@@ -18,4 +18,4 @@ This directory contains all documentation for ListenWell MVP planning.
 *No plans yet*
 
 ### Source Material
-*No source material yet*
+- [Conflict Resolution](source-material/conflict-resolution.md) - AI-Facilitated Conflict Metabolism System MVP spec

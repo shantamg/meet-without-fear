@@ -4,7 +4,7 @@ Raw input documents for ListenWell MVP planning.
 
 ## Documents
 
-*No source material yet - add your input documents here*
+- **[Conflict Resolution](conflict-resolution.md)** - AI-Facilitated Conflict Metabolism System MVP spec
 
 ---
 
