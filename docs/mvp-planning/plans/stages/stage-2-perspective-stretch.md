@@ -162,7 +162,7 @@ This exchange:
 flowchart TB
     subgraph Screen[Perspective Stretch Screen]
         subgraph Header[Header]
-            Logo[ListenWell]
+            Logo[BeHeard]
             Stage[Stage 2: Perspective Stretch]
             Status[Building empathy]
         end

@@ -8,7 +8,7 @@ The Vessel architecture that protects user data and controls information flow.
 
 ## Overview
 
-ListenWell uses a three-vessel model to separate and protect data:
+BeHeard uses a three-vessel model to separate and protect data:
 
 ```mermaid
 flowchart TB

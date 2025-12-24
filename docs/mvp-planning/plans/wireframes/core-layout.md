@@ -8,7 +8,7 @@ Base app structure that persists across all screens.
 flowchart TB
     subgraph DesktopApp[Desktop App - 1200px+]
         subgraph TopBar[Top Navigation Bar]
-            Logo[ListenWell]
+            Logo[BeHeard]
             StageIndicator[Stage 2 of 4]
             Profile[User Menu]
         end
@@ -41,7 +41,7 @@ flowchart TB
     subgraph MobileApp[Mobile App - Under 768px]
         subgraph MobileTop[Top Bar]
             BackBtn[Back]
-            MobileLogo[ListenWell]
+            MobileLogo[BeHeard]
             MobileStage[S2]
             MenuBtn[Menu]
         end

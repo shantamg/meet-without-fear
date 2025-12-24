@@ -1,12 +1,12 @@
 # User Journey
 
-Complete flow through ListenWell from first contact to resolution.
+Complete flow through BeHeard from first contact to resolution.
 
 ## High-Level Journey
 
 ```mermaid
 flowchart TD
-    Entry[User discovers ListenWell] --> Invite{How did they arrive?}
+    Entry[User discovers BeHeard] --> Invite{How did they arrive?}
     Invite -->|Self-initiated| Create[Create conflict session]
     Invite -->|Invited by other| Accept[Accept invitation]
 

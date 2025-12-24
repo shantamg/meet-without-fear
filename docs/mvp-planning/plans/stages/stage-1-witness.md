@@ -87,7 +87,7 @@ The AI uses several approaches to help users feel heard:
 flowchart TB
     subgraph Screen[The Witness Screen]
         subgraph Header[Header]
-            Logo[ListenWell]
+            Logo[BeHeard]
             Stage[Stage 1: The Witness]
             Progress[Your progress: In conversation]
         end

@@ -1,6 +1,6 @@
 # Mechanisms
 
-Key behavioral mechanics that govern how ListenWell operates across all stages.
+Key behavioral mechanics that govern how BeHeard operates across all stages.
 
 ## Documents
 

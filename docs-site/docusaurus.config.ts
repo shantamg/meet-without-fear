@@ -3,8 +3,8 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: 'ListenWell MVP Planning',
-  tagline: 'ListenWell MVP Planning Documentation',
+  title: 'BeHeard MVP Planning',
+  tagline: 'BeHeard MVP Planning Documentation',
   favicon: 'img/favicon.ico',
 
   future: {
@@ -51,7 +51,7 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'ListenWell MVP Planning',
+      title: 'BeHeard MVP Planning',
       items: [
         {
           type: 'docSidebar',
@@ -63,7 +63,7 @@ const config: Config = {
     },
     footer: {
       style: 'dark',
-      copyright: `ListenWell MVP Planning Documentation`,
+      copyright: `BeHeard MVP Planning Documentation`,
     },
     prism: {
       theme: prismThemes.github,

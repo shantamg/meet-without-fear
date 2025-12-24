@@ -1,6 +1,6 @@
-# ListenWell - MVP Planning
+# BeHeard - MVP Planning
 
-This repository contains planning documentation for ListenWell MVP.
+This repository contains planning documentation for BeHeard MVP.
 
 ## Current Work
 

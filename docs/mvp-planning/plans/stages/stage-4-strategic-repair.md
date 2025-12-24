@@ -117,7 +117,7 @@ flowchart TD
 flowchart TB
     subgraph Screen[Strategic Repair Screen]
         subgraph Header[Header]
-            Logo[ListenWell]
+            Logo[BeHeard]
             Stage[Stage 4: Strategic Repair]
             Status[Building your path forward]
         end

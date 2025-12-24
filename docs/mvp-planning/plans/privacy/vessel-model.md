@@ -2,7 +2,7 @@
 
 ## The Three Vessels
 
-ListenWell separates data into three distinct containers with different access rules.
+BeHeard separates data into three distinct containers with different access rules.
 
 ```mermaid
 flowchart TB

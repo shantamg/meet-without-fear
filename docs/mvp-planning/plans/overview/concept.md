@@ -12,9 +12,9 @@ Conflict escalates because humans try to solve problems while under **physiologi
 
 ## The Solution
 
-ListenWell acts as an **External Prefrontal Cortex** that:
+BeHeard acts as an **External Prefrontal Cortex** that:
 
-| Function | How ListenWell Provides It |
+| Function | How BeHeard Provides It |
 |----------|---------------------------|
 | Regulation | Emotional Barometer monitors intensity; enforces cooling periods |
 | Memory | Accurate, attributed records of what each person shared |

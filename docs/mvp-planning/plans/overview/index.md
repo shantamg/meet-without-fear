@@ -1,6 +1,6 @@
 # Overview
 
-High-level documentation for the ListenWell AI-Facilitated Conflict Resolution System.
+High-level documentation for the BeHeard AI-Facilitated Conflict Resolution System.
 
 ## Documents
 
@@ -12,7 +12,7 @@ High-level documentation for the ListenWell AI-Facilitated Conflict Resolution S
 
 ## At a Glance
 
-ListenWell acts as an **External Prefrontal Cortex** for people in conflict. Instead of users communicating directly (which escalates tension), they interact with an AI that:
+BeHeard acts as an **External Prefrontal Cortex** for people in conflict. Instead of users communicating directly (which escalates tension), they interact with an AI that:
 
 1. **Maintains regulation** - Tracks emotional intensity and enforces cooling periods
 2. **Preserves memory** - Keeps accurate records without distortion
@@ -25,7 +25,7 @@ flowchart LR
         A[User A] <-->|Direct Conflict| B[User B]
     end
 
-    subgraph ListenWell
+    subgraph BeHeard
         C[User A] --> AI[AI Facilitator]
         AI --> D[User B]
         D --> AI

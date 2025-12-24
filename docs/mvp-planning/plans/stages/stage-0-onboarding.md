@@ -16,7 +16,7 @@ Establish the Process Guardian role and secure commitment from both parties thro
 ```mermaid
 flowchart TD
     Entry[User enters system] --> Welcome[Welcome message]
-    Welcome --> Explain[Explain ListenWell process]
+    Welcome --> Explain[Explain BeHeard process]
 
     subgraph Explanation[Process Explanation]
         E1[AI facilitates - not judges]
@@ -75,12 +75,12 @@ I understand that:
 flowchart TB
     subgraph Screen[Onboarding Screen]
         subgraph Header[Header]
-            Logo[ListenWell]
+            Logo[BeHeard]
             Stage[Stage 0 of 4]
         end
 
         subgraph Content[Main Content]
-            Title[Welcome to ListenWell]
+            Title[Welcome to BeHeard]
             Intro[Brief explanation paragraph]
             Steps[Visual stage overview]
         end

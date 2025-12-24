@@ -2,7 +2,7 @@
   "name": "listen-well",
   "version": "0.0.1",
   "private": true,
-  "description": "ListenWell MVP Planning",
+  "description": "BeHeard MVP Planning",
   "workspaces": [
     "docs-site"
   ],
