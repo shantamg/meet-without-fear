@@ -59,6 +59,11 @@ const config: Config = {
           position: 'left',
           label: 'Docs',
         },
+        {
+          href: '/demo/features/',
+          position: 'left',
+          label: 'Demos',
+        },
       ],
     },
     footer: {

@@ -1,5 +1,11 @@
 # Emotional Barometer
 
+:::tip See it in action
+[Try the Cooling Period demo](/demo/features/cooling-period.html) - Experience breathing exercises, grounding prompts, and journaling.
+
+[Try the Waiting States demo](/demo/features/waiting-states.html) - See what users experience while waiting for their partner.
+:::
+
 ## Purpose
 
 Monitor emotional intensity throughout the process and enforce pacing controls when intensity is too high for productive work.

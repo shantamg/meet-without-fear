@@ -1,5 +1,11 @@
 # Mirror Intervention
 
+:::tip See it in action
+[Try the Process Explanation demo](/demo/features/process-explanation.html) - See how the AI explains the stages upfront.
+
+[Try the Accuracy Loops demo](/demo/features/accuracy-loops.html) - See how the AI refines its understanding.
+:::
+
 ## Purpose
 
 When a user expresses judgment, attack, or sarcasm about the other person, redirect them to self-reflection and curiosity rather than allowing escalation.

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cooling Period Options - BeHeard Demo</title>
+    <link rel="stylesheet" href="../styles/shared.css">
+    <style>
+        .exercise-container {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .exercise-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .exercise-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+
+        .breathing-circle {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: rgba(16, 163, 127, 0.15);
+            border: 3px solid var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            transition: transform 4s ease-in-out;
+        }
+
+        .breathing-circle.inhale {
+            transform: scale(1.3);
+        }
+
+        .breathing-circle.hold {
+            transform: scale(1.3);
+        }
+
+        .breathing-circle.exhale {
+            transform: scale(1);
+        }
+
+        .breathing-text {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .breathing-timer {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .breathing-instruction {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+
+        .grounding-step {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            text-align: left;
+        }
+
+        .grounding-step-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .grounding-step-number {
+            width: 28px;
+            height: 28px;
+            background: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .grounding-step-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .grounding-step-prompt {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .grounding-step.active {
+            border: 1px solid var(--accent);
+        }
+
+        .grounding-step.completed .grounding-step-number {
+            background: var(--success);
+        }
+
+        .journal-container {
+            text-align: left;
+        }
+
+        .journal-prompt {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        .journal-textarea {
+            width: 100%;
+            min-height: 180px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            color: var(--text-primary);
+            font-size: 15px;
+            line-height: 1.6;
+            resize: vertical;
+            outline: none;
+            font-family: inherit;
+            margin-bottom: 16px;
+        }
+
+        .journal-textarea:focus {
+            border-color: var(--accent);
+        }
+
+        .journal-textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        .privacy-note {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .cycle-count {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <header class="header">
+            <a href="index.html" class="header-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                All Demos
+            </a>
+            <div class="header-top">
+                <div class="header-logo">BeHeard</div>
+                <div class="header-stage">Cooling Period</div>
+            </div>
+        </header>
+
+        <div class="content-area" id="contentArea">
+            <!-- Dynamic content -->
+        </div>
+
+        <!-- Emotion Bar -->
+        <div class="emotion-bar" id="emotionBar">
+            <div class="emotion-header">
+                <span class="emotion-label">How are you feeling?</span>
+                <span class="emotion-value" id="emotionValue">5</span>
+            </div>
+            <input type="range" class="emotion-slider" id="emotionSlider" min="1" max="10" value="5">
+            <div class="emotion-labels">
+                <span>Calm</span>
+                <span>Elevated</span>
+                <span>Intense</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cooling Modal -->
+    <div class="modal-overlay" id="coolingModal">
+        <div class="modal">
+            <div class="modal-icon">&#128524;</div>
+            <div class="modal-title">Taking a Moment</div>
+            <div class="modal-text">Your emotions are running high, and that is completely understandable. Let us pause and choose a way to ground yourself.</div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="startExercise('breathing')">Breathing exercise</button>
+                <button class="btn btn-secondary" onclick="startExercise('grounding')">Grounding exercise</button>
+                <button class="btn btn-secondary" onclick="startExercise('journal')">Journal it out</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let emotionLevel = 5;
+        let breathingInterval = null;
+        let currentCycle = 0;
+        const totalCycles = 3;
+
+        function addMessage(text, type = 'ai') {
+            const content = document.getElementById('contentArea');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            content.appendChild(msg);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function showCoolingModal() {
+            document.getElementById('coolingModal').classList.add('visible');
+        }
+
+        function hideCoolingModal() {
+            document.getElementById('coolingModal').classList.remove('visible');
+        }
+
+        function startExercise(type) {
+            hideCoolingModal();
+            const content = document.getElementById('contentArea');
+            content.innerHTML = '';
+
+            switch(type) {
+                case 'breathing':
+                    showBreathingExercise();
+                    break;
+                case 'grounding':
+                    showGroundingExercise();
+                    break;
+                case 'journal':
+                    showJournalExercise();
+                    break;
+            }
+        }
+
+        function showBreathingExercise() {
+            const content = document.getElementById('contentArea');
+            currentCycle = 0;
+
+            const container = document.createElement('div');
+            container.className = 'exercise-container';
+            container.innerHTML = `
+                <div class="exercise-title">4-7-8 Breathing</div>
+                <div class="exercise-subtitle">Follow the circle and breathe with the rhythm</div>
+                <div class="breathing-circle" id="breathingCircle">
+                    <span class="breathing-text" id="breathingText">Ready</span>
+                </div>
+                <div class="breathing-timer" id="breathingTimer">--</div>
+                <div class="breathing-instruction" id="breathingInstruction">Tap to begin</div>
+                <div class="cycle-count" id="cycleCount"></div>
+                <button class="btn btn-secondary" id="startBreathingBtn" onclick="startBreathingCycle()">Start</button>
+            `;
+            content.appendChild(container);
+        }
+
+        function startBreathingCycle() {
+            document.getElementById('startBreathingBtn').classList.add('hidden');
+            runBreathingPhase();
+        }
+
+        function runBreathingPhase() {
+            const circle = document.getElementById('breathingCircle');
+            const text = document.getElementById('breathingText');
+            const timer = document.getElementById('breathingTimer');
+            const instruction = document.getElementById('breathingInstruction');
+            const cycleCount = document.getElementById('cycleCount');
+
+            // Inhale for 4 seconds
+            circle.className = 'breathing-circle inhale';
+            text.textContent = 'Breathe In';
+            instruction.textContent = 'Breathe in through your nose';
+            let count = 4;
+            timer.textContent = count;
+
+            const inhaleInterval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    timer.textContent = count;
+                } else {
+                    clearInterval(inhaleInterval);
+                    // Hold for 7 seconds
+                    circle.className = 'breathing-circle hold';
+                    text.textContent = 'Hold';
+                    instruction.textContent = 'Hold your breath gently';
+                    count = 7;
+                    timer.textContent = count;
+
+                    const holdInterval = setInterval(() => {
+                        count--;
+                        if (count > 0) {
+                            timer.textContent = count;
+                        } else {
+                            clearInterval(holdInterval);
+                            // Exhale for 8 seconds
+                            circle.className = 'breathing-circle exhale';
+                            text.textContent = 'Breathe Out';
+                            instruction.textContent = 'Exhale slowly through your mouth';
+                            count = 8;
+                            timer.textContent = count;
+
+                            const exhaleInterval = setInterval(() => {
+                                count--;
+                                if (count > 0) {
+                                    timer.textContent = count;
+                                } else {
+                                    clearInterval(exhaleInterval);
+                                    currentCycle++;
+                                    cycleCount.textContent = `Cycle ${currentCycle} of ${totalCycles}`;
+
+                                    if (currentCycle < totalCycles) {
+                                        setTimeout(runBreathingPhase, 1000);
+                                    } else {
+                                        completeExercise();
+                                    }
+                                }
+                            }, 1000);
+                        }
+                    }, 1000);
+                }
+            }, 1000);
+        }
+
+        function showGroundingExercise() {
+            const content = document.getElementById('contentArea');
+
+            const container = document.createElement('div');
+            container.className = 'exercise-container';
+            container.innerHTML = `
+                <div class="exercise-title">5-4-3-2-1 Grounding</div>
+                <div class="exercise-subtitle">Connect with your senses to return to the present</div>
+                <div id="groundingSteps"></div>
+                <button class="btn btn-primary" id="nextStepBtn" onclick="nextGroundingStep()">Start</button>
+            `;
+            content.appendChild(container);
+
+            window.groundingStep = 0;
+            window.groundingData = [
+                { number: 5, sense: 'See', prompt: 'Name 5 things you can see right now' },
+                { number: 4, sense: 'Touch', prompt: 'Name 4 things you can touch or feel' },
+                { number: 3, sense: 'Hear', prompt: 'Name 3 things you can hear' },
+                { number: 2, sense: 'Smell', prompt: 'Name 2 things you can smell' },
+                { number: 1, sense: 'Taste', prompt: 'Name 1 thing you can taste' }
+            ];
+        }
+
+        function nextGroundingStep() {
+            const stepsContainer = document.getElementById('groundingSteps');
+            const btn = document.getElementById('nextStepBtn');
+
+            if (window.groundingStep > 0) {
+                const prevStep = stepsContainer.querySelector('.grounding-step.active');
+                if (prevStep) {
+                    prevStep.classList.remove('active');
+                    prevStep.classList.add('completed');
+                }
+            }
+
+            if (window.groundingStep < window.groundingData.length) {
+                const data = window.groundingData[window.groundingStep];
+                const step = document.createElement('div');
+                step.className = 'grounding-step active';
+                step.innerHTML = `
+                    <div class="grounding-step-header">
+                        <div class="grounding-step-number">${data.number}</div>
+                        <div class="grounding-step-title">${data.sense}</div>
+                    </div>
+                    <div class="grounding-step-prompt">${data.prompt}</div>
+                `;
+                stepsContainer.appendChild(step);
+                btn.textContent = window.groundingStep < window.groundingData.length - 1 ? 'Next' : 'Complete';
+                window.groundingStep++;
+            } else {
+                completeExercise();
+            }
+        }
+
+        function showJournalExercise() {
+            const content = document.getElementById('contentArea');
+
+            const container = document.createElement('div');
+            container.className = 'exercise-container journal-container';
+            container.innerHTML = `
+                <div class="exercise-title">Journal It Out</div>
+                <div class="journal-prompt">
+                    Write freely about what you are feeling. Do not worry about grammar or making sense - just let it flow. This is private and will not be shared.
+                </div>
+                <textarea class="journal-textarea" id="journalText" placeholder="Start writing..."></textarea>
+                <div class="privacy-note">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Private - only you can see this
+                </div>
+                <button class="btn btn-primary" style="margin-top: 16px; width: 100%;" onclick="completeExercise()">I am ready to continue</button>
+            `;
+            content.appendChild(container);
+        }
+
+        function completeExercise() {
+            const content = document.getElementById('contentArea');
+            content.innerHTML = '';
+
+            // Reset emotion slider
+            document.getElementById('emotionSlider').value = 5;
+            document.getElementById('emotionValue').textContent = '5';
+            emotionLevel = 5;
+
+            addMessage('Well done. Taking that moment for yourself shows real self-awareness.');
+            setTimeout(() => {
+                addMessage('When you are ready, we can continue. How are you feeling now?');
+                setTimeout(() => {
+                    showContinueOptions();
+                }, 1000);
+            }, 1500);
+        }
+
+        function showContinueOptions() {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+
+            ['I feel calmer now', 'I need another moment', 'Let us continue'].forEach(text => {
+                const btn = document.createElement('button');
+                btn.className = 'suggested-btn';
+                btn.textContent = text;
+                btn.onclick = () => {
+                    container.remove();
+                    addMessage(text, 'user');
+                    setTimeout(() => {
+                        if (text === 'I need another moment') {
+                            showCoolingModal();
+                        } else {
+                            addMessage('Good. Remember, you can always take a moment whenever you need to. Now, where were we...');
+                            setTimeout(() => {
+                                showTryAgain();
+                            }, 1500);
+                        }
+                    }, 500);
+                };
+                container.appendChild(btn);
+            });
+            content.appendChild(container);
+        }
+
+        function showTryAgain() {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+            const btn = document.createElement('button');
+            btn.className = 'suggested-btn';
+            btn.textContent = 'Try demo again';
+            btn.onclick = () => {
+                content.innerHTML = '';
+                startDemo();
+            };
+            container.appendChild(btn);
+            content.appendChild(container);
+        }
+
+        function startDemo() {
+            addMessage('This demo shows what happens when emotions run high during a conversation.');
+            setTimeout(() => {
+                addMessage('Try moving the emotion slider at the bottom to level 9 or 10 to trigger the cooling period.');
+            }, 1500);
+        }
+
+        // Emotion slider handler
+        document.getElementById('emotionSlider').addEventListener('input', function() {
+            emotionLevel = parseInt(this.value);
+            document.getElementById('emotionValue').textContent = this.value;
+
+            if (emotionLevel >= 9) {
+                setTimeout(showCoolingModal, 300);
+            }
+        });
+
+        // Start demo
+        startDemo();
+    </script>
+</body>
+</html>

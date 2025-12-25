@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Inner Work Mode - BeHeard Demo</title>
+    <link rel="stylesheet" href="../styles/shared.css">
+</head>
+<body>
+    <div class="phone-frame">
+        <header class="header">
+            <a href="index.html" class="header-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                All Demos
+            </a>
+            <div class="header-top">
+                <div class="header-logo">BeHeard</div>
+                <div class="header-stage">Inner Work Mode</div>
+            </div>
+        </header>
+
+        <div class="content-area" id="contentArea">
+            <!-- Dynamic content -->
+        </div>
+
+        <div class="input-area" id="inputArea">
+            <div class="input-wrapper">
+                <textarea class="input-field" id="inputField" placeholder="Share your thoughts..." rows="1"></textarea>
+            </div>
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let step = 0;
+
+        const responses = [
+            {
+                trigger: null,
+                messages: [
+                    "Welcome to Inner Work mode. This is a space for you alone - a chance to explore your patterns, understand your triggers, and grow as a person.",
+                    "There is no partner involved here. Just you and me, working together on your personal growth.",
+                    "What brings you here today? Are you processing a specific conflict, or looking to understand yourself better?"
+                ],
+                suggestions: ["I keep having the same arguments", "I want to understand my triggers", "I am working on myself"]
+            },
+            {
+                messages: [
+                    "I hear you. Recurring patterns in conflict often point to something deeper - unmet needs or old wounds that get activated.",
+                    "Let me ask you something: Think about the last few times you felt really frustrated or hurt in a relationship. What was the common thread?"
+                ],
+                suggestions: ["I felt unheard", "I felt criticized", "I felt dismissed"]
+            },
+            {
+                messages: [
+                    "Feeling unheard is painful. It touches on something fundamental - our need to matter, to be seen.",
+                    "I notice you have mentioned this pattern. When did you first learn that your voice might not be heard? Sometimes these patterns start earlier than we realize."
+                ],
+                suggestions: ["Growing up, I was often ignored", "In past relationships", "I am not sure"]
+            },
+            {
+                messages: [
+                    "That early experience of being ignored can create a template - a story we carry that says our words do not matter. And then we bring that sensitivity into current relationships.",
+                    "Here is something interesting: often, the same need that makes us sensitive to being unheard also makes us excellent listeners. Have people told you that you are a good listener?"
+                ],
+                suggestions: ["Yes, they have", "I try to be", "I had not thought about that"]
+            },
+            {
+                messages: [
+                    "So your wound is also your gift. That is often how it works.",
+                    "Let me offer you a reframe to practice: When you feel unheard, instead of thinking \"They do not care about me,\" try \"I have a strong need to be understood, and that is okay. I can ask for what I need.\""
+                ],
+                suggestions: ["That feels different", "Can you say more?", "I want to try that"]
+            },
+            {
+                messages: [
+                    "This is the core of Inner Work - transforming old patterns into new awareness. You are not broken. You are carrying wisdom that just needs to be understood.",
+                    "Would you like to explore this pattern more, or is there another area you would like to work on?"
+                ],
+                suggestions: ["I want to keep exploring", "This is enough for now", "What else can I work on?"]
+            },
+            {
+                messages: [
+                    "You have done meaningful work here today. Remember: awareness is the first step to change.",
+                    "I will be here whenever you want to continue. Inner Work is a journey, not a destination."
+                ],
+                final: true
+            }
+        ];
+
+        function addMessage(text, type = 'ai') {
+            const content = document.getElementById('contentArea');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            content.appendChild(msg);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function showTyping() {
+            const content = document.getElementById('contentArea');
+            const typing = document.createElement('div');
+            typing.className = 'typing-indicator';
+            typing.id = 'typingIndicator';
+            typing.innerHTML = '<span></span><span></span><span></span>';
+            content.appendChild(typing);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function hideTyping() {
+            const typing = document.getElementById('typingIndicator');
+            if (typing) typing.remove();
+        }
+
+        function showSuggestions(suggestions) {
+            const content = document.getElementById('contentArea');
+            const existing = content.querySelector('.suggested-messages');
+            if (existing) existing.remove();
+
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+            suggestions.forEach(s => {
+                const btn = document.createElement('button');
+                btn.className = 'suggested-btn';
+                btn.textContent = s;
+                btn.onclick = () => sendSuggested(s);
+                container.appendChild(btn);
+            });
+            content.appendChild(container);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function hideSuggestions() {
+            const content = document.getElementById('contentArea');
+            const existing = content.querySelector('.suggested-messages');
+            if (existing) existing.remove();
+        }
+
+        function showInsightCard(title, content) {
+            const contentArea = document.getElementById('contentArea');
+            const card = document.createElement('div');
+            card.className = 'panel';
+            card.innerHTML = `
+                <div class="panel-header">${title}</div>
+                <div class="panel-content">${content}</div>
+            `;
+            contentArea.appendChild(card);
+            contentArea.scrollTop = contentArea.scrollHeight;
+        }
+
+        function processResponse() {
+            if (step >= responses.length) return;
+
+            const response = responses[step];
+            let delay = 0;
+
+            response.messages.forEach((msg, i) => {
+                setTimeout(() => {
+                    showTyping();
+                    setTimeout(() => {
+                        hideTyping();
+                        addMessage(msg);
+
+                        // Show insight card after the reframe message
+                        if (step === 4 && i === 1) {
+                            setTimeout(() => {
+                                showInsightCard('Pattern Reframe', '"I have a strong need to be understood, and that is okay. I can ask for what I need."');
+                            }, 500);
+                        }
+
+                        // Show suggestions after last message
+                        if (i === response.messages.length - 1 && response.suggestions) {
+                            setTimeout(() => showSuggestions(response.suggestions), 500);
+                        }
+
+                        // Show restart for final step
+                        if (response.final && i === response.messages.length - 1) {
+                            setTimeout(() => {
+                                showSuggestions(['Start over']);
+                            }, 1000);
+                        }
+                    }, 1000);
+                }, delay);
+                delay += 2000;
+            });
+
+            step++;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('inputField');
+            const text = input.value.trim();
+            if (!text) return;
+
+            hideSuggestions();
+            addMessage(text, 'user');
+            input.value = '';
+            input.style.height = 'auto';
+
+            setTimeout(processResponse, 500);
+        }
+
+        function sendSuggested(text) {
+            if (text === 'Start over') {
+                step = 0;
+                document.getElementById('contentArea').innerHTML = '';
+                processResponse();
+                return;
+            }
+
+            hideSuggestions();
+            addMessage(text, 'user');
+            setTimeout(processResponse, 500);
+        }
+
+        // Input handling
+        document.getElementById('inputField').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        document.getElementById('inputField').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Start the demo
+        processResponse();
+    </script>
+</body>
+</html>

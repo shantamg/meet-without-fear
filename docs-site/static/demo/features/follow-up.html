@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Follow-up Check-in - BeHeard Demo</title>
+    <link rel="stylesheet" href="../styles/shared.css">
+    <style>
+        .notification-card {
+            background: linear-gradient(135deg, rgba(16, 163, 127, 0.15) 0%, rgba(16, 163, 127, 0.05) 100%);
+            border: 1px solid var(--accent);
+            border-radius: 20px;
+            padding: 24px;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        .notification-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .notification-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .notification-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .agreement-reminder {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+
+        .agreement-reminder-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .agreement-reminder-icon {
+            font-size: 20px;
+        }
+
+        .agreement-reminder-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .agreement-reminder-content {
+            font-size: 15px;
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        .checkin-options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .checkin-option {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .checkin-option:hover {
+            border-color: var(--accent);
+        }
+
+        .checkin-option-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .checkin-option-icon.success {
+            background: rgba(16, 163, 127, 0.15);
+        }
+
+        .checkin-option-icon.revisit {
+            background: rgba(245, 158, 11, 0.15);
+        }
+
+        .checkin-option-icon.pending {
+            background: rgba(147, 197, 253, 0.15);
+        }
+
+        .checkin-option-text {
+            flex: 1;
+        }
+
+        .checkin-option-title {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .checkin-option-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .progress-summary {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .progress-header {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .progress-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .progress-item:last-child {
+            border-bottom: none;
+        }
+
+        .progress-check {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .progress-check.done {
+            background: var(--success);
+            color: white;
+        }
+
+        .progress-check.partial {
+            background: var(--warning);
+            color: white;
+        }
+
+        .progress-check.pending {
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+
+        .progress-text {
+            flex: 1;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .next-steps {
+            background: rgba(16, 163, 127, 0.1);
+            border: 1px solid var(--accent);
+            border-radius: 16px;
+            padding: 20px;
+        }
+
+        .next-steps-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 12px;
+        }
+
+        .next-steps-content {
+            font-size: 14px;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <header class="header">
+            <a href="index.html" class="header-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                All Demos
+            </a>
+            <div class="header-top">
+                <div class="header-logo">BeHeard</div>
+                <div class="header-stage">Follow-up Check-in</div>
+            </div>
+        </header>
+
+        <div class="content-area" id="contentArea">
+            <!-- Dynamic content -->
+        </div>
+
+        <div class="input-area hidden" id="inputArea">
+            <div class="input-wrapper">
+                <textarea class="input-field" id="inputField" placeholder="Share how things have been going..." rows="1"></textarea>
+            </div>
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function addMessage(text, type = 'ai') {
+            const content = document.getElementById('contentArea');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            content.appendChild(msg);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function showTyping() {
+            const content = document.getElementById('contentArea');
+            const typing = document.createElement('div');
+            typing.className = 'typing-indicator';
+            typing.id = 'typingIndicator';
+            typing.innerHTML = '<span></span><span></span><span></span>';
+            content.appendChild(typing);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function hideTyping() {
+            const typing = document.getElementById('typingIndicator');
+            if (typing) typing.remove();
+        }
+
+        function showNotification() {
+            const content = document.getElementById('contentArea');
+
+            const notification = document.createElement('div');
+            notification.className = 'notification-card';
+            notification.innerHTML = `
+                <div class="notification-icon">&#128197;</div>
+                <div class="notification-title">Check-in Time</div>
+                <div class="notification-text">It has been 3 days since your agreement with Jordan. How are things going?</div>
+            `;
+            content.appendChild(notification);
+        }
+
+        function showAgreementReminder() {
+            const content = document.getElementById('contentArea');
+
+            const reminder = document.createElement('div');
+            reminder.className = 'agreement-reminder';
+            reminder.innerHTML = `
+                <div class="agreement-reminder-header">
+                    <span class="agreement-reminder-icon">&#128221;</span>
+                    <span class="agreement-reminder-title">Your Agreement</span>
+                </div>
+                <div class="agreement-reminder-content">
+                    For the next two weeks: 15-minute Sunday planning session + share one specific appreciation each day
+                </div>
+            `;
+            content.appendChild(reminder);
+        }
+
+        function showCheckinOptions() {
+            const content = document.getElementById('contentArea');
+
+            const options = document.createElement('div');
+            options.className = 'checkin-options';
+            options.id = 'checkinOptions';
+            options.innerHTML = `
+                <div class="checkin-option" onclick="selectOption('going-well')">
+                    <div class="checkin-option-icon success">&#128522;</div>
+                    <div class="checkin-option-text">
+                        <div class="checkin-option-title">Going well</div>
+                        <div class="checkin-option-desc">We have been sticking to the agreement</div>
+                    </div>
+                </div>
+                <div class="checkin-option" onclick="selectOption('need-revisit')">
+                    <div class="checkin-option-icon revisit">&#128533;</div>
+                    <div class="checkin-option-text">
+                        <div class="checkin-option-title">Need to revisit</div>
+                        <div class="checkin-option-desc">Something is not working or we had a setback</div>
+                    </div>
+                </div>
+                <div class="checkin-option" onclick="selectOption('not-started')">
+                    <div class="checkin-option-icon pending">&#128564;</div>
+                    <div class="checkin-option-text">
+                        <div class="checkin-option-title">Have not tried yet</div>
+                        <div class="checkin-option-desc">We have not had a chance to start</div>
+                    </div>
+                </div>
+            `;
+            content.appendChild(options);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function selectOption(option) {
+            const options = document.getElementById('checkinOptions');
+            if (options) options.remove();
+
+            switch (option) {
+                case 'going-well':
+                    handleGoingWell();
+                    break;
+                case 'need-revisit':
+                    handleNeedRevisit();
+                    break;
+                case 'not-started':
+                    handleNotStarted();
+                    break;
+            }
+        }
+
+        function handleGoingWell() {
+            addMessage('Going well - we have been sticking to the agreement', 'user');
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                addMessage('That is wonderful to hear! Let me ask about specifics.');
+
+                setTimeout(() => {
+                    showProgressSummary();
+                }, 1000);
+            }, 800);
+        }
+
+        function showProgressSummary() {
+            const content = document.getElementById('contentArea');
+
+            addMessage('Did you complete these parts of your agreement?');
+
+            setTimeout(() => {
+                const summary = document.createElement('div');
+                summary.className = 'progress-summary';
+                summary.innerHTML = `
+                    <div class="progress-header">Agreement Items</div>
+                    <div class="progress-item" onclick="toggleProgress(this)">
+                        <div class="progress-check done">&#10003;</div>
+                        <div class="progress-text">Sunday planning session</div>
+                    </div>
+                    <div class="progress-item" onclick="toggleProgress(this)">
+                        <div class="progress-check partial">~</div>
+                        <div class="progress-text">Daily appreciation (5 of 7 days)</div>
+                    </div>
+                `;
+                content.appendChild(summary);
+
+                setTimeout(() => {
+                    addMessage('It looks like you did the planning session and shared appreciations most days. That is real progress!');
+                    setTimeout(() => {
+                        showCelebration();
+                    }, 1500);
+                }, 1000);
+            }, 500);
+        }
+
+        function showCelebration() {
+            addMessage('The fact that you are checking in and tracking your progress shows commitment. Would you like to continue with this agreement or adjust it?');
+
+            setTimeout(() => {
+                const content = document.getElementById('contentArea');
+                const container = document.createElement('div');
+                container.className = 'suggested-messages';
+
+                ['Keep the same agreement', 'Adjust the agreement'].forEach(text => {
+                    const btn = document.createElement('button');
+                    btn.className = 'suggested-btn';
+                    btn.textContent = text;
+                    btn.onclick = () => {
+                        container.remove();
+                        addMessage(text, 'user');
+                        showTyping();
+                        setTimeout(() => {
+                            hideTyping();
+                            addMessage('Great. I will check in again in a week. Keep up the good work!');
+                            setTimeout(showRestart, 1500);
+                        }, 800);
+                    };
+                    container.appendChild(btn);
+                });
+                content.appendChild(container);
+            }, 500);
+        }
+
+        function handleNeedRevisit() {
+            addMessage('Need to revisit - something is not working', 'user');
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                addMessage('I appreciate you being honest about that. Setbacks are part of the process, not failures.');
+
+                setTimeout(() => {
+                    addMessage('What happened? Did something specific come up, or has the agreement been harder to keep than expected?');
+                    document.getElementById('inputArea').classList.remove('hidden');
+
+                    setTimeout(() => {
+                        const content = document.getElementById('contentArea');
+                        const container = document.createElement('div');
+                        container.className = 'suggested-messages';
+
+                        const suggestions = [
+                            'We had another argument',
+                            'The agreement felt forced',
+                            'Life got in the way'
+                        ];
+
+                        suggestions.forEach(text => {
+                            const btn = document.createElement('button');
+                            btn.className = 'suggested-btn';
+                            btn.textContent = text;
+                            btn.onclick = () => {
+                                container.remove();
+                                addMessage(text, 'user');
+                                showTyping();
+                                setTimeout(() => {
+                                    hideTyping();
+                                    showNextSteps();
+                                }, 1000);
+                            };
+                            container.appendChild(btn);
+                        });
+                        content.appendChild(container);
+                    }, 500);
+                }, 1500);
+            }, 800);
+        }
+
+        function showNextSteps() {
+            addMessage('That makes sense. These experiments do not always work on the first try. What matters is that you are still engaged.');
+
+            setTimeout(() => {
+                const content = document.getElementById('contentArea');
+                const nextSteps = document.createElement('div');
+                nextSteps.className = 'next-steps';
+                nextSteps.innerHTML = `
+                    <div class="next-steps-title">Suggested Next Steps</div>
+                    <div class="next-steps-content">
+                        Would you like to:
+                        <br><br>
+                        1. Try a smaller version of the same agreement<br>
+                        2. Go back to Stage 4 and choose different strategies<br>
+                        3. Schedule time to talk with Jordan about what is not working
+                    </div>
+                `;
+                content.appendChild(nextSteps);
+
+                setTimeout(showRestart, 2000);
+            }, 1500);
+        }
+
+        function handleNotStarted() {
+            addMessage('Have not tried yet', 'user');
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                addMessage('That is okay. Life gets busy, and sometimes agreements need time to begin.');
+
+                setTimeout(() => {
+                    addMessage('Is there a specific barrier? Sometimes the hardest part is just starting.');
+
+                    setTimeout(() => {
+                        const content = document.getElementById('contentArea');
+                        const container = document.createElement('div');
+                        container.className = 'suggested-messages';
+
+                        ['We have been too busy', 'It feels awkward to start', 'We forgot'].forEach(text => {
+                            const btn = document.createElement('button');
+                            btn.className = 'suggested-btn';
+                            btn.textContent = text;
+                            btn.onclick = () => {
+                                container.remove();
+                                addMessage(text, 'user');
+                                showTyping();
+                                setTimeout(() => {
+                                    hideTyping();
+                                    addMessage('Would you like me to send both of you a gentle reminder tomorrow to start? Sometimes a little nudge helps.');
+                                    setTimeout(() => {
+                                        const innerContainer = document.createElement('div');
+                                        innerContainer.className = 'suggested-messages';
+                                        ['Yes, send a reminder', 'No, we will figure it out'].forEach(t => {
+                                            const b = document.createElement('button');
+                                            b.className = 'suggested-btn';
+                                            b.textContent = t;
+                                            b.onclick = () => {
+                                                innerContainer.remove();
+                                                addMessage(t, 'user');
+                                                showTyping();
+                                                setTimeout(() => {
+                                                    hideTyping();
+                                                    addMessage(t.includes('Yes') ? 'Done. I will check in again in a few days. You have got this!' : 'Understood. I will check back in a few days. Remember, there is no judgment here - just support.');
+                                                    setTimeout(showRestart, 1500);
+                                                }, 800);
+                                            };
+                                            innerContainer.appendChild(b);
+                                        });
+                                        content.appendChild(innerContainer);
+                                    }, 500);
+                                }, 1000);
+                            };
+                            container.appendChild(btn);
+                        });
+                        content.appendChild(container);
+                    }, 500);
+                }, 1500);
+            }, 800);
+        }
+
+        function showRestart() {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+            const btn = document.createElement('button');
+            btn.className = 'suggested-btn';
+            btn.textContent = 'Try demo again';
+            btn.onclick = () => {
+                content.innerHTML = '';
+                document.getElementById('inputArea').classList.add('hidden');
+                startDemo();
+            };
+            container.appendChild(btn);
+            content.appendChild(container);
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('inputField');
+            const text = input.value.trim();
+            if (!text) return;
+
+            addMessage(text, 'user');
+            input.value = '';
+            input.style.height = 'auto';
+        }
+
+        function startDemo() {
+            showNotification();
+
+            setTimeout(() => {
+                showAgreementReminder();
+                setTimeout(() => {
+                    addMessage('This check-in is a chance to celebrate progress or adjust course. How has it been going?');
+                    setTimeout(showCheckinOptions, 1000);
+                }, 1000);
+            }, 1000);
+        }
+
+        // Input handling
+        document.getElementById('inputField').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        document.getElementById('inputField').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Start demo
+        startDemo();
+    </script>
+</body>
+</html>

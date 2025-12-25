@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Process Explanation - BeHeard Demo</title>
+    <link rel="stylesheet" href="../styles/shared.css">
+</head>
+<body>
+    <div class="phone-frame">
+        <header class="header">
+            <a href="index.html" class="header-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                All Demos
+            </a>
+            <div class="header-top">
+                <div class="header-logo">BeHeard</div>
+                <div class="header-stage">Process Explanation</div>
+            </div>
+        </header>
+
+        <div class="content-area" id="contentArea">
+            <!-- Dynamic content -->
+        </div>
+
+        <div class="input-area hidden" id="inputArea">
+            <div class="input-wrapper">
+                <textarea class="input-field" id="inputField" placeholder="Share your thoughts..." rows="1"></textarea>
+            </div>
+            <button class="send-btn" id="sendBtn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const stages = [
+            {
+                name: "Stage 1: The Witness",
+                description: "First, you will each have private time with me to share your perspective. I will listen deeply and reflect back what I hear. No judgment, no advice - just witnessing."
+            },
+            {
+                name: "Stage 2: Perspective Stretch",
+                description: "Once you have both been heard, I will help you understand each other. You will see a summary of what your partner shared, and I will guide you to consider their experience."
+            },
+            {
+                name: "Stage 3: Need Mapping",
+                description: "Together, we will identify the core needs beneath the conflict. Often, people in conflict share the same underlying needs - like respect, recognition, or connection."
+            },
+            {
+                name: "Stage 4: Strategic Repair",
+                description: "Finally, you will both propose small experiments - specific actions to try for a set period. You will agree on what to try and schedule a check-in."
+            }
+        ];
+
+        let currentStage = -1;
+
+        function addMessage(text, type = 'ai') {
+            const content = document.getElementById('contentArea');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            content.appendChild(msg);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function showTyping() {
+            const content = document.getElementById('contentArea');
+            const typing = document.createElement('div');
+            typing.className = 'typing-indicator';
+            typing.id = 'typingIndicator';
+            typing.innerHTML = '<span></span><span></span><span></span>';
+            content.appendChild(typing);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function hideTyping() {
+            const typing = document.getElementById('typingIndicator');
+            if (typing) typing.remove();
+        }
+
+        function showStageCard(stage) {
+            const content = document.getElementById('contentArea');
+            const card = document.createElement('div');
+            card.className = 'panel';
+            card.innerHTML = `
+                <div class="panel-header">${stage.name}</div>
+                <div class="panel-content">${stage.description}</div>
+            `;
+            content.appendChild(card);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function showContinueButton(text, onClick) {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+            const btn = document.createElement('button');
+            btn.className = 'suggested-btn';
+            btn.textContent = text;
+            btn.onclick = () => {
+                container.remove();
+                onClick();
+            };
+            container.appendChild(btn);
+            content.appendChild(container);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function showFinalOptions() {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+
+            const yesBtn = document.createElement('button');
+            yesBtn.className = 'suggested-btn';
+            yesBtn.textContent = 'Yes, I am ready to begin';
+            yesBtn.onclick = () => {
+                container.remove();
+                addMessage('Yes, I am ready to begin', 'user');
+                showTyping();
+                setTimeout(() => {
+                    hideTyping();
+                    addMessage('Wonderful. Let us start by hearing your story. Take your time - there is no rush here.');
+                    setTimeout(() => {
+                        addMessage('What happened that brought you here today?');
+                        document.getElementById('inputArea').classList.remove('hidden');
+                    }, 1500);
+                }, 1000);
+            };
+
+            const questionsBtn = document.createElement('button');
+            questionsBtn.className = 'suggested-btn';
+            questionsBtn.textContent = 'I have some questions first';
+            questionsBtn.onclick = () => {
+                container.remove();
+                addMessage('I have some questions first', 'user');
+                showTyping();
+                setTimeout(() => {
+                    hideTyping();
+                    addMessage('Of course. What would you like to know? I am here to help you feel comfortable with the process.');
+                    document.getElementById('inputArea').classList.remove('hidden');
+                }, 1000);
+            };
+
+            container.appendChild(yesBtn);
+            container.appendChild(questionsBtn);
+            content.appendChild(container);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function nextStage() {
+            currentStage++;
+
+            if (currentStage < stages.length) {
+                showTyping();
+                setTimeout(() => {
+                    hideTyping();
+                    showStageCard(stages[currentStage]);
+                    setTimeout(() => {
+                        showContinueButton('Continue', nextStage);
+                    }, 500);
+                }, 800);
+            } else {
+                showTyping();
+                setTimeout(() => {
+                    hideTyping();
+                    addMessage('That is the complete process. It takes time, but couples who go through all the stages often find a depth of understanding they have never had before.');
+                    setTimeout(() => {
+                        addMessage('Are you ready to begin?');
+                        setTimeout(showFinalOptions, 500);
+                    }, 1500);
+                }, 1000);
+            }
+        }
+
+        function startDemo() {
+            addMessage('Before we begin, I want to walk you through how BeHeard works so you know what to expect.');
+
+            setTimeout(() => {
+                addMessage('This is a guided process with four main stages. Each one builds on the last.');
+                setTimeout(() => {
+                    showContinueButton('Tell me about the stages', nextStage);
+                }, 1000);
+            }, 1500);
+        }
+
+        // Start the demo
+        startDemo();
+    </script>
+</body>
+</html>

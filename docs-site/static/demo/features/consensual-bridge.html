@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Consensual Bridge - BeHeard Demo</title>
+    <link rel="stylesheet" href="../styles/shared.css">
+    <style>
+        .insight-card {
+            background: rgba(16, 163, 127, 0.1);
+            border: 1px solid var(--accent);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .insight-label {
+            font-size: 12px;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .insight-text {
+            font-size: 15px;
+            color: var(--text-primary);
+            line-height: 1.6;
+            font-style: italic;
+        }
+
+        .consent-options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .consent-option {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .consent-option:hover {
+            border-color: var(--accent);
+        }
+
+        .consent-option.selected {
+            border-color: var(--accent);
+            background: rgba(16, 163, 127, 0.1);
+        }
+
+        .consent-option-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 6px;
+        }
+
+        .consent-radio {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .consent-option.selected .consent-radio {
+            border-color: var(--accent);
+            background: var(--accent);
+        }
+
+        .consent-radio-inner {
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .consent-option.selected .consent-radio-inner {
+            opacity: 1;
+        }
+
+        .consent-option-title {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .consent-option-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-left: 32px;
+        }
+
+        .preview-container {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .preview-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .preview-icon {
+            font-size: 18px;
+        }
+
+        .preview-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .preview-content {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .preview-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .preview-text {
+            font-size: 14px;
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        .partner-notification {
+            background: rgba(16, 163, 127, 0.15);
+            border: 1px solid var(--accent);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .notification-icon {
+            font-size: 20px;
+        }
+
+        .notification-content {
+            flex: 1;
+        }
+
+        .notification-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .notification-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <header class="header">
+            <a href="index.html" class="header-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                All Demos
+            </a>
+            <div class="header-top">
+                <div class="header-logo">BeHeard</div>
+                <div class="header-stage">Consensual Bridge</div>
+            </div>
+        </header>
+
+        <div class="content-area" id="contentArea">
+            <!-- Dynamic content -->
+        </div>
+
+        <div class="input-area hidden" id="inputArea">
+            <div class="input-wrapper">
+                <textarea class="input-field" id="inputField" placeholder="Share your thoughts..." rows="1"></textarea>
+            </div>
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let selectedOption = null;
+        const fullReflection = "I realize now that I have been carrying a lot of resentment. It is not just about who does what - it is that I feel alone in caring about our home. When I come home to dishes in the sink, what I actually feel is forgotten. Like I do not matter enough to put in the effort.";
+        const summaryReflection = "Alex realized that the frustration is not really about chores - it is about feeling alone and wanting to feel like they matter to their partner.";
+
+        function addMessage(text, type = 'ai') {
+            const content = document.getElementById('contentArea');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            content.appendChild(msg);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function showTyping() {
+            const content = document.getElementById('contentArea');
+            const typing = document.createElement('div');
+            typing.className = 'typing-indicator';
+            typing.id = 'typingIndicator';
+            typing.innerHTML = '<span></span><span></span><span></span>';
+            content.appendChild(typing);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function hideTyping() {
+            const typing = document.getElementById('typingIndicator');
+            if (typing) typing.remove();
+        }
+
+        function showInsight() {
+            const content = document.getElementById('contentArea');
+            const insight = document.createElement('div');
+            insight.className = 'insight-card';
+            insight.innerHTML = `
+                <div class="insight-label">Your Insight</div>
+                <div class="insight-text">${fullReflection}</div>
+            `;
+            content.appendChild(insight);
+        }
+
+        function showConsentQuestion() {
+            addMessage('This is a meaningful insight. Would you like to share it with Jordan?');
+
+            setTimeout(() => {
+                const content = document.getElementById('contentArea');
+                const options = document.createElement('div');
+                options.className = 'consent-options';
+                options.id = 'consentOptions';
+
+                const optionsData = [
+                    {
+                        id: 'full',
+                        title: 'Share full reflection',
+                        desc: 'Jordan will see exactly what you wrote'
+                    },
+                    {
+                        id: 'summary',
+                        title: 'Share summary only',
+                        desc: 'I will create a brief version for Jordan'
+                    },
+                    {
+                        id: 'private',
+                        title: 'Keep private',
+                        desc: 'This stays between you and me'
+                    }
+                ];
+
+                optionsData.forEach(opt => {
+                    const option = document.createElement('div');
+                    option.className = 'consent-option';
+                    option.dataset.option = opt.id;
+                    option.innerHTML = `
+                        <div class="consent-option-header">
+                            <div class="consent-radio"><div class="consent-radio-inner"></div></div>
+                            <div class="consent-option-title">${opt.title}</div>
+                        </div>
+                        <div class="consent-option-desc">${opt.desc}</div>
+                    `;
+                    option.onclick = () => selectOption(opt.id);
+                    options.appendChild(option);
+                });
+
+                content.appendChild(options);
+                content.scrollTop = content.scrollHeight;
+            }, 1000);
+        }
+
+        function selectOption(optionId) {
+            selectedOption = optionId;
+
+            document.querySelectorAll('.consent-option').forEach(opt => {
+                opt.classList.toggle('selected', opt.dataset.option === optionId);
+            });
+
+            // Remove existing confirm button
+            const existingBtn = document.querySelector('.confirm-container');
+            if (existingBtn) existingBtn.remove();
+
+            // Add confirm button
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages confirm-container';
+            const btn = document.createElement('button');
+            btn.className = 'suggested-btn';
+            btn.textContent = 'Confirm choice';
+            btn.onclick = confirmChoice;
+            container.appendChild(btn);
+            content.appendChild(container);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function confirmChoice() {
+            const confirmBtn = document.querySelector('.confirm-container');
+            if (confirmBtn) confirmBtn.remove();
+
+            const optionsEl = document.getElementById('consentOptions');
+            if (optionsEl) optionsEl.remove();
+
+            switch (selectedOption) {
+                case 'full':
+                    handleFullShare();
+                    break;
+                case 'summary':
+                    handleSummaryShare();
+                    break;
+                case 'private':
+                    handlePrivate();
+                    break;
+            }
+        }
+
+        function handleFullShare() {
+            addMessage('Share full reflection', 'user');
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                addMessage('I will share your complete reflection with Jordan. Let me show you exactly what they will see:');
+
+                setTimeout(() => {
+                    showPreview(fullReflection, true);
+                }, 1000);
+            }, 800);
+        }
+
+        function handleSummaryShare() {
+            addMessage('Share summary only', 'user');
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                addMessage('I will create a brief summary that captures the essence. Here is what Jordan will see:');
+
+                setTimeout(() => {
+                    showPreview(summaryReflection, false);
+                }, 1000);
+            }, 800);
+        }
+
+        function handlePrivate() {
+            addMessage('Keep private', 'user');
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                addMessage('Understood. This insight stays between us. Sometimes the most important realizations are just for you.');
+
+                setTimeout(() => {
+                    addMessage('You can always choose to share later if you change your mind.');
+                    setTimeout(showRestart, 1500);
+                }, 1500);
+            }, 800);
+        }
+
+        function showPreview(text, isFull) {
+            const content = document.getElementById('contentArea');
+            const preview = document.createElement('div');
+            preview.className = 'preview-container';
+            preview.innerHTML = `
+                <div class="preview-header">
+                    <span class="preview-icon">&#128065;</span>
+                    <span class="preview-title">Preview: What Jordan Will See</span>
+                </div>
+                <div class="preview-content">
+                    <div class="preview-label">${isFull ? 'Alex shared:' : 'Summary from Alex:'}</div>
+                    <div class="preview-text">${text}</div>
+                </div>
+                <div class="suggested-messages">
+                    <button class="suggested-btn" onclick="sendToPartner()">Send to Jordan</button>
+                    <button class="suggested-btn" onclick="editChoice()">Go back</button>
+                </div>
+            `;
+            content.appendChild(preview);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function sendToPartner() {
+            const content = document.getElementById('contentArea');
+            const preview = content.querySelector('.preview-container');
+            if (preview) {
+                // Remove the buttons
+                const btns = preview.querySelector('.suggested-messages');
+                if (btns) btns.remove();
+            }
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                addMessage('Sent. Jordan will receive this when they reach the Perspective Stretch stage.');
+
+                setTimeout(() => {
+                    showPartnerNotification();
+                }, 1500);
+            }, 1000);
+        }
+
+        function showPartnerNotification() {
+            const content = document.getElementById('contentArea');
+            const notification = document.createElement('div');
+            notification.className = 'partner-notification';
+            notification.innerHTML = `
+                <span class="notification-icon">&#128276;</span>
+                <div class="notification-content">
+                    <div class="notification-title">Notification sent to Jordan</div>
+                    <div class="notification-text">They will see your reflection when the time is right in their process.</div>
+                </div>
+            `;
+            content.appendChild(notification);
+
+            setTimeout(() => {
+                addMessage('This is how the Consensual Bridge works - you control what gets shared and when.');
+                setTimeout(showRestart, 1500);
+            }, 1500);
+        }
+
+        function editChoice() {
+            const content = document.getElementById('contentArea');
+            const preview = content.querySelector('.preview-container');
+            if (preview) preview.remove();
+
+            showConsentQuestion();
+        }
+
+        function showRestart() {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+            const btn = document.createElement('button');
+            btn.className = 'suggested-btn';
+            btn.textContent = 'Try demo again';
+            btn.onclick = () => {
+                selectedOption = null;
+                content.innerHTML = '';
+                startDemo();
+            };
+            container.appendChild(btn);
+            content.appendChild(container);
+        }
+
+        function startDemo() {
+            addMessage('You have just had an important realization during your reflection:');
+
+            setTimeout(() => {
+                showInsight();
+                setTimeout(showConsentQuestion, 1500);
+            }, 1000);
+        }
+
+        // Start demo
+        startDemo();
+    </script>
+</body>
+</html>

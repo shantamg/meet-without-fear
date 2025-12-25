@@ -12,6 +12,13 @@ This directory contains all documentation for BeHeard MVP planning - an AI-Facil
 - **[Plans](plans/index.md)** - Implementation plans with user flows and wireframe diagrams
 - **[Source Material](source-material/index.md)** - Raw input documents and requirements
 
+## Interactive Demos
+
+Experience the key features in action:
+
+- **[Full Journey Demo](/demo/index.html)** - Walk through all 5 stages
+- **[Feature Demos](/demo/features/index.html)** - Explore individual mechanisms
+
 ## Quick Links
 
 ### Overview

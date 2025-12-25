@@ -1,5 +1,9 @@
 # System Guardrails
 
+:::tip See it in action
+[Try the Guardrails demo](/demo/features/guardrails.html) - See how the AI maintains neutrality and redirects attempts to game the system.
+:::
+
 ## Purpose
 
 Define the inviolable rules that the AI always follows, regardless of user requests or conversational pressure.

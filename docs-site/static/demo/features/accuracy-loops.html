@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Accuracy Loops - BeHeard Demo</title>
+    <link rel="stylesheet" href="../styles/shared.css">
+    <style>
+        .reflection-bubble {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 12px;
+        }
+
+        .reflection-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+
+        .reflection-text {
+            font-size: 15px;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .accuracy-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .accuracy-btn {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .accuracy-btn.correct {
+            background: rgba(16, 163, 127, 0.15);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+        }
+
+        .accuracy-btn.correct:hover {
+            background: rgba(16, 163, 127, 0.25);
+        }
+
+        .accuracy-btn.incorrect {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+        }
+
+        .accuracy-btn.incorrect:hover {
+            border-color: var(--warning);
+        }
+
+        .iteration-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .iteration-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+        }
+
+        .iteration-dot.active {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .iteration-dot.complete {
+            background: var(--success);
+            border-color: var(--success);
+        }
+
+        .success-card {
+            background: rgba(16, 163, 127, 0.15);
+            border: 1px solid var(--accent);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .success-icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+        }
+
+        .success-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .success-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <header class="header">
+            <a href="index.html" class="header-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                All Demos
+            </a>
+            <div class="header-top">
+                <div class="header-logo">BeHeard</div>
+                <div class="header-stage">Accuracy Loops</div>
+            </div>
+        </header>
+
+        <div class="content-area" id="contentArea">
+            <!-- Dynamic content -->
+        </div>
+
+        <div class="input-area" id="inputArea">
+            <div class="input-wrapper">
+                <textarea class="input-field" id="inputField" placeholder="Help me understand better..." rows="1"></textarea>
+            </div>
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let iteration = 0;
+        const maxIterations = 3;
+
+        const reflections = [
+            {
+                text: "It sounds like you felt dismissed when Jordan interrupted you during dinner.",
+                correction: "It was not about being interrupted - it was that they were on their phone the whole time."
+            },
+            {
+                text: "I see. So you felt ignored because Jordan was distracted by their phone during your conversation.",
+                correction: "It is more than ignored - I felt like I was not worth their attention."
+            },
+            {
+                text: "That is deeper. You felt unimportant, like you were not worth putting the phone down for. Like your presence did not matter enough.",
+                final: true
+            }
+        ];
+
+        function addMessage(text, type = 'ai') {
+            const content = document.getElementById('contentArea');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            content.appendChild(msg);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function showTyping() {
+            const content = document.getElementById('contentArea');
+            const typing = document.createElement('div');
+            typing.className = 'typing-indicator';
+            typing.id = 'typingIndicator';
+            typing.innerHTML = '<span></span><span></span><span></span>';
+            content.appendChild(typing);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function hideTyping() {
+            const typing = document.getElementById('typingIndicator');
+            if (typing) typing.remove();
+        }
+
+        function showIterationBadge() {
+            const content = document.getElementById('contentArea');
+            const badge = document.createElement('div');
+            badge.className = 'iteration-badge';
+            badge.id = 'iterationBadge';
+            badge.innerHTML = `
+                <span>Understanding attempt</span>
+                ${[1,2,3].map(i => `<div class="iteration-dot ${i < iteration + 1 ? 'complete' : ''} ${i === iteration + 1 ? 'active' : ''}"></div>`).join('')}
+            `;
+            content.appendChild(badge);
+        }
+
+        function updateIterationBadge() {
+            const badge = document.getElementById('iterationBadge');
+            if (badge) {
+                badge.innerHTML = `
+                    <span>Understanding attempt</span>
+                    ${[1,2,3].map(i => `<div class="iteration-dot ${i < iteration + 1 ? 'complete' : ''} ${i === iteration + 1 ? 'active' : ''}"></div>`).join('')}
+                `;
+            }
+        }
+
+        function showReflection() {
+            const content = document.getElementById('contentArea');
+            const data = reflections[iteration];
+
+            const bubble = document.createElement('div');
+            bubble.className = 'reflection-bubble';
+            bubble.id = 'reflectionBubble';
+            bubble.innerHTML = `
+                <div class="reflection-label">My understanding</div>
+                <div class="reflection-text">${data.text}</div>
+                ${!data.final ? `
+                    <div class="accuracy-buttons">
+                        <button class="accuracy-btn correct" onclick="confirmAccurate()">
+                            <span>&#10003;</span> That is right
+                        </button>
+                        <button class="accuracy-btn incorrect" onclick="requestCorrection()">
+                            <span>&#8634;</span> Not quite
+                        </button>
+                    </div>
+                ` : ''}
+            `;
+            content.appendChild(bubble);
+            content.scrollTop = content.scrollHeight;
+
+            if (data.final) {
+                setTimeout(() => {
+                    showFinalAccuracyCheck();
+                }, 500);
+            }
+        }
+
+        function showFinalAccuracyCheck() {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+
+            const correctBtn = document.createElement('button');
+            correctBtn.className = 'suggested-btn';
+            correctBtn.textContent = 'Yes, that captures it';
+            correctBtn.onclick = confirmAccurate;
+
+            const incorrectBtn = document.createElement('button');
+            incorrectBtn.className = 'suggested-btn';
+            incorrectBtn.textContent = 'Still not quite right';
+            incorrectBtn.onclick = requestCorrection;
+
+            container.appendChild(correctBtn);
+            container.appendChild(incorrectBtn);
+            content.appendChild(container);
+        }
+
+        function confirmAccurate() {
+            // Remove buttons
+            const bubble = document.getElementById('reflectionBubble');
+            const buttons = bubble?.querySelector('.accuracy-buttons');
+            if (buttons) buttons.remove();
+
+            const suggestions = document.querySelector('.suggested-messages');
+            if (suggestions) suggestions.remove();
+
+            addMessage('Yes, that captures it', 'user');
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                showSuccess();
+            }, 800);
+        }
+
+        function requestCorrection() {
+            // Remove buttons
+            const bubble = document.getElementById('reflectionBubble');
+            const buttons = bubble?.querySelector('.accuracy-buttons');
+            if (buttons) buttons.remove();
+
+            const suggestions = document.querySelector('.suggested-messages');
+            if (suggestions) suggestions.remove();
+
+            addMessage('Not quite', 'user');
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                addMessage('Help me understand better - what did I miss?');
+
+                // Show input or suggestion
+                if (iteration < reflections.length - 1 && reflections[iteration].correction) {
+                    setTimeout(() => {
+                        const content = document.getElementById('contentArea');
+                        const container = document.createElement('div');
+                        container.className = 'suggested-messages';
+                        const btn = document.createElement('button');
+                        btn.className = 'suggested-btn';
+                        btn.textContent = reflections[iteration].correction;
+                        btn.onclick = () => sendCorrection(reflections[iteration].correction);
+                        container.appendChild(btn);
+                        content.appendChild(container);
+                    }, 500);
+                }
+            }, 800);
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('inputField');
+            const text = input.value.trim();
+            if (!text) return;
+
+            sendCorrection(text);
+            input.value = '';
+            input.style.height = 'auto';
+        }
+
+        function sendCorrection(text) {
+            // Remove suggestions
+            const suggestions = document.querySelector('.suggested-messages');
+            if (suggestions) suggestions.remove();
+
+            addMessage(text, 'user');
+
+            iteration++;
+            updateIterationBadge();
+
+            if (iteration < reflections.length) {
+                showTyping();
+                setTimeout(() => {
+                    hideTyping();
+                    addMessage('I hear you. Let me try again:');
+                    setTimeout(showReflection, 800);
+                }, 1000);
+            } else {
+                showTyping();
+                setTimeout(() => {
+                    hideTyping();
+                    addMessage('Thank you for your patience in helping me understand. Getting this right matters.');
+                    setTimeout(showRestart, 1500);
+                }, 1000);
+            }
+        }
+
+        function showSuccess() {
+            const content = document.getElementById('contentArea');
+            const card = document.createElement('div');
+            card.className = 'success-card';
+            card.innerHTML = `
+                <div class="success-icon">&#10003;</div>
+                <div class="success-title">Understanding Achieved</div>
+                <div class="success-text">
+                    It took ${iteration + 1} ${iteration === 0 ? 'attempt' : 'attempts'} to get this right.
+                    This is how BeHeard ensures you truly feel heard - we do not move on until we understand.
+                </div>
+            `;
+            content.appendChild(card);
+
+            setTimeout(showRestart, 2000);
+        }
+
+        function showRestart() {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+            const btn = document.createElement('button');
+            btn.className = 'suggested-btn';
+            btn.textContent = 'Try demo again';
+            btn.onclick = () => {
+                iteration = 0;
+                content.innerHTML = '';
+                startDemo();
+            };
+            container.appendChild(btn);
+            content.appendChild(container);
+        }
+
+        function startDemo() {
+            addMessage('This demo shows how the AI refines its understanding when it gets things wrong.');
+
+            setTimeout(() => {
+                addMessage('You have just shared something important. Watch how I check my understanding:');
+                setTimeout(() => {
+                    showIterationBadge();
+                    setTimeout(showReflection, 500);
+                }, 1000);
+            }, 1500);
+        }
+
+        // Input handling
+        document.getElementById('inputField').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        document.getElementById('inputField').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Start demo
+        startDemo();
+    </script>
+</body>
+</html>

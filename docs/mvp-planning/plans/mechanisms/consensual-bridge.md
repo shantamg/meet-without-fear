@@ -1,5 +1,9 @@
 # Consensual Bridge
 
+:::tip See it in action
+[Try the Consensual Bridge demo](/demo/features/consensual-bridge.html) - Explore explicit consent prompts for sharing reflections with your partner.
+:::
+
 ## Purpose
 
 Control what information flows between users, ensuring nothing is shared without explicit consent.

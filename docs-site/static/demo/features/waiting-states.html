@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Waiting States - BeHeard Demo</title>
+    <link rel="stylesheet" href="../styles/shared.css">
+    <style>
+        .partner-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .partner-avatar {
+            width: 72px;
+            height: 72px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin: 0 auto 16px;
+        }
+
+        .partner-name {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .partner-status {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+
+        .progress-container {
+            margin-bottom: 24px;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        .progress-label {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .stage-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .stage-pip {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+        }
+
+        .stage-pip.completed {
+            background: var(--success);
+        }
+
+        .stage-pip.current {
+            background: var(--accent);
+            box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.3);
+        }
+
+        .waiting-options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .waiting-option {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+        }
+
+        .waiting-option:hover {
+            border-color: var(--accent);
+        }
+
+        .waiting-option-icon {
+            font-size: 24px;
+        }
+
+        .waiting-option-text {
+            flex: 1;
+        }
+
+        .waiting-option-title {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .waiting-option-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .update-notification {
+            background: rgba(16, 163, 127, 0.15);
+            border: 1px solid var(--accent);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .update-icon {
+            font-size: 24px;
+        }
+
+        .update-text {
+            flex: 1;
+        }
+
+        .update-title {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .update-time {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .mindfulness-container {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        .mindfulness-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .mindfulness-prompt {
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .reflection-preview {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: left;
+            margin-bottom: 16px;
+        }
+
+        .reflection-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .reflection-text {
+            font-size: 14px;
+            color: var(--text-primary);
+            line-height: 1.5;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <header class="header">
+            <a href="index.html" class="header-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                All Demos
+            </a>
+            <div class="header-top">
+                <div class="header-logo">BeHeard</div>
+                <div class="header-stage">Waiting States</div>
+            </div>
+        </header>
+
+        <div class="content-area" id="contentArea">
+            <!-- Dynamic content -->
+        </div>
+    </div>
+
+    <script>
+        let partnerStage = 1;
+        let partnerProgress = 30;
+
+        function addMessage(text, type = 'ai') {
+            const content = document.getElementById('contentArea');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            content.appendChild(msg);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function showPartnerStatus() {
+            const content = document.getElementById('contentArea');
+
+            const card = document.createElement('div');
+            card.className = 'partner-card';
+            card.id = 'partnerCard';
+            card.innerHTML = `
+                <div class="partner-avatar">J</div>
+                <div class="partner-name">Jordan</div>
+                <div class="partner-status" id="partnerStatusText">Currently in Stage ${partnerStage}: The Witness</div>
+                <div class="stage-indicator" id="stageIndicator">
+                    ${[1,2,3,4].map(s => `<div class="stage-pip ${s < partnerStage ? 'completed' : ''} ${s === partnerStage ? 'current' : ''}"></div>`).join('')}
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: ${partnerProgress}%"></div>
+                    </div>
+                    <div class="progress-label">Stage ${partnerStage} progress</div>
+                </div>
+            `;
+            content.appendChild(card);
+        }
+
+        function showWaitingOptions() {
+            const content = document.getElementById('contentArea');
+
+            const options = document.createElement('div');
+            options.className = 'waiting-options';
+            options.id = 'waitingOptions';
+            options.innerHTML = `
+                <div class="waiting-option" onclick="reviewReflection()">
+                    <span class="waiting-option-icon">&#128196;</span>
+                    <div class="waiting-option-text">
+                        <div class="waiting-option-title">Review your reflection</div>
+                        <div class="waiting-option-desc">Read what you shared in Stage 1</div>
+                    </div>
+                </div>
+                <div class="waiting-option" onclick="takeBreak()">
+                    <span class="waiting-option-icon">&#9749;</span>
+                    <div class="waiting-option-text">
+                        <div class="waiting-option-title">Take a break</div>
+                        <div class="waiting-option-desc">Pause notifications and come back later</div>
+                    </div>
+                </div>
+                <div class="waiting-option" onclick="practiceMindfulness()">
+                    <span class="waiting-option-icon">&#127807;</span>
+                    <div class="waiting-option-text">
+                        <div class="waiting-option-title">Practice patience</div>
+                        <div class="waiting-option-desc">A brief mindfulness exercise</div>
+                    </div>
+                </div>
+            `;
+            content.appendChild(options);
+        }
+
+        function reviewReflection() {
+            const options = document.getElementById('waitingOptions');
+            options.classList.add('hidden');
+
+            const content = document.getElementById('contentArea');
+            const preview = document.createElement('div');
+            preview.className = 'reflection-preview';
+            preview.innerHTML = `
+                <div class="reflection-label">Your Stage 1 Reflection</div>
+                <div class="reflection-text">"I feel like I am always the one picking up after everyone. It is not just about the chores - it is that I feel invisible. Like my efforts do not matter. I want to feel like we are partners, not like I am doing this alone."</div>
+            `;
+            content.appendChild(preview);
+
+            setTimeout(() => {
+                addMessage('This is what you shared with me. Take a moment to sit with it. Does it still feel true?');
+                setTimeout(() => {
+                    showBackButton();
+                }, 1000);
+            }, 500);
+        }
+
+        function takeBreak() {
+            const options = document.getElementById('waitingOptions');
+            options.classList.add('hidden');
+
+            addMessage('Taking a break is healthy. I will send you a notification when Jordan is ready to continue.');
+            setTimeout(() => {
+                addMessage('Until then, try to do something kind for yourself.');
+                setTimeout(() => {
+                    const content = document.getElementById('contentArea');
+                    const notification = document.createElement('div');
+                    notification.className = 'panel';
+                    notification.innerHTML = `
+                        <div class="panel-header">Notification Settings</div>
+                        <div class="panel-content">
+                            You will receive a notification when Jordan completes their current stage. Take the time you need.
+                        </div>
+                    `;
+                    content.appendChild(notification);
+                    setTimeout(showBackButton, 1000);
+                }, 1500);
+            }, 1000);
+        }
+
+        function practiceMindfulness() {
+            const options = document.getElementById('waitingOptions');
+            options.classList.add('hidden');
+
+            const content = document.getElementById('contentArea');
+            const mindfulness = document.createElement('div');
+            mindfulness.className = 'mindfulness-container';
+            mindfulness.innerHTML = `
+                <div class="mindfulness-title">A Moment of Patience</div>
+                <div class="mindfulness-prompt">
+                    Waiting can be hard, especially when you care about resolution.<br><br>
+                    Take a breath and consider: Jordan is doing their own work right now. They are reflecting, just like you did. They are taking this seriously.<br><br>
+                    What would you want Jordan to be thinking about you while they wait?
+                </div>
+            `;
+            content.appendChild(mindfulness);
+
+            setTimeout(() => {
+                addMessage('Hold that thought. The patience you practice now is part of the process.');
+                setTimeout(showBackButton, 1500);
+            }, 3000);
+        }
+
+        function showBackButton() {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+            const btn = document.createElement('button');
+            btn.className = 'suggested-btn';
+            btn.textContent = 'Back to waiting';
+            btn.onclick = () => {
+                content.innerHTML = '';
+                startDemo();
+            };
+            container.appendChild(btn);
+            content.appendChild(container);
+        }
+
+        function simulatePartnerProgress() {
+            setTimeout(() => {
+                partnerProgress = 65;
+                const progressFill = document.getElementById('progressFill');
+                if (progressFill) progressFill.style.width = `${partnerProgress}%`;
+
+                setTimeout(() => {
+                    partnerProgress = 100;
+                    if (progressFill) progressFill.style.width = '100%';
+
+                    setTimeout(() => {
+                        showPartnerUpdate();
+                    }, 1000);
+                }, 3000);
+            }, 4000);
+        }
+
+        function showPartnerUpdate() {
+            const content = document.getElementById('contentArea');
+            const options = document.getElementById('waitingOptions');
+            if (options) options.classList.add('hidden');
+
+            const update = document.createElement('div');
+            update.className = 'update-notification';
+            update.innerHTML = `
+                <span class="update-icon">&#10003;</span>
+                <div class="update-text">
+                    <div class="update-title">Jordan has moved to Stage 2</div>
+                    <div class="update-time">Just now</div>
+                </div>
+            `;
+            content.appendChild(update);
+
+            // Update the card
+            partnerStage = 2;
+            const statusText = document.getElementById('partnerStatusText');
+            const stageIndicator = document.getElementById('stageIndicator');
+            const progressFill = document.getElementById('progressFill');
+
+            if (statusText) statusText.textContent = `Currently in Stage ${partnerStage}: Perspective Stretch`;
+            if (stageIndicator) {
+                stageIndicator.innerHTML = [1,2,3,4].map(s =>
+                    `<div class="stage-pip ${s < partnerStage ? 'completed' : ''} ${s === partnerStage ? 'current' : ''}"></div>`
+                ).join('');
+            }
+            if (progressFill) {
+                progressFill.style.width = '15%';
+            }
+
+            setTimeout(() => {
+                addMessage('Great news! Jordan has completed Stage 1 and is now working on understanding your perspective.');
+                setTimeout(() => {
+                    const container = document.createElement('div');
+                    container.className = 'suggested-messages';
+                    const btn = document.createElement('button');
+                    btn.className = 'suggested-btn';
+                    btn.textContent = 'Try demo again';
+                    btn.onclick = () => {
+                        partnerStage = 1;
+                        partnerProgress = 30;
+                        content.innerHTML = '';
+                        startDemo();
+                    };
+                    container.appendChild(btn);
+                    content.appendChild(container);
+                }, 1500);
+            }, 1000);
+        }
+
+        function startDemo() {
+            addMessage('You have completed Stage 1. Now we wait for Jordan to finish their reflection.');
+            setTimeout(() => {
+                showPartnerStatus();
+                setTimeout(() => {
+                    addMessage('While you wait, here are some things you can do:');
+                    setTimeout(() => {
+                        showWaitingOptions();
+                        simulatePartnerProgress();
+                    }, 500);
+                }, 1000);
+            }, 1500);
+        }
+
+        // Start demo
+        startDemo();
+    </script>
+</body>
+</html>

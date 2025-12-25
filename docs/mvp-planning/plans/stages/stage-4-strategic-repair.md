@@ -1,5 +1,9 @@
 # Stage 4: Strategic Repair
 
+:::tip See it in action
+[Try the Follow-up Check-in demo](/demo/features/follow-up.html) - Experience the post-agreement check-in that ensures accountability.
+:::
+
 ## Purpose
 
 Move from understanding to action by designing small, reversible experiments that address identified needs.

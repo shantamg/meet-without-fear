@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Attachment Support - BeHeard Demo</title>
+    <link rel="stylesheet" href="../styles/shared.css">
+    <style>
+        .attachment-trigger {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 16px;
+        }
+
+        .attachment-trigger:hover {
+            border-color: var(--accent);
+        }
+
+        .attachment-trigger-icon {
+            font-size: 20px;
+        }
+
+        .attachment-trigger-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .attachment-menu {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .attachment-option {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .attachment-option:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .attachment-option-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-tertiary);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .attachment-option-text {
+            flex: 1;
+        }
+
+        .attachment-option-title {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .attachment-option-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .file-preview {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .file-preview-thumb {
+            width: 56px;
+            height: 56px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .file-preview-thumb.image {
+            background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+        }
+
+        .file-preview-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .file-preview-info {
+            flex: 1;
+        }
+
+        .file-preview-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .file-preview-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .file-preview-remove {
+            width: 28px;
+            height: 28px;
+            background: var(--bg-tertiary);
+            border: none;
+            border-radius: 50%;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .file-preview-remove:hover {
+            background: var(--error);
+            color: white;
+        }
+
+        .screenshot-mock {
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 12px;
+            padding: 16px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .screenshot-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .screenshot-avatar {
+            width: 32px;
+            height: 32px;
+            background: #667eea;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: white;
+        }
+
+        .screenshot-name {
+            color: white;
+            font-weight: 500;
+        }
+
+        .screenshot-bubble {
+            background: rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            color: rgba(255,255,255,0.9);
+        }
+
+        .screenshot-bubble.sent {
+            background: #0084ff;
+            margin-left: 40px;
+        }
+
+        .ai-analysis {
+            background: rgba(16, 163, 127, 0.1);
+            border: 1px solid var(--accent);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .ai-analysis-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .ai-analysis-icon {
+            font-size: 18px;
+        }
+
+        .ai-analysis-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .ai-analysis-content {
+            font-size: 14px;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <header class="header">
+            <a href="index.html" class="header-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                All Demos
+            </a>
+            <div class="header-top">
+                <div class="header-logo">BeHeard</div>
+                <div class="header-stage">Attachment Support</div>
+            </div>
+        </header>
+
+        <div class="content-area" id="contentArea">
+            <!-- Dynamic content -->
+        </div>
+
+        <div class="input-area" id="inputArea">
+            <button class="send-btn" id="attachBtn" onclick="showAttachmentMenu()" style="background: var(--bg-tertiary);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                </svg>
+            </button>
+            <div class="input-wrapper">
+                <textarea class="input-field" id="inputField" placeholder="Add context about the screenshot..." rows="1"></textarea>
+            </div>
+            <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let hasAttachment = false;
+
+        function addMessage(text, type = 'ai') {
+            const content = document.getElementById('contentArea');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            content.appendChild(msg);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function showTyping() {
+            const content = document.getElementById('contentArea');
+            const typing = document.createElement('div');
+            typing.className = 'typing-indicator';
+            typing.id = 'typingIndicator';
+            typing.innerHTML = '<span></span><span></span><span></span>';
+            content.appendChild(typing);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function hideTyping() {
+            const typing = document.getElementById('typingIndicator');
+            if (typing) typing.remove();
+        }
+
+        function showAttachmentMenu() {
+            const content = document.getElementById('contentArea');
+
+            // Remove existing menu if present
+            const existing = document.getElementById('attachmentMenu');
+            if (existing) {
+                existing.remove();
+                return;
+            }
+
+            const menu = document.createElement('div');
+            menu.className = 'attachment-menu';
+            menu.id = 'attachmentMenu';
+            menu.innerHTML = `
+                <div class="attachment-option" onclick="selectAttachment('screenshot')">
+                    <div class="attachment-option-icon">&#128247;</div>
+                    <div class="attachment-option-text">
+                        <div class="attachment-option-title">Upload screenshot</div>
+                        <div class="attachment-option-desc">Share a screenshot from your device</div>
+                    </div>
+                </div>
+                <div class="attachment-option" onclick="selectAttachment('pdf')">
+                    <div class="attachment-option-icon">&#128196;</div>
+                    <div class="attachment-option-text">
+                        <div class="attachment-option-title">Upload PDF</div>
+                        <div class="attachment-option-desc">Share a document or email</div>
+                    </div>
+                </div>
+                <div class="attachment-option" onclick="selectAttachment('photo')">
+                    <div class="attachment-option-icon">&#128248;</div>
+                    <div class="attachment-option-text">
+                        <div class="attachment-option-title">Take photo</div>
+                        <div class="attachment-option-desc">Capture something to share</div>
+                    </div>
+                </div>
+            `;
+            content.appendChild(menu);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function selectAttachment(type) {
+            const menu = document.getElementById('attachmentMenu');
+            if (menu) menu.remove();
+
+            hasAttachment = true;
+
+            const content = document.getElementById('contentArea');
+
+            // Show file preview
+            const preview = document.createElement('div');
+            preview.className = 'file-preview';
+            preview.id = 'filePreview';
+            preview.innerHTML = `
+                <div class="file-preview-thumb image">
+                    <span style="font-size: 24px;">&#128172;</span>
+                </div>
+                <div class="file-preview-info">
+                    <div class="file-preview-name">text_conversation.png</div>
+                    <div class="file-preview-meta">Screenshot - 245 KB</div>
+                </div>
+                <button class="file-preview-remove" onclick="removeAttachment()">&#10005;</button>
+            `;
+            content.appendChild(preview);
+
+            // Show mock screenshot
+            const screenshot = document.createElement('div');
+            screenshot.className = 'screenshot-mock';
+            screenshot.id = 'screenshotMock';
+            screenshot.innerHTML = `
+                <div class="screenshot-header">
+                    <div class="screenshot-avatar">J</div>
+                    <div class="screenshot-name">Jordan</div>
+                </div>
+                <div class="screenshot-bubble">Can you pick up milk on the way home?</div>
+                <div class="screenshot-bubble sent">I just got home</div>
+                <div class="screenshot-bubble">You ALWAYS do this</div>
+                <div class="screenshot-bubble">I asked you one simple thing</div>
+                <div class="screenshot-bubble sent">I was in meetings all day, I forgot</div>
+                <div class="screenshot-bubble">You forgot because you dont care</div>
+            `;
+            content.appendChild(screenshot);
+            content.scrollTop = content.scrollHeight;
+
+            document.getElementById('inputField').placeholder = 'Add context about this...';
+
+            setTimeout(() => {
+                showSuggestion();
+            }, 500);
+        }
+
+        function removeAttachment() {
+            hasAttachment = false;
+            const preview = document.getElementById('filePreview');
+            const screenshot = document.getElementById('screenshotMock');
+            if (preview) preview.remove();
+            if (screenshot) screenshot.remove();
+            document.getElementById('inputField').placeholder = 'Share your thoughts...';
+        }
+
+        function showSuggestion() {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+            container.id = 'suggestions';
+
+            const btn = document.createElement('button');
+            btn.className = 'suggested-btn';
+            btn.textContent = 'This is the kind of thing that happens';
+            btn.onclick = () => sendWithContext('This is the kind of thing that happens. One small thing and it becomes a big fight.');
+            container.appendChild(btn);
+            content.appendChild(container);
+        }
+
+        function sendWithContext(text) {
+            const suggestions = document.getElementById('suggestions');
+            if (suggestions) suggestions.remove();
+
+            addMessage(text, 'user');
+            hasAttachment = false;
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                addMessage('I can see the conversation you shared. Let me take a look...');
+
+                setTimeout(() => {
+                    showAIAnalysis();
+                }, 1500);
+            }, 1000);
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('inputField');
+            const text = input.value.trim();
+            if (!text && !hasAttachment) return;
+
+            const suggestions = document.getElementById('suggestions');
+            if (suggestions) suggestions.remove();
+
+            addMessage(text || '[Shared screenshot]', 'user');
+            input.value = '';
+            input.style.height = 'auto';
+
+            if (hasAttachment) {
+                hasAttachment = false;
+
+                showTyping();
+                setTimeout(() => {
+                    hideTyping();
+                    addMessage('I can see the conversation you shared. Let me take a look...');
+
+                    setTimeout(() => {
+                        showAIAnalysis();
+                    }, 1500);
+                }, 1000);
+            }
+        }
+
+        function showAIAnalysis() {
+            const content = document.getElementById('contentArea');
+
+            const analysis = document.createElement('div');
+            analysis.className = 'ai-analysis';
+            analysis.innerHTML = `
+                <div class="ai-analysis-header">
+                    <span class="ai-analysis-icon">&#128270;</span>
+                    <span class="ai-analysis-title">What I Notice</span>
+                </div>
+                <div class="ai-analysis-content">
+                    Looking at this exchange, I can see how quickly things escalated. Jordan asked about milk, then interpreted your forgetting as not caring. That is a big jump - from a forgotten errand to "you do not care."
+                    <br><br>
+                    This pattern - where small things become evidence of larger failures - often points to deeper unmet needs. Jordan might be expressing something more than frustration about milk.
+                </div>
+            `;
+            content.appendChild(analysis);
+            content.scrollTop = content.scrollHeight;
+
+            setTimeout(() => {
+                addMessage('Does this pattern - small thing becomes big accusation - happen often?');
+                setTimeout(() => {
+                    const container = document.createElement('div');
+                    container.className = 'suggested-messages';
+
+                    ['Yes, all the time', 'Sometimes', 'This was unusual'].forEach(text => {
+                        const btn = document.createElement('button');
+                        btn.className = 'suggested-btn';
+                        btn.textContent = text;
+                        btn.onclick = () => {
+                            container.remove();
+                            addMessage(text, 'user');
+                            showTyping();
+                            setTimeout(() => {
+                                hideTyping();
+                                addMessage('Thank you for sharing this screenshot. It helps me understand what you are dealing with. The visual context tells me more than words alone could.');
+                                setTimeout(showRestart, 1500);
+                            }, 1000);
+                        };
+                        container.appendChild(btn);
+                    });
+                    content.appendChild(container);
+                }, 500);
+            }, 2000);
+        }
+
+        function showRestart() {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'suggested-messages';
+            const btn = document.createElement('button');
+            btn.className = 'suggested-btn';
+            btn.textContent = 'Try demo again';
+            btn.onclick = () => {
+                hasAttachment = false;
+                content.innerHTML = '';
+                startDemo();
+            };
+            container.appendChild(btn);
+            content.appendChild(container);
+        }
+
+        function startDemo() {
+            addMessage('This demo shows how you can share screenshots and documents to give context to your story.');
+
+            setTimeout(() => {
+                addMessage('Sometimes a text conversation or email says more than a description could. Tap the paperclip icon to try it.');
+            }, 1500);
+        }
+
+        // Input handling
+        document.getElementById('inputField').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        document.getElementById('inputField').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Start demo
+        startDemo();
+    </script>
+</body>
+</html>

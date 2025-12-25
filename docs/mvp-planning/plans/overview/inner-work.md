@@ -1,5 +1,9 @@
 # Inner Work Mode
 
+:::tip See it in action
+[Try the Inner Work demo](/demo/features/inner-work.html) - Experience the solo journey for personal growth and pattern recognition.
+:::
+
 ## Purpose
 
 Inner Work is a separate mode focused on personal growth and self-understanding. Unlike the conflict resolution stages which center on resolving issues with another person, Inner Work draws from patterns across all of a users conflicts to provide therapeutic insights, tools, and trainings.

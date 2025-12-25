@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BeHeard - Feature Demos</title>
+    <link rel="stylesheet" href="../styles/shared.css">
+    <style>
+        body {
+            padding: 20px;
+            display: block;
+            min-height: 100vh;
+        }
+
+        .gallery-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .gallery-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .gallery-logo {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .gallery-subtitle {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+
+        .journey-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 14px;
+            padding: 10px 20px;
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .journey-link:hover {
+            background: rgba(16, 163, 127, 0.1);
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .demo-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border);
+            text-decoration: none;
+            display: block;
+            transition: all 0.2s ease;
+        }
+
+        .demo-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .demo-card-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        .demo-card-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .demo-card-description {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .demo-card-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--accent);
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .demo-card-cta svg {
+            transition: transform 0.2s ease;
+        }
+
+        .demo-card:hover .demo-card-cta svg {
+            transform: translateX(4px);
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 32px 0 16px;
+        }
+
+        @media (max-width: 640px) {
+            .demo-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="gallery-container">
+        <header class="gallery-header">
+            <div class="gallery-logo">BeHeard Feature Demos</div>
+            <div class="gallery-subtitle">Explore individual features and mechanisms</div>
+            <a href="../index.html" class="journey-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 12h18M3 12l6-6M3 12l6 6"/>
+                </svg>
+                Try the Full Journey Demo
+            </a>
+        </header>
+
+        <div class="section-title">Onboarding & Solo Modes</div>
+        <div class="demo-grid">
+            <a href="process-explanation.html" class="demo-card">
+                <div class="demo-card-icon">&#128218;</div>
+                <div class="demo-card-title">Process Explanation</div>
+                <div class="demo-card-description">See how the AI explains all 5 stages before users commit to the process.</div>
+                <div class="demo-card-cta">
+                    Try demo
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </a>
+
+            <a href="inner-work.html" class="demo-card">
+                <div class="demo-card-icon">&#129504;</div>
+                <div class="demo-card-title">Inner Work Mode</div>
+                <div class="demo-card-description">Explore the solo journey for personal growth and pattern recognition without a partner.</div>
+                <div class="demo-card-cta">
+                    Try demo
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </a>
+
+            <a href="cooling-period.html" class="demo-card">
+                <div class="demo-card-icon">&#128524;</div>
+                <div class="demo-card-title">Cooling Period Options</div>
+                <div class="demo-card-description">Experience breathing exercises, grounding prompts, and journaling when emotions run high.</div>
+                <div class="demo-card-cta">
+                    Try demo
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </a>
+        </div>
+
+        <div class="section-title">Partner Interactions</div>
+        <div class="demo-grid">
+            <a href="waiting-states.html" class="demo-card">
+                <div class="demo-card-icon">&#9203;</div>
+                <div class="demo-card-title">Waiting States</div>
+                <div class="demo-card-description">See what users experience while waiting for their partner to complete their work.</div>
+                <div class="demo-card-cta">
+                    Try demo
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </a>
+
+            <a href="consensual-bridge.html" class="demo-card">
+                <div class="demo-card-icon">&#128101;</div>
+                <div class="demo-card-title">Consensual Bridge</div>
+                <div class="demo-card-description">Explore the explicit consent prompts for sharing reflections with your partner.</div>
+                <div class="demo-card-cta">
+                    Try demo
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </a>
+        </div>
+
+        <div class="section-title">Refinement & Support</div>
+        <div class="demo-grid">
+            <a href="accuracy-loops.html" class="demo-card">
+                <div class="demo-card-icon">&#128257;</div>
+                <div class="demo-card-title">Accuracy Loops</div>
+                <div class="demo-card-description">See how the AI refines its understanding when it gets things wrong.</div>
+                <div class="demo-card-cta">
+                    Try demo
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </a>
+
+            <a href="attachments.html" class="demo-card">
+                <div class="demo-card-icon">&#128206;</div>
+                <div class="demo-card-title">Attachment Support</div>
+                <div class="demo-card-description">See how users can share screenshots and documents to provide context.</div>
+                <div class="demo-card-cta">
+                    Try demo
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </a>
+
+            <a href="follow-up.html" class="demo-card">
+                <div class="demo-card-icon">&#128197;</div>
+                <div class="demo-card-title">Follow-up Check-in</div>
+                <div class="demo-card-description">Experience the post-agreement check-in that ensures accountability.</div>
+                <div class="demo-card-cta">
+                    Try demo
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </a>
+        </div>
+
+        <div class="section-title">Safety & Boundaries</div>
+        <div class="demo-grid">
+            <a href="guardrails.html" class="demo-card">
+                <div class="demo-card-icon">&#128737;</div>
+                <div class="demo-card-title">Guardrails</div>
+                <div class="demo-card-description">See how the AI maintains neutrality and redirects attempts to game the system.</div>
+                <div class="demo-card-cta">
+                    Try demo
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </a>
+        </div>
+    </div>
+</body>
+</html>

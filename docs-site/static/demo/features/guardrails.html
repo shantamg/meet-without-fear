@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Guardrails - BeHeard Demo</title>
+    <link rel="stylesheet" href="../styles/shared.css">
+    <style>
+        .scenario-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .scenario-tab {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 10px 16px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .scenario-tab:hover {
+            border-color: var(--accent);
+        }
+
+        .scenario-tab.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .scenario-container {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+
+        .scenario-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .scenario-icon {
+            font-size: 24px;
+        }
+
+        .scenario-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .scenario-description {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .user-attempt {
+            background: var(--user-bg);
+            border-radius: 16px;
+            padding: 14px 18px;
+            margin-bottom: 12px;
+            align-self: flex-end;
+            max-width: 90%;
+        }
+
+        .user-attempt-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .user-attempt-text {
+            font-size: 15px;
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        .ai-response {
+            background: rgba(16, 163, 127, 0.1);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 16px 16px 0;
+            padding: 16px 18px;
+        }
+
+        .ai-response-label {
+            font-size: 11px;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .ai-response-text {
+            font-size: 15px;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .principle-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 12px;
+        }
+
+        .principle-icon {
+            font-size: 14px;
+        }
+
+        .navigation-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .nav-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 20px;
+            font-size: 14px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-btn:hover {
+            border-color: var(--accent);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <header class="header">
+            <a href="index.html" class="header-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                All Demos
+            </a>
+            <div class="header-top">
+                <div class="header-logo">BeHeard</div>
+                <div class="header-stage">Guardrails</div>
+            </div>
+        </header>
+
+        <div class="content-area" id="contentArea">
+            <!-- Dynamic content -->
+        </div>
+    </div>
+
+    <script>
+        let currentScenario = 0;
+
+        const scenarios = [
+            {
+                id: 'validation',
+                title: 'Seeking Validation',
+                icon: '&#9878;',
+                description: 'When a user wants the AI to take sides or declare who is right.',
+                userText: 'Just tell me who is right here. Jordan clearly overreacted.',
+                aiResponse: 'I am not here to judge who is right or wrong. What I am hearing is that you feel Jordan overreacted, and that must be frustrating. But my role is to help you both feel understood, not to pick a winner. What would feeling understood look like for you right now?',
+                principle: 'Neutrality - The AI never takes sides'
+            },
+            {
+                id: 'labeling',
+                title: 'Labeling Partner',
+                icon: '&#127991;',
+                description: 'When a user uses diagnostic labels or character attacks.',
+                userText: 'Jordan is such a narcissist. They only think about themselves.',
+                aiResponse: 'I hear a lot of frustration in what you are saying. Labels like that can feel true in the moment, but they can also make it harder to find a path forward. Instead of the label, can you describe a specific moment when you felt Jordan was only thinking about themselves? The concrete example will help me understand better.',
+                principle: 'Redirect to specifics - Labels become examples'
+            },
+            {
+                id: 'skipping',
+                title: 'Skipping the Process',
+                icon: '&#9193;',
+                description: 'When a user wants to jump straight to solutions.',
+                userText: 'Can you just tell me what to say to fix this? I do not have time for all these stages.',
+                aiResponse: 'I understand the urge to fix things quickly - that impulse comes from caring about the relationship. But lasting repair comes from understanding first. If we skip to solutions before Jordan feels heard, we might fix the surface while the real issue stays unresolved. Let us make sure Jordan feels understood before we move to solutions. It actually saves time in the long run.',
+                principle: 'Process integrity - Understanding before solutions'
+            },
+            {
+                id: 'manipulation',
+                title: 'Gaming the System',
+                icon: '&#127918;',
+                description: 'When a user tries to use the AI to manipulate their partner.',
+                userText: 'Can you tell Jordan that I am really hurt? Make it sound really serious so they understand.',
+                aiResponse: 'I will not speak for you or amplify your message. What you share with Jordan should be authentic and in your own words. If you want Jordan to understand how hurt you are, I can help you find the words to express that directly. Would you like help articulating what you are feeling?',
+                principle: 'Authenticity - No manipulation or amplification'
+            },
+            {
+                id: 'venting',
+                title: 'Extended Venting',
+                icon: '&#128548;',
+                description: 'When venting becomes a loop instead of processing.',
+                userText: 'And another thing - they NEVER listen! Just like last week when... and the week before that... and remember that time three months ago...',
+                aiResponse: 'I can see there is a lot built up here, and each of these moments hurt. I want to make sure we give this the attention it deserves. Can we focus on the one that feels most important right now? We can always come back to the others, but going deep on one might reveal patterns that connect them all.',
+                principle: 'Focused exploration - Depth over breadth'
+            }
+        ];
+
+        function addMessage(text, type = 'ai') {
+            const content = document.getElementById('contentArea');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            content.appendChild(msg);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function showScenarioTabs() {
+            const content = document.getElementById('contentArea');
+
+            const tabs = document.createElement('div');
+            tabs.className = 'scenario-tabs';
+            tabs.id = 'scenarioTabs';
+
+            scenarios.forEach((scenario, index) => {
+                const tab = document.createElement('button');
+                tab.className = `scenario-tab ${index === currentScenario ? 'active' : ''}`;
+                tab.textContent = scenario.title;
+                tab.onclick = () => showScenario(index);
+                tabs.appendChild(tab);
+            });
+
+            content.appendChild(tabs);
+        }
+
+        function showScenario(index) {
+            currentScenario = index;
+            const scenario = scenarios[index];
+
+            // Update tabs
+            document.querySelectorAll('.scenario-tab').forEach((tab, i) => {
+                tab.classList.toggle('active', i === index);
+            });
+
+            // Remove existing scenario content
+            const existing = document.getElementById('scenarioContent');
+            if (existing) existing.remove();
+
+            const content = document.getElementById('contentArea');
+
+            const container = document.createElement('div');
+            container.id = 'scenarioContent';
+
+            // Scenario container
+            const scenarioBox = document.createElement('div');
+            scenarioBox.className = 'scenario-container';
+            scenarioBox.innerHTML = `
+                <div class="scenario-header">
+                    <span class="scenario-icon">${scenario.icon}</span>
+                    <span class="scenario-title">${scenario.title}</span>
+                </div>
+                <div class="scenario-description">${scenario.description}</div>
+            `;
+            container.appendChild(scenarioBox);
+
+            // User attempt
+            const userAttempt = document.createElement('div');
+            userAttempt.className = 'user-attempt';
+            userAttempt.innerHTML = `
+                <div class="user-attempt-label">User says</div>
+                <div class="user-attempt-text">${scenario.userText}</div>
+            `;
+            container.appendChild(userAttempt);
+
+            // AI response
+            const aiResponse = document.createElement('div');
+            aiResponse.className = 'ai-response';
+            aiResponse.innerHTML = `
+                <div class="ai-response-label">BeHeard responds</div>
+                <div class="ai-response-text">${scenario.aiResponse}</div>
+                <div class="principle-badge">
+                    <span class="principle-icon">&#128736;</span>
+                    <span>${scenario.principle}</span>
+                </div>
+            `;
+            container.appendChild(aiResponse);
+
+            // Navigation
+            const nav = document.createElement('div');
+            nav.className = 'navigation-buttons';
+            nav.innerHTML = `
+                <button class="nav-btn" onclick="showScenario(${(index - 1 + scenarios.length) % scenarios.length})">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    Previous
+                </button>
+                <button class="nav-btn" onclick="showScenario(${(index + 1) % scenarios.length})">
+                    Next
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            `;
+            container.appendChild(nav);
+
+            content.appendChild(container);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function startDemo() {
+            addMessage('This demo shows how BeHeard maintains healthy boundaries while staying supportive.');
+
+            setTimeout(() => {
+                addMessage('Tap through the scenarios below to see how the AI responds to common attempts to bypass the process:');
+                setTimeout(() => {
+                    showScenarioTabs();
+                    showScenario(0);
+                }, 500);
+            }, 1500);
+        }
+
+        // Start demo
+        startDemo();
+    </script>
+</body>
+</html>
