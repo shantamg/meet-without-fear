@@ -1,7 +1,7 @@
 # Consensual Bridge
 
 :::tip See it in action
-[Try the Consensual Bridge demo](/demo/features/consensual-bridge.html) - Explore explicit consent prompts for sharing reflections with your partner.
+<a href="/demo/features/consensual-bridge.html" onClick="window.location.href='/demo/features/consensual-bridge.html'; return false;">Try the Consensual Bridge demo</a> - Explore explicit consent prompts for sharing reflections with your partner.
 :::
 
 ## Purpose

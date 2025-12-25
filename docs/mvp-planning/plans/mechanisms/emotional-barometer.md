@@ -1,9 +1,9 @@
 # Emotional Barometer
 
 :::tip See it in action
-[Try the Cooling Period demo](/demo/features/cooling-period.html) - Experience breathing exercises, grounding prompts, and journaling.
+<a href="/demo/features/cooling-period.html" onClick="window.location.href='/demo/features/cooling-period.html'; return false;">Try the Cooling Period demo</a> - Experience breathing exercises, grounding prompts, and journaling.
 
-[Try the Waiting States demo](/demo/features/waiting-states.html) - See what users experience while waiting for their partner.
+<a href="/demo/features/waiting-states.html" onClick="window.location.href='/demo/features/waiting-states.html'; return false;">Try the Waiting States demo</a> - See what users experience while waiting for their partner.
 :::
 
 ## Purpose

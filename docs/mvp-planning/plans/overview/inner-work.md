@@ -1,7 +1,7 @@
 # Inner Work Mode
 
 :::tip See it in action
-[Try the Inner Work demo](/demo/features/inner-work.html) - Experience the solo journey for personal growth and pattern recognition.
+<a href="/demo/features/inner-work.html" onClick="window.location.href='/demo/features/inner-work.html'; return false;">Try the Inner Work demo</a> - Experience the solo journey for personal growth and pattern recognition.
 :::
 
 ## Purpose

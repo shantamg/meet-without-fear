@@ -16,8 +16,8 @@ This directory contains all documentation for BeHeard MVP planning - an AI-Facil
 
 Experience the key features in action:
 
-- **[Full Journey Demo](/demo/index.html)** - Walk through all 5 stages
-- **[Feature Demos](/demo/features/index.html)** - Explore individual mechanisms
+- <strong><a href="/demo/index.html" onClick="window.location.href='/demo/index.html'; return false;">Full Journey Demo</a></strong> - Walk through all 5 stages
+- <strong><a href="/demo/features/index.html" onClick="window.location.href='/demo/features/index.html'; return false;">Feature Demos</a></strong> - Explore individual mechanisms
 
 ## Quick Links
 

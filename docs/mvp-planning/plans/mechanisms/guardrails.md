@@ -1,7 +1,7 @@
 # System Guardrails
 
 :::tip See it in action
-[Try the Guardrails demo](/demo/features/guardrails.html) - See how the AI maintains neutrality and redirects attempts to game the system.
+<a href="/demo/features/guardrails.html" onClick="window.location.href='/demo/features/guardrails.html'; return false;">Try the Guardrails demo</a> - See how the AI maintains neutrality and redirects attempts to game the system.
 :::
 
 ## Purpose

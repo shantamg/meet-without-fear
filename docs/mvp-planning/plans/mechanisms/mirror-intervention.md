@@ -1,9 +1,9 @@
 # Mirror Intervention
 
 :::tip See it in action
-[Try the Process Explanation demo](/demo/features/process-explanation.html) - See how the AI explains the stages upfront.
+<a href="/demo/features/process-explanation.html" onClick="window.location.href='/demo/features/process-explanation.html'; return false;">Try the Process Explanation demo</a> - See how the AI explains the stages upfront.
 
-[Try the Accuracy Loops demo](/demo/features/accuracy-loops.html) - See how the AI refines its understanding.
+<a href="/demo/features/accuracy-loops.html" onClick="window.location.href='/demo/features/accuracy-loops.html'; return false;">Try the Accuracy Loops demo</a> - See how the AI refines its understanding.
 :::
 
 ## Purpose

@@ -1,7 +1,7 @@
 # Stage 4: Strategic Repair
 
 :::tip See it in action
-[Try the Follow-up Check-in demo](/demo/features/follow-up.html) - Experience the post-agreement check-in that ensures accountability.
+<a href="/demo/features/follow-up.html" onClick="window.location.href='/demo/features/follow-up.html'; return false;">Try the Follow-up Check-in demo</a> - Experience the post-agreement check-in that ensures accountability.
 :::
 
 ## Purpose
