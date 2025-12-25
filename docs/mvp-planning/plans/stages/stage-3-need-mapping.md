@@ -11,6 +11,17 @@ Transition from surface-level stories and complaints to identifying universal hu
 - Identify at least one common-ground need
 - Reframe accusations into I-statements and needs
 
+## Visual Design: Gentle and Soft
+
+Stage 3 uses **softer colors** to create a gentle, calming feel that supports the reflective nature of this work:
+
+- Soft blues and teals for need cards
+- Gentle greens for common ground elements
+- Rounded corners and generous padding
+- **Side-by-side layout is key** - users see both sets of needs simultaneously
+
+The visual juxtaposition of both parties' needs creates the insight moment where users recognize shared humanity.
+
 ## Flow
 
 ```mermaid

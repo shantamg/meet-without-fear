@@ -138,6 +138,15 @@ When cooling period is triggered, the AI may offer:
 | Private journaling | Write without sharing |
 | Pause timer | Set a timer before returning |
 
+## Display Options
+
+The barometer can be presented in two ways:
+
+1. **Always visible** - A persistent slider at the bottom of the chat interface that users can adjust at any time
+2. **Periodic popup** - The barometer appears as a gentle popup at key moments (stage transitions, after intense exchanges, or on a timer)
+
+Either approach is valid. The always-visible option provides continuous awareness, while the popup approach can feel less intrusive and more intentional.
+
 ## Implementation Notes
 
 - Check-ins should feel natural, not intrusive

@@ -11,6 +11,17 @@ Provide each user with the experience of being deeply and fully heard by the AI,
 - Help users articulate feelings they may not have words for
 - Continue until the user genuinely feels heard
 
+## Open-Ended Design
+
+Stage 1 is intentionally **open-ended with no suggested prompts or options**. This design choice:
+
+- Allows the user to share freely without being guided toward specific responses
+- Enables assessment of how well the AI listens and reframes
+- Creates authentic space for natural expression
+- Avoids leading questions that might shape the narrative
+
+The AI simply invites sharing and then responds with empathetic reflection. The user types freely in an open text field.
+
 ## Flow
 
 ```mermaid

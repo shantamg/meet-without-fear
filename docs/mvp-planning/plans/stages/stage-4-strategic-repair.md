@@ -6,47 +6,51 @@ Move from understanding to action by designing small, reversible experiments tha
 
 ## AI Goal
 
-- Guide users toward proposing concrete actions
-- Ensure proposals are small, reversible, and time-bounded
-- Facilitate negotiation if needed
+- Invite **both users** to propose their own strategies
+- Help refine proposals to be small, reversible, and time-bounded
+- Collect and combine suggestions from both parties
+- Present all strategies as **unlabeled options** (no attribution to source)
+- Allow users to select from the combined pool
+- Offer to generate additional AI suggestions if desired
 - Document agreed-upon micro-experiments
-- Optionally schedule follow-up
+
+## Key Design: Collaborative Strategy Generation
+
+Unlike traditional negotiation where one person proposes and the other reacts, Stage 4 invites **both parties to contribute strategies independently**. The AI then:
+
+1. Collects strategies from both users
+2. Presents them as a single unlabeled pool
+3. Asks: "Here is what we have come up with so far. Are you happy with these options, or would you like me to try and generate a few more to explore?"
+
+This approach:
+- Removes defensiveness that comes with accepting another's proposal
+- Creates joint ownership of solutions
+- Avoids win/lose dynamics
+- Encourages creativity when users can build on unlabeled ideas
 
 ## Flow
 
 ```mermaid
 flowchart TD
     Enter[Enter Stage 4] --> Intro[AI introduces repair work]
-    Intro --> Review[Review common ground needs]
-    Review --> Invite[Invite action proposals]
+    Intro --> InviteA[Invite User A strategy]
+    InviteA --> RefineA[AI helps refine specifics]
 
-    Invite --> Propose[User proposes action]
+    InviteB[Invite User B strategy] --> RefineB[AI helps refine]
 
-    subgraph Criteria[Micro-Experiment Criteria]
-        C1[Small - one specific thing]
-        C2[Reversible - can undo if needed]
-        C3[Time-bounded - clear duration]
-        C4[Measurable - can assess success]
-    end
+    RefineA --> Collect[Collect all strategies]
+    RefineB --> Collect
 
-    Propose --> Check{Meets criteria?}
-    Check -->|Too big| Smaller[Help scope down]
-    Smaller --> Propose
-    Check -->|Not reversible| Adjust[Suggest reversible version]
-    Adjust --> Propose
-    Check -->|Vague| Clarify[Help make specific]
-    Clarify --> Propose
-    Check -->|Good| ToOther[Present to other party]
+    Collect --> Present[Present unlabeled strategy pool]
+    Present --> Question[Happy with options or want more?]
 
-    ToOther --> Response{Other response}
-    Response -->|Accept| Agreed[Record agreement]
-    Response -->|Counter-propose| Negotiate[AI facilitates]
-    Negotiate --> ToOther
-    Response -->|Reject| WhyReject[Explore concerns]
-    WhyReject --> Revise[Revise proposal]
-    Revise --> ToOther
+    Question -->|Want more| Generate[AI generates additional ideas]
+    Generate --> Present
 
-    Agreed --> Document[Document experiment]
+    Question -->|Happy| Select[Users select preferred strategies]
+    Select --> Combine[Combine selections]
+    Combine --> Document[Document micro-experiment]
+
     Document --> FollowUp{Schedule check-in?}
     FollowUp -->|Yes| Schedule[Set follow-up date]
     FollowUp -->|No| Complete[Stage 4 complete]
@@ -124,30 +128,35 @@ flowchart TB
 
         subgraph Foundation[Common Ground Foundation]
             Title1[Building on shared needs]
-            SharedNeed[You both need: Safety and Connection]
+            SharedNeed[You both need: Recognition]
         end
 
-        subgraph Proposals[Proposals Area]
-            Title2[Proposed Micro-Experiments]
-            Prop1[Your proposal: Daily 10-min check-in]
-            Status1[Status: Awaiting partner response]
-            Prop2[Partner proposal: Weekly date night]
-            Status2[Status: Awaiting your response]
+        subgraph Strategies[Collective Strategies - Unlabeled]
+            Title2[Here is what we have come up with]
+            Strat1[Weekly 15-min planning session]
+            Strat2[Daily appreciation message]
+            Strat3[Shared task list]
+            Strat4[Take turns choosing activities]
+            Strat5[5-minute check-in before bed]
         end
 
-        subgraph Actions[Response Actions]
-            Accept[Accept]
-            Modify[Suggest modification]
-            Counter[Counter-propose]
+        subgraph Actions[Options]
+            Happy[These look good]
+            More[Generate more ideas]
         end
 
-        subgraph Agreed[Agreed Experiments]
+        subgraph Agreed[Final Agreement]
             Title3[Your Commitments]
-            Exp1[1. Daily check-in - starts Monday]
-            FollowUp[Schedule check-in: Next Sunday]
+            Exp1[Weekly planning + daily appreciation]
+            FollowUp[Check-in: Two weeks from today]
         end
     end
 ```
+
+**Key visual elements:**
+- Strategy buttons are presented without labels indicating who suggested them
+- All buttons use soft, neutral colors (no "yours" vs "theirs" styling)
+- Users can select multiple strategies to combine
 
 ## Success Criteria
 

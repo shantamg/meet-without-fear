@@ -235,7 +235,7 @@
             line-height: 1.6;
         }
 
-        /* Needs Grid */
+        /* Needs Grid - Stage 3 uses softer, gentler colors */
         .needs-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -251,30 +251,31 @@
         }
 
         .need-card {
-            background: var(--bg-tertiary);
+            background: rgba(147, 197, 253, 0.15);
+            border: 1px solid rgba(147, 197, 253, 0.3);
             padding: 10px 12px;
-            border-radius: 8px;
+            border-radius: 12px;
             font-size: 13px;
             color: var(--text-primary);
             margin-bottom: 8px;
         }
 
         .need-card.common {
-            background: rgba(16, 163, 127, 0.2);
-            border: 1px solid var(--accent);
+            background: rgba(167, 243, 208, 0.2);
+            border: 1px solid rgba(110, 231, 183, 0.5);
         }
 
         .common-ground {
             grid-column: 1 / -1;
-            background: rgba(16, 163, 127, 0.15);
-            border: 1px solid var(--accent);
-            border-radius: 12px;
-            padding: 16px;
+            background: rgba(167, 243, 208, 0.15);
+            border: 1px solid rgba(110, 231, 183, 0.4);
+            border-radius: 16px;
+            padding: 20px;
             text-align: center;
         }
 
         .common-ground h4 {
-            color: var(--accent);
+            color: #6ee7b7;
             margin-bottom: 8px;
         }
 
@@ -329,6 +330,50 @@
             color: var(--text-primary);
             font-size: 14px;
             line-height: 1.6;
+        }
+
+        /* Collective Strategies - unlabeled mixed buttons */
+        .strategies-container {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .strategies-header {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .strategies-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .strategy-btn {
+            background: rgba(147, 197, 253, 0.15);
+            border: 1px solid rgba(147, 197, 253, 0.3);
+            color: var(--text-primary);
+            padding: 12px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            max-width: 100%;
+        }
+
+        .strategy-btn:hover {
+            background: rgba(147, 197, 253, 0.25);
+            border-color: rgba(147, 197, 253, 0.5);
+        }
+
+        .strategy-btn.selected {
+            background: rgba(110, 231, 183, 0.2);
+            border-color: rgba(110, 231, 183, 0.5);
         }
 
         /* Curiosity Compact */
@@ -844,23 +889,24 @@
                         needs: ["Recognition for their contributions", "Clarity on expectations", "Feeling competent rather than criticized"]
                     },
                     opening: [
-                        "Now I would like to share some of what Jordan expressed, with their permission. This is not about who is right - it is about understanding.",
-                        "Here is what Jordan shared:"
+                        "Before we look at what Jordan shared, I want to give you a moment to reflect.",
+                        "Thinking about Jordan right now - what do you imagine they might be feeling about this situation?"
                     ],
+                    ventingResponse: "I hear that frustration. It makes sense you would feel that way after everything you have been carrying. Take a moment - is there anything else you need to express before we continue?",
+                    empathyPrompt: "Now that you have had space to express that - if you step back for a moment, what do you think Jordan might genuinely need from this relationship?",
                     mirrorIntervention: "I notice some strong feelings coming up. That reaction makes sense given your own pain. But before we go further - if you set aside the hurt for a moment, what might Jordan be experiencing that leads them to see things this way?",
                     reflections: [
-                        "That is a thoughtful response. You are starting to see that Jordan might be feeling undervalued too, just in different ways.",
-                        "Exactly. Even when you disagree, being able to understand their experience is what creates space for real change."
+                        "That is insightful. You are starting to consider what Jordan might be experiencing, even before hearing their words.",
+                        "That shows real empathy. Now let me share what Jordan actually expressed, so you can see how your intuition compares:"
                     ],
                     empathyExchange: {
                         intro: "You have done meaningful work here. Now I would like to offer you something: a reflection of how Jordan experiences you. Would you be open to hearing it?",
                         reflection: "Jordan experiences you as someone who cares deeply about your home and family. They also shared that sometimes they feel like nothing they do measures up - that there is always another task or another way they have fallen short. They want to be a good partner but feel uncertain about how."
                     },
                     suggestions: [
-                        "I can see they feel unappreciated too",
-                        "That is hard to hear but I understand",
-                        "They never help with what I need",
-                        "Yes, I am open to hearing it"
+                        "I imagine they feel criticized",
+                        "I think they feel like they can not win",
+                        "Honestly I am still frustrated with them"
                     ]
                 },
                 3: {
@@ -886,19 +932,20 @@
                 },
                 4: {
                     name: "Strategic Repair",
-                    partnerProposal: {
-                        text: "Weekly household meeting - 15 minutes every Sunday to review the week ahead and plan together. No phones, no distractions.",
-                        from: "Jordan"
-                    },
                     opening: [
                         "Now comes the most important part: turning understanding into action.",
-                        "Jordan has already put forward a proposal:"
+                        "Based on everything we have discussed, what is one small thing you could try doing differently? Think of something specific and time-bounded."
                     ],
-                    suggestions: [
-                        "I like this idea - let us try it",
-                        "Can we make it shorter at first?",
-                        "I want to add daily appreciations"
+                    refinementPrompt: "That is a good starting point. Let me help you make it even more concrete - how often would you do this, and for how long would you try it?",
+                    // All suggestions from both parties - presented without labels
+                    allStrategies: [
+                        "Weekly 15-min planning session on Sundays",
+                        "Say one specific appreciation each morning",
+                        "Create a shared task list we both update",
+                        "Take turns choosing weekend activities",
+                        "5-minute check-in before bed each night"
                     ],
+                    collectiveMessage: "Here is what we have come up with so far. Are you happy with these options, or would you like me to try and generate a few more to explore?",
                     agreement: {
                         text: "For the next two weeks: 15-minute Sunday planning session + share one specific appreciation each day",
                         checkIn: "Two weeks from today"
@@ -971,7 +1018,7 @@
             const data = MockData.stages[0];
 
             content.innerHTML = `
-                <div class="message ai">Welcome, ${MockData.scenario.userName}. Before we begin working through your conflict with ${MockData.scenario.partnerName} about ${MockData.scenario.topic}, I need you to commit to approaching this process with an open mind.</div>
+                <div class="message ai">Congratulations ${MockData.scenario.userName}, you have taken the first step towards strengthening your connections. Are you open to me guiding you and ${MockData.scenario.partnerName} through a process where you both can be heard? I think there is a way we can find a win-win here.</div>
                 <div class="compact-container">
                     <div class="compact-title">The Curiosity Compact</div>
                     <div class="compact-terms">
@@ -1016,7 +1063,7 @@
             addAIMessage(data.opening[0]);
             setTimeout(() => {
                 addAIMessage(data.opening[1]);
-                showSuggestions(data.suggestions.slice(0, 2));
+                // No suggested options - Stage 1 is open-ended to assess AI listening quality
             }, 1500);
         }
 
@@ -1027,17 +1074,12 @@
 
             const data = MockData.stages[2];
 
+            // Stage 2 now starts by creating space for empathy, not presenting partner's words
             addAIMessage(data.opening[0]);
             setTimeout(() => {
                 addAIMessage(data.opening[1]);
-                setTimeout(() => {
-                    addPanel("What Jordan Shared", data.partnerPerspective.summary);
-                    addNeedsList("Their Core Needs", data.partnerPerspective.needs);
-                    setTimeout(() => {
-                        addAIMessage("How does hearing this land for you?");
-                        showSuggestions(data.suggestions.slice(0, 3));
-                    }, 1000);
-                }, 1000);
+                // Show suggestions that invite self-generated empathy or allow venting
+                showSuggestions(data.suggestions);
             }, 1500);
         }
 
@@ -1068,14 +1110,30 @@
 
             const data = MockData.stages[4];
 
+            // Stage 4 now starts by inviting the user to suggest their own strategies
             addAIMessage(data.opening[0]);
             setTimeout(() => {
                 addAIMessage(data.opening[1]);
-                setTimeout(() => {
-                    addProposal(data.partnerProposal);
-                    showSuggestions(data.suggestions);
-                }, 1000);
+                // No suggestions - user proposes their own ideas first
             }, 1500);
+        }
+
+        function addStrategiesGrid(strategies, message) {
+            const content = document.getElementById('contentArea');
+            const container = document.createElement('div');
+            container.className = 'strategies-container';
+            container.innerHTML = `
+                <div class="strategies-header">${message}</div>
+                <div class="strategies-grid">
+                    ${strategies.map(s => `<button class="strategy-btn" onclick="selectStrategy(this, '${s.replace(/'/g, "\\'")}')">${s}</button>`).join('')}
+                </div>
+            `;
+            content.appendChild(container);
+            content.scrollTop = content.scrollHeight;
+        }
+
+        function selectStrategy(btn, strategy) {
+            btn.classList.toggle('selected');
         }
 
         // ========== MESSAGE HELPERS ==========
@@ -1281,9 +1339,9 @@
         function handleStage1Response(text, step, data) {
             if (step <= data.reflections.length) {
                 addAIMessage(data.reflections[step - 1]);
-                if (step < 3) {
-                    showSuggestions([data.suggestions[step], data.suggestions[step + 1] || "Tell me more"]);
-                } else {
+                // No suggested options - Stage 1 is fully open-ended
+                // This allows assessment of how well the AI listens and reframes
+                if (step >= 3) {
                     showCompletionCheck("Do you feel fully heard?", "Not yet", "Yes, I feel heard", () => {
                         showModal("Stage 1 Complete", "You have been witnessed. When Jordan completes their session, you will both move to understanding each other's perspective.", "Continue to Stage 2");
                     });
@@ -1292,18 +1350,42 @@
         }
 
         function handleStage2Response(text, step, data) {
+            // Check for venting/frustration patterns
+            const ventingPattern = /frustrated|angry|annoyed|mad|unfair|they never|they always|selfish|lazy|does not care|doesn't care/i;
+            const isVenting = ventingPattern.test(text);
+
             if (!State.flags.reflectionReceived) {
-                if (step === 1 || State.flags.mirrorTriggered) {
-                    addAIMessage(data.reflections[0]);
-                    showSuggestions(["I can see we both feel unappreciated", "This helps me understand"]);
-                    State.flags.mirrorTriggered = false;
+                if (step === 1) {
+                    if (isVenting) {
+                        // Allow space for venting first
+                        addAIMessage(data.ventingResponse);
+                        showSuggestions(["I think I have said what I needed to", "Yes, there is more"]);
+                    } else {
+                        // They attempted empathy - acknowledge it
+                        addAIMessage(data.reflections[0]);
+                        showSuggestions(["What did Jordan actually say?", "I want to understand more"]);
+                    }
                 } else if (step === 2) {
-                    addAIMessage(data.reflections[1]);
-                    setTimeout(() => {
-                        addAIMessage(data.empathyExchange.intro);
-                        showSuggestions(["Yes, I am open to hearing it", "I need a moment first"]);
-                    }, 1500);
+                    if (State.flags.mirrorTriggered) {
+                        addAIMessage(data.mirrorIntervention);
+                        showSuggestions(["You are right, let me think about that", "I can try to see their side"]);
+                        State.flags.mirrorTriggered = false;
+                    } else {
+                        // Now reveal what partner actually shared
+                        addAIMessage(data.reflections[1]);
+                        setTimeout(() => {
+                            addPanel("What Jordan Shared", data.partnerPerspective.summary);
+                            addNeedsList("Their Core Needs", data.partnerPerspective.needs);
+                            setTimeout(() => {
+                                addAIMessage("How does this compare to what you imagined?");
+                                showSuggestions(["I was close", "This surprises me", "I can see it now"]);
+                            }, 1000);
+                        }, 1500);
+                    }
                 } else if (step === 3) {
+                    addAIMessage(data.empathyExchange.intro);
+                    showSuggestions(["Yes, I am open to hearing it", "I need a moment first"]);
+                } else if (step === 4) {
                     addAIMessage(data.empathyExchange.reflection);
                     State.flags.reflectionReceived = true;
                     setTimeout(() => {
@@ -1329,20 +1411,44 @@
 
         function handleStage4Response(text, step, data) {
             if (step === 1) {
-                if (text.toLowerCase().includes("add") || text.toLowerCase().includes("appreciation")) {
-                    addAIMessage("That is a wonderful addition. Combining Jordan's weekly planning with daily appreciations creates both structure and warmth. Let me check with Jordan...");
-                } else {
-                    addAIMessage("Great. Let me confirm this with Jordan...");
-                }
+                // User proposed their first strategy
+                addAIMessage(data.refinementPrompt);
+                // Let them refine with open text
+            } else if (step === 2) {
+                // After refinement, show that Jordan has also contributed
+                addAIMessage("Great. I have also collected some ideas from Jordan. Let me combine everything you have both come up with.");
                 setTimeout(() => {
-                    addAIMessage("Jordan has agreed! You have reached your first agreement.");
+                    addStrategiesGrid(data.allStrategies, data.collectiveMessage);
                     setTimeout(() => {
-                        addAgreement(data.agreement);
-                        setTimeout(() => {
-                            showModal("Resolution Complete", "You and Jordan have completed the BeHeard process and reached an agreement. Remember: this is an experiment. You will check in together in two weeks.", "Finish Demo", true);
-                        }, 1500);
+                        showSuggestions(["These look good - let us pick a couple", "Can you generate a few more ideas?"]);
                     }, 1000);
-                }, 2500);
+                }, 1500);
+            } else if (step === 3) {
+                if (text.toLowerCase().includes("more")) {
+                    // Generate more ideas
+                    addAIMessage("Let me think of a few more based on your shared needs...");
+                    setTimeout(() => {
+                        const moreStrategies = [
+                            ...data.allStrategies,
+                            "Text each other one thing you are grateful for at lunch",
+                            "Alternate who handles bedtime routine each night"
+                        ];
+                        addStrategiesGrid(moreStrategies, "Here are some additional options:");
+                        showSuggestions(["These are great options", "I want to finalize our agreement"]);
+                    }, 1500);
+                } else {
+                    // Ready to finalize
+                    addAIMessage("Wonderful. Which ones would you like to try? Select the strategies that feel most doable.");
+                    showSuggestions(["Weekly planning + daily appreciation", "I will let Jordan choose"]);
+                }
+            } else if (step === 4) {
+                addAIMessage("I have shared your selections with Jordan. You have both agreed on a starting point.");
+                setTimeout(() => {
+                    addAgreement(data.agreement);
+                    setTimeout(() => {
+                        showModal("Resolution Complete", "You and Jordan have completed the BeHeard process and reached an agreement. Remember: this is an experiment. You will check in together in two weeks.", "Finish Demo", true);
+                    }, 1500);
+                }, 1500);
             }
         }
 

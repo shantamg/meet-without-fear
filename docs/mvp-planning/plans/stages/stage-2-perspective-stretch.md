@@ -6,25 +6,48 @@ Build genuine empathy by helping each user understand the other persons perspect
 
 ## AI Goal
 
-- Present the other persons perspective (curated, consented content only)
+- Create space for self-generated empathy before revealing partner's words
+- Allow venting if needed - residual frustration from Stage 1 is normal
+- Gently guide toward perspective-taking
+- Only then present the other persons perspective (curated, consented content only)
 - Monitor for judgment, attacks, or dismissiveness
 - Use Mirror Intervention when needed
 - Confirm the user can accurately state the other persons needs without judgment
+
+## Key Design Principle: Self-Generated Empathy First
+
+Stage 2 does **not** start by presenting what the other person said. This is intentional:
+
+- Immediately sharing the partner's words can trigger defensiveness
+- People are more likely to accept perspectives they arrive at themselves
+- Venting may still occur - Stage 1 does not always exhaust all frustration
+- Self-generated empathy creates readiness to receive the other's actual words
+
+The AI first asks: "What do you imagine they might be feeling about this situation?"
 
 ## Flow
 
 ```mermaid
 flowchart TD
-    Enter[Enter Stage 2] --> Intro[AI introduces perspective work]
-    Intro --> Present[AI presents other perspective]
+    Enter[Enter Stage 2] --> Invite[AI invites self-reflection]
+    Invite --> Imagine[Ask: What might they be feeling?]
 
-    Present --> React[User reacts to perspective]
+    Imagine --> Response{User response type}
+    Response -->|Venting| Acknowledge[Acknowledge frustration]
+    Acknowledge --> MoreVent{More to express?}
+    MoreVent -->|Yes| Acknowledge
+    MoreVent -->|No| EmpathyPrompt[Gently guide to empathy]
 
-    React --> Analysis{AI analyzes response}
+    Response -->|Empathy attempt| Validate[Validate insight]
+    EmpathyPrompt --> Validate
+
+    Validate --> Present[Now share partner perspective]
+    Present --> Compare[How does this compare to your guess?]
+
+    Compare --> Analysis{AI analyzes response}
     Analysis -->|Judgment detected| Mirror[Mirror Intervention]
-    Analysis -->|Dismissive| Challenge[Gentle challenge]
     Analysis -->|Curious| Deepen[Deepen understanding]
-    Analysis -->|Empathetic| Validate[Validate progress]
+    Analysis -->|Empathetic| Proceed[Continue to reflection exchange]
 
     Mirror --> Reframe[Help reframe to curiosity]
     Reframe --> React

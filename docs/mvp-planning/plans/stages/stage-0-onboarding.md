@@ -6,27 +6,32 @@ Establish the Process Guardian role and secure commitment from both parties thro
 
 ## AI Goal
 
-- Explain the system and its stages
-- Set expectations for asynchronous, AI-mediated communication
-- Establish trust in the process
+- Acknowledge the courage it takes to begin this process
+- Offer to guide both parties through a process of being heard
+- Present the possibility of a win-win outcome
 - Secure explicit agreement to proceed with curiosity rather than judgment
+
+## Opening Message
+
+The AI opens with a simple, warm message:
+
+> "Congratulations [Name], you have taken the first step towards strengthening your connections. Are you open to me guiding you and [Partner] through a process where you both can be heard? I think there is a way we can find a win-win here."
+
+This message:
+- Celebrates the courage to begin
+- Asks for consent to guide
+- Frames the goal as mutual understanding
+- Offers hope without overpromising
 
 ## Flow
 
 ```mermaid
 flowchart TD
-    Entry[User enters system] --> Welcome[Welcome message]
-    Welcome --> Explain[Explain BeHeard process]
-
-    subgraph Explanation[Process Explanation]
-        E1[AI facilitates - not judges]
-        E2[You will not speak directly]
-        E3[5 stages to resolution]
-        E4[Your privacy is protected]
-    end
-
-    Explain --> Explanation
-    Explanation --> Compact[Present Curiosity Compact]
+    Entry[User enters system] --> Welcome[Simple welcome message]
+    Welcome --> Consent{Open to being guided?}
+    Consent -->|Yes| Compact[Present Curiosity Compact]
+    Consent -->|Questions| Clarify[AI answers questions]
+    Clarify --> Consent
 
     Compact --> Review[User reviews terms]
     Review --> Questions{Questions?}
