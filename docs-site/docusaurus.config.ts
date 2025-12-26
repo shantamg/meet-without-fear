@@ -11,7 +11,7 @@ const config: Config = {
     v4: true,
   },
 
-  url: 'https://listenwell-mvp-planning.vercel.app',
+  url: 'https://listen-well-planning.vercel.app',
   baseUrl: '/',
 
   onBrokenLinks: 'warn',
