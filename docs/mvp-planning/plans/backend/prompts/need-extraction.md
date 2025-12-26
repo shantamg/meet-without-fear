@@ -144,7 +144,7 @@ Return as JSON.
 | 0.9+ | Multiple explicit statements, high emotional intensity |
 | 0.7-0.9 | Clear pattern, some explicit statements |
 | 0.5-0.7 | Inferred from context, less explicit |
-| <0.5 | Speculative, minimal evidence |
+| \<0.5 | Speculative, minimal evidence |
 
 ## Common Patterns
 
