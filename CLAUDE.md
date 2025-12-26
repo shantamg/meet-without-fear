@@ -24,3 +24,10 @@ Each directory in `docs/mvp-planning/` has an `index.md` file that serves as nav
 - **Avoid special characters in mermaid** - quotes, apostrophes, and emojis can cause parse errors
 - Link between related documents for easy navigation
 - Keep documents focused and modular
+
+## Keeping Docs and Demos in Sync
+
+When making changes to the application, keep the planning documentation and demos up to date:
+
+- **Planning docs** (`docs/mvp-planning/plans/`) should reflect current functionality and flows
+- **Demos** should be updated when features they showcase are modified
