@@ -6,6 +6,16 @@ Design for interactive feature demos linked from the documentation site.
 
 Create focused, feature-specific demos that complement the main journey demo. Each demo showcases a single mechanism, linked directly from relevant documentation pages.
 
+## Core Interface Principle
+
+**Open input, not preset choices.** All demos should use open text fields for user input rather than preset button choices. This:
+- Does not limit or steer users
+- Gives maximum space for open-ended sharing and venting
+- Demonstrates what the real interface will feel like
+- Shows the AI listening, not directing
+
+The demo responses will not match typed content (since there is no real AI), but this is acceptable - the demos exist to showcase the interface, not simulate real conversations.
+
 ## File Structure
 
 ```
@@ -63,12 +73,12 @@ All demos import this shared file for consistency.
 
 **Flow:**
 1. User selects "I want to work on myself"
-2. AI asks about recurring conflict patterns
-3. User describes a pattern
+2. AI asks about recurring conflict patterns (open text field)
+3. User types their pattern description freely
 4. AI reflects back: "I notice you mentioned feeling unheard in multiple relationships. Would you like to explore that pattern?"
-5. Offers reframe exercise
+5. Open text field for continued exploration
 
-**Demonstrates:** Personal growth mode, pattern recognition, therapeutic insights
+**Demonstrates:** Personal growth mode, pattern recognition, open-ended exploration
 
 ---
 
@@ -126,13 +136,13 @@ All demos import this shared file for consistency.
 
 **Flow:**
 1. AI reflects: "It sounds like you felt dismissed when Jordan interrupted you."
-2. Buttons: "That's right" / "Not quite"
-3. If "Not quite" → AI: "Help me understand better - what did I miss?"
-4. User refines
-5. AI reflects again
-6. Loop continues until accurate (show 2-3 iterations)
+2. Open text field for response
+3. User types correction or confirmation
+4. AI: "Help me understand better..." or "Thank you for clarifying"
+5. AI reflects again with refined understanding
+6. Loop continues until user confirms accuracy
 
-**Demonstrates:** AI earns understanding, doesn't assume
+**Demonstrates:** AI earns understanding, doesn't assume, open input throughout
 
 ---
 
@@ -157,34 +167,38 @@ All demos import this shared file for consistency.
 
 **Flow:**
 1. Notification: "It's been 3 days since your agreement with Jordan. How's it going?"
-2. Options: "Going well" / "Need to revisit" / "Haven't tried yet"
-3. Each path shows appropriate AI response and next steps
+2. Open text field for user to share their experience
+3. AI responds based on sentiment and continues conversation
+4. Offers support or celebrates progress as appropriate
 
-**Demonstrates:** Ongoing support, accountability
+**Demonstrates:** Ongoing support, accountability, open reflection space
 
 ---
 
 ### 9. Guardrails
 
-**Purpose:** Show AI maintaining boundaries
+**Purpose:** Show AI maintaining boundaries while keeping space open
 
-**Scenarios:**
+**Flow:**
+1. Open text field - user can type anything
+2. Demo shows example challenging inputs and AI responses
+3. AI redirects without dismissing, maintains neutrality
 
-**A - Seeking validation:**
-- User: "Just tell me who's right here"
+**Example exchanges shown:**
+
+**Seeking validation:**
+- User types: "Just tell me who's right here"
 - AI: "I'm not here to judge who's right or wrong. I'm here to help you both feel understood. What would feeling understood look like for you?"
 
-**B - Venting about partner:**
-- User: "Jordan is such a narcissist"
+**Venting about partner:**
+- User types: "Jordan is such a narcissist"
 - AI: "I hear a lot of frustration. Instead of labels, can you describe a specific moment when you felt hurt by Jordan's actions?"
 
-**C - Attempting to skip stages:**
-- User: "Just tell me what to say to fix this"
+**Attempting to skip:**
+- User types: "Just tell me what to say to fix this"
 - AI: "I know you want resolution quickly. But lasting repair comes from understanding first. Let's make sure Jordan feels heard before we move to solutions."
 
-User clicks through each scenario to see AI responses.
-
-**Demonstrates:** Neutrality, redirecting without dismissing, process integrity
+**Demonstrates:** Neutrality, redirecting without dismissing, open input maintained even when redirecting
 
 ---
 

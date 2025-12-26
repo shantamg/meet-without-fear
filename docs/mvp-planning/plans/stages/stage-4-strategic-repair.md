@@ -23,14 +23,18 @@ Move from understanding to action by designing small, reversible experiments tha
 Unlike traditional negotiation where one person proposes and the other reacts, Stage 4 invites **both parties to contribute strategies independently**. The AI then:
 
 1. Collects strategies from both users
-2. Presents them as a single unlabeled pool
+2. Presents them as a single unlabeled pool (no attribution to source)
 3. Asks: "Here is what we have come up with so far. Are you happy with these options, or would you like me to try and generate a few more to explore?"
+4. Each person **privately ranks their top choices**
+5. AI reveals where selections overlap
 
 This approach:
 - Removes defensiveness that comes with accepting another's proposal
 - Creates joint ownership of solutions
 - Avoids win/lose dynamics
 - Encourages creativity when users can build on unlabeled ideas
+- Private ranking removes pressure of visible negotiation
+- Overlap emerges naturally without either person feeling like they gave in
 
 ## Flow
 
@@ -51,9 +55,19 @@ flowchart TD
     Question -->|Want more| Generate[AI generates additional ideas]
     Generate --> Present
 
-    Question -->|Happy| Select[Users select preferred strategies]
-    Select --> Combine[Combine selections]
-    Combine --> Document[Document micro-experiment]
+    Question -->|Happy| PrivateRank[Each privately ranks top choices]
+    PrivateRank --> WaitBoth[Wait for both to rank]
+    WaitBoth --> Reveal[AI reveals overlap]
+    Reveal --> Overlap{Any overlap?}
+
+    Overlap -->|Yes| Discuss[Discuss overlapping options]
+    Overlap -->|No| Explore[Explore differences]
+    Explore --> MoreOptions{Want more options?}
+    MoreOptions -->|Yes| Generate
+    MoreOptions -->|No| Negotiate[Work toward common ground]
+    Negotiate --> Discuss
+
+    Discuss --> Document[Document micro-experiment]
 
     Document --> FollowUp{Schedule check-in?}
     FollowUp -->|Yes| Schedule[Set follow-up date]
@@ -93,33 +107,29 @@ flowchart TB
 | Safety | "We will use a pause signal when conversations get heated and take 5 minutes" |
 | Fairness | "We will alternate who chooses weekend activities for the next month" |
 
-## Negotiation Flow
+## When No Overlap Exists
+
+If private rankings reveal no overlap, the AI facilitates finding common ground:
 
 ```mermaid
 flowchart TD
-    Proposal[User A proposes] --> Present[AI presents to User B]
+    NoOverlap[No overlap in rankings] --> Explore[AI explores each persons top pick]
+    Explore --> Understand[Help each understand why partner chose differently]
+    Understand --> Options{Path forward}
 
-    Present --> Reaction{User B reaction}
-    Reaction -->|Love it| Accept[Accept as-is]
-    Reaction -->|Mostly good| Tweak[Suggest small tweak]
-    Reaction -->|Concerns| Counter[Counter-proposal]
-    Reaction -->|No way| Explore[Explore objection]
+    Options -->|Generate more| NewIdeas[AI generates new options]
+    NewIdeas --> ReRank[Both re-rank with new pool]
 
-    Tweak --> Modify[AI helps modify]
-    Modify --> BackToA[Present modified to A]
-    BackToA --> Agreed{A accepts?}
-    Agreed -->|Yes| Done[Agreement reached]
-    Agreed -->|No| Negotiate[Further negotiation]
+    Options -->|Discuss| Discuss[Open discussion about priorities]
+    Discuss --> Compromise[Find acceptable middle ground]
 
-    Counter --> Process[AI processes counter]
-    Process --> BackToA
-
-    Explore --> Understand[Understand the concern]
-    Understand --> NewIdea[Generate new idea]
-    NewIdea --> Proposal
+    Options -->|Hybrid| Combine[Combine elements from different picks]
+    Combine --> Propose[Propose hybrid option]
 ```
 
 ## Wireframe: Strategic Repair Interface
+
+### Strategy Pool View
 
 ```mermaid
 flowchart TB
@@ -145,22 +155,67 @@ flowchart TB
         end
 
         subgraph Actions[Options]
-            Happy[These look good]
+            Happy[These look good - rank my choices]
             More[Generate more ideas]
         end
+    end
+```
 
-        subgraph Agreed[Final Agreement]
-            Title3[Your Commitments]
-            Exp1[Weekly planning + daily appreciation]
-            FollowUp[Check-in: Two weeks from today]
+### Private Ranking View
+
+```mermaid
+flowchart TB
+    subgraph Screen[Rank Your Top Choices]
+        subgraph Header[Header]
+            Logo[BeHeard]
+            Stage[Stage 4: Strategic Repair]
+            Status[Private ranking]
+        end
+
+        subgraph Instructions[Instructions]
+            Text[Select your top choices - partner wont see your picks until you both submit]
+        end
+
+        subgraph Ranking[Your Ranking]
+            Pick1[1. Daily appreciation message]
+            Pick2[2. 5-minute check-in before bed]
+            Pick3[3. Weekly planning session]
+        end
+
+        subgraph Submit[Submit]
+            Button[Submit my ranking]
+        end
+    end
+```
+
+### Overlap Reveal View
+
+```mermaid
+flowchart TB
+    subgraph Screen[Your Shared Priorities]
+        subgraph Header[Header]
+            Logo[BeHeard]
+            Stage[Stage 4: Strategic Repair]
+            Status[Common ground found]
+        end
+
+        subgraph Overlap[You Both Chose]
+            Match1[Daily appreciation message]
+            Match2[5-minute check-in before bed]
+        end
+
+        subgraph Unique[Only One of You Chose]
+            Diff1[Weekly planning session]
+            Diff2[Shared task list]
         end
     end
 ```
 
 **Key visual elements:**
-- Strategy buttons are presented without labels indicating who suggested them
+- Strategy options are presented without labels indicating who suggested them
 - All buttons use soft, neutral colors (no "yours" vs "theirs" styling)
-- Users can select multiple strategies to combine
+- Ranking is private until both submit
+- Overlap is revealed together, celebrating common ground
 
 ## Success Criteria
 
