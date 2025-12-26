@@ -49,6 +49,10 @@ The AI enforces stage progression:
 - The system tracks each users progress independently
 - Both must complete a stage before either can advance
 
+## Backend Implementation
+
+See [Retrieval Contracts](../backend/state-machine/retrieval-contracts.md) for the critical per-stage data access rules that enforce privacy at every stage.
+
 ---
 
 [Back to Plans](../index.md)

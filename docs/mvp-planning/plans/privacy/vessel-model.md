@@ -298,6 +298,11 @@ flowchart TB
 - [System Guardrails](../mechanisms/guardrails.md)
 - [User Journey](../overview/user-journey.md)
 
+## Backend Implementation
+
+- [Prisma Schema](../backend/data-model/prisma-schema.md) - Database implementation of the vessel architecture
+- [Retrieval Contracts](../backend/state-machine/retrieval-contracts.md) - Per-stage data access enforcement
+
 ---
 
 [Back to Privacy](./index.md) | [Back to Plans](../index.md)

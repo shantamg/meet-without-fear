@@ -16,6 +16,9 @@ Key behavioral mechanics: Emotional Barometer, Mirror Intervention, Consensual B
 ### [Privacy Model](./privacy/index.md)
 The Vessel privacy architecture and data handling approach.
 
+### [Backend](./backend/index.md)
+Technical implementation: architecture, data models, state machine, and retrieval contracts.
+
 ### [Wireframes](./wireframes/index.md)
 UI concepts and screen layouts for key interfaces.
 

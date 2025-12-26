@@ -1,0 +1,451 @@
+---
+slug: /backend/state-machine/retrieval-contracts
+sidebar_position: 1
+---
+
+# Retrieval Contracts
+
+**This is the most critical document for maintaining trust in BeHeard.**
+
+Every stage has a hard retrieval contract that defines exactly what data can and cannot be accessed. These are not guidelines - they are enforced constraints.
+
+## Core Rules
+
+> If something can affect trust, it must not rely on similarity search alone.
+
+> Vector search results are candidates, not facts. All results must still pass stage + consent + vessel validation.
+
+> AI Synthesis objects may influence retrieval planning but may never be injected directly into the generation context.
+
+> Retrieval planning output must compile into a finite set of contract-typed queries; any query not representable in the contract schema is rejected.
+
+> Retrieval scope is fixed per turn. Retrieval planning occurs once; generation may not trigger additional retrieval.
+
+## Contract Structure
+
+Each contract specifies:
+
+- **ALLOWED**: Data that CAN be retrieved
+- **FORBIDDEN**: Data that MUST NEVER be accessed
+- **REQUIRES**: Conditions that must be true before retrieval
+- **VECTOR SCOPE**: What semantic search can access (if any)
+
+## Contract Schema
+
+All retrieval queries must be representable in this schema. Queries that don't fit are rejected.
+
+```typescript
+type VesselScope = 'user' | 'shared' | 'global';
+type QuerySource = 'structured' | 'vector' | 'metadata';
+
+type RetrievalQuery =
+  // Metadata queries (Stage 0+)
+  | { type: 'session_metadata'; source: 'metadata' }
+  | { type: 'relationship_metadata'; source: 'metadata' }
+  | { type: 'session_outcomes'; source: 'structured' }
+
+  // User Vessel queries (Stage 1+)
+  | { type: 'user_event'; vessel: 'user'; source: QuerySource; userId: string }
+  | { type: 'emotional_reading'; vessel: 'user'; source: QuerySource; userId: string }
+  | { type: 'need'; vessel: 'user'; source: QuerySource; userId: string }
+  | { type: 'boundary'; vessel: 'user'; source: 'structured'; userId: string }
+
+  // Shared Vessel queries (Stage 2+)
+  | { type: 'consented_content'; vessel: 'shared'; source: 'structured'; consentActive: true }
+  | { type: 'common_ground'; vessel: 'shared'; source: 'structured' }
+  | { type: 'agreement'; vessel: 'shared'; source: 'structured' }
+  | { type: 'micro_experiment'; vessel: 'shared'; source: 'structured' }
+
+  // Global queries (Stage 4 only)
+  | { type: 'experiment_suggestion'; vessel: 'global'; source: 'vector' };
+
+// Validation: query must match schema AND pass stage contract
+function isValidQuery(query: RetrievalQuery, stage: number): boolean {
+  const matchesSchema = isRetrievalQuery(query);  // Type guard
+  const passesContract = validateStageContract(query, stage);
+  return matchesSchema && passesContract;
+}
+```
+
+### Shared Vessel Consent Semantics
+
+**Invariant**: All objects stored in Shared Vessel are either:
+- **(a) Directly consented** (`ConsentedContent`) - requires `consentActive: true` check at query time
+- **(b) Derived from consented inputs** (`Agreement`, `CommonGround`) - safe to retrieve without additional consent checks because they are only created after consent gates are satisfied
+
+This explains why `agreement` and `common_ground` queries don't have `consentActive` fields - they are inherently safe by construction.
+
+---
+
+## Stage 0: Onboarding
+
+**Purpose**: Establish trust and commitment to the process.
+
+### Retrieval Contract
+
+| Category | Access |
+|----------|--------|
+| **ALLOWED** | User's own previous session metadata (counts, dates, completion status) |
+| **ALLOWED** | User's own previous session outcomes (agreed artifacts, not raw content) |
+| **ALLOWED** | Relationship metadata (when created, session count) |
+| **FORBIDDEN** | Partner's data of any kind |
+| **FORBIDDEN** | Any User Vessel raw content (events, emotions, needs) |
+| **REQUIRES** | Active session with both users |
+| **VECTOR SCOPE** | None |
+
+### Rationale
+
+Stage 0 is about consent and commitment. Only metadata and outcomes from prior sessions are allowed - never raw content from any User Vessel.
+
+```typescript
+// Stage 0 retrieval validation
+function validateStage0Retrieval(query: RetrievalQuery): boolean {
+  return query.type === 'session_metadata'
+      || query.type === 'relationship_metadata'
+      || query.type === 'session_outcomes';  // Agreed artifacts only, not raw content
+}
+```
+
+---
+
+## Stage 1: The Witness
+
+**Purpose**: Deep reflection and feeling heard. See [Stage 1 Documentation](../../stages/stage-1-witness.md).
+
+### Retrieval Contract
+
+| Category | Access |
+|----------|--------|
+| **ALLOWED** | Current user's own raw input (this session) |
+| **ALLOWED** | Current user's emotional readings |
+| **ALLOWED** | Current user's own User Vessel content from prior sessions (same relationship only) |
+| **FORBIDDEN** | Partner's data of any kind |
+| **FORBIDDEN** | Shared Vessel content |
+| **FORBIDDEN** | AI Synthesis Map |
+| **REQUIRES** | User is the data owner |
+| **VECTOR SCOPE** | User's own content only (for continuity) |
+
+### Rationale
+
+Stage 1 is about being witnessed. The AI can only see what the current user shares. Partner isolation is absolute.
+
+**Prior sessions scope**: Limited to the current user's own User Vessel content within the same relationship. This explicitly excludes:
+- Any partner data from prior sessions
+- Any Shared Vessel content from prior sessions
+- Any AI Synthesis from prior sessions
+
+```typescript
+// Stage 1 retrieval validation
+function validateStage1Retrieval(
+  query: RetrievalQuery,
+  currentUserId: string
+): boolean {
+  // Must be user's own data (guard for queries that have userId)
+  if ('userId' in query && query.userId !== currentUserId) return false;
+
+  // No shared vessel access
+  if ('vessel' in query && query.vessel === 'shared') return false;
+
+  // Note: AI Synthesis is already unrepresentable by schema (no 'ai_synthesis' source type)
+
+  return true;
+}
+```
+
+### Vector Search Rules
+
+```sql
+-- ALLOWED: Find similar moments in user's own history
+-- Key by (sessionId, userId), join through UserVessel - RLS enforces access
+SELECT ue.* FROM "UserEvent" ue
+JOIN "UserVessel" uv ON ue."vesselId" = uv.id
+WHERE uv."userId" = current_setting('app.actor_id', true)
+  AND uv."sessionId" = current_setting('app.current_session_id', true)
+  AND ue.embedding <=> $queryEmbedding < 0.3;
+
+-- FORBIDDEN: Any query touching partner's data
+-- RLS policy will return zero rows even if attempted
+```
+
+---
+
+## Stage 2: Perspective Stretch
+
+**Purpose**: Build empathy for partner's perspective. See [Stage 2 Documentation](../../stages/stage-2-perspective-stretch.md).
+
+### Retrieval Contract
+
+| Category | Access |
+|----------|--------|
+| **ALLOWED** | Current user's own data (all) |
+| **ALLOWED** | Shared Vessel - consented content only |
+| **ALLOWED** | Partner's consented reflections addressed to current user (Shared Vessel only) |
+| **FORBIDDEN** | Partner's raw venting (User Vessel) |
+| **FORBIDDEN** | AI Synthesis Map directly |
+| **FORBIDDEN** | Non-consented partner data |
+| **REQUIRES** | Content in Shared Vessel has active consent |
+| **VECTOR SCOPE** | User's own + Shared Vessel |
+
+### Rationale
+
+Stage 2 introduces partner awareness through the Consensual Bridge. Only content the partner has explicitly consented to share can be accessed.
+
+```typescript
+// Stage 2 retrieval validation
+function validateStage2Retrieval(
+  query: RetrievalQuery,
+  currentUserId: string
+): boolean {
+  // User Vessel queries: must be current user's own data
+  if ('vessel' in query && query.vessel === 'user') {
+    return 'userId' in query && query.userId === currentUserId;
+  }
+
+  // Shared Vessel queries: allowed if consented content or derived objects
+  if ('vessel' in query && query.vessel === 'shared') {
+    // consented_content requires consentActive check
+    if (query.type === 'consented_content') {
+      return 'consentActive' in query && query.consentActive === true;
+    }
+    // common_ground, agreement are derived from consented inputs - safe
+    return true;
+  }
+
+  // Metadata queries allowed
+  if (query.type === 'session_metadata' || query.type === 'relationship_metadata') {
+    return true;
+  }
+
+  return false;
+}
+```
+
+**Note**: Partner data is accessed via Shared Vessel queries (e.g., `consented_content`), not via User Vessel queries with partner's userId. The schema does not allow querying another user's User Vessel.
+
+### Consent Verification
+
+```sql
+-- Before retrieving any partner-related content
+SELECT cc.id, cc."transformedContent"
+FROM "ConsentedContent" cc
+JOIN "ConsentRecord" cr ON cc."consentRecordId" = cr.id
+WHERE cc."sharedVesselId" = $sharedVesselId
+  AND cc."sourceUserId" = $partnerId
+  AND cr.decision = 'GRANTED'
+  AND cr."revokedAt" IS NULL
+  AND cc."consentActive" = true;
+```
+
+---
+
+## Stage 3: Need Mapping
+
+**Purpose**: Identify universal needs and find common ground. See [Stage 3 Documentation](../../stages/stage-3-need-mapping.md).
+
+### Retrieval Contract
+
+| Category | Access |
+|----------|--------|
+| **ALLOWED** | Current user's identified needs |
+| **ALLOWED** | Shared Vessel content (consented needs) |
+| **ALLOWED** | Common ground candidates |
+| **FORBIDDEN** | Partner's raw events |
+| **FORBIDDEN** | Non-consented partner needs |
+| **REQUIRES** | Needs must be confirmed by user |
+| **VECTOR SCOPE** | Needs only (not events) |
+
+### Rationale
+
+Stage 3 works with abstracted needs, not raw events. This protects privacy while enabling common ground discovery.
+
+```typescript
+// Stage 3 retrieval validation
+function validateStage3Retrieval(
+  query: RetrievalQuery,
+  currentUserId: string
+): boolean {
+  // User Vessel need queries: must be current user's own
+  if (query.type === 'need' && 'vessel' in query && query.vessel === 'user') {
+    return 'userId' in query && query.userId === currentUserId;
+  }
+
+  // Shared Vessel queries: common_ground and consented_content allowed
+  if ('vessel' in query && query.vessel === 'shared') {
+    if (query.type === 'common_ground') return true;  // Derived from consented inputs
+    if (query.type === 'consented_content') {
+      return 'consentActive' in query && query.consentActive === true;
+    }
+  }
+
+  // Note: "Partner needs" are accessed via consented_content (need-shaped entries),
+  // not via need queries with partner userId. The need type is always vessel: 'user'.
+
+  return false;
+}
+```
+
+---
+
+## Stage 4: Strategic Repair
+
+**Purpose**: Design and commit to micro-experiments. See [Stage 4 Documentation](../../stages/stage-4-strategic-repair.md).
+
+### Retrieval Contract
+
+| Category | Access |
+|----------|--------|
+| **ALLOWED** | All Shared Vessel content |
+| **ALLOWED** | Confirmed common ground |
+| **ALLOWED** | Past agreements (this relationship) |
+| **ALLOWED** | Past micro-experiments and outcomes |
+| **ALLOWED** | Global Micro-Experiments Library (anonymized suggestions) |
+| **FORBIDDEN** | User Vessel raw content (either party) |
+| **REQUIRES** | Use structured records for decisions, NOT vector search |
+| **VECTOR SCOPE: User Memory** | Forbidden |
+| **VECTOR SCOPE: Global Knowledge** | Allowed (for suggestions only) |
+
+### Rationale
+
+Stage 4 is about action, not exploration. Decisions must be based on structured, auditable records.
+
+**Two types of vector search access:**
+- **User Memory**: Forbidden - cannot search user's past content to inform agreements
+- **Global Knowledge**: Allowed - can search anonymized "Micro-Experiments Library" to suggest ideas when users are stuck
+
+### Global Library Invariants
+
+The Micro-Experiments Library must satisfy these invariants:
+
+1. **No user content without explicit opt-in**: User-authored experiments only enter this library if the user explicitly consents to anonymized contribution
+2. **No user embeddings in global index**: Embeddings generated from user content are NEVER mixed into the global library index - only curated/admin-authored content or explicitly contributed anonymized content
+
+```typescript
+// Stage 4 retrieval validation
+function validateStage4Retrieval(
+  query: RetrievalQuery
+): boolean {
+  // Shared Vessel structured queries
+  if ('vessel' in query && query.vessel === 'shared') {
+    // Agreements, common ground, consented content
+    if (query.type === 'agreement' || query.type === 'common_ground') {
+      return true;
+    }
+    if (query.type === 'consented_content') {
+      return 'consentActive' in query && query.consentActive === true;
+    }
+    // Past experiments from structured records only (NOT vector search)
+    if (query.type === 'micro_experiment') {
+      return query.source === 'structured';
+    }
+  }
+
+  // Global Library: vector search for suggestions allowed
+  if (query.type === 'experiment_suggestion') {
+    return 'vessel' in query
+        && query.vessel === 'global'
+        && query.source === 'vector';
+  }
+
+  return false;
+}
+```
+
+### Agreement Retrieval (Deterministic Only)
+
+```sql
+-- CORRECT: Structured query for agreements
+SELECT a.id, a.description, a.status, a."agreedAt"
+FROM "Agreement" a
+WHERE a."sharedVesselId" = $sharedVesselId
+  AND a."agreedByA" = true
+  AND a."agreedByB" = true
+ORDER BY a."agreedAt" DESC;
+
+-- FORBIDDEN: Vector search for agreement content
+-- Never use embedding similarity to find "what was agreed"
+```
+
+---
+
+## Cross-Stage Rules
+
+### Universal Constraints
+
+These rules apply to ALL stages:
+
+| Rule | Enforcement |
+|------|-------------|
+| No partner User Vessel access | Validated at retrieval layer |
+| Consent must be active | Checked on every query |
+| Revoked content is inaccessible | Filtered by `revokedAt IS NULL` |
+| AI Synthesis is internal only | Never exposed in retrieval results |
+
+### Memory Intent Layer
+
+Before any retrieval, determine the intent:
+
+```typescript
+type MemoryIntent =
+  | 'emotional_validation'  // Stay present, minimal recall
+  | 'stage_enforcement'     // No recall, enforce rules
+  | 'recall_commitment'     // Full structured retrieval
+  | 'offer_continuity'      // Light summary of last session
+  | 'avoid_recall';         // Safety mode, no retrieval
+
+function determineMemoryIntent(
+  stage: number,
+  emotionalIntensity: number,
+  userMessage: string
+): MemoryIntent {
+  // High emotional intensity = avoid deep recall
+  if (emotionalIntensity >= 8) return 'avoid_recall';
+
+  // Stage 1 = mostly stay present
+  if (stage === 1) return 'emotional_validation';
+
+  // Explicit reference to past agreement
+  if (userMessage.includes('we agreed')) return 'recall_commitment';
+
+  // Default by stage
+  return getDefaultIntentForStage(stage);
+}
+```
+
+---
+
+## Implementation Checklist
+
+### Retrieval Layer Must
+
+- [ ] Validate stage before any query
+- [ ] Check user ownership for User Vessel queries
+- [ ] Verify consent status for Shared Vessel queries
+- [ ] Log all retrieval attempts for audit
+- [ ] Reject any query that doesn't match contract
+
+### Database Layer Must
+
+- [ ] Index by `vesselId` for fast ownership checks
+- [ ] Index by `consentActive` for consent filtering
+- [ ] Support `revokedAt IS NULL` filtering efficiently
+- [ ] Separate User Vessel and Shared Vessel queries
+
+### AI Layer Must
+
+- [ ] Receive pre-filtered context only
+- [ ] Never issue raw database queries
+- [ ] Not decide what to retrieve
+- [ ] Ground responses in provided context only
+
+---
+
+## Related Documentation
+
+- [Stage 1: The Witness](../../stages/stage-1-witness.md)
+- [Stage 2: Perspective Stretch](../../stages/stage-2-perspective-stretch.md)
+- [Stage 3: Need Mapping](../../stages/stage-3-need-mapping.md)
+- [Stage 4: Strategic Repair](../../stages/stage-4-strategic-repair.md)
+- [Vessel Model](../../privacy/vessel-model.md)
+- [Consensual Bridge](../../mechanisms/consensual-bridge.md)
+
+[Back to State Machine](./index.md) | [Back to Backend](../index.md)

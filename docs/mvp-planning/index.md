@@ -42,6 +42,11 @@ Experience the key features in action:
 ### Privacy
 - [Vessel Model](plans/privacy/vessel-model.md) - Three-vessel privacy architecture
 
+### Backend
+- [Backend Architecture](plans/backend/index.md) - Technical implementation overview
+- [Prisma Schema](plans/backend/data-model/prisma-schema.md) - Database models
+- [Retrieval Contracts](plans/backend/state-machine/retrieval-contracts.md) - Per-stage data access rules
+
 ### Navigation & Dashboard
 - [Home Dashboard](plans/wireframes/home-dashboard.md) - Primary landing screen
 - [Person Detail](plans/wireframes/person-detail.md) - Relationship view
