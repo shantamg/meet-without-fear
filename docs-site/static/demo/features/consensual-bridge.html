@@ -210,6 +210,7 @@
         let selectedOption = null;
         const fullReflection = "I realize now that I have been carrying a lot of resentment. It is not just about who does what - it is that I feel alone in caring about our home. When I come home to dishes in the sink, what I actually feel is forgotten. Like I do not matter enough to put in the effort.";
         const summaryReflection = "Alex realized that the frustration is not really about chores - it is about feeling alone and wanting to feel like they matter to their partner.";
+        const themeReflection = "Core need identified: Feeling valued and not forgotten";
 
         function addMessage(text, type = 'ai') {
             const content = document.getElementById('contentArea');
@@ -265,6 +266,11 @@
                         id: 'summary',
                         title: 'Share summary only',
                         desc: 'I will create a brief version for Jordan'
+                    },
+                    {
+                        id: 'theme',
+                        title: 'Share just the theme',
+                        desc: 'Jordan will see only the core need identified'
                     },
                     {
                         id: 'private',
@@ -333,6 +339,9 @@
                 case 'summary':
                     handleSummaryShare();
                     break;
+                case 'theme':
+                    handleThemeShare();
+                    break;
                 case 'private':
                     handlePrivate();
                     break;
@@ -367,6 +376,20 @@
             }, 800);
         }
 
+        function handleThemeShare() {
+            addMessage('Share just the theme', 'user');
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                addMessage('I will share only the core need I identified. Here is what Jordan will see:');
+
+                setTimeout(() => {
+                    showPreview(themeReflection, false, true);
+                }, 1000);
+            }, 800);
+        }
+
         function handlePrivate() {
             addMessage('Keep private', 'user');
 
@@ -382,17 +405,18 @@
             }, 800);
         }
 
-        function showPreview(text, isFull) {
+        function showPreview(text, isFull, isTheme = false) {
             const content = document.getElementById('contentArea');
             const preview = document.createElement('div');
             preview.className = 'preview-container';
+            let labelText = isFull ? 'Alex shared:' : (isTheme ? 'Theme from Alex:' : 'Summary from Alex:');
             preview.innerHTML = `
                 <div class="preview-header">
                     <span class="preview-icon">&#128065;</span>
                     <span class="preview-title">Preview: What Jordan Will See</span>
                 </div>
                 <div class="preview-content">
-                    <div class="preview-label">${isFull ? 'Alex shared:' : 'Summary from Alex:'}</div>
+                    <div class="preview-label">${labelText}</div>
                     <div class="preview-text">${text}</div>
                 </div>
                 <div style="display: flex; gap: var(--spacing-sm); padding-top: var(--spacing-md);">

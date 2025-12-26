@@ -296,6 +296,10 @@
                         <div class="option-btn-title">Grounding exercise</div>
                         <div class="option-btn-desc">5-4-3-2-1 senses check</div>
                     </button>
+                    <button class="option-btn" onclick="chooseOption('bodyscan')">
+                        <div class="option-btn-title">Body scan</div>
+                        <div class="option-btn-desc">Check in with physical sensations</div>
+                    </button>
                     <button class="option-btn" onclick="chooseOption('break')">
                         <div class="option-btn-title">Take a break</div>
                         <div class="option-btn-desc">Come back when ready</div>
@@ -335,6 +339,12 @@
                         showExercise('grounding');
                     }, 500);
                     break;
+                case 'bodyscan':
+                    addMessage('I would like to try the body scan', 'user');
+                    setTimeout(() => {
+                        showExercise('bodyscan');
+                    }, 500);
+                    break;
                 case 'break':
                     addMessage('I need to take a break', 'user');
                     setTimeout(() => {
@@ -360,6 +370,8 @@
                 showBreathingExercise();
             } else if (type === 'grounding') {
                 showGroundingExercise();
+            } else if (type === 'bodyscan') {
+                showBodyScanExercise();
             }
         }
 
@@ -534,6 +546,73 @@
                 stepsContainer.appendChild(step);
                 btn.textContent = window.groundingStep < window.groundingData.length - 1 ? 'Next' : 'Complete';
                 window.groundingStep++;
+            } else {
+                completeExercise();
+            }
+        }
+
+        function showBodyScanExercise() {
+            const content = document.getElementById('contentArea');
+
+            // Add back button
+            const backBtn = document.createElement('button');
+            backBtn.className = 'back-to-chat';
+            backBtn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                Back to chat
+            `;
+            backBtn.onclick = backToChat;
+            content.appendChild(backBtn);
+
+            const container = document.createElement('div');
+            container.className = 'exercise-container';
+            container.innerHTML = `
+                <div class="exercise-title">Body Scan</div>
+                <div class="exercise-subtitle">Notice physical sensations without judgment</div>
+                <div id="bodyScanSteps"></div>
+                <button class="btn btn-primary" id="nextBodyScanBtn" onclick="nextBodyScanStep()">Start</button>
+            `;
+            content.appendChild(container);
+
+            window.bodyScanStep = 0;
+            window.bodyScanData = [
+                { area: 'Feet', prompt: 'Notice your feet. Are they warm or cool? Tense or relaxed? Just observe.' },
+                { area: 'Legs', prompt: 'Move your attention to your legs. Notice any sensations in your calves and thighs.' },
+                { area: 'Stomach', prompt: 'Bring awareness to your stomach. Notice if it feels tight, fluttery, or calm.' },
+                { area: 'Chest', prompt: 'Focus on your chest. Notice your breath moving in and out. How does it feel?' },
+                { area: 'Shoulders', prompt: 'Notice your shoulders. Are they raised or relaxed? Let them soften if you can.' },
+                { area: 'Face', prompt: 'Finally, notice your face. Your jaw, your forehead. Let any tension melt away.' }
+            ];
+        }
+
+        function nextBodyScanStep() {
+            const stepsContainer = document.getElementById('bodyScanSteps');
+            const btn = document.getElementById('nextBodyScanBtn');
+
+            if (window.bodyScanStep > 0) {
+                const prevStep = stepsContainer.querySelector('.grounding-step.active');
+                if (prevStep) {
+                    prevStep.classList.remove('active');
+                    prevStep.classList.add('completed');
+                }
+            }
+
+            if (window.bodyScanStep < window.bodyScanData.length) {
+                const data = window.bodyScanData[window.bodyScanStep];
+                const step = document.createElement('div');
+                step.className = 'grounding-step active';
+                step.innerHTML = `
+                    <div class="grounding-step-header">
+                        <div class="grounding-step-number">${window.bodyScanStep + 1}</div>
+                        <div class="grounding-step-title">${data.area}</div>
+                    </div>
+                    <div class="grounding-step-prompt">${data.prompt}</div>
+                `;
+                stepsContainer.appendChild(step);
+                btn.textContent = window.bodyScanStep < window.bodyScanData.length - 1 ? 'Next' : 'Complete';
+                window.bodyScanStep++;
             } else {
                 completeExercise();
             }

@@ -173,6 +173,140 @@
         .advance-bar .btn {
             width: 100%;
         }
+
+        /* Private Ranking Styles */
+        .ranking-container {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin: var(--spacing-md) 0;
+            border: 1px solid var(--border);
+        }
+        .ranking-header {
+            font-size: var(--font-size-sm);
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-md);
+        }
+        .ranking-instruction {
+            font-size: var(--font-size-xs);
+            color: var(--text-muted);
+            margin-bottom: var(--spacing-md);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+        }
+        .ranking-instruction svg {
+            flex-shrink: 0;
+        }
+        .ranking-options {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-sm);
+        }
+        .ranking-option {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            padding: var(--spacing-md);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .ranking-option:hover {
+            border-color: var(--accent);
+        }
+        .ranking-option.selected {
+            border-color: var(--accent);
+            background: rgba(16, 163, 127, 0.1);
+        }
+        .ranking-checkbox {
+            width: 22px;
+            height: 22px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s ease;
+        }
+        .ranking-option.selected .ranking-checkbox {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+        .ranking-option.selected .ranking-checkbox::after {
+            content: '\\2713';
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .ranking-text {
+            flex: 1;
+            font-size: var(--font-size-sm);
+            color: var(--text-primary);
+        }
+        .ranking-submit {
+            margin-top: var(--spacing-lg);
+            width: 100%;
+        }
+
+        /* Overlap Reveal Styles */
+        .overlap-container {
+            margin: var(--spacing-md) 0;
+        }
+        .overlap-section {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-md);
+            border: 1px solid var(--border);
+        }
+        .overlap-section.matched {
+            border-color: var(--accent);
+            background: rgba(16, 163, 127, 0.05);
+        }
+        .overlap-header {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-md);
+        }
+        .overlap-icon {
+            font-size: 20px;
+        }
+        .overlap-title {
+            font-size: var(--font-size-sm);
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .overlap-subtitle {
+            font-size: var(--font-size-xs);
+            color: var(--text-secondary);
+            margin-left: auto;
+        }
+        .overlap-items {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-sm);
+        }
+        .overlap-item {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-sm);
+            color: var(--text-primary);
+        }
+        .overlap-item.matched {
+            background: rgba(16, 163, 127, 0.15);
+        }
+        .overlap-item-icon {
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -772,6 +906,180 @@
             btn.classList.toggle('selected');
         }
 
+        // Store user selections for ranking
+        let userRankingSelections = [];
+
+        function showPrivateRanking(strategies) {
+            const content = document.getElementById('contentArea');
+            userRankingSelections = [];
+
+            const container = document.createElement('div');
+            container.className = 'ranking-container';
+            container.id = 'rankingContainer';
+            container.innerHTML = `
+                <div class="ranking-header">Select Your Top Choices</div>
+                <div class="ranking-instruction">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    Jordan will not see your picks until you both submit
+                </div>
+                <div class="ranking-options" id="rankingOptions">
+                    ${strategies.map((s, i) => `
+                        <div class="ranking-option" onclick="toggleRankingOption(this, ${i})">
+                            <div class="ranking-checkbox"></div>
+                            <div class="ranking-text">${s}</div>
+                        </div>
+                    `).join('')}
+                </div>
+                <button class="btn btn-primary ranking-submit" onclick="submitRanking()">Submit My Ranking</button>
+            `;
+            content.appendChild(container);
+            content.scrollTop = content.scrollHeight;
+
+            // Store strategies for later
+            window.currentStrategies = strategies;
+        }
+
+        function toggleRankingOption(el, index) {
+            el.classList.toggle('selected');
+            const strategy = window.currentStrategies[index];
+            if (el.classList.contains('selected')) {
+                if (!userRankingSelections.includes(strategy)) {
+                    userRankingSelections.push(strategy);
+                }
+            } else {
+                userRankingSelections = userRankingSelections.filter(s => s !== strategy);
+            }
+        }
+
+        function submitRanking() {
+            if (userRankingSelections.length === 0) {
+                addAIMessage("Please select at least one strategy before submitting.");
+                return;
+            }
+
+            // Remove ranking container
+            const rankingContainer = document.getElementById('rankingContainer');
+            if (rankingContainer) rankingContainer.remove();
+
+            addUserMessage(`Selected ${userRankingSelections.length} strategies`);
+
+            showTyping();
+            setTimeout(() => {
+                hideTyping();
+                addAIMessage("Thank you. Jordan has also submitted their choices. Let me show you where you overlap...");
+
+                setTimeout(() => {
+                    showOverlapReveal();
+                }, 1500);
+            }, 1500);
+        }
+
+        function showOverlapReveal() {
+            const content = document.getElementById('contentArea');
+
+            // Simulate Jordan's picks - they match some of the user's selections
+            const jordanPicks = [
+                "Weekly 15-min planning session on Sundays",
+                "Say one specific appreciation each morning",
+                "5-minute check-in before bed each night"
+            ];
+
+            // Find overlaps
+            const overlaps = userRankingSelections.filter(s => jordanPicks.includes(s));
+            const userOnly = userRankingSelections.filter(s => !jordanPicks.includes(s));
+            const jordanOnly = jordanPicks.filter(s => !userRankingSelections.includes(s));
+
+            const container = document.createElement('div');
+            container.className = 'overlap-container';
+            container.id = 'overlapContainer';
+
+            let html = '';
+
+            // Show matches section
+            if (overlaps.length > 0) {
+                html += `
+                    <div class="overlap-section matched">
+                        <div class="overlap-header">
+                            <span class="overlap-icon">&#10003;</span>
+                            <span class="overlap-title">You Both Chose</span>
+                            <span class="overlap-subtitle">${overlaps.length} match${overlaps.length > 1 ? 'es' : ''}</span>
+                        </div>
+                        <div class="overlap-items">
+                            ${overlaps.map(s => `
+                                <div class="overlap-item matched">
+                                    <span class="overlap-item-icon">&#128154;</span>
+                                    ${s}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Show unique selections
+            if (userOnly.length > 0 || jordanOnly.length > 0) {
+                html += `
+                    <div class="overlap-section">
+                        <div class="overlap-header">
+                            <span class="overlap-icon">&#128100;</span>
+                            <span class="overlap-title">Only One of You Chose</span>
+                        </div>
+                        <div class="overlap-items">
+                            ${userOnly.map(s => `
+                                <div class="overlap-item">
+                                    <span class="overlap-item-icon">You:</span>
+                                    ${s}
+                                </div>
+                            `).join('')}
+                            ${jordanOnly.map(s => `
+                                <div class="overlap-item">
+                                    <span class="overlap-item-icon">Jordan:</span>
+                                    ${s}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+            content.appendChild(container);
+            content.scrollTop = content.scrollHeight;
+
+            // Continue with the flow
+            setTimeout(() => {
+                if (overlaps.length > 0) {
+                    addAIMessage(`Great news! You both chose ${overlaps.length === 1 ? 'the same strategy' : overlaps.length + ' strategies in common'}. This gives you a strong foundation.`);
+                } else {
+                    addAIMessage("Your choices are different, but that is okay. Let us discuss which ones feel most important to each of you.");
+                }
+
+                setTimeout(() => {
+                    finalizeAgreementFromOverlap(overlaps);
+                }, 2000);
+            }, 1500);
+        }
+
+        function finalizeAgreementFromOverlap(overlaps) {
+            const data = MockData.stages[4];
+
+            if (overlaps.length > 0) {
+                addAIMessage("Based on your shared choices, here is your agreement:");
+            } else {
+                addAIMessage("After discussing, you have found common ground:");
+            }
+
+            setTimeout(() => {
+                addAgreement(data.agreement);
+                setTimeout(() => {
+                    showStageCompletion("Resolution Complete", "You and Jordan have completed the BeHeard process and reached an agreement. Remember: this is an experiment. You will check in together in two weeks.", "Finish Demo", true);
+                }, 1500);
+            }, 1000);
+        }
+
         // ========== MESSAGE HELPERS ==========
         function addAIMessage(text) {
             const content = document.getElementById('contentArea');
@@ -1038,22 +1346,20 @@
                             "Alternate who handles bedtime routine each night"
                         ];
                         addStrategiesGrid(moreStrategies, "Here are some additional options:");
+                        window.currentStrategiesForRanking = moreStrategies;
                         // Open-ended - user types their response
                     }, 1500);
                 } else {
-                    // Ready to finalize
-                    addAIMessage("Wonderful. Which ones would you like to try? Select the strategies that feel most doable.");
-                    // Open-ended - user types their response
-                }
-            } else if (step === 4) {
-                addAIMessage("I have shared your selections with Jordan. You have both agreed on a starting point.");
-                setTimeout(() => {
-                    addAgreement(data.agreement);
+                    // Ready for private ranking
+                    addAIMessage("Now it is time to privately rank your top choices. Jordan will do the same, and then we will reveal where you overlap.");
                     setTimeout(() => {
-                        showStageCompletion("Resolution Complete", "You and Jordan have completed the BeHeard process and reached an agreement. Remember: this is an experiment. You will check in together in two weeks.", "Finish Demo", true);
+                        // Use current strategies or default
+                        const strategies = window.currentStrategiesForRanking || data.allStrategies;
+                        showPrivateRanking(strategies);
                     }, 1500);
-                }, 1500);
+                }
             }
+            // Step 4+ is now handled by submitRanking and showOverlapReveal
         }
 
         function showCompletionCheck(question, noText, yesText, onYes) {
