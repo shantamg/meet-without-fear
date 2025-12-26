@@ -67,6 +67,29 @@ function isValidQuery(query: RetrievalQuery, stage: number): boolean {
 }
 ```
 
+## Context Bundles (What the Model Sees)
+
+All prompts receive pre-assembled, stage-scoped bundles. Every field must be tagged with:
+- **source** (`user|shared|global`)
+- **provenance** (object type + id, createdAt)
+- **consent_state** (active/revoked/not_applicable)
+- **stage_scope** (which stage produced it)
+
+| Stage | Bundle Fields (required shape) |
+|-------|--------------------------------|
+| Stage 0 | `session_metadata`, `relationship_metadata`, `session_outcomes` (structured, no vectors) |
+| Stage 1 | `messages` (current session, user-only), `emotional_readings` (user-only), `prior_themes` (optional: user-only, same relationship, ≤3 bullets, summarizer = deterministic), `conversation_context` (recent turn buffer, user-only) |
+| Stage 2 | Stage 1 bundle **plus** `shared_partner_content[]` (each item: `{type: TRANSFORMED_NEED|CONSENTED_STATEMENT, content, consentActive: true, transformed: true, sourceUserId}`, no raw partner venting), `empathy_draft` (user-authored), `phase` |
+| Stage 3 | Confirmed `user_needs[]`, `synthesized_needs[]` (derived only from user content; marked `model_generated: true`), `clarification_needed[]`, optional `partner_needs[]` (from shared vessel, consentActive true), `common_ground[]` (derived) |
+| Stage 4 | `common_ground[]`, `strategies[]` (unattributed pool), `user_rankings` (private until both submit), `partner_rankings` (unlock after both submit), `agreements[]`, `micro_experiments[]` (structured only), `global_suggestions[]` (vector-derived, must be labeled `source: global_library`) |
+| Emotional Support (any stage) | `intensity`, `trend`, `recent_message` (user-only). **No recall contexts injected** when `MemoryIntent=avoid_recall`. |
+
+**Assembler Rules**
+- Reject any field lacking provenance or consent metadata.
+- Strip AI Synthesis artifacts; only their user-confirmed outputs may appear.
+- Enforce per-stage bundle composition; cross-stage fields must not bleed between stages.
+- Log the final injected bundle for audit.
+
 ### Shared Vessel Consent Semantics
 
 **Invariant**: All objects stored in Shared Vessel are either:
@@ -155,12 +178,14 @@ function validateStage1Retrieval(
 ### Vector Search Rules
 
 ```sql
--- ALLOWED: Find similar moments in user's own history
--- Key by (sessionId, userId), join through UserVessel - RLS enforces access
-SELECT ue.* FROM "UserEvent" ue
+-- ALLOWED: Find similar moments in user's own history (this relationship)
+-- Key by (relationshipId, userId) so prior sessions are available
+SELECT ue.*
+FROM "UserEvent" ue
 JOIN "UserVessel" uv ON ue."vesselId" = uv.id
+JOIN "Session" s ON uv."sessionId" = s.id
 WHERE uv."userId" = current_setting('app.actor_id', true)
-  AND uv."sessionId" = current_setting('app.current_session_id', true)
+  AND s."relationshipId" = (SELECT "relationshipId" FROM "Session" WHERE id = current_setting('app.current_session_id', true))
   AND ue.embedding <=> $queryEmbedding < 0.3;
 
 -- FORBIDDEN: Any query touching partner's data
@@ -333,9 +358,9 @@ function validateStage4Retrieval(
     if (query.type === 'consented_content') {
       return 'consentActive' in query && query.consentActive === true;
     }
-    // Past experiments from structured records only (NOT vector search)
+    // Past experiments from structured Agreement records only (NOT vector search)
     if (query.type === 'micro_experiment') {
-      return query.source === 'structured';
+      return query.source === 'structured'; // maps to Agreement.type = MICRO_EXPERIMENT with optional proposalId
     }
   }
 

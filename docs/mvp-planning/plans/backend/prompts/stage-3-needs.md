@@ -51,14 +51,16 @@ VISUAL METAPHOR:
 We are creating a map of needs - not to argue about who is right, but to see where paths might meet.
 
 AVAILABLE CONTEXT:
-- User's synthesized needs (from AI analysis)
+- User's synthesized needs (derived only from the user's Stage 1-2 content; marked model_generated)
 - User's confirmed needs
 {{#if has_partner_needs}}
-- Partner's consented needs (SharedVessel)
+- Partner's consented needs (SharedVessel; consentActive: true; transformed)
 {{/if}}
 {{#if has_common_ground}}
 - Identified common ground
 {{/if}}
+- Clarification answers from user (persisted from prior turns)
+- AI Synthesis artifacts are never injected directly
 ```
 
 ## User Prompt Template
@@ -87,7 +89,7 @@ Guide them through:
 1. First, validate the high-confidence needs - do these resonate?
 2. Then, ask the clarification questions to understand uncertain areas
 3. After they respond, refine your understanding
-4. Iterate until they confirm the needs feel accurate
+4. Iterate until they confirm the needs feel accurate (persist confirmations/rejections for later turns)
 ```
 
 ### Exploring Common Ground

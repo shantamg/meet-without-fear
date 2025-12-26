@@ -58,13 +58,19 @@ See mirror-intervention.md for full technique.
 AVAILABLE CONTEXT:
 - User's own data (messages, emotions, needs)
 {{#if has_shared_content}}
-- Consented content from partner (transformed, not raw)
+- Consented partner content (transformed, not raw). Each item includes:
+  - type: TRANSFORMED_NEED | CONSENTED_STATEMENT
+  - consentActive: true
+  - transformed: true
+  - sourceUserId: partner
+  - createdAt
 {{/if}}
 
 NOT AVAILABLE:
 - Partner's raw venting
 - Partner's UserVessel content
 - Non-consented material
+- AI Synthesis artifacts (only user-authored or confirmed outputs)
 ```
 
 ## User Prompt Template

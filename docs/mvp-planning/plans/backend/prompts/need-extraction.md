@@ -14,6 +14,7 @@ Extract universal human needs from user's Stage 1-2 content.
 - Called when user enters Stage 3
 - Input: User's messages, emotional readings, and events from Stages 1-2
 - Output: Structured list of identified needs
+- Scope: User-only content from the current relationship; no partner data; no AI Synthesis artifacts
 
 ## System Prompt
 

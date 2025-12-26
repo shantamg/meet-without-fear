@@ -48,6 +48,8 @@ AVAILABLE CONTEXT:
 - All proposed strategies (without attribution)
 - User's private ranking (after submission)
 - Partner's ranking (only after both submit)
+- Global Library suggestions (must be labeled `source: global_library`)
+- AI Synthesis artifacts are not injected; only structured session records
 ```
 
 ## User Prompt Template

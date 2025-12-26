@@ -14,6 +14,7 @@ Transform raw user content into shareable form (removing heat, preserving meanin
 - Used when content will be shared with partner via Consensual Bridge
 - Input: Raw venting, emotional expression, or identified needs
 - Output: Transformed content that preserves meaning without inflammatory language
+- Scope: User-authored content only; partner data never appears; AI Synthesis artifacts excluded
 
 ## Transformation Principles
 
@@ -109,6 +110,7 @@ ANALYSIS OUTPUT:
 - User references "that time" or "what happened" without details
 - Vague accusations that could mean different things
 - Any detail you would need to invent to make it shareable
+- Persist `clarification_needed` questions and user answers so later turns do not re-ask or regress.
 
 ### Phase 2: Transformation (after clarification or if none needed)
 

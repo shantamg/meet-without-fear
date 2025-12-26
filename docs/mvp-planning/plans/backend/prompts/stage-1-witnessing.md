@@ -51,17 +51,18 @@ User is at high intensity. Stay especially present. Avoid recall. Validate heavi
 {{/if}}
 
 RETRIEVAL CONTEXT:
-You have access to:
+You have access to (user-only):
 - User's messages in this session
 - User's emotional readings
 {{#if has_prior_sessions}}
-- Summary of user's themes from prior sessions (same relationship)
+- Prior themes (user-only, same relationship, ≤3 bullets, deterministic summarizer)
 {{/if}}
 
 You do NOT have access to:
 - Partner's data of any kind
 - Shared content
 - Any other relationship data
+- AI Synthesis artifacts (only user-authored or confirmed data may appear)
 ```
 
 ## User Prompt Template
