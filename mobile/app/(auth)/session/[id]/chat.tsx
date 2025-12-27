@@ -3,13 +3,24 @@
  *
  * AI conversation interface for a session.
  * Displays message history and allows sending new messages.
+ *
+ * Features:
+ * - Real-time message display
+ * - Optimistic updates for user messages
+ * - AI typing indicator during response
+ * - Auto-scroll to latest message
  */
 
 import { useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
-import { useMessages, useSendMessage } from '@/src/hooks/useMessages';
+import {
+  useMessages,
+  useSendMessage,
+  useOptimisticMessage,
+} from '@/src/hooks/useMessages';
 import { ChatInterface } from '@/src/components/ChatInterface';
+import { Stage, MessageRole } from '@listen-well/shared';
 
 // ============================================================================
 // Component
@@ -28,12 +39,33 @@ export default function ChatScreen() {
   // Send message mutation
   const { mutate: sendMessage, isPending: isSending } = useSendMessage();
 
+  // Optimistic updates for immediate feedback
+  const { addOptimisticMessage, removeOptimisticMessage } =
+    useOptimisticMessage();
+
   const handleSendMessage = useCallback(
     (content: string) => {
       if (!sessionId) return;
-      sendMessage({ sessionId, content });
+
+      // Add optimistic message immediately
+      const optimisticId = addOptimisticMessage(sessionId, {
+        content,
+        role: MessageRole.USER,
+        stage: Stage.WITNESS, // Default to Witness stage for chat
+      });
+
+      // Send the actual message
+      sendMessage(
+        { sessionId, content },
+        {
+          onError: () => {
+            // Remove optimistic message on failure
+            removeOptimisticMessage(sessionId, optimisticId);
+          },
+        }
+      );
     },
-    [sessionId, sendMessage]
+    [sessionId, sendMessage, addOptimisticMessage, removeOptimisticMessage]
   );
 
   // Loading state

@@ -64,6 +64,28 @@ describe('ChatInterface', () => {
       render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} />);
 
       expect(screen.getByTestId('chat-message-list')).toBeTruthy();
+      expect(screen.getByTestId('chat-empty-state')).toBeTruthy();
+    });
+
+    it('shows custom empty state message', () => {
+      render(
+        <ChatInterface
+          messages={[]}
+          onSendMessage={mockOnSendMessage}
+          emptyStateTitle="Welcome"
+          emptyStateMessage="Start typing..."
+        />
+      );
+
+      expect(screen.getByText('Welcome')).toBeTruthy();
+      expect(screen.getByText('Start typing...')).toBeTruthy();
+    });
+
+    it('hides empty state when messages exist', () => {
+      const messages = [createMockMessage({ id: '1', content: 'Hello' })];
+      render(<ChatInterface messages={messages} onSendMessage={mockOnSendMessage} />);
+
+      expect(screen.queryByTestId('chat-empty-state')).toBeNull();
     });
 
     it('renders multiple messages in correct order', () => {

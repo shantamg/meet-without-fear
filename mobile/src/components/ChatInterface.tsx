@@ -3,11 +3,19 @@
  *
  * Complete chat interface combining message list, typing indicator, and input.
  * Handles auto-scroll to bottom on new messages and keyboard avoidance.
+ *
+ * Features:
+ * - Message history with user/AI styling
+ * - Typing indicator while AI is responding
+ * - Auto-scroll to new messages
+ * - Keyboard avoidance on iOS
+ * - Empty state for new conversations
  */
 
 import { useRef, useEffect, useCallback } from 'react';
 import {
   View,
+  Text,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -28,17 +36,25 @@ interface ChatInterfaceProps {
   onSendMessage: (content: string) => void;
   isLoading?: boolean;
   disabled?: boolean;
+  emptyStateTitle?: string;
+  emptyStateMessage?: string;
 }
 
 // ============================================================================
 // Component
 // ============================================================================
 
+const DEFAULT_EMPTY_TITLE = 'Start the Conversation';
+const DEFAULT_EMPTY_MESSAGE =
+  "Share what's on your mind. I'm here to listen and help you work through it.";
+
 export function ChatInterface({
   messages,
   onSendMessage,
   isLoading = false,
   disabled = false,
+  emptyStateTitle = DEFAULT_EMPTY_TITLE,
+  emptyStateMessage = DEFAULT_EMPTY_MESSAGE,
 }: ChatInterfaceProps) {
   const flatListRef = useRef<FlatList<MessageDTO>>(null);
 
@@ -80,6 +96,16 @@ export function ChatInterface({
     return <TypingIndicator />;
   }, [isLoading]);
 
+  const renderEmptyState = useCallback(() => {
+    if (isLoading) return null;
+    return (
+      <View style={styles.emptyState} testID="chat-empty-state">
+        <Text style={styles.emptyStateTitle}>{emptyStateTitle}</Text>
+        <Text style={styles.emptyStateMessage}>{emptyStateMessage}</Text>
+      </View>
+    );
+  }, [isLoading, emptyStateTitle, emptyStateMessage]);
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -91,8 +117,12 @@ export function ChatInterface({
         data={messages}
         keyExtractor={keyExtractor}
         renderItem={renderMessage}
-        contentContainerStyle={styles.messageList}
+        contentContainerStyle={[
+          styles.messageList,
+          messages.length === 0 && styles.messageListEmpty,
+        ]}
         ListFooterComponent={renderFooter}
+        ListEmptyComponent={renderEmptyState}
         showsVerticalScrollIndicator={false}
         testID="chat-message-list"
       />
@@ -113,5 +143,28 @@ const styles = StyleSheet.create({
   messageList: {
     paddingVertical: 16,
     flexGrow: 1,
+  },
+  messageListEmpty: {
+    justifyContent: 'center',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 48,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  emptyStateMessage: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#6B7280',
+    textAlign: 'center',
   },
 });
