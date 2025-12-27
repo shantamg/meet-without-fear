@@ -99,7 +99,16 @@ flowchart TD
 
 ### Optional: AI-Assisted Hints
 
-If a user is stuck or their attempt is significantly off, the AI may offer (with consent) to share a helpful quotation or sentiment from the partner. Details of when this triggers are TBD during implementation.
+If a user is stuck, the AI may offer a hint about the partner's perspective.
+
+**Key constraints:**
+- Hints are only available if partner has already shared content to SharedVessel
+- No new consent request is sent to partner (they already consented when sharing)
+- User must explicitly accept the hint offer
+- If no partner content is available, AI offers alternative support (reframing, universal needs)
+- Hints inform AI questions - partner content is never quoted directly
+
+See [Hint System](../mechanisms/hint-system.md) for the full design.
 
 ## Mirror Intervention
 
@@ -112,7 +121,7 @@ flowchart TD
 
     subgraph Example[Example Exchange]
         User[User: They are just happy I am miserable]
-        AI[AI: That sounds like a thought born of your own hurt. If you look past your pain for a moment what fear might be driving their behavior?]
+        AI[AI: I hear how painful that is. When we are hurting this much it can feel like the other person must be causing it on purpose. What fear might be driving their behavior?]
     end
 
     Reflect --> Example
