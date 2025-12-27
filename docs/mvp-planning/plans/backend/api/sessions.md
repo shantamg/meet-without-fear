@@ -95,8 +95,8 @@ curl -X POST /api/v1/sessions \
         "startedAt": null,
         "completedAt": null
       },
-      "isMyTurn": false,
-      "waitingOnPartner": true
+      "selfActionNeeded": ["compactSigned"],
+      "partnerActionNeeded": ["partnerCompactSigned"]
     },
     "invitationId": "inv_def456",
     "invitationUrl": "beheard://invite/inv_def456"
@@ -184,8 +184,8 @@ interface SessionDetailDTO {
   currentGates: StageGateDTO[];
   resolvedAt: string | null;
 
-  isMyTurn: boolean;
-  waitingOnPartner: boolean;
+  selfActionNeeded: string[];
+  partnerActionNeeded: string[];
 }
 ```
 

@@ -1,33 +1,33 @@
-# MVP Planning Process
+# BeHeard Development
 
-This repository focuses on generating documentation for MVP planning.
+## Development Practices
 
-## Structure
+### Test-Driven Development
+- Write tests first, then implementation
+- Run `npm run test` in the relevant workspace before considering work complete
+- Run `npm run check` to verify types before committing
 
-All MVP planning documentation lives in `docs/mvp-planning/`:
+### Code Organization
+- **Shared types in `shared/`** - All DTOs, contracts, and cross-workspace types
+- **Small, testable functions** - Each function does one thing
+- **Logic separate from views** - Mobile: hooks/services for logic, components for UI
+- **Reusable code** - Extract common patterns to shared or workspace-level utilities
 
-- **`source-material/`** - Raw input documents (Google Docs exports, sheets, requirements)
-- **`plans/`** - Generated markdown plans that link to each other, with mermaid diagrams for user flows and wireframe representations
+### Verification Before Completion
+Always run before considering a task done:
+```bash
+npm run check   # Type checking across all workspaces
+npm run test    # Tests across all workspaces
+```
 
-## Index Files
+### Git Workflow
+- Commit and push often (small, focused commits)
+- Each commit should pass check and test
 
-Each directory in `docs/mvp-planning/` has an `index.md` file that serves as navigation to all documents within that directory.
+## Project Structure
 
-**Keep index files up to date:** When adding, removing, or renaming documents, always update the relevant `index.md` file to reflect the changes.
-
-## Documentation Style
-
-- Use mermaid diagrams extensively to represent user flows and wireframe concepts
-- Prefer mermaid to ASCII when representing things visually
-- **Use flowchart with subgraphs for screen wireframes** - block-beta has rendering issues on GitHub
-- **Do not use colors/styles in mermaid diagrams** - they render poorly on GitHub
-- **Avoid special characters in mermaid** - quotes, apostrophes, and emojis can cause parse errors
-- Link between related documents for easy navigation
-- Keep documents focused and modular
-
-## Keeping Docs and Demos in Sync
-
-When making changes to the application, keep the planning documentation and demos up to date:
-
-- **Planning docs** (`docs/mvp-planning/plans/`) should reflect current functionality and flows
-- **Demos** should be updated when features they showcase are modified
+- `shared/` - Types, DTOs, contracts shared between backend and mobile
+- `backend/` - Express API, Prisma, business logic
+- `mobile/` - Expo React Native app
+- `implementation/` - Executable implementation plans (not deployed)
+- `docs/mvp-planning/` - Planning docs (deployed to docs site)

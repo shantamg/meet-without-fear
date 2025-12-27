@@ -131,8 +131,8 @@ curl -X POST /api/v1/invitations/inv_def456/accept \
         "startedAt": "2024-01-15T10:30:00Z",
         "completedAt": null
       },
-      "isMyTurn": true,
-      "waitingOnPartner": false
+      "selfActionNeeded": ["compactSigned"],
+      "partnerActionNeeded": ["partnerCompactSigned"]
     }
   }
 }

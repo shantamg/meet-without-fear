@@ -28,8 +28,8 @@ export interface SessionSummaryDTO {
   partnerProgress: StageProgressDTO;
 
   // Computed helpers for UI
-  isMyTurn: boolean;
-  waitingOnPartner: boolean;
+  selfActionNeeded: string[];     // Gate keys the user still needs
+  partnerActionNeeded: string[];  // Gate keys partner must satisfy to unlock next stage
 }
 
 export interface StageProgressDTO {
@@ -56,6 +56,9 @@ export interface SessionDetailDTO extends SessionSummaryDTO {
 
   // Resolution info (if resolved)
   resolvedAt: string | null;
+
+  selfActionNeeded: string[];
+  partnerActionNeeded: string[];
 }
 
 export interface StageGateDTO {
