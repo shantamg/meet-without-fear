@@ -7,6 +7,17 @@ sidebar_position: 3
 
 Invitation acceptance and management for session partners.
 
+## Delivery Methods
+
+Invitations can be sent via email or phone:
+
+| Channel | Provider | Details |
+|---------|----------|---------|
+| Email | [Resend](https://resend.com) | Transactional email delivery |
+| Phone | [Twilio](https://twilio.com) | SMS delivery |
+
+When creating a session with `inviteEmail`, the invitation is sent via Resend. When using `invitePhone`, it's sent via Twilio SMS. The invitation includes a deep link to accept.
+
 ## Get Invitation Details
 
 Get details about an invitation (can be accessed without auth for preview).

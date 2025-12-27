@@ -38,6 +38,13 @@ interface CreateSessionRequest {
 - Cannot have an active session with the same person
 - Email/phone must be valid format
 
+### Invitation Delivery
+
+- **Email**: Sent via [Resend](https://resend.com) when `inviteEmail` is provided
+- **Phone**: Sent via [Twilio](https://twilio.com) SMS when `invitePhone` is provided
+
+See [Invitations API](./invitations.md) for delivery details.
+
 ### Response
 
 ```typescript

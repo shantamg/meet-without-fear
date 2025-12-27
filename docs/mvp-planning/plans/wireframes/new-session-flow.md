@@ -231,6 +231,8 @@ flowchart TD
 | Valid | Send button enabled |
 | Already connected | Suggest selecting from list |
 
+**Delivery**: Email invitations are sent via [Resend](https://resend.com), phone invitations via [Twilio](https://twilio.com) SMS.
+
 ### Topic Validation
 
 | State | Behavior |
