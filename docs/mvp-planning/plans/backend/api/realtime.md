@@ -364,7 +364,7 @@ Stage 4 negotiation requires special handling to prevent emotional disruption:
 | `disconnected` (< 30s) | Invisible to user | Silent reconnect |
 | `disconnected` (30s-2min) | Subtle indicator | "Reconnecting..." toast |
 | `suspended` (> 2min) | Full notice | Modal with "Connection lost. Your progress is saved." |
-| `failed` | Critical | Fall back to polling + clear explanation |
+| `failed` | Critical | Show error with refresh prompt |
 
 **Critical Invariant:** Rankings and proposals are persisted server-side immediately. Connection loss never causes data loss.
 
@@ -375,23 +375,6 @@ const STAGE_4_RECOVERY_CONFIG = {
   disconnectedRetryTimeout: 5000, // Retry every 5s when disconnected
   suspendedRetryTimeout: 15000,   // Retry every 15s when suspended
 };
-```
-
-### Fallback to Polling
-
-If Ably connection fails, fall back to polling:
-
-```typescript
-const POLL_INTERVAL = 10000; // 10 seconds
-
-useEffect(() => {
-  if (connectionStatus === 'failed') {
-    const interval = setInterval(() => {
-      refetchSessionState();
-    }, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }
-}, [connectionStatus]);
 ```
 
 ### Token Refresh Failure Handling
