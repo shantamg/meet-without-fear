@@ -138,4 +138,110 @@ describe('SessionCard', () => {
 
     expect(screen.queryByTestId('action-badge')).toBeNull();
   });
+
+  // Status indicator tests
+  describe('status indicators', () => {
+    it('shows invited status badge for INVITED sessions', () => {
+      const session = createMockSession({
+        status: SessionStatus.INVITED,
+      });
+      render(<SessionCard session={session} />);
+
+      expect(screen.getByText('Pending')).toBeTruthy();
+    });
+
+    it('shows paused status badge for PAUSED sessions', () => {
+      const session = createMockSession({
+        status: SessionStatus.PAUSED,
+      });
+      render(<SessionCard session={session} />);
+
+      expect(screen.getByText('Paused')).toBeTruthy();
+    });
+
+    it('shows resolved status badge for RESOLVED sessions', () => {
+      const session = createMockSession({
+        status: SessionStatus.RESOLVED,
+      });
+      render(<SessionCard session={session} />);
+
+      expect(screen.getByText('Resolved')).toBeTruthy();
+    });
+  });
+
+  // Time since update tests
+  describe('time display', () => {
+    beforeAll(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2024-01-03T12:00:00Z'));
+    });
+
+    afterAll(() => {
+      jest.useRealTimers();
+    });
+
+    it('shows time since last update', () => {
+      const session = createMockSession({
+        updatedAt: '2024-01-03T10:00:00Z', // 2 hours ago
+      });
+      render(<SessionCard session={session} />);
+
+      expect(screen.getByText('2h ago')).toBeTruthy();
+    });
+
+    it('shows days for older sessions', () => {
+      const session = createMockSession({
+        updatedAt: '2024-01-01T12:00:00Z', // 2 days ago
+      });
+      render(<SessionCard session={session} />);
+
+      expect(screen.getByText('2d ago')).toBeTruthy();
+    });
+  });
+
+  // Hero card messaging tests
+  describe('hero card messaging', () => {
+    it('shows "is waiting for you" message when partner is waiting', () => {
+      const session = createMockSession({
+        partner: { id: 'user-2', name: 'Alex' },
+        selfActionNeeded: ['complete_stage'],
+        partnerProgress: {
+          stage: Stage.WITNESS,
+          status: StageStatus.GATE_PENDING, // Partner completed, waiting on us
+          startedAt: '2024-01-01T00:00:00Z',
+          completedAt: '2024-01-02T00:00:00Z',
+        },
+      });
+      render(<SessionCard session={session} isHero />);
+
+      expect(screen.getByText('Alex is waiting for you')).toBeTruthy();
+    });
+
+    it('shows "Ready to continue" message when your turn but partner not waiting', () => {
+      const session = createMockSession({
+        partner: { id: 'user-2', name: 'Alex' },
+        selfActionNeeded: ['complete_stage'],
+        partnerProgress: {
+          stage: Stage.WITNESS,
+          status: StageStatus.IN_PROGRESS,
+          startedAt: '2024-01-01T00:00:00Z',
+          completedAt: null,
+        },
+      });
+      render(<SessionCard session={session} isHero />);
+
+      expect(screen.getByText('Ready to continue with Alex')).toBeTruthy();
+    });
+
+    it('shows "Waiting for partner" message when you are waiting', () => {
+      const session = createMockSession({
+        partner: { id: 'user-2', name: 'Alex' },
+        selfActionNeeded: [],
+        partnerActionNeeded: ['complete_stage'],
+      });
+      render(<SessionCard session={session} isHero />);
+
+      expect(screen.getByText('Waiting for Alex')).toBeTruthy();
+    });
+  });
 });

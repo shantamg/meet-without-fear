@@ -15,6 +15,19 @@ import {
   ExerciseType,
 } from '@prisma/client';
 
+import {
+  SessionStatus as SharedSessionStatus,
+  StageStatus as SharedStageStatus,
+  MessageRole as SharedMessageRole,
+  Attribution as SharedAttribution,
+  NeedCategory as SharedNeedCategory,
+  ConsentDecision as SharedConsentDecision,
+  ConsentContentType as SharedConsentContentType,
+  AgreementType as SharedAgreementType,
+  AgreementStatus as SharedAgreementStatus,
+  GlobalLibrarySource as SharedGlobalLibrarySource,
+} from '@listen-well/shared';
+
 /**
  * Prisma Schema Tests
  *
@@ -229,6 +242,87 @@ describe('Prisma Schema', () => {
         source: GlobalLibrarySource.CURATED,
       };
       expect(libraryInput.source).toBe('CURATED');
+    });
+  });
+
+  describe('Enum Alignment with Shared Package', () => {
+    /**
+     * These tests verify that Prisma enums match the shared package enums.
+     * This ensures type consistency between backend (using Prisma) and mobile (using shared).
+     */
+
+    it('SessionStatus enum values match shared package', () => {
+      expect(SessionStatus.CREATED).toBe(SharedSessionStatus.CREATED);
+      expect(SessionStatus.INVITED).toBe(SharedSessionStatus.INVITED);
+      expect(SessionStatus.ACTIVE).toBe(SharedSessionStatus.ACTIVE);
+      expect(SessionStatus.PAUSED).toBe(SharedSessionStatus.PAUSED);
+      expect(SessionStatus.WAITING).toBe(SharedSessionStatus.WAITING);
+      expect(SessionStatus.RESOLVED).toBe(SharedSessionStatus.RESOLVED);
+      expect(SessionStatus.ABANDONED).toBe(SharedSessionStatus.ABANDONED);
+    });
+
+    it('StageStatus enum values match shared package', () => {
+      expect(StageStatus.NOT_STARTED).toBe(SharedStageStatus.NOT_STARTED);
+      expect(StageStatus.IN_PROGRESS).toBe(SharedStageStatus.IN_PROGRESS);
+      expect(StageStatus.GATE_PENDING).toBe(SharedStageStatus.GATE_PENDING);
+      expect(StageStatus.COMPLETED).toBe(SharedStageStatus.COMPLETED);
+    });
+
+    it('MessageRole enum values match shared package', () => {
+      expect(MessageRole.USER).toBe(SharedMessageRole.USER);
+      expect(MessageRole.AI).toBe(SharedMessageRole.AI);
+      expect(MessageRole.SYSTEM).toBe(SharedMessageRole.SYSTEM);
+    });
+
+    it('Attribution enum values match shared package', () => {
+      expect(Attribution.SELF).toBe(SharedAttribution.SELF);
+      expect(Attribution.OTHER).toBe(SharedAttribution.OTHER);
+      expect(Attribution.MUTUAL).toBe(SharedAttribution.MUTUAL);
+      expect(Attribution.EXTERNAL).toBe(SharedAttribution.EXTERNAL);
+    });
+
+    it('NeedCategory enum values match shared package', () => {
+      expect(NeedCategory.SAFETY).toBe(SharedNeedCategory.SAFETY);
+      expect(NeedCategory.CONNECTION).toBe(SharedNeedCategory.CONNECTION);
+      expect(NeedCategory.AUTONOMY).toBe(SharedNeedCategory.AUTONOMY);
+      expect(NeedCategory.RECOGNITION).toBe(SharedNeedCategory.RECOGNITION);
+      expect(NeedCategory.MEANING).toBe(SharedNeedCategory.MEANING);
+      expect(NeedCategory.FAIRNESS).toBe(SharedNeedCategory.FAIRNESS);
+    });
+
+    it('ConsentDecision enum values match shared package', () => {
+      expect(ConsentDecision.GRANTED).toBe(SharedConsentDecision.GRANTED);
+      expect(ConsentDecision.DENIED).toBe(SharedConsentDecision.DENIED);
+      expect(ConsentDecision.REVOKED).toBe(SharedConsentDecision.REVOKED);
+    });
+
+    it('ConsentContentType enum values match shared package', () => {
+      expect(ConsentContentType.IDENTIFIED_NEED).toBe(SharedConsentContentType.IDENTIFIED_NEED);
+      expect(ConsentContentType.EVENT_SUMMARY).toBe(SharedConsentContentType.EVENT_SUMMARY);
+      expect(ConsentContentType.EMOTIONAL_PATTERN).toBe(SharedConsentContentType.EMOTIONAL_PATTERN);
+      expect(ConsentContentType.BOUNDARY).toBe(SharedConsentContentType.BOUNDARY);
+      expect(ConsentContentType.EMPATHY_DRAFT).toBe(SharedConsentContentType.EMPATHY_DRAFT);
+      expect(ConsentContentType.EMPATHY_ATTEMPT).toBe(SharedConsentContentType.EMPATHY_ATTEMPT);
+      expect(ConsentContentType.STRATEGY_PROPOSAL).toBe(SharedConsentContentType.STRATEGY_PROPOSAL);
+    });
+
+    it('AgreementType enum values match shared package', () => {
+      expect(AgreementType.MICRO_EXPERIMENT).toBe(SharedAgreementType.MICRO_EXPERIMENT);
+      expect(AgreementType.COMMITMENT).toBe(SharedAgreementType.COMMITMENT);
+      expect(AgreementType.CHECK_IN).toBe(SharedAgreementType.CHECK_IN);
+    });
+
+    it('AgreementStatus enum values match shared package', () => {
+      expect(AgreementStatus.PROPOSED).toBe(SharedAgreementStatus.PROPOSED);
+      expect(AgreementStatus.AGREED).toBe(SharedAgreementStatus.AGREED);
+      expect(AgreementStatus.IN_PROGRESS).toBe(SharedAgreementStatus.IN_PROGRESS);
+      expect(AgreementStatus.COMPLETED).toBe(SharedAgreementStatus.COMPLETED);
+      expect(AgreementStatus.ABANDONED).toBe(SharedAgreementStatus.ABANDONED);
+    });
+
+    it('GlobalLibrarySource enum values match shared package', () => {
+      expect(GlobalLibrarySource.CURATED).toBe(SharedGlobalLibrarySource.CURATED);
+      expect(GlobalLibrarySource.CONTRIBUTED).toBe(SharedGlobalLibrarySource.CONTRIBUTED);
     });
   });
 

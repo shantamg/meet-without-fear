@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { sendInvitationEmail } from '../services/email';
+import { notifyPartner } from '../services/realtime';
 import { z } from 'zod';
 
 // ============================================================================
@@ -376,8 +377,11 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
       },
     });
 
-    // TODO: Notify inviter via realtime (when realtime service is implemented)
-    // await notifyPartner(invitation.sessionId, invitation.invitedById, 'session.joined', {});
+    // Notify inviter via realtime that partner joined
+    await notifyPartner(invitation.sessionId, invitation.invitedById, 'session.joined', {
+      userId: user.id,
+      userName: user.name,
+    });
 
     successResponse(res, {
       session: {
@@ -454,8 +458,10 @@ export async function declineInvitation(req: Request, res: Response): Promise<vo
       data: { status: 'ABANDONED' },
     });
 
-    // TODO: Notify inviter via realtime (when realtime service is implemented)
-    // await notifyPartner(invitation.sessionId, invitation.invitedById, 'invitation.declined', {});
+    // Notify inviter via realtime that invitation was declined
+    await notifyPartner(invitation.sessionId, invitation.invitedById, 'invitation.declined', {
+      reason,
+    });
 
     successResponse(res, { declined: true });
   } catch (error) {

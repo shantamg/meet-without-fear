@@ -8,7 +8,7 @@
 
 ## Prerequisites
 
-- [ ] `backend/stage-3-api.md` complete
+- [x] `backend/stage-3-api.md` complete
 
 ## External Services Required
 
@@ -233,11 +233,11 @@ npm run test
 
 ## Verification
 
-- [ ] Strategy pool is anonymous (no createdBy exposed)
-- [ ] Strategies shuffled to prevent order bias
-- [ ] Rankings are private until both submit
-- [ ] Overlap calculated correctly
-- [ ] Agreement links to strategy
-- [ ] Partner notifications sent
-- [ ] `npm run check` passes
-- [ ] `npm run test` passes
+- [x] Strategy pool is anonymous (no createdBy exposed)
+- [x] Strategies shuffled to prevent order bias
+- [x] Rankings are private until both submit
+- [x] Overlap calculated correctly
+- [x] Agreement links to strategy
+- [x] Partner notifications sent
+- [x] `npm run check` passes
+- [x] `npm run test` passes

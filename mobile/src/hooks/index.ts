@@ -142,3 +142,50 @@ export {
   type RecordEmotionInput,
   type CompleteExerciseInput,
 } from './useEmotions';
+
+// ============================================================================
+// People/Relationships
+// ============================================================================
+
+export {
+  // Query keys
+  personKeys,
+  // Types
+  type SessionStatus as PersonSessionStatus,
+  type ActiveSessionInfo,
+  type PersonDTO,
+  type PastSessionDTO,
+  type GetPersonResponse,
+  type GetPastSessionsResponse,
+  // Hooks
+  usePerson,
+  usePastSessions,
+} from './usePerson';
+
+// ============================================================================
+// Realtime (WebSocket)
+// ============================================================================
+
+export {
+  // Types
+  type RealtimeConfig,
+  type RealtimeState,
+  type RealtimeActions,
+  // Main hook
+  useRealtime,
+  // Convenience hooks
+  usePartnerTyping,
+  usePartnerPresence,
+  useSessionEvents,
+} from './useRealtime';
+
+// ============================================================================
+// Notifications
+// ============================================================================
+
+export {
+  useNotifications,
+  type NotificationData,
+  type NotificationPermissionStatus,
+  type UseNotificationsReturn,
+} from './useNotifications';

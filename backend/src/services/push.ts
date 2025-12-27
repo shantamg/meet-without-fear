@@ -71,6 +71,14 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'Session complete',
     body: 'Congratulations! You have resolved this conversation.',
   },
+  'session.joined': {
+    title: 'Partner joined',
+    body: 'Your partner has joined the session.',
+  },
+  'invitation.declined': {
+    title: 'Invitation declined',
+    body: 'Your partner has declined the session invitation.',
+  },
 };
 
 /**

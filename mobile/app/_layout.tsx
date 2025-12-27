@@ -10,9 +10,24 @@ import { StyleSheet } from 'react-native';
 import { AuthContext, useAuthProvider } from '@/src/hooks/useAuth';
 import { QueryProvider } from '@/src/providers/QueryProvider';
 import { setTokenProvider } from '@/src/lib/api';
+import { ToastProvider } from '@/src/contexts/ToastContext';
+import { useNotifications } from '@/src/hooks/useNotifications';
+import { configureNotificationHandler } from '@/src/services/notifications';
+
+// Configure notification handler at module load (before app renders)
+configureNotificationHandler();
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
+
+/**
+ * Notification initializer component
+ * Must be inside QueryProvider to use React Query hooks
+ */
+function NotificationInitializer() {
+  useNotifications();
+  return null;
+}
 
 /**
  * Root layout component
@@ -48,17 +63,22 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <AuthContext.Provider value={auth}>
           <QueryProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              {/* Public routes - no auth required */}
-              <Stack.Screen name="(public)" />
+            <ToastProvider>
+              {/* Initialize notifications - must be inside QueryProvider */}
+              <NotificationInitializer />
 
-              {/* Auth-required routes */}
-              <Stack.Screen name="(auth)" />
+              <Stack screenOptions={{ headerShown: false }}>
+                {/* Public routes - no auth required */}
+                <Stack.Screen name="(public)" />
 
-              {/* 404 handler */}
-              <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-            </Stack>
-            <StatusBar style="auto" />
+                {/* Auth-required routes */}
+                <Stack.Screen name="(auth)" />
+
+                {/* 404 handler */}
+                <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+              </Stack>
+              <StatusBar style="auto" />
+            </ToastProvider>
           </QueryProvider>
         </AuthContext.Provider>
       </SafeAreaProvider>

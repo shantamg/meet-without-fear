@@ -50,6 +50,11 @@ jest.mock('../../services/email', () => ({
   }),
 }));
 
+// Mock realtime service
+jest.mock('../../services/realtime', () => ({
+  notifyPartner: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Helper to create mock request
 function createMockRequest(options: {
   user?: { id: string; email: string; name?: string | null };

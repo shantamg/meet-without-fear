@@ -44,6 +44,38 @@ jest.mock('react-native/src/private/specs_DEPRECATED/modules/NativeDeviceInfo', 
 // Mock NativeEventEmitter
 jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter');
 
+// Mock UIManager for React Native 0.79+
+jest.mock('react-native/Libraries/ReactNative/UIManager', () => ({
+  ...jest.requireActual('react-native/Libraries/ReactNative/UIManager'),
+  hasViewManagerConfig: jest.fn(() => true),
+  getViewManagerConfig: jest.fn(() => ({
+    Commands: {},
+    NativeProps: {},
+    validAttributes: {},
+  })),
+  setLayoutAnimationEnabledExperimental: jest.fn(),
+  configureNextLayoutAnimation: jest.fn(),
+  createView: jest.fn(),
+  updateView: jest.fn(),
+  manageChildren: jest.fn(),
+  setChildren: jest.fn(),
+  removeRootView: jest.fn(),
+  removeSubviewsFromContainerWithID: jest.fn(),
+  replaceExistingNonRootView: jest.fn(),
+  measure: jest.fn(),
+  measureInWindow: jest.fn(),
+  measureLayout: jest.fn(),
+  measureLayoutRelativeToParent: jest.fn(),
+  dispatchViewManagerCommand: jest.fn(),
+  focus: jest.fn(),
+  blur: jest.fn(),
+  findSubviewIn: jest.fn(),
+  getConstants: () => ({
+    customBubblingEventTypes: {},
+    customDirectEventTypes: {},
+  }),
+}));
+
 // Mock NativeUIManager
 jest.mock('react-native/Libraries/ReactNative/NativeUIManager', () => ({
   __esModule: true,
@@ -52,6 +84,12 @@ jest.mock('react-native/Libraries/ReactNative/NativeUIManager', () => ({
       customBubblingEventTypes: {},
       customDirectEventTypes: {},
     }),
+    hasViewManagerConfig: jest.fn(() => true),
+    getViewManagerConfig: jest.fn(() => ({
+      Commands: {},
+      NativeProps: {},
+      validAttributes: {},
+    })),
     getConstantsForViewManager: jest.fn(),
     getDefaultEventTypes: jest.fn(() => []),
     setLayoutAnimationEnabledExperimental: jest.fn(),
@@ -92,6 +130,26 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+// Mock Modal component for React Native 0.79+ using inline view component
+jest.mock('react-native/Libraries/Modal/Modal', () => {
+  const React = require('react');
+  // Create a simple View-like component to avoid circular deps
+  const MockView = React.forwardRef((props, ref) => {
+    return React.createElement('View', { ...props, ref });
+  });
+  MockView.displayName = 'MockView';
+
+  const MockModal = ({ visible, testID, children }) => {
+    if (!visible) return null;
+    return React.createElement(MockView, { testID }, children);
+  };
+  MockModal.displayName = 'Modal';
+  return {
+    __esModule: true,
+    default: MockModal,
+  };
+});
+
 // Mock expo-router
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -110,14 +168,43 @@ jest.mock('expo-router', () => ({
 // Mock react-native-reanimated with inline mock (avoid loading the actual module)
 jest.mock('react-native-reanimated', () => {
   const React = require('react');
+
+  // Create animated component wrappers without importing react-native to avoid circular deps
+  const AnimatedView = React.forwardRef((props, ref) =>
+    React.createElement('View', { ...props, ref })
+  );
+  AnimatedView.displayName = 'Animated.View';
+
+  const AnimatedText = React.forwardRef((props, ref) =>
+    React.createElement('Text', { ...props, ref })
+  );
+  AnimatedText.displayName = 'Animated.Text';
+
+  const AnimatedImage = React.forwardRef((props, ref) =>
+    React.createElement('Image', { ...props, ref })
+  );
+  AnimatedImage.displayName = 'Animated.Image';
+
+  const AnimatedScrollView = React.forwardRef((props, ref) =>
+    React.createElement('ScrollView', { ...props, ref })
+  );
+  AnimatedScrollView.displayName = 'Animated.ScrollView';
+
+  // Default export with View, Text, etc. as properties
+  const Animated = {
+    addWhitelistedNativeProps: jest.fn(),
+    addWhitelistedUIProps: jest.fn(),
+    createAnimatedComponent: (component) => component,
+    call: jest.fn(),
+    View: AnimatedView,
+    Text: AnimatedText,
+    Image: AnimatedImage,
+    ScrollView: AnimatedScrollView,
+  };
+
   return {
     __esModule: true,
-    default: {
-      addWhitelistedNativeProps: jest.fn(),
-      addWhitelistedUIProps: jest.fn(),
-      createAnimatedComponent: (component) => component,
-      call: jest.fn(),
-    },
+    default: Animated,
     useSharedValue: jest.fn((initialValue) => ({ value: initialValue })),
     useAnimatedStyle: jest.fn(() => ({})),
     useDerivedValue: jest.fn((fn) => ({ value: fn() })),
@@ -128,13 +215,14 @@ jest.mock('react-native-reanimated', () => {
     withDelay: jest.fn((_, value) => value),
     withSequence: jest.fn((...args) => args[args.length - 1]),
     withRepeat: jest.fn((value) => value),
+    cancelAnimation: jest.fn(),
     Easing: {
-      linear: jest.fn(),
-      ease: jest.fn(),
-      bezier: jest.fn(),
-      in: jest.fn(),
-      out: jest.fn(),
-      inOut: jest.fn(),
+      linear: jest.fn((v) => v),
+      ease: jest.fn((v) => v),
+      bezier: jest.fn(() => (v) => v),
+      in: jest.fn((fn) => fn),
+      out: jest.fn((fn) => fn),
+      inOut: jest.fn((fn) => fn),
     },
     runOnJS: jest.fn((fn) => fn),
     runOnUI: jest.fn((fn) => fn),
@@ -145,10 +233,11 @@ jest.mock('react-native-reanimated', () => {
     SlideInRight: { duration: jest.fn().mockReturnThis() },
     SlideOutLeft: { duration: jest.fn().mockReturnThis() },
     Layout: { duration: jest.fn().mockReturnThis() },
-    View: (props) => React.createElement('View', props),
-    Text: (props) => React.createElement('Text', props),
-    Image: (props) => React.createElement('Image', props),
-    ScrollView: (props) => React.createElement('ScrollView', props),
+    // Also export as named exports for destructuring import
+    View: AnimatedView,
+    Text: AnimatedText,
+    Image: AnimatedImage,
+    ScrollView: AnimatedScrollView,
   };
 });
 
@@ -170,9 +259,155 @@ jest.mock('lucide-react-native', () => {
   });
 });
 
-// Silence the warning: Animated: `useNativeDriver` is not supported
+// Mock expo-notifications
+jest.mock('expo-notifications', () => ({
+  getPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  requestPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
+  getExpoPushTokenAsync: jest.fn(() => Promise.resolve({ data: 'ExponentPushToken[mock]' })),
+  addNotificationReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  setNotificationHandler: jest.fn(),
+  setNotificationChannelAsync: jest.fn(),
+  setBadgeCountAsync: jest.fn(),
+  getBadgeCountAsync: jest.fn(() => Promise.resolve(0)),
+  AndroidImportance: {
+    MAX: 5,
+    HIGH: 4,
+    DEFAULT: 3,
+    LOW: 2,
+    MIN: 1,
+  },
+}));
+
+// Mock expo-modules-core
+jest.mock('expo-modules-core', () => ({
+  EventSubscription: class {},
+}));
+
+// Mock expo-device
+jest.mock('expo-device', () => ({
+  isDevice: true,
+  brand: 'Apple',
+  modelName: 'iPhone 14',
+  osName: 'iOS',
+  osVersion: '17.0',
+}));
+
+// Mock expo-constants
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: {
+    expoConfig: {
+      extra: {
+        eas: {
+          projectId: 'test-project-id',
+        },
+      },
+    },
+  },
+}));
+
+// Mock NativeAnimatedHelper for React Native 0.79+
+jest.mock('react-native/src/private/animated/NativeAnimatedHelper', () => ({
+  __esModule: true,
+  default: {
+    API: {
+      setWaitingForIdentifier: jest.fn(),
+      createAnimatedNode: jest.fn(),
+      startListeningToAnimatedNodeValue: jest.fn(),
+      stopListeningToAnimatedNodeValue: jest.fn(),
+      connectAnimatedNodes: jest.fn(),
+      disconnectAnimatedNodes: jest.fn(),
+      startAnimatingNode: jest.fn(),
+      stopAnimation: jest.fn(),
+      setAnimatedNodeValue: jest.fn(),
+      setAnimatedNodeOffset: jest.fn(),
+      flattenAnimatedNodeOffset: jest.fn(),
+      extractAnimatedNodeOffset: jest.fn(),
+      connectAnimatedNodeToView: jest.fn(),
+      disconnectAnimatedNodeFromView: jest.fn(),
+      restoreDefaultValues: jest.fn(),
+      dropAnimatedNode: jest.fn(),
+      addAnimatedEventToView: jest.fn(),
+      removeAnimatedEventFromView: jest.fn(),
+      getValue: jest.fn(),
+      flushQueue: jest.fn(),
+      unsetWaitingForIdentifier: jest.fn(),
+    },
+    addWhitelistedNativeProps: jest.fn(),
+    addWhitelistedUIProps: jest.fn(),
+    validateProps: jest.fn(),
+    assertNativeAnimatedModule: jest.fn(),
+    shouldUseNativeDriver: jest.fn(() => false),
+  },
+  API: {
+    setWaitingForIdentifier: jest.fn(),
+    createAnimatedNode: jest.fn(),
+    startListeningToAnimatedNodeValue: jest.fn(),
+    stopListeningToAnimatedNodeValue: jest.fn(),
+    connectAnimatedNodes: jest.fn(),
+    disconnectAnimatedNodes: jest.fn(),
+    startAnimatingNode: jest.fn(),
+    stopAnimation: jest.fn(),
+    setAnimatedNodeValue: jest.fn(),
+    setAnimatedNodeOffset: jest.fn(),
+    flattenAnimatedNodeOffset: jest.fn(),
+    extractAnimatedNodeOffset: jest.fn(),
+    connectAnimatedNodeToView: jest.fn(),
+    disconnectAnimatedNodeFromView: jest.fn(),
+    restoreDefaultValues: jest.fn(),
+    dropAnimatedNode: jest.fn(),
+    addAnimatedEventToView: jest.fn(),
+    removeAnimatedEventFromView: jest.fn(),
+    getValue: jest.fn(),
+    flushQueue: jest.fn(),
+    unsetWaitingForIdentifier: jest.fn(),
+  },
+  addWhitelistedNativeProps: jest.fn(),
+  addWhitelistedUIProps: jest.fn(),
+  validateProps: jest.fn(),
+  assertNativeAnimatedModule: jest.fn(),
+  shouldUseNativeDriver: jest.fn(() => false),
+}));
+
+// Also mock the legacy path
 try {
-  jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper');
+  jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper', () => ({
+    __esModule: true,
+    default: {
+      addWhitelistedNativeProps: jest.fn(),
+      addWhitelistedUIProps: jest.fn(),
+      validateProps: jest.fn(),
+      assertNativeAnimatedModule: jest.fn(),
+      shouldUseNativeDriver: jest.fn(() => false),
+    },
+    shouldUseNativeDriver: jest.fn(() => false),
+  }));
 } catch {
   // Module path may differ in newer RN versions
 }
+
+// Mock expo-secure-store
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(() => Promise.resolve(null)),
+  setItemAsync: jest.fn(() => Promise.resolve()),
+  deleteItemAsync: jest.fn(() => Promise.resolve()),
+}));
+
+// Mock expo-linking
+jest.mock('expo-linking', () => ({
+  createURL: jest.fn((path) => `beheard://${path}`),
+  parse: jest.fn((url) => {
+    try {
+      const parsed = new URL(url.replace('beheard://', 'https://beheard.app/'));
+      return {
+        path: parsed.pathname.slice(1),
+        queryParams: Object.fromEntries(parsed.searchParams),
+      };
+    } catch {
+      return { path: '', queryParams: {} };
+    }
+  }),
+  getInitialURL: jest.fn(() => Promise.resolve(null)),
+  addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+}));

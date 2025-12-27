@@ -1,144 +1,98 @@
-import { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { useEffect } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { ArrowRight, Save } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CuriosityCompact } from '@/src/components/CuriosityCompact';
+import { WaitingRoom } from '@/src/components/WaitingRoom';
+import { useCompactStatus, useSignCompact } from '@/src/hooks/useStages';
 
 /**
- * Compact view screen
- * Stage 0 - Initial thoughts in compact format
+ * Compact Screen
+ * Stage 0 - Curiosity Compact signing
+ *
+ * Users must review and sign the Curiosity Compact before proceeding.
+ * Both users must sign before advancing to the chat stage.
  */
 export default function CompactScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [situation, setSituation] = useState('');
-  const [feeling, setFeeling] = useState('');
-  const [thought, setThought] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      // TODO: Save compact view to API
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      console.log('Saved compact view:', { situation, feeling, thought });
-    } catch (error) {
-      console.error('Failed to save:', error);
-    } finally {
-      setIsSaving(false);
+  const { data: compactStatus, isLoading } = useCompactStatus(id);
+  const { mutate: signCompact, isPending } = useSignCompact();
+
+  // Navigate to chat when both have signed
+  useEffect(() => {
+    if (compactStatus?.canAdvance) {
+      router.replace(`/session/${id}/chat`);
     }
+  }, [compactStatus?.canAdvance, id, router]);
+
+  const handleSign = () => {
+    signCompact(
+      { sessionId: id! },
+      {
+        onSuccess: (response) => {
+          if (response.canAdvance) {
+            router.replace(`/session/${id}/chat`);
+          }
+        },
+      }
+    );
   };
 
-  const handleContinueToChat = () => {
-    router.push(`/session/${id}/chat`);
-  };
+  // Loading state
+  if (isLoading) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            title: 'Curiosity Compact',
+            headerBackTitle: 'Session',
+          }}
+        />
+        <SafeAreaView style={styles.container} edges={['bottom']}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#4F46E5" />
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
 
-  const isComplete = situation.trim() && feeling.trim() && thought.trim();
+  // User has signed but partner has not - show waiting room
+  if (compactStatus?.mySigned && !compactStatus?.partnerSigned) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            title: 'Curiosity Compact',
+            headerBackTitle: 'Session',
+          }}
+        />
+        <SafeAreaView style={styles.container} edges={['bottom']}>
+          <WaitingRoom
+            message="You've signed the Curiosity Compact. Waiting for your partner to sign the compact before you can begin."
+          />
+        </SafeAreaView>
+      </>
+    );
+  }
 
+  // User has not signed - show compact
   return (
     <>
       <Stack.Screen
         options={{
           headerShown: true,
-          title: 'Compact View',
+          title: 'Curiosity Compact',
           headerBackTitle: 'Session',
         }}
       />
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        <KeyboardAvoidingView
-          style={styles.keyboardView}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-            <Text style={styles.intro}>
-              Let's start with a quick snapshot of what's happening. Fill in these
-              three areas to capture the essence of your experience.
-            </Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Situation</Text>
-              <Text style={styles.hint}>
-                What's happening? Describe the context briefly.
-              </Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="When I... / After... / During..."
-                value={situation}
-                onChangeText={setSituation}
-                multiline
-                numberOfLines={3}
-                maxLength={500}
-                textAlignVertical="top"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Feeling</Text>
-              <Text style={styles.hint}>What emotions are you experiencing?</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="I feel... / I'm feeling..."
-                value={feeling}
-                onChangeText={setFeeling}
-                multiline
-                numberOfLines={3}
-                maxLength={500}
-                textAlignVertical="top"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Thought</Text>
-              <Text style={styles.hint}>
-                What thoughts or beliefs come up?
-              </Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="I think... / I believe..."
-                value={thought}
-                onChangeText={setThought}
-                multiline
-                numberOfLines={3}
-                maxLength={500}
-                textAlignVertical="top"
-              />
-            </View>
-
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={[styles.saveButton, isSaving && styles.buttonDisabled]}
-                onPress={handleSave}
-                disabled={isSaving}
-              >
-                <Save color="#007AFF" size={20} />
-                <Text style={styles.saveButtonText}>
-                  {isSaving ? 'Saving...' : 'Save Draft'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.continueButton,
-                  !isComplete && styles.buttonDisabled,
-                ]}
-                onPress={handleContinueToChat}
-                disabled={!isComplete}
-              >
-                <Text style={styles.continueButtonText}>Continue to Chat</Text>
-                <ArrowRight color="#FFFFFF" size={20} />
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+        <CuriosityCompact sessionId={id!} onSign={handleSign} />
       </SafeAreaView>
     </>
   );
@@ -147,86 +101,16 @@ export default function CompactScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-    gap: 20,
-  },
-  intro: {
-    fontSize: 15,
-    color: '#3C3C43',
-    lineHeight: 22,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
   },
-  inputGroup: {
-    gap: 8,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  label: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#000000',
-  },
-  hint: {
-    fontSize: 14,
-    color: '#8E8E93',
-  },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
+  loadingText: {
+    marginTop: 12,
     fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  textArea: {
-    minHeight: 80,
-    paddingTop: 12,
-  },
-  actions: {
-    gap: 12,
-    marginTop: 8,
-    paddingBottom: 24,
-  },
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#007AFF',
-  },
-  saveButtonText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#007AFF',
-  },
-  continueButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    padding: 16,
-    gap: 8,
-  },
-  continueButtonText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  buttonDisabled: {
-    opacity: 0.5,
+    color: '#6B7280',
   },
 });

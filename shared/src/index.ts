@@ -19,6 +19,7 @@ export * from './dto/needs';
 export * from './dto/strategy';
 export * from './dto/auth';
 export * from './dto/empathy';
+export * from './dto/realtime';
 
 // Validation schemas
 export * from './validation';
