@@ -21,6 +21,7 @@
     "db:query": "tsx src/scripts/db-query.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@clerk/express": "^1.7.60",
     "@prisma/client": "^6.1.0",
     "@react-native-community/netinfo": "^11.4.1",
@@ -47,7 +48,6 @@
     "jest": "^29.7.0",
     "prettier": "^3.4.2",
     "prisma": "^6.1.0",
-    "react-test-renderer": "^19.2.3",
     "ts-jest": "^29.2.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
