@@ -29,6 +29,20 @@ jest.mock('../../../../src/hooks/useSessions', () => ({
   useSessions: () => mockUseSessions(),
 }));
 
+// Mock useAuth hook
+jest.mock('@/src/hooks/useAuth', () => ({
+  useAuth: () => ({
+    user: { id: 'user-1', name: 'Test User', email: 'test@example.com' },
+    isAuthenticated: true,
+    isLoading: false,
+  }),
+}));
+
+// Mock react-native-safe-area-context
+jest.mock('react-native-safe-area-context', () => ({
+  SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 // Helper to create mock session
 function createMockSession(overrides: Partial<SessionSummaryDTO> = {}): SessionSummaryDTO {
   return {
