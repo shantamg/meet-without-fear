@@ -11,7 +11,7 @@ import {
   paginationParams,
   intensityRating,
   phoneNumber,
-  apiResponseSchema,
+  validationApiResponseSchema,
 } from '../utils';
 import { z } from 'zod';
 
@@ -151,10 +151,10 @@ describe('phoneNumber', () => {
   });
 });
 
-describe('apiResponseSchema', () => {
+describe('validationApiResponseSchema', () => {
   it('wraps data schema', () => {
     const dataSchema = z.object({ name: z.string() });
-    const responseSchema = apiResponseSchema(dataSchema);
+    const responseSchema = validationApiResponseSchema(dataSchema);
 
     const result = responseSchema.safeParse({
       success: true,
@@ -165,7 +165,7 @@ describe('apiResponseSchema', () => {
 
   it('requires success: true', () => {
     const dataSchema = z.object({ name: z.string() });
-    const responseSchema = apiResponseSchema(dataSchema);
+    const responseSchema = validationApiResponseSchema(dataSchema);
 
     const result = responseSchema.safeParse({
       success: false,

@@ -56,16 +56,16 @@ export type ErrorResponseInput = z.infer<typeof errorResponseSchema>;
 // API Response Wrapper
 // ============================================================================
 
-/** Wrap a data schema in standard API response format */
-export function apiResponseSchema<T extends z.ZodTypeAny>(dataSchema: T) {
+/** Wrap a data schema in standard API response format (validation helper) */
+export function validationApiResponseSchema<T extends z.ZodTypeAny>(dataSchema: T) {
   return z.object({
     success: z.literal(true),
     data: dataSchema,
   });
 }
 
-/** API error response schema */
-export const apiErrorResponseSchema = z.object({
+/** API error response schema (validation helper) */
+export const validationApiErrorResponseSchema = z.object({
   success: z.literal(false),
   error: z.object({
     code: z.nativeEnum(ErrorCode),

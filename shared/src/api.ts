@@ -4,6 +4,8 @@
  * Standard response wrappers and error types for all API endpoints.
  */
 
+import { z } from 'zod';
+
 // ============================================================================
 // Standard API Response Wrapper
 // ============================================================================
@@ -47,6 +49,48 @@ export enum ErrorCode {
   INTERNAL_ERROR = 'INTERNAL_ERROR',
   SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',
 }
+
+/**
+ * Backwards-compatible alias for API error codes used in contracts
+ * ApiErrorCode keeps the naming used in implementation plans.
+ */
+export enum ApiErrorCode {
+  UNAUTHORIZED = 'UNAUTHORIZED',
+  FORBIDDEN = 'FORBIDDEN',
+  NOT_FOUND = 'NOT_FOUND',
+  CONFLICT = 'CONFLICT',
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  INVALID_STAGE = 'INVALID_STAGE',
+  GATE_NOT_SATISFIED = 'GATE_NOT_SATISFIED',
+  CONSENT_REQUIRED = 'CONSENT_REQUIRED',
+  CONSENT_REVOKED = 'CONSENT_REVOKED',
+  SESSION_NOT_ACTIVE = 'SESSION_NOT_ACTIVE',
+  PARTNER_NOT_READY = 'PARTNER_NOT_READY',
+  INVITATION_EXPIRED = 'INVITATION_EXPIRED',
+  INTERNAL_ERROR = 'INTERNAL_ERROR',
+  SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',
+}
+
+// ============================================================================
+// Zod Schemas (runtime validation for API wrappers)
+// ============================================================================
+
+export const apiErrorSchema = z.object({
+  code: z.nativeEnum(ApiErrorCode),
+  message: z.string(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const apiResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
+  z.object({
+    success: z.literal(true),
+    data: dataSchema,
+  });
+
+export const apiErrorResponseSchema = z.object({
+  success: z.literal(false),
+  error: apiErrorSchema,
+});
 
 // ============================================================================
 // Pagination

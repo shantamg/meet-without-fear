@@ -154,6 +154,12 @@ export const getAblyToken = asyncHandler(async (req: Request, res: Response): Pr
   const ablyApiKey = process.env.ABLY_API_KEY;
 
   if (!ablyApiKey) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ValidationError('Realtime not configured', {
+        errors: { ABLY_API_KEY: ['ABLY_API_KEY is required in production'] },
+      });
+    }
+
     // Return mock token for development
     const mockTokenRequest = {
       keyName: 'mock-key-name',

@@ -293,6 +293,41 @@ describe('Stage 1 API', () => {
         })
       );
     });
+
+    it('rejects messages when user is not in stage 1', async () => {
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+        id: mockSessionId,
+        status: 'ACTIVE',
+        relationship: {
+          members: [{ userId: mockUser.id }],
+        },
+      });
+
+      // User progress shows stage 0 (onboarding), so stage1 messages should be blocked
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 0,
+        status: 'IN_PROGRESS',
+      });
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: { content: 'Trying to send too early' },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await sendMessage(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(400);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'VALIDATION_ERROR',
+          }),
+        })
+      );
+    });
   });
 
   describe('POST /sessions/:id/feel-heard (confirmFeelHeard)', () => {

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
+import { apiClient } from '../lib/api';
+import type { ApiResponse, GetMeResponse } from '@listen-well/shared';
 
 const AUTH_TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
@@ -15,6 +17,15 @@ export interface User {
   firstName?: string;
   lastName?: string;
   avatarUrl?: string;
+}
+
+/**
+ * Optional external auth adapter (e.g., Clerk) so we can bridge to backend tokens.
+ */
+export interface AuthAdapter {
+  getToken: () => Promise<string | null>;
+  getUser?: () => Promise<User | null>;
+  signOut?: () => Promise<void>;
 }
 
 /**
@@ -37,10 +48,21 @@ export interface AuthContextValue extends AuthState {
   verifySignUpCode: (code: string) => Promise<void>;
   signOut: () => Promise<void>;
   getToken: () => Promise<string | null>;
+  /**
+   * Bootstrap from an external session (e.g., Clerk) and sync profile from backend.
+   */
+  bootstrapExternalSession: (token: string, user?: User | null) => Promise<void>;
 }
 
 // Create context with undefined default
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+// External adapter registry (singleton)
+let registeredAdapter: AuthAdapter | null = null;
+
+export function registerAuthAdapter(adapter: AuthAdapter): void {
+  registeredAdapter = adapter;
+}
 
 /**
  * Hook to access authentication state and methods
@@ -83,10 +105,8 @@ export function useProtectedRoute() {
 
 /**
  * Hook to provide authentication state (for AuthProvider)
- * This is the implementation that manages auth state
- *
- * Uses email code verification flow compatible with Clerk.
- * In development without Clerk, accepts any 6-digit code.
+ * This is the implementation that manages auth state.
+ * Uses email code verification flow by default; can be bootstrapped with Clerk via registerAuthAdapter.
  */
 export function useAuthProvider(): AuthContextValue {
   const [state, setState] = useState<AuthState>({
@@ -97,7 +117,6 @@ export function useAuthProvider(): AuthContextValue {
   });
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [pendingName, setPendingName] = useState<string | null>(null);
-  const [isSignUp, setIsSignUp] = useState(false);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -106,25 +125,31 @@ export function useAuthProvider(): AuthContextValue {
 
   const checkSession = useCallback(async () => {
     try {
+      // Prefer external adapter if available (e.g., Clerk)
+      if (registeredAdapter) {
+        const token = await registeredAdapter.getToken();
+        if (token) {
+          const externalUser = registeredAdapter.getUser ? await registeredAdapter.getUser() : null;
+          const hydrated = await syncFromBackend(token, externalUser);
+          if (hydrated) return;
+        }
+      }
+
       const token = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
       const userJson = await SecureStore.getItemAsync(USER_KEY);
 
-      if (token && userJson) {
-        const storedUser = JSON.parse(userJson) as User;
-        setState({
-          user: storedUser,
-          isLoading: false,
-          isAuthenticated: true,
-          pendingVerification: false,
-        });
-      } else {
-        setState({
-          user: null,
-          isLoading: false,
-          isAuthenticated: false,
-          pendingVerification: false,
-        });
+      if (token) {
+        const cachedUser = userJson ? (JSON.parse(userJson) as User) : null;
+        const hydrated = await syncFromBackend(token, cachedUser);
+        if (hydrated) return;
       }
+
+      setState({
+        user: null,
+        isLoading: false,
+        isAuthenticated: false,
+        pendingVerification: false,
+      });
     } catch (error) {
       console.error('Session check failed:', error);
       setState({
@@ -141,7 +166,6 @@ export function useAuthProvider(): AuthContextValue {
 
     try {
       // In production, this would call Clerk to send email code
-      // For now, simulate sending code
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       console.log(`[Auth] Verification code sent to ${email}`);
@@ -159,46 +183,132 @@ export function useAuthProvider(): AuthContextValue {
     }
   }, []);
 
-  const verifySignInCode = useCallback(async (code: string) => {
-    if (!pendingEmail) {
-      throw new Error('No pending email verification');
-    }
-
+  const signOut = useCallback(async () => {
     setState((prev) => ({ ...prev, isLoading: true }));
 
     try {
-      // In production, verify with Clerk
-      // For dev, accept any 6-digit code
-      if (code.length !== 6) {
-        throw new Error('Invalid verification code');
+      await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+      await SecureStore.deleteItemAsync(USER_KEY);
+      if (registeredAdapter?.signOut) {
+        await registeredAdapter.signOut();
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const user: User = {
-        id: `user_${Date.now()}`,
-        email: pendingEmail,
-        name: pendingEmail.split('@')[0],
-      };
-
-      const token = `token_${Date.now()}`;
-
-      await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
-
       setState({
-        user,
+        user: null,
         isLoading: false,
-        isAuthenticated: true,
+        isAuthenticated: false,
         pendingVerification: false,
       });
-
-      setPendingEmail(null);
     } catch (error) {
       setState((prev) => ({ ...prev, isLoading: false }));
       throw error;
     }
-  }, [pendingEmail]);
+  }, []);
+
+  const getToken = useCallback(async () => {
+    if (registeredAdapter) {
+      return registeredAdapter.getToken();
+    }
+    return SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+  }, []);
+
+  const syncFromBackend = useCallback(
+    async (token: string, fallbackUser: User | null = null): Promise<boolean> => {
+      try {
+        const response = await apiClient.get<ApiResponse<GetMeResponse>>('/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const user: User = {
+          id: response.data.data.user.id,
+          email: response.data.data.user.email,
+          name: response.data.data.user.name || response.data.data.user.email,
+        };
+
+        await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
+        await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+
+        setState({
+          user,
+          isLoading: false,
+          isAuthenticated: true,
+          pendingVerification: false,
+        });
+        return true;
+      } catch (err) {
+        if (fallbackUser) {
+          setState({
+            user: fallbackUser,
+            isLoading: false,
+            isAuthenticated: true,
+            pendingVerification: false,
+          });
+          return true;
+        }
+
+        setState((prev) => ({
+          ...prev,
+          isLoading: false,
+          isAuthenticated: false,
+        }));
+        return false;
+      }
+    },
+    []
+  );
+
+  const bootstrapExternalSession = useCallback(
+    async (token: string, user?: User | null) => {
+      setState((prev) => ({ ...prev, isLoading: true }));
+      const hydrated = await syncFromBackend(token, user ?? null);
+
+      if (!hydrated && user) {
+        await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
+        await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+        setState({
+          user,
+          isLoading: false,
+          isAuthenticated: true,
+          pendingVerification: false,
+        });
+      }
+    },
+    [syncFromBackend]
+  );
+
+  const verifySignInCode = useCallback(
+    async (code: string) => {
+      if (!pendingEmail) {
+        throw new Error('No pending email verification');
+      }
+
+      setState((prev) => ({ ...prev, isLoading: true }));
+
+      try {
+        // In production, verify with Clerk; for dev, accept any 6-digit code
+        if (code.length !== 6) {
+          throw new Error('Invalid verification code');
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        const user: User = {
+          id: `user_${Date.now()}`,
+          email: pendingEmail,
+          name: pendingEmail.split('@')[0],
+        };
+
+        const token = `token_${Date.now()}`;
+        await bootstrapExternalSession(token, user);
+
+        setPendingEmail(null);
+      } catch (error) {
+        setState((prev) => ({ ...prev, isLoading: false }));
+        throw error;
+      }
+    },
+    [pendingEmail, bootstrapExternalSession]
+  );
 
   const signUp = useCallback(async (email: string, name: string) => {
     setState((prev) => ({ ...prev, isLoading: true }));
@@ -223,71 +333,43 @@ export function useAuthProvider(): AuthContextValue {
     }
   }, []);
 
-  const verifySignUpCode = useCallback(async (code: string) => {
-    if (!pendingEmail) {
-      throw new Error('No pending email verification');
-    }
-
-    setState((prev) => ({ ...prev, isLoading: true }));
-
-    try {
-      // In production, verify with Clerk
-      if (code.length !== 6) {
-        throw new Error('Invalid verification code');
+  const verifySignUpCode = useCallback(
+    async (code: string) => {
+      if (!pendingEmail) {
+        throw new Error('No pending email verification');
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      setState((prev) => ({ ...prev, isLoading: true }));
 
-      const user: User = {
-        id: `user_${Date.now()}`,
-        email: pendingEmail,
-        name: pendingName || pendingEmail.split('@')[0],
-        firstName: pendingName?.split(' ')[0],
-        lastName: pendingName?.split(' ').slice(1).join(' ') || undefined,
-      };
+      try {
+        // In production, verify with Clerk; for dev, accept any 6-digit code
+        if (code.length !== 6) {
+          throw new Error('Invalid verification code');
+        }
 
-      const token = `token_${Date.now()}`;
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+        const user: User = {
+          id: `user_${Date.now()}`,
+          email: pendingEmail,
+          name: pendingName || pendingEmail.split('@')[0],
+          firstName: pendingName?.split(' ')[0],
+          lastName: pendingName?.split(' ').slice(1).join(' ') || undefined,
+        };
 
-      setState({
-        user,
-        isLoading: false,
-        isAuthenticated: true,
-        pendingVerification: false,
-      });
+        const token = `token_${Date.now()}`;
 
-      setPendingEmail(null);
-      setPendingName(null);
-    } catch (error) {
-      setState((prev) => ({ ...prev, isLoading: false }));
-      throw error;
-    }
-  }, [pendingEmail, pendingName]);
+        await bootstrapExternalSession(token, user);
 
-  const signOut = useCallback(async () => {
-    setState((prev) => ({ ...prev, isLoading: true }));
-
-    try {
-      await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
-      await SecureStore.deleteItemAsync(USER_KEY);
-
-      setState({
-        user: null,
-        isLoading: false,
-        isAuthenticated: false,
-        pendingVerification: false,
-      });
-    } catch (error) {
-      setState((prev) => ({ ...prev, isLoading: false }));
-      throw error;
-    }
-  }, []);
-
-  const getToken = useCallback(async () => {
-    return SecureStore.getItemAsync(AUTH_TOKEN_KEY);
-  }, []);
+        setPendingEmail(null);
+        setPendingName(null);
+      } catch (error) {
+        setState((prev) => ({ ...prev, isLoading: false }));
+        throw error;
+      }
+    },
+    [pendingEmail, pendingName, bootstrapExternalSession]
+  );
 
   return {
     ...state,
@@ -297,6 +379,7 @@ export function useAuthProvider(): AuthContextValue {
     verifySignUpCode,
     signOut,
     getToken,
+    bootstrapExternalSession,
   };
 }
 

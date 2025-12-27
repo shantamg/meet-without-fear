@@ -280,12 +280,12 @@ export async function requireAuth(
   } else if (isDevelopment()) {
     await handleMockAuth(req, res, next, true);
   } else {
-    // Production without Clerk configured
+    // Production without Clerk configured is a hard failure
     const response: ApiResponse<never> = {
       success: false,
       error: {
         code: ErrorCode.INTERNAL_ERROR,
-        message: 'Authentication not configured',
+        message: 'Authentication not configured: set CLERK_SECRET_KEY and CLERK_PUBLISHABLE_KEY',
       },
     };
     res.status(500).json(response);
