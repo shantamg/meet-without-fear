@@ -1,5 +1,35 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+/**
+ * Legacy Emotions Hook
+ *
+ * This hook provides a simplified interface for emotion recording.
+ * For full functionality, prefer using the hooks from useMessages.ts:
+ * - useEmotionalHistory
+ * - useRecordEmotion
+ * - useCompleteExercise
+ */
+
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  UseMutationOptions,
+  UseQueryOptions,
+} from '@tanstack/react-query';
 import { useCallback } from 'react';
+import { get, post, ApiClientError } from '../lib/api';
+import {
+  RecordEmotionalReadingRequest,
+  RecordEmotionalReadingResponse,
+  GetEmotionalHistoryResponse,
+  CompleteExerciseRequest as SharedCompleteExerciseRequest,
+  CompleteExerciseResponse as SharedCompleteExerciseResponse,
+  EmotionalReadingDTO,
+  EmotionalSupportType,
+} from '@listen-well/shared';
+
+// ============================================================================
+// Types
+// ============================================================================
 
 /**
  * Emotion check-in record
@@ -45,79 +75,108 @@ export interface CompleteExerciseInput {
   durationSeconds: number;
 }
 
-/**
- * Query keys for emotion-related queries
- */
+// ============================================================================
+// Query Keys
+// ============================================================================
+
 const EMOTION_QUERY_KEYS = {
   all: ['emotions'] as const,
   bySession: (sessionId: string) => ['emotions', 'session', sessionId] as const,
   exercises: ['exercises'] as const,
-  exercisesBySession: (sessionId: string) => ['exercises', 'session', sessionId] as const,
+  exercisesBySession: (sessionId: string) =>
+    ['exercises', 'session', sessionId] as const,
 };
 
-/**
- * Stub API client for emotion endpoints
- * TODO: Replace with actual API client when available
- */
-const emotionApi = {
-  /**
-   * Record a new emotion check-in
-   */
-  async recordEmotion(input: RecordEmotionInput): Promise<EmotionRecord> {
-    // TODO: Replace with actual API call
-    // return apiClient.post<EmotionRecord>('/emotions', input);
-    console.log('[STUB] Recording emotion:', input);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    return {
-      id: `emotion-${Date.now()}`,
-      sessionId: input.sessionId,
-      intensity: input.intensity,
-      context: input.context,
-      createdAt: new Date().toISOString(),
-    };
-  },
+// ============================================================================
+// API Functions
+// ============================================================================
 
-  /**
-   * Get emotions for a session
-   */
-  async getEmotions(sessionId: string): Promise<EmotionRecord[]> {
-    // TODO: Replace with actual API call
-    // return apiClient.get<EmotionRecord[]>(`/sessions/${sessionId}/emotions`);
-    console.log('[STUB] Getting emotions for session:', sessionId);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+async function fetchEmotions(sessionId: string): Promise<EmotionRecord[]> {
+  const response = await get<GetEmotionalHistoryResponse>(
+    `/sessions/${sessionId}/emotions`
+  );
+  return response.readings.map((reading) => ({
+    id: reading.id,
+    sessionId,
+    intensity: reading.intensity,
+    context: reading.context ?? undefined,
+    createdAt: reading.timestamp,
+  }));
+}
+
+async function recordEmotionApi(
+  input: RecordEmotionInput
+): Promise<EmotionRecord> {
+  const request: RecordEmotionalReadingRequest = {
+    sessionId: input.sessionId,
+    intensity: input.intensity,
+    context: input.context,
+  };
+  const response = await post<RecordEmotionalReadingResponse>(
+    `/sessions/${input.sessionId}/emotions`,
+    request
+  );
+  return {
+    id: response.reading.id,
+    sessionId: input.sessionId,
+    intensity: response.reading.intensity,
+    context: response.reading.context ?? undefined,
+    createdAt: response.reading.timestamp,
+  };
+}
+
+async function fetchExercises(sessionId: string): Promise<ExerciseRecord[]> {
+  // Note: This endpoint may not exist yet - adjust when available
+  try {
+    const response = await get<{ exercises: ExerciseRecord[] }>(
+      `/sessions/${sessionId}/exercises`
+    );
+    return response.exercises;
+  } catch (error) {
+    // Return empty array if endpoint not available
+    console.warn('Exercises endpoint not available:', error);
     return [];
-  },
+  }
+}
 
-  /**
-   * Complete a regulation exercise
-   */
-  async completeExercise(input: CompleteExerciseInput): Promise<ExerciseRecord> {
-    // TODO: Replace with actual API call
-    // return apiClient.post<ExerciseRecord>('/exercises', input);
-    console.log('[STUB] Completing exercise:', input);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    return {
-      id: `exercise-${Date.now()}`,
-      sessionId: input.sessionId,
-      exerciseType: input.exerciseType,
-      intensityBefore: input.intensityBefore,
-      intensityAfter: input.intensityAfter,
-      durationSeconds: input.durationSeconds,
-      completedAt: new Date().toISOString(),
-    };
-  },
+async function completeExerciseApi(
+  input: CompleteExerciseInput
+): Promise<ExerciseRecord> {
+  // Map local exercise type to shared EmotionalSupportType
+  const exerciseTypeMap: Record<CompleteExerciseInput['exerciseType'], EmotionalSupportType> = {
+    breathing: EmotionalSupportType.BREATHING_EXERCISE,
+    grounding: EmotionalSupportType.GROUNDING,
+    other: EmotionalSupportType.BODY_SCAN, // Map 'other' to body scan
+  };
 
-  /**
-   * Get exercises for a session
-   */
-  async getExercises(sessionId: string): Promise<ExerciseRecord[]> {
-    // TODO: Replace with actual API call
-    // return apiClient.get<ExerciseRecord[]>(`/sessions/${sessionId}/exercises`);
-    console.log('[STUB] Getting exercises for session:', sessionId);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    return [];
-  },
-};
+  const request: SharedCompleteExerciseRequest = {
+    sessionId: input.sessionId,
+    exerciseType: exerciseTypeMap[input.exerciseType],
+    completed: true,
+    intensityBefore: input.intensityBefore,
+    intensityAfter: input.intensityAfter,
+  };
+
+  const response = await post<SharedCompleteExerciseResponse>(
+    `/sessions/${input.sessionId}/exercises`,
+    request
+  );
+
+  // Generate an ID and timestamp since the shared response doesn't include them
+  return {
+    id: `exercise-${Date.now()}`,
+    sessionId: input.sessionId,
+    exerciseType: input.exerciseType,
+    intensityBefore: input.intensityBefore,
+    intensityAfter: input.intensityAfter,
+    durationSeconds: input.durationSeconds,
+    completedAt: new Date().toISOString(),
+  };
+}
+
+// ============================================================================
+// Hook
+// ============================================================================
 
 /**
  * Hook for managing emotion check-ins and regulation exercises
@@ -127,6 +186,11 @@ const emotionApi = {
  * - Fetching emotion history for a session
  * - Completing regulation exercises
  * - Fetching exercise history for a session
+ *
+ * @deprecated Prefer using individual hooks from useMessages.ts:
+ * - useEmotionalHistory
+ * - useRecordEmotion
+ * - useCompleteExercise
  */
 export function useEmotions(sessionId?: string) {
   const queryClient = useQueryClient();
@@ -134,7 +198,7 @@ export function useEmotions(sessionId?: string) {
   // Query for fetching emotions by session
   const emotionsQuery = useQuery({
     queryKey: EMOTION_QUERY_KEYS.bySession(sessionId || ''),
-    queryFn: () => emotionApi.getEmotions(sessionId!),
+    queryFn: () => fetchEmotions(sessionId!),
     enabled: !!sessionId,
     staleTime: 30000, // 30 seconds
   });
@@ -142,14 +206,14 @@ export function useEmotions(sessionId?: string) {
   // Query for fetching exercises by session
   const exercisesQuery = useQuery({
     queryKey: EMOTION_QUERY_KEYS.exercisesBySession(sessionId || ''),
-    queryFn: () => emotionApi.getExercises(sessionId!),
+    queryFn: () => fetchExercises(sessionId!),
     enabled: !!sessionId,
     staleTime: 30000, // 30 seconds
   });
 
   // Mutation for recording an emotion
   const recordEmotionMutation = useMutation({
-    mutationFn: emotionApi.recordEmotion,
+    mutationFn: recordEmotionApi,
     onSuccess: (newEmotion) => {
       // Invalidate and refetch emotions for this session
       queryClient.invalidateQueries({
@@ -160,7 +224,7 @@ export function useEmotions(sessionId?: string) {
 
   // Mutation for completing an exercise
   const completeExerciseMutation = useMutation({
-    mutationFn: emotionApi.completeExercise,
+    mutationFn: completeExerciseApi,
     onSuccess: (newExercise) => {
       // Invalidate and refetch exercises for this session
       queryClient.invalidateQueries({

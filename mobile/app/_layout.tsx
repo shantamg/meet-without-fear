@@ -8,6 +8,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 
 import { AuthContext, useAuthProvider } from '@/src/hooks/useAuth';
+import { QueryProvider } from '@/src/providers/QueryProvider';
+import { setTokenProvider } from '@/src/lib/api';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -22,6 +24,13 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     // Add custom fonts here if needed
   });
+
+  // Initialize API client token provider when auth is ready
+  useEffect(() => {
+    if (auth.getToken) {
+      setTokenProvider({ getToken: auth.getToken });
+    }
+  }, [auth.getToken]);
 
   useEffect(() => {
     if ((fontsLoaded || fontError) && !auth.isLoading) {
@@ -38,17 +47,19 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaProvider>
         <AuthContext.Provider value={auth}>
-          <Stack screenOptions={{ headerShown: false }}>
-            {/* Public routes - no auth required */}
-            <Stack.Screen name="(public)" />
+          <QueryProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+              {/* Public routes - no auth required */}
+              <Stack.Screen name="(public)" />
 
-            {/* Auth-required routes */}
-            <Stack.Screen name="(auth)" />
+              {/* Auth-required routes */}
+              <Stack.Screen name="(auth)" />
 
-            {/* 404 handler */}
-            <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-          </Stack>
-          <StatusBar style="auto" />
+              {/* 404 handler */}
+              <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+            </Stack>
+            <StatusBar style="auto" />
+          </QueryProvider>
         </AuthContext.Provider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -1,8 +1,20 @@
+/**
+ * Hooks Index
+ *
+ * Central export point for all React Query hooks and custom hooks.
+ */
+
+// ============================================================================
 // Authentication
+// ============================================================================
+
 export { useAuth, useProtectedRoute, useAuthProvider, AuthContext } from './useAuth';
 export type { User, AuthState, AuthContextValue } from './useAuth';
 
-// Invitation deep links
+// ============================================================================
+// Invitation Deep Links
+// ============================================================================
+
 export {
   useInvitationLink,
   usePendingInvitation,
@@ -11,4 +23,122 @@ export {
   createInvitationLink,
 } from './useInvitation';
 
-// Other hooks will be exported here as they are created
+// ============================================================================
+// Sessions
+// ============================================================================
+
+export {
+  // Query keys
+  sessionKeys,
+  // Types
+  type ListSessionsParams,
+  type ListSessionsResponse,
+  type GetSessionResponse,
+  type PauseSessionRequest,
+  type PauseSessionResponse,
+  type ResumeSessionResponse,
+  // Hooks
+  useSessions,
+  useInfiniteSessions,
+  useSession,
+  useCreateSession,
+  usePauseSession,
+  useResumeSession,
+  // Invitation hooks
+  useInvitation,
+  useAcceptInvitation,
+  useDeclineInvitation,
+  useResendInvitation,
+} from './useSessions';
+
+// ============================================================================
+// Messages
+// ============================================================================
+
+export {
+  // Query keys
+  messageKeys,
+  // Types
+  type GetMessagesParams,
+  type SendMessageParams,
+  // Hooks
+  useMessages,
+  useInfiniteMessages,
+  useSendMessage,
+  // Emotional barometer
+  useEmotionalHistory,
+  useRecordEmotion,
+  useCompleteExercise,
+  // Optimistic updates
+  useOptimisticMessage,
+} from './useMessages';
+
+// ============================================================================
+// Profile
+// ============================================================================
+
+export {
+  // Query keys
+  profileKeys,
+  // Hooks
+  useProfile,
+  useUpdateProfile,
+  useUpdatePushToken,
+  useUnregisterPushToken,
+  useAblyToken,
+  useDeleteAccount,
+  useExportData,
+} from './useProfile';
+
+// ============================================================================
+// Stages
+// ============================================================================
+
+export {
+  // Query keys
+  stageKeys,
+  // Progress
+  useProgress,
+  // Stage 0: Compact
+  useCompactStatus,
+  useSignCompact,
+  // Stage 1: Feel Heard
+  useConfirmFeelHeard,
+  // Stage 2: Empathy
+  useEmpathyDraft,
+  useSaveEmpathyDraft,
+  useConsentToShareEmpathy,
+  usePartnerEmpathy,
+  useValidateEmpathy,
+  // Stage 3: Needs
+  useNeeds,
+  useConfirmNeeds,
+  useAddNeed,
+  useConsentShareNeeds,
+  useCommonGround,
+  useConfirmCommonGround,
+  // Stage 4: Strategies
+  useStrategies,
+  useProposeStrategy,
+  useRequestStrategySuggestions,
+  useMarkReadyToRank,
+  useSubmitRankings,
+  useStrategiesReveal,
+  // Agreements
+  useAgreements,
+  useCreateAgreement,
+  useConfirmAgreement,
+  useResolveSession,
+} from './useStages';
+
+// ============================================================================
+// Emotions (legacy - uses stub API, prefer useMessages emotion hooks)
+// ============================================================================
+
+export {
+  useEmotions,
+  type EmotionRecord,
+  type ExerciseRecord,
+  type RecordEmotionInput,
+  type CompleteExerciseInput,
+} from './useEmotions';
