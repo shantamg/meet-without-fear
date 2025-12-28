@@ -21,6 +21,7 @@ export interface SessionSummaryDTO {
   partner: {
     id: string;
     name: string | null;
+    nickname: string | null; // What I call my partner (set during invitation or later)
   };
 
   // Stage progress (both users)
@@ -135,4 +136,16 @@ export interface ResendInvitationResponse {
   sent: boolean;
   sentAt: string;
   expiresAt: string;
+}
+
+// ============================================================================
+// Partner Nickname
+// ============================================================================
+
+export interface UpdateNicknameRequest {
+  nickname: string | null;
+}
+
+export interface UpdateNicknameResponse {
+  nickname: string | null;
 }

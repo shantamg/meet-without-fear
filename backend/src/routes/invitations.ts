@@ -6,6 +6,7 @@ import {
   acceptInvitation,
   declineInvitation,
   resendInvitation,
+  updateNickname,
 } from '../controllers/invitations';
 import { requireAuth } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errors';
@@ -53,5 +54,12 @@ router.post('/invitations/:id/decline', requireAuth, asyncHandler(declineInvitat
  * @access Private - requires authentication (only inviter)
  */
 router.post('/invitations/:id/resend', requireAuth, asyncHandler(resendInvitation));
+
+/**
+ * @route PATCH /api/v1/relationships/:relationshipId/nickname
+ * @description Update the nickname for your partner in a relationship
+ * @access Private - requires authentication
+ */
+router.patch('/relationships/:relationshipId/nickname', requireAuth, asyncHandler(updateNickname));
 
 export default router;

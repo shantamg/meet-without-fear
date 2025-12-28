@@ -32,6 +32,10 @@ const declineInvitationSchema = z.object({
   reason: z.string().optional(),
 });
 
+const updateNicknameSchema = z.object({
+  nickname: z.string().min(1).max(100).nullable(),
+});
+
 // ============================================================================
 // Controllers
 // ============================================================================
@@ -70,6 +74,7 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
                   select: {
                     id: true,
                     name: true,
+                    firstName: true,
                     email: true,
                   },
                 },
@@ -88,6 +93,10 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
     const items = hasMore ? sessions.slice(0, -1) : sessions;
 
     const formattedSessions = items.map((session) => {
+      // Find my membership record (for nickname I use for partner)
+      const myMember = session.relationship.members.find(
+        (m: { userId: string }) => m.userId === user.id
+      );
       const partnerMember = session.relationship.members.find(
         (m: { userId: string }) => m.userId !== user.id
       );
@@ -146,6 +155,12 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
         partnerActionNeeded.push('complete_stage');
       }
 
+      // For invited sessions (partner hasn't joined), use nickname from my membership
+      // For active sessions, still use nickname (what I call them) with fallback to their actual name
+      const partnerDisplayName = partnerMember
+        ? (myMember as { nickname?: string | null } | undefined)?.nickname || partnerMember.user.firstName || partnerMember.user.name
+        : (myMember as { nickname?: string | null } | undefined)?.nickname || null;
+
       return {
         id: session.id,
         relationshipId: session.relationshipId,
@@ -155,9 +170,10 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
         partner: partnerMember
           ? {
               id: partnerMember.user.id,
-              name: partnerMember.user.name,
+              name: partnerDisplayName,
+              nickname: (myMember as { nickname?: string | null } | undefined)?.nickname || null,
             }
-          : { id: '', name: null }, // Placeholder for invited sessions
+          : { id: '', name: partnerDisplayName, nickname: (myMember as { nickname?: string | null } | undefined)?.nickname || null },
         myProgress,
         partnerProgress,
         selfActionNeeded,
@@ -222,10 +238,26 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       relationship = await prisma.relationship.create({
         data: {
           members: {
-            create: { userId: user.id },
+            create: {
+              userId: user.id,
+              nickname: inviteName || null, // Store what inviter calls the invitee
+            },
           },
         },
       });
+    } else {
+      // Update nickname on existing membership if inviteName provided
+      if (inviteName) {
+        await prisma.relationshipMember.update({
+          where: {
+            relationshipId_userId: {
+              relationshipId: relationship.id,
+              userId: user.id,
+            },
+          },
+          data: { nickname: inviteName },
+        });
+      }
     }
 
     // Create session in INVITED status
@@ -648,5 +680,57 @@ export async function resendInvitation(req: Request, res: Response): Promise<voi
   } catch (error) {
     console.error('[resendInvitation] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to resend invitation', 500);
+  }
+}
+
+/**
+ * Update nickname for partner in a relationship
+ * PATCH /relationships/:relationshipId/nickname
+ */
+export async function updateNickname(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { relationshipId } = req.params;
+
+    const parseResult = updateNicknameSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.issues);
+      return;
+    }
+
+    const { nickname } = parseResult.data;
+
+    // Verify user is a member of this relationship
+    const member = await prisma.relationshipMember.findUnique({
+      where: {
+        relationshipId_userId: {
+          relationshipId,
+          userId: user.id,
+        },
+      },
+    });
+
+    if (!member) {
+      errorResponse(res, 'NOT_FOUND', 'Relationship not found', 404);
+      return;
+    }
+
+    // Update the nickname
+    const updatedMember = await prisma.relationshipMember.update({
+      where: { id: member.id },
+      data: { nickname },
+    });
+
+    successResponse(res, {
+      nickname: updatedMember.nickname,
+    });
+  } catch (error) {
+    console.error('[updateNickname] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to update nickname', 500);
   }
 }

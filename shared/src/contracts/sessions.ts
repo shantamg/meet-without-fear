@@ -14,6 +14,7 @@ import { SessionStatus, Stage, StageStatus } from '../enums';
 const partnerSchema = z.object({
   id: z.string(),
   name: z.string().nullable(),
+  nickname: z.string().nullable(), // What I call my partner
 });
 
 const stageProgressSchema = z.object({
@@ -225,3 +226,19 @@ export const resendInvitationResponseSchema = z.object({
 });
 
 export type ResendInvitationResponseInput = z.infer<typeof resendInvitationResponseSchema>;
+
+// ============================================================================
+// PATCH /relationships/:relationshipId/nickname - Update Nickname
+// ============================================================================
+
+export const updateNicknameRequestSchema = z.object({
+  nickname: z.string().min(1, 'Nickname is required').max(100, 'Nickname too long').nullable(),
+});
+
+export type UpdateNicknameRequestInput = z.infer<typeof updateNicknameRequestSchema>;
+
+export const updateNicknameResponseSchema = z.object({
+  nickname: z.string().nullable(),
+});
+
+export type UpdateNicknameResponseInput = z.infer<typeof updateNicknameResponseSchema>;
