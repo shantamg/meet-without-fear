@@ -6,6 +6,7 @@
  */
 
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -80,44 +81,44 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   accurateButton: {
     padding: 16,
-    backgroundColor: '#D1FAE5',
+    backgroundColor: 'rgba(16, 163, 127, 0.15)',
     borderRadius: 12,
     marginBottom: 8,
   },
   accurateText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#065F46',
+    color: colors.accent,
   },
   partialButton: {
     padding: 16,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
     borderRadius: 12,
     marginBottom: 8,
   },
   partialText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#92400E',
+    color: colors.warning,
   },
   inaccurateButton: {
     padding: 16,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
     borderRadius: 12,
     marginBottom: 8,
   },
   inaccurateText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#991B1B',
+    color: colors.error,
   },
   subtext: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginTop: 4,
   },
 });

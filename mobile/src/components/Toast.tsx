@@ -7,6 +7,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -150,7 +151,7 @@ export function Toast({
         hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
         testID="toast-close"
       >
-        <X color="#6B7280" size={20} />
+        <X color={colors.textSecondary} size={20} />
       </TouchableOpacity>
     </Animated.View>
   );
@@ -164,24 +165,24 @@ function getVariantStyles(variant: ToastProps['variant']) {
   switch (variant) {
     case 'success':
       return {
-        container: { borderLeftColor: '#10B981', borderLeftWidth: 4 },
-        title: { color: '#065F46' },
-        actionButton: { backgroundColor: '#10B981' },
-        actionText: { color: '#FFFFFF' },
+        container: { borderLeftColor: colors.accent, borderLeftWidth: 4 },
+        title: { color: colors.accent },
+        actionButton: { backgroundColor: colors.accent },
+        actionText: { color: colors.textPrimary },
       };
     case 'error':
       return {
-        container: { borderLeftColor: '#EF4444', borderLeftWidth: 4 },
-        title: { color: '#991B1B' },
-        actionButton: { backgroundColor: '#EF4444' },
-        actionText: { color: '#FFFFFF' },
+        container: { borderLeftColor: colors.error, borderLeftWidth: 4 },
+        title: { color: colors.error },
+        actionButton: { backgroundColor: colors.error },
+        actionText: { color: colors.textPrimary },
       };
     case 'warning':
       return {
-        container: { borderLeftColor: '#F59E0B', borderLeftWidth: 4 },
-        title: { color: '#92400E' },
-        actionButton: { backgroundColor: '#F59E0B' },
-        actionText: { color: '#FFFFFF' },
+        container: { borderLeftColor: colors.warning, borderLeftWidth: 4 },
+        title: { color: colors.warning },
+        actionButton: { backgroundColor: colors.warning },
+        actionText: { color: colors.textPrimary },
       };
     default:
       return {
@@ -205,12 +206,14 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
     zIndex: 9999,
@@ -222,22 +225,22 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   body: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginTop: 4,
   },
   actionButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     borderRadius: 6,
     marginRight: 8,
   },
   actionText: {
-    color: 'white',
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },

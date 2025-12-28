@@ -9,6 +9,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useState } from 'react';
 import { CompactTerms } from './CompactTerms';
 import { useSignCompact } from '../hooks/useStages';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -89,21 +90,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 24,
+    backgroundColor: colors.bgPrimary,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 24,
   },
   termsContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
@@ -118,13 +120,13 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#9CA3AF',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#4F46E5',
-    borderColor: '#4F46E5',
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   checkmark: {
     color: 'white',
@@ -134,17 +136,17 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     marginLeft: 12,
     fontSize: 16,
-    color: '#374151',
+    color: colors.textSecondary,
   },
   signButton: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
     marginBottom: 12,
   },
   signButtonDisabled: {
-    backgroundColor: '#9CA3AF',
+    backgroundColor: colors.textMuted,
   },
   signButtonText: {
     color: 'white',
@@ -156,7 +158,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   questionsText: {
-    color: '#4F46E5',
+    color: colors.accent,
     fontSize: 14,
   },
 });

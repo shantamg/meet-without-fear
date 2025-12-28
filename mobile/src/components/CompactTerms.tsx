@@ -6,6 +6,7 @@
  */
 
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Constants
@@ -65,7 +66,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 12,
-    color: '#1F2937',
+    color: colors.textSecondary,
   },
   secondSection: {
     marginTop: 24,
@@ -76,7 +77,7 @@ const styles = StyleSheet.create({
   },
   bullet: {
     width: 20,
-    color: '#4F46E5',
+    color: colors.accent,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -84,7 +85,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     lineHeight: 20,
-    color: '#374151',
+    color: colors.textSecondary,
   },
 });
 

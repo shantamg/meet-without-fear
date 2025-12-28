@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useClerk } from '@clerk/clerk-expo';
 
 import { useAuth } from '@/src/hooks/useAuth';
+import { colors } from '@/src/theme';
 
 /**
  * Profile tab screen
@@ -96,7 +97,7 @@ export default function ProfileScreen() {
         {/* Profile header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
-            <User color="#FFFFFF" size={40} />
+            <User color={colors.textPrimary} size={40} />
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{user?.name || 'User'}</Text>
@@ -117,10 +118,10 @@ export default function ProfileScreen() {
               onPress={item.onPress}
             >
               <View style={styles.menuItemLeft}>
-                <item.icon color="#007AFF" size={22} />
+                <item.icon color={colors.accent} size={22} />
                 <Text style={styles.menuItemLabel}>{item.label}</Text>
               </View>
-              <ChevronRight color="#C7C7CC" size={20} />
+              <ChevronRight color={colors.textSecondary} size={20} />
             </TouchableOpacity>
           ))}
         </View>
@@ -132,7 +133,7 @@ export default function ProfileScreen() {
             onPress={handleSignOut}
           >
             <View style={styles.menuItemLeft}>
-              <LogOut color="#FF3B30" size={22} />
+              <LogOut color={colors.error} size={22} />
               <Text style={[styles.menuItemLabel, styles.signOutLabel]}>
                 Sign Out
               </Text>
@@ -150,7 +151,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: colors.bgPrimary,
   },
   scrollView: {
     flex: 1,
@@ -162,7 +163,7 @@ const styles = StyleSheet.create({
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
     padding: 16,
     gap: 16,
@@ -171,7 +172,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -181,15 +182,15 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#000000',
+    color: colors.textPrimary,
   },
   profileEmail: {
     fontSize: 15,
-    color: '#8E8E93',
+    color: colors.textSecondary,
     marginTop: 4,
   },
   menuSection: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
     overflow: 'hidden',
   },
@@ -199,7 +200,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: colors.border,
   },
   menuItemFirst: {
     borderTopLeftRadius: 12,
@@ -217,14 +218,14 @@ const styles = StyleSheet.create({
   },
   menuItemLabel: {
     fontSize: 17,
-    color: '#000000',
+    color: colors.textPrimary,
   },
   signOutLabel: {
-    color: '#FF3B30',
+    color: colors.error,
   },
   version: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 8,
   },

@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Home, MessageSquare, User } from 'lucide-react-native';
 import { StyleSheet } from 'react-native';
+import { colors } from '@/src/theme';
 
 /**
  * Tab bar configuration
@@ -10,8 +11,8 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: '#8E8E93',
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabLabel,
         headerStyle: styles.header,
@@ -50,8 +51,8 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#FFFFFF',
-    borderTopColor: '#E5E5EA',
+    backgroundColor: colors.bgSecondary,
+    borderTopColor: colors.border,
     borderTopWidth: 1,
     paddingTop: 4,
     paddingBottom: 4,
@@ -62,14 +63,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   header: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgSecondary,
     shadowColor: 'transparent',
     elevation: 0,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: colors.border,
   },
   headerTitle: {
     fontWeight: '600',
     fontSize: 17,
+    color: colors.textPrimary,
   },
 });

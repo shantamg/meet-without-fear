@@ -9,6 +9,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { SessionSummaryDTO } from '@be-heard/shared';
 import { STAGE_NAMES, SessionStatus, StageStatus } from '@be-heard/shared';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -231,21 +232,23 @@ export function SessionCard({ session, isHero = false }: SessionCardProps) {
 const styles = StyleSheet.create({
   // Base card styles
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
 
   // Action needed card (subtle highlight)
   actionCard: {
     borderLeftWidth: 3,
-    borderLeftColor: '#4F46E5',
+    borderLeftColor: colors.accent,
   },
 
   // Paused card (muted)
@@ -256,18 +259,19 @@ const styles = StyleSheet.create({
   // Resolved card (subtle success)
   resolvedCard: {
     borderLeftWidth: 3,
-    borderLeftColor: '#10B981',
+    borderLeftColor: colors.success,
   },
 
   // Hero card variant
   heroCard: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     padding: 24,
     marginBottom: 20,
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 4,
     borderLeftWidth: 0,
+    borderColor: 'transparent',
   },
 
   // Header with name and badge
@@ -282,7 +286,7 @@ const styles = StyleSheet.create({
   partnerName: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: colors.textPrimary,
     flex: 1,
     marginRight: 8,
   },
@@ -299,13 +303,13 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.error,
   },
   heroBadge: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#FCD34D',
+    backgroundColor: colors.warning,
   },
 
   // Meta row (stage + time)
@@ -319,10 +323,10 @@ const styles = StyleSheet.create({
   // Stage name
   stage: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   heroStage: {
-    color: '#E0E7FF',
+    color: 'rgba(255, 255, 255, 0.85)',
     fontSize: 16,
     marginTop: 4,
   },
@@ -330,7 +334,7 @@ const styles = StyleSheet.create({
   // Time ago text
   timeAgo: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: colors.textMuted,
   },
 
   // Status badge
@@ -342,32 +346,32 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   statusBadgePending: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.bgTertiary,
   },
   statusBadgePaused: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.bgTertiary,
   },
   statusBadgeResolved: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: 'rgba(16, 163, 127, 0.2)',
   },
   statusBadgeText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#92400E',
+    color: colors.warning,
   },
   statusBadgeTextResolved: {
-    color: '#065F46',
+    color: colors.success,
   },
 
   // Action text
   actionText: {
     fontSize: 14,
-    color: '#4F46E5',
+    color: colors.accent,
     fontWeight: '600',
     marginTop: 12,
   },
   heroActionText: {
-    color: '#FCD34D',
+    color: colors.warning,
     fontSize: 16,
     marginTop: 16,
   },
@@ -375,11 +379,11 @@ const styles = StyleSheet.create({
   // Waiting text
   waitingText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textMuted,
     marginTop: 12,
   },
   heroWaitingText: {
-    color: '#A5B4FC',
+    color: 'rgba(255, 255, 255, 0.7)',
     fontSize: 16,
     marginTop: 16,
   },
@@ -393,7 +397,7 @@ const styles = StyleSheet.create({
   },
   heroHint: {
     fontSize: 14,
-    color: '#C7D2FE',
+    color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'center',
   },
 });

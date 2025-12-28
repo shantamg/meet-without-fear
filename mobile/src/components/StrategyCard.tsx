@@ -7,6 +7,7 @@
 
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Check, Circle } from 'lucide-react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -62,7 +63,7 @@ export function StrategyCard({
               <Text style={styles.rankNumber}>{rank}</Text>
             </View>
           ) : (
-            <Circle color="#9CA3AF" size={24} />
+            <Circle color={colors.textSecondary} size={24} />
           )}
         </View>
       )}
@@ -119,20 +120,20 @@ export function StrategyCard({
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
+    backgroundColor: 'rgba(147, 197, 253, 0.15)',
+    borderRadius: 20,
     padding: 16,
     marginBottom: 8,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: 'rgba(147, 197, 253, 0.3)',
   },
   selectedCard: {
-    borderColor: '#4F46E5',
-    backgroundColor: '#EEF2FF',
+    borderColor: 'rgba(110, 231, 183, 0.5)',
+    backgroundColor: 'rgba(110, 231, 183, 0.2)',
   },
   overlapCard: {
-    borderColor: '#10B981',
-    backgroundColor: '#ECFDF5',
+    borderColor: colors.success,
+    backgroundColor: 'rgba(16, 163, 127, 0.15)',
   },
   checkbox: {
     marginRight: 12,
@@ -142,7 +143,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -156,16 +157,16 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 16,
-    color: '#1F2937',
+    color: colors.textPrimary,
     lineHeight: 22,
   },
   duration: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginTop: 4,
   },
   overlapBadge: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     borderRadius: 12,
     padding: 4,
     alignSelf: 'center',

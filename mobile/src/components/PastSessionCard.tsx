@@ -7,6 +7,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { CheckCircle } from 'lucide-react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -49,7 +50,7 @@ export function PastSessionCard({ sessionId, date, topic }: PastSessionCardProps
       accessibilityHint="Tap to view session review"
       testID="past-session-card"
     >
-      <CheckCircle color="#10B981" size={20} />
+      <CheckCircle color={colors.success} size={20} />
       <View style={styles.content}>
         <Text style={styles.date}>{date}</Text>
         <Text style={styles.topic}>{topic}</Text>
@@ -67,9 +68,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 8,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   content: {
     marginLeft: 12,
@@ -77,12 +80,12 @@ const styles = StyleSheet.create({
   },
   date: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 2,
   },
   topic: {
     fontSize: 16,
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
 });
 

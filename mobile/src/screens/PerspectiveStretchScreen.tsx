@@ -16,6 +16,7 @@ import { useEffect, useMemo } from 'react';
 import { View, ScrollView, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { colors } from '@/theme';
 import { useSession } from '../hooks/useSessions';
 import {
   useProgress,
@@ -118,7 +119,7 @@ export function PerspectiveStretchScreen() {
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={styles.loadingText}>Loading perspective stretch...</Text>
       </View>
     );
@@ -146,23 +147,25 @@ export function PerspectiveStretchScreen() {
     );
   }
 
-  // Handle consent actions
-  const handleConsent = () => {
+  // Handle sharing option selection
+  const handleShareSelect = (option: 'full' | 'summary' | 'theme' | 'private') => {
     if (!sessionId) return;
-    consentToShare({
-      sessionId,
-      consent: true,
-    });
-  };
 
-  const handleDecline = () => {
-    // Go back to editing - mark draft as not ready
-    if (!sessionId || !empathyDraftData?.draft?.content) return;
-    saveDraft({
-      sessionId,
-      content: empathyDraftData.draft.content,
-      readyToShare: false,
-    });
+    if (option === 'private') {
+      // Go back to editing - mark draft as not ready
+      if (!empathyDraftData?.draft?.content) return;
+      saveDraft({
+        sessionId,
+        content: empathyDraftData.draft.content,
+        readyToShare: false,
+      });
+    } else {
+      // Share with partner (full, summary, or theme)
+      consentToShare({
+        sessionId,
+        consent: true,
+      });
+    }
   };
 
   // Handle validation actions
@@ -236,10 +239,7 @@ export function PerspectiveStretchScreen() {
             <ConsentPrompt
               title="Share your attempt?"
               description={`${partnerName} will see your attempt to understand their perspective. They can provide feedback on how accurate it feels.`}
-              onConsent={handleConsent}
-              onDecline={handleDecline}
-              consentLabel="Yes, share this"
-              declineLabel="Not yet"
+              onSelect={handleShareSelect}
               testID="consent-prompt"
             />
           </ScrollView>
@@ -307,13 +307,13 @@ export function PerspectiveStretchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: colors.bgPrimary,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: colors.bgPrimary,
     padding: 20,
   },
   chatContainer: {
@@ -322,17 +322,17 @@ const styles = StyleSheet.create({
   header: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   title: {
     fontSize: 20,
     fontWeight: '600',
     marginBottom: 4,
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   scrollContent: {
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
 });
 

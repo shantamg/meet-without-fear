@@ -7,6 +7,7 @@
 
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { StrategyCard } from './StrategyCard';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -92,41 +93,44 @@ export function OverlapReveal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.bgPrimary,
   },
   content: {
     flexGrow: 1,
   },
   header: {
     padding: 16,
-    backgroundColor: '#D1FAE5',
+    backgroundColor: 'rgba(16, 163, 127, 0.15)',
     alignItems: 'center',
   },
   title: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#065F46',
+    color: colors.textPrimary,
   },
   subtitle: {
     fontSize: 14,
-    color: '#10B981',
+    color: colors.success,
     marginTop: 4,
   },
   section: {
     padding: 16,
+    backgroundColor: colors.bgSecondary,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 12,
-    color: '#374151',
+    color: colors.textPrimary,
   },
   noOverlap: {
     padding: 24,
     alignItems: 'center',
+    backgroundColor: colors.bgSecondary,
   },
   noOverlapText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
   },

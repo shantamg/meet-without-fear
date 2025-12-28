@@ -26,6 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/hooks/useAuth';
 import { useSessions } from '../../../src/hooks/useSessions';
 import { SessionCard } from '../../../src/components/SessionCard';
+import { colors } from '@/src/theme';
 import type { SessionSummaryDTO } from '@be-heard/shared';
 
 // ============================================================================
@@ -65,7 +66,7 @@ export default function HomeScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#4F46E5" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
@@ -97,7 +98,7 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel="Create new session"
             >
-              <Plus color="#FFFFFF" size={20} />
+              <Plus color={colors.textPrimary} size={20} />
               <Text style={styles.newSessionButtonText}>New Session</Text>
             </TouchableOpacity>
           </View>
@@ -126,8 +127,8 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={isRefetching}
             onRefresh={refetch}
-            tintColor="#4F46E5"
-            colors={['#4F46E5']}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
           />
         }
         ListHeaderComponent={
@@ -147,7 +148,7 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Create new session"
               >
-                <Plus color="#4F46E5" size={24} />
+                <Plus color={colors.accent} size={24} />
               </TouchableOpacity>
             </View>
 
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
   // Layout containers
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.bgPrimary,
   },
   centerContainer: {
     flex: 1,
@@ -211,12 +212,12 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   userName: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
   },
 
   // Header
@@ -229,28 +230,30 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   headerNewButton: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.bgTertiary,
   },
 
   // Section title
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.textMuted,
     marginTop: 8,
     marginBottom: 16,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 
   // Loading state
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
 
   // Empty state
@@ -258,7 +261,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.bgTertiary,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
@@ -269,13 +272,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     marginBottom: 8,
     textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 32,
@@ -285,18 +288,18 @@ const styles = StyleSheet.create({
   newSessionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 12,
-    shadowColor: '#4F46E5',
+    shadowColor: colors.accent,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
   newSessionButtonText: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 17,
     fontWeight: '600',
     marginLeft: 8,
@@ -305,7 +308,7 @@ const styles = StyleSheet.create({
   // No more sessions text
   noMoreSessions: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textMuted,
     textAlign: 'center',
     marginTop: 24,
   },

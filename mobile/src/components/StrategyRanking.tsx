@@ -8,6 +8,7 @@
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { useState, useCallback } from 'react';
 import { StrategyCard } from './StrategyCard';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -131,20 +132,21 @@ export function StrategyRanking({ strategies, onSubmit }: StrategyRankingProps) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.bgPrimary,
   },
   header: {
     padding: 16,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#92400E',
+    color: colors.warning,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    color: '#92400E',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   list: {
@@ -156,31 +158,31 @@ const styles = StyleSheet.create({
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderTopColor: colors.border,
+    backgroundColor: colors.bgSecondary,
   },
   count: {
     textAlign: 'center',
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   submitButton: {
     padding: 14,
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     borderRadius: 8,
     alignItems: 'center',
   },
   submitDisabled: {
-    backgroundColor: '#9CA3AF',
+    backgroundColor: colors.bgTertiary,
   },
   submitText: {
-    color: 'white',
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
   submitTextDisabled: {
-    color: '#E5E7EB',
+    color: colors.textMuted,
   },
 });
 

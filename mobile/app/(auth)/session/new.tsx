@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Send } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCreateSession } from '@/src/hooks/useSessions';
+import { colors } from '@/src/theme';
 
 /**
  * New session screen
@@ -62,6 +63,7 @@ export default function NewSessionScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Give your session a title..."
+                placeholderTextColor={colors.textMuted}
                 value={title}
                 onChangeText={setTitle}
                 maxLength={100}
@@ -73,6 +75,7 @@ export default function NewSessionScreen() {
               <TextInput
                 style={[styles.input, styles.textArea]}
                 placeholder="Describe what you're feeling or experiencing..."
+                placeholderTextColor={colors.textMuted}
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -87,6 +90,7 @@ export default function NewSessionScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Enter their name..."
+                placeholderTextColor={colors.textMuted}
                 value={personName}
                 onChangeText={setPersonName}
                 maxLength={50}
@@ -101,6 +105,7 @@ export default function NewSessionScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="name@email.com"
+                placeholderTextColor={colors.textMuted}
                 value={inviteEmail}
                 onChangeText={setInviteEmail}
                 keyboardType="email-address"
@@ -137,7 +142,7 @@ export default function NewSessionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: colors.bgPrimary,
   },
   keyboardView: {
     flex: 1,
@@ -159,15 +164,16 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#000000',
+    color: colors.textSecondary,
   },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
     padding: 16,
     fontSize: 17,
     borderWidth: 1,
-    borderColor: '#E5E5EA',
+    borderColor: colors.border,
+    color: colors.textPrimary,
   },
   textArea: {
     minHeight: 120,
@@ -175,7 +181,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: colors.textMuted,
     marginTop: 4,
   },
   footer: {
@@ -186,13 +192,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: colors.accent,
     borderRadius: 12,
     padding: 16,
     gap: 8,
   },
   submitButtonDisabled: {
-    backgroundColor: '#C7C7CC',
+    backgroundColor: colors.bgTertiary,
   },
   submitButtonText: {
     fontSize: 17,

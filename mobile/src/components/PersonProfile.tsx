@@ -5,6 +5,7 @@
  */
 
 import { View, Text, StyleSheet } from 'react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -52,31 +53,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 24,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
+    backgroundColor: colors.bgSecondary,
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#4F46E5',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
+    backgroundColor: '#7159c1',
   },
   initials: {
     fontSize: 28,
     fontWeight: '600',
-    color: 'white',
+    color: '#ffffff',
   },
   name: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#1F2937',
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   connected: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
 });
 

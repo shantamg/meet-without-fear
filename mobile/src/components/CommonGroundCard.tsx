@@ -6,6 +6,7 @@
  */
 
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -62,28 +63,31 @@ export function CommonGroundCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#F0FDF4',
+    backgroundColor: 'rgba(167, 243, 208, 0.15)',
     borderRadius: 16,
     padding: 20,
     marginHorizontal: 16,
     marginVertical: 8,
-    borderWidth: 2,
-    borderColor: '#86EFAC',
+    borderWidth: 1,
+    borderColor: 'rgba(110, 231, 183, 0.4)',
+    alignItems: 'center',
   },
   title: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#166534',
+    color: colors.textPrimary,
     marginBottom: 16,
+    textAlign: 'center',
   },
   needRow: {
     flexDirection: 'row',
     marginBottom: 12,
+    alignSelf: 'stretch',
   },
   emoji: {
     fontSize: 20,
     marginRight: 12,
-    color: '#10B981',
+    color: colors.success,
   },
   needContent: {
     flex: 1,
@@ -91,25 +95,27 @@ const styles = StyleSheet.create({
   category: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#166534',
+    color: colors.textPrimary,
   },
   description: {
     fontSize: 14,
-    color: '#374151',
+    color: colors.textSecondary,
     marginTop: 2,
     lineHeight: 20,
   },
   insightBox: {
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(167, 243, 208, 0.1)',
     borderRadius: 8,
     padding: 12,
     marginTop: 12,
+    alignSelf: 'stretch',
   },
   insightText: {
     fontSize: 14,
     fontStyle: 'italic',
-    color: '#065F46',
+    color: colors.textPrimary,
     lineHeight: 20,
+    textAlign: 'center',
   },
 });
 

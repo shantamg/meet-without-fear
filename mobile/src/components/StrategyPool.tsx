@@ -7,6 +7,7 @@
 
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { StrategyCard } from './StrategyCard';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -96,21 +97,22 @@ export function StrategyPool({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.bgPrimary,
   },
   header: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   list: {
     flex: 1,
@@ -121,31 +123,31 @@ const styles = StyleSheet.create({
   actions: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderTopColor: colors.border,
+    backgroundColor: colors.bgSecondary,
   },
   moreButton: {
     padding: 14,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderRadius: 8,
     alignItems: 'center',
     marginBottom: 8,
   },
   moreButtonDisabled: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.bgTertiary,
   },
   moreText: {
-    color: '#4F46E5',
+    color: colors.accent,
     fontSize: 14,
     fontWeight: '500',
   },
   moreTextDisabled: {
-    color: '#9CA3AF',
+    color: colors.textMuted,
   },
   readyButton: {
     padding: 14,
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     borderRadius: 8,
     alignItems: 'center',
   },

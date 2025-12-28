@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { Plus } from 'lucide-react-native';
 
 import { usePerson, usePastSessions } from '../hooks/usePerson';
+import { colors } from '@/theme';
 import { PersonProfile } from '../components/PersonProfile';
 import { CurrentSessionCard } from '../components/CurrentSessionCard';
 import { PastSessionCard } from '../components/PastSessionCard';
@@ -108,7 +109,7 @@ export function PersonDetailScreen({ personId }: PersonDetailScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: colors.bgPrimary,
   },
   newSessionButton: {
     flexDirection: 'row',
@@ -116,11 +117,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     margin: 16,
     padding: 16,
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     borderRadius: 12,
   },
   newSessionText: {
-    color: 'white',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
@@ -132,11 +133,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,
-    color: '#374151',
+    color: colors.textPrimary,
   },
   emptyText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     textAlign: 'center',
     paddingVertical: 24,
   },

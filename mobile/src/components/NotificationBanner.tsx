@@ -7,6 +7,7 @@
 
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Bell, X, ChevronRight } from 'lucide-react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -98,7 +99,7 @@ export function NotificationBanner({
           hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
           testID="notification-banner-close"
         >
-          <X color="#6B7280" size={18} />
+          <X color={colors.textMuted} size={18} />
         </TouchableOpacity>
       )}
     </View>
@@ -162,33 +163,59 @@ function getVariantStyles(variant: NotificationBannerProps['variant']): VariantS
   switch (variant) {
     case 'warning':
       return {
-        container: { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
-        iconContainer: { backgroundColor: '#FDE68A' },
-        iconColor: '#D97706',
-        title: { color: '#92400E' },
-        actionButton: { backgroundColor: '#F59E0B' },
-        actionText: { color: '#FFFFFF' },
-        actionIconColor: '#FFFFFF',
+        container: {
+          backgroundColor: 'rgba(245, 158, 11, 0.15)',
+          borderColor: colors.warning,
+          borderLeftWidth: 3,
+          borderTopWidth: 0,
+          borderRightWidth: 0,
+          borderBottomWidth: 0,
+          borderTopLeftRadius: 0,
+          borderBottomLeftRadius: 0,
+          borderTopRightRadius: 12,
+          borderBottomRightRadius: 12,
+        },
+        iconContainer: { backgroundColor: 'rgba(245, 158, 11, 0.25)' },
+        iconColor: colors.warning,
+        title: { color: colors.textPrimary },
+        actionButton: { backgroundColor: colors.warning },
+        actionText: { color: colors.bgPrimary },
+        actionIconColor: colors.bgPrimary,
       };
     case 'permission':
       return {
-        container: { backgroundColor: '#EEF2FF', borderColor: '#4F46E5' },
-        iconContainer: { backgroundColor: '#E0E7FF' },
-        iconColor: '#4F46E5',
-        title: { color: '#312E81' },
-        actionButton: { backgroundColor: '#4F46E5' },
-        actionText: { color: '#FFFFFF' },
-        actionIconColor: '#FFFFFF',
+        container: {
+          backgroundColor: colors.bgSecondary,
+          borderColor: colors.accent,
+          borderLeftWidth: 3,
+          borderTopWidth: 0,
+          borderRightWidth: 0,
+          borderBottomWidth: 0,
+          borderTopLeftRadius: 0,
+          borderBottomLeftRadius: 0,
+          borderTopRightRadius: 12,
+          borderBottomRightRadius: 12,
+        },
+        iconContainer: { backgroundColor: 'rgba(16, 163, 127, 0.2)' },
+        iconColor: colors.accent,
+        title: { color: colors.textPrimary },
+        actionButton: { backgroundColor: colors.accent },
+        actionText: { color: colors.bgPrimary },
+        actionIconColor: colors.bgPrimary,
       };
     default:
       return {
-        container: { backgroundColor: '#F3F4F6', borderColor: '#E5E7EB' },
-        iconContainer: { backgroundColor: '#E5E7EB' },
-        iconColor: '#6B7280',
-        title: { color: '#1F2937' },
-        actionButton: { backgroundColor: '#374151' },
-        actionText: { color: '#FFFFFF' },
-        actionIconColor: '#FFFFFF',
+        container: {
+          backgroundColor: colors.bgSecondary,
+          borderColor: colors.border,
+          borderWidth: 1,
+        },
+        iconContainer: { backgroundColor: colors.bgTertiary },
+        iconColor: colors.textSecondary,
+        title: { color: colors.textPrimary },
+        actionButton: { backgroundColor: colors.bgTertiary },
+        actionText: { color: colors.textPrimary },
+        actionIconColor: colors.textPrimary,
       };
   }
 }
@@ -225,7 +252,7 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 13,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   actionButton: {

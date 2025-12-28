@@ -7,6 +7,7 @@
 
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { NeedCard } from './NeedCard';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -64,9 +65,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   title: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: 12,
   },
 });

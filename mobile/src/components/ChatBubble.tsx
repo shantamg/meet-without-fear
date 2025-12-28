@@ -1,7 +1,7 @@
 import { View, Text } from 'react-native';
 import { MessageRole } from '@be-heard/shared';
-import { createStyles, shadows } from '../theme/styled';
-import { theme } from '../theme';
+import { createStyles } from '../theme/styled';
+import { colors } from '../theme';
 
 // ============================================================================
 // Types
@@ -12,6 +12,7 @@ export interface ChatBubbleMessage {
   role: MessageRole;
   content: string;
   timestamp: string;
+  isIntervention?: boolean;
 }
 
 interface ChatBubbleProps {
@@ -26,21 +27,48 @@ interface ChatBubbleProps {
 export function ChatBubble({ message, showTimestamp = true }: ChatBubbleProps) {
   const styles = useStyles();
   const isUser = message.role === MessageRole.USER;
+  const isSystem = message.role === MessageRole.SYSTEM;
+  const isIntervention = message.isIntervention ?? false;
 
   const formatTime = (timestamp: string): string => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Determine container alignment
+  const getContainerStyle = () => {
+    if (isUser) return styles.userContainer;
+    if (isSystem) return styles.systemContainer;
+    return styles.aiContainer;
+  };
+
+  // Determine bubble style
+  const getBubbleStyle = () => {
+    if (isIntervention) return styles.interventionBubble;
+    if (isUser) return styles.userBubble;
+    if (isSystem) return styles.systemBubble;
+    return styles.aiBubble;
+  };
+
+  // Determine text style
+  const getTextStyle = () => {
+    if (isSystem && !isIntervention) return styles.systemText;
+    return styles.text;
+  };
+
   return (
     <View
-      style={[styles.container, isUser ? styles.userContainer : styles.aiContainer]}
+      style={[styles.container, getContainerStyle()]}
       testID={`chat-bubble-${message.id}`}
     >
-      <View style={[styles.bubble, isUser ? styles.userBubble : styles.aiBubble]}>
-        <Text style={[styles.text, isUser && styles.userText]}>{message.content}</Text>
+      <View style={[styles.bubble, getBubbleStyle()]}>
+        <Text style={getTextStyle()}>{message.content}</Text>
       </View>
-      {showTimestamp && <Text style={styles.time}>{formatTime(message.timestamp)}</Text>}
+      {showTimestamp && (
+        <Text style={[styles.time, isSystem && styles.systemTime]}>
+          {formatTime(message.timestamp)}
+        </Text>
+      )}
     </View>
   );
 }
@@ -49,7 +77,7 @@ const useStyles = () =>
   createStyles((t) => ({
     container: {
       marginVertical: t.spacing.xs,
-      paddingHorizontal: t.spacing.xl,
+      paddingHorizontal: t.spacing.lg,
     },
     userContainer: {
       alignItems: 'flex-end',
@@ -57,36 +85,61 @@ const useStyles = () =>
     aiContainer: {
       alignItems: 'flex-start',
     },
+    systemContainer: {
+      alignItems: 'center',
+    },
     bubble: {
-      maxWidth: '80%',
-      padding: t.spacing.md,
-      borderRadius: 18,
-      borderWidth: 1,
+      maxWidth: '85%',
     },
+    // User messages: bgSecondary background, 16px border-radius
     userBubble: {
-      backgroundColor: t.colors.accent,
-      borderColor: t.colors.accentHover,
-      borderBottomRightRadius: 6,
-      ...shadows.md,
+      backgroundColor: colors.bgSecondary,
+      paddingVertical: t.spacing.md,
+      paddingHorizontal: t.spacing.lg,
+      borderRadius: 16,
     },
+    // AI messages: no background, just text
     aiBubble: {
-      backgroundColor: t.colors.bgSecondary,
-      borderColor: t.colors.border,
-      borderBottomLeftRadius: 6,
-      ...shadows.sm,
+      padding: 0,
+    },
+    // System messages: bgTertiary background, 12px border-radius, centered
+    systemBubble: {
+      backgroundColor: colors.bgTertiary,
+      paddingVertical: t.spacing.md,
+      paddingHorizontal: t.spacing.lg,
+      borderRadius: 12,
+    },
+    // Intervention messages: warning background with left border
+    interventionBubble: {
+      backgroundColor: 'rgba(245, 158, 11, 0.15)',
+      borderLeftWidth: 3,
+      borderLeftColor: colors.warning,
+      paddingVertical: t.spacing.md,
+      paddingHorizontal: t.spacing.lg,
+      borderTopRightRadius: 12,
+      borderBottomRightRadius: 12,
+      borderTopLeftRadius: 0,
+      borderBottomLeftRadius: 0,
     },
     text: {
-      fontSize: t.typography.fontSize.lg,
+      fontSize: t.typography.fontSize.md,
       lineHeight: 22,
-      color: t.colors.textPrimary,
+      color: colors.textPrimary,
       fontFamily: t.typography.fontFamily.regular,
     },
-    userText: {
-      color: t.colors.textPrimary,
+    systemText: {
+      fontSize: t.typography.fontSize.sm,
+      lineHeight: 20,
+      color: colors.textSecondary,
+      fontFamily: t.typography.fontFamily.regular,
+      textAlign: 'center',
     },
     time: {
       fontSize: t.typography.fontSize.sm,
-      color: theme.colors.textMuted,
+      color: colors.textSecondary,
       marginTop: t.spacing.xs,
+    },
+    systemTime: {
+      textAlign: 'center',
     },
   }));

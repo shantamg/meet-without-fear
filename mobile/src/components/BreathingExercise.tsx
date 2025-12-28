@@ -8,6 +8,7 @@ import Animated, {
   Easing,
   cancelAnimation,
 } from 'react-native-reanimated';
+import { colors } from '@/theme';
 
 /**
  * Breathing phases for the exercise
@@ -42,8 +43,8 @@ interface PhaseConfig {
 
 const PHASE_CONFIGS: Record<Exclude<BreathingPhase, 'ready'>, PhaseConfig> = {
   inhale: { duration: 4000, instruction: 'Breathe in slowly...' },
-  hold: { duration: 4000, instruction: 'Hold...' },
-  exhale: { duration: 4000, instruction: 'Breathe out slowly...' },
+  hold: { duration: 7000, instruction: 'Hold...' },
+  exhale: { duration: 8000, instruction: 'Breathe out slowly...' },
 };
 
 /**
@@ -129,32 +130,33 @@ export function BreathingExercise({
     if (!isRunning || phase === 'ready') return;
 
     if (phase === 'inhale') {
-      scale.value = withTiming(1.5, {
-        duration: phaseDuration,
+      scale.value = withTiming(1.3, {
+        duration: PHASE_CONFIGS.inhale.duration,
         easing: Easing.inOut(Easing.ease),
       });
     } else if (phase === 'hold') {
       // Keep scale at current value
     } else if (phase === 'exhale') {
       scale.value = withTiming(1, {
-        duration: phaseDuration,
+        duration: PHASE_CONFIGS.exhale.duration,
         easing: Easing.inOut(Easing.ease),
       });
     }
 
-    // Schedule next phase
+    // Schedule next phase using phase-specific duration
+    const currentPhaseDuration = PHASE_CONFIGS[phase].duration;
     phaseTimeoutRef.current = setTimeout(() => {
       if (completedCycles < cycles) {
         advancePhase();
       }
-    }, phaseDuration);
+    }, currentPhaseDuration);
 
     return () => {
       if (phaseTimeoutRef.current) {
         clearTimeout(phaseTimeoutRef.current);
       }
     };
-  }, [phase, isRunning, phaseDuration, advancePhase, completedCycles, cycles, scale]);
+  }, [phase, isRunning, advancePhase, completedCycles, cycles, scale]);
 
   const animatedCircleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -253,12 +255,12 @@ export function BreathingExercise({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modal: {
-    backgroundColor: 'white',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
@@ -269,19 +271,21 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     marginBottom: 24,
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   circle: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#4F46E5',
+    backgroundColor: 'rgba(16, 163, 127, 0.2)',
+    borderWidth: 3,
+    borderColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
   },
   phaseText: {
-    color: 'white',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '500',
     textTransform: 'capitalize',
@@ -289,51 +293,51 @@ const styles = StyleSheet.create({
   instruction: {
     fontSize: 18,
     marginBottom: 16,
-    color: '#374151',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   count: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textMuted,
     marginBottom: 24,
   },
   startButton: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     paddingVertical: 12,
     paddingHorizontal: 48,
     borderRadius: 8,
     marginBottom: 16,
   },
   startButtonText: {
-    color: 'white',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   doneButton: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.accent,
     paddingVertical: 12,
     paddingHorizontal: 48,
     borderRadius: 8,
     marginBottom: 16,
   },
   doneButtonText: {
-    color: 'white',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   skip: {
-    color: '#9CA3AF',
+    color: colors.textMuted,
     fontSize: 14,
   },
   checkInLabel: {
     fontSize: 18,
     fontWeight: '500',
     marginBottom: 8,
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   beforeLabel: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 24,
   },
   intensitySelector: {
@@ -345,14 +349,14 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.bgTertiary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   intensityButtonText: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.textPrimary,
   },
   intensityValue: {
     width: 80,
@@ -361,7 +365,7 @@ const styles = StyleSheet.create({
   intensityValueText: {
     fontSize: 36,
     fontWeight: '700',
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
 });
 

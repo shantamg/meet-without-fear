@@ -12,6 +12,7 @@ import { useSession } from '@/src/hooks/useSessions';
 import { useCompactStatus } from '@/src/hooks/useStages';
 import { CuriosityCompact } from '@/src/components/CuriosityCompact';
 import { WaitingRoom } from '@/src/components/WaitingRoom';
+import { colors } from '@/src/theme';
 
 // ============================================================================
 // Component
@@ -79,6 +80,6 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgPrimary,
   },
 });

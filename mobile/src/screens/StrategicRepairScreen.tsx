@@ -28,6 +28,7 @@ import {
 } from '../hooks/useStages';
 import { useSession } from '../hooks/useSessions';
 import { StrategyPhase } from '@be-heard/shared';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -80,7 +81,7 @@ export function StrategicRepairScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4F46E5" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Loading strategies...</Text>
         </View>
       </SafeAreaView>
@@ -245,7 +246,7 @@ export function StrategicRepairScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgPrimary,
   },
   loadingContainer: {
     flex: 1,
@@ -256,7 +257,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
 });

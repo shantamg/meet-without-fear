@@ -1,6 +1,7 @@
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
+import { colors } from '@/theme';
 
 /**
  * Intensity level configuration with label and color
@@ -33,17 +34,16 @@ export interface EmotionalBarometerProps {
  * Intensity level definitions mapping values to labels and colors
  */
 const INTENSITY_LEVELS: IntensityLevel[] = [
-  { max: 3, label: 'Calm', color: '#10B981' },
-  { max: 5, label: 'Neutral', color: '#6B7280' },
-  { max: 7, label: 'Heightened', color: '#F59E0B' },
-  { max: 10, label: 'Intense', color: '#EF4444' },
+  { max: 3, label: 'Calm', color: colors.calm },
+  { max: 6, label: 'Elevated', color: colors.elevated },
+  { max: 10, label: 'Intense', color: colors.intense },
 ];
 
 /**
  * Get the intensity level for a given value
  */
 function getIntensityLevel(value: number): IntensityLevel {
-  return INTENSITY_LEVELS.find((level) => value <= level.max) || INTENSITY_LEVELS[3];
+  return INTENSITY_LEVELS.find((level) => value <= level.max) || INTENSITY_LEVELS[2];
 }
 
 /**
@@ -53,16 +53,16 @@ function getGradientColor(value: number): string {
   // Map value 1-10 to 0-1 for interpolation
   const t = (value - 1) / 9;
 
-  // Green (10B981) to Yellow (F59E0B) to Red (EF4444)
+  // Calm (#10a37f) to Elevated (#f59e0b) to Intense (#ef4444)
   if (t <= 0.5) {
-    // Green to Yellow
+    // Calm to Elevated
     const localT = t * 2;
     const r = Math.round(16 + (245 - 16) * localT);
-    const g = Math.round(185 + (158 - 185) * localT);
-    const b = Math.round(129 + (11 - 129) * localT);
+    const g = Math.round(163 + (158 - 163) * localT);
+    const b = Math.round(127 + (11 - 127) * localT);
     return `rgb(${r}, ${g}, ${b})`;
   } else {
-    // Yellow to Red
+    // Elevated to Intense
     const localT = (t - 0.5) * 2;
     const r = Math.round(245 + (239 - 245) * localT);
     const g = Math.round(158 + (68 - 158) * localT);
@@ -75,7 +75,7 @@ function getGradientColor(value: number): string {
  * EmotionalBarometer - A slider component for checking in emotional intensity
  *
  * Displays a 1-10 slider with color gradient from green (calm) to red (intense).
- * Shows a suggestion to take a moment when intensity is high (>=8).
+ * Shows a suggestion to take a moment when intensity is high (>=9).
  * Optionally allows entering context about the emotional state.
  */
 export function EmotionalBarometer({
@@ -123,16 +123,17 @@ export function EmotionalBarometer({
         value={value}
         onValueChange={handleValueChange}
         minimumTrackTintColor={currentColor}
-        maximumTrackTintColor="#E5E7EB"
+        maximumTrackTintColor={colors.bgTertiary}
         thumbTintColor={currentColor}
       />
 
       <View style={styles.labels}>
         <Text style={styles.scaleLabel}>Calm</Text>
+        <Text style={styles.scaleLabel}>Elevated</Text>
         <Text style={styles.scaleLabel}>Intense</Text>
       </View>
 
-      {value >= 8 && (
+      {value >= 9 && (
         <View style={styles.suggestion}>
           <Text style={styles.suggestionText}>
             Take a moment to ground yourself before continuing
@@ -149,7 +150,7 @@ export function EmotionalBarometer({
             value={context}
             onChangeText={handleContextChange}
             placeholder="Optional: describe what you're feeling..."
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textMuted}
             multiline
             numberOfLines={3}
             textAlignVertical="top"
@@ -163,6 +164,8 @@ export function EmotionalBarometer({
 const styles = StyleSheet.create({
   container: {
     padding: 16,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 12,
   },
   header: {
     flexDirection: 'row',
@@ -173,7 +176,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   value: {
     fontSize: 18,
@@ -190,16 +193,18 @@ const styles = StyleSheet.create({
   },
   scaleLabel: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: colors.textMuted,
   },
   suggestion: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderLeftWidth: 3,
+    borderLeftColor: colors.warning,
     padding: 12,
     borderRadius: 8,
     marginTop: 16,
   },
   suggestionText: {
-    color: '#92400E',
+    color: colors.textPrimary,
     fontSize: 14,
     textAlign: 'center',
   },
@@ -209,17 +214,18 @@ const styles = StyleSheet.create({
   contextLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   contextInput: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.border,
     borderRadius: 8,
     padding: 12,
     fontSize: 14,
-    color: '#1F2937',
+    color: colors.textPrimary,
     minHeight: 80,
+    backgroundColor: colors.bgPrimary,
   },
 });
 

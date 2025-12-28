@@ -6,6 +6,7 @@
  */
 
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -47,21 +48,23 @@ export function EmpathyAttemptCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
     padding: 16,
     marginHorizontal: 16,
     marginVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   partnerCard: {
-    backgroundColor: '#EDE9FE',
+    backgroundColor: colors.bgSecondary,
     borderWidth: 2,
-    borderColor: '#8B5CF6',
+    borderColor: colors.accent,
   },
   label: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -69,7 +72,7 @@ const styles = StyleSheet.create({
   content: {
     fontSize: 16,
     lineHeight: 24,
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
 });
 

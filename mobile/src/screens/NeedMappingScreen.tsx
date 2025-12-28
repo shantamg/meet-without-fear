@@ -16,6 +16,7 @@ import { View, ScrollView, StyleSheet, Text, ActivityIndicator, TouchableOpacity
 import { useState, useCallback } from 'react';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { colors } from '@/theme';
 import { useSession } from '../hooks/useSessions';
 import {
   useMessages,
@@ -150,7 +151,7 @@ export function NeedMappingScreen() {
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={styles.loadingText}>Loading need mapping...</Text>
       </View>
     );
@@ -448,7 +449,7 @@ export function NeedMappingScreen() {
     router.replace(`/session/${sessionId}`);
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={styles.loadingText}>Moving to next stage...</Text>
       </View>
     );
@@ -464,29 +465,29 @@ export function NeedMappingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: colors.bgPrimary,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: colors.bgPrimary,
     padding: 20,
   },
   header: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   title: {
     fontSize: 20,
     fontWeight: '600',
     marginBottom: 4,
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   scrollContent: {
@@ -498,41 +499,41 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   confirmation: {
     marginTop: 24,
     padding: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
   },
   confirmQuestion: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 16,
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   adjustButton: {
     padding: 14,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderRadius: 8,
     alignItems: 'center',
     marginBottom: 8,
-    backgroundColor: 'white',
+    backgroundColor: colors.bgSecondary,
   },
   adjustText: {
-    color: '#374151',
+    color: colors.textPrimary,
     fontSize: 14,
   },
   confirmButton: {
     padding: 14,
-    backgroundColor: '#10B981',
+    backgroundColor: colors.accent,
     borderRadius: 8,
     alignItems: 'center',
   },
   confirmText: {
-    color: 'white',
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },

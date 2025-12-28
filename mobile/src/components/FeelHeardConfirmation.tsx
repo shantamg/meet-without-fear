@@ -6,6 +6,7 @@
  */
 
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -51,7 +52,7 @@ export function FeelHeardConfirmation({
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#F0FDF4',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
     marginHorizontal: 16,
     marginBottom: 16,
@@ -60,11 +61,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 8,
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 16,
   },
   buttons: {
@@ -73,18 +74,18 @@ const styles = StyleSheet.create({
   continueButton: {
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderRadius: 8,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgSecondary,
   },
   continueText: {
-    color: '#374151',
+    color: colors.textSecondary,
     fontSize: 14,
   },
   confirmButton: {
     padding: 12,
-    backgroundColor: '#10B981',
+    backgroundColor: colors.accent,
     borderRadius: 8,
     alignItems: 'center',
   },

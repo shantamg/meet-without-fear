@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { useSignIn, useOAuth } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import { AntDesign } from '@expo/vector-icons';
+import { colors } from '@/theme';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -175,6 +176,7 @@ export default function WelcomeScreen() {
             value={code}
             onChangeText={setCode}
             placeholder="000000"
+            placeholderTextColor={colors.textSecondary}
             keyboardType="number-pad"
             maxLength={6}
             autoFocus
@@ -224,7 +226,7 @@ export default function WelcomeScreen() {
           style={styles.oauthButton}
           onPress={() => handleOAuthSignIn(startGoogleOAuth, 'Google')}
         >
-          <AntDesign name="google" size={20} color="#1F2937" style={styles.buttonIcon} />
+          <AntDesign name="google" size={20} color={colors.textPrimary} style={styles.buttonIcon} />
           <Text style={styles.oauthButtonText}>Continue with Google</Text>
         </TouchableOpacity>
 
@@ -232,7 +234,7 @@ export default function WelcomeScreen() {
           style={styles.oauthButton}
           onPress={() => handleOAuthSignIn(startAppleOAuth, 'Apple')}
         >
-          <AntDesign name={'apple1' as any} size={20} color="#1F2937" style={styles.buttonIcon} />
+          <AntDesign name={'apple1' as any} size={20} color={colors.textPrimary} style={styles.buttonIcon} />
           <Text style={styles.oauthButtonText}>Continue with Apple</Text>
         </TouchableOpacity>
 
@@ -252,6 +254,7 @@ export default function WelcomeScreen() {
             setError(null);
           }}
           placeholder="Email address"
+          placeholderTextColor={colors.textSecondary}
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
@@ -277,7 +280,7 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgPrimary,
   },
   content: {
     flex: 1,
@@ -287,56 +290,58 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: colors.textPrimary,
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 40,
     textAlign: 'center',
   },
   error: {
     fontSize: 14,
-    color: '#EF4444',
+    color: colors.error,
     marginBottom: 16,
     paddingHorizontal: 4,
     textAlign: 'center',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.border,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
     marginBottom: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.bgSecondary,
+    color: colors.textPrimary,
   },
   codeInput: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.border,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 18,
     fontSize: 24,
     letterSpacing: 8,
     marginBottom: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.bgSecondary,
+    color: colors.textPrimary,
   },
   button: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 16,
   },
   buttonDisabled: {
-    backgroundColor: '#A5B4FC',
+    backgroundColor: colors.accentHover,
   },
   buttonText: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -345,20 +350,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   linkText: {
-    color: '#4F46E5',
+    color: colors.accent,
     fontSize: 14,
     fontWeight: '500',
   },
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   oauthButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgSecondary,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.border,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
@@ -367,7 +372,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   oauthButtonText: {
-    color: '#1F2937',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '500',
   },
@@ -382,11 +387,11 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontSize: 14,
   },
 });

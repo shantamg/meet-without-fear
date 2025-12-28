@@ -6,6 +6,7 @@
  */
 
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -77,36 +78,38 @@ export function NeedCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#E0F2FE',
+    backgroundColor: 'rgba(147, 197, 253, 0.15)',
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(147, 197, 253, 0.3)',
     padding: 16,
     marginBottom: 8,
     position: 'relative',
   },
   sharedCard: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: 'rgba(167, 243, 208, 0.2)',
     borderWidth: 2,
-    borderColor: '#10B981',
+    borderColor: 'rgba(110, 231, 183, 0.5)',
   },
   category: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0369A1',
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   sharedCategory: {
-    color: '#065F46',
+    color: colors.success,
   },
   description: {
     fontSize: 16,
-    color: '#1F2937',
+    color: colors.textPrimary,
     lineHeight: 22,
   },
   sharedBadge: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,

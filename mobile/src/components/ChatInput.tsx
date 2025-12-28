@@ -102,18 +102,19 @@ const useStyles = () =>
     inputWrapper: {
       flex: 1,
       position: 'relative',
-    },
-    input: {
+      backgroundColor: t.colors.bgTertiary,
+      borderRadius: 20,
       borderWidth: 1,
       borderColor: t.colors.border,
-      borderRadius: 18,
+    },
+    input: {
       paddingHorizontal: t.spacing.lg,
       paddingTop: 12,
       paddingBottom: 12,
       fontSize: t.typography.fontSize.lg,
       maxHeight: 140,
       color: t.colors.textPrimary,
-      backgroundColor: t.colors.bgPrimary,
+      backgroundColor: 'transparent',
     },
     characterCount: {
       position: 'absolute',
@@ -126,10 +127,13 @@ const useStyles = () =>
       color: t.colors.warning,
     },
     sendButton: {
-      padding: t.spacing.md,
+      width: 40,
+      height: 40,
       marginLeft: t.spacing.sm,
       backgroundColor: t.colors.accent,
-      borderRadius: 16,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     sendButtonDisabled: {
       opacity: 0.5,

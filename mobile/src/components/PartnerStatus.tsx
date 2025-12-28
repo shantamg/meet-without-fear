@@ -15,6 +15,7 @@ import {
   TextStyle,
 } from 'react-native';
 import { ConnectionStatus, PresenceStatus } from '@be-heard/shared';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -45,7 +46,7 @@ interface TypingDotsProps {
   color?: string;
 }
 
-function TypingDots({ color = '#666' }: TypingDotsProps) {
+function TypingDots({ color = colors.textMuted }: TypingDotsProps) {
   const dot1Opacity = useRef(new Animated.Value(0.3)).current;
   const dot2Opacity = useRef(new Animated.Value(0.3)).current;
   const dot3Opacity = useRef(new Animated.Value(0.3)).current;
@@ -125,15 +126,15 @@ function StatusIndicator({ status, size = 8 }: StatusIndicatorProps) {
   const getColor = () => {
     switch (status) {
       case 'online':
-        return '#22C55E'; // Green
+        return colors.accent;
       case 'offline':
-        return '#9CA3AF'; // Gray
+        return colors.textMuted;
       case 'connecting':
-        return '#F59E0B'; // Amber
+        return colors.warning;
       case 'error':
-        return '#EF4444'; // Red
+        return colors.error;
       default:
-        return '#9CA3AF';
+        return colors.textMuted;
     }
   };
 
@@ -206,7 +207,7 @@ export function PartnerStatus({
     return (
       <View style={[styles.compactContainer, style]}>
         <StatusIndicator status={displayStatus} size={6} />
-        {isTyping && showTyping && <TypingDots color="#666" />}
+        {isTyping && showTyping && <TypingDots color={colors.textMuted} />}
       </View>
     );
   }
@@ -225,7 +226,7 @@ export function PartnerStatus({
           {isTyping && showTyping ? (
             <>
               <Text style={styles.statusText}>typing</Text>
-              <TypingDots color="#666" />
+              <TypingDots color={colors.textMuted} />
             </>
           ) : (
             <Text
@@ -285,7 +286,7 @@ export function InlineTypingIndicator({
       <Text style={styles.inlineTypingText}>
         {partnerName ? `${partnerName} is typing` : 'Partner is typing'}
       </Text>
-      <TypingDots color="#666" />
+      <TypingDots color={colors.textMuted} />
     </View>
   );
 }
@@ -300,6 +301,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 4,
     paddingHorizontal: 8,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 8,
   },
   compactContainer: {
     flexDirection: 'row',
@@ -315,7 +318,7 @@ const styles = StyleSheet.create({
   nameText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
+    color: colors.textPrimary,
     marginBottom: 2,
   },
   statusRow: {
@@ -324,13 +327,13 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textMuted,
   },
   onlineText: {
-    color: '#059669',
+    color: colors.accent,
   },
   errorText: {
-    color: '#DC2626',
+    color: colors.error,
   },
   typingDots: {
     flexDirection: 'row',
@@ -345,16 +348,20 @@ const styles = StyleSheet.create({
   },
   badge: {
     padding: 4,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 6,
   },
   inlineTyping: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 4,
     paddingHorizontal: 12,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 8,
   },
   inlineTypingText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontStyle: 'italic',
   },
 });

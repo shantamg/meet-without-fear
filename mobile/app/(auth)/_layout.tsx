@@ -1,5 +1,6 @@
 import { Redirect, Stack } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
+import { colors } from '@/theme';
 
 /**
  * Auth group layout
@@ -19,7 +20,21 @@ export default function AuthLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        headerStyle: {
+          backgroundColor: colors.bgPrimary,
+        },
+        headerTintColor: colors.textPrimary,
+        headerTitleStyle: {
+          color: colors.textPrimary,
+        },
+        contentStyle: {
+          backgroundColor: colors.bgPrimary,
+        },
+      }}
+    >
       {/* Tabs are the main navigation */}
       <Stack.Screen name="(tabs)" />
 

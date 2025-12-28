@@ -7,6 +7,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Stage, STAGE_NAMES } from '@be-heard/shared';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -98,30 +99,30 @@ const styles = StyleSheet.create({
   container: {
     margin: 16,
     padding: 20,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#4F46E5',
+    borderColor: colors.accent,
   },
   stageLabel: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#4F46E5',
+    color: colors.accent,
     marginBottom: 8,
   },
   status: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 16,
   },
   continueButton: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     padding: 14,
     borderRadius: 8,
     alignItems: 'center',
   },
   continueText: {
-    color: 'white',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },

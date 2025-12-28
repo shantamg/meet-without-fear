@@ -5,6 +5,7 @@
  */
 
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
@@ -84,15 +85,15 @@ const styles = StyleSheet.create({
   container: {
     margin: 16,
     padding: 20,
-    backgroundColor: '#F0FDF4',
+    backgroundColor: 'rgba(16, 163, 127, 0.15)',
     borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#86EFAC',
+    borderWidth: 1,
+    borderColor: colors.accent,
   },
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#166534',
+    color: colors.accent,
     marginBottom: 20,
     textAlign: 'center',
   },
@@ -102,25 +103,25 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textTransform: 'uppercase',
     marginBottom: 4,
     letterSpacing: 0.5,
   },
   value: {
     fontSize: 16,
-    color: '#1F2937',
+    color: colors.textPrimary,
     lineHeight: 22,
   },
   confirmButton: {
     marginTop: 16,
     padding: 16,
-    backgroundColor: '#10B981',
+    backgroundColor: colors.accent,
     borderRadius: 8,
     alignItems: 'center',
   },
   confirmText: {
-    color: 'white',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },

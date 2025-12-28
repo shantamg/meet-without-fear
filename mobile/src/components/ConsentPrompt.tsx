@@ -2,25 +2,60 @@
  * ConsentPrompt Component
  *
  * Asks for explicit consent before sharing sensitive information.
- * Used in Stage 2 before sharing empathy attempts and Stage 3 before sharing needs.
+ * Offers 4 granular sharing options: full, summary, theme, or private.
  */
 
+import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
+import { colors } from '@/theme';
 
 // ============================================================================
 // Types
 // ============================================================================
 
+export type SharingOption = 'full' | 'summary' | 'theme' | 'private';
+
+interface SharingOptionConfig {
+  id: SharingOption;
+  title: string;
+  description: string;
+}
+
 interface ConsentPromptProps {
   title: string;
   description: string;
-  onConsent: () => void;
-  onDecline: () => void;
-  consentLabel?: string;
-  declineLabel?: string;
+  onSelect: (option: SharingOption) => void;
+  insight?: string;
   style?: ViewStyle;
   testID?: string;
 }
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const SHARING_OPTIONS: SharingOptionConfig[] = [
+  {
+    id: 'full',
+    title: 'Share full reflection',
+    description: 'Partner sees exactly what you wrote',
+  },
+  {
+    id: 'summary',
+    title: 'Share summary only',
+    description: 'Brief AI-generated version',
+  },
+  {
+    id: 'theme',
+    title: 'Share just the theme',
+    description: 'Only the core need identified',
+  },
+  {
+    id: 'private',
+    title: 'Keep private',
+    description: 'Stays between you and AI',
+  },
+];
 
 // ============================================================================
 // Component
@@ -29,35 +64,73 @@ interface ConsentPromptProps {
 export function ConsentPrompt({
   title,
   description,
-  onConsent,
-  onDecline,
-  consentLabel = 'Yes, share this',
-  declineLabel = 'Not yet',
+  onSelect,
+  insight,
   style,
   testID,
 }: ConsentPromptProps) {
+  const [selectedOption, setSelectedOption] = useState<SharingOption | null>(null);
+
+  const handleConfirm = () => {
+    if (selectedOption) {
+      onSelect(selectedOption);
+    }
+  };
+
   return (
     <View style={[styles.container, style]} testID={testID}>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.description}>{description}</Text>
 
-      <View style={styles.buttons}>
-        <TouchableOpacity
-          style={styles.declineButton}
-          onPress={onDecline}
-          accessibilityRole="button"
-        >
-          <Text style={styles.declineText}>{declineLabel}</Text>
-        </TouchableOpacity>
+      {insight && (
+        <View style={styles.insightContainer}>
+          <Text style={styles.insightLabel}>Your reflection:</Text>
+          <Text style={styles.insightText}>{insight}</Text>
+        </View>
+      )}
 
+      <View style={styles.optionsContainer}>
+        {SHARING_OPTIONS.map((option) => {
+          const isSelected = selectedOption === option.id;
+          return (
+            <TouchableOpacity
+              key={option.id}
+              style={[
+                styles.optionCard,
+                isSelected && styles.optionCardSelected,
+              ]}
+              onPress={() => setSelectedOption(option.id)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: isSelected }}
+            >
+              <View style={styles.radioContainer}>
+                <View
+                  style={[
+                    styles.radioOuter,
+                    isSelected && styles.radioOuterSelected,
+                  ]}
+                >
+                  {isSelected && <View style={styles.radioInner} />}
+                </View>
+              </View>
+              <View style={styles.optionContent}>
+                <Text style={styles.optionTitle}>{option.title}</Text>
+                <Text style={styles.optionDescription}>{option.description}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {selectedOption && (
         <TouchableOpacity
-          style={styles.consentButton}
-          onPress={onConsent}
+          style={styles.confirmButton}
+          onPress={handleConfirm}
           accessibilityRole="button"
         >
-          <Text style={styles.consentText}>{consentLabel}</Text>
+          <Text style={styles.confirmText}>Confirm choice</Text>
         </TouchableOpacity>
-      </View>
+      )}
     </View>
   );
 }
@@ -69,7 +142,7 @@ export function ConsentPrompt({
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
     marginHorizontal: 16,
     marginVertical: 8,
@@ -78,39 +151,89 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   description: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 16,
     lineHeight: 20,
   },
-  buttons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  declineButton: {
-    flex: 1,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+  insightContainer: {
+    backgroundColor: colors.bgTertiary,
     borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  insightLabel: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginBottom: 4,
+  },
+  insightText: {
+    fontSize: 14,
+    color: colors.textPrimary,
+    lineHeight: 20,
+  },
+  optionsContainer: {
+    gap: 8,
+  },
+  optionCard: {
+    flexDirection: 'row',
     alignItems: 'center',
+    padding: 12,
+    backgroundColor: colors.bgSecondary,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+  },
+  optionCardSelected: {
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(16, 163, 127, 0.1)',
+  },
+  radioContainer: {
+    marginRight: 12,
+  },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioOuterSelected: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accent,
+  },
+  radioInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: 'white',
   },
-  declineText: {
-    color: '#374151',
-    fontSize: 14,
-  },
-  consentButton: {
+  optionContent: {
     flex: 1,
-    padding: 12,
-    backgroundColor: '#4F46E5',
+  },
+  optionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  optionDescription: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  confirmButton: {
+    marginTop: 16,
+    padding: 14,
+    backgroundColor: colors.accent,
     borderRadius: 8,
     alignItems: 'center',
   },
-  consentText: {
+  confirmText: {
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
