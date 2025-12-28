@@ -15,19 +15,24 @@ import {
   UpdateProfileResponse,
   UpdatePushTokenResponse,
   AblyTokenResponse,
+  UpdateBiometricPreferenceResponse,
   updateProfileRequestSchema,
   updatePushTokenRequestSchema,
+  updateBiometricPreferenceRequestSchema,
 } from '@be-heard/shared';
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
-function toUserDTO(user: AuthUser): { id: string; email: string; name: string | null; createdAt: string } {
+function toUserDTO(user: AuthUser) {
   return {
     id: user.id,
     email: user.email,
     name: user.name,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    biometricEnabled: user.biometricEnabled,
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -95,6 +100,9 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response): P
         id: updatedUser.id,
         email: updatedUser.email,
         name: updatedUser.name,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        biometricEnabled: updatedUser.biometricEnabled,
         createdAt: updatedUser.createdAt.toISOString(),
       },
     },
@@ -269,6 +277,43 @@ export const deletePushToken = asyncHandler(async (req: Request, res: Response):
     success: true,
     data: {
       registered: false,
+    },
+  };
+
+  res.json(response);
+});
+
+// ============================================================================
+// PATCH /auth/biometric
+// ============================================================================
+
+export const updateBiometricPreference = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const user = getUser(req);
+
+  // Validate request body
+  const parseResult = updateBiometricPreferenceRequestSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    throw new ValidationError('Invalid biometric preference data', {
+      errors: parseResult.error.flatten().fieldErrors,
+    });
+  }
+
+  const { enabled } = parseResult.data;
+
+  // Update biometric preference
+  const updatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      biometricEnabled: enabled,
+      biometricEnrolledAt: enabled ? new Date() : null,
+    },
+  });
+
+  const response: ApiResponse<UpdateBiometricPreferenceResponse> = {
+    success: true,
+    data: {
+      biometricEnabled: updatedUser.biometricEnabled,
+      biometricEnrolledAt: updatedUser.biometricEnrolledAt?.toISOString() ?? null,
     },
   };
 

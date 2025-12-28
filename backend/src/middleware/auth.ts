@@ -19,7 +19,11 @@ export interface AuthUser {
   clerkId: string | null;
   email: string;
   name: string | null;
+  firstName: string | null;
+  lastName: string | null;
   pushToken: string | null;
+  biometricEnabled: boolean;
+  biometricEnrolledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -108,7 +112,9 @@ async function handleClerkAuth(
     const clerkUser = await clerkClient.users.getUser(clerkUserId);
 
     const email = clerkUser.emailAddresses[0]?.emailAddress || `${clerkUserId}@pending.clerk`;
-    const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || null;
+    const firstName = clerkUser.firstName || null;
+    const lastName = clerkUser.lastName || null;
+    const name = [firstName, lastName].filter(Boolean).join(' ') || null;
 
     // Upsert user based on Clerk ID
     const user = await prisma.user.upsert({
@@ -116,11 +122,15 @@ async function handleClerkAuth(
       update: {
         email,
         name,
+        firstName,
+        lastName,
       },
       create: {
         clerkId: clerkUserId,
         email,
         name,
+        firstName,
+        lastName,
       },
     });
 

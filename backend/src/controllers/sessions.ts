@@ -54,6 +54,7 @@ export async function getSession(req: Request, res: Response): Promise<void> {
                   select: {
                     id: true,
                     name: true,
+                    firstName: true,
                   },
                 },
               },
@@ -82,19 +83,25 @@ export async function getSession(req: Request, res: Response): Promise<void> {
     const currentProgress = session.stageProgress[0];
 
     successResponse(res, {
-      id: session.id,
-      status: session.status,
-      currentStage: currentProgress?.stage ?? 0,
-      stageStatus: currentProgress?.status ?? 'NOT_STARTED',
-      relationshipId: session.relationshipId,
-      partner: partnerMember
-        ? {
-            id: partnerMember.userId,
-            name: partnerMember.user.name,
-          }
-        : null,
-      createdAt: session.createdAt.toISOString(),
-      resolvedAt: session.resolvedAt?.toISOString() ?? null,
+      session: {
+        id: session.id,
+        status: session.status,
+        currentStage: currentProgress?.stage ?? 0,
+        stageStatus: currentProgress?.status ?? 'NOT_STARTED',
+        relationshipId: session.relationshipId,
+        partner: partnerMember
+          ? {
+              id: partnerMember.userId,
+              name: partnerMember.user.firstName || partnerMember.user.name,
+            }
+          : null,
+        myProgress: {
+          stage: currentProgress?.stage ?? 0,
+          status: currentProgress?.status ?? 'NOT_STARTED',
+        },
+        createdAt: session.createdAt.toISOString(),
+        resolvedAt: session.resolvedAt?.toISOString() ?? null,
+      },
     });
   } catch (error) {
     console.error('[getSession] Error:', error);

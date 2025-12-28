@@ -15,6 +15,7 @@ import {
   updatePushToken,
   deletePushToken,
   getAblyToken,
+  updateBiometricPreference,
 } from '../controllers/auth';
 
 const router = Router();
@@ -81,5 +82,19 @@ router.delete('/push-token', deletePushToken);
  * - tokenRequest: AblyTokenRequest object
  */
 router.get('/ably-token', getAblyToken);
+
+/**
+ * PATCH /auth/biometric
+ *
+ * Update biometric authentication preference.
+ *
+ * Request: UpdateBiometricPreferenceRequest
+ * - enabled: boolean
+ *
+ * Response: UpdateBiometricPreferenceResponse
+ * - biometricEnabled: boolean
+ * - biometricEnrolledAt: string | null
+ */
+router.patch('/biometric', updateBiometricPreference);
 
 export default router;
