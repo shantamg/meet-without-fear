@@ -17,6 +17,7 @@
     "deploy:android:prepare": "node scripts/deploy-android-prepare.js",
     "deploy:android:release": "node scripts/deploy-android-release.js",
     "build:mobile": "npm run build --workspace=mobile",
+    "dev": "concurrently \"npm run dev:api\" \"sleep 2 && npm run dev:mobile\"",
     "dev:mobile": "npm --workspace mobile run start",
     "dev:mobile:clear": "npm --workspace mobile run start:clear",
     "dev:api": "npm run dev:watch --workspace=backend",
@@ -34,7 +35,8 @@
     "docs:bundle": "node scripts/bundle-planning-docs.js"
   },
   "devDependencies": {
-    "better-sqlite3": "^12.5.0"
+    "better-sqlite3": "^12.5.0",
+    "concurrently": "^9.2.1"
   },
   "dependencies": {
     "react": "19.0.0",

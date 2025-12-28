@@ -2,10 +2,10 @@
  * Needs Service
  *
  * Provides AI-powered need extraction and common ground analysis for Stage 3.
- * Uses Anthropic's Claude API to analyze conversation history and identify needs.
+ * Uses AWS Bedrock with Claude to analyze conversation history and identify needs.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import { getCompletion, resetBedrockClient } from '../lib/bedrock';
 import { prisma } from '../lib/prisma';
 import { NeedCategory } from '@be-heard/shared';
 
@@ -45,37 +45,13 @@ export interface CommonGroundRecord {
 // Configuration
 // ============================================================================
 
-const MODEL = 'claude-sonnet-4-20250514';
 const MAX_TOKENS = 2048;
-
-/**
- * Get Anthropic client singleton.
- * Returns null if ANTHROPIC_API_KEY is not configured.
- */
-function getAnthropicClient(): Anthropic | null {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.warn('[Needs Service] ANTHROPIC_API_KEY not configured - using mock responses');
-    return null;
-  }
-  return new Anthropic({ apiKey });
-}
-
-// Lazy-initialized client
-let anthropicClient: Anthropic | null | undefined;
-
-function getClient(): Anthropic | null {
-  if (anthropicClient === undefined) {
-    anthropicClient = getAnthropicClient();
-  }
-  return anthropicClient;
-}
 
 /**
  * Reset the client (useful for testing)
  */
 export function resetNeedsClient(): void {
-  anthropicClient = undefined;
+  resetBedrockClient();
 }
 
 // ============================================================================
@@ -215,37 +191,29 @@ export async function extractNeedsFromConversation(
     .map((m) => `${m.role === 'USER' ? 'User' : 'AI'}: ${m.content}`)
     .join('\n\n');
 
-  const client = getClient();
   let extractedNeeds: ExtractedNeed[];
 
-  if (!client) {
-    // Mock response for development
-    extractedNeeds = getMockExtractedNeeds();
-  } else {
-    try {
-      const response = await client.messages.create({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        system: buildNeedExtractionPrompt(),
-        messages: [
-          {
-            role: 'user',
-            content: `Please analyze this conversation and identify the speaker's underlying needs:\n\n${conversationText}`,
-          },
-        ],
-      });
+  try {
+    const response = await getCompletion({
+      systemPrompt: buildNeedExtractionPrompt(),
+      messages: [
+        {
+          role: 'user',
+          content: `Please analyze this conversation and identify the speaker's underlying needs:\n\n${conversationText}`,
+        },
+      ],
+      maxTokens: MAX_TOKENS,
+    });
 
-      const textContent = response.content.find((block) => block.type === 'text');
-      if (!textContent || textContent.type !== 'text') {
-        console.error('[Needs Service] No text content in response');
-        extractedNeeds = getMockExtractedNeeds();
-      } else {
-        extractedNeeds = parseNeedsResponse(textContent.text);
-      }
-    } catch (error) {
-      console.error('[Needs Service] Error extracting needs:', error);
+    if (!response) {
+      // Mock response for development without API key
       extractedNeeds = getMockExtractedNeeds();
+    } else {
+      extractedNeeds = parseNeedsResponse(response);
     }
+  } catch (error) {
+    console.error('[Needs Service] Error extracting needs:', error);
+    extractedNeeds = getMockExtractedNeeds();
   }
 
   // Save needs to database
@@ -327,37 +295,29 @@ export async function findCommonGround(
     .map((n) => `- ${n.category}: ${n.need}`)
     .join('\n');
 
-  const client = getClient();
   let commonGroundItems: Array<{ category: NeedCategory; need: string; insight: string }>;
 
-  if (!client) {
-    // Mock response for development
-    commonGroundItems = getMockCommonGround();
-  } else {
-    try {
-      const response = await client.messages.create({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        system: buildCommonGroundPrompt(),
-        messages: [
-          {
-            role: 'user',
-            content: `Partner 1's needs:\n${user1NeedsText}\n\nPartner 2's needs:\n${user2NeedsText}\n\nPlease identify common ground between these partners.`,
-          },
-        ],
-      });
+  try {
+    const response = await getCompletion({
+      systemPrompt: buildCommonGroundPrompt(),
+      messages: [
+        {
+          role: 'user',
+          content: `Partner 1's needs:\n${user1NeedsText}\n\nPartner 2's needs:\n${user2NeedsText}\n\nPlease identify common ground between these partners.`,
+        },
+      ],
+      maxTokens: MAX_TOKENS,
+    });
 
-      const textContent = response.content.find((block) => block.type === 'text');
-      if (!textContent || textContent.type !== 'text') {
-        console.error('[Needs Service] No text content in common ground response');
-        commonGroundItems = getMockCommonGround();
-      } else {
-        commonGroundItems = parseCommonGroundResponse(textContent.text);
-      }
-    } catch (error) {
-      console.error('[Needs Service] Error finding common ground:', error);
+    if (!response) {
+      // Mock response for development without API key
       commonGroundItems = getMockCommonGround();
+    } else {
+      commonGroundItems = parseCommonGroundResponse(response);
     }
+  } catch (error) {
+    console.error('[Needs Service] Error finding common ground:', error);
+    commonGroundItems = getMockCommonGround();
   }
 
   // Save common ground to database

@@ -5,13 +5,7 @@
  * Uses AWS Bedrock Converse API with Claude for witnessing conversations in Stage 1.
  */
 
-import {
-  BedrockRuntimeClient,
-  ConverseCommand,
-  type Message,
-  type SystemContentBlock,
-  type InferenceConfiguration,
-} from '@aws-sdk/client-bedrock-runtime';
+import { getCompletion, resetBedrockClient, getBedrockClient } from '../lib/bedrock';
 
 // ============================================================================
 // Types
@@ -41,40 +35,14 @@ export interface AIConfig {
 // Configuration
 // ============================================================================
 
-const MODEL_ID = 'anthropic.claude-sonnet-4-20250514-v1:0';
 const DEFAULT_MAX_TOKENS = 1024;
 const DEFAULT_THINKING_BUDGET = 1024;
-
-/**
- * Get Bedrock client singleton.
- * Returns null if AWS credentials are not configured.
- * Reads AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION from environment.
- */
-function getBedrockClient(): BedrockRuntimeClient | null {
-  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-    console.warn('[AI Service] AWS credentials not configured - using mock responses');
-    return null;
-  }
-  return new BedrockRuntimeClient({
-    region: process.env.AWS_REGION || 'us-east-1',
-  });
-}
-
-// Lazy-initialized client
-let bedrockClient: BedrockRuntimeClient | null | undefined;
-
-function getClient(): BedrockRuntimeClient | null {
-  if (bedrockClient === undefined) {
-    bedrockClient = getBedrockClient();
-  }
-  return bedrockClient;
-}
 
 /**
  * Reset the client (useful for testing)
  */
 export function resetAIClient(): void {
-  bedrockClient = undefined;
+  resetBedrockClient();
 }
 
 // ============================================================================
@@ -169,16 +137,6 @@ CRITICAL: After your <analysis>, provide your response to the user. Do NOT inclu
 // ============================================================================
 
 /**
- * Convert our message format to Bedrock Converse API format
- */
-function toBedrockMessages(messages: ConversationMessage[]): Message[] {
-  return messages.map((m) => ({
-    role: m.role,
-    content: [{ text: m.content }],
-  }));
-}
-
-/**
  * Get a witness response from the AI for Stage 1 conversations.
  *
  * @param messages - The conversation history
@@ -191,59 +149,25 @@ export async function getWitnessResponse(
   context: WitnessContext,
   config?: AIConfig
 ): Promise<string> {
-  const client = getClient();
-
-  if (!client) {
-    // Mock response for development without API key
-    return getMockWitnessResponse(messages, context);
-  }
+  const systemPrompt = buildWitnessSystemPrompt(context);
+  const maxTokens = config?.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const thinkingBudget = config?.thinkingBudget ?? DEFAULT_THINKING_BUDGET;
 
   try {
-    const systemPrompt = buildWitnessSystemPrompt(context);
-    const maxTokens = config?.maxTokens ?? DEFAULT_MAX_TOKENS;
-    const thinkingBudget = config?.thinkingBudget ?? DEFAULT_THINKING_BUDGET;
-
-    // Build system content blocks
-    const system: SystemContentBlock[] = [{ text: systemPrompt }];
-
-    // Build inference configuration
-    const inferenceConfig: InferenceConfiguration = {
+    const response = await getCompletion({
+      systemPrompt,
+      messages,
       maxTokens,
-    };
-
-    // Build the Converse command with thinking budget
-    const command = new ConverseCommand({
-      modelId: MODEL_ID,
-      messages: toBedrockMessages(messages),
-      system,
-      inferenceConfig,
-      // Configure extended thinking via additional model fields
-      additionalModelRequestFields: {
-        thinking: {
-          type: 'enabled',
-          budget_tokens: thinkingBudget,
-        },
-      },
+      thinkingBudget,
     });
 
-    const response = await client.send(command);
-
-    // Extract text content from response
-    const outputMessage = response.output?.message;
-    if (!outputMessage?.content) {
-      console.error('[AI Service] No content in response');
-      return getMockWitnessResponse(messages, context);
-    }
-
-    // Find the text block in the response (skip thinking blocks)
-    const textBlock = outputMessage.content.find((block) => 'text' in block);
-    if (!textBlock || !('text' in textBlock)) {
-      console.error('[AI Service] No text content in response');
+    if (!response) {
+      // Mock response for development without API key
       return getMockWitnessResponse(messages, context);
     }
 
     // Strip analysis tags before returning
-    return stripAnalysisTags(textBlock.text ?? '');
+    return stripAnalysisTags(response);
   } catch (error) {
     console.error('[AI Service] Error getting witness response:', error);
     // Fall back to mock response on error
@@ -299,7 +223,7 @@ export async function checkAIServiceHealth(): Promise<{
   accessible: boolean;
   error?: string;
 }> {
-  const client = getClient();
+  const client = getBedrockClient();
 
   if (!client) {
     return {
@@ -311,17 +235,15 @@ export async function checkAIServiceHealth(): Promise<{
 
   try {
     // Make a minimal API call to verify connectivity
-    const command = new ConverseCommand({
-      modelId: MODEL_ID,
-      messages: [{ role: 'user', content: [{ text: 'Hello' }] }],
-      inferenceConfig: { maxTokens: 10 },
+    const response = await getCompletion({
+      systemPrompt: 'You are a helpful assistant.',
+      messages: [{ role: 'user', content: 'Hello' }],
+      maxTokens: 10,
     });
-
-    await client.send(command);
 
     return {
       configured: true,
-      accessible: true,
+      accessible: response !== null,
     };
   } catch (error) {
     return {

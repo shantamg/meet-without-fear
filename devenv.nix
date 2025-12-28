@@ -17,7 +17,7 @@
   # System packages
   packages = with pkgs; [
     git
-    nodejs
+    nodejs_20
   ];
 
   # Enable .env file loading

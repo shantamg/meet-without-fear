@@ -3,15 +3,46 @@ const fs = require('fs');
 
 try {
   const ip = execSync('ipconfig getifaddr en0').toString().trim();
-  const line = `EXPO_PUBLIC_API_URL=http://${ip}:3000\n`;
+  const newApiUrl = `EXPO_PUBLIC_API_URL=http://${ip}:3000`;
 
-  fs.writeFileSync('.env', line);
-  console.log(`  EXPO_PUBLIC_API_URL=${line.trim()}`);
-  console.log('Local IP address detected and set successfully!');
+  // Read existing .env file if it exists
+  let envContent = '';
+  if (fs.existsSync('.env')) {
+    envContent = fs.readFileSync('.env', 'utf8');
+  }
+
+  // Parse existing env vars
+  const envVars = new Map();
+  envContent.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const [key, ...valueParts] = trimmed.split('=');
+      if (key) {
+        envVars.set(key.trim(), valueParts.join('='));
+      }
+    }
+  });
+
+  // Update or add API URL
+  envVars.set('EXPO_PUBLIC_API_URL', `http://${ip}:3000`);
+
+  // Add EXPO_ROUTER_APP_ROOT if not present
+  if (!envVars.has('EXPO_ROUTER_APP_ROOT')) {
+    envVars.set('EXPO_ROUTER_APP_ROOT', './app');
+  }
+
+  // Write back to .env
+  const newContent = Array.from(envVars.entries())
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n') + '\n';
+
+  fs.writeFileSync('.env', newContent);
+  console.log(`⇢ EXPO_PUBLIC_API_URL=${newApiUrl}`);
+  console.log('✅ Local IP address detected and set successfully!');
 } catch (error) {
-  console.error('Failed to detect local IP address automatically.');
+  console.error('❌ Failed to detect local IP address automatically.');
   console.error('Error:', error.message);
-  console.log('\nTo use Expo Go app, please manually set your local IP address:');
+  console.log('\n📱 To use Expo Go app, please manually set your local IP address:');
   console.log('1. Find your local IP address:');
   console.log('   - macOS: System Preferences > Network > Advanced > TCP/IP');
   console.log('   - Or run: ifconfig | grep "inet " | grep -v 127.0.0.1');
