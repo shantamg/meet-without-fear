@@ -172,24 +172,40 @@ export function useSendMessage(
       );
     },
     onSuccess: (data, { sessionId }) => {
-      // Optimistically add messages to cache
-      queryClient.setQueryData<GetMessagesResponse>(
-        messageKeys.list(sessionId),
-        (old) => {
-          if (!old) {
-            return {
-              messages: [data.userMessage, data.aiResponse],
-              hasMore: false,
-            };
-          }
+      // Get the stage from the response to update the correct cache
+      const stage = data.userMessage.stage;
+
+      const updateCache = (old: GetMessagesResponse | undefined) => {
+        if (!old) {
           return {
-            ...old,
-            messages: [...old.messages, data.userMessage, data.aiResponse],
+            messages: [data.userMessage, data.aiResponse],
+            hasMore: false,
           };
         }
+        return {
+          ...old,
+          messages: [...old.messages, data.userMessage, data.aiResponse],
+        };
+      };
+
+      // Update stage-specific cache (what witness screen uses)
+      if (stage !== undefined) {
+        queryClient.setQueryData<GetMessagesResponse>(
+          messageKeys.list(sessionId, stage),
+          updateCache
+        );
+      }
+
+      // Also update non-stage-filtered cache
+      queryClient.setQueryData<GetMessagesResponse>(
+        messageKeys.list(sessionId),
+        updateCache
       );
 
       // Invalidate to get fresh data
+      if (stage !== undefined) {
+        queryClient.invalidateQueries({ queryKey: messageKeys.list(sessionId, stage) });
+      }
       queryClient.invalidateQueries({ queryKey: messageKeys.list(sessionId) });
 
       // Session might have progressed - invalidate session detail
@@ -306,43 +322,66 @@ export function useOptimisticMessage() {
 
   return {
     addOptimisticMessage: (sessionId: string, message: Partial<MessageDTO>) => {
+      const stage = message.stage;
       const optimisticMessage: MessageDTO = {
         id: `optimistic-${Date.now()}`,
         sessionId,
         senderId: null,
         role: MessageRole.USER,
         content: message.content || '',
-        stage: message.stage || Stage.ONBOARDING,
+        stage: stage || Stage.ONBOARDING,
         timestamp: new Date().toISOString(),
         ...message,
       };
 
+      const updateCache = (old: GetMessagesResponse | undefined) => {
+        if (!old) {
+          return { messages: [optimisticMessage], hasMore: false };
+        }
+        return {
+          ...old,
+          messages: [...old.messages, optimisticMessage],
+        };
+      };
+
+      // Update stage-specific cache (what witness screen uses)
+      if (stage !== undefined) {
+        queryClient.setQueryData<GetMessagesResponse>(
+          messageKeys.list(sessionId, stage),
+          updateCache
+        );
+      }
+
+      // Also update non-stage-filtered cache
       queryClient.setQueryData<GetMessagesResponse>(
         messageKeys.list(sessionId),
-        (old) => {
-          if (!old) {
-            return { messages: [optimisticMessage], hasMore: false };
-          }
-          return {
-            ...old,
-            messages: [...old.messages, optimisticMessage],
-          };
-        }
+        updateCache
       );
 
       return optimisticMessage.id;
     },
 
-    removeOptimisticMessage: (sessionId: string, optimisticId: string) => {
+    removeOptimisticMessage: (sessionId: string, optimisticId: string, stage?: Stage) => {
+      const updateCache = (old: GetMessagesResponse | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          messages: old.messages.filter((m) => m.id !== optimisticId),
+        };
+      };
+
+      // Remove from stage-specific cache
+      if (stage !== undefined) {
+        queryClient.setQueryData<GetMessagesResponse>(
+          messageKeys.list(sessionId, stage),
+          updateCache
+        );
+      }
+
+      // Remove from non-stage-filtered cache
       queryClient.setQueryData<GetMessagesResponse>(
         messageKeys.list(sessionId),
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            messages: old.messages.filter((m) => m.id !== optimisticId),
-          };
-        }
+        updateCache
       );
     },
   };

@@ -35,15 +35,10 @@ export interface BreathingExerciseProps {
 /**
  * Phase timing configuration
  */
-interface PhaseConfig {
-  duration: number;
-  instruction: string;
-}
-
-const PHASE_CONFIGS: Record<Exclude<BreathingPhase, 'ready'>, PhaseConfig> = {
-  inhale: { duration: 4000, instruction: 'Breathe in slowly...' },
-  hold: { duration: 7000, instruction: 'Hold...' },
-  exhale: { duration: 8000, instruction: 'Breathe out slowly...' },
+const PHASE_INSTRUCTIONS: Record<Exclude<BreathingPhase, 'ready'>, string> = {
+  inhale: 'Breathe in slowly...',
+  hold: 'Hold...',
+  exhale: 'Breathe out slowly...',
 };
 
 /**
@@ -53,7 +48,7 @@ function getPhaseInstruction(phase: BreathingPhase): string {
   if (phase === 'ready') {
     return 'Get comfortable and press Start';
   }
-  return PHASE_CONFIGS[phase].instruction;
+  return PHASE_INSTRUCTIONS[phase];
 }
 
 /**
@@ -129,21 +124,15 @@ export function BreathingExercise({
     if (!isRunning || phase === 'ready') return;
 
     if (phase === 'inhale') {
-      scale.value = withTiming(1.3, {
-        duration: PHASE_CONFIGS.inhale.duration,
-        easing: Easing.inOut(Easing.ease),
-      });
+      scale.value = withTiming(1.3, { duration: phaseDuration, easing: Easing.inOut(Easing.ease) });
     } else if (phase === 'hold') {
       // Keep scale at current value
     } else if (phase === 'exhale') {
-      scale.value = withTiming(1, {
-        duration: PHASE_CONFIGS.exhale.duration,
-        easing: Easing.inOut(Easing.ease),
-      });
+      scale.value = withTiming(1, { duration: phaseDuration, easing: Easing.inOut(Easing.ease) });
     }
 
     // Schedule next phase using phase-specific duration
-    const currentPhaseDuration = PHASE_CONFIGS[phase].duration;
+    const currentPhaseDuration = phaseDuration;
     phaseTimeoutRef.current = setTimeout(() => {
       if (completedCycles < cycles) {
         advancePhase();
