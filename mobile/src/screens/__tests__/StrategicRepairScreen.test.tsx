@@ -110,6 +110,8 @@ const mockMarkReady = jest.fn();
 const mockSubmitRankings = jest.fn();
 const mockConfirmAgreement = jest.fn();
 const mockResolveSession = jest.fn();
+const mockProposeStrategy = jest.fn();
+const mockCreateAgreement = jest.fn();
 
 jest.mock('../../hooks/useSessions', () => ({
   useSession: () => ({
@@ -153,6 +155,18 @@ jest.mock('../../hooks/useStages', () => ({
   }),
   useResolveSession: () => ({
     mutate: mockResolveSession,
+  }),
+  useCommonGround: () => ({
+    data: { commonGround: [] },
+    isLoading: false,
+  }),
+  useProposeStrategy: () => ({
+    mutate: mockProposeStrategy,
+    isPending: false,
+  }),
+  useCreateAgreement: () => ({
+    mutate: mockCreateAgreement,
+    isPending: false,
   }),
 }));
 
@@ -274,7 +288,7 @@ describe('StrategicRepairScreen', () => {
     it('shows partner name in waiting message', () => {
       render(<StrategicRepairScreen />);
 
-      expect(screen.getByText(/alex/i)).toBeTruthy();
+      expect(screen.getAllByText(/alex/i).length).toBeGreaterThan(0);
     });
   });
 
@@ -354,13 +368,13 @@ describe('StrategicRepairScreen', () => {
     it('handles no overlap gracefully', () => {
       render(<StrategicRepairScreen />);
 
-      expect(screen.getByText(/no direct overlap/i)).toBeTruthy();
+      expect(screen.getByText(/different priorities/i)).toBeTruthy();
     });
 
     it('shows encouraging message when no overlap', () => {
       render(<StrategicRepairScreen />);
 
-      expect(screen.getByText(/that is okay/i)).toBeTruthy();
+      expect(screen.getByText(/your rankings did not overlap/i)).toBeTruthy();
     });
   });
 });

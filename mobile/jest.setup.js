@@ -280,6 +280,15 @@ jest.mock('expo-notifications', () => ({
   },
 }));
 
+// Mock expo-web-browser used by Clerk/AuthSession
+jest.mock('expo-web-browser', () => ({
+  maybeCompleteAuthSession: jest.fn(),
+  openAuthSessionAsync: jest.fn(() => Promise.resolve({ type: 'success' })),
+  dismissAuthSession: jest.fn(),
+  warmUpAsync: jest.fn(),
+  coolDownAsync: jest.fn(),
+}));
+
 // Mock expo-modules-core
 jest.mock('expo-modules-core', () => ({
   EventSubscription: class {},
@@ -395,6 +404,23 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(() => Promise.resolve()),
 }));
 
+// Mock expo-local-authentication (virtual mock - module may not be installed yet)
+jest.mock(
+  'expo-local-authentication',
+  () => ({
+    hasHardwareAsync: jest.fn(() => Promise.resolve(true)),
+    isEnrolledAsync: jest.fn(() => Promise.resolve(true)),
+    supportedAuthenticationTypesAsync: jest.fn(() => Promise.resolve([1])), // FINGERPRINT = 1
+    authenticateAsync: jest.fn(() => Promise.resolve({ success: true })),
+    AuthenticationType: {
+      FINGERPRINT: 1,
+      FACIAL_RECOGNITION: 2,
+      IRIS: 3,
+    },
+  }),
+  { virtual: true }
+);
+
 // Mock expo-linking
 jest.mock('expo-linking', () => ({
   createURL: jest.fn((path) => `beheard://${path}`),
@@ -412,3 +438,11 @@ jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(() => Promise.resolve(null)),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
+
+// Ensure Keyboard listeners always provide a removable subscription
+try {
+  const { Keyboard } = require('react-native');
+  Keyboard.addListener = jest.fn(() => ({ remove: jest.fn() }));
+} catch {
+  // If react-native isn't available for some reason, ignore
+}

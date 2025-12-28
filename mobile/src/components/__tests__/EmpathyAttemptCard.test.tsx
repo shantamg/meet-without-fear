@@ -7,6 +7,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 import { EmpathyAttemptCard } from '../EmpathyAttemptCard';
+import { colors } from '@/theme';
 
 describe('EmpathyAttemptCard', () => {
   const defaultAttempt = 'I understand that you feel frustrated when...';
@@ -29,7 +30,7 @@ describe('EmpathyAttemptCard', () => {
       const card = getByTestId('empathy-card');
       // User cards have the default gray background
       expect(card.props.style).not.toContainEqual(
-        expect.objectContaining({ borderColor: '#8B5CF6' })
+        expect.objectContaining({ borderColor: colors.accent })
       );
     });
   });
@@ -50,10 +51,8 @@ describe('EmpathyAttemptCard', () => {
         <EmpathyAttemptCard attempt={defaultAttempt} isPartner testID="partner-card" />
       );
       const card = getByTestId('partner-card');
-      // Partner cards have purple border styling
-      expect(card.props.style).toContainEqual(
-        expect.objectContaining({ borderColor: '#8B5CF6' })
-      );
+      // Partner cards have accent border styling
+      expect(card.props.style).toContainEqual(expect.objectContaining({ borderColor: colors.accent }));
     });
   });
 

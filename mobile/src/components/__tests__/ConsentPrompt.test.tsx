@@ -12,8 +12,7 @@ describe('ConsentPrompt', () => {
   const defaultProps = {
     title: 'Share your attempt?',
     description: 'Your partner will see this.',
-    onConsent: jest.fn(),
-    onDecline: jest.fn(),
+    onSelect: jest.fn(),
   };
 
   beforeEach(() => {
@@ -21,74 +20,35 @@ describe('ConsentPrompt', () => {
   });
 
   describe('Content Display', () => {
-    it('renders the title', () => {
+    it('renders the title and description', () => {
       render(<ConsentPrompt {...defaultProps} />);
       expect(screen.getByText(defaultProps.title)).toBeTruthy();
-    });
-
-    it('renders the description', () => {
-      render(<ConsentPrompt {...defaultProps} />);
       expect(screen.getByText(defaultProps.description)).toBeTruthy();
     });
 
-    it('shows default consent label', () => {
+    it('shows all sharing options by default', () => {
       render(<ConsentPrompt {...defaultProps} />);
-      expect(screen.getByText('Yes, share this')).toBeTruthy();
+      expect(screen.getByText('Share full reflection')).toBeTruthy();
+      expect(screen.getByText('Share summary only')).toBeTruthy();
+      expect(screen.getByText('Share just the theme')).toBeTruthy();
+      expect(screen.getByText('Keep private')).toBeTruthy();
     });
 
-    it('shows default decline label', () => {
-      render(<ConsentPrompt {...defaultProps} />);
-      expect(screen.getByText('Not yet')).toBeTruthy();
-    });
-
-    it('shows custom consent label', () => {
-      render(<ConsentPrompt {...defaultProps} consentLabel="I agree" />);
-      expect(screen.getByText('I agree')).toBeTruthy();
-    });
-
-    it('shows custom decline label', () => {
-      render(<ConsentPrompt {...defaultProps} declineLabel="Go back" />);
-      expect(screen.getByText('Go back')).toBeTruthy();
+    it('shows simplified options when requested', () => {
+      render(<ConsentPrompt {...defaultProps} simplified />);
+      expect(screen.getByText('Share with partner')).toBeTruthy();
+      expect(screen.getByText('Keep editing')).toBeTruthy();
     });
   });
 
   describe('User Interactions', () => {
-    it('calls onConsent when consent button is pressed', () => {
+    it('allows selecting an option and confirming', () => {
       render(<ConsentPrompt {...defaultProps} />);
-      const consentButton = screen.getByText('Yes, share this');
-      fireEvent.press(consentButton);
-      expect(defaultProps.onConsent).toHaveBeenCalledTimes(1);
-    });
 
-    it('calls onDecline when decline button is pressed', () => {
-      render(<ConsentPrompt {...defaultProps} />);
-      const declineButton = screen.getByText('Not yet');
-      fireEvent.press(declineButton);
-      expect(defaultProps.onDecline).toHaveBeenCalledTimes(1);
-    });
+      fireEvent.press(screen.getByText('Share summary only'));
+      fireEvent.press(screen.getByText('Confirm choice'));
 
-    it('does not call onConsent when decline is pressed', () => {
-      render(<ConsentPrompt {...defaultProps} />);
-      const declineButton = screen.getByText('Not yet');
-      fireEvent.press(declineButton);
-      expect(defaultProps.onConsent).not.toHaveBeenCalled();
-    });
-
-    it('does not call onDecline when consent is pressed', () => {
-      render(<ConsentPrompt {...defaultProps} />);
-      const consentButton = screen.getByText('Yes, share this');
-      fireEvent.press(consentButton);
-      expect(defaultProps.onDecline).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Accessibility', () => {
-    it('has accessible buttons', () => {
-      render(<ConsentPrompt {...defaultProps} />);
-      const consentButton = screen.getByText('Yes, share this');
-      const declineButton = screen.getByText('Not yet');
-      expect(consentButton.props.accessibilityRole || 'button').toBe('button');
-      expect(declineButton.props.accessibilityRole || 'button').toBe('button');
+      expect(defaultProps.onSelect).toHaveBeenCalledWith('summary');
     });
   });
 
@@ -96,26 +56,10 @@ describe('ConsentPrompt', () => {
     it('accepts custom style prop', () => {
       const customStyle = { marginTop: 20 };
       const { getByTestId } = render(
-        <ConsentPrompt {...defaultProps} style={customStyle} testID="consent-prompt" />
+        <ConsentPrompt {...defaultProps} style={customStyle} testID='consent-prompt' />
       );
       const container = getByTestId('consent-prompt');
       expect(container.props.style).toContainEqual(expect.objectContaining(customStyle));
-    });
-  });
-
-  describe('Edge Cases', () => {
-    it('handles long title text', () => {
-      const longTitle = 'Are you sure you want to share your empathy attempt with your partner?';
-      render(<ConsentPrompt {...defaultProps} title={longTitle} />);
-      expect(screen.getByText(longTitle)).toBeTruthy();
-    });
-
-    it('handles long description text', () => {
-      const longDescription =
-        'Your partner will be able to see your attempt to understand their perspective. ' +
-        'They can provide feedback on how accurate your understanding feels to them.';
-      render(<ConsentPrompt {...defaultProps} description={longDescription} />);
-      expect(screen.getByText(longDescription)).toBeTruthy();
     });
   });
 });

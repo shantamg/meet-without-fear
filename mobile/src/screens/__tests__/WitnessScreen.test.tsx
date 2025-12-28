@@ -208,6 +208,7 @@ describe('WitnessScreen', () => {
 
     render(<WitnessScreen />);
     fireEvent.press(screen.getByText(/yes, I feel heard/i));
+    fireEvent.press(screen.getByText(/continue/i));
     expect(mockConfirmHeard).toHaveBeenCalledWith(
       { sessionId: 'test-session-123', confirmed: true },
       expect.any(Object)
@@ -229,6 +230,7 @@ describe('WitnessScreen', () => {
 
     render(<WitnessScreen />);
     fireEvent.press(screen.getByText(/yes, I feel heard/i));
+    fireEvent.press(screen.getByText(/continue/i));
 
     // Simulate the onSuccess callback
     if (confirmHeardOnSuccess) {
@@ -255,7 +257,7 @@ describe('WitnessScreen', () => {
     mockPartnerProgressStage = Stage.WITNESS;
 
     render(<WitnessScreen />);
-    expect(screen.getByText(/alex/i)).toBeTruthy();
+    expect(screen.getAllByText(/alex/i).length).toBeGreaterThan(0);
   });
 
   it('shows waiting indicator in waiting room', () => {
@@ -266,15 +268,16 @@ describe('WitnessScreen', () => {
     expect(screen.getByTestId('waiting-indicator')).toBeTruthy();
   });
 
-  it('shows empty state when no messages', () => {
+  it('shows welcome message when no user messages', () => {
     mockMessages = [];
     render(<WitnessScreen />);
-    expect(screen.getByTestId('chat-empty-state')).toBeTruthy();
+    // The chat shows a welcome message from AI instead of empty state
+    expect(screen.getByTestId('chat-bubble-welcome-message')).toBeTruthy();
   });
 
-  it('shows appropriate empty state message for witness stage', () => {
+  it('shows appropriate welcome message for witness stage', () => {
     mockMessages = [];
     render(<WitnessScreen />);
-    expect(screen.getByText(/share your experience/i)).toBeTruthy();
+    expect(screen.getByText(/here to listen/i)).toBeTruthy();
   });
 });

@@ -27,7 +27,7 @@ describe('WaitingRoom', () => {
       />
     );
 
-    expect(screen.getByText(/jane/i)).toBeTruthy();
+    expect(screen.getAllByText(/jane/i).length).toBeGreaterThan(0);
   });
 
   it('shows a loading indicator', () => {

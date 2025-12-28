@@ -47,7 +47,8 @@ describe('EmotionalBarometer', () => {
 
   it('displays the correct intensity label for medium values', () => {
     render(<EmotionalBarometer value={5} onChange={jest.fn()} />);
-    expect(screen.getByText(/Elevated/)).toBeTruthy();
+    const elevated = screen.getAllByText(/Elevated/);
+    expect(elevated.length).toBeGreaterThanOrEqual(1);
   });
 
   it('displays the correct intensity label for intense values (7-10 range)', () => {

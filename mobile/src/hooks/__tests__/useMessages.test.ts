@@ -368,7 +368,7 @@ describe('useMessages', () => {
         await mutationPromise;
       });
 
-      expect(mockPost).toHaveBeenCalledWith('/sessions/session-123/exercises', {
+      expect(mockPost).toHaveBeenCalledWith('/sessions/session-123/exercises/complete', {
         sessionId: 'session-123',
         exerciseType: EmotionalSupportType.BREATHING_EXERCISE,
         completed: true,

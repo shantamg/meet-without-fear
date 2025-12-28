@@ -261,16 +261,17 @@ describe('PerspectiveStretchScreen', () => {
       expect(screen.getByText(/My understanding of your perspective/i)).toBeTruthy();
     });
 
-    it('shows consent and decline buttons', () => {
+    it('shows simplified sharing options', () => {
       render(<PerspectiveStretchScreen />);
-      expect(screen.getByText(/yes, share this/i)).toBeTruthy();
-      expect(screen.getByText(/not yet/i)).toBeTruthy();
+      expect(screen.getByText(/share with partner/i)).toBeTruthy();
+      expect(screen.getByText(/keep editing/i)).toBeTruthy();
     });
 
     it('calls consentToShare mutation when user consents', () => {
       render(<PerspectiveStretchScreen />);
-      const consentButton = screen.getByText(/yes, share this/i);
-      fireEvent.press(consentButton);
+
+      fireEvent.press(screen.getByText(/share with partner/i));
+      fireEvent.press(screen.getByText(/confirm choice/i));
       expect(mockConsentToShare).toHaveBeenCalled();
     });
   });

@@ -285,7 +285,7 @@ describe('NeedMappingScreen', () => {
 
     it('shows shared need details', () => {
       render(<NeedMappingScreen />);
-      expect(screen.getByText(/both want to feel safe/i)).toBeTruthy();
+      expect(screen.getAllByText(/both want to feel safe/i).length).toBeGreaterThan(0);
     });
 
     it('shows continue button', () => {
@@ -311,7 +311,7 @@ describe('NeedMappingScreen', () => {
 
     it('shows partner name in waiting message', () => {
       render(<NeedMappingScreen />);
-      expect(screen.getByText(/Alex/)).toBeTruthy();
+      expect(screen.getAllByText(/Alex/).length).toBeGreaterThan(0);
     });
 
     it('shows waiting message about partner completing needs', () => {

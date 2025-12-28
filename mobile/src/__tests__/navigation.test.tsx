@@ -21,6 +21,20 @@ import * as NotFound from '../../app/+not-found';
 import * as NavigationTypes from '../types/navigation';
 import * as AuthHooks from '../hooks/useAuth';
 
+// Mock Clerk to avoid loading native deps during tests
+jest.mock('@clerk/clerk-expo', () => {
+  const React = require('react');
+  return {
+    ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
+    ClerkLoaded: ({ children }: { children: React.ReactNode }) => children,
+    useAuth: () => ({ isSignedIn: true }),
+  };
+});
+
+jest.mock('@clerk/clerk-expo/token-cache', () => ({
+  tokenCache: {},
+}));
+
 jest.mock('expo-font', () => ({
   useFonts: () => [true, null],
   loadAsync: jest.fn(),
