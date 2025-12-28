@@ -57,7 +57,7 @@ const mockGet = api.get as jest.MockedFunction<typeof api.get>;
 const mockPost = api.post as jest.MockedFunction<typeof api.post>;
 
 // Create a wrapper with QueryClient
-function createWrapper() {
+function createWrapper(): React.FC<{ children: React.ReactNode }> {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -65,7 +65,7 @@ function createWrapper() {
       },
     },
   });
-  return ({ children }: { children: React.ReactNode }) =>
+  return ({ children }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);
 }
 

@@ -1,22 +1,21 @@
 import { Redirect, Stack } from 'expo-router';
-
-import { useAuth } from '@/src/hooks/useAuth';
+import { useAuth } from '@clerk/clerk-expo';
 
 /**
  * Auth group layout
  * Redirects to login if user is not authenticated
  */
 export default function AuthLayout() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isSignedIn, isLoaded } = useAuth();
 
   // Show nothing while checking auth
-  if (isLoading) {
+  if (!isLoaded) {
     return null;
   }
 
-  // Redirect to login if not authenticated
-  if (!isAuthenticated) {
-    return <Redirect href="/login" />;
+  // Redirect to welcome screen if not authenticated
+  if (!isSignedIn) {
+    return <Redirect href="/(public)" />;
   }
 
   return (

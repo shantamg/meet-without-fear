@@ -1,13 +1,8 @@
-/**
- * ChatInput Component
- *
- * Text input with send button for composing chat messages.
- * Includes character limit indicator and disabled state handling.
- */
-
 import { useState, useCallback } from 'react';
-import { View, TextInput, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { View, TextInput, TouchableOpacity, Text } from 'react-native';
 import { Send } from 'lucide-react-native';
+import { createStyles } from '../theme/styled';
+import { theme } from '../theme';
 
 // ============================================================================
 // Types
@@ -39,6 +34,7 @@ export function ChatInput({
   maxLength = DEFAULT_MAX_LENGTH,
   showCharacterCount = false,
 }: ChatInputProps) {
+  const styles = useStyles();
   const [input, setInput] = useState('');
 
   const canSend = input.trim().length > 0 && !disabled;
@@ -64,7 +60,7 @@ export function ChatInput({
           value={input}
           onChangeText={handleChangeText}
           placeholder={placeholder}
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={theme.colors.textMuted}
           multiline
           maxLength={maxLength}
           editable={!disabled}
@@ -83,7 +79,7 @@ export function ChatInput({
         disabled={!canSend}
         activeOpacity={0.7}
       >
-        <Send color={canSend ? '#4F46E5' : '#9CA3AF'} size={20} />
+        <Send color={canSend ? theme.colors.textPrimary : theme.colors.textMuted} size={20} />
       </TouchableOpacity>
     </View>
   );
@@ -93,46 +89,50 @@ export function ChatInput({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    padding: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-  },
-  inputWrapper: {
-    flex: 1,
-    position: 'relative',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
-    fontSize: 16,
-    maxHeight: 120,
-    color: '#1F2937',
-    backgroundColor: '#FFFFFF',
-  },
-  characterCount: {
-    position: 'absolute',
-    right: 12,
-    bottom: -16,
-    fontSize: 10,
-    color: '#9CA3AF',
-  },
-  characterCountWarning: {
-    color: '#EF4444',
-  },
-  sendButton: {
-    padding: 10,
-    marginLeft: 4,
-  },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
-});
+const useStyles = () =>
+  createStyles((t) => ({
+    container: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      padding: t.spacing.lg,
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
+      backgroundColor: t.colors.bgSecondary,
+    },
+    inputWrapper: {
+      flex: 1,
+      position: 'relative',
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      borderRadius: 18,
+      paddingHorizontal: t.spacing.lg,
+      paddingTop: 12,
+      paddingBottom: 12,
+      fontSize: t.typography.fontSize.lg,
+      maxHeight: 140,
+      color: t.colors.textPrimary,
+      backgroundColor: t.colors.bgPrimary,
+    },
+    characterCount: {
+      position: 'absolute',
+      right: t.spacing.md,
+      bottom: -16,
+      fontSize: t.typography.fontSize.xs,
+      color: t.colors.textMuted,
+    },
+    characterCountWarning: {
+      color: t.colors.warning,
+    },
+    sendButton: {
+      padding: t.spacing.md,
+      marginLeft: t.spacing.sm,
+      backgroundColor: t.colors.accent,
+      borderRadius: 16,
+    },
+    sendButtonDisabled: {
+      opacity: 0.5,
+      backgroundColor: t.colors.bgTertiary,
+    },
+  }));

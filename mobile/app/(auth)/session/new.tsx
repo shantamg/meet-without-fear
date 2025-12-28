@@ -13,6 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Send } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useCreateSession } from '@/src/hooks/useSessions';
 
 /**
  * New session screen
@@ -23,7 +24,8 @@ export default function NewSessionScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [personName, setPersonName] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const { mutateAsync: createSession, isPending } = useCreateSession();
 
   const handleSubmit = async () => {
     if (!title.trim()) {
@@ -31,20 +33,19 @@ export default function NewSessionScreen() {
       return;
     }
 
-    setIsSubmitting(true);
+    const context = [title.trim(), description.trim()].filter(Boolean).join('\n\n');
 
     try {
-      // TODO: Create session via API
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const response = await createSession({
+        context,
+        inviteName: personName.trim() || undefined,
+        inviteEmail: inviteEmail.trim() || undefined,
+      });
 
-      // Navigate to the new session
-      const mockSessionId = 'session-' + Date.now();
-      router.replace(`/session/${mockSessionId}`);
+      router.replace(`/session/${response.session.id}`);
     } catch (error) {
       console.error('Failed to create session:', error);
       Alert.alert('Error', 'Failed to create session. Please try again.');
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -94,24 +95,40 @@ export default function NewSessionScreen() {
                 You can invite them after creating the session
               </Text>
             </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Invite by email (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="name@email.com"
+                value={inviteEmail}
+                onChangeText={setInviteEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Text style={styles.hint}>
+                If provided, we will send an invitation link automatically.
+              </Text>
+            </View>
           </View>
 
           <View style={styles.footer}>
             <TouchableOpacity
-              style={[
-                styles.submitButton,
-                (!title.trim() || isSubmitting) && styles.submitButtonDisabled,
-              ]}
-              onPress={handleSubmit}
-              disabled={!title.trim() || isSubmitting}
-            >
-              <Text style={styles.submitButtonText}>
-                {isSubmitting ? 'Creating...' : 'Start Session'}
-              </Text>
-              <Send color="#FFFFFF" size={20} />
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
+            style={[
+              styles.submitButton,
+              (!title.trim() || isPending) && styles.submitButtonDisabled,
+            ]}
+            onPress={handleSubmit}
+            disabled={!title.trim() || isPending}
+          >
+            <Text style={styles.submitButtonText}>
+              {isPending ? 'Creating...' : 'Start Session'}
+            </Text>
+            <Send color="#FFFFFF" size={20} />
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

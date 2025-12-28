@@ -1,12 +1,7 @@
-/**
- * ChatBubble Component
- *
- * Renders a single message bubble for chat interface.
- * User messages are right-aligned, AI messages are left-aligned.
- */
-
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text } from 'react-native';
 import { MessageRole } from '@be-heard/shared';
+import { createStyles, shadows } from '../theme/styled';
+import { theme } from '../theme';
 
 // ============================================================================
 // Types
@@ -29,6 +24,7 @@ interface ChatBubbleProps {
 // ============================================================================
 
 export function ChatBubble({ message, showTimestamp = true }: ChatBubbleProps) {
+  const styles = useStyles();
   const isUser = message.role === MessageRole.USER;
 
   const formatTime = (timestamp: string): string => {
@@ -49,45 +45,48 @@ export function ChatBubble({ message, showTimestamp = true }: ChatBubbleProps) {
   );
 }
 
-// ============================================================================
-// Styles
-// ============================================================================
-
-const styles = StyleSheet.create({
-  container: {
-    marginVertical: 4,
-    paddingHorizontal: 16,
-  },
-  userContainer: {
-    alignItems: 'flex-end',
-  },
-  aiContainer: {
-    alignItems: 'flex-start',
-  },
-  bubble: {
-    maxWidth: '80%',
-    padding: 12,
-    borderRadius: 16,
-  },
-  userBubble: {
-    backgroundColor: '#4F46E5',
-    borderBottomRightRadius: 4,
-  },
-  aiBubble: {
-    backgroundColor: '#F3F4F6',
-    borderBottomLeftRadius: 4,
-  },
-  text: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#1F2937',
-  },
-  userText: {
-    color: '#FFFFFF',
-  },
-  time: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 4,
-  },
-});
+const useStyles = () =>
+  createStyles((t) => ({
+    container: {
+      marginVertical: t.spacing.xs,
+      paddingHorizontal: t.spacing.xl,
+    },
+    userContainer: {
+      alignItems: 'flex-end',
+    },
+    aiContainer: {
+      alignItems: 'flex-start',
+    },
+    bubble: {
+      maxWidth: '80%',
+      padding: t.spacing.md,
+      borderRadius: 18,
+      borderWidth: 1,
+    },
+    userBubble: {
+      backgroundColor: t.colors.accent,
+      borderColor: t.colors.accentHover,
+      borderBottomRightRadius: 6,
+      ...shadows.md,
+    },
+    aiBubble: {
+      backgroundColor: t.colors.bgSecondary,
+      borderColor: t.colors.border,
+      borderBottomLeftRadius: 6,
+      ...shadows.sm,
+    },
+    text: {
+      fontSize: t.typography.fontSize.lg,
+      lineHeight: 22,
+      color: t.colors.textPrimary,
+      fontFamily: t.typography.fontFamily.regular,
+    },
+    userText: {
+      color: t.colors.textPrimary,
+    },
+    time: {
+      fontSize: t.typography.fontSize.sm,
+      color: theme.colors.textMuted,
+      marginTop: t.spacing.xs,
+    },
+  }));

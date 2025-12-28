@@ -12,7 +12,7 @@
  */
 
 import { useCallback } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import { View, ActivityIndicator, Text } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import {
   useMessages,
@@ -21,12 +21,14 @@ import {
 } from '@/src/hooks/useMessages';
 import { ChatInterface } from '@/src/components/ChatInterface';
 import { Stage, MessageRole } from '@be-heard/shared';
+import { createStyles } from '@/src/theme/styled';
 
 // ============================================================================
 // Component
 // ============================================================================
 
 export default function ChatScreen() {
+  const styles = useStyles();
   const { id: sessionId } = useLocalSearchParams<{ id: string }>();
 
   // Fetch messages for this session
@@ -110,36 +112,33 @@ export default function ChatScreen() {
   );
 }
 
-// ============================================================================
-// Styles
-// ============================================================================
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  errorText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#EF4444',
-    marginBottom: 8,
-  },
-  errorDetail: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-});
+const useStyles = () =>
+  createStyles((t) => ({
+    container: {
+      flex: 1,
+      backgroundColor: t.colors.bgPrimary,
+    },
+    centerContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: t.colors.bgPrimary,
+      padding: 20,
+    },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 16,
+      color: t.colors.textSecondary,
+    },
+    errorText: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: t.colors.error,
+      marginBottom: 8,
+    },
+    errorDetail: {
+      fontSize: 14,
+      color: t.colors.textSecondary,
+      textAlign: 'center',
+    },
+  }));

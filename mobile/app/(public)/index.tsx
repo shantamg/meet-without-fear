@@ -232,7 +232,7 @@ export default function WelcomeScreen() {
           style={styles.oauthButton}
           onPress={() => handleOAuthSignIn(startAppleOAuth, 'Apple')}
         >
-          <AntDesign name="apple-o" size={20} color="#1F2937" style={styles.buttonIcon} />
+          <AntDesign name={'apple1' as any} size={20} color="#1F2937" style={styles.buttonIcon} />
           <Text style={styles.oauthButtonText}>Continue with Apple</Text>
         </TouchableOpacity>
 

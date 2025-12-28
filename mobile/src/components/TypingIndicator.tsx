@@ -1,18 +1,13 @@
-/**
- * TypingIndicator Component
- *
- * Animated typing indicator showing AI is composing a response.
- * Displays three dots with staggered opacity animation.
- */
-
 import { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import { View, Animated } from 'react-native';
+import { createStyles } from '../theme/styled';
 
 // ============================================================================
 // Component
 // ============================================================================
 
 export function TypingIndicator() {
+  const styles = useStyles();
   const dot1 = useRef(new Animated.Value(0.3)).current;
   const dot2 = useRef(new Animated.Value(0.3)).current;
   const dot3 = useRef(new Animated.Value(0.3)).current;
@@ -62,24 +57,24 @@ export function TypingIndicator() {
 
 // ============================================================================
 // Styles
-// ============================================================================
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    padding: 12,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 16,
-    borderBottomLeftRadius: 4,
-    alignSelf: 'flex-start',
-    marginLeft: 16,
-    marginVertical: 4,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#9CA3AF',
-    marginHorizontal: 2,
-  },
-});
+const useStyles = () =>
+  createStyles((t) => ({
+    container: {
+      flexDirection: 'row',
+      padding: t.spacing.md,
+      backgroundColor: t.colors.bgSecondary,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      alignSelf: 'flex-start',
+      marginLeft: t.spacing.xl,
+      marginVertical: t.spacing.xs,
+    },
+    dot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: t.colors.textMuted,
+      marginHorizontal: 2,
+    },
+  }));

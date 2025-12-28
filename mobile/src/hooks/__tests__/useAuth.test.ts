@@ -35,8 +35,8 @@ const mockDeleteItemAsync = SecureStore.deleteItemAsync as jest.MockedFunction<
 /**
  * Helper to create a wrapper with AuthContext
  */
-function createAuthWrapper(authValue: ReturnType<typeof useAuthProvider>) {
-  return ({ children }: { children: React.ReactNode }) =>
+function createAuthWrapper(authValue: ReturnType<typeof useAuthProvider>): React.FC<{ children: React.ReactNode }> {
+  return ({ children }) =>
     React.createElement(AuthContext.Provider, { value: authValue }, children);
 }
 

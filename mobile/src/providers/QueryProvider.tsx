@@ -4,7 +4,7 @@
  * Configures and provides the QueryClient to the app.
  */
 
-import React, { ReactNode, useState } from 'react';
+import React, { type PropsWithChildren, useState } from 'react';
 import {
   QueryClient,
   QueryClientProvider,
@@ -101,9 +101,7 @@ function createQueryClient(): QueryClient {
 // Provider Component
 // ============================================================================
 
-interface QueryProviderProps {
-  children: ReactNode;
-}
+type QueryProviderProps = PropsWithChildren<{}>;
 
 /**
  * Query Provider component that wraps the app.
@@ -143,7 +141,9 @@ export function QueryProvider({ children }: QueryProviderProps): React.ReactElem
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      {children as any}
+    </QueryClientProvider>
   );
 }
 

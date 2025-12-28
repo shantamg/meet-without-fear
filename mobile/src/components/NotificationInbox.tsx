@@ -98,9 +98,9 @@ export function NotificationInbox({
     onMarkRead(notification.id);
 
     if (notification.deepLink) {
-      router.push(notification.deepLink);
+      router.push(notification.deepLink as any);
     } else if (notification.sessionId) {
-      router.push(`/session/${notification.sessionId}`);
+      router.push(`/session/${notification.sessionId}` as any);
     }
   };
 

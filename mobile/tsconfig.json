@@ -11,5 +11,5 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "types/**/*.d.ts"],
-  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "dist"]
+  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "dist", "**/__tests__/**"]
 }

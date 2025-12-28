@@ -5,7 +5,7 @@
  * Includes emotional barometer check-ins and feel-heard confirmation.
  */
 
-import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
+import { View, ActivityIndicator, Text } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,12 +22,14 @@ import { EmotionalBarometer } from '@/src/components/EmotionalBarometer';
 import { FeelHeardConfirmation } from '@/src/components/FeelHeardConfirmation';
 import { WaitingRoom } from '@/src/components/WaitingRoom';
 import { Stage, MessageRole } from '@be-heard/shared';
+import { createStyles } from '@/src/theme/styled';
 
 // ============================================================================
 // Component
 // ============================================================================
 
 export default function WitnessScreen() {
+  const styles = useStyles();
   const { id: sessionId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { data: sessionData } = useSession(sessionId);
@@ -199,43 +201,41 @@ export default function WitnessScreen() {
 }
 
 // ============================================================================
-// Styles
-// ============================================================================
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  content: {
-    flex: 1,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  errorText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#EF4444',
-    marginBottom: 8,
-  },
-  errorDetail: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  barometerContainer: {
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    backgroundColor: '#F9FAFB',
-  },
-});
+const useStyles = () =>
+  createStyles((t) => ({
+    container: {
+      flex: 1,
+      backgroundColor: t.colors.bgPrimary,
+    },
+    content: {
+      flex: 1,
+    },
+    centerContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: t.colors.bgPrimary,
+      padding: 20,
+    },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 16,
+      color: t.colors.textSecondary,
+    },
+    errorText: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: t.colors.error,
+      marginBottom: 8,
+    },
+    errorDetail: {
+      fontSize: 14,
+      color: t.colors.textSecondary,
+      textAlign: 'center',
+    },
+    barometerContainer: {
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
+      backgroundColor: t.colors.bgSecondary,
+    },
+  }));

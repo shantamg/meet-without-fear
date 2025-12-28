@@ -102,9 +102,9 @@ export function useNotifications(): UseNotificationsReturn {
       const data = parseNotificationData(response);
 
       if (data.screen) {
-        router.push(data.screen as string);
+        router.push(data.screen as any);
       } else if (data.sessionId) {
-        router.push(`/session/${data.sessionId}`);
+        router.push(`/session/${data.sessionId}` as any);
       }
     },
     [router]

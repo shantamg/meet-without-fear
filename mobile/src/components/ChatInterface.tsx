@@ -1,17 +1,3 @@
-/**
- * ChatInterface Component
- *
- * Complete chat interface combining message list, typing indicator, and input.
- * Handles auto-scroll to bottom on new messages and keyboard avoidance.
- *
- * Features:
- * - Message history with user/AI styling
- * - Typing indicator while AI is responding
- * - Auto-scroll to new messages
- * - Keyboard avoidance on iOS
- * - Empty state for new conversations
- */
-
 import { useRef, useEffect, useCallback } from 'react';
 import {
   View,
@@ -19,13 +5,13 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  StyleSheet,
   ListRenderItem,
 } from 'react-native';
 import type { MessageDTO } from '@be-heard/shared';
 import { ChatBubble, ChatBubbleMessage } from './ChatBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { ChatInput } from './ChatInput';
+import { createStyles } from '../theme/styled';
 
 // ============================================================================
 // Types
@@ -56,6 +42,7 @@ export function ChatInterface({
   emptyStateTitle = DEFAULT_EMPTY_TITLE,
   emptyStateMessage = DEFAULT_EMPTY_MESSAGE,
 }: ChatInterfaceProps) {
+  const styles = useStyles();
   const flatListRef = useRef<FlatList<MessageDTO>>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -135,36 +122,38 @@ export function ChatInterface({
 // Styles
 // ============================================================================
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  messageList: {
-    paddingVertical: 16,
-    flexGrow: 1,
-  },
-  messageListEmpty: {
-    justifyContent: 'center',
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 48,
-  },
-  emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1F2937',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  emptyStateMessage: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-});
+const useStyles = () =>
+  createStyles((t) => ({
+    container: {
+      flex: 1,
+      backgroundColor: t.colors.bgPrimary,
+    },
+    messageList: {
+      paddingVertical: t.spacing.lg,
+      flexGrow: 1,
+      gap: t.spacing.xs,
+    },
+    messageListEmpty: {
+      justifyContent: 'center',
+    },
+    emptyState: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: t.spacing['3xl'],
+      paddingVertical: t.spacing['3xl'],
+    },
+    emptyStateTitle: {
+      fontSize: t.typography.fontSize['2xl'],
+      fontWeight: '700',
+      color: t.colors.textPrimary,
+      textAlign: 'center',
+      marginBottom: t.spacing.md,
+    },
+    emptyStateMessage: {
+      fontSize: t.typography.fontSize.lg,
+      lineHeight: 24,
+      color: t.colors.textSecondary,
+      textAlign: 'center',
+    },
+  }));
