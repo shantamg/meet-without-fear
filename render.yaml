@@ -3,6 +3,7 @@ services:
     name: be-heard-api
     runtime: node
     plan: starter
+    branch: main
     buildCommand: npm install && npm run prisma:generate --workspace=backend && npm run build --workspace=backend
     startCommand: cd backend && npx prisma migrate deploy && node dist/backend/src/server.js
     envVars:
