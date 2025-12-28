@@ -152,7 +152,7 @@ export const confirmNeedsRequestSchema = z.object({
         needId: z.string().cuid(),
         confirmed: z.boolean(),
         correction: z.string().max(500, 'Correction too long').optional(),
-      })
+      }),
     )
     .optional(),
 });
@@ -176,13 +176,13 @@ export const needsMappingResponseSchema = z.object({
       id: z.string(),
       category: z.string(),
       description: z.string(),
-    })
+    }),
   ),
   sharedNeeds: z.array(
     z.object({
       category: z.string(),
       description: z.string(),
-    })
+    }),
   ),
   sharedNeedIds: z.array(z.string()),
   insight: z.string().optional(),
@@ -237,14 +237,14 @@ export const strategiesRevealResponseSchema = z.object({
       id: z.string(),
       description: z.string(),
       duration: z.string().optional(),
-    })
+    }),
   ),
   overlapping: z
     .array(
       z.object({
         id: z.string(),
         description: z.string(),
-      })
+      }),
     )
     .optional(),
   uniqueToMe: z
@@ -252,7 +252,7 @@ export const strategiesRevealResponseSchema = z.object({
       z.object({
         id: z.string(),
         description: z.string(),
-      })
+      }),
     )
     .optional(),
   uniqueToPartner: z
@@ -260,7 +260,7 @@ export const strategiesRevealResponseSchema = z.object({
       z.object({
         id: z.string(),
         description: z.string(),
-      })
+      }),
     )
     .optional(),
   agreement: z

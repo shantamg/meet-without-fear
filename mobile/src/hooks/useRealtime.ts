@@ -207,7 +207,7 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
   } = config;
 
   const { user } = useAuth();
-  const { data: tokenData, refetch: refetchToken } = useAblyToken();
+  useAblyToken(); // Token hook kept for side effects
 
   // State
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(
@@ -380,7 +380,6 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
     onTypingChange,
     onSessionEvent,
     onStageProgress,
-    refetchToken,
   ]);
 
   const disconnect = useCallback(() => {

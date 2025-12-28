@@ -323,6 +323,7 @@ enum AgreementType {
   MICRO_EXPERIMENT // Small, reversible action
   COMMITMENT // Longer-term agreement
   CHECK_IN // Scheduled follow-up
+  HYBRID // Combined elements from multiple strategies
 }
 
 enum AgreementStatus {

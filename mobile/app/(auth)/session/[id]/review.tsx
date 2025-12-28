@@ -6,10 +6,10 @@
 
 import { View, ScrollView, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
-import { CheckCircle } from 'lucide-react-native';
+import { CheckCircle, Clock } from 'lucide-react-native';
 
 import { useSession } from '../../../../src/hooks/useSessions';
-import { STAGE_NAMES, Stage, SessionStatus } from '@be-heard/shared';
+import { STAGE_NAMES, Stage, SessionStatus, StageStatus, StageProgressDTO } from '@be-heard/shared';
 
 // ============================================================================
 // Types
@@ -20,13 +20,17 @@ interface StageReviewData {
   name: string;
   summary: string;
   completedAt: string | null;
+  isCompleted: boolean;
 }
 
-interface AgreementData {
-  type: string;
-  experiment: string;
-  confirmedAt: string;
-}
+// Default stage descriptions for fallback
+const DEFAULT_STAGE_SUMMARIES: Record<Stage, string> = {
+  [Stage.ONBOARDING]: 'Both partners signed the Curiosity Compact',
+  [Stage.WITNESS]: 'Each shared their perspective and felt heard',
+  [Stage.PERSPECTIVE_STRETCH]: 'Practiced empathy by understanding each other\'s view',
+  [Stage.NEED_MAPPING]: 'Identified underlying needs and found common ground',
+  [Stage.STRATEGIC_REPAIR]: 'Created actionable agreements together',
+};
 
 // ============================================================================
 // Component
@@ -69,47 +73,19 @@ export default function SessionReviewScreen() {
     ? formatDate(session.resolvedAt)
     : 'In progress';
 
-  // Get topic from session context (if available) or use a default
-  const topic = 'Session with ' + (session.partner.name || 'Partner');
+  // Get topic from session - check for context or description fields, otherwise use partner name
+  const topic = getSessionTopic(session);
 
-  // Build stage timeline from progress data
-  const stageTimeline: StageReviewData[] = [
-    {
-      stage: Stage.ONBOARDING,
-      name: STAGE_NAMES[Stage.ONBOARDING],
-      summary: 'Both partners signed the Curiosity Compact',
-      completedAt: null,
-    },
-    {
-      stage: Stage.WITNESS,
-      name: STAGE_NAMES[Stage.WITNESS],
-      summary: 'Each shared their perspective and felt heard',
-      completedAt: null,
-    },
-    {
-      stage: Stage.PERSPECTIVE_STRETCH,
-      name: STAGE_NAMES[Stage.PERSPECTIVE_STRETCH],
-      summary: 'Practiced empathy by understanding each other\'s view',
-      completedAt: null,
-    },
-    {
-      stage: Stage.NEED_MAPPING,
-      name: STAGE_NAMES[Stage.NEED_MAPPING],
-      summary: 'Identified underlying needs and found common ground',
-      completedAt: null,
-    },
-    {
-      stage: Stage.STRATEGIC_REPAIR,
-      name: STAGE_NAMES[Stage.STRATEGIC_REPAIR],
-      summary: 'Created actionable agreements together',
-      completedAt: null,
-    },
-  ];
+  // Build stage timeline from actual session progress data
+  const stageTimeline = buildStageTimeline(session.myProgress, session.partnerProgress);
 
-  // Filter to only completed stages based on progress
-  const completedStages = stageTimeline.filter(
+  // Filter to only completed or in-progress stages
+  const visibleStages = stageTimeline.filter(
     (s) => s.stage <= session.myProgress.stage
   );
+
+  // Get agreement information if available
+  const agreement = getAgreementFromSession(session);
 
   return (
     <>
@@ -129,13 +105,25 @@ export default function SessionReviewScreen() {
         <View style={styles.timeline}>
           <Text style={styles.timelineTitle}>Journey Timeline</Text>
 
-          {completedStages.map((stage, index) => (
+          {visibleStages.map((stage) => (
             <View key={stage.stage} style={styles.stageCard}>
               <View style={styles.stageHeader}>
-                <View style={styles.stageNumber}>
-                  <Text style={styles.stageNumberText}>{stage.stage}</Text>
+                <View style={[
+                  styles.stageNumber,
+                  stage.isCompleted ? styles.stageNumberCompleted : styles.stageNumberInProgress
+                ]}>
+                  {stage.isCompleted ? (
+                    <CheckCircle color="white" size={14} />
+                  ) : (
+                    <Clock color="white" size={14} />
+                  )}
                 </View>
-                <Text style={styles.stageName}>{stage.name}</Text>
+                <View style={styles.stageInfo}>
+                  <Text style={styles.stageName}>{stage.name}</Text>
+                  {stage.completedAt && (
+                    <Text style={styles.stageDate}>{formatDate(stage.completedAt)}</Text>
+                  )}
+                </View>
               </View>
               <Text style={styles.stageSummary}>{stage.summary}</Text>
             </View>
@@ -146,9 +134,13 @@ export default function SessionReviewScreen() {
         {isResolved && (
           <View style={styles.outcomeCard}>
             <Text style={styles.outcomeTitle}>Agreed Actions</Text>
-            <Text style={styles.outcomeText}>
-              Review your agreements in the session details
-            </Text>
+            {agreement ? (
+              <Text style={styles.outcomeText}>{agreement}</Text>
+            ) : (
+              <Text style={styles.outcomeTextMuted}>
+                No specific agreements recorded for this session
+              </Text>
+            )}
           </View>
         )}
 
@@ -173,6 +165,98 @@ function formatDate(isoDate: string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+/**
+ * Extract session topic from available session data.
+ * Falls back to partner name if no explicit topic is set.
+ */
+function getSessionTopic(session: {
+  partner: { name: string | null };
+  // Extended fields that may or may not exist
+  context?: string;
+  topic?: string;
+  description?: string;
+}): string {
+  // Check for explicit topic/description fields (if they exist in extended data)
+  if ('topic' in session && session.topic) {
+    return session.topic;
+  }
+  if ('description' in session && session.description) {
+    return session.description;
+  }
+  if ('context' in session && session.context) {
+    return session.context;
+  }
+
+  // Fall back to partner-based description
+  return `Session with ${session.partner.name || 'Partner'}`;
+}
+
+/**
+ * Build stage timeline from user and partner progress data.
+ */
+function buildStageTimeline(
+  myProgress: StageProgressDTO,
+  partnerProgress: StageProgressDTO
+): StageReviewData[] {
+  const allStages: Stage[] = [
+    Stage.ONBOARDING,
+    Stage.WITNESS,
+    Stage.PERSPECTIVE_STRETCH,
+    Stage.NEED_MAPPING,
+    Stage.STRATEGIC_REPAIR,
+  ];
+
+  return allStages.map((stage) => {
+    // A stage is completed if user has progressed past it
+    const isCompleted = myProgress.stage > stage ||
+      (myProgress.stage === stage && myProgress.status === StageStatus.COMPLETED);
+
+    // Use completion time from progress if this is the current completed stage
+    let completedAt: string | null = null;
+    if (myProgress.stage === stage && myProgress.completedAt) {
+      completedAt = myProgress.completedAt;
+    }
+
+    // Use stage-specific summary or fall back to default
+    const summary = DEFAULT_STAGE_SUMMARIES[stage];
+
+    return {
+      stage,
+      name: STAGE_NAMES[stage],
+      summary,
+      completedAt,
+      isCompleted,
+    };
+  });
+}
+
+/**
+ * Extract agreement/experiment text from session if available.
+ */
+function getAgreementFromSession(session: {
+  // Extended fields that may exist
+  agreement?: { experiment?: string; actions?: string[] };
+  experiment?: string;
+  resolvedAt: string | null;
+}): string | null {
+  // Check for agreement object with experiment
+  if ('agreement' in session && session.agreement?.experiment) {
+    return session.agreement.experiment;
+  }
+
+  // Check for agreement actions
+  if ('agreement' in session && session.agreement?.actions?.length) {
+    return session.agreement.actions.join('\n');
+  }
+
+  // Check for direct experiment field
+  if ('experiment' in session && session.experiment) {
+    return session.experiment;
+  }
+
+  return null;
 }
 
 // ============================================================================
@@ -249,25 +333,34 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#4F46E5',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 12,
   },
-  stageNumberText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'white',
+  stageNumberCompleted: {
+    backgroundColor: '#10B981',
+  },
+  stageNumberInProgress: {
+    backgroundColor: '#4F46E5',
+  },
+  stageInfo: {
+    flex: 1,
   },
   stageName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#4F46E5',
+    color: '#374151',
+  },
+  stageDate: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
   },
   stageSummary: {
     fontSize: 14,
     color: '#6B7280',
-    marginLeft: 32,
+    marginLeft: 36,
+    marginTop: 4,
   },
   outcomeCard: {
     margin: 16,
@@ -286,6 +379,12 @@ const styles = StyleSheet.create({
   outcomeText: {
     fontSize: 14,
     color: '#374151',
+    lineHeight: 20,
+  },
+  outcomeTextMuted: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontStyle: 'italic',
   },
   partnerSection: {
     padding: 16,

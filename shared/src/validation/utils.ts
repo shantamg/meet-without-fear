@@ -82,11 +82,11 @@ export const validationApiErrorResponseSchema = z.object({
 export const intensityRating = z.number().int().min(1).max(10);
 
 /** Phone number (E.164 format) */
-export const phoneNumber = z.string().regex(
-  /^\+?[1-9]\d{1,14}$/,
-  'Valid phone number required'
-);
+export const phoneNumber = z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Valid phone number required');
 
 /** Safe string (no XSS) */
 export const safeString = (maxLength = 1000) =>
-  z.string().max(maxLength).transform((val) => val.trim());
+  z
+    .string()
+    .max(maxLength)
+    .transform(val => val.trim());

@@ -5,7 +5,16 @@ import {
   getPendingInvitation,
   clearPendingInvitation,
   createInvitationLink,
+  useInvitationDetails,
+  type InvitationDetails,
 } from '../useInvitation';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
+
+// Import mocked API
+import { get, ApiClientError } from '@/src/lib/api';
+import { ErrorCode } from '@be-heard/shared';
 
 // Mock AsyncStorage
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -37,9 +46,6 @@ jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Linking from 'expo-linking';
 
 const mockGetItem = AsyncStorage.getItem as jest.MockedFunction<typeof AsyncStorage.getItem>;
 const mockSetItem = AsyncStorage.setItem as jest.MockedFunction<typeof AsyncStorage.setItem>;
@@ -285,5 +291,215 @@ describe('invitation flow integration', () => {
     });
 
     expect(mockRemoveItem).toHaveBeenCalledWith('pending_invitation');
+  });
+});
+
+// Mock API module for useInvitationDetails tests
+jest.mock('@/src/lib/api', () => ({
+  get: jest.fn(),
+  ApiClientError: class ApiClientError extends Error {
+    code: string;
+    status: number;
+    constructor(error: { code: string; message: string }, status: number) {
+      super(error.message);
+      this.code = error.code;
+      this.status = status;
+    }
+  },
+}));
+
+const mockGet = get as jest.MockedFunction<typeof get>;
+
+describe('useInvitationDetails', () => {
+  const mockInvitation: InvitationDetails = {
+    id: 'test-invitation-id',
+    invitedBy: {
+      id: 'inviter-id',
+      name: 'Test Inviter',
+    },
+    name: 'Test User',
+    status: 'PENDING',
+    createdAt: '2024-01-01T00:00:00.000Z',
+    expiresAt: '2024-01-08T00:00:00.000Z',
+    session: {
+      id: 'session-id',
+      status: 'INVITED',
+    },
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('starts with loading state', () => {
+    mockGet.mockImplementation(() => new Promise(() => {})); // Never resolves
+
+    const { result } = renderHook(() => useInvitationDetails('test-id'));
+
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.invitation).toBeNull();
+    expect(result.current.error).toBeNull();
+  });
+
+  it('fetches invitation details successfully', async () => {
+    mockGet.mockResolvedValue({ invitation: mockInvitation });
+
+    const { result } = renderHook(() => useInvitationDetails('test-id'));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.invitation).toEqual(mockInvitation);
+    expect(result.current.error).toBeNull();
+    expect(result.current.isExpired).toBe(false);
+    expect(result.current.isNotFound).toBe(false);
+    expect(mockGet).toHaveBeenCalledWith('/v1/invitations/test-id');
+  });
+
+  it('detects expired invitation', async () => {
+    const expiredInvitation = { ...mockInvitation, status: 'EXPIRED' as const };
+    mockGet.mockResolvedValue({ invitation: expiredInvitation });
+
+    const { result } = renderHook(() => useInvitationDetails('expired-id'));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.isExpired).toBe(true);
+    expect(result.current.invitation?.status).toBe('EXPIRED');
+  });
+
+  it('handles not found error', async () => {
+    const notFoundError = new (ApiClientError as unknown as new (error: { code: string; message: string }, status: number) => Error)(
+      { code: ErrorCode.NOT_FOUND, message: 'Not found' },
+      404
+    );
+    Object.assign(notFoundError, { code: ErrorCode.NOT_FOUND });
+    mockGet.mockRejectedValue(notFoundError);
+
+    const { result } = renderHook(() => useInvitationDetails('nonexistent-id'));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.isNotFound).toBe(true);
+    expect(result.current.error?.type).toBe('not_found');
+    expect(result.current.invitation).toBeNull();
+  });
+
+  it('handles network error', async () => {
+    const networkError = new (ApiClientError as unknown as new (error: { code: string; message: string }, status: number) => Error)(
+      { code: ErrorCode.SERVICE_UNAVAILABLE, message: 'Network error' },
+      0
+    );
+    Object.assign(networkError, { code: ErrorCode.SERVICE_UNAVAILABLE });
+    mockGet.mockRejectedValue(networkError);
+
+    const { result } = renderHook(() => useInvitationDetails('network-error-id'));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.error?.type).toBe('network');
+    expect(result.current.isNotFound).toBe(false);
+  });
+
+  it('handles null invitation ID', async () => {
+    const { result } = renderHook(() => useInvitationDetails(null));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.error?.type).toBe('not_found');
+    expect(result.current.isNotFound).toBe(true);
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it('handles undefined invitation ID', async () => {
+    const { result } = renderHook(() => useInvitationDetails(undefined));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.error?.type).toBe('not_found');
+    expect(result.current.isNotFound).toBe(true);
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it('provides refetch function', async () => {
+    mockGet.mockResolvedValue({ invitation: mockInvitation });
+
+    const { result } = renderHook(() => useInvitationDetails('refetch-id'));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+
+    // Refetch
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    expect(mockGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('refetches when invitation ID changes', async () => {
+    mockGet.mockResolvedValue({ invitation: mockInvitation });
+
+    const { result, rerender } = renderHook(
+      ({ id }) => useInvitationDetails(id),
+      { initialProps: { id: 'first-id' } }
+    );
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(mockGet).toHaveBeenCalledWith('/v1/invitations/first-id');
+
+    // Change the ID
+    rerender({ id: 'second-id' });
+
+    await waitFor(() => {
+      expect(mockGet).toHaveBeenCalledWith('/v1/invitations/second-id');
+    });
+
+    expect(mockGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('handles accepted invitation status', async () => {
+    const acceptedInvitation = { ...mockInvitation, status: 'ACCEPTED' as const };
+    mockGet.mockResolvedValue({ invitation: acceptedInvitation });
+
+    const { result } = renderHook(() => useInvitationDetails('accepted-id'));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.invitation?.status).toBe('ACCEPTED');
+    expect(result.current.isExpired).toBe(false);
+  });
+
+  it('handles declined invitation status', async () => {
+    const declinedInvitation = { ...mockInvitation, status: 'DECLINED' as const };
+    mockGet.mockResolvedValue({ invitation: declinedInvitation });
+
+    const { result } = renderHook(() => useInvitationDetails('declined-id'));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.invitation?.status).toBe('DECLINED');
+    expect(result.current.isExpired).toBe(false);
   });
 });

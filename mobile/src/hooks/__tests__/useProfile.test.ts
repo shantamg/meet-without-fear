@@ -18,6 +18,9 @@ import {
   profileKeys,
 } from '../useProfile';
 
+// Import mocked functions
+import * as api from '../../lib/api';
+
 // Mock the API module
 jest.mock('../../lib/api', () => ({
   get: jest.fn(),
@@ -36,9 +39,6 @@ jest.mock('../../lib/api', () => ({
     }
   },
 }));
-
-// Import mocked functions
-import * as api from '../../lib/api';
 
 const mockGet = api.get as jest.MockedFunction<typeof api.get>;
 const mockPost = api.post as jest.MockedFunction<typeof api.post>;

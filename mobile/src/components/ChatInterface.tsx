@@ -8,7 +8,7 @@ import {
   ListRenderItem,
 } from 'react-native';
 import type { MessageDTO } from '@be-heard/shared';
-import { ChatBubble, ChatBubbleMessage } from './ChatBubble';
+import { ChatBubble, ChatBubbleMessage, MessageDeliveryStatus } from './ChatBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { ChatInput } from './ChatInput';
 import { createStyles } from '../theme/styled';
@@ -17,8 +17,13 @@ import { createStyles } from '../theme/styled';
 // Types
 // ============================================================================
 
+/** Extended message type that includes optional delivery status */
+export interface ChatMessage extends MessageDTO {
+  status?: MessageDeliveryStatus;
+}
+
 interface ChatInterfaceProps {
-  messages: MessageDTO[];
+  messages: ChatMessage[];
   onSendMessage: (content: string) => void;
   isLoading?: boolean;
   disabled?: boolean;
@@ -43,7 +48,7 @@ export function ChatInterface({
   emptyStateMessage = DEFAULT_EMPTY_MESSAGE,
 }: ChatInterfaceProps) {
   const styles = useStyles();
-  const flatListRef = useRef<FlatList<MessageDTO>>(null);
+  const flatListRef = useRef<FlatList<ChatMessage>>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -66,17 +71,18 @@ export function ChatInterface({
     }
   }, [isLoading]);
 
-  const renderMessage: ListRenderItem<MessageDTO> = useCallback(({ item }) => {
+  const renderMessage: ListRenderItem<ChatMessage> = useCallback(({ item }) => {
     const bubbleMessage: ChatBubbleMessage = {
       id: item.id,
       role: item.role,
       content: item.content,
       timestamp: item.timestamp,
+      status: item.status,
     };
     return <ChatBubble message={bubbleMessage} />;
   }, []);
 
-  const keyExtractor = useCallback((item: MessageDTO) => item.id, []);
+  const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
 
   const renderFooter = useCallback(() => {
     if (!isLoading) return null;

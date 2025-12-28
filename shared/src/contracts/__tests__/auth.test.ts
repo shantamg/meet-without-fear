@@ -2,11 +2,7 @@
  * Auth Contracts Tests
  */
 
-import {
-  updateProfileRequestSchema,
-  updatePushTokenRequestSchema,
-  userDTOSchema,
-} from '../auth';
+import { updateProfileRequestSchema, updatePushTokenRequestSchema, userDTOSchema } from '../auth';
 
 describe('userDTOSchema', () => {
   it('accepts valid user', () => {

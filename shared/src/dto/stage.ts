@@ -33,12 +33,7 @@ export interface PartnerStageStatusDTO {
 /**
  * Gate satisfaction varies by stage. Each stage has specific requirements.
  */
-export type GateSatisfactionDTO =
-  | Stage0Gates
-  | Stage1Gates
-  | Stage2Gates
-  | Stage3Gates
-  | Stage4Gates;
+export type GateSatisfactionDTO = Stage0Gates | Stage1Gates | Stage2Gates | Stage3Gates | Stage4Gates;
 
 export interface Stage0Gates {
   stage: Stage.ONBOARDING;
@@ -51,7 +46,7 @@ export interface Stage1Gates {
   stage: Stage.WITNESS;
   feelHeardConfirmed: boolean;
   feelHeardConfirmedAt: string | null;
-  finalEmotionalReading: number | null;  // 1-10
+  finalEmotionalReading: number | null; // 1-10
 }
 
 export interface Stage2Gates {
@@ -144,7 +139,7 @@ export interface CompactStatusResponse {
 
 export interface ConfirmFeelHeardRequest {
   sessionId: string;
-  confirmed: boolean;  // false = "not yet"
+  confirmed: boolean; // false = "not yet"
 }
 
 export interface ConfirmFeelHeardResponse {

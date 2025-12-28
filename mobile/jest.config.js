@@ -1,3 +1,6 @@
+/* eslint-env node */
+const path = require('path');
+
 module.exports = {
   preset: 'jest-expo',
   transformIgnorePatterns: [
@@ -6,8 +9,16 @@ module.exports = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
   moduleNameMapper: {
     '^@shared/(.*)$': '<rootDir>/../shared/src/$1',
+    // Match tsconfig paths: @/* resolves to ./* or ./src/*
+    '^@/theme$': '<rootDir>/src/theme',
+    '^@/theme/(.*)$': '<rootDir>/src/theme/$1',
     '^@/(.*)$': '<rootDir>/$1',
   },
+  // Ensure Jest resolves modules from mobile workspace first, then root
+  moduleDirectories: [
+    path.resolve(__dirname, 'node_modules'),
+    'node_modules',
+  ],
   setupFiles: ['<rootDir>/jest.env.js'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
 };

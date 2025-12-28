@@ -37,12 +37,20 @@ export interface ActiveSessionInfo {
   lastUpdate: string;
 }
 
+export interface PendingInvitationInfo {
+  id: string;
+  sessionId: string;
+  sentAt: string;
+  expiresAt: string;
+}
+
 export interface PersonDTO {
   id: string;
   name: string;
   initials: string;
   connectedSince: string;
   activeSession: ActiveSessionInfo | null;
+  pendingInvitation: PendingInvitationInfo | null;
 }
 
 export interface PastSessionDTO {

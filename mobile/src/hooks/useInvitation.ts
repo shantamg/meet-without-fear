@@ -1,8 +1,50 @@
 import { useEffect, useState, useCallback } from 'react';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { get, ApiClientError } from '@/src/lib/api';
+import { ErrorCode } from '@be-heard/shared';
 
 const PENDING_INVITATION_KEY = 'pending_invitation';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/** Invitation status as returned by the API */
+export type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
+
+/** Invitation details returned from the API */
+export interface InvitationDetails {
+  id: string;
+  invitedBy: {
+    id: string;
+    name: string | null;
+  };
+  name: string | null;
+  status: InvitationStatus;
+  createdAt: string;
+  expiresAt: string;
+  session: {
+    id: string;
+    status: string;
+  };
+}
+
+/** Error types for invitation fetching */
+export type InvitationErrorType = 'not_found' | 'network' | 'unknown';
+
+/** State returned by useInvitationDetails hook */
+export interface UseInvitationDetailsState {
+  invitation: InvitationDetails | null;
+  isLoading: boolean;
+  error: {
+    type: InvitationErrorType;
+    message: string;
+  } | null;
+  isExpired: boolean;
+  isNotFound: boolean;
+  refetch: () => Promise<void>;
+}
 
 /**
  * Parses invitation data from a deep link URL
@@ -139,4 +181,78 @@ export function usePendingInvitation() {
 export function createInvitationLink(invitationId: string): string {
   // Use Linking.createURL for proper scheme handling
   return Linking.createURL(`invitation/${invitationId}`);
+}
+
+// ============================================================================
+// Invitation Details Hook
+// ============================================================================
+
+/**
+ * Hook to fetch and manage invitation details from the API.
+ *
+ * Handles:
+ * - Loading state during fetch
+ * - Not found errors (404)
+ * - Expired invitation detection
+ * - Network errors with retry capability
+ *
+ * @param invitationId - The invitation ID to fetch, or null/undefined to skip
+ */
+export function useInvitationDetails(
+  invitationId: string | null | undefined
+): UseInvitationDetailsState {
+  const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<{ type: InvitationErrorType; message: string } | null>(null);
+
+  const fetchInvitation = useCallback(async () => {
+    if (!invitationId) {
+      setIsLoading(false);
+      setError({ type: 'not_found', message: 'No invitation ID provided' });
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await get<{ invitation: InvitationDetails }>(
+        `/v1/invitations/${invitationId}`
+      );
+      setInvitation(response.invitation);
+    } catch (err) {
+      console.error('[useInvitationDetails] Error fetching invitation:', err);
+
+      if (err instanceof ApiClientError) {
+        if (err.code === ErrorCode.NOT_FOUND) {
+          setError({ type: 'not_found', message: 'Invitation not found' });
+        } else if (err.code === ErrorCode.SERVICE_UNAVAILABLE) {
+          setError({ type: 'network', message: 'Unable to connect. Please check your connection.' });
+        } else {
+          setError({ type: 'unknown', message: err.message || 'An unexpected error occurred' });
+        }
+      } else {
+        setError({ type: 'network', message: 'Unable to connect. Please check your connection.' });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [invitationId]);
+
+  useEffect(() => {
+    fetchInvitation();
+  }, [fetchInvitation]);
+
+  // Compute derived states
+  const isExpired = invitation?.status === 'EXPIRED';
+  const isNotFound = error?.type === 'not_found';
+
+  return {
+    invitation,
+    isLoading,
+    error,
+    isExpired,
+    isNotFound,
+    refetch: fetchInvitation,
+  };
 }

@@ -13,7 +13,7 @@ import { MessageRole, Stage } from '../enums';
 export interface MessageDTO {
   id: string;
   sessionId: string;
-  senderId: string | null;  // null for AI messages
+  senderId: string | null; // null for AI messages
   role: MessageRole;
   content: string;
   stage: Stage;
@@ -28,8 +28,8 @@ export interface SendMessageRequest {
   content: string;
 
   // Optional: include emotional reading with message
-  emotionalIntensity?: number;  // 1-10
-  emotionalContext?: string;    // Optional description
+  emotionalIntensity?: number; // 1-10
+  emotionalContext?: string; // Optional description
 }
 
 export interface SendMessageResponse {
@@ -47,7 +47,7 @@ export interface SendMessageResponse {
 
 export interface EmotionalReadingDTO {
   id: string;
-  intensity: number;  // 1-10
+  intensity: number; // 1-10
   context: string | null;
   stage: Stage;
   timestamp: string;
@@ -55,7 +55,7 @@ export interface EmotionalReadingDTO {
 
 export interface RecordEmotionalReadingRequest {
   sessionId: string;
-  intensity: number;  // 1-10
+  intensity: number; // 1-10
   context?: string;
 }
 
@@ -81,14 +81,14 @@ export enum EmotionalSupportType {
 export interface CompleteExerciseRequest {
   sessionId: string;
   exerciseType: EmotionalSupportType;
-  completed: boolean;  // false = skipped
+  completed: boolean; // false = skipped
   intensityBefore?: number;
   intensityAfter?: number;
 }
 
 export interface CompleteExerciseResponse {
   logged: boolean;
-  postExerciseCheckIn?: boolean;  // Should we ask for new reading?
+  postExerciseCheckIn?: boolean; // Should we ask for new reading?
 }
 
 // ============================================================================
@@ -97,7 +97,7 @@ export interface CompleteExerciseResponse {
 
 export interface GetMessagesRequest {
   sessionId: string;
-  stage?: Stage;  // Filter by stage
+  stage?: Stage; // Filter by stage
   cursor?: string;
   limit?: number;
 }

@@ -4,12 +4,22 @@
  */
 
 // Session stage types
+// Maps to conceptual stages in the BeHeard conflict resolution process
 export type SessionStage =
-  | 'compact'     // Stage 0: Initial compact format
-  | 'chat'        // Stage 1: AI-guided chat
-  | 'empathy'     // Stage 2: Empathy mapping
+  // Stage 0: Initial stages
+  | 'onboarding'  // Stage 0a: Session onboarding/setup
+  | 'compact'     // Stage 0b: Initial compact format entry
+  // Stage 1: Understanding
+  | 'chat'        // Stage 1a: AI-guided chat exploration
+  | 'witness'     // Stage 1b: Witness mode - being heard
+  // Stage 2: Empathy & Perspective
+  | 'empathy'     // Stage 2a: Empathy mapping
+  | 'perspective' // Stage 2b: Perspective taking/switching
+  // Stage 3: Needs
   | 'needs'       // Stage 3: Needs identification
-  | 'strategies'; // Stage 4: Strategy development
+  // Stage 4: Resolution
+  | 'strategies'  // Stage 4a: Strategy development
+  | 'review';     // Stage 4b: Session review and summary
 
 // Route parameter types for dynamic routes
 export interface SessionRouteParams {
@@ -42,14 +52,26 @@ export type AppRoutes = {
   // Session routes
   '/session/new': undefined;
   '/session/[id]': SessionRouteParams;
-  '/session/[id]/chat': SessionRouteParams;
+  // Stage 0: Initial stages
+  '/session/[id]/onboarding': SessionRouteParams;
   '/session/[id]/compact': SessionRouteParams;
+  // Stage 1: Understanding
+  '/session/[id]/chat': SessionRouteParams;
+  '/session/[id]/witness': SessionRouteParams;
+  // Stage 2: Empathy & Perspective
   '/session/[id]/empathy': SessionRouteParams;
+  '/session/[id]/perspective': SessionRouteParams;
+  // Stage 3: Needs
   '/session/[id]/needs': SessionRouteParams;
+  // Stage 4: Resolution
   '/session/[id]/strategies': SessionRouteParams;
+  '/session/[id]/review': SessionRouteParams;
 
   // Person routes
   '/person/[id]': PersonRouteParams;
+
+  // Settings routes
+  '/settings/notifications': undefined;
 };
 
 // Type for router.push with params

@@ -14,7 +14,7 @@ export interface SessionSummaryDTO {
   id: string;
   relationshipId: string;
   status: SessionStatus;
-  createdAt: string;  // ISO 8601
+  createdAt: string; // ISO 8601
   updatedAt: string;
 
   // Partner info (minimal - just what's needed for display)
@@ -28,8 +28,8 @@ export interface SessionSummaryDTO {
   partnerProgress: StageProgressDTO;
 
   // Computed helpers for UI
-  selfActionNeeded: string[];     // Gate keys the user still needs
-  partnerActionNeeded: string[];  // Gate keys partner must satisfy to unlock next stage
+  selfActionNeeded: string[]; // Gate keys the user still needs
+  partnerActionNeeded: string[]; // Gate keys partner must satisfy to unlock next stage
 }
 
 export interface StageProgressDTO {
@@ -79,10 +79,10 @@ export interface CreateSessionRequest {
   // OR invite by contact
   inviteEmail?: string;
   invitePhone?: string;
-  inviteName?: string;  // Display name for the invitation
+  inviteName?: string; // Display name for the invitation
 
   // Optional: initial context
-  context?: string;  // What this session is about (private to creator)
+  context?: string; // What this session is about (private to creator)
 }
 
 export interface CreateSessionResponse {

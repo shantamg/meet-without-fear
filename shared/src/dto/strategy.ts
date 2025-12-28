@@ -11,11 +11,11 @@ import { AgreementStatus, AgreementType } from '../enums';
 // ============================================================================
 
 export enum StrategyPhase {
-  COLLECTING = 'COLLECTING',     // Users still adding
-  RANKING = 'RANKING',           // Both ready to rank
-  REVEALING = 'REVEALING',       // Revealing overlap
-  NEGOTIATING = 'NEGOTIATING',   // Working toward agreement
-  AGREED = 'AGREED',             // Agreement reached
+  COLLECTING = 'COLLECTING', // Users still adding
+  RANKING = 'RANKING', // Both ready to rank
+  REVEALING = 'REVEALING', // Revealing overlap
+  NEGOTIATING = 'NEGOTIATING', // Working toward agreement
+  AGREED = 'AGREED', // Agreement reached
 }
 
 // ============================================================================
@@ -54,7 +54,7 @@ export interface ProposeStrategyResponse {
 // ============================================================================
 
 export interface RequestSuggestionsRequest {
-  count?: number;  // Default: 3
+  count?: number; // Default: 3
   focusNeeds?: string[];
 }
 
@@ -75,7 +75,7 @@ export interface MarkReadyResponse {
 
 export interface StrategyRanking {
   strategyId: string;
-  rank: number;  // 1 = top choice
+  rank: number; // 1 = top choice
 }
 
 export interface SubmitRankingRequest {

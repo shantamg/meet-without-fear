@@ -46,6 +46,38 @@ export interface UpdatePushTokenResponse {
   registered: boolean;
 }
 
+// ============================================================================
+// Notification Preferences
+// ============================================================================
+
+export interface NotificationPreferencesDTO {
+  /** Master toggle for push notifications */
+  pushEnabled: boolean;
+  /** Master toggle for email notifications */
+  emailEnabled: boolean;
+  /** Notify when receiving new session invitations */
+  newInvitations: boolean;
+  /** Notify on partner actions (signed compact, completed stage, etc.) */
+  partnerActions: boolean;
+  /** Send follow-up reminders for agreements */
+  followUpReminders: boolean;
+}
+
+export interface GetNotificationPreferencesResponse {
+  preferences: NotificationPreferencesDTO;
+}
+
+export interface UpdateNotificationPreferencesRequest {
+  pushEnabled?: boolean;
+  emailEnabled?: boolean;
+  newInvitations?: boolean;
+  partnerActions?: boolean;
+  followUpReminders?: boolean;
+}
+
+export interface UpdateNotificationPreferencesResponse {
+  preferences: NotificationPreferencesDTO;
+}
 
 // ============================================================================
 // Ably Token

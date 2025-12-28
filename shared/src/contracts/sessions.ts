@@ -77,7 +77,7 @@ export const createSessionRequestSchema = z
     inviteName: z.string().max(100, 'Name too long').optional(),
     context: z.string().max(500, 'Context too long').optional(),
   })
-  .refine((data) => data.personId || data.inviteEmail || data.invitePhone, {
+  .refine(data => data.personId || data.inviteEmail || data.invitePhone, {
     message: 'Must provide personId, inviteEmail, or invitePhone',
   });
 

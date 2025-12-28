@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Animated, {
   useSharedValue,
   withTiming,
-  withSequence,
   useAnimatedStyle,
   Easing,
   cancelAnimation,

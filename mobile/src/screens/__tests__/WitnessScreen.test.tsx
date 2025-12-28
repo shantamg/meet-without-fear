@@ -8,6 +8,9 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { Stage, MessageRole } from '@be-heard/shared';
 
+// Import after mocks
+import WitnessScreen from '../../../app/(auth)/session/[id]/witness';
+
 // Mock expo-router
 const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
@@ -52,7 +55,7 @@ jest.mock('../../hooks/useSessions', () => ({
 }));
 
 // Create a variable to control messages from tests
-let mockMessages: Array<{
+let mockMessages: {
   id: string;
   role: string;
   content: string;
@@ -60,7 +63,7 @@ let mockMessages: Array<{
   senderId: string | null;
   stage: number;
   timestamp: string;
-}> = [];
+}[] = [];
 
 let mockMyProgressStage = Stage.WITNESS;
 let mockPartnerProgressStage = Stage.WITNESS;
@@ -116,9 +119,6 @@ jest.mock('../../hooks/useStages', () => ({
     isLoading: false,
   }),
 }));
-
-// Import after mocks
-import WitnessScreen from '../../../app/(auth)/session/[id]/witness';
 
 describe('WitnessScreen', () => {
   beforeEach(() => {

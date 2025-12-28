@@ -21,13 +21,13 @@ import {
   SaveEmpathyDraftResponse,
   ConsentToShareEmpathyResponse,
   GetProgressResponse,
+  GateSatisfactionDTO,
+  StageBlockedReason,
   // DTOs
-  EmpathyDraftDTO,
   GetEmpathyDraftResponse,
   GetPartnerEmpathyResponse,
   ValidateEmpathyRequest,
   ValidateEmpathyResponse,
-  IdentifiedNeedDTO,
   GetNeedsResponse,
   ConfirmNeedsRequest,
   ConfirmNeedsResponse,
@@ -36,23 +36,21 @@ import {
   ConfirmCommonGroundResponse,
   AddNeedRequest,
   AddNeedResponse,
-  ConsentShareNeedsRequest,
   ConsentShareNeedsResponse,
   StrategyDTO,
   GetStrategiesResponse,
   ProposeStrategyRequest,
   ProposeStrategyResponse,
-  SubmitRankingRequest,
   SubmitRankingResponse,
   RevealOverlapResponse,
   MarkReadyResponse,
   AgreementDTO,
   CreateAgreementRequest,
   CreateAgreementResponse,
-  ConfirmAgreementRequest,
   ConfirmAgreementResponse,
   ResolveSessionResponse,
   Stage,
+  StageStatus,
 } from '@be-heard/shared';
 import { sessionKeys } from './useSessions';
 
@@ -66,6 +64,10 @@ export const stageKeys = {
 
   // Stage 0: Compact
   compact: (sessionId: string) => [...stageKeys.all, 'compact', sessionId] as const,
+
+  // Gate status
+  gates: (sessionId: string, stage: number) =>
+    [...stageKeys.all, 'gates', sessionId, stage] as const,
 
   // Stage 2: Empathy
   empathyDraft: (sessionId: string) =>
@@ -778,6 +780,84 @@ export function useResolveSession(
       queryClient.invalidateQueries({ queryKey: sessionKeys.lists() });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
     },
+    ...options,
+  });
+}
+
+// ============================================================================
+// Stage Advancement
+// ============================================================================
+
+/**
+ * Response type for advance stage API.
+ * Based on backend controller implementation.
+ */
+interface AdvanceStageApiResponse {
+  advanced: boolean;
+  newStage: number;
+  newStatus: StageStatus | 'NOT_STARTED';
+  advancedAt: string | null;
+  blockedReason?: StageBlockedReason;
+  unsatisfiedGates?: string[];
+}
+
+/**
+ * Advance to the next stage.
+ * POST /sessions/:id/stages/advance
+ */
+export function useAdvanceStage(
+  options?: Omit<
+    UseMutationOptions<AdvanceStageApiResponse, ApiClientError, { sessionId: string }>,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId }) => {
+      return post<AdvanceStageApiResponse>(`/sessions/${sessionId}/stages/advance`);
+    },
+    onSuccess: (_, { sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+    },
+    ...options,
+  });
+}
+
+// ============================================================================
+// Gate Status
+// ============================================================================
+
+/**
+ * Response type for gate status API.
+ */
+interface GateStatusResponse {
+  stage: Stage;
+  gates: GateSatisfactionDTO;
+}
+
+/**
+ * Get gate satisfaction status for a specific stage.
+ * GET /sessions/:id/stages/:stage/gates
+ */
+export function useGateStatus(
+  sessionId: string | undefined,
+  stage: number | undefined,
+  options?: Omit<
+    UseQueryOptions<GateStatusResponse, ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: stageKeys.gates(sessionId || '', stage ?? 0),
+    queryFn: async () => {
+      if (!sessionId) throw new Error('Session ID is required');
+      if (stage === undefined) throw new Error('Stage is required');
+      return get<GateStatusResponse>(`/sessions/${sessionId}/stages/${stage}/gates`);
+    },
+    enabled: !!sessionId && stage !== undefined,
+    staleTime: 15_000, // Gates can change frequently during a stage
     ...options,
   });
 }

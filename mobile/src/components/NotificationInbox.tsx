@@ -8,6 +8,7 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Mail, Users, MessageCircle, Calendar, CheckCircle, Bell } from 'lucide-react-native';
+import { colors } from '@/src/theme';
 
 // ============================================================================
 // Types
@@ -54,11 +55,11 @@ const NOTIFICATION_ICONS: Record<NotificationType, typeof Bell> = {
 };
 
 const NOTIFICATION_COLORS: Record<NotificationType, string> = {
-  invite: '#4F46E5',
-  stage: '#10B981',
+  invite: colors.accent,
+  stage: colors.success,
   message: '#3B82F6',
-  followup: '#F59E0B',
-  general: '#6B7280',
+  followup: colors.warning,
+  general: colors.textMuted,
 };
 
 // ============================================================================
@@ -160,7 +161,7 @@ export function NotificationInbox({
         {unreadCount > 0 && onMarkAllRead && (
           <TouchableOpacity onPress={onMarkAllRead} testID="mark-all-read-button">
             <View style={styles.markAllReadButton}>
-              <CheckCircle color="#4F46E5" size={16} />
+              <CheckCircle color={colors.accent} size={16} />
               <Text style={styles.markAllReadText}>Mark all read</Text>
             </View>
           </TouchableOpacity>
@@ -172,7 +173,7 @@ export function NotificationInbox({
   const renderEmpty = () => (
     <View style={styles.emptyContainer} testID="notification-inbox-empty">
       <View style={styles.emptyIconContainer}>
-        <Bell color="#9CA3AF" size={48} />
+        <Bell color={colors.textMuted} size={48} />
       </View>
       <Text style={styles.emptyTitle}>No notifications</Text>
       <Text style={styles.emptyDescription}>
@@ -216,12 +217,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1F2937',
+    color: colors.textPrimary,
   },
   markAllReadButton: {
     flexDirection: 'row',
@@ -230,18 +231,18 @@ const styles = StyleSheet.create({
   },
   markAllReadText: {
     fontSize: 14,
-    color: '#4F46E5',
+    color: colors.accent,
     fontWeight: '500',
   },
   item: {
     flexDirection: 'row',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderBottomColor: colors.border,
+    backgroundColor: colors.bgSecondary,
   },
   unread: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: colors.bgTertiary,
   },
   iconContainer: {
     width: 40,
@@ -257,7 +258,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1F2937',
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   unreadTitle: {
@@ -265,19 +266,19 @@ const styles = StyleSheet.create({
   },
   body: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   timestamp: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: colors.textMuted,
     marginTop: 6,
   },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     alignSelf: 'center',
     marginLeft: 8,
   },
@@ -294,7 +295,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.bgTertiary,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -302,12 +303,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
+    color: colors.textPrimary,
     marginBottom: 8,
   },
   emptyDescription: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 20,
@@ -315,11 +316,11 @@ const styles = StyleSheet.create({
   emptyAction: {
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accent,
     borderRadius: 8,
   },
   emptyActionText: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
   },

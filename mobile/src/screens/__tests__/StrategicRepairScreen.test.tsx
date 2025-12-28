@@ -9,6 +9,9 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { StrategyPhase } from '@be-heard/shared';
 
+// Import after mocks
+import { StrategicRepairScreen } from '../StrategicRepairScreen';
+
 // ============================================================================
 // Mocks
 // ============================================================================
@@ -152,9 +155,6 @@ jest.mock('../../hooks/useStages', () => ({
     mutate: mockResolveSession,
   }),
 }));
-
-// Import after mocks
-import { StrategicRepairScreen } from '../StrategicRepairScreen';
 
 // ============================================================================
 // Tests

@@ -7,12 +7,15 @@ import { colors } from '../theme';
 // Types
 // ============================================================================
 
+export type MessageDeliveryStatus = 'sending' | 'sent' | 'delivered' | 'read';
+
 export interface ChatBubbleMessage {
   id: string;
   role: MessageRole;
   content: string;
   timestamp: string;
   isIntervention?: boolean;
+  status?: MessageDeliveryStatus;
 }
 
 interface ChatBubbleProps {
@@ -33,6 +36,19 @@ export function ChatBubble({ message, showTimestamp = true }: ChatBubbleProps) {
   const formatTime = (timestamp: string): string => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getStatusText = (status: MessageDeliveryStatus): string => {
+    switch (status) {
+      case 'sending':
+        return 'Sending...';
+      case 'sent':
+        return 'Sent';
+      case 'delivered':
+        return 'Delivered';
+      case 'read':
+        return 'Read';
+    }
   };
 
   // Determine container alignment
@@ -64,11 +80,24 @@ export function ChatBubble({ message, showTimestamp = true }: ChatBubbleProps) {
       <View style={[styles.bubble, getBubbleStyle()]}>
         <Text style={getTextStyle()}>{message.content}</Text>
       </View>
-      {showTimestamp && (
-        <Text style={[styles.time, isSystem && styles.systemTime]}>
-          {formatTime(message.timestamp)}
-        </Text>
-      )}
+      <View style={styles.metaContainer}>
+        {showTimestamp && (
+          <Text style={[styles.time, isSystem && styles.systemTime]}>
+            {formatTime(message.timestamp)}
+          </Text>
+        )}
+        {isUser && message.status && (
+          <Text
+            style={[
+              styles.statusText,
+              message.status === 'sending' && styles.statusSending,
+              message.status === 'read' && styles.statusRead,
+            ]}
+          >
+            {getStatusText(message.status)}
+          </Text>
+        )}
+      </View>
     </View>
   );
 }
@@ -98,9 +127,13 @@ const useStyles = () =>
       paddingHorizontal: t.spacing.lg,
       borderRadius: 16,
     },
-    // AI messages: no background, just text
+    // AI messages: light gray background with asymmetric border radius
     aiBubble: {
-      padding: 0,
+      backgroundColor: colors.bgSecondary,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 16,
+      borderBottomLeftRadius: 4,
     },
     // System messages: bgTertiary background, 12px border-radius, centered
     systemBubble: {
@@ -134,12 +167,28 @@ const useStyles = () =>
       fontFamily: t.typography.fontFamily.regular,
       textAlign: 'center',
     },
+    metaContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.spacing.sm,
+      marginTop: t.spacing.xs,
+    },
     time: {
       fontSize: t.typography.fontSize.sm,
       color: colors.textSecondary,
-      marginTop: t.spacing.xs,
     },
     systemTime: {
       textAlign: 'center',
+    },
+    statusText: {
+      fontSize: t.typography.fontSize.xs,
+      color: colors.textMuted,
+      fontFamily: t.typography.fontFamily.regular,
+    },
+    statusSending: {
+      fontStyle: 'italic',
+    },
+    statusRead: {
+      color: colors.accent,
     },
   }));

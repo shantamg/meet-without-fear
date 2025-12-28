@@ -1,3 +1,4 @@
+/* eslint-env jest, node */
 // Jest setup file for React Native / Expo
 // Add mocks as needed
 

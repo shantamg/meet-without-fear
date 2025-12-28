@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { uuid, intensityRating } from './utils';
+import { intensityRating } from './utils';
 
 // ============================================================================
 // Record Barometer Reading

@@ -2,25 +2,16 @@
  * Session Validation Schema Tests
  */
 
-import {
-  stageSchema,
-  sessionStatusSchema,
-  stageStatusSchema,
-  stageProgressSchema,
-} from '../session';
+import { stageSchema, sessionStatusSchema, stageStatusSchema, stageProgressSchema } from '../session';
 import { Stage, SessionStatus, StageStatus } from '../../enums';
 
 describe('stageSchema', () => {
   it('validates all stage values', () => {
     expect(stageSchema.parse(Stage.ONBOARDING)).toBe(Stage.ONBOARDING);
     expect(stageSchema.parse(Stage.WITNESS)).toBe(Stage.WITNESS);
-    expect(stageSchema.parse(Stage.PERSPECTIVE_STRETCH)).toBe(
-      Stage.PERSPECTIVE_STRETCH
-    );
+    expect(stageSchema.parse(Stage.PERSPECTIVE_STRETCH)).toBe(Stage.PERSPECTIVE_STRETCH);
     expect(stageSchema.parse(Stage.NEED_MAPPING)).toBe(Stage.NEED_MAPPING);
-    expect(stageSchema.parse(Stage.STRATEGIC_REPAIR)).toBe(
-      Stage.STRATEGIC_REPAIR
-    );
+    expect(stageSchema.parse(Stage.STRATEGIC_REPAIR)).toBe(Stage.STRATEGIC_REPAIR);
   });
 
   it('rejects invalid stage', () => {
@@ -31,15 +22,9 @@ describe('stageSchema', () => {
 
 describe('sessionStatusSchema', () => {
   it('validates all session status values', () => {
-    expect(sessionStatusSchema.parse(SessionStatus.CREATED)).toBe(
-      SessionStatus.CREATED
-    );
-    expect(sessionStatusSchema.parse(SessionStatus.ACTIVE)).toBe(
-      SessionStatus.ACTIVE
-    );
-    expect(sessionStatusSchema.parse(SessionStatus.RESOLVED)).toBe(
-      SessionStatus.RESOLVED
-    );
+    expect(sessionStatusSchema.parse(SessionStatus.CREATED)).toBe(SessionStatus.CREATED);
+    expect(sessionStatusSchema.parse(SessionStatus.ACTIVE)).toBe(SessionStatus.ACTIVE);
+    expect(sessionStatusSchema.parse(SessionStatus.RESOLVED)).toBe(SessionStatus.RESOLVED);
   });
 
   it('rejects invalid status', () => {
@@ -49,15 +34,9 @@ describe('sessionStatusSchema', () => {
 
 describe('stageStatusSchema', () => {
   it('validates all stage status values', () => {
-    expect(stageStatusSchema.parse(StageStatus.NOT_STARTED)).toBe(
-      StageStatus.NOT_STARTED
-    );
-    expect(stageStatusSchema.parse(StageStatus.IN_PROGRESS)).toBe(
-      StageStatus.IN_PROGRESS
-    );
-    expect(stageStatusSchema.parse(StageStatus.COMPLETED)).toBe(
-      StageStatus.COMPLETED
-    );
+    expect(stageStatusSchema.parse(StageStatus.NOT_STARTED)).toBe(StageStatus.NOT_STARTED);
+    expect(stageStatusSchema.parse(StageStatus.IN_PROGRESS)).toBe(StageStatus.IN_PROGRESS);
+    expect(stageStatusSchema.parse(StageStatus.COMPLETED)).toBe(StageStatus.COMPLETED);
   });
 
   it('rejects invalid status', () => {

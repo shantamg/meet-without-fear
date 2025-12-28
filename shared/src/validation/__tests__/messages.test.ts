@@ -2,11 +2,7 @@
  * Messages Validation Tests
  */
 
-import {
-  sendMessageRequestSchema,
-  getMessagesQuerySchema,
-  messageResponseSchema,
-} from '../messages';
+import { sendMessageRequestSchema, getMessagesQuerySchema, messageResponseSchema } from '../messages';
 import { MessageRole } from '../../enums';
 
 describe('sendMessageRequestSchema', () => {

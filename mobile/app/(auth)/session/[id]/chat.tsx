@@ -20,6 +20,7 @@ import {
   useOptimisticMessage,
 } from '@/src/hooks/useMessages';
 import { ChatInterface } from '@/src/components/ChatInterface';
+import { ChatHeader } from '@/src/components/ChatHeader';
 import { Stage, MessageRole } from '@be-heard/shared';
 import { createStyles } from '@/src/theme/styled';
 
@@ -102,6 +103,13 @@ export default function ChatScreen() {
         }}
       />
       <View style={styles.container}>
+        <ChatHeader
+          stageName="Conversation"
+          stageNumber={1}
+          stageDescription="Continue the conversation with AI assistance."
+          showProgress={false}
+          testID="chat-screen-header"
+        />
         <ChatInterface
           messages={messages}
           onSendMessage={handleSendMessage}

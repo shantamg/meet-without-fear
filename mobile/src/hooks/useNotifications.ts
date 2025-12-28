@@ -6,7 +6,6 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as Notifications from 'expo-notifications';
-import { type EventSubscription } from 'expo-modules-core';
 import { useRouter } from 'expo-router';
 import {
   getExpoPushToken,
@@ -79,8 +78,8 @@ export function useNotifications(): UseNotificationsReturn {
   );
 
   // Refs for subscription cleanup
-  const notificationListener = useRef<EventSubscription | null>(null);
-  const responseListener = useRef<EventSubscription | null>(null);
+  const notificationListener = useRef<Notifications.EventSubscription | null>(null);
+  const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   // Request permission callback
   const requestPermission = useCallback(async (): Promise<boolean> => {

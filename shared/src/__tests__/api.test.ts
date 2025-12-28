@@ -1,17 +1,12 @@
 import { z } from 'zod';
-import {
-  apiErrorSchema,
-  apiResponseSchema,
-  apiErrorResponseSchema,
-  ApiErrorCode,
-} from '../api';
+import { apiErrorSchema, apiResponseSchema, apiErrorResponseSchema, ApiErrorCode } from '../api';
 
 describe('API wrappers', () => {
   it('parses successful responses', () => {
     const schema = apiResponseSchema(
       z.object({
         value: z.string(),
-      })
+      }),
     );
 
     const result = schema.safeParse({

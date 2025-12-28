@@ -1,7 +1,36 @@
-import { Tabs } from 'expo-router';
-import { Home, MessageSquare, User } from 'lucide-react-native';
-import { StyleSheet } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
+import { Home, MessageSquare, User, Bell } from 'lucide-react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { colors } from '@/src/theme';
+import { NotificationBadge } from '@/src/components/NotificationBadge';
+import { useUnreadCount } from '@/src/hooks/useUnreadCount';
+
+/**
+ * Header notification bell button with badge
+ */
+function NotificationButton() {
+  const router = useRouter();
+  const { unreadCount } = useUnreadCount();
+
+  const handlePress = () => {
+    router.push('/notifications');
+  };
+
+  return (
+    <TouchableOpacity
+      style={styles.notificationButton}
+      onPress={handlePress}
+      accessibilityLabel={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+      accessibilityRole="button"
+      testID="notification-bell-button"
+    >
+      <View>
+        <Bell color={colors.textPrimary} size={22} />
+        <NotificationBadge count={unreadCount} />
+      </View>
+    </TouchableOpacity>
+  );
+}
 
 /**
  * Tab bar configuration
@@ -25,6 +54,7 @@ export default function TabLayout() {
           title: 'Home',
           tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
           headerTitle: 'BeHeard',
+          headerRight: () => <NotificationButton />,
         }}
       />
       <Tabs.Screen
@@ -73,5 +103,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 17,
     color: colors.textPrimary,
+  },
+  notificationButton: {
+    padding: 8,
+    marginRight: 8,
   },
 });

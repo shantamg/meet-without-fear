@@ -1,7 +1,36 @@
-import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useCallback } from 'react';
 import { colors } from '@/theme';
+
+/**
+ * Threshold for showing breathing exercise suggestion
+ * Plan specifies >= 8 for "Intense" zone
+ */
+const SUGGESTION_THRESHOLD = 8;
+
+/**
+ * Display mode for the barometer
+ * - 'full': Full slider view with all options (default)
+ * - 'compact': Smaller inline view for embedding
+ * - 'quick': Just 3 buttons for quick selection
+ */
+export type PromptMode = 'full' | 'compact' | 'quick';
+
+/**
+ * Quick selection options for 'quick' mode
+ */
+interface QuickOption {
+  label: string;
+  value: number;
+  color: string;
+}
+
+const QUICK_OPTIONS: QuickOption[] = [
+  { label: 'Calm', value: 2, color: colors.calm },
+  { label: 'Mixed', value: 6, color: colors.elevated },
+  { label: 'Intense', value: 9, color: colors.intense },
+];
 
 /**
  * Intensity level configuration with label and color
@@ -28,14 +57,20 @@ export interface EmotionalBarometerProps {
   onContextChange?: (context: string) => void;
   /** Current context value */
   context?: string;
+  /** Display mode for periodic prompts */
+  promptMode?: PromptMode;
 }
 
 /**
  * Intensity level definitions mapping values to labels and colors
+ * Zone boundaries per plan:
+ * - Calm: 1-4
+ * - Elevated: 5-7
+ * - Intense: 8-10
  */
 const INTENSITY_LEVELS: IntensityLevel[] = [
-  { max: 3, label: 'Calm', color: colors.calm },
-  { max: 6, label: 'Elevated', color: colors.elevated },
+  { max: 4, label: 'Calm', color: colors.calm },
+  { max: 7, label: 'Elevated', color: colors.elevated },
   { max: 10, label: 'Intense', color: colors.intense },
 ];
 
@@ -75,8 +110,13 @@ function getGradientColor(value: number): string {
  * EmotionalBarometer - A slider component for checking in emotional intensity
  *
  * Displays a 1-10 slider with color gradient from green (calm) to red (intense).
- * Shows a suggestion to take a moment when intensity is high (>=9).
+ * Shows a suggestion to take a moment when intensity is high (>=8).
  * Optionally allows entering context about the emotional state.
+ *
+ * Supports multiple prompt modes:
+ * - 'full': Full slider view with all options (default)
+ * - 'compact': Smaller inline view for embedding
+ * - 'quick': Just 3 buttons for quick selection (Calm/Mixed/Intense)
  */
 export function EmotionalBarometer({
   value,
@@ -85,6 +125,7 @@ export function EmotionalBarometer({
   showContextInput = false,
   onContextChange,
   context = '',
+  promptMode = 'full',
 }: EmotionalBarometerProps) {
   const currentLevel = getIntensityLevel(value);
   const currentColor = getGradientColor(value);
@@ -103,6 +144,79 @@ export function EmotionalBarometer({
     [onContextChange]
   );
 
+  const handleQuickSelect = useCallback(
+    (selectedValue: number) => {
+      onChange(selectedValue);
+    },
+    [onChange]
+  );
+
+  // Quick mode: 3 tappable buttons for fast selection
+  if (promptMode === 'quick') {
+    return (
+      <View style={styles.quickContainer}>
+        {showLabel && (
+          <Text style={styles.quickLabel}>How are you feeling?</Text>
+        )}
+        <View style={styles.quickButtonsRow}>
+          {QUICK_OPTIONS.map((option) => {
+            const isSelected = getIntensityLevel(value).label === option.label ||
+              (option.label === 'Mixed' && getIntensityLevel(value).label === 'Elevated');
+            return (
+              <TouchableOpacity
+                key={option.label}
+                testID={`quick-${option.label.toLowerCase()}`}
+                style={[
+                  styles.quickButton,
+                  { borderColor: option.color },
+                  isSelected && { backgroundColor: option.color },
+                ]}
+                onPress={() => handleQuickSelect(option.value)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.quickButtonText,
+                    { color: isSelected ? colors.textPrimary : option.color },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+
+  // Compact mode: smaller inline view
+  if (promptMode === 'compact') {
+    return (
+      <View style={styles.compactContainer}>
+        <View style={styles.compactHeader}>
+          <Text style={styles.compactLabel}>Feeling:</Text>
+          <Text style={[styles.compactValue, { color: currentColor }]}>
+            {currentLevel.label}
+          </Text>
+        </View>
+        <Slider
+          testID="slider"
+          style={styles.compactSlider}
+          minimumValue={1}
+          maximumValue={10}
+          step={1}
+          value={value}
+          onValueChange={handleValueChange}
+          minimumTrackTintColor={currentColor}
+          maximumTrackTintColor={colors.bgTertiary}
+          thumbTintColor={currentColor}
+        />
+      </View>
+    );
+  }
+
+  // Full mode (default): complete slider view
   return (
     <View style={styles.container}>
       {showLabel && (
@@ -133,7 +247,7 @@ export function EmotionalBarometer({
         <Text style={styles.scaleLabel}>Intense</Text>
       </View>
 
-      {value >= 9 && (
+      {value >= SUGGESTION_THRESHOLD && (
         <View style={styles.suggestion}>
           <Text style={styles.suggestionText}>
             Take a moment to ground yourself before continuing
@@ -162,6 +276,7 @@ export function EmotionalBarometer({
 }
 
 const styles = StyleSheet.create({
+  // Full mode styles
   container: {
     padding: 16,
     backgroundColor: colors.bgSecondary,
@@ -226,6 +341,64 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     minHeight: 80,
     backgroundColor: colors.bgPrimary,
+  },
+
+  // Quick mode styles
+  quickContainer: {
+    padding: 12,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 12,
+  },
+  quickLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  quickButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  quickButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  quickButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Compact mode styles
+  compactContainer: {
+    padding: 8,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 8,
+  },
+  compactHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  compactLabel: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  compactValue: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  compactSlider: {
+    width: '100%',
+    height: 24,
   },
 });
 

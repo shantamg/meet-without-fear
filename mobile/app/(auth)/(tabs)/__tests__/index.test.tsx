@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, screen, fireEvent } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import HomeScreen from '../index';
 import { SessionSummaryDTO, SessionStatus, Stage, StageStatus } from '@be-heard/shared';
@@ -190,7 +190,7 @@ describe('HomeScreen', () => {
     renderWithProviders(<HomeScreen />);
 
     // The hero card should be the one with action needed
-    const heroCard = screen.getByTestId('hero-card');
+    expect(screen.getByTestId('hero-card')).toBeTruthy();
     // The hero card should contain "Your turn" since it has action needed
     expect(screen.getByText('Your turn')).toBeTruthy();
   });

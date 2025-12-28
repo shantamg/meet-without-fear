@@ -18,6 +18,9 @@ import {
 } from '../useMessages';
 import { MessageRole, Stage, EmotionalSupportType } from '@be-heard/shared';
 
+// Import mocked functions
+import * as api from '../../lib/api';
+
 // Mock the API module
 jest.mock('../../lib/api', () => ({
   get: jest.fn(),
@@ -32,9 +35,6 @@ jest.mock('../../lib/api', () => ({
     }
   },
 }));
-
-// Import mocked functions
-import * as api from '../../lib/api';
 
 const mockGet = api.get as jest.MockedFunction<typeof api.get>;
 const mockPost = api.post as jest.MockedFunction<typeof api.post>;
@@ -412,7 +412,7 @@ describe('useMessages', () => {
       // Message should be removed from cache
       const updatedCache = queryClient.getQueryData(messageKeys.list('session-123'));
       if (updatedCache && typeof updatedCache === 'object' && 'messages' in updatedCache) {
-        const messages = (updatedCache as { messages: Array<{ id: string }> }).messages;
+        const messages = (updatedCache as { messages: { id: string }[] }).messages;
         expect(messages.find((m) => m.id === optimisticId)).toBeUndefined();
       }
     });

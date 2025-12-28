@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Send } from 'lucide-react-native';
+import { Send } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCreateSession } from '@/src/hooks/useSessions';
 import { colors } from '@/src/theme';

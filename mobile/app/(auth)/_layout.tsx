@@ -57,6 +57,15 @@ export default function AuthLayout() {
           title: 'Person',
         }}
       />
+
+      {/* Notifications */}
+      <Stack.Screen
+        name="notifications"
+        options={{
+          headerShown: true,
+          title: 'Notifications',
+        }}
+      />
     </Stack>
   );
 }

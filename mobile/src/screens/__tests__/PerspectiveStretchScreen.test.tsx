@@ -9,6 +9,9 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { Stage, StageStatus } from '@be-heard/shared';
 
+// Import after mocks
+import { PerspectiveStretchScreen } from '../PerspectiveStretchScreen';
+
 // ============================================================================
 // Mocks
 // ============================================================================
@@ -155,9 +158,6 @@ jest.mock('../../hooks/useMessages', () => ({
     isPending: false,
   }),
 }));
-
-// Import after mocks
-import { PerspectiveStretchScreen } from '../PerspectiveStretchScreen';
 
 // ============================================================================
 // Tests

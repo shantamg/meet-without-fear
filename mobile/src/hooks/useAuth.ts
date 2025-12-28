@@ -237,7 +237,7 @@ export function useAuthProvider(): AuthContextValue {
           pendingVerification: false,
         });
         return true;
-      } catch (err) {
+      } catch {
         if (fallbackUser) {
           setState({
             user: fallbackUser,

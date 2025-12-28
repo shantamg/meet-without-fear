@@ -1,279 +1,68 @@
-import { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSignIn, useOAuth } from '@clerk/clerk-expo';
-import * as WebBrowser from 'expo-web-browser';
-import { AntDesign } from '@expo/vector-icons';
 import { colors } from '@/theme';
 
-WebBrowser.maybeCompleteAuthSession();
-
 /**
- * Unified authentication screen
- * Handles both login and signup via OAuth
+ * Welcome screen - the first screen users see
+ * Shows branding, tagline, and CTAs to get started or sign in
  */
 export default function WelcomeScreen() {
-  const { signIn, setActive, isLoaded } = useSignIn();
-  const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
-  const { startOAuthFlow: startAppleOAuth } = useOAuth({ strategy: 'oauth_apple' });
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [pendingVerification, setPendingVerification] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleOAuthSignIn = async (startOAuthFlow: any, provider: string) => {
-    try {
-      console.log(`Starting OAuth flow for ${provider}...`);
-      const result = await startOAuthFlow();
-      console.log('OAuth result:', result);
-
-      // Check if we have a valid session
-      if (result.createdSessionId && result.setActive) {
-        console.log('Session created:', result.createdSessionId);
-        await result.setActive({ session: result.createdSessionId });
-        console.log('Session activated, redirecting...');
-        router.replace('/(auth)/(tabs)');
-      } else if (result.signUp?.createdSessionId && result.setActive) {
-        // Sometimes session is in signUp object
-        console.log('Session from signUp:', result.signUp.createdSessionId);
-        await result.setActive({ session: result.signUp.createdSessionId });
-        router.replace('/(auth)/(tabs)');
-      } else if (result.signIn?.createdSessionId && result.setActive) {
-        // Or in signIn object
-        console.log('Session from signIn:', result.signIn.createdSessionId);
-        await result.setActive({ session: result.signIn.createdSessionId });
-        router.replace('/(auth)/(tabs)');
-      } else {
-        console.log('No session created. SignUp status:', result.signUp?.status);
-        console.log('Missing fields:', result.signUp?.missingFields);
-        setError('Please complete your profile in Clerk dashboard or make phone number optional');
-      }
-    } catch (err) {
-      console.error(`OAuth error (${provider}):`, err);
-      setError(`Failed to continue with ${provider}`);
-    }
+  const handleGetStarted = () => {
+    router.push('/(public)/auth-options');
   };
 
-  const handleSendCode = async () => {
-    if (!email.trim()) {
-      setError('Please enter your email');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setError('Please enter a valid email');
-      return;
-    }
-
-    if (!isLoaded) {
-      setError('Authentication not ready');
-      return;
-    }
-
-    setError(null);
-    setIsLoading(true);
-
-    try {
-      if (!signIn) {
-        throw new Error('Sign in not initialized');
-      }
-
-      const signInAttempt = await signIn.create({
-        identifier: email.trim().toLowerCase(),
-      });
-
-      const emailCodeFactor = signInAttempt.supportedFirstFactors?.find(
-        (f) => f.strategy === 'email_code' && 'emailAddressId' in f
-      );
-
-      if (!emailCodeFactor || !('emailAddressId' in emailCodeFactor)) {
-        throw new Error('Email code verification not available');
-      }
-
-      await signIn.prepareFirstFactor({
-        strategy: 'email_code',
-        emailAddressId: emailCodeFactor.emailAddressId,
-      });
-
-      setPendingVerification(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to send code';
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleSignIn = () => {
+    router.push('/(public)/auth-options');
   };
 
-  const handleVerifyCode = async () => {
-    if (!code.trim()) {
-      setError('Please enter the verification code');
-      return;
-    }
-
-    if (code.length !== 6) {
-      setError('Code must be 6 digits');
-      return;
-    }
-
-    if (!isLoaded) {
-      setError('Authentication not ready');
-      return;
-    }
-
-    setError(null);
-    setIsLoading(true);
-
-    try {
-      if (!signIn || !setActive) {
-        throw new Error('Sign in not initialized');
-      }
-
-      const signInAttempt = await signIn.attemptFirstFactor({
-        strategy: 'email_code',
-        code,
-      });
-
-      if (signInAttempt.status === 'complete') {
-        await setActive({ session: signInAttempt.createdSessionId });
-        router.replace('/(auth)/(tabs)');
-      } else {
-        setError('Verification failed. Please try again.');
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Invalid code';
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleTerms = () => {
+    // Placeholder URL - replace with actual terms page
+    Linking.openURL('https://beheard.app/terms');
   };
 
-  if (pendingVerification) {
-    return (
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        <View style={styles.content}>
-          <Text style={styles.title}>Enter verification code</Text>
-          <Text style={styles.subtitle}>We sent a code to {email}</Text>
-
-          {error && <Text style={styles.error}>{error}</Text>}
-
-          <TextInput
-            style={styles.codeInput}
-            value={code}
-            onChangeText={setCode}
-            placeholder="000000"
-            placeholderTextColor={colors.textSecondary}
-            keyboardType="number-pad"
-            maxLength={6}
-            autoFocus
-            textAlign="center"
-          />
-
-          <TouchableOpacity
-            style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={handleVerifyCode}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>Verify</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.linkButton}
-            onPress={() => {
-              setCode('');
-              setError(null);
-              setPendingVerification(false);
-            }}
-          >
-            <Text style={styles.linkText}>Use a different email</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    );
-  }
+  const handlePrivacy = () => {
+    // Placeholder URL - replace with actual privacy page
+    Linking.openURL('https://beheard.app/privacy');
+  };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
+    <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Be Heard</Text>
-        <Text style={styles.subtitle}>Welcome! Sign in or create an account</Text>
-
-        {error && <Text style={styles.error}>{error}</Text>}
-
-        {/* OAuth Buttons */}
-        <TouchableOpacity
-          style={styles.oauthButton}
-          onPress={() => handleOAuthSignIn(startGoogleOAuth, 'Google')}
-        >
-          <AntDesign name="google" size={20} color={colors.textPrimary} style={styles.buttonIcon} />
-          <Text style={styles.oauthButtonText}>Continue with Google</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.oauthButton}
-          onPress={() => handleOAuthSignIn(startAppleOAuth, 'Apple')}
-        >
-          <AntDesign name={'apple1' as any} size={20} color={colors.textPrimary} style={styles.buttonIcon} />
-          <Text style={styles.oauthButtonText}>Continue with Apple</Text>
-        </TouchableOpacity>
-
-        {/* Divider */}
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or continue with email</Text>
-          <View style={styles.dividerLine} />
+        {/* Branding Section */}
+        <View style={styles.brandingSection}>
+          <Text style={styles.logo}>BeHeard</Text>
+          <Text style={styles.tagline}>Work through conflict together</Text>
         </View>
 
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
-          value={email}
-          onChangeText={(text) => {
-            setEmail(text);
-            setError(null);
-          }}
-          placeholder="Email address"
-          placeholderTextColor={colors.textSecondary}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="email"
-        />
+        {/* CTA Section */}
+        <View style={styles.ctaSection}>
+          <TouchableOpacity style={styles.primaryButton} onPress={handleGetStarted}>
+            <Text style={styles.primaryButtonText}>Get Started</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.button, isLoading && styles.buttonDisabled]}
-          onPress={handleSendCode}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.buttonText}>Continue with email</Text>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryLink} onPress={handleSignIn}>
+            <Text style={styles.secondaryLinkText}>
+              Already have an account? <Text style={styles.signInText}>Sign in</Text>
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Legal Links */}
+        <View style={styles.legalSection}>
+          <View style={styles.legalLinks}>
+            <TouchableOpacity onPress={handleTerms}>
+              <Text style={styles.legalText}>Terms of Service</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalDivider}>|</Text>
+            <TouchableOpacity onPress={handlePrivacy}>
+              <Text style={styles.legalText}>Privacy Policy</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
-    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -285,113 +74,66 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
   },
-  title: {
-    fontSize: 32,
+  brandingSection: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logo: {
+    fontSize: 48,
     fontWeight: 'bold',
     color: colors.textPrimary,
-    marginBottom: 8,
-    textAlign: 'center',
+    marginBottom: 16,
   },
-  subtitle: {
-    fontSize: 16,
+  tagline: {
+    fontSize: 18,
     color: colors.textSecondary,
-    marginBottom: 40,
     textAlign: 'center',
   },
-  error: {
-    fontSize: 14,
-    color: colors.error,
-    marginBottom: 16,
-    paddingHorizontal: 4,
-    textAlign: 'center',
+  ctaSection: {
+    paddingBottom: 24,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    marginBottom: 16,
-    backgroundColor: colors.bgSecondary,
-    color: colors.textPrimary,
-  },
-  codeInput: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 18,
-    fontSize: 24,
-    letterSpacing: 8,
-    marginBottom: 16,
-    backgroundColor: colors.bgSecondary,
-    color: colors.textPrimary,
-  },
-  button: {
+  primaryButton: {
     backgroundColor: colors.accent,
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 16,
   },
-  buttonDisabled: {
-    backgroundColor: colors.accentHover,
-  },
-  buttonText: {
+  primaryButtonText: {
     color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  secondaryLink: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  secondaryLinkText: {
+    color: colors.textSecondary,
     fontSize: 16,
-    fontWeight: '600',
   },
-  linkButton: {
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  linkText: {
+  signInText: {
     color: colors.accent,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  label: {
-    fontSize: 14,
     fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 8,
   },
-  oauthButton: {
-    backgroundColor: colors.bgSecondary,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
+  legalSection: {
+    paddingBottom: 24,
+  },
+  legalLinks: {
     flexDirection: 'row',
     justifyContent: 'center',
-  },
-  oauthButtonText: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  buttonIcon: {
-    marginRight: 8,
-  },
-  divider: {
-    flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    color: colors.textSecondary,
+  legalText: {
+    color: colors.textMuted,
     fontSize: 14,
+  },
+  legalDivider: {
+    color: colors.textMuted,
+    fontSize: 14,
+    marginHorizontal: 12,
   },
 });

@@ -2,6 +2,8 @@ import { renderHook, waitFor, act } from '@testing-library/react-native';
 import React from 'react';
 import { useAuthProvider, useAuth, AuthContext } from '../useAuth';
 
+import * as SecureStore from 'expo-secure-store';
+
 // Mock expo-secure-store
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(),
@@ -19,8 +21,6 @@ jest.mock('expo-router', () => ({
   useSegments: () => ['(public)'],
   useRootNavigationState: () => ({ key: 'root' }),
 }));
-
-import * as SecureStore from 'expo-secure-store';
 
 const mockGetItemAsync = SecureStore.getItemAsync as jest.MockedFunction<
   typeof SecureStore.getItemAsync

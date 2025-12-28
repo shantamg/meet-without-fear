@@ -12,9 +12,8 @@ import {
   StyleSheet,
   Animated,
   ViewStyle,
-  TextStyle,
 } from 'react-native';
-import { ConnectionStatus, PresenceStatus } from '@be-heard/shared';
+import { ConnectionStatus } from '@be-heard/shared';
 import { colors } from '@/theme';
 
 // ============================================================================
@@ -54,7 +53,6 @@ function TypingDots({ color = colors.textMuted }: TypingDotsProps) {
   useEffect(() => {
     const animateDots = () => {
       const duration = 400;
-      const delay = 200;
 
       Animated.loop(
         Animated.sequence([

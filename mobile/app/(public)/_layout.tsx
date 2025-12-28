@@ -1,5 +1,6 @@
 import { Redirect, Stack } from 'expo-router';
 import { useAuth } from '@clerk/clerk-expo';
+import { colors } from '@/theme';
 
 /**
  * Public routes layout
@@ -23,10 +24,11 @@ export default function PublicLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: '#FFFFFF' },
+        contentStyle: { backgroundColor: colors.bgPrimary },
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="auth-options" />
       <Stack.Screen name="invitation" />
     </Stack>
   );

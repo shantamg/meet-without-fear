@@ -12,18 +12,18 @@ import { NeedCategory } from '../enums';
 
 export interface IdentifiedNeedDTO {
   id: string;
-  need: string;              // e.g., "Recognition"
+  need: string; // e.g., "Recognition"
   category: NeedCategory;
-  description: string;       // Specific description for this user
-  evidence: string[];        // Quotes/references supporting this
+  description: string; // Specific description for this user
+  evidence: string[]; // Quotes/references supporting this
   confirmed: boolean;
-  aiConfidence: number;      // 0-1
+  aiConfidence: number; // 0-1
 }
 
 export interface GetNeedsResponse {
   needs: IdentifiedNeedDTO[];
   synthesizedAt: string;
-  isDirty: boolean;  // True if content changed since synthesis
+  isDirty: boolean; // True if content changed since synthesis
 }
 
 // ============================================================================
@@ -33,7 +33,7 @@ export interface GetNeedsResponse {
 export interface NeedConfirmation {
   needId: string;
   confirmed: boolean;
-  adjustment?: string;  // If user wants to rephrase
+  adjustment?: string; // If user wants to rephrase
 }
 
 export interface ConfirmNeedsRequest {

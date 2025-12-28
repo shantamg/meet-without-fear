@@ -40,7 +40,7 @@ export interface ConsentRecordDTO {
 export interface ConsentRequestDTO {
   id: string;
   contentType: ConsentContentType;
-  contentDescription: string;  // What the AI is asking to share
+  contentDescription: string; // What the AI is asking to share
 
   // Preview of transformed content (what partner would see)
   transformedPreview: string;
@@ -88,7 +88,7 @@ export interface DecideConsentResponse {
 export interface ConsentedContentDTO {
   id: string;
   sourceUserId: string;
-  transformedContent: string;  // Heat removed, need preserved
+  transformedContent: string; // Heat removed, need preserved
   consentedAt: string;
   consentActive: boolean;
 }

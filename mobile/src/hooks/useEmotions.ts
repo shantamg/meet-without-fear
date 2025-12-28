@@ -12,18 +12,15 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
-  UseMutationOptions,
-  UseQueryOptions,
 } from '@tanstack/react-query';
 import { useCallback } from 'react';
-import { get, post, ApiClientError } from '../lib/api';
+import { get, post } from '../lib/api';
 import {
   RecordEmotionalReadingRequest,
   RecordEmotionalReadingResponse,
   GetEmotionalHistoryResponse,
   CompleteExerciseRequest as SharedCompleteExerciseRequest,
   CompleteExerciseResponse as SharedCompleteExerciseResponse,
-  EmotionalReadingDTO,
   EmotionalSupportType,
 } from '@be-heard/shared';
 
@@ -157,7 +154,8 @@ async function completeExerciseApi(
     intensityAfter: input.intensityAfter,
   };
 
-  const response = await post<SharedCompleteExerciseResponse>(
+  // Make the API call (response not used, we construct our own return value)
+  await post<SharedCompleteExerciseResponse>(
     `/sessions/${input.sessionId}/exercises`,
     request
   );

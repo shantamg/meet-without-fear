@@ -85,7 +85,12 @@ import { Stage, StageStatus } from '../enums';
 
 /** Stage path parameter validation */
 export const stageParamSchema = z.object({
-  stage: z.coerce.number().int().min(0).max(4).transform((val) => val as Stage),
+  stage: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(4)
+    .transform(val => val as Stage),
 });
 
 export type StageParamInput = z.infer<typeof stageParamSchema>;
@@ -124,7 +129,7 @@ export const stageStatusResponseSchema = z.object({
       description: z.string(),
       satisfied: z.boolean(),
       requiredForAdvance: z.boolean(),
-    })
+    }),
   ),
 });
 

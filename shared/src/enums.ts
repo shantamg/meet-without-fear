@@ -10,19 +10,19 @@
 // ============================================================================
 
 export enum SessionStatus {
-  CREATED = 'CREATED',       // Session created, invitation not yet sent
-  INVITED = 'INVITED',       // Partner invited, awaiting acceptance
-  ACTIVE = 'ACTIVE',         // Both users engaged
-  PAUSED = 'PAUSED',         // Cooling period or temporary pause
-  WAITING = 'WAITING',       // One user ahead, waiting for other
-  RESOLVED = 'RESOLVED',     // Process completed successfully
-  ABANDONED = 'ABANDONED',   // Timeout or withdrawal
+  CREATED = 'CREATED', // Session created, invitation not yet sent
+  INVITED = 'INVITED', // Partner invited, awaiting acceptance
+  ACTIVE = 'ACTIVE', // Both users engaged
+  PAUSED = 'PAUSED', // Cooling period or temporary pause
+  WAITING = 'WAITING', // One user ahead, waiting for other
+  RESOLVED = 'RESOLVED', // Process completed successfully
+  ABANDONED = 'ABANDONED', // Timeout or withdrawal
 }
 
 export enum StageStatus {
   NOT_STARTED = 'NOT_STARTED',
   IN_PROGRESS = 'IN_PROGRESS',
-  GATE_PENDING = 'GATE_PENDING',  // Requirements met, awaiting partner
+  GATE_PENDING = 'GATE_PENDING', // Requirements met, awaiting partner
   COMPLETED = 'COMPLETED',
 }
 
@@ -97,9 +97,10 @@ export enum ConsentContentType {
 // ============================================================================
 
 export enum AgreementType {
-  MICRO_EXPERIMENT = 'MICRO_EXPERIMENT',  // Small, reversible action
-  COMMITMENT = 'COMMITMENT',               // Longer-term agreement
-  CHECK_IN = 'CHECK_IN',                   // Scheduled follow-up
+  MICRO_EXPERIMENT = 'MICRO_EXPERIMENT', // Small, reversible action
+  COMMITMENT = 'COMMITMENT', // Longer-term agreement
+  CHECK_IN = 'CHECK_IN', // Scheduled follow-up
+  HYBRID = 'HYBRID', // Combined elements from multiple strategies
 }
 
 export enum AgreementStatus {
@@ -115,6 +116,6 @@ export enum AgreementStatus {
 // ============================================================================
 
 export enum GlobalLibrarySource {
-  CURATED = 'CURATED',         // Admin/expert authored
+  CURATED = 'CURATED', // Admin/expert authored
   CONTRIBUTED = 'CONTRIBUTED', // User-contributed with explicit consent
 }

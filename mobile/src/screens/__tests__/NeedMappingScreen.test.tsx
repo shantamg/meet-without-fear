@@ -13,6 +13,9 @@ import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 import { Stage, StageStatus, NeedCategory, MessageRole, CommonGroundDTO } from '@be-heard/shared';
 
+// Import after mocks
+import { NeedMappingScreen } from '../NeedMappingScreen';
+
 // Mock expo-router
 const mockReplace = jest.fn();
 const mockPush = jest.fn();
@@ -184,9 +187,6 @@ jest.mock('../../hooks/useStages', () => ({
     isPending: false,
   }),
 }));
-
-// Import after mocks
-import { NeedMappingScreen } from '../NeedMappingScreen';
 
 describe('NeedMappingScreen', () => {
   beforeEach(() => {

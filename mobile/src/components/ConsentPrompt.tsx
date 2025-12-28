@@ -2,7 +2,9 @@
  * ConsentPrompt Component
  *
  * Asks for explicit consent before sharing sensitive information.
- * Offers 4 granular sharing options: full, summary, theme, or private.
+ * Supports two modes:
+ * - Simplified: Simple consent/decline (2 options)
+ * - Full: 4 granular sharing options: full, summary, theme, or private
  */
 
 import { useState } from 'react';
@@ -28,6 +30,8 @@ interface ConsentPromptProps {
   insight?: string;
   style?: ViewStyle;
   testID?: string;
+  /** When true, shows simplified consent/decline options instead of 4 granular options */
+  simplified?: boolean;
 }
 
 // ============================================================================
@@ -57,6 +61,19 @@ const SHARING_OPTIONS: SharingOptionConfig[] = [
   },
 ];
 
+const SIMPLIFIED_OPTIONS: SharingOptionConfig[] = [
+  {
+    id: 'full',
+    title: 'Share with partner',
+    description: 'Your partner will see your attempt',
+  },
+  {
+    id: 'private',
+    title: 'Keep editing',
+    description: 'Continue working on your understanding',
+  },
+];
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -68,6 +85,7 @@ export function ConsentPrompt({
   insight,
   style,
   testID,
+  simplified = false,
 }: ConsentPromptProps) {
   const [selectedOption, setSelectedOption] = useState<SharingOption | null>(null);
 
@@ -76,6 +94,9 @@ export function ConsentPrompt({
       onSelect(selectedOption);
     }
   };
+
+  // Use simplified options when in simplified mode
+  const options = simplified ? SIMPLIFIED_OPTIONS : SHARING_OPTIONS;
 
   return (
     <View style={[styles.container, style]} testID={testID}>
@@ -90,7 +111,7 @@ export function ConsentPrompt({
       )}
 
       <View style={styles.optionsContainer}>
-        {SHARING_OPTIONS.map((option) => {
+        {options.map((option) => {
           const isSelected = selectedOption === option.id;
           return (
             <TouchableOpacity

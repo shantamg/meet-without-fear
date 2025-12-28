@@ -101,7 +101,7 @@ function createQueryClient(): QueryClient {
 // Provider Component
 // ============================================================================
 
-type QueryProviderProps = PropsWithChildren<{}>;
+type QueryProviderProps = PropsWithChildren;
 
 /**
  * Query Provider component that wraps the app.
@@ -156,11 +156,14 @@ export function QueryProvider({ children }: QueryProviderProps): React.ReactElem
  * Only use this in development.
  */
 export function useDebugQueryClient(): QueryClient | null {
+  // Hook must be called unconditionally (React rules of hooks)
+  const context = React.useContext(
+    // @ts-expect-error - accessing internal context for debugging
+    QueryClientProvider._context || {}
+  ) as { queryClient?: QueryClient };
+
+  // Only return the client in development
   if (__DEV__) {
-    const context = React.useContext(
-      // @ts-expect-error - accessing internal context for debugging
-      QueryClientProvider._context || {}
-    ) as { queryClient?: QueryClient };
     return context.queryClient || null;
   }
   return null;

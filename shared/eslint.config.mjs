@@ -8,6 +8,7 @@ export default [
   js.configs.recommended,
   {
     files: ['src/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -35,6 +36,46 @@ export default [
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': 'error',
       'no-console': 'warn',
+      'prefer-const': 'error',
+      'prettier/prettier': 'error',
+    },
+  },
+  // Test files configuration
+  {
+    files: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        project: './tsconfig.json',
+      },
+      globals: {
+        process: 'readonly',
+        global: 'readonly',
+        require: 'readonly',
+        Buffer: 'readonly',
+        // Jest globals
+        describe: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        jest: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint,
+      prettier: prettier,
+    },
+    rules: {
+      ...tseslint.configs.recommended.rules,
+      ...prettierConfig.rules,
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': 'error',
+      'no-console': 'off',
       'prefer-const': 'error',
       'prettier/prettier': 'error',
     },

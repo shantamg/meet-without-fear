@@ -35,6 +35,9 @@ import {
 } from '../useStages';
 import { Stage, StageStatus, NeedCategory, AgreementType, AgreementStatus, StrategyPhase } from '@be-heard/shared';
 
+// Import mocked functions
+import * as api from '../../lib/api';
+
 // Mock the API module
 jest.mock('../../lib/api', () => ({
   get: jest.fn(),
@@ -49,9 +52,6 @@ jest.mock('../../lib/api', () => ({
     }
   },
 }));
-
-// Import mocked functions
-import * as api from '../../lib/api';
 
 const mockGet = api.get as jest.MockedFunction<typeof api.get>;
 const mockPost = api.post as jest.MockedFunction<typeof api.post>;
@@ -137,7 +137,7 @@ describe('useStages', () => {
 
         expect(result.current.data?.mySigned).toBe(true);
         expect(result.current.data?.partnerSigned).toBe(false);
-        expect(mockGet).toHaveBeenCalledWith(`/sessions/${sessionId}/compact`);
+        expect(mockGet).toHaveBeenCalledWith(`/sessions/${sessionId}/compact/status`);
       });
     });
 

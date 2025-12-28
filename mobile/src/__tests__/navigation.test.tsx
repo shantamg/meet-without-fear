@@ -6,6 +6,21 @@
  */
 
 // Mock expo-font before any imports
+// Import modules for testing - these will use the mocks above
+import * as RootLayout from '../../app/_layout';
+import * as AuthLayout from '../../app/(auth)/_layout';
+import * as TabsLayout from '../../app/(auth)/(tabs)/_layout';
+import * as PublicLayout from '../../app/(public)/_layout';
+import * as LoginScreen from '../../app/(public)/login';
+import * as SignupScreen from '../../app/(public)/signup';
+import * as HomeScreen from '../../app/(auth)/(tabs)/index';
+import * as SessionsScreen from '../../app/(auth)/(tabs)/sessions';
+import * as ProfileScreen from '../../app/(auth)/(tabs)/profile';
+import * as SessionLayout from '../../app/(auth)/session/[id]/_layout';
+import * as NotFound from '../../app/+not-found';
+import * as NavigationTypes from '../types/navigation';
+import * as AuthHooks from '../hooks/useAuth';
+
 jest.mock('expo-font', () => ({
   useFonts: () => [true, null],
   loadAsync: jest.fn(),
@@ -134,21 +149,6 @@ jest.mock('@be-heard/shared', () => ({
   Stage: { WITNESS: 'WITNESS' },
   StageStatus: { IN_PROGRESS: 'IN_PROGRESS' },
 }));
-
-// Import modules for testing - these will use the mocks above
-import * as RootLayout from '../../app/_layout';
-import * as AuthLayout from '../../app/(auth)/_layout';
-import * as TabsLayout from '../../app/(auth)/(tabs)/_layout';
-import * as PublicLayout from '../../app/(public)/_layout';
-import * as LoginScreen from '../../app/(public)/login';
-import * as SignupScreen from '../../app/(public)/signup';
-import * as HomeScreen from '../../app/(auth)/(tabs)/index';
-import * as SessionsScreen from '../../app/(auth)/(tabs)/sessions';
-import * as ProfileScreen from '../../app/(auth)/(tabs)/profile';
-import * as SessionLayout from '../../app/(auth)/session/[id]/_layout';
-import * as NotFound from '../../app/+not-found';
-import * as NavigationTypes from '../types/navigation';
-import * as AuthHooks from '../hooks/useAuth';
 
 describe('Navigation Structure', () => {
   describe('Route existence', () => {
