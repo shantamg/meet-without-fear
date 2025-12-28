@@ -95,7 +95,7 @@ export function useProtectedRoute() {
 
     if (!isAuthenticated && inAuthGroup) {
       // User is not signed in but trying to access protected route
-      router.replace('/login');
+      router.replace('/(public)');
     } else if (isAuthenticated && inPublicGroup) {
       // User is signed in but on public route, redirect to home
       router.replace('/');
@@ -170,7 +170,6 @@ export function useAuthProvider(): AuthContextValue {
 
       console.log(`[Auth] Verification code sent to ${email}`);
       setPendingEmail(email);
-      setIsSignUp(false);
 
       setState((prev) => ({
         ...prev,
@@ -218,6 +217,10 @@ export function useAuthProvider(): AuthContextValue {
         const response = await apiClient.get<ApiResponse<GetMeResponse>>('/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
         });
+
+        if (!response.data.data?.user) {
+          throw new Error('Invalid response from backend');
+        }
 
         const user: User = {
           id: response.data.data.user.id,
@@ -320,7 +323,6 @@ export function useAuthProvider(): AuthContextValue {
       console.log(`[Auth] Signup verification code sent to ${email}`);
       setPendingEmail(email);
       setPendingName(name);
-      setIsSignUp(true);
 
       setState((prev) => ({
         ...prev,

@@ -13,8 +13,21 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// API routes
+// Request logging
+app.use((req, res, next) => {
+  const hasAuth = !!req.headers.authorization;
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} (auth: ${hasAuth})`);
+
+  // Log response status
+  res.on('finish', () => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} -> ${res.statusCode}`);
+  });
+  next();
+});
+
+// API routes - support both /api and /api/v1 for compatibility
 app.use('/api/v1', routes);
+app.use('/api', routes);
 
 // 404 handler
 app.use((_req, res) => {

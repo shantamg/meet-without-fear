@@ -63,6 +63,93 @@ const declineInvitationSchema = z.object({
 // ============================================================================
 
 /**
+ * List user's sessions
+ * GET /sessions
+ */
+export async function listSessions(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { status, limit = '20', cursor } = req.query;
+    const takeLimit = parseInt(limit as string, 10);
+
+    // Find sessions where user is a member of the relationship
+    const sessions = await prisma.session.findMany({
+      where: {
+        relationship: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+        ...(status && { status: status as 'INVITED' | 'ACTIVE' | 'PAUSED' | 'RESOLVED' | 'ABANDONED' }),
+      },
+      include: {
+        relationship: {
+          include: {
+            members: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        stageProgress: {
+          where: { userId: user.id },
+          orderBy: { stage: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: takeLimit + 1,
+      ...(cursor && { cursor: { id: cursor as string }, skip: 1 }),
+    });
+
+    const hasMore = sessions.length > takeLimit;
+    const items = hasMore ? sessions.slice(0, -1) : sessions;
+
+    const formattedSessions = items.map((session) => {
+      const partner = session.relationship.members.find(
+        (m: { userId: string }) => m.userId !== user.id
+      );
+      const currentStage = session.stageProgress[0]?.stage ?? 0;
+
+      return {
+        id: session.id,
+        status: session.status,
+        currentStage,
+        partner: partner
+          ? {
+              id: partner.user.id,
+              name: partner.user.name,
+            }
+          : null,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+      };
+    });
+
+    successResponse(res, {
+      items: formattedSessions,
+      hasMore,
+      cursor: hasMore ? items[items.length - 1]?.id : undefined,
+    });
+  } catch (error) {
+    console.error('[listSessions] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to list sessions', 500);
+  }
+}
+
+/**
  * Create a new session with an invitation
  * POST /sessions
  */

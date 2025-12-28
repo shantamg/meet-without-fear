@@ -23,7 +23,7 @@ export default function InvitationScreen() {
     const handleInvitation = async () => {
       if (!id) {
         // No invitation ID, go to login
-        router.replace('/login');
+        router.replace('/(public)');
         return;
       }
 
@@ -40,7 +40,7 @@ export default function InvitationScreen() {
         router.replace(`/session/${id}`);
       } else {
         // User needs to login first
-        router.replace('/login');
+        router.replace('/(public)');
       }
     };
 

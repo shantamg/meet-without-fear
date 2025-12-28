@@ -18,14 +18,17 @@
   packages = with pkgs; [
     git
     nodejs_20
+    postgresql_16  # For pg_config, psql, etc.
   ];
 
   # Enable .env file loading
   dotenv.enable = true;
 
-  # PostgreSQL service for Prisma
+  # PostgreSQL service for Prisma (with pgvector)
   services.postgres = {
     enable = true;
+    package = pkgs.postgresql_16;
+    extensions = extensions: [ extensions.pgvector ];
     listen_addresses = "*";
     port = 5432;
     initialDatabases = [
@@ -47,6 +50,7 @@
     ];
     initialScript = ''
       ALTER USER be_heard_user LOGIN CREATEDB;
+      CREATE EXTENSION IF NOT EXISTS vector;
     '';
   };
 

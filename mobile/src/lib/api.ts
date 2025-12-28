@@ -18,10 +18,13 @@ import { ApiError, ApiResponse, ErrorCode } from '@be-heard/shared';
 // Configuration
 // ============================================================================
 
-const API_BASE_URL =
+// Get base URL and ensure it has /api suffix
+const rawApiUrl =
   Constants.expoConfig?.extra?.apiUrl ||
   process.env.EXPO_PUBLIC_API_URL ||
-  'http://localhost:3000/api';
+  'http://localhost:3000';
+
+const API_BASE_URL = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
 
 const REQUEST_TIMEOUT = 30000; // 30 seconds
 

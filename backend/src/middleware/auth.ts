@@ -103,14 +103,24 @@ async function handleClerkAuth(
   }
 
   try {
+    // Fetch user details from Clerk to get their real name/email
+    const { clerkClient } = await import('@clerk/express');
+    const clerkUser = await clerkClient.users.getUser(clerkUserId);
+
+    const email = clerkUser.emailAddresses[0]?.emailAddress || `${clerkUserId}@pending.clerk`;
+    const name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') || null;
+
     // Upsert user based on Clerk ID
     const user = await prisma.user.upsert({
       where: { clerkId: clerkUserId },
-      update: {},
+      update: {
+        email,
+        name,
+      },
       create: {
         clerkId: clerkUserId,
-        email: `${clerkUserId}@pending.clerk`, // Placeholder, updated on first profile fetch
-        name: null,
+        email,
+        name,
       },
     });
 

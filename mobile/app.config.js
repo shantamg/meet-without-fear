@@ -1,7 +1,7 @@
 const { withPlugins } = require('@expo/config-plugins');
 
 module.exports = ({ config }) => {
-  // Set default API URL if not provided (production URL when we have one)
+  // Set default API URL if not provided (production URL)
   if (!process.env.EXPO_PUBLIC_API_URL) {
     process.env.EXPO_PUBLIC_API_URL = 'https://be-heard-api.onrender.com';
   }

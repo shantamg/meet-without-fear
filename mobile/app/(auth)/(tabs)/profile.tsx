@@ -17,6 +17,7 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useClerk } from '@clerk/clerk-expo';
 
 import { useAuth } from '@/src/hooks/useAuth';
 
@@ -27,6 +28,7 @@ import { useAuth } from '@/src/hooks/useAuth';
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const { signOut: clerkSignOut } = useClerk();
 
   const handleSignOut = () => {
     Alert.alert(
@@ -39,8 +41,11 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
+              // Sign out from Clerk first (clears OAuth session)
+              await clerkSignOut();
+              // Then clear local auth state
               await signOut();
-              router.replace('/login');
+              router.replace('/(public)');
             } catch (error) {
               console.error('Sign out failed:', error);
             }

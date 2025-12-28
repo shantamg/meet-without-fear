@@ -25,10 +25,16 @@ jest.mock('../../lib/prisma', () => ({
   },
 }));
 
-// Mock Clerk verifyToken
+// Mock Clerk verifyToken and clerkClient
 const mockVerifyToken = jest.fn();
+const mockGetUser = jest.fn();
 jest.mock('@clerk/express', () => ({
   verifyToken: (...args: unknown[]) => mockVerifyToken(...args),
+  clerkClient: {
+    users: {
+      getUser: (...args: unknown[]) => mockGetUser(...args),
+    },
+  },
 }));
 
 // Helper to create mock request
@@ -152,6 +158,11 @@ describe('Auth Middleware', () => {
 
     it('authenticates user with valid Clerk token', async () => {
       mockVerifyToken.mockResolvedValue({ sub: 'clerk-user-123' });
+      mockGetUser.mockResolvedValue({
+        firstName: 'Test',
+        lastName: 'User',
+        emailAddresses: [{ emailAddress: 'test@example.com' }],
+      });
       (prisma.user.upsert as jest.Mock).mockResolvedValue(mockUser);
 
       const req = createMockRequest({
@@ -165,12 +176,15 @@ describe('Auth Middleware', () => {
       expect(mockVerifyToken).toHaveBeenCalledWith('valid-clerk-token', {
         secretKey: 'sk_test_xxx',
       });
+      expect(mockGetUser).toHaveBeenCalledWith('clerk-user-123');
       expect(prisma.user.upsert).toHaveBeenCalledWith({
         where: { clerkId: 'clerk-user-123' },
-        update: {},
-        create: expect.objectContaining({
+        update: { email: 'test@example.com', name: 'Test User' },
+        create: {
           clerkId: 'clerk-user-123',
-        }),
+          email: 'test@example.com',
+          name: 'Test User',
+        },
       });
       expect(next).toHaveBeenCalled();
       expect(req.user).toEqual(mockUser);
@@ -193,6 +207,11 @@ describe('Auth Middleware', () => {
 
     it('populates user when valid Clerk token provided', async () => {
       mockVerifyToken.mockResolvedValue({ sub: 'clerk-user-123' });
+      mockGetUser.mockResolvedValue({
+        firstName: 'Test',
+        lastName: 'User',
+        emailAddresses: [{ emailAddress: 'test@example.com' }],
+      });
       (prisma.user.upsert as jest.Mock).mockResolvedValue(mockUser);
 
       const req = createMockRequest({
