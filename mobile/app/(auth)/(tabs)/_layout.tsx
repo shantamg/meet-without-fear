@@ -52,7 +52,9 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
+          tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+            <Home color={color} size={size} />
+          ),
           headerTitle: 'BeHeard',
           headerRight: () => <NotificationButton />,
         }}
@@ -61,7 +63,7 @@ export default function TabLayout() {
         name="sessions"
         options={{
           title: 'Sessions',
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ color, size }: { color: string; size: number }) => (
             <MessageSquare color={color} size={size} />
           ),
           headerTitle: 'My Sessions',
@@ -71,7 +73,9 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
+          tabBarIcon: ({ color, size }: { color: string; size: number }) => (
+            <User color={color} size={size} />
+          ),
           headerTitle: 'Profile',
         }}
       />

@@ -104,7 +104,7 @@ export default function RootLayout() {
                     {/* 404 handler */}
                     <Stack.Screen name="+not-found" options={{ headerShown: true }} />
                   </Stack>
-                  <StatusBar style="auto" />
+                  <StatusBar style="light" />
                 </ToastProvider>
               </QueryProvider>
             </AuthContext.Provider>

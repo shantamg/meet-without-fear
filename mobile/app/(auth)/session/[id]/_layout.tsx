@@ -1,52 +1,26 @@
 import { Stack } from 'expo-router';
+import { colors } from '@/src/theme';
 
 /**
  * Session detail layout
- * Stack navigator for session views
+ *
+ * Simplified layout for the unified chat-centric session interface.
+ * The UnifiedSessionScreen handles all stage transitions internally.
  */
 export default function SessionLayout() {
   return (
-    <Stack screenOptions={{ headerShown: true }}>
+    <Stack
+      screenOptions={{
+        headerShown: false, // UnifiedSessionScreen has its own header
+        contentStyle: {
+          backgroundColor: colors.bgPrimary,
+        },
+      }}
+    >
       <Stack.Screen
         name="index"
         options={{
           title: 'Session',
-          headerBackTitle: 'Back',
-        }}
-      />
-      <Stack.Screen
-        name="chat"
-        options={{
-          title: 'Chat',
-          headerBackTitle: 'Session',
-        }}
-      />
-      <Stack.Screen
-        name="compact"
-        options={{
-          title: 'Compact View',
-          headerBackTitle: 'Session',
-        }}
-      />
-      <Stack.Screen
-        name="empathy"
-        options={{
-          title: 'Empathy Map',
-          headerBackTitle: 'Session',
-        }}
-      />
-      <Stack.Screen
-        name="needs"
-        options={{
-          title: 'Needs',
-          headerBackTitle: 'Session',
-        }}
-      />
-      <Stack.Screen
-        name="strategies"
-        options={{
-          title: 'Strategies',
-          headerBackTitle: 'Session',
         }}
       />
     </Stack>

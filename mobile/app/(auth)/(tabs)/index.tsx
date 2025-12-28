@@ -7,9 +7,10 @@
  * - Session list sorted by priority
  * - Empty state with new session CTA
  * - Pull to refresh
+ * - Biometric authentication opt-in prompt
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -24,8 +25,10 @@ import { Plus } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/src/hooks/useAuth';
+import { useBiometricAuth } from '@/src/hooks';
 import { useSessions } from '../../../src/hooks/useSessions';
 import { SessionCard } from '../../../src/components/SessionCard';
+import { BiometricPrompt } from '../../../src/components/BiometricPrompt';
 import { colors } from '@/src/theme';
 import type { SessionSummaryDTO } from '@be-heard/shared';
 
@@ -37,6 +40,22 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { data, isLoading, refetch, isRefetching } = useSessions();
+  const { isAvailable, isEnrolled, hasPrompted, isLoading: biometricLoading } = useBiometricAuth();
+
+  // Biometric prompt state
+  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+
+  // Show biometric prompt when conditions are met
+  useEffect(() => {
+    // Show prompt if biometrics available, enrolled, and user hasn't been prompted yet
+    if (!biometricLoading && isAvailable && isEnrolled && !hasPrompted) {
+      // Small delay to let the UI settle after login
+      const timer = setTimeout(() => {
+        setShowBiometricPrompt(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [biometricLoading, isAvailable, isEnrolled, hasPrompted]);
 
   // Sort sessions: action needed first, then by last updated
   const sortedSessions = useMemo(() => {
@@ -81,7 +100,7 @@ export default function HomeScreen() {
           {/* Welcome header */}
           <View style={styles.welcomeSection}>
             <Text style={styles.greeting}>Welcome back,</Text>
-            <Text style={styles.userName}>{user?.name || 'User'}</Text>
+            <Text style={styles.userName}>{user?.firstName || user?.name || 'User'}</Text>
           </View>
 
           <View style={styles.emptyContent}>
@@ -103,6 +122,13 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Biometric opt-in prompt */}
+        <BiometricPrompt
+          visible={showBiometricPrompt}
+          onDismiss={() => setShowBiometricPrompt(false)}
+          testID="biometric-prompt"
+        />
       </SafeAreaView>
     );
   }
@@ -136,7 +162,7 @@ export default function HomeScreen() {
             {/* Welcome section */}
             <View style={styles.welcomeSection}>
               <Text style={styles.greeting}>Welcome back,</Text>
-              <Text style={styles.userName}>{user?.name || 'User'}</Text>
+              <Text style={styles.userName}>{user?.firstName || user?.name || 'User'}</Text>
             </View>
 
             {/* Header with new session button */}
@@ -168,6 +194,13 @@ export default function HomeScreen() {
             <Text style={styles.noMoreSessions}>No other sessions</Text>
           )
         }
+      />
+
+      {/* Biometric opt-in prompt */}
+      <BiometricPrompt
+        visible={showBiometricPrompt}
+        onDismiss={() => setShowBiometricPrompt(false)}
+        testID="biometric-prompt"
       />
     </SafeAreaView>
   );

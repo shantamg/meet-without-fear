@@ -2,11 +2,12 @@
  * Witness Screen (Stage 1)
  *
  * The AI-guided conversation where users share their perspective.
+ * Clean chat experience with AI welcome message.
  * Includes emotional barometer check-ins and feel-heard confirmation.
  */
 
 import { View, ActivityIndicator, Text, TouchableOpacity } from 'react-native';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSession } from '@/src/hooks/useSessions';
@@ -18,13 +19,21 @@ import {
 } from '@/src/hooks/useMessages';
 import { useConfirmFeelHeard, useProgress } from '@/src/hooks/useStages';
 import { ChatInterface } from '@/src/components/ChatInterface';
-import { ChatHeader } from '@/src/components/ChatHeader';
+import { SessionChatHeader } from '@/src/components/SessionChatHeader';
 import { EmotionalBarometer } from '@/src/components/EmotionalBarometer';
 import { FeelHeardConfirmation } from '@/src/components/FeelHeardConfirmation';
 import { BreathingExercise } from '@/src/components/BreathingExercise';
 import { WaitingRoom } from '@/src/components/WaitingRoom';
-import { Stage, MessageRole } from '@be-heard/shared';
+import { Stage, MessageRole, MessageDTO } from '@be-heard/shared';
 import { createStyles } from '@/src/theme/styled';
+
+// ============================================================================
+// AI Welcome Message
+// ============================================================================
+
+const AI_WELCOME_MESSAGE = `Hi there. I'm here to listen and help you feel heard. This is your private space - whatever you share stays between us.
+
+Take your time and share what's on your mind.`;
 
 // ============================================================================
 // Constants
@@ -75,7 +84,26 @@ export default function WitnessScreen() {
   const prevMessageCountRef = useRef(0);
 
   const session = sessionData?.session;
-  const messages = messagesData?.messages ?? [];
+  const apiMessages = messagesData?.messages ?? [];
+
+  // Create welcome message to show when there are no messages
+  const welcomeMessage: MessageDTO = useMemo(() => ({
+    id: 'welcome-message',
+    sessionId: sessionId!,
+    senderId: null,
+    role: MessageRole.AI,
+    content: AI_WELCOME_MESSAGE,
+    stage: Stage.WITNESS,
+    timestamp: new Date().toISOString(),
+  }), [sessionId]);
+
+  // Show welcome message if no messages exist, otherwise show API messages
+  const messages = useMemo(() => {
+    if (apiMessages.length === 0) {
+      return [welcomeMessage];
+    }
+    return apiMessages;
+  }, [apiMessages, welcomeMessage]);
 
   // Count user messages
   const userMessageCount = messages.filter(m => m.role === MessageRole.USER).length;
@@ -273,26 +301,20 @@ export default function WitnessScreen() {
     <>
       <Stack.Screen
         options={{
-          headerShown: true,
-          title: 'Share Your Perspective',
-          headerBackTitle: 'Session',
+          headerShown: false, // Use custom SessionChatHeader instead
         }}
       />
-      <SafeAreaView style={styles.container} edges={['bottom']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.content}>
-          <ChatHeader
-            stageName="The Witness"
-            stageNumber={1}
-            stageDescription="Share your perspective. The AI is here to listen and help you feel heard."
-            completedStages={0}
+          <SessionChatHeader
+            partnerName={session?.partner?.name}
+            partnerOnline={false} // TODO: Get from realtime subscription
             testID="witness-chat-header"
           />
           <ChatInterface
             messages={messages}
             onSendMessage={handleSendMessage}
             isLoading={isSending}
-            emptyStateTitle="Share Your Experience"
-            emptyStateMessage="This is your private space to share what happened and how you feel. The AI is here to listen without judgment."
           />
 
           {/* Emotional Barometer */}
