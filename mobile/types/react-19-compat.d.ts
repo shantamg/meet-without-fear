@@ -1,22 +1,14 @@
 /**
- * React 19 compatibility type augmentations
+ * React 19 / React Native type compatibility
  *
- * This file fixes type compatibility issues between React 19's stricter JSX types
- * and libraries that use ForwardRefExoticComponent (lucide-react-native, react-native-safe-area-context).
+ * Using @types/react 18.x for compatibility with React Native.
+ * React 19 runtime is used, but types are from React 18 to avoid
+ * JSX component type issues.
  *
- * @see https://github.com/lucide-icons/lucide/issues/2718
+ * @see https://github.com/facebook/react-native/issues/48937
  */
-import type { JSX } from 'react';
 
-declare module 'react' {
-  // Extend JSX.ElementType to accept ForwardRefExoticComponent
-  // This fixes the "cannot be used as a JSX component" error
-  interface ExoticComponent<P = object> {
-    (props: P): JSX.Element | null;
-  }
-}
-
-// Extend lucide-react-native types to be compatible with React 19
+// Extend lucide-react-native types for proper icon typing
 declare module 'lucide-react-native' {
   import type { ComponentType } from 'react';
   import type { SvgProps } from 'react-native-svg';
