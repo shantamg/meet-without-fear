@@ -18,6 +18,7 @@ export const colors = {
   userBg: '#2f2f2f',
   border: '#444444',
   success: '#10a37f',
+  successBg: '#1a3a30',
   warning: '#f59e0b',
   error: '#ef4444',
 
