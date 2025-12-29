@@ -2,6 +2,9 @@
  * Shared Bedrock Client
  *
  * Provides a singleton AWS Bedrock client for all AI services.
+ * Implements two-model stratification:
+ * - Haiku: Fast, structured output for mechanics (classification, detection, planning)
+ * - Sonnet: Empathetic responses for user-facing interactions
  */
 
 import {
@@ -14,10 +17,21 @@ import {
 } from '@aws-sdk/client-bedrock-runtime';
 
 // ============================================================================
-// Configuration
+// Configuration - Two Model Stratification
 // ============================================================================
 
-export const BEDROCK_MODEL_ID = 'anthropic.claude-sonnet-4-20250514-v1:0';
+// Haiku: Fast model for mechanics (retrieval planning, classification, detection)
+// ~3x faster and cheaper than Sonnet, good for structured JSON output
+export const BEDROCK_HAIKU_MODEL_ID =
+  process.env.BEDROCK_HAIKU_MODEL_ID || 'anthropic.claude-3-5-haiku-20241022-v1:0';
+
+// Sonnet: Empathetic model for user-facing responses
+// Better at nuance, empathy, and natural conversation
+export const BEDROCK_SONNET_MODEL_ID =
+  process.env.BEDROCK_SONNET_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
+
+// Legacy export for backward compatibility
+export const BEDROCK_MODEL_ID = BEDROCK_SONNET_MODEL_ID;
 
 // ============================================================================
 // Client Singleton
@@ -65,6 +79,21 @@ export interface CompletionOptions {
   maxTokens?: number;
   thinkingBudget?: number;
 }
+
+export interface HaikuCompletionOptions {
+  systemPrompt: string;
+  messages: SimpleMessage[];
+  maxTokens?: number;
+}
+
+export interface SonnetCompletionOptions {
+  systemPrompt: string;
+  messages: SimpleMessage[];
+  maxTokens?: number;
+  thinkingBudget?: number;
+}
+
+export type ModelType = 'haiku' | 'sonnet';
 
 // ============================================================================
 // Helper Functions
@@ -127,4 +156,111 @@ export async function getCompletion(options: CompletionOptions): Promise<string 
   }
 
   return textBlock.text ?? null;
+}
+
+/**
+ * Get completion from a specific model (Haiku or Sonnet).
+ * Use this when you need to explicitly choose the model.
+ */
+export async function getModelCompletion(
+  model: ModelType,
+  options: CompletionOptions
+): Promise<string | null> {
+  const client = getBedrockClient();
+  if (!client) {
+    return null;
+  }
+
+  const { systemPrompt, messages, maxTokens = 2048, thinkingBudget } = options;
+  const modelId = model === 'haiku' ? BEDROCK_HAIKU_MODEL_ID : BEDROCK_SONNET_MODEL_ID;
+
+  const system: SystemContentBlock[] = [{ text: systemPrompt }];
+  const inferenceConfig: InferenceConfiguration = { maxTokens };
+
+  const commandInput: ConverseCommandInput = {
+    modelId,
+    messages: toBedrockMessages(messages),
+    system,
+    inferenceConfig,
+  };
+
+  // Add thinking budget if specified (Sonnet only)
+  if (thinkingBudget && model === 'sonnet') {
+    commandInput.additionalModelRequestFields = {
+      thinking: {
+        type: 'enabled',
+        budget_tokens: thinkingBudget,
+      },
+    };
+  }
+
+  const command = new ConverseCommand(commandInput);
+  const response = await client.send(command);
+
+  const outputMessage = response.output?.message;
+  if (!outputMessage?.content) {
+    return null;
+  }
+
+  const textBlock = outputMessage.content.find((block) => 'text' in block);
+  if (!textBlock || !('text' in textBlock)) {
+    return null;
+  }
+
+  return textBlock.text ?? null;
+}
+
+/**
+ * Get structured JSON output from Haiku.
+ * Use for: retrieval planning, classification, detection, extraction.
+ * Fast and cheap - ideal for mechanical tasks.
+ *
+ * @returns Parsed JSON object or null if parsing fails
+ */
+export async function getHaikuJson<T>(
+  options: HaikuCompletionOptions
+): Promise<T | null> {
+  const response = await getModelCompletion('haiku', {
+    ...options,
+    maxTokens: options.maxTokens ?? 1024,
+  });
+
+  if (!response) {
+    return null;
+  }
+
+  try {
+    // Extract JSON from response (handle markdown code blocks)
+    let jsonStr = response.trim();
+
+    // Remove markdown code block if present
+    if (jsonStr.startsWith('```json')) {
+      jsonStr = jsonStr.slice(7);
+    } else if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.slice(3);
+    }
+    if (jsonStr.endsWith('```')) {
+      jsonStr = jsonStr.slice(0, -3);
+    }
+
+    return JSON.parse(jsonStr.trim()) as T;
+  } catch (error) {
+    console.error('[Bedrock] Failed to parse Haiku JSON response:', error);
+    console.error('[Bedrock] Raw response:', response);
+    return null;
+  }
+}
+
+/**
+ * Get empathetic response from Sonnet.
+ * Use for: user-facing responses, witnessing, empathy building.
+ * Better at nuance and natural conversation.
+ */
+export async function getSonnetResponse(
+  options: SonnetCompletionOptions
+): Promise<string | null> {
+  return getModelCompletion('sonnet', {
+    ...options,
+    maxTokens: options.maxTokens ?? 2048,
+  });
 }

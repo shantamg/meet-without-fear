@@ -15,7 +15,7 @@ import { prisma } from '../lib/prisma';
 import { ApiResponse, ErrorCode } from '@be-heard/shared';
 import { notifyPartner } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
-import { getPartnerUserId } from '../utils/session';
+import { getPartnerUserId, isSessionCreator } from '../utils/session';
 
 // ============================================================================
 // Controllers
@@ -528,24 +528,40 @@ export async function advanceStage(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Check session is active
-    if (session.status !== 'ACTIVE') {
-      errorResponse(
-        res,
-        ErrorCode.SESSION_NOT_ACTIVE,
-        `Cannot advance stage: session status is ${session.status}`,
-        400
-      );
-      return;
-    }
-
-    // Get user's current progress
+    // Get user's current progress (needed for status check logic)
     const currentProgress = session.stageProgress
       .filter((sp) => sp.userId === user.id)
       .sort((a, b) => b.stage - a.stage)[0];
 
     const currentStage = currentProgress?.stage ?? 0;
     const nextStage = currentStage + 1;
+
+    // Check session status allows advancement
+    // Allow ACTIVE for all users, allow INVITED for creator advancing to Stage 1
+    if (session.status !== 'ACTIVE') {
+      if (session.status === 'INVITED' && nextStage === 1) {
+        // Creator can advance from Stage 0 to Stage 1 while waiting for partner
+        const isCreator = await isSessionCreator(sessionId, user.id);
+        if (!isCreator) {
+          errorResponse(
+            res,
+            ErrorCode.SESSION_NOT_ACTIVE,
+            `Cannot advance stage: session status is ${session.status}`,
+            400
+          );
+          return;
+        }
+        // Creator can proceed
+      } else {
+        errorResponse(
+          res,
+          ErrorCode.SESSION_NOT_ACTIVE,
+          `Cannot advance stage: session status is ${session.status}`,
+          400
+        );
+        return;
+      }
+    }
 
     // Validate stage range
     if (nextStage > 4) {

@@ -38,6 +38,7 @@ const REQUEST_TIMEOUT = 30000; // 30 seconds
  */
 export interface TokenProvider {
   getToken: (options?: { forceRefresh?: boolean }) => Promise<string | null>;
+  signOut?: () => Promise<void>;
 }
 
 let tokenProvider: TokenProvider | null = null;
@@ -48,6 +49,21 @@ let tokenProvider: TokenProvider | null = null;
  */
 export function setTokenProvider(provider: TokenProvider): void {
   tokenProvider = provider;
+}
+
+/**
+ * Sign out the user when auth is invalid.
+ * Called when we get an unrecoverable 401.
+ */
+async function handleAuthFailure(): Promise<void> {
+  if (tokenProvider?.signOut) {
+    console.warn('[API] Signing out due to auth failure');
+    try {
+      await tokenProvider.signOut();
+    } catch (error) {
+      console.error('[API] Failed to sign out:', error);
+    }
+  }
 }
 
 // ============================================================================
@@ -180,6 +196,9 @@ apiClient.interceptors.response.use(
 
         // If we couldn't refresh or token is invalid, the user needs to re-authenticate
         console.warn('[API] Unauthorized - session may have expired, please sign in again');
+
+        // Sign out the user to force re-authentication
+        await handleAuthFailure();
       }
 
       // Create standardized API error

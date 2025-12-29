@@ -15,6 +15,7 @@ jest.mock('../../lib/prisma', () => ({
       findUnique: jest.fn(),
       update: jest.fn(),
       upsert: jest.fn(),
+      create: jest.fn(),
     },
     message: {
       create: jest.fn(),
@@ -30,12 +31,21 @@ jest.mock('../../lib/prisma', () => ({
     user: {
       findUnique: jest.fn(),
     },
+    userVessel: {
+      findUnique: jest.fn(),
+    },
+    emotionalReading: {
+      findMany: jest.fn(),
+    },
+    invitation: {
+      findFirst: jest.fn(),
+    },
   },
 }));
 
 // Mock AI service
 jest.mock('../../services/ai', () => ({
-  getWitnessResponse: jest.fn(),
+  getOrchestratedResponse: jest.fn(),
 }));
 
 // Mock realtime service
@@ -119,23 +129,45 @@ describe('Stage 1 API', () => {
         timestamp: new Date(),
       };
 
-      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+      const mockSession = {
         id: mockSessionId,
         status: 'ACTIVE',
+        relationshipId: 'rel-1',
+        createdAt: new Date(),
         relationship: {
-          members: [{ userId: mockUser.id }],
+          members: [{ userId: mockUser.id, user: { name: 'Test User' } }],
         },
-      });
+        stageProgress: [mockStageProgress],
+      };
 
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue(mockSession);
       (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
       (prisma.message.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.message.create as jest.Mock)
         .mockResolvedValueOnce(mockUserMessage)
         .mockResolvedValueOnce(mockAiMessage);
+      (prisma.relationshipMember.findMany as jest.Mock).mockResolvedValue([
+        { userId: mockUser.id },
+      ]);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.emotionalReading.findMany as jest.Mock).mockResolvedValue([]);
 
-      (aiService.getWitnessResponse as jest.Mock).mockResolvedValue(
-        'I hear that you are feeling frustrated...'
-      );
+      // Mock the orchestrated response
+      (aiService.getOrchestratedResponse as jest.Mock).mockResolvedValue({
+        response: 'I hear that you are feeling frustrated...',
+        memoryIntent: { intent: 'emotional_validation', depth: 'minimal', reason: 'Test' },
+        contextBundle: {
+          conversationContext: { recentTurns: [], turnCount: 0, sessionDurationMinutes: 0 },
+          emotionalThread: { initialIntensity: null, currentIntensity: null, trend: 'unknown', notableShifts: [] },
+          stageContext: { stage: 1, gatesSatisfied: {} },
+          userName: 'Test User',
+          intent: { intent: 'emotional_validation', depth: 'minimal', reason: 'Test' },
+          assembledAt: new Date().toISOString(),
+        },
+        usedMock: false,
+      });
 
       const req = createMockRequest({
         user: mockUser,
@@ -163,7 +195,7 @@ describe('Stage 1 API', () => {
         })
       );
 
-      expect(aiService.getWitnessResponse).toHaveBeenCalled();
+      expect(aiService.getOrchestratedResponse).toHaveBeenCalled();
     });
 
     it('requires authentication', async () => {
@@ -211,14 +243,14 @@ describe('Stage 1 API', () => {
       );
     });
 
-    it('rejects messages when user not in stage 1', async () => {
+    it('rejects messages when user in stage 0 without compact signed', async () => {
       const mockStageProgress = {
         id: 'progress-1',
         sessionId: mockSessionId,
         userId: mockUser.id,
         stage: 0, // Still in stage 0
         status: 'IN_PROGRESS',
-        gatesSatisfied: {},
+        gatesSatisfied: {}, // Compact not signed
       };
 
       (prisma.session.findFirst as jest.Mock).mockResolvedValue({
@@ -246,7 +278,7 @@ describe('Stage 1 API', () => {
           success: false,
           error: expect.objectContaining({
             code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('stage 1'),
+            message: expect.stringContaining('Curiosity Compact'),
           }),
         })
       );

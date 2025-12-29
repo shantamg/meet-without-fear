@@ -10,7 +10,7 @@
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { getWitnessResponse } from '../services/ai';
+import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
 import {
   sendMessageRequestSchema,
   feelHeardRequestSchema,
@@ -20,7 +20,7 @@ import {
 } from '@be-heard/shared';
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
-import { getPartnerUserId } from '../utils/session';
+import { getPartnerUserId, isSessionCreator } from '../utils/session';
 
 // ============================================================================
 // Helpers
@@ -104,15 +104,27 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Check session is active
+    // Check session allows messaging
+    // Allow ACTIVE status for all users, and INVITED status for the session creator
+    // This lets the creator start working on Stages 0-1 while waiting for partner
     if (session.status !== 'ACTIVE') {
-      console.log(`[sendMessage] Session ${sessionId} is not active: ${session.status}`);
-      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
-      return;
+      if (session.status === 'INVITED') {
+        const isCreator = await isSessionCreator(sessionId, user.id);
+        if (!isCreator) {
+          console.log(`[sendMessage] Session ${sessionId} is INVITED and user ${user.id} is not the creator`);
+          errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+          return;
+        }
+        // Creator can proceed while session is INVITED
+      } else {
+        console.log(`[sendMessage] Session ${sessionId} is not active: ${session.status}`);
+        errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+        return;
+      }
     }
 
     // Get user's current stage progress
-    const progress = await prisma.stageProgress.findFirst({
+    let progress = await prisma.stageProgress.findFirst({
       where: {
         sessionId,
         userId: user.id,
@@ -121,11 +133,47 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       orderBy: { stage: 'desc' },
     });
 
-    // Check user is in stage 1
-    const currentStage = progress?.stage ?? 0;
-    if (currentStage !== 1) {
+    // Check user is in stage 1, auto-advance from Stage 0 if compact is signed
+    let currentStage = progress?.stage ?? 0;
+    if (currentStage === 0) {
+      // Check if compact is signed - if so, auto-advance to Stage 1
+      const gates = progress?.gatesSatisfied as Record<string, unknown> | null;
+      if (gates?.compactSigned) {
+        console.log(`[sendMessage] Auto-advancing user ${user.id} from Stage 0 to Stage 1`);
+        const now = new Date();
+
+        // Complete Stage 0
+        if (progress) {
+          await prisma.stageProgress.update({
+            where: { id: progress.id },
+            data: { status: 'COMPLETED', completedAt: now },
+          });
+        }
+
+        // Create Stage 1 progress
+        progress = await prisma.stageProgress.create({
+          data: {
+            sessionId,
+            userId: user.id,
+            stage: 1,
+            status: 'IN_PROGRESS',
+            startedAt: now,
+            gatesSatisfied: {},
+          },
+        });
+        currentStage = 1;
+      } else {
+        // Compact not signed yet - they need to sign first
+        errorResponse(
+          res,
+          'VALIDATION_ERROR',
+          'Please sign the Curiosity Compact before starting your conversation',
+          400
+        );
+        return;
+      }
+    } else if (currentStage !== 1) {
       console.log(`[sendMessage] User ${user.id} in session ${sessionId} is in stage ${currentStage}, not stage 1`);
-      console.log(`[sendMessage] Progress record:`, JSON.stringify(progress, null, 2));
       errorResponse(
         res,
         'VALIDATION_ERROR',
@@ -142,7 +190,7 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
         senderId: user.id,
         role: 'USER',
         content,
-        stage: 1,
+        stage: currentStage,
       },
     });
 
@@ -159,16 +207,53 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     // Count user turns for AI context
     const userTurnCount = history.filter((m) => m.role === 'USER').length;
 
-    // Get AI witness response
-    const aiContent = await getWitnessResponse(
+    // Get partner name for context
+    const partnerId = await getPartnerUserId(sessionId, user.id);
+    let partnerName: string | undefined;
+    if (partnerId) {
+      const partner = await prisma.user.findUnique({
+        where: { id: partnerId },
+        select: { name: true },
+      });
+      partnerName = partner?.name || undefined;
+    }
+
+    // Get session for duration calculation
+    const sessionForDuration = await prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { createdAt: true },
+    });
+    const sessionDurationMinutes = sessionForDuration
+      ? Math.floor((Date.now() - sessionForDuration.createdAt.getTime()) / 60000)
+      : 0;
+
+    // Determine if this is the first turn in the session
+    const isFirstTurnInSession = userTurnCount === 1;
+
+    // Build full context for orchestrated response
+    const aiContext: FullAIContext = {
+      sessionId,
+      userId: user.id,
+      userName: user.name || 'there',
+      partnerName,
+      stage: currentStage,
+      turnCount: userTurnCount,
+      emotionalIntensity: 5, // TODO: Get from emotional barometer when implemented
+      sessionDurationMinutes,
+      isFirstTurnInSession,
+    };
+
+    // Get AI response using full orchestration pipeline
+    const orchestratorResult = await getOrchestratedResponse(
       history.map((m) => ({
-        role: m.role === 'USER' ? 'user' : 'assistant',
+        role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
         content: m.content,
       })),
-      {
-        userName: user.name || 'there',
-        turnCount: userTurnCount,
-      }
+      aiContext
+    );
+
+    console.log(
+      `[sendMessage] Orchestrator: intent=${orchestratorResult.memoryIntent.intent}, depth=${orchestratorResult.memoryIntent.depth}, mock=${orchestratorResult.usedMock}`
     );
 
     // Save AI response
@@ -177,8 +262,8 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
         sessionId,
         senderId: null,
         role: 'AI',
-        content: aiContent,
-        stage: 1,
+        content: orchestratorResult.response,
+        stage: currentStage,
       },
     });
 
@@ -264,10 +349,20 @@ export async function confirmFeelHeard(
       return;
     }
 
-    // Check session is active
+    // Check session allows feel-heard confirmation
+    // Allow ACTIVE status for all users, and INVITED status for the session creator
     if (session.status !== 'ACTIVE') {
-      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
-      return;
+      if (session.status === 'INVITED') {
+        const isCreator = await isSessionCreator(sessionId, user.id);
+        if (!isCreator) {
+          errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+          return;
+        }
+        // Creator can proceed while session is INVITED
+      } else {
+        errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+        return;
+      }
     }
 
     // Get user's current stage progress

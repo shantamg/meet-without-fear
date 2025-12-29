@@ -52,8 +52,12 @@ function ClerkAuthSetup() {
 
     // Also set token provider for API client
     // When forceRefresh is true, use skipCache to bypass Clerk's token cache
+    // Include signOut so API client can sign out on unrecoverable 401
     setTokenProvider({
       getToken: async (options) => getToken({ skipCache: options?.forceRefresh }),
+      signOut: async () => {
+        await signOut();
+      },
     });
   }, [getToken, signOut]);
 

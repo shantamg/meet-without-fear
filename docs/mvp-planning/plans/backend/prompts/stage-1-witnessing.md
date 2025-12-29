@@ -68,6 +68,7 @@ REFLECTION TECHNIQUES (both modes):
 - Validation: "That sounds really difficult..."
 - Gentle probing: "Can you tell me more about..."
 - Summarizing: "Let me see if I can capture what you have shared..."
+- Modeling reframe: "I hear the pain underneath that. What you are really needing is..." (Shows user how to filter attacking language into needs - teaching by doing)
 
 INSIGHT TECHNIQUES (INSIGHT MODE only, and tentatively):
 - Pattern recognition: "I notice you have mentioned X several times..."

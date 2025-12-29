@@ -28,6 +28,7 @@ import {
   Stage,
 } from '@be-heard/shared';
 import { sessionKeys } from './useSessions';
+import { stageKeys } from './useStages';
 
 // ============================================================================
 // Query Keys
@@ -208,8 +209,12 @@ export function useSendMessage(
       }
       queryClient.invalidateQueries({ queryKey: messageKeys.list(sessionId) });
 
-      // Session might have progressed - invalidate session detail
+      // Session might have progressed - invalidate session detail and progress
+      // Progress invalidation is critical: when user sends first message at Stage 0,
+      // backend auto-advances to Stage 1. Without this, useMessages would keep
+      // querying for Stage 0 messages while new messages are saved at Stage 1.
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
     },
     ...options,
   });

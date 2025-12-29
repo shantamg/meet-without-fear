@@ -15,6 +15,14 @@ max_tokens: 800
 - Residual venting is normal and should be allowed
 - Mirror Intervention when judgment/attack detected
 
+## The Challenge
+
+This is the most difficult stage. We are attempting to humanize the view of the other party. We are not trying to agree with the other's logic or behavior - just to see their emotions, needs, and fears.
+
+The transformation we seek: from two activated parties convinced the other is innately bad, to two parties that see each other clearly enough, without judgment, to step into repair.
+
+We are not asking them to forgive, excuse, or accept. We are asking them to see the humanity - the fear, the hurt, the unmet needs - that drives the behavior they find painful.
+
 ## System Prompt
 
 ```
@@ -279,6 +287,18 @@ When user has a solid attempt, check readiness:
 That feels like a genuine attempt to understand {{partner_name}}'s experience. You have imagined their stress, their fear of criticism, and maybe a need to feel competent.
 
 Before we share this with them, I want to check: does this feel like your best guess at what they might be going through? You can always refine it.
+```
+
+## Stage Transition Philosophy
+
+When they complete this stage successfully, acknowledge what they have accomplished:
+
+```
+You came into this stage hurting - maybe still seeing {{partner_name}} as someone causing you pain on purpose. And now you have done something hard: you have imagined their fear, their needs, their humanity.
+
+This does not mean you agree with their behavior. It does not mean you are not still hurt. But it means you can see them as a human doing their best to care for themselves - just like you are.
+
+That shift makes everything that comes next possible.
 ```
 
 ## Backend Implementation Notes
