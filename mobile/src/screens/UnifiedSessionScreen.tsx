@@ -158,25 +158,35 @@ export function UnifiedSessionScreen({
   } = useUnifiedSession(sessionId);
 
   // -------------------------------------------------------------------------
+  // Effective Stage (accounts for compact signed but stage not yet updated)
+  // -------------------------------------------------------------------------
+  const effectiveStage = useMemo(() => {
+    if (currentStage === Stage.ONBOARDING && compactData?.mySigned) {
+      return Stage.WITNESS;
+    }
+    return currentStage;
+  }, [currentStage, compactData?.mySigned]);
+
+  // -------------------------------------------------------------------------
   // Prepare Messages with Welcome Message
   // -------------------------------------------------------------------------
   const displayMessages = useMemo((): ChatMessage[] => {
     if (messages.length === 0) {
-      // Show welcome message for the current stage
+      // Show welcome message for the effective stage
       return [
         {
-          id: `welcome-${currentStage}`,
+          id: `welcome-${effectiveStage}`,
           sessionId,
           senderId: null,
           role: MessageRole.AI,
-          content: getWelcomeMessage(currentStage, partnerName),
-          stage: currentStage,
+          content: getWelcomeMessage(effectiveStage, partnerName),
+          stage: effectiveStage,
           timestamp: new Date().toISOString(),
         },
       ];
     }
     return messages;
-  }, [messages, currentStage, sessionId, partnerName]);
+  }, [messages, effectiveStage, sessionId, partnerName]);
 
   // -------------------------------------------------------------------------
   // Render Inline Card
@@ -667,7 +677,7 @@ export function UnifiedSessionScreen({
           messages={displayMessages}
           onSendMessage={sendMessage}
           isLoading={isSending}
-          showEmotionSlider={currentStage === Stage.WITNESS}
+          showEmotionSlider={effectiveStage === Stage.WITNESS}
           emotionValue={barometerValue}
           onEmotionChange={handleBarometerChange}
           onHighEmotion={(value) => {
