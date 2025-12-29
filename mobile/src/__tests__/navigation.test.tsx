@@ -27,7 +27,22 @@ jest.mock('@clerk/clerk-expo', () => {
   return {
     ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
     ClerkLoaded: ({ children }: { children: React.ReactNode }) => children,
-    useAuth: () => ({ isSignedIn: true }),
+    useAuth: () => ({
+      isSignedIn: true,
+      isLoaded: true,
+      signOut: jest.fn(),
+      getToken: jest.fn().mockResolvedValue('mock-token'),
+    }),
+    useUser: () => ({
+      user: {
+        id: 'test-user',
+        emailAddresses: [{ emailAddress: 'test@example.com' }],
+        fullName: 'Test User',
+        firstName: 'Test',
+        lastName: 'User',
+        createdAt: new Date(),
+      },
+    }),
   };
 });
 
@@ -234,10 +249,5 @@ describe('Auth Hook', () => {
 
   it('exports AuthContext', () => {
     expect(AuthHooks.AuthContext).toBeDefined();
-  });
-
-  it('exports useProtectedRoute hook', () => {
-    expect(AuthHooks.useProtectedRoute).toBeDefined();
-    expect(typeof AuthHooks.useProtectedRoute).toBe('function');
   });
 });

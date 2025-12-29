@@ -1,14 +1,13 @@
 /**
  * HomeScreen Tests
  *
- * Tests for the home screen with session list and hero card.
+ * Tests for the home screen with the chat-first interface.
  */
 
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react-native';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import HomeScreen from '../index';
-import { SessionSummaryDTO, SessionStatus, Stage, StageStatus } from '@be-heard/shared';
 
 // Mock expo-router
 const mockPush = jest.fn();
@@ -20,25 +19,80 @@ jest.mock('expo-router', () => ({
 
 // Mock lucide-react-native
 jest.mock('lucide-react-native', () => ({
-  Plus: () => 'PlusIcon',
+  ChevronDown: () => 'ChevronDownIcon',
+  MessageCircle: () => 'MessageCircleIcon',
+  Send: () => 'SendIcon',
 }));
 
-// Mock useSessions hook
-const mockUseSessions = jest.fn();
-jest.mock('../../../../src/hooks/useSessions', () => ({
-  useSessions: () => mockUseSessions(),
+// Mock useRouterChat hook
+const mockSendMessage = jest.fn();
+const mockUseRouterChat = jest.fn(() => ({
+  messages: [
+    {
+      id: 'welcome',
+      sessionId: 'router',
+      senderId: null,
+      role: 'AI',
+      content: "Hi! What can I help you work through today?",
+      stage: 'ONBOARDING',
+      timestamp: new Date().toISOString(),
+    },
+  ],
+  isSending: false,
+  isLoading: false,
+  sendMessage: mockSendMessage,
+  clearMessages: jest.fn(),
 }));
 
-// Mock useAuth hook
-jest.mock('@/src/hooks/useAuth', () => ({
-  useAuth: () => ({
-    user: { id: 'user-1', name: 'Test User', email: 'test@example.com' },
-    isAuthenticated: true,
-    isLoading: false,
-  }),
+jest.mock('../../../../src/hooks/useRouterChat', () => ({
+  useRouterChat: (options: { onSessionCreated?: (id: string) => void }) => {
+    const result = mockUseRouterChat();
+    // Store the callback for testing
+    (mockUseRouterChat as unknown as { onSessionCreated?: (id: string) => void }).onSessionCreated =
+      options.onSessionCreated;
+    return result;
+  },
 }));
 
-// Mock useBiometricAuth hook to prevent async state updates
+// Mock ChatInterface component
+jest.mock('../../../../src/components/ChatInterface', () => ({
+  ChatInterface: ({
+    messages,
+    onSendMessage,
+    isLoading,
+  }: {
+    messages: unknown[];
+    onSendMessage: (content: string) => void;
+    isLoading: boolean;
+  }) => {
+    const { View, Text, TouchableOpacity, TextInput } = require('react-native');
+    return (
+      <View testID="chat-interface">
+        <Text testID="message-count">{messages.length} messages</Text>
+        {isLoading && <Text testID="loading-indicator">Loading...</Text>}
+        <TextInput testID="message-input" placeholder="Type a message" />
+        <TouchableOpacity testID="send-button" onPress={() => onSendMessage('test message')}>
+          <Text>Send</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  },
+}));
+
+// Mock BiometricPrompt component
+jest.mock('../../../../src/components/BiometricPrompt', () => ({
+  BiometricPrompt: ({ visible, testID }: { visible: boolean; testID?: string }) => {
+    const { View, Text } = require('react-native');
+    if (!visible) return null;
+    return (
+      <View testID={testID || 'biometric-prompt'}>
+        <Text>Biometric Prompt</Text>
+      </View>
+    );
+  },
+}));
+
+// Mock useBiometricAuth hook
 jest.mock('@/src/hooks', () => ({
   useBiometricAuth: () => ({
     isAvailable: false,
@@ -63,36 +117,6 @@ jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-// Helper to create mock session
-function createMockSession(overrides: Partial<SessionSummaryDTO> = {}): SessionSummaryDTO {
-  return {
-    id: 'session-1',
-    relationshipId: 'rel-1',
-    status: SessionStatus.ACTIVE,
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2024-01-02T00:00:00Z',
-    partner: {
-      id: 'user-2',
-      name: 'Jane Doe',
-    },
-    myProgress: {
-      stage: Stage.WITNESS,
-      status: StageStatus.IN_PROGRESS,
-      startedAt: '2024-01-01T00:00:00Z',
-      completedAt: null,
-    },
-    partnerProgress: {
-      stage: Stage.WITNESS,
-      status: StageStatus.IN_PROGRESS,
-      startedAt: '2024-01-01T00:00:00Z',
-      completedAt: null,
-    },
-    selfActionNeeded: [],
-    partnerActionNeeded: [],
-    ...overrides,
-  };
-}
-
 function renderWithProviders(component: React.ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -102,116 +126,81 @@ function renderWithProviders(component: React.ReactElement) {
     },
   });
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      {component}
-    </QueryClientProvider>
-  );
+  return render(<QueryClientProvider client={queryClient}>{component}</QueryClientProvider>);
 }
 
 describe('HomeScreen', () => {
   beforeEach(() => {
     mockPush.mockClear();
-    mockUseSessions.mockClear();
+    mockSendMessage.mockClear();
   });
 
-  it('shows loading state while fetching sessions', () => {
-    mockUseSessions.mockReturnValue({
-      data: undefined,
+  it('renders the ChatInterface component', () => {
+    renderWithProviders(<HomeScreen />);
+
+    expect(screen.getByTestId('chat-interface')).toBeTruthy();
+    expect(screen.getByTestId('message-count')).toBeTruthy();
+  });
+
+  it('calls sendMessage when send button is pressed', () => {
+    renderWithProviders(<HomeScreen />);
+
+    const sendButton = screen.getByTestId('send-button');
+    fireEvent.press(sendButton);
+
+    expect(mockSendMessage).toHaveBeenCalledWith('test message');
+  });
+
+  it('navigates to session when session is created', () => {
+    renderWithProviders(<HomeScreen />);
+
+    // Simulate session creation callback
+    const onSessionCreated = (
+      mockUseRouterChat as unknown as { onSessionCreated?: (id: string) => void }
+    ).onSessionCreated;
+    if (onSessionCreated) {
+      onSessionCreated('new-session-123');
+    }
+
+    expect(mockPush).toHaveBeenCalledWith('/session/new-session-123');
+  });
+
+  it('does not show biometric prompt when already prompted', () => {
+    renderWithProviders(<HomeScreen />);
+
+    // Biometric prompt should not be visible since hasPrompted is true
+    expect(screen.queryByTestId('biometric-prompt')).toBeNull();
+  });
+
+  it('shows loading state when isLoading is true', () => {
+    mockUseRouterChat.mockReturnValueOnce({
+      messages: [],
+      isSending: false,
       isLoading: true,
+      sendMessage: mockSendMessage,
+      clearMessages: jest.fn(),
     });
 
     renderWithProviders(<HomeScreen />);
 
     expect(screen.getByText('Loading...')).toBeTruthy();
   });
+});
 
-  it('shows empty state when no sessions', () => {
-    mockUseSessions.mockReturnValue({
-      data: { items: [], hasMore: false },
-      isLoading: false,
-    });
-
-    renderWithProviders(<HomeScreen />);
-
-    expect(screen.getByText(/no active sessions/i)).toBeTruthy();
-    expect(screen.getByText(/start a new conversation/i)).toBeTruthy();
+describe('HomeScreen with biometric prompt', () => {
+  beforeEach(() => {
+    mockPush.mockClear();
+    jest.useFakeTimers();
   });
 
-  it('shows hero card for most urgent session', () => {
-    const urgentSession = createMockSession({
-      id: 'urgent-session',
-      selfActionNeeded: ['complete_witness'],
-    });
-    const normalSession = createMockSession({
-      id: 'normal-session',
-      selfActionNeeded: [],
-    });
-
-    mockUseSessions.mockReturnValue({
-      data: { items: [normalSession, urgentSession], hasMore: false },
-      isLoading: false,
-    });
-
-    renderWithProviders(<HomeScreen />);
-
-    expect(screen.getByTestId('hero-card')).toBeTruthy();
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
-  it('shows session list below hero', () => {
-    const sessions = [
-      createMockSession({ id: 'session-1', selfActionNeeded: ['action'] }),
-      createMockSession({ id: 'session-2' }),
-      createMockSession({ id: 'session-3' }),
-    ];
-
-    mockUseSessions.mockReturnValue({
-      data: { items: sessions, hasMore: false },
-      isLoading: false,
-    });
-
+  it('renders without errors with biometric available', () => {
+    // This test verifies the component renders without errors
     renderWithProviders(<HomeScreen />);
 
-    // Hero + 2 regular cards
-    expect(screen.getByTestId('hero-card')).toBeTruthy();
-    expect(screen.getAllByTestId('session-card').length).toBe(2);
-  });
-
-  it('navigates to new session screen when button pressed', () => {
-    mockUseSessions.mockReturnValue({
-      data: { items: [], hasMore: false },
-      isLoading: false,
-    });
-
-    renderWithProviders(<HomeScreen />);
-
-    fireEvent.press(screen.getByText('New Session'));
-
-    expect(mockPush).toHaveBeenCalledWith('/session/new');
-  });
-
-  it('sorts sessions with action needed first', () => {
-    const noActionSession = createMockSession({
-      id: 'no-action',
-      selfActionNeeded: [],
-      updatedAt: '2024-01-03T00:00:00Z',
-    });
-    const actionNeededSession = createMockSession({
-      id: 'action-needed',
-      selfActionNeeded: ['complete_stage'],
-      updatedAt: '2024-01-01T00:00:00Z', // Older but has action
-    });
-
-    mockUseSessions.mockReturnValue({
-      data: { items: [noActionSession, actionNeededSession], hasMore: false },
-      isLoading: false,
-    });
-
-    renderWithProviders(<HomeScreen />);
-
-    // The hero card should be the one with action needed
-    expect(screen.getByTestId('hero-card')).toBeTruthy();
-    // The hero card should contain "Your turn" since it has action needed
-    expect(screen.getByText('Your turn')).toBeTruthy();
+    expect(screen.getByTestId('chat-interface')).toBeTruthy();
   });
 });

@@ -289,6 +289,63 @@ jest.mock('expo-web-browser', () => ({
   coolDownAsync: jest.fn(),
 }));
 
+// Mock expo-auth-session (required by Clerk)
+jest.mock('expo-auth-session', () => ({
+  makeRedirectUri: jest.fn(() => 'https://redirect.test'),
+  useAuthRequest: jest.fn(() => [null, null, jest.fn()]),
+  AuthRequest: jest.fn(),
+  ResponseType: { Code: 'code', Token: 'token' },
+  CodeChallengeMethod: { S256: 'S256', Plain: 'plain' },
+  AuthError: class AuthError extends Error {},
+  TokenError: class TokenError extends Error {},
+}));
+
+// Mock @clerk/clerk-expo
+jest.mock('@clerk/clerk-expo', () => {
+  const React = require('react');
+  return {
+    ClerkProvider: ({ children }) => children,
+    ClerkLoaded: ({ children }) => children,
+    useAuth: () => ({
+      isSignedIn: true,
+      isLoaded: true,
+      signOut: jest.fn().mockResolvedValue(undefined),
+      getToken: jest.fn().mockResolvedValue('mock-token'),
+    }),
+    useUser: () => ({
+      user: {
+        id: 'test-user-id',
+        emailAddresses: [{ emailAddress: 'test@example.com' }],
+        fullName: 'Test User',
+        firstName: 'Test',
+        lastName: 'User',
+        createdAt: new Date(),
+      },
+    }),
+    useOAuth: () => ({
+      startOAuthFlow: jest.fn().mockResolvedValue({
+        createdSessionId: 'test-session',
+        setActive: jest.fn(),
+      }),
+    }),
+    useSignIn: () => ({
+      signIn: { create: jest.fn(), prepareFirstFactor: jest.fn(), attemptFirstFactor: jest.fn() },
+      setActive: jest.fn(),
+      isLoaded: true,
+    }),
+    useSignUp: () => ({
+      signUp: { create: jest.fn() },
+      setActive: jest.fn(),
+      isLoaded: true,
+    }),
+  };
+});
+
+// Mock @clerk/clerk-expo/token-cache
+jest.mock('@clerk/clerk-expo/token-cache', () => ({
+  tokenCache: {},
+}));
+
 // Mock expo-modules-core
 jest.mock('expo-modules-core', () => ({
   EventSubscription: class {},
