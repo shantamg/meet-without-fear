@@ -229,7 +229,7 @@ export function PerspectiveStretchScreen() {
   // Derived data
   const session = sessionData?.session;
   const myProgress = progressData?.myProgress;
-  const partnerName = session?.partner?.name ?? 'Partner';
+  const partnerName = session?.partner?.nickname ?? session?.partner?.name ?? 'Partner';
 
   // Determine current phase
   const phase = useMemo(

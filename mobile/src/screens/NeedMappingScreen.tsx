@@ -691,7 +691,7 @@ export function NeedMappingScreen() {
         <SafeAreaView style={styles.container} edges={['bottom']}>
           <WaitingRoom
             message="Waiting for your partner to complete need mapping"
-            partnerName={session?.partner?.name ?? undefined}
+            partnerName={session?.partner?.nickname ?? session?.partner?.name ?? undefined}
           />
         </SafeAreaView>
       </>
@@ -807,7 +807,7 @@ export function NeedMappingScreen() {
       description: cg.description,
     }));
 
-    const partnerName = session?.partner?.name ?? 'Partner';
+    const partnerName = session?.partner?.nickname ?? session?.partner?.name ?? 'Partner';
 
     return (
       <>
@@ -875,7 +875,7 @@ export function NeedMappingScreen() {
         <SafeAreaView style={styles.container} edges={['bottom']}>
           <WaitingRoom
             message="Waiting for your partner to confirm their needs so we can discover common ground"
-            partnerName={session?.partner?.name ?? undefined}
+            partnerName={session?.partner?.nickname ?? session?.partner?.name ?? undefined}
           />
         </SafeAreaView>
       </>

@@ -613,9 +613,7 @@ model Invitation {
   sessionId     String
   invitedBy     User             @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
   invitedById   String
-  email         String?
-  phone         String?
-  name          String?
+  name          String?          // Display name for the invited person
   status        InvitationStatus @default(PENDING)
   createdAt     DateTime         @default(now())
   expiresAt     DateTime
@@ -624,7 +622,6 @@ model Invitation {
   declineReason String?
 
   @@index([sessionId])
-  @@index([email])
   @@index([status])
 }
 

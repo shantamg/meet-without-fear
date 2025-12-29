@@ -20,17 +20,17 @@ describe('createSessionRequestSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts email invitation', () => {
+  it('accepts inviteName only', () => {
     const result = createSessionRequestSchema.safeParse({
-      inviteEmail: 'partner@example.com',
       inviteName: 'My Partner',
     });
     expect(result.success).toBe(true);
   });
 
-  it('accepts phone invitation', () => {
+  it('accepts both personId and inviteName', () => {
     const result = createSessionRequestSchema.safeParse({
-      invitePhone: '+14155551234',
+      personId: 'clxxxxxxxxxxxxxxxxxx123',
+      inviteName: 'My Partner',
     });
     expect(result.success).toBe(true);
   });
@@ -42,7 +42,7 @@ describe('createSessionRequestSchema', () => {
 
   it('accepts optional context', () => {
     const result = createSessionRequestSchema.safeParse({
-      inviteEmail: 'test@example.com',
+      inviteName: 'My Partner',
       context: 'We need to discuss finances',
     });
     expect(result.success).toBe(true);
@@ -50,7 +50,7 @@ describe('createSessionRequestSchema', () => {
 
   it('rejects context over 500 chars', () => {
     const result = createSessionRequestSchema.safeParse({
-      inviteEmail: 'test@example.com',
+      inviteName: 'My Partner',
       context: 'x'.repeat(501),
     });
     expect(result.success).toBe(false);

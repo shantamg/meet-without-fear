@@ -597,7 +597,7 @@ export function StrategicRepairScreen() {
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <WaitingRoom
           message="Waiting for your partner to submit their ranking"
-          partnerName={session?.partner?.name || undefined}
+          partnerName={session?.partner?.nickname ?? session?.partner?.name ?? undefined}
         />
       </SafeAreaView>
     );
@@ -682,7 +682,7 @@ export function StrategicRepairScreen() {
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <WaitingRoom
           message="Creating your agreement based on shared priorities..."
-          partnerName={session?.partner?.name || undefined}
+          partnerName={session?.partner?.nickname ?? session?.partner?.name ?? undefined}
         />
       </SafeAreaView>
     );

@@ -73,13 +73,11 @@ export type SessionDetailInput = z.infer<typeof sessionDetailSchema>;
 export const createSessionRequestSchema = z
   .object({
     personId: z.string().cuid().optional(),
-    inviteEmail: z.string().email('Invalid email format').optional(),
-    invitePhone: z.string().optional(),
     inviteName: z.string().min(1, 'Name is required').max(100, 'Name too long').optional(),
     context: z.string().max(500, 'Context too long').optional(),
   })
-  .refine(data => data.personId || data.inviteEmail || data.invitePhone || data.inviteName, {
-    message: 'Must provide personId, inviteEmail, invitePhone, or inviteName',
+  .refine(data => data.personId || data.inviteName, {
+    message: 'Must provide personId or inviteName',
   });
 
 export type CreateSessionRequestInput = z.infer<typeof createSessionRequestSchema>;

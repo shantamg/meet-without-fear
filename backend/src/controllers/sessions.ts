@@ -49,7 +49,9 @@ export async function getSession(req: Request, res: Response): Promise<void> {
         relationship: {
           include: {
             members: {
-              include: {
+              select: {
+                userId: true,
+                nickname: true,
                 user: {
                   select: {
                     id: true,
@@ -74,6 +76,11 @@ export async function getSession(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    // Get my membership (for nickname I use for partner)
+    const myMember = session.relationship.members.find(
+      (m) => m.userId === user.id
+    );
+
     // Get partner info
     const partnerMember = session.relationship.members.find(
       (m) => m.userId !== user.id
@@ -81,6 +88,12 @@ export async function getSession(req: Request, res: Response): Promise<void> {
 
     // Get current stage progress
     const currentProgress = session.stageProgress[0];
+
+    // Use nickname (what I call my partner) with fallback to their actual name
+    const partnerDisplayName = myMember?.nickname ||
+      partnerMember?.user.firstName ||
+      partnerMember?.user.name ||
+      null;
 
     successResponse(res, {
       session: {
@@ -92,9 +105,10 @@ export async function getSession(req: Request, res: Response): Promise<void> {
         partner: partnerMember
           ? {
               id: partnerMember.userId,
-              name: partnerMember.user.firstName || partnerMember.user.name,
+              name: partnerDisplayName,
+              nickname: myMember?.nickname || null,
             }
-          : null,
+          : { id: '', name: myMember?.nickname || null, nickname: myMember?.nickname || null },
         myProgress: {
           stage: currentProgress?.stage ?? 0,
           status: currentProgress?.status ?? 'NOT_STARTED',

@@ -9,11 +9,10 @@
 import { useCallback, useMemo } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stage, MessageRole, StrategyPhase } from '@meet-without-fear/shared';
+import { Stage, MessageRole, StrategyPhase, SessionStatus } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
-import { EmotionalBarometer } from '../components/EmotionalBarometer';
 import { FeelHeardConfirmation } from '../components/FeelHeardConfirmation';
 import { BreathingExercise } from '../components/BreathingExercise';
 import { WaitingStatusMessage } from '../components/WaitingStatusMessage';
@@ -45,15 +44,46 @@ interface UnifiedSessionScreenProps {
 // AI Welcome Messages per Stage
 // ============================================================================
 
-const AI_WELCOME_MESSAGES: Record<Stage, string> = {
-  [Stage.ONBOARDING]: `Welcome! Before we begin, let's establish some ground rules that will help us have a productive conversation.`,
-  [Stage.WITNESS]: `Hi there. I'm here to listen and help you feel heard. This is your private space - whatever you share stays between us.
+/**
+ * Get the appropriate welcome message for each stage
+ */
+function getWelcomeMessage(stage: Stage, partnerName?: string | null): string {
+  const nickname = partnerName || 'your partner';
 
-Take your time and share what's on your mind.`,
-  [Stage.PERSPECTIVE_STRETCH]: `Now let's work on understanding your partner's perspective. I'll help you build empathy by exploring what they might be feeling and why.`,
-  [Stage.NEED_MAPPING]: `Let's explore what you truly need from this situation. Behind every frustration is an unmet need - let's discover yours together.`,
-  [Stage.STRATEGIC_REPAIR]: `You've both done incredible work. Now let's find strategies that address both of your needs. I'll suggest some options to get us started.`,
-};
+  switch (stage) {
+    case Stage.ONBOARDING:
+      return `Welcome! Before we begin, let's establish some ground rules that will help us have a productive conversation.`;
+    case Stage.WITNESS:
+      return `What's going on between you and ${nickname}?`;
+    case Stage.PERSPECTIVE_STRETCH:
+      return `Now let's work on understanding ${nickname}'s perspective. I'll help you build empathy by exploring what they might be feeling and why.`;
+    case Stage.NEED_MAPPING:
+      return `Let's explore what you truly need from this situation. Behind every frustration is an unmet need - let's discover yours together.`;
+    case Stage.STRATEGIC_REPAIR:
+      return `You've both done incredible work. Now let's find strategies that address both of your needs. I'll suggest some options to get us started.`;
+    default:
+      return `What's going on between you and ${nickname}?`;
+  }
+}
+
+/**
+ * Get brief status text for the header based on session status
+ */
+function getBriefStatus(status?: SessionStatus): string | undefined {
+  switch (status) {
+    case SessionStatus.INVITED:
+    case SessionStatus.CREATED:
+      return 'invited';
+    case SessionStatus.ACTIVE:
+      return undefined; // No badge needed when active
+    case SessionStatus.PAUSED:
+      return 'paused';
+    case SessionStatus.RESOLVED:
+      return 'resolved';
+    default:
+      return undefined;
+  }
+}
 
 // ============================================================================
 // Component
@@ -71,6 +101,7 @@ export function UnifiedSessionScreen({
     isLoading,
 
     // Session context
+    session,
     currentStage,
     partnerName,
     partnerProgress,
@@ -86,7 +117,6 @@ export function UnifiedSessionScreen({
 
     // Local state
     barometerValue,
-    showFinalCheck,
     pendingConfirmation,
 
     // Stage-specific data
@@ -124,7 +154,6 @@ export function UnifiedSessionScreen({
     // Utility actions
     clearMirrorIntervention,
     showCooling,
-    showFinal,
     setPendingConfirmation,
   } = useUnifiedSession(sessionId);
 
@@ -140,14 +169,14 @@ export function UnifiedSessionScreen({
           sessionId,
           senderId: null,
           role: MessageRole.AI,
-          content: AI_WELCOME_MESSAGES[currentStage],
+          content: getWelcomeMessage(currentStage, partnerName),
           stage: currentStage,
           timestamp: new Date().toISOString(),
         },
       ];
     }
     return messages;
-  }, [messages, currentStage, sessionId]);
+  }, [messages, currentStage, sessionId, partnerName]);
 
   // -------------------------------------------------------------------------
   // Render Inline Card
@@ -170,7 +199,6 @@ export function UnifiedSessionScreen({
             <View style={styles.inlineCard} key={card.id}>
               <FeelHeardConfirmation
                 onConfirm={() => {
-                  showFinal(true);
                   handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
                 }}
                 onContinue={() => dismissCard(card.id)}
@@ -419,7 +447,6 @@ export function UnifiedSessionScreen({
       styles,
       partnerName,
       pendingConfirmation,
-      showFinal,
       showCooling,
       openOverlay,
       dismissCard,
@@ -589,6 +616,7 @@ export function UnifiedSessionScreen({
         <SessionChatHeader
           partnerName={partnerName}
           partnerOnline={false}
+          briefStatus={getBriefStatus(session?.status)}
           testID="session-chat-header"
         />
         <CuriosityCompact
@@ -608,6 +636,7 @@ export function UnifiedSessionScreen({
         <SessionChatHeader
           partnerName={partnerName}
           partnerOnline={false}
+          briefStatus={getBriefStatus(session?.status)}
           testID="session-chat-header"
         />
         <StrategyRanking
@@ -630,6 +659,7 @@ export function UnifiedSessionScreen({
       <SessionChatHeader
         partnerName={partnerName}
         partnerOnline={false}
+        briefStatus={getBriefStatus(session?.status)}
         testID="session-chat-header"
       />
       <View style={styles.content}>
@@ -637,39 +667,19 @@ export function UnifiedSessionScreen({
           messages={displayMessages}
           onSendMessage={sendMessage}
           isLoading={isSending}
+          showEmotionSlider={currentStage === Stage.WITNESS}
+          emotionValue={barometerValue}
+          onEmotionChange={handleBarometerChange}
+          onHighEmotion={(value) => {
+            if (value >= 8) {
+              showCooling(true);
+            }
+          }}
+          compactEmotionSlider
         />
 
         {/* Render inline cards at the end of the chat */}
         {inlineCards.map((card) => renderInlineCard(card))}
-
-        {/* Emotional Barometer (shown periodically in Stage 1) */}
-        {currentStage === Stage.WITNESS && showFinalCheck && (
-          <View style={styles.barometerContainer}>
-            <EmotionalBarometer
-              value={barometerValue}
-              onChange={handleBarometerChange}
-            />
-            <View style={styles.finalCheckActions}>
-              <Text style={styles.finalCheckText}>
-                Check in with yourself before moving on
-              </Text>
-              <TouchableOpacity
-                style={styles.finalCheckButton}
-                onPress={() => {
-                  if (barometerValue >= 8) {
-                    showCooling(true);
-                    setPendingConfirmation(true);
-                  } else {
-                    handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
-                  }
-                  showFinal(false);
-                }}
-              >
-                <Text style={styles.finalCheckButtonText}>Continue</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
       </View>
 
       {/* Overlays */}
@@ -861,36 +871,6 @@ const useStyles = () =>
       color: t.colors.accent,
       fontSize: 14,
       fontWeight: '500',
-    },
-
-    // Barometer
-    barometerContainer: {
-      borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-      backgroundColor: t.colors.bgSecondary,
-    },
-    finalCheckActions: {
-      padding: 16,
-      borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-      alignItems: 'center',
-    },
-    finalCheckText: {
-      fontSize: 14,
-      color: t.colors.textSecondary,
-      marginBottom: 12,
-      textAlign: 'center',
-    },
-    finalCheckButton: {
-      backgroundColor: t.colors.accent,
-      paddingVertical: 12,
-      paddingHorizontal: 32,
-      borderRadius: 8,
-    },
-    finalCheckButtonText: {
-      color: 'white',
-      fontSize: 16,
-      fontWeight: '600',
     },
 
     // Confirmation Buttons

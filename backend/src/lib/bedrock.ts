@@ -236,7 +236,7 @@ export async function getHaikuJson<T>(
   }
 
   try {
-    // Extract JSON from response (handle markdown code blocks)
+    // Extract JSON from response (handle markdown code blocks and extra text)
     let jsonStr = response.trim();
 
     // Remove markdown code block if present
@@ -249,7 +249,38 @@ export async function getHaikuJson<T>(
       jsonStr = jsonStr.slice(0, -3);
     }
 
-    return JSON.parse(jsonStr.trim()) as T;
+    jsonStr = jsonStr.trim();
+
+    // Extract just the JSON object/array if there's extra text after it
+    // This handles cases where the LLM adds explanatory text after the JSON
+    const firstBrace = jsonStr.indexOf('{');
+    const firstBracket = jsonStr.indexOf('[');
+
+    if (firstBrace !== -1 || firstBracket !== -1) {
+      const startChar = firstBrace === -1 ? '[' :
+                        firstBracket === -1 ? '{' :
+                        firstBrace < firstBracket ? '{' : '[';
+      const endChar = startChar === '{' ? '}' : ']';
+      const startIdx = startChar === '{' ? firstBrace : firstBracket;
+
+      // Find the matching closing brace/bracket
+      let depth = 0;
+      let endIdx = -1;
+      for (let i = startIdx; i < jsonStr.length; i++) {
+        if (jsonStr[i] === startChar) depth++;
+        else if (jsonStr[i] === endChar) depth--;
+        if (depth === 0) {
+          endIdx = i;
+          break;
+        }
+      }
+
+      if (endIdx !== -1) {
+        jsonStr = jsonStr.slice(startIdx, endIdx + 1);
+      }
+    }
+
+    return JSON.parse(jsonStr) as T;
   } catch (error) {
     console.error('[Bedrock] Failed to parse Haiku JSON response:', error);
     console.error('[Bedrock] Raw response:', response);

@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { sendInvitationEmail } from '../services/email';
 import { notifyPartner } from '../services/realtime';
 import { z } from 'zod';
 import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
@@ -19,13 +18,11 @@ import { successResponse, errorResponse } from '../utils/response';
 
 const createSessionSchema = z.object({
   personId: z.string().optional(),
-  inviteEmail: z.string().email().optional(),
-  invitePhone: z.string().optional(),
-  inviteName: z.string().optional(),
+  inviteName: z.string().min(1).optional(),
   context: z.string().optional(),
 }).refine(
-  (data) => data.personId || data.inviteEmail || data.invitePhone,
-  { message: 'Must provide personId, inviteEmail, or invitePhone' }
+  (data) => data.personId || data.inviteName,
+  { message: 'Must provide personId or inviteName' }
 );
 
 const declineInvitationSchema = z.object({
@@ -210,7 +207,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const { personId, inviteEmail, invitePhone, inviteName } = parseResult.data;
+    const { personId, inviteName } = parseResult.data;
 
     // Create or find relationship
     let relationship;
@@ -274,22 +271,14 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       data: {
         sessionId: session.id,
         invitedById: user.id,
-        email: inviteEmail,
-        phone: invitePhone,
         name: inviteName,
         expiresAt,
       },
     });
 
-    // Generate invitation URL
+    // Generate invitation URL (user shares via their own channels)
     const appUrl = process.env.APP_URL || 'https://meetwithoutfear.app';
     const invitationUrl = `${appUrl}/invitation/${invitation.id}`;
-
-    // Send invitation email if provided
-    if (inviteEmail) {
-      const inviterName = user.name || 'Someone';
-      await sendInvitationEmail(inviteEmail, inviterName, invitationUrl);
-    }
 
     // Create initial stage progress for inviter
     await prisma.stageProgress.create({
@@ -613,73 +602,6 @@ export async function declineInvitation(req: Request, res: Response): Promise<vo
   } catch (error) {
     console.error('[declineInvitation] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to decline invitation', 500);
-  }
-}
-
-/**
- * Resend an invitation email
- * POST /invitations/:id/resend
- */
-export async function resendInvitation(req: Request, res: Response): Promise<void> {
-  try {
-    const user = req.user;
-    if (!user) {
-      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
-      return;
-    }
-
-    const { id } = req.params;
-
-    const invitation = await prisma.invitation.findUnique({
-      where: { id },
-      include: {
-        invitedBy: {
-          select: { id: true, name: true },
-        },
-      },
-    });
-
-    if (!invitation) {
-      errorResponse(res, 'NOT_FOUND', 'Invitation not found', 404);
-      return;
-    }
-
-    // Only the inviter can resend
-    if (invitation.invitedById !== user.id) {
-      errorResponse(res, 'FORBIDDEN', 'Only the inviter can resend the invitation', 403);
-      return;
-    }
-
-    // Can only resend pending invitations
-    if (invitation.status !== 'PENDING') {
-      errorResponse(res, 'VALIDATION_ERROR', 'Can only resend pending invitations', 400);
-      return;
-    }
-
-    // Must have an email to resend
-    if (!invitation.email) {
-      errorResponse(res, 'VALIDATION_ERROR', 'No email address for this invitation', 400);
-      return;
-    }
-
-    // Generate invitation URL
-    const appUrl = process.env.APP_URL || 'https://meetwithoutfear.app';
-    const invitationUrl = `${appUrl}/invitation/${invitation.id}`;
-
-    const inviterName = user.name || 'Someone';
-    const emailResult = await sendInvitationEmail(invitation.email, inviterName, invitationUrl);
-
-    if (!emailResult.success) {
-      errorResponse(res, 'EMAIL_FAILED', 'Failed to send invitation email', 500);
-      return;
-    }
-
-    successResponse(res, {
-      resent: true,
-    });
-  } catch (error) {
-    console.error('[resendInvitation] Error:', error);
-    errorResponse(res, 'INTERNAL_ERROR', 'Failed to resend invitation', 500);
   }
 }
 

@@ -122,6 +122,7 @@ interface UnifiedSessionState {
   showCoolingSuggestion: boolean;
   showFinalCheck: boolean;
   pendingConfirmation: boolean;
+  hasConfirmedHeard: boolean; // Tracks if user confirmed they feel heard
   followUpDate: Date | null;
   waitingStatus: WaitingStatusState;
   previousWaitingStatus: WaitingStatusState; // Track previous to detect changes
@@ -237,6 +238,7 @@ type SessionAction =
   | { type: 'SHOW_COOLING_SUGGESTION'; payload: boolean }
   | { type: 'SHOW_FINAL_CHECK'; payload: boolean }
   | { type: 'SET_PENDING_CONFIRMATION'; payload: boolean }
+  | { type: 'SET_HAS_CONFIRMED_HEARD'; payload: boolean }
   | { type: 'SET_WAITING_STATUS'; payload: WaitingStatusState }
   | { type: 'RESET_STATE' };
 
@@ -278,6 +280,8 @@ function sessionReducer(
       return { ...state, showFinalCheck: action.payload };
     case 'SET_PENDING_CONFIRMATION':
       return { ...state, pendingConfirmation: action.payload };
+    case 'SET_HAS_CONFIRMED_HEARD':
+      return { ...state, hasConfirmedHeard: action.payload };
     case 'SET_WAITING_STATUS':
       return {
         ...state,
@@ -303,6 +307,7 @@ const initialState: UnifiedSessionState = {
   showCoolingSuggestion: false,
   showFinalCheck: false,
   pendingConfirmation: false,
+  hasConfirmedHeard: false,
   followUpDate: null,
   waitingStatus: null,
   previousWaitingStatus: null,
@@ -394,7 +399,10 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // -------------------------------------------------------------------------
   const session = sessionData?.session;
   const messages = messagesData?.messages ?? [];
-  const partnerName = session?.partner?.name ?? 'Partner';
+  // Only show 'Partner' fallback after data has loaded, otherwise show empty string
+  const partnerName = loadingSession
+    ? ''
+    : (session?.partner?.nickname ?? session?.partner?.name ?? 'Partner');
   const myProgress = progressData?.myProgress;
   const partnerProgress = progressData?.partnerProgress;
   const canAdvance = progressData?.canAdvance ?? false;
@@ -574,8 +582,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
         });
       }
 
-      // Feel heard confirmation
-      if (isAskingAboutHeard && !state.showFinalCheck && !state.showCoolingSuggestion) {
+      // Feel heard confirmation (only show if not already confirmed)
+      if (isAskingAboutHeard && !state.showFinalCheck && !state.showCoolingSuggestion && !state.hasConfirmedHeard) {
         cards.push({
           id: 'feel-heard-confirmation',
           type: 'feel-heard-confirmation',
@@ -800,6 +808,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const handleConfirmFeelHeard = useCallback(
     (onSuccess?: () => void) => {
       if (!sessionId) return;
+      // Mark as confirmed to prevent looping
+      dispatch({ type: 'SET_HAS_CONFIRMED_HEARD', payload: true });
       confirmHeard({ sessionId, confirmed: true }, { onSuccess });
     },
     [sessionId, confirmHeard]

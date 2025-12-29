@@ -24,16 +24,39 @@ import { EmotionalBarometer } from '@/src/components/EmotionalBarometer';
 import { FeelHeardConfirmation } from '@/src/components/FeelHeardConfirmation';
 import { BreathingExercise } from '@/src/components/BreathingExercise';
 import { WaitingRoom } from '@/src/components/WaitingRoom';
-import { Stage, MessageRole, MessageDTO } from '@meet-without-fear/shared';
+import { Stage, MessageRole, MessageDTO, SessionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '@/src/theme/styled';
 
 // ============================================================================
 // AI Welcome Message
 // ============================================================================
 
-const AI_WELCOME_MESSAGE = `Hi there. I'm here to listen and help you feel heard. This is your private space - whatever you share stays between us.
+/**
+ * Generate the personalized welcome message based on partner name
+ */
+function getWelcomeMessage(partnerName?: string | null): string {
+  const nickname = partnerName || 'your partner';
+  return `What's going on between you and ${nickname}?`;
+}
 
-Take your time and share what's on your mind.`;
+/**
+ * Get brief status text for the header based on session status
+ */
+function getBriefStatus(status?: SessionStatus): string | undefined {
+  switch (status) {
+    case SessionStatus.INVITED:
+    case SessionStatus.CREATED:
+      return 'invited';
+    case SessionStatus.ACTIVE:
+      return undefined; // No badge needed when active
+    case SessionStatus.PAUSED:
+      return 'paused';
+    case SessionStatus.RESOLVED:
+      return 'resolved';
+    default:
+      return undefined;
+  }
+}
 
 // ============================================================================
 // Constants
@@ -92,10 +115,10 @@ export default function WitnessScreen() {
     sessionId: sessionId!,
     senderId: null,
     role: MessageRole.AI,
-    content: AI_WELCOME_MESSAGE,
+    content: getWelcomeMessage(session?.partner?.name),
     stage: Stage.WITNESS,
     timestamp: new Date().toISOString(),
-  }), [sessionId]);
+  }), [sessionId, session?.partner?.name]);
 
   // Show welcome message if no messages exist, otherwise show API messages
   const messages = useMemo(() => {
@@ -309,6 +332,7 @@ export default function WitnessScreen() {
           <SessionChatHeader
             partnerName={session?.partner?.name}
             partnerOnline={false} // TODO: Get from realtime subscription
+            briefStatus={getBriefStatus(session?.status)}
             testID="witness-chat-header"
           />
           <ChatInterface

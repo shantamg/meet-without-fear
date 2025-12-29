@@ -2,11 +2,10 @@
  * EmotionSlider Component
  *
  * A mood/emotion barometer slider that lets users indicate their emotional state.
- * Based on the demo design at docs-site/static/demo/index.html.
  *
  * Features:
  * - Gradient slider from calm (green) to elevated (yellow) to intense (red)
- * - Labels: "Calm", "Elevated", "Intense"
+ * - Shows word labels: "Calm", "Elevated", "Intense" based on value
  * - Triggers callback when emotion level is high (>= threshold)
  */
 
@@ -30,8 +29,48 @@ interface EmotionSliderProps {
   highThreshold?: number;
   /** Whether the slider is disabled */
   disabled?: boolean;
+  /** Compact mode for low-profile display */
+  compact?: boolean;
   /** Test ID for testing */
   testID?: string;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Get interpolated color between green and red based on value (1-10)
+ * Calm (#10a37f) -> Elevated (#f59e0b) -> Intense (#ef4444)
+ */
+function getGradientColor(value: number): string {
+  const t = (value - 1) / 9;
+
+  if (t <= 0.5) {
+    // Calm to Elevated
+    const localT = t * 2;
+    const r = Math.round(16 + (245 - 16) * localT);
+    const g = Math.round(163 + (158 - 163) * localT);
+    const b = Math.round(127 + (11 - 127) * localT);
+    return `rgb(${r}, ${g}, ${b})`;
+  } else {
+    // Elevated to Intense
+    const localT = (t - 0.5) * 2;
+    const r = Math.round(245 + (239 - 245) * localT);
+    const g = Math.round(158 + (68 - 158) * localT);
+    const b = Math.round(11 + (68 - 11) * localT);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+}
+
+/**
+ * Get intensity label based on value
+ * Zone boundaries: Calm (1-4), Elevated (5-7), Intense (8-10)
+ */
+function getIntensityLabel(value: number): string {
+  if (value <= 4) return 'Calm';
+  if (value <= 7) return 'Elevated';
+  return 'Intense';
 }
 
 // ============================================================================
@@ -44,9 +83,12 @@ export function EmotionSlider({
   onHighEmotion,
   highThreshold = 9,
   disabled = false,
+  compact = false,
   testID = 'emotion-slider',
 }: EmotionSliderProps) {
-  const styles = useStyles();
+  const styles = useStyles(compact);
+  const currentColor = getGradientColor(value);
+  const intensityLabel = getIntensityLabel(value);
 
   const handleValueChange = (newValue: number) => {
     const roundedValue = Math.round(newValue);
@@ -58,19 +100,12 @@ export function EmotionSlider({
     }
   };
 
-  // Get color based on current value
-  const getValueColor = () => {
-    if (value <= 3) return colors.calm;
-    if (value <= 6) return colors.elevated;
-    return colors.intense;
-  };
-
   return (
     <View style={styles.container} testID={testID}>
       <View style={styles.header}>
         <Text style={styles.label}>How are you feeling?</Text>
-        <Text style={[styles.value, { color: getValueColor() }]} testID={`${testID}-value`}>
-          {value}
+        <Text style={[styles.value, { color: currentColor }]} testID={`${testID}-value`}>
+          {intensityLabel}
         </Text>
       </View>
 
@@ -82,9 +117,9 @@ export function EmotionSlider({
           step={1}
           value={value}
           onValueChange={handleValueChange}
-          minimumTrackTintColor={colors.calm}
-          maximumTrackTintColor={colors.intense}
-          thumbTintColor="#ffffff"
+          minimumTrackTintColor={currentColor}
+          maximumTrackTintColor={colors.bgTertiary}
+          thumbTintColor={currentColor}
           disabled={disabled}
           testID={`${testID}-control`}
         />
@@ -103,12 +138,12 @@ export function EmotionSlider({
 // Styles
 // ============================================================================
 
-const useStyles = () =>
+const useStyles = (compact?: boolean) =>
   createStyles((t) => ({
     container: {
       backgroundColor: t.colors.bgSecondary,
-      paddingHorizontal: t.spacing.xl,
-      paddingVertical: t.spacing.md,
+      paddingHorizontal: compact ? t.spacing.md : t.spacing.xl,
+      paddingVertical: compact ? t.spacing.xs : t.spacing.md,
       borderTopWidth: 1,
       borderTopColor: t.colors.border,
     },
@@ -116,27 +151,28 @@ const useStyles = () =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: t.spacing.sm,
+      marginBottom: compact ? 0 : t.spacing.sm,
     },
     label: {
-      fontSize: t.typography.fontSize.sm,
-      color: t.colors.textSecondary,
+      fontSize: compact ? t.typography.fontSize.xs : t.typography.fontSize.sm,
+      color: t.colors.textMuted,
     },
     value: {
-      fontSize: t.typography.fontSize.md,
+      fontSize: compact ? t.typography.fontSize.sm : t.typography.fontSize.md,
       fontWeight: '600',
     },
     sliderContainer: {
-      marginVertical: t.spacing.xs,
+      marginVertical: compact ? 0 : t.spacing.xs,
     },
     slider: {
       width: '100%',
-      height: 40,
+      height: compact ? 28 : 40,
     },
     labels: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginTop: t.spacing.xs,
+      marginTop: compact ? 0 : t.spacing.xs,
+      display: compact ? 'none' : 'flex',
     },
     labelText: {
       fontSize: t.typography.fontSize.xs,

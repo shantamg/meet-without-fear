@@ -116,12 +116,8 @@ export const sessionCreationHandler: IntentHandler = {
 // ============================================================================
 
 function canCreate(state: SessionCreationState): boolean {
-  return Boolean(
-    state.person.firstName &&
-      state.person.contactInfo?.value &&
-      (state.person.contactInfo.type === 'email' ||
-        state.person.contactInfo.type === 'phone')
-  );
+  // Only need a name to create a session - invitation is shared via link
+  return Boolean(state.person.firstName);
 }
 
 function askForMissingInfo(
@@ -134,10 +130,6 @@ function askForMissingInfo(
   if (!state.person.firstName) {
     message = "Who would you like to start a session with?";
     creationState.update(userId, { step: 'GATHERING_PERSON' });
-  } else if (!state.person.contactInfo?.value) {
-    // Offer both email and phone - be direct about getting contact info
-    message = `Great! What's ${state.person.firstName}'s email or phone number? I'll send them an invitation to join.`;
-    creationState.update(userId, { step: 'GATHERING_CONTACT' });
   } else {
     message = "I'm ready to create the session.";
   }
@@ -149,11 +141,7 @@ function askForMissingInfo(
     actionType: 'NEED_MORE_INFO',
     message: finalMessage,
     data: {
-      missingFields: !state.person.firstName
-        ? ['firstName']
-        : !state.person.contactInfo?.value
-          ? ['contact']
-          : [],
+      missingFields: !state.person.firstName ? ['firstName'] : [],
       partialPerson: state.person,
     },
     actions: [
@@ -224,7 +212,7 @@ async function createSession(
       },
     });
 
-    // Create invitation
+    // Create invitation (user shares link manually)
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
@@ -232,10 +220,6 @@ async function createSession(
       data: {
         sessionId: session.id,
         invitedById: userId,
-        email:
-          person.contactInfo.type === 'email' ? person.contactInfo.value : undefined,
-        phone:
-          person.contactInfo.type === 'phone' ? person.contactInfo.value : undefined,
         name: person.firstName + (person.lastName ? ` ${person.lastName}` : ''),
         expiresAt,
       },

@@ -183,9 +183,14 @@ export function useSendMessage(
             hasMore: false,
           };
         }
+        // Filter out optimistic messages (they start with 'optimistic-')
+        // and add the real messages from the API response
+        const existingMessages = old.messages.filter(
+          (m) => !m.id.startsWith('optimistic-')
+        );
         return {
           ...old,
-          messages: [...old.messages, data.userMessage, data.aiResponse],
+          messages: [...existingMessages, data.userMessage, data.aiResponse],
         };
       };
 

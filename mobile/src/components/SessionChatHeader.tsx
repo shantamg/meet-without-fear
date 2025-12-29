@@ -2,15 +2,15 @@
  * SessionChatHeader Component
  *
  * A minimal, chat-centric header for session screens.
- * Shows partner info and online status - clean chat experience.
+ * Layout: nickname with online/offline indicator on left, brief status on right.
+ * No spinners - just clean, simple status display.
  * Designed to feel like a messaging app rather than a dashboard.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import {
   View,
   Text,
-  Animated,
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
@@ -23,14 +23,16 @@ import { colors } from '../theme';
 // ============================================================================
 
 export interface SessionChatHeaderProps {
-  /** Partner's display name */
+  /** Partner's display name (nickname) */
   partnerName?: string | null;
   /** Whether the partner is currently online */
   partnerOnline?: boolean;
-  /** Whether the partner is currently typing */
+  /** Whether the partner is currently typing (ignored - no typing indicator in header) */
   partnerTyping?: boolean;
   /** Connection status to the server */
   connectionStatus?: ConnectionStatus;
+  /** Brief status text to show on the right (e.g., "invited", "active", etc.) */
+  briefStatus?: string;
   /** Optional callback when header is pressed (e.g., to show session info) */
   onPress?: () => void;
   /** Custom container style */
@@ -44,130 +46,22 @@ export interface SessionChatHeaderProps {
 // ============================================================================
 
 /**
- * Animated typing indicator with three pulsing dots
- */
-function TypingIndicator() {
-  const dot1 = useRef(new Animated.Value(0.4)).current;
-  const dot2 = useRef(new Animated.Value(0.4)).current;
-  const dot3 = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    const duration = 350;
-    const delay = 150;
-
-    const animation = Animated.loop(
-      Animated.stagger(delay, [
-        Animated.sequence([
-          Animated.timing(dot1, {
-            toValue: 1,
-            duration,
-            useNativeDriver: true,
-          }),
-          Animated.timing(dot1, {
-            toValue: 0.4,
-            duration,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(dot2, {
-            toValue: 1,
-            duration,
-            useNativeDriver: true,
-          }),
-          Animated.timing(dot2, {
-            toValue: 0.4,
-            duration,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(dot3, {
-            toValue: 1,
-            duration,
-            useNativeDriver: true,
-          }),
-          Animated.timing(dot3, {
-            toValue: 0.4,
-            duration,
-            useNativeDriver: true,
-          }),
-        ]),
-      ])
-    );
-
-    animation.start();
-    return () => animation.stop();
-  }, [dot1, dot2, dot3]);
-
-  const styles = useTypingStyles();
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.text}>typing</Text>
-      <View style={styles.dots}>
-        <Animated.View style={[styles.dot, { opacity: dot1 }]} />
-        <Animated.View style={[styles.dot, { opacity: dot2 }]} />
-        <Animated.View style={[styles.dot, { opacity: dot3 }]} />
-      </View>
-    </View>
-  );
-}
-
-const useTypingStyles = () =>
-  createStyles((t) => ({
-    container: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    text: {
-      fontSize: t.typography.fontSize.xs,
-      color: t.colors.textMuted,
-      marginRight: 4,
-    },
-    dots: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 2,
-    },
-    dot: {
-      width: 4,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: t.colors.textMuted,
-    },
-  }));
-
-/**
- * Online status indicator dot
+ * Simple online/offline status indicator dot
  */
 function StatusDot({
-  status,
+  isOnline,
   size = 8,
 }: {
-  status: 'online' | 'offline' | 'connecting' | 'error';
+  isOnline: boolean;
   size?: number;
 }) {
-  const getColor = () => {
-    switch (status) {
-      case 'online':
-        return colors.accent;
-      case 'offline':
-        return colors.textMuted;
-      case 'connecting':
-        return colors.warning;
-      case 'error':
-        return colors.error;
-    }
-  };
-
   return (
     <View
       style={{
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: getColor(),
+        backgroundColor: isOnline ? colors.accent : colors.textMuted,
       }}
       testID="status-dot"
     />
@@ -181,60 +75,36 @@ function StatusDot({
 export function SessionChatHeader({
   partnerName,
   partnerOnline = false,
-  partnerTyping = false,
+  partnerTyping: _partnerTyping = false, // Ignored - no typing indicator in header
   connectionStatus = ConnectionStatus.CONNECTED,
+  briefStatus,
   onPress,
   style,
   testID = 'session-chat-header',
 }: SessionChatHeaderProps) {
   const styles = useStyles();
 
-  // Derive display status
-  const getDisplayStatus = (): 'online' | 'offline' | 'connecting' | 'error' => {
-    if (
-      connectionStatus === ConnectionStatus.CONNECTING ||
-      connectionStatus === ConnectionStatus.SUSPENDED
-    ) {
-      return 'connecting';
-    }
-    if (connectionStatus === ConnectionStatus.FAILED) {
-      return 'error';
-    }
-    // If no partner (AI mode), always show as "online"
-    if (!partnerName) {
-      return 'online';
-    }
-    return partnerOnline ? 'online' : 'offline';
-  };
+  // Determine if partner is effectively online
+  // If no partner (AI mode), always show as "online"
+  const isOnline = !partnerName
+    ? true
+    : connectionStatus === ConnectionStatus.CONNECTED && partnerOnline;
 
-  const displayStatus = getDisplayStatus();
-
-  // Status text when not typing
-  const getStatusText = (): string => {
-    // For AI assistant, show "AI assistant" instead of online/offline
+  // Get the online/offline text
+  const getOnlineText = (): string => {
     if (!partnerName) {
-      return 'AI assistant';
+      return 'online'; // AI is always online
     }
-    switch (displayStatus) {
-      case 'online':
-        return 'online';
-      case 'offline':
-        return 'offline';
-      case 'connecting':
-        return 'connecting...';
-      case 'error':
-        return 'connection lost';
-    }
+    return isOnline ? 'online' : 'offline';
   };
 
   const displayName = partnerName || 'Meet Without Fear';
 
   const content = (
     <View style={[styles.container, style]} testID={testID}>
-      {/* Centered: Partner info */}
-      <View style={styles.centerSection}>
+      {/* Left section: nickname with online/offline indicator */}
+      <View style={styles.leftSection}>
         <View style={styles.nameRow}>
-          <StatusDot status={displayStatus} />
           <Text
             style={styles.partnerName}
             numberOfLines={1}
@@ -242,26 +112,28 @@ export function SessionChatHeader({
           >
             {displayName}
           </Text>
-        </View>
-
-        {/* Status line: either typing indicator or status text */}
-        <View style={styles.statusRow}>
-          {partnerTyping ? (
-            <TypingIndicator />
-          ) : (
-            <Text
-              style={[
-                styles.statusText,
-                displayStatus === 'online' && styles.statusOnline,
-                displayStatus === 'error' && styles.statusError,
-              ]}
-              testID={`${testID}-status`}
-            >
-              {getStatusText()}
-            </Text>
-          )}
+          <StatusDot isOnline={isOnline} />
+          <Text
+            style={[styles.onlineText, isOnline && styles.onlineTextActive]}
+            testID={`${testID}-online-status`}
+          >
+            {getOnlineText()}
+          </Text>
         </View>
       </View>
+
+      {/* Right section: brief status (invited, active, etc.) */}
+      {briefStatus && (
+        <View style={styles.rightSection}>
+          <Text
+            style={styles.briefStatus}
+            numberOfLines={1}
+            testID={`${testID}-brief-status`}
+          >
+            {briefStatus}
+          </Text>
+        </View>
+      )}
     </View>
   );
 
@@ -290,40 +162,41 @@ const useStyles = () =>
     container: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
+      justifyContent: 'space-between',
       paddingHorizontal: t.spacing.md,
       paddingVertical: t.spacing.sm,
       backgroundColor: t.colors.bgSecondary,
       borderBottomWidth: 1,
       borderBottomColor: t.colors.border,
-      minHeight: 56,
+      minHeight: 48,
     },
-    centerSection: {
-      alignItems: 'center',
+    leftSection: {
+      flex: 1,
+    },
+    rightSection: {
+      marginLeft: t.spacing.sm,
     },
     nameRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 6,
     },
     partnerName: {
       fontSize: t.typography.fontSize.lg,
       fontWeight: '600',
       color: t.colors.textPrimary,
     },
-    statusRow: {
-      marginTop: 2,
-      alignItems: 'center',
-    },
-    statusText: {
-      fontSize: t.typography.fontSize.xs,
+    onlineText: {
+      fontSize: t.typography.fontSize.sm,
       color: t.colors.textMuted,
     },
-    statusOnline: {
+    onlineTextActive: {
       color: t.colors.accent,
     },
-    statusError: {
-      color: t.colors.error,
+    briefStatus: {
+      fontSize: t.typography.fontSize.sm,
+      color: t.colors.textSecondary,
+      fontStyle: 'italic',
     },
   }));
 

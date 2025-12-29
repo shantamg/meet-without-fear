@@ -4,7 +4,6 @@ import {
   getInvitation,
   acceptInvitation,
   declineInvitation,
-  resendInvitation,
 } from '../../controllers/invitations';
 import { prisma } from '../../lib/prisma';
 
@@ -109,7 +108,6 @@ describe('Invitations API', () => {
       const req = createMockRequest({
         user: mockUser,
         body: {
-          inviteEmail: 'partner@example.com',
           inviteName: 'Partner Name',
         },
       });
@@ -132,7 +130,7 @@ describe('Invitations API', () => {
 
     it('requires authentication', async () => {
       const req = createMockRequest({
-        body: { inviteEmail: 'partner@example.com' },
+        body: { inviteName: 'Partner Name' },
       });
       const { res, statusMock, jsonMock } = createMockResponse();
 
@@ -471,60 +469,4 @@ describe('Invitations API', () => {
     });
   });
 
-  describe('POST /invitations/:id/resend (resendInvitation)', () => {
-    it('resends invitation email', async () => {
-      const mockInvitation = {
-        id: 'inv-123',
-        invitedById: 'user-1',
-        email: 'partner@example.com',
-        status: 'PENDING',
-        invitedBy: { id: 'user-1', name: 'Inviter' },
-      };
-
-      (prisma.invitation.findUnique as jest.Mock).mockResolvedValue(mockInvitation);
-
-      const req = createMockRequest({
-        user: { id: 'user-1', email: 'inviter@example.com', name: 'Inviter' },
-        params: { id: 'inv-123' },
-      });
-      const { res, statusMock, jsonMock } = createMockResponse();
-
-      await resendInvitation(req as Request, res as Response);
-
-      expect(statusMock).toHaveBeenCalledWith(200);
-      expect(jsonMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: true,
-          data: expect.objectContaining({ resent: true }),
-        })
-      );
-    });
-
-    it('only allows inviter to resend', async () => {
-      const mockInvitation = {
-        id: 'inv-123',
-        invitedById: 'user-1',
-        email: 'partner@example.com',
-        status: 'PENDING',
-      };
-
-      (prisma.invitation.findUnique as jest.Mock).mockResolvedValue(mockInvitation);
-
-      const req = createMockRequest({
-        user: { id: 'user-2', email: 'other@example.com' }, // Not the inviter
-        params: { id: 'inv-123' },
-      });
-      const { res, statusMock, jsonMock } = createMockResponse();
-
-      await resendInvitation(req as Request, res as Response);
-
-      expect(statusMock).toHaveBeenCalledWith(403);
-      expect(jsonMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: false,
-          error: expect.objectContaining({ code: 'FORBIDDEN' }),
-        })
-      );
-    });
-  });
 });

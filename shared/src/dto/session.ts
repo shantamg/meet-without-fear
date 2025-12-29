@@ -74,13 +74,11 @@ export interface StageGateDTO {
 // ============================================================================
 
 export interface CreateSessionRequest {
-  // Either invite an existing person or invite by contact info
+  // Either invite an existing person or provide a name
   personId?: string;
 
-  // OR invite by contact
-  inviteEmail?: string;
-  invitePhone?: string;
-  inviteName?: string; // Display name for the invitation
+  // OR provide a display name for the new person
+  inviteName?: string; // What you call them (nickname)
 
   // Optional: initial context
   context?: string; // What this session is about (private to creator)

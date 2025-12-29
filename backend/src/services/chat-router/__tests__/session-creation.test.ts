@@ -281,7 +281,7 @@ describe('Session Creation Handler', () => {
         id: 'inv-1',
         sessionId: 'session-1',
         invitedById: 'user-1',
-        email: 'john@example.com',
+        name: 'John',
       };
 
       (prisma.relationship.create as jest.Mock).mockResolvedValue(mockRelationship);
@@ -322,14 +322,13 @@ describe('Session Creation Handler', () => {
         data: {
           sessionId: session.id,
           invitedById: 'user-1',
-          email: 'john@example.com',
           name: 'John',
           expiresAt: expect.any(Date),
         },
       });
 
       expect(prisma.invitation.create).toHaveBeenCalled();
-      expect(invitation.email).toBe('john@example.com');
+      expect(invitation.name).toBe('John');
     });
   });
 
@@ -337,10 +336,10 @@ describe('Session Creation Handler', () => {
     it('returns correct structure for need more info', () => {
       const result: IntentHandlerResult = {
         actionType: 'NEED_MORE_INFO',
-        message: "What's John's email address?",
+        message: "Who would you like to start a session with?",
         data: {
-          missingFields: ['email'],
-          partialPerson: { firstName: 'John' },
+          missingFields: ['firstName'],
+          partialPerson: {},
         },
         actions: [
           {
@@ -353,7 +352,7 @@ describe('Session Creation Handler', () => {
 
       expect(result.actionType).toBe('NEED_MORE_INFO');
       expect(result.actions).toHaveLength(1);
-      expect(result.data?.missingFields).toContain('email');
+      expect(result.data?.missingFields).toContain('firstName');
     });
 
     it('returns correct structure for session created', () => {

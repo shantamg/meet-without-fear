@@ -38,6 +38,8 @@ interface ChatInterfaceProps {
   onEmotionChange?: (value: number) => void;
   /** Callback when emotion reaches high threshold */
   onHighEmotion?: (value: number) => void;
+  /** Use compact emotion slider for low-profile display */
+  compactEmotionSlider?: boolean;
 }
 
 // ============================================================================
@@ -59,6 +61,7 @@ export function ChatInterface({
   emotionValue = 5,
   onEmotionChange,
   onHighEmotion,
+  compactEmotionSlider = false,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
@@ -77,10 +80,18 @@ export function ChatInterface({
   // Also scroll when loading state changes (typing indicator appears)
   useEffect(() => {
     if (isLoading) {
-      const timer = setTimeout(() => {
+      // First scroll immediately to start showing the indicator
+      const timer1 = setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-      return () => clearTimeout(timer);
+      }, 50);
+      // Second scroll after layout has settled to ensure full visibility
+      const timer2 = setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 200);
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+      };
     }
   }, [isLoading]);
 
@@ -139,6 +150,7 @@ export function ChatInterface({
           value={emotionValue}
           onChange={onEmotionChange}
           onHighEmotion={onHighEmotion}
+          compact={compactEmotionSlider}
           testID="chat-emotion-slider"
         />
       )}

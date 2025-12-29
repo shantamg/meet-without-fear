@@ -5,7 +5,6 @@ import {
   getInvitation,
   acceptInvitation,
   declineInvitation,
-  resendInvitation,
   updateNickname,
 } from '../controllers/invitations';
 import { requireAuth } from '../middleware/auth';
@@ -47,13 +46,6 @@ router.post('/invitations/:id/accept', requireAuth, asyncHandler(acceptInvitatio
  * @access Private - requires authentication
  */
 router.post('/invitations/:id/decline', requireAuth, asyncHandler(declineInvitation));
-
-/**
- * @route POST /api/v1/invitations/:id/resend
- * @description Resend an invitation email
- * @access Private - requires authentication (only inviter)
- */
-router.post('/invitations/:id/resend', requireAuth, asyncHandler(resendInvitation));
 
 /**
  * @route PATCH /api/v1/relationships/:relationshipId/nickname
