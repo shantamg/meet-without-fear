@@ -5,7 +5,7 @@
  */
 
 import { Response } from 'express';
-import { ApiResponse } from '@be-heard/shared';
+import { ApiResponse, ErrorCode } from '@be-heard/shared';
 
 /**
  * Send a successful API response
@@ -28,4 +28,25 @@ export function errorResponse(
     success: false,
     error: { code, message, details },
   } as ApiResponse<never>);
+}
+
+/**
+ * Create a success response object (for res.json())
+ */
+export function success<T>(data: T): ApiResponse<T> {
+  return { success: true, data };
+}
+
+/**
+ * Create an error response object (for res.json())
+ */
+export function error(
+  code: ErrorCode | string,
+  message: string,
+  details?: Record<string, unknown>
+): ApiResponse<never> {
+  return {
+    success: false,
+    error: { code: code as ErrorCode, message, details },
+  };
 }

@@ -10,6 +10,7 @@
 import {
   BedrockRuntimeClient,
   ConverseCommand,
+  InvokeModelCommand,
   type Message,
   type SystemContentBlock,
   type InferenceConfiguration,
@@ -29,6 +30,11 @@ export const BEDROCK_HAIKU_MODEL_ID =
 // Better at nuance, empathy, and natural conversation
 export const BEDROCK_SONNET_MODEL_ID =
   process.env.BEDROCK_SONNET_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
+
+// Titan: Embedding model for semantic search
+// Outputs 1536-dimensional vectors for similarity matching
+export const BEDROCK_TITAN_EMBED_MODEL_ID =
+  process.env.BEDROCK_TITAN_EMBED_MODEL_ID || 'amazon.titan-embed-text-v2:0';
 
 // Legacy export for backward compatibility
 export const BEDROCK_MODEL_ID = BEDROCK_SONNET_MODEL_ID;
@@ -263,4 +269,70 @@ export async function getSonnetResponse(
     ...options,
     maxTokens: options.maxTokens ?? 2048,
   });
+}
+
+// ============================================================================
+// Embeddings (Titan)
+// ============================================================================
+
+/**
+ * Embedding dimensions for vector storage.
+ * Titan v2 supports 256, 512, or 1024 dimensions.
+ * We use 1024 for best quality (matches schema: vector(1536) but Titan v2 max is 1024).
+ */
+export const EMBEDDING_DIMENSIONS = 1024;
+
+/**
+ * Generate an embedding vector for text using Titan.
+ * Use for: semantic search, similarity matching, vector storage.
+ *
+ * @param text - The text to embed (max ~8000 tokens)
+ * @returns Float array of embedding dimensions, or null if unavailable
+ */
+export async function getEmbedding(text: string): Promise<number[] | null> {
+  const client = getBedrockClient();
+  if (!client) {
+    return null;
+  }
+
+  // Truncate text if too long (Titan has ~8000 token limit)
+  const truncatedText = text.slice(0, 30000); // Rough character limit
+
+  try {
+    const command = new InvokeModelCommand({
+      modelId: BEDROCK_TITAN_EMBED_MODEL_ID,
+      contentType: 'application/json',
+      accept: 'application/json',
+      body: JSON.stringify({
+        inputText: truncatedText,
+        dimensions: EMBEDDING_DIMENSIONS,
+        normalize: true,
+      }),
+    });
+
+    const response = await client.send(command);
+
+    if (!response.body) {
+      return null;
+    }
+
+    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+    return responseBody.embedding as number[];
+  } catch (error) {
+    console.error('[Bedrock] Failed to generate embedding:', error);
+    return null;
+  }
+}
+
+/**
+ * Generate embeddings for multiple texts in batch.
+ * More efficient than calling getEmbedding() multiple times.
+ *
+ * @param texts - Array of texts to embed
+ * @returns Array of embeddings (null for any that failed)
+ */
+export async function getEmbeddings(texts: string[]): Promise<(number[] | null)[]> {
+  // Titan doesn't support batch embeddings natively, so we parallelize
+  const results = await Promise.all(texts.map((text) => getEmbedding(text)));
+  return results;
 }
