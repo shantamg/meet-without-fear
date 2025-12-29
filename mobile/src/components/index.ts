@@ -30,6 +30,10 @@ export { SessionCard } from './SessionCard';
 // Emotional regulation components
 export { EmotionalBarometer } from './EmotionalBarometer';
 export { BreathingExercise } from './BreathingExercise';
+export { GroundingExercise } from './GroundingExercise';
+export { BodyScanExercise } from './BodyScanExercise';
+export { SupportOptionsModal } from './SupportOptionsModal';
+export type { SupportOption } from './SupportOptionsModal';
 
 // Stage 0 components
 export { CompactTerms } from './CompactTerms';

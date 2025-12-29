@@ -15,6 +15,9 @@ import { ChatInterface, ChatMessage } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
 import { FeelHeardConfirmation } from '../components/FeelHeardConfirmation';
 import { BreathingExercise } from '../components/BreathingExercise';
+import { GroundingExercise } from '../components/GroundingExercise';
+import { BodyScanExercise } from '../components/BodyScanExercise';
+import { SupportOptionsModal, SupportOption } from '../components/SupportOptionsModal';
 import { WaitingStatusMessage } from '../components/WaitingStatusMessage';
 import { EmpathyAttemptCard } from '../components/EmpathyAttemptCard';
 import { AccuracyFeedback } from '../components/AccuracyFeedback';
@@ -217,46 +220,10 @@ export function UnifiedSessionScreen({
           );
 
         case 'cooling-suggestion':
-          return (
-            <View style={styles.coolingSuggestion} key={card.id}>
-              <Text style={styles.coolingSuggestionTitle}>
-                You seem to be feeling intense emotions
-              </Text>
-              <Text style={styles.coolingSuggestionText}>
-                Would you like to take a moment?
-              </Text>
-              <View style={styles.coolingOptions}>
-                <TouchableOpacity
-                  style={styles.coolingOptionButton}
-                  onPress={() => showCooling(false)}
-                >
-                  <Text style={styles.coolingOptionText}>Continue sharing</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.coolingOptionButton, styles.coolingOptionAccent]}
-                  onPress={() => openOverlay('breathing-exercise')}
-                >
-                  <Text style={styles.coolingOptionTextAccent}>
-                    Try breathing exercise
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.coolingOptionButton}
-                  onPress={() => {
-                    if (pendingConfirmation) {
-                      handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
-                    } else {
-                      onNavigateBack?.();
-                    }
-                  }}
-                >
-                  <Text style={styles.coolingOptionText}>
-                    {pendingConfirmation ? 'Proceed anyway' : 'Take a break'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
+          // Show the support options modal instead of inline card
+          // This is handled by the overlay system - just render nothing here
+          // The modal is triggered via openOverlay('support-options')
+          return null;
 
         case 'mirror-intervention':
           return (
@@ -478,6 +445,39 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   const renderOverlay = useCallback(() => {
     switch (activeOverlay) {
+      case 'support-options':
+        return (
+          <SupportOptionsModal
+            visible={true}
+            onSelectOption={(option: SupportOption) => {
+              switch (option) {
+                case 'keep-sharing':
+                  closeOverlay();
+                  showCooling(false);
+                  break;
+                case 'breathing':
+                  openOverlay('breathing-exercise');
+                  break;
+                case 'grounding':
+                  openOverlay('grounding-exercise');
+                  break;
+                case 'body-scan':
+                  openOverlay('body-scan-exercise');
+                  break;
+                case 'break':
+                  closeOverlay();
+                  showCooling(false);
+                  onNavigateBack?.();
+                  break;
+              }
+            }}
+            onClose={() => {
+              closeOverlay();
+              showCooling(false);
+            }}
+          />
+        );
+
       case 'breathing-exercise':
         return (
           <BreathingExercise
@@ -486,6 +486,35 @@ export function UnifiedSessionScreen({
             onComplete={(intensityAfter) => {
               handleBarometerChange(intensityAfter);
               closeOverlay();
+              showCooling(false);
+            }}
+            onClose={closeOverlay}
+          />
+        );
+
+      case 'grounding-exercise':
+        return (
+          <GroundingExercise
+            visible={true}
+            intensityBefore={barometerValue}
+            onComplete={(intensityAfter) => {
+              handleBarometerChange(intensityAfter);
+              closeOverlay();
+              showCooling(false);
+            }}
+            onClose={closeOverlay}
+          />
+        );
+
+      case 'body-scan-exercise':
+        return (
+          <BodyScanExercise
+            visible={true}
+            intensityBefore={barometerValue}
+            onComplete={(intensityAfter) => {
+              handleBarometerChange(intensityAfter);
+              closeOverlay();
+              showCooling(false);
             }}
             onClose={closeOverlay}
           />
@@ -602,6 +631,9 @@ export function UnifiedSessionScreen({
     handleResolveSession,
     handleSignCompact,
     closeOverlay,
+    openOverlay,
+    showCooling,
+    onNavigateBack,
     onStageComplete,
   ]);
 
@@ -681,8 +713,8 @@ export function UnifiedSessionScreen({
           emotionValue={barometerValue}
           onEmotionChange={handleBarometerChange}
           onHighEmotion={(value) => {
-            if (value >= 8) {
-              showCooling(true);
+            if (value >= 9) {
+              openOverlay('support-options');
             }
           }}
           compactEmotionSlider

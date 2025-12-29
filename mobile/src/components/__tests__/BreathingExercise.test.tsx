@@ -28,13 +28,13 @@ describe('BreathingExercise', () => {
 
   it('shows title', () => {
     render(<BreathingExercise {...defaultProps} />);
-    expect(screen.getByText('Breathing Exercise')).toBeTruthy();
+    expect(screen.getByText('4-7-8 Breathing')).toBeTruthy();
   });
 
   it('shows ready state initially', () => {
     render(<BreathingExercise {...defaultProps} />);
     expect(screen.getByText('Ready')).toBeTruthy();
-    expect(screen.getByText('Get comfortable and press Start')).toBeTruthy();
+    expect(screen.getByText('Tap to begin')).toBeTruthy();
   });
 
   it('shows start button in ready state', () => {
@@ -42,9 +42,10 @@ describe('BreathingExercise', () => {
     expect(screen.getByTestId('start-button')).toBeTruthy();
   });
 
-  it('shows cycle count', () => {
+  it('shows countdown timer placeholder initially', () => {
     render(<BreathingExercise {...defaultProps} />);
-    expect(screen.getByText('0/3 cycles')).toBeTruthy();
+    expect(screen.getByTestId('countdown-timer')).toBeTruthy();
+    expect(screen.getByText('--')).toBeTruthy();
   });
 
   it('shows skip button', () => {
@@ -63,19 +64,27 @@ describe('BreathingExercise', () => {
   it('transitions to inhale phase when start is pressed', () => {
     render(<BreathingExercise {...defaultProps} />);
     fireEvent.press(screen.getByTestId('start-button'));
-    expect(screen.getByText('inhale')).toBeTruthy();
-    expect(screen.getByText('Breathe in slowly...')).toBeTruthy();
+    expect(screen.getByText('Breathe In')).toBeTruthy();
+    expect(screen.getByText('Breathe in through your nose')).toBeTruthy();
   });
 
-  it('uses custom cycle count', () => {
-    render(<BreathingExercise {...defaultProps} cycles={5} />);
-    expect(screen.getByText('0/5 cycles')).toBeTruthy();
+  it('shows back to chat button', () => {
+    render(<BreathingExercise {...defaultProps} />);
+    expect(screen.getByTestId('back-button')).toBeTruthy();
+    expect(screen.getByText('← Back to chat')).toBeTruthy();
+  });
+
+  it('calls onClose when back button is pressed', () => {
+    const onClose = jest.fn();
+    render(<BreathingExercise {...defaultProps} onClose={onClose} />);
+    fireEvent.press(screen.getByTestId('back-button'));
+    expect(onClose).toHaveBeenCalled();
   });
 
   describe('when not visible', () => {
     it('does not render content when not visible', () => {
       render(<BreathingExercise {...defaultProps} visible={false} />);
-      expect(screen.queryByText('Breathing Exercise')).toBeNull();
+      expect(screen.queryByText('4-7-8 Breathing')).toBeNull();
     });
   });
 

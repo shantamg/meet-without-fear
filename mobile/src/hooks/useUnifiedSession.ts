@@ -49,6 +49,9 @@ import {
 
 export type OverlayType =
   | 'breathing-exercise'
+  | 'grounding-exercise'
+  | 'body-scan-exercise'
+  | 'support-options'
   | 'strategy-pool'
   | 'strategy-ranking'
   | 'overlap-reveal'
