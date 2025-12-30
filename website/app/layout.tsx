@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
-import { dark } from "@clerk/themes";
 import { Inter } from "next/font/google";
+import { Providers } from "@/components/providers";
 import "./globals.css";
 
 const inter = Inter({
@@ -32,22 +31,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider
-      appearance={{
-        baseTheme: dark,
-        variables: {
-          colorPrimary: "#6366f1",
-          colorBackground: "#171717",
-          colorInputBackground: "#262626",
-          colorInputText: "#e5e5e5",
-        },
-      }}
-    >
-      <html lang="en" className={inter.variable}>
-        <body className="min-h-screen bg-background font-sans antialiased">
-          {children}
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en" className={inter.variable}>
+      <body className="min-h-screen bg-background font-sans antialiased">
+        <Providers>{children}</Providers>
+      </body>
+    </html>
   );
 }
