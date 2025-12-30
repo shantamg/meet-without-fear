@@ -377,7 +377,7 @@ describe('Session Creation Handler', () => {
         },
         data: {
           invitationId: 'inv-1',
-          invitationUrl: 'https://meetwithoutfear.app/invite/inv-1',
+          invitationUrl: 'https://meetwithoutfear.com/invite/inv-1',
         },
       };
 
