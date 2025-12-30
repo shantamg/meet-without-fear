@@ -108,7 +108,7 @@ describe('BreathingExercise', () => {
       );
     });
 
-    it('shows before intensity value', async () => {
+    it('shows intensity slider initialized to before value', async () => {
       render(<BreathingExercise {...defaultProps} cycles={1} phaseDuration={100} />);
 
       fireEvent.press(screen.getByTestId('start-button'));
@@ -119,41 +119,16 @@ describe('BreathingExercise', () => {
 
       await waitFor(
         () => {
-          expect(screen.getByText('Before: 7')).toBeTruthy();
+          // Should show slider with initial value matching intensityBefore
+          expect(screen.getByTestId('intensity-slider')).toBeTruthy();
+          // Check that value shows "7 - Elevated"
+          expect(screen.getByText('7 - Elevated')).toBeTruthy();
         },
         { timeout: 1000 }
       );
     });
 
-    it('allows adjusting intensity after exercise', async () => {
-      render(<BreathingExercise {...defaultProps} cycles={1} phaseDuration={100} />);
-
-      fireEvent.press(screen.getByTestId('start-button'));
-
-      await act(async () => {
-        jest.advanceTimersByTime(400);
-      });
-
-      await waitFor(
-        () => {
-          expect(screen.getByTestId('increase-intensity')).toBeTruthy();
-        },
-        { timeout: 1000 }
-      );
-
-      // Initial value should be 5
-      expect(screen.getByText('5')).toBeTruthy();
-
-      // Increase intensity
-      fireEvent.press(screen.getByTestId('increase-intensity'));
-      expect(screen.getByText('6')).toBeTruthy();
-
-      // Decrease intensity
-      fireEvent.press(screen.getByTestId('decrease-intensity'));
-      expect(screen.getByText('5')).toBeTruthy();
-    });
-
-    it('calls onComplete with intensity after when done is pressed', async () => {
+    it('calls onComplete with intensity when done is pressed', async () => {
       const onComplete = jest.fn();
       render(
         <BreathingExercise {...defaultProps} onComplete={onComplete} cycles={1} phaseDuration={100} />
@@ -172,57 +147,9 @@ describe('BreathingExercise', () => {
         { timeout: 1000 }
       );
 
-      // Adjust intensity to 4
-      fireEvent.press(screen.getByTestId('decrease-intensity'));
-
+      // Complete with default value (7, matching intensityBefore)
       fireEvent.press(screen.getByTestId('done-button'));
-      expect(onComplete).toHaveBeenCalledWith(4);
-    });
-
-    it('does not allow intensity below 1', async () => {
-      render(<BreathingExercise {...defaultProps} cycles={1} phaseDuration={100} />);
-
-      fireEvent.press(screen.getByTestId('start-button'));
-
-      await act(async () => {
-        jest.advanceTimersByTime(400);
-      });
-
-      await waitFor(
-        () => {
-          expect(screen.getByTestId('decrease-intensity')).toBeTruthy();
-        },
-        { timeout: 1000 }
-      );
-
-      // Try to decrease below 1
-      for (let i = 0; i < 10; i++) {
-        fireEvent.press(screen.getByTestId('decrease-intensity'));
-      }
-      expect(screen.getByText('1')).toBeTruthy();
-    });
-
-    it('does not allow intensity above 10', async () => {
-      render(<BreathingExercise {...defaultProps} cycles={1} phaseDuration={100} />);
-
-      fireEvent.press(screen.getByTestId('start-button'));
-
-      await act(async () => {
-        jest.advanceTimersByTime(400);
-      });
-
-      await waitFor(
-        () => {
-          expect(screen.getByTestId('increase-intensity')).toBeTruthy();
-        },
-        { timeout: 1000 }
-      );
-
-      // Try to increase above 10
-      for (let i = 0; i < 10; i++) {
-        fireEvent.press(screen.getByTestId('increase-intensity'));
-      }
-      expect(screen.getByText('10')).toBeTruthy();
+      expect(onComplete).toHaveBeenCalledWith(7);
     });
   });
 });

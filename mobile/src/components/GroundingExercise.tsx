@@ -24,9 +24,10 @@ import {
   Platform,
   Keyboard,
 } from 'react-native';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
+import { IntensityCheck } from './IntensityCheck';
 
 interface GroundingStep {
   number: number;
@@ -69,6 +70,13 @@ export function GroundingExercise({
   const isStarted = currentStepIndex >= 0;
   const isFinished = completedSteps.length === GROUNDING_STEPS.length;
 
+  // Initialize intensity to current value when modal opens
+  useEffect(() => {
+    if (visible) {
+      setIntensityAfter(intensityBefore);
+    }
+  }, [visible, intensityBefore]);
+
   const handleStart = useCallback(() => {
     setCurrentStepIndex(0);
   }, []);
@@ -99,8 +107,8 @@ export function GroundingExercise({
     setCompletedSteps([]);
     setCurrentInput('');
     setShowIntensityCheck(false);
-    setIntensityAfter(5);
-  }, [intensityAfter, onComplete]);
+    setIntensityAfter(intensityBefore);
+  }, [intensityAfter, intensityBefore, onComplete]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -109,11 +117,11 @@ export function GroundingExercise({
     setCompletedSteps([]);
     setCurrentInput('');
     setShowIntensityCheck(false);
-    setIntensityAfter(5);
-  }, [onClose]);
+    setIntensityAfter(intensityBefore);
+  }, [intensityBefore, onClose]);
 
-  const handleIntensityChange = useCallback((delta: number) => {
-    setIntensityAfter((current) => Math.min(10, Math.max(1, current + delta)));
+  const handleIntensityChange = useCallback((newValue: number) => {
+    setIntensityAfter(newValue);
   }, []);
 
   const currentStep = currentStepIndex >= 0 ? GROUNDING_STEPS[currentStepIndex] : null;
@@ -229,41 +237,11 @@ export function GroundingExercise({
               ) : null}
             </ScrollView>
           ) : (
-            /* Post-exercise intensity check */
-            <View style={styles.intensityCheck}>
-              <Text style={styles.checkInLabel}>How are you feeling now?</Text>
-              <Text style={styles.beforeLabel}>Before: {intensityBefore}</Text>
-
-              <View style={styles.intensitySelector}>
-                <TouchableOpacity
-                  style={styles.intensityButton}
-                  onPress={() => handleIntensityChange(-1)}
-                  testID="decrease-intensity"
-                >
-                  <Text style={styles.intensityButtonText}>-</Text>
-                </TouchableOpacity>
-
-                <View style={styles.intensityValue}>
-                  <Text style={styles.intensityValueText}>{intensityAfter}</Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.intensityButton}
-                  onPress={() => handleIntensityChange(1)}
-                  testID="increase-intensity"
-                >
-                  <Text style={styles.intensityButtonText}>+</Text>
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handleComplete}
-                testID="done-button"
-              >
-                <Text style={styles.primaryButtonText}>Back to chat</Text>
-              </TouchableOpacity>
-            </View>
+            <IntensityCheck
+              value={intensityAfter}
+              onChange={handleIntensityChange}
+              onDone={handleComplete}
+            />
           )}
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -385,50 +363,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: '600',
-  },
-  intensityCheck: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  checkInLabel: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: colors.textPrimary,
-  },
-  beforeLabel: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginBottom: 32,
-  },
-  intensitySelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  intensityButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.bgTertiary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  intensityButtonText: {
-    fontSize: 32,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  intensityValue: {
-    width: 100,
-    alignItems: 'center',
-  },
-  intensityValueText: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: colors.textPrimary,
   },
 });
 

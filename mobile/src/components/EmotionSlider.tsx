@@ -10,6 +10,7 @@
  */
 
 import { View, Text } from 'react-native';
+import { useRef } from 'react';
 import Slider from '@react-native-community/slider';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -90,12 +91,30 @@ export function EmotionSlider({
   const currentColor = getGradientColor(value);
   const intensityLabel = getIntensityLabel(value);
 
+  // Track the value when user starts sliding
+  const slideStartValue = useRef(value);
+
+  const handleSlidingStart = () => {
+    // Remember value at start of slide
+    slideStartValue.current = value;
+  };
+
   const handleValueChange = (newValue: number) => {
     const roundedValue = Math.round(newValue);
     onChange(roundedValue);
+  };
 
-    // Trigger high emotion callback if threshold reached
-    if (roundedValue >= highThreshold && onHighEmotion) {
+  const handleSlidingComplete = (newValue: number) => {
+    const roundedValue = Math.round(newValue);
+
+    // Only trigger high emotion if:
+    // 1. Final value is >= threshold
+    // 2. User raised the value (not lowered)
+    if (
+      roundedValue >= highThreshold &&
+      roundedValue > slideStartValue.current &&
+      onHighEmotion
+    ) {
       onHighEmotion(roundedValue);
     }
   };
@@ -116,7 +135,9 @@ export function EmotionSlider({
           maximumValue={10}
           step={1}
           value={value}
+          onSlidingStart={handleSlidingStart}
           onValueChange={handleValueChange}
+          onSlidingComplete={handleSlidingComplete}
           minimumTrackTintColor={currentColor}
           maximumTrackTintColor={colors.bgTertiary}
           thumbTintColor={currentColor}
