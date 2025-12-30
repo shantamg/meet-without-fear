@@ -149,6 +149,14 @@ export function ChatInterface({
     }
   }, [lastAIMessageId, onLastAIMessageComplete]);
 
+  // If there's no new AI message to wait for (all historical), signal completion immediately
+  // This lets the parent know it doesn't need to wait for typewriter
+  useEffect(() => {
+    if (lastAIMessageId === null && messages.length > 0 && onLastAIMessageComplete) {
+      onLastAIMessageComplete();
+    }
+  }, [lastAIMessageId, messages.length, onLastAIMessageComplete]);
+
   // Handle typewriter progress - scroll to keep new content visible
   const handleTypewriterProgress = useCallback(() => {
     scrollToBottom(false);

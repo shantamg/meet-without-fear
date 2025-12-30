@@ -4,12 +4,12 @@
   <!-- Left circle -->
   <circle cx="95" cy="70" r="50"
           fill="none"
-          stroke="white"
+          stroke="#6366f1"
           stroke-width="10" />
 
   <!-- Right circle -->
   <circle cx="145" cy="70" r="50"
           fill="none"
-          stroke="white"
+          stroke="#6366f1"
           stroke-width="10" />
 </svg>
