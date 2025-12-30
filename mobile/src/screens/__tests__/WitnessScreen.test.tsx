@@ -278,6 +278,7 @@ describe('WitnessScreen', () => {
   it('shows appropriate welcome message for witness stage', () => {
     mockMessages = [];
     render(<WitnessScreen />);
-    expect(screen.getByText(/here to listen/i)).toBeTruthy();
+    // Witness stage welcome message asks about what's going on
+    expect(screen.getByText(/what's going on between you and/i)).toBeTruthy();
   });
 });

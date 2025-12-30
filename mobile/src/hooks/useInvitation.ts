@@ -56,8 +56,8 @@ function parseInvitationFromUrl(url: string): string | null {
     // Handle various URL formats:
     // - meetwithoutfear://invitation/abc123
     // - meetwithoutfear://invitation?id=abc123
-    // - https://meetwithoutfear.app/invitation/abc123
-    // - https://meetwithoutfear.app/invitation?id=abc123
+    // - https://meetwithoutfear.com/invitation/abc123
+    // - https://meetwithoutfear.com/invitation?id=abc123
 
     if (path?.startsWith('invitation/')) {
       // Path format: invitation/abc123

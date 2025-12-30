@@ -82,7 +82,7 @@ describe('useInvitationLink', () => {
   });
 
   it('handles https URL format', async () => {
-    mockGetInitialURL.mockResolvedValue('https://meetwithoutfear.app/invitation/xyz789');
+    mockGetInitialURL.mockResolvedValue('https://meetwithoutfear.com/invitation/xyz789');
 
     const { result } = renderHook(() => useInvitationLink());
 
