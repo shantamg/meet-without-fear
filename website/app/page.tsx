@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight, Shield, Heart, MessageCircle, Users } from "lucide-react";
 
 export default function HomePage() {
@@ -7,7 +8,8 @@ export default function HomePage() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-3">
+            <Image src="/logo.svg" alt="Meet Without Fear" width={48} height={28} />
             <span className="text-2xl font-bold text-accent">Meet Without Fear</span>
           </Link>
           <nav className="flex items-center gap-4">

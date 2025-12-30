@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 140" width="240" height="140" role="img" aria-label="Meet Without Fear logo">
+  <title>Meet Without Fear</title>
+
+  <!-- Left circle -->
+  <circle cx="95" cy="70" r="50"
+          fill="none"
+          stroke="white"
+          stroke-width="10" />
+
+  <!-- Right circle -->
+  <circle cx="145" cy="70" r="50"
+          fill="none"
+          stroke="white"
+          stroke-width="10" />
+</svg>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Apple, Smartphone, ArrowLeft, QrCode } from "lucide-react";
 
 type Platform = "ios" | "android";
@@ -36,7 +37,10 @@ export default function AppDownloadPage() {
             <ArrowLeft className="w-5 h-5" />
             <span>Back</span>
           </Link>
-          <span className="text-xl font-bold text-accent">Meet Without Fear</span>
+          <Link href="/" className="flex items-center gap-2">
+            <Image src="/logo.svg" alt="Meet Without Fear" width={40} height={24} />
+            <span className="text-xl font-bold text-accent">Meet Without Fear</span>
+          </Link>
         </div>
       </header>
 

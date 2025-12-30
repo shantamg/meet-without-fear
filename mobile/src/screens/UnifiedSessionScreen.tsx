@@ -204,6 +204,7 @@ export function UnifiedSessionScreen({
 
   // Animation for the invitation panel slide-up
   const invitationPanelAnim = useRef(new Animated.Value(0)).current;
+  const hasAnimatedPanelRef = useRef(false);
 
   // Calculate whether panel should show: have message, in right phase, not waiting for typewriter
   const shouldShowInvitationPanel = !!(
@@ -214,12 +215,19 @@ export function UnifiedSessionScreen({
 
   // Animate panel when shouldShowInvitationPanel changes
   useEffect(() => {
-    Animated.spring(invitationPanelAnim, {
-      toValue: shouldShowInvitationPanel ? 1 : 0,
-      useNativeDriver: true,
-      tension: 50,
-      friction: 8,
-    }).start();
+    if (shouldShowInvitationPanel && !hasAnimatedPanelRef.current) {
+      // First time showing (on mount/load) - set immediately without animation
+      invitationPanelAnim.setValue(1);
+      hasAnimatedPanelRef.current = true;
+    } else if (hasAnimatedPanelRef.current) {
+      // Subsequent changes - animate
+      Animated.spring(invitationPanelAnim, {
+        toValue: shouldShowInvitationPanel ? 1 : 0,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 8,
+      }).start();
+    }
   }, [shouldShowInvitationPanel, invitationPanelAnim]);
 
   // When invitation becomes confirmed, create the "Invitation Sent" indicator
@@ -236,15 +244,16 @@ export function UnifiedSessionScreen({
     wasInvitationConfirmedRef.current = invitationConfirmed;
   }, [invitationConfirmed]);
 
-  // Track when invitation message changes from one defined value to another
+  // Track when invitation message changes from one message value to another
   // This indicates a new AI response, so wait for typewriter
-  // If changing from undefined to defined, it's initial load - show immediately
+  // If changing from null/undefined to defined, it's initial load - show immediately
   useEffect(() => {
     const prev = prevInvitationMessageRef.current;
     const curr = invitationMessage;
 
-    // If message changed from one defined value to another, wait for typewriter
-    if (prev !== undefined && curr !== undefined && prev !== curr) {
+    // If message changed from one actual message to another, wait for typewriter
+    // Only trigger if BOTH prev and curr are truthy strings (not null/undefined)
+    if (prev && curr && prev !== curr) {
       setWaitingForTypewriter(true);
     }
 
