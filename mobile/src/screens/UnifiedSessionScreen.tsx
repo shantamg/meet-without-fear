@@ -6,12 +6,12 @@
  * appearing as inline cards or overlays.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stage, MessageRole, StrategyPhase, SessionStatus } from '@meet-without-fear/shared';
 
-import { ChatInterface, ChatMessage } from '../components/ChatInterface';
+import { ChatInterface, ChatMessage, ChatIndicatorItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
 import { FeelHeardConfirmation } from '../components/FeelHeardConfirmation';
 import { BreathingExercise } from '../components/BreathingExercise';
@@ -190,6 +190,56 @@ export function UnifiedSessionScreen({
   // Track when user is refining the invitation (after initial send, from Stage 1)
   // This overrides Stage 1 UI to show invitation crafting UI instead
   const [isRefiningInvitation, setIsRefiningInvitation] = useState(false);
+
+  // -------------------------------------------------------------------------
+  // Track Invitation Confirmation for Indicator
+  // -------------------------------------------------------------------------
+  const wasInvitationConfirmedRef = useRef(invitationConfirmed);
+  const [invitationSentIndicator, setInvitationSentIndicator] = useState<ChatIndicatorItem | null>(null);
+
+  // Track when to show the invitation draft panel (after typewriter completes)
+  const [showInvitationPanel, setShowInvitationPanel] = useState(false);
+
+  // When invitation becomes confirmed, create the "Invitation Sent" indicator
+  useEffect(() => {
+    if (invitationConfirmed && !wasInvitationConfirmedRef.current) {
+      // Invitation just got confirmed - add the indicator
+      setInvitationSentIndicator({
+        type: 'indicator',
+        indicatorType: 'invitation-sent',
+        id: `invitation-sent-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+      });
+      // Reset the panel visibility - it will show after typewriter completes
+      setShowInvitationPanel(false);
+    }
+    wasInvitationConfirmedRef.current = invitationConfirmed;
+  }, [invitationConfirmed]);
+
+  // During invitation phase before confirmation, show panel based on whether there's a draft
+  useEffect(() => {
+    if (isInvitationPhase && invitationMessage && !invitationConfirmed) {
+      // Show the panel immediately during invitation crafting phase
+      setShowInvitationPanel(true);
+    }
+  }, [isInvitationPhase, invitationMessage, invitationConfirmed]);
+
+  // Callback when the last AI message finishes typing
+  const handleLastAIMessageComplete = useCallback(() => {
+    // If we have an invitation message draft and we're in invitation phase, show the panel
+    if (invitationMessage && (isInvitationPhase || isRefiningInvitation)) {
+      setShowInvitationPanel(true);
+    }
+  }, [invitationMessage, isInvitationPhase, isRefiningInvitation]);
+
+  // Build indicators array
+  const indicators = useMemo((): ChatIndicatorItem[] => {
+    const items: ChatIndicatorItem[] = [];
+    if (invitationSentIndicator) {
+      items.push(invitationSentIndicator);
+    }
+    return items;
+  }, [invitationSentIndicator]);
 
   // -------------------------------------------------------------------------
   // Effective Stage (accounts for compact signed but stage not yet updated)
@@ -756,6 +806,7 @@ export function UnifiedSessionScreen({
       <View style={styles.content}>
         <ChatInterface
           messages={displayMessages}
+          indicators={indicators}
           onSendMessage={sendMessage}
           isLoading={isSending}
           showEmotionSlider={effectiveStage === Stage.WITNESS && !isInvitationPhase && !isRefiningInvitation}
@@ -767,8 +818,9 @@ export function UnifiedSessionScreen({
             }
           }}
           compactEmotionSlider
+          onLastAIMessageComplete={handleLastAIMessageComplete}
           renderAboveInput={
-            (isInvitationPhase || isRefiningInvitation) && invitationMessage && invitationUrl
+            showInvitationPanel && (isInvitationPhase || isRefiningInvitation) && invitationMessage && invitationUrl
               ? () => (
                   <View style={styles.invitationDraftContainer}>
                     <Text style={styles.invitationDraftMessage}>

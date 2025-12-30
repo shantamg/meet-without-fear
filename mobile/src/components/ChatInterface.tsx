@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,12 @@ import {
   Platform,
   ListRenderItem,
 } from 'react-native';
-import type { MessageDTO } from '@meet-without-fear/shared';
+import type { MessageDTO, MessageRole } from '@meet-without-fear/shared';
 import { ChatBubble, ChatBubbleMessage, MessageDeliveryStatus } from './ChatBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { ChatInput } from './ChatInput';
 import { EmotionSlider } from './EmotionSlider';
+import { ChatIndicator, ChatIndicatorType } from './ChatIndicator';
 import { createStyles } from '../theme/styled';
 
 // ============================================================================
@@ -21,10 +22,33 @@ import { createStyles } from '../theme/styled';
 /** Extended message type that includes optional delivery status */
 export interface ChatMessage extends MessageDTO {
   status?: MessageDeliveryStatus;
+  /** If true, skip typewriter effect (for messages loaded from history) */
+  skipTypewriter?: boolean;
+}
+
+// Re-export indicator type for use by parent components
+export { ChatIndicatorType } from './ChatIndicator';
+
+/** Indicator item to display inline in chat */
+export interface ChatIndicatorItem {
+  type: 'indicator';
+  indicatorType: ChatIndicatorType;
+  id: string;
+  timestamp?: string;
+}
+
+/** Union type for items that can appear in chat list */
+export type ChatListItem = ChatMessage | ChatIndicatorItem;
+
+/** Type guard to check if item is an indicator */
+function isIndicator(item: ChatListItem): item is ChatIndicatorItem {
+  return 'type' in item && item.type === 'indicator';
 }
 
 interface ChatInterfaceProps {
   messages: ChatMessage[];
+  /** Optional indicators to display inline (e.g., "Invitation Sent") */
+  indicators?: ChatIndicatorItem[];
   onSendMessage: (content: string) => void;
   isLoading?: boolean;
   disabled?: boolean;
@@ -42,6 +66,8 @@ interface ChatInterfaceProps {
   compactEmotionSlider?: boolean;
   /** Content to render above the input (e.g., invitation share button) */
   renderAboveInput?: () => React.ReactNode;
+  /** Callback when the most recent AI message finishes typewriter effect */
+  onLastAIMessageComplete?: () => void;
 }
 
 // ============================================================================
@@ -54,6 +80,7 @@ const DEFAULT_EMPTY_MESSAGE =
 
 export function ChatInterface({
   messages,
+  indicators = [],
   onSendMessage,
   isLoading = false,
   disabled = false,
@@ -65,20 +92,68 @@ export function ChatInterface({
   onHighEmotion,
   compactEmotionSlider = false,
   renderAboveInput,
+  onLastAIMessageComplete,
 }: ChatInterfaceProps) {
   const styles = useStyles();
-  const flatListRef = useRef<FlatList<ChatMessage>>(null);
+  const flatListRef = useRef<FlatList<ChatListItem>>(null);
+
+  // Track which messages have completed typewriter effect
+  const [completedMessages, setCompletedMessages] = useState<Set<string>>(new Set());
+
+  // Track message IDs that existed on initial mount - these should skip typewriter
+  const initialMessageIdsRef = useRef<Set<string> | null>(null);
+  if (initialMessageIdsRef.current === null) {
+    // First render - capture all existing message IDs
+    initialMessageIdsRef.current = new Set(messages.map(m => m.id));
+  }
+
+  // Find the last AI message ID for typewriter completion tracking
+  // Only consider messages that weren't in the initial set (i.e., new messages)
+  const lastAIMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role !== 'USER' && !initialMessageIdsRef.current?.has(msg.id)) {
+        return msg.id;
+      }
+    }
+    return null;
+  }, [messages]);
+
+  // Merge messages and indicators, sorted by timestamp
+  const listItems = useMemo((): ChatListItem[] => {
+    const items: ChatListItem[] = [...messages, ...indicators];
+    return items.sort((a, b) => {
+      const aTime = 'timestamp' in a && a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = 'timestamp' in b && b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return aTime - bTime;
+    });
+  }, [messages, indicators]);
+
+  // Handle typewriter completion for a specific message
+  const handleTypewriterComplete = useCallback((messageId: string) => {
+    setCompletedMessages(prev => new Set(prev).add(messageId));
+
+    // If this is the last AI message, call the callback
+    if (messageId === lastAIMessageId && onLastAIMessageComplete) {
+      onLastAIMessageComplete();
+    }
+  }, [lastAIMessageId, onLastAIMessageComplete]);
+
+  // Handle typewriter progress - scroll to keep new content visible
+  const handleTypewriterProgress = useCallback(() => {
+    flatListRef.current?.scrollToEnd({ animated: false });
+  }, []);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (messages.length > 0) {
+    if (listItems.length > 0) {
       // Small delay to ensure layout is complete
       const timer = setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [messages.length]);
+  }, [listItems.length]);
 
   // Also scroll when content above input changes (e.g., invitation draft appears)
   useEffect(() => {
@@ -108,18 +183,34 @@ export function ChatInterface({
     }
   }, [isLoading]);
 
-  const renderMessage: ListRenderItem<ChatMessage> = useCallback(({ item }) => {
+  const renderItem: ListRenderItem<ChatListItem> = useCallback(({ item }) => {
+    // Render indicator
+    if (isIndicator(item)) {
+      return <ChatIndicator type={item.indicatorType} timestamp={item.timestamp} />;
+    }
+
+    // Skip typewriter for messages that existed on initial mount (loaded from history)
+    const isInitialMessage = initialMessageIdsRef.current?.has(item.id) ?? false;
+
+    // Render message
     const bubbleMessage: ChatBubbleMessage = {
       id: item.id,
       role: item.role,
       content: item.content,
       timestamp: item.timestamp,
       status: item.status,
+      skipTypewriter: item.skipTypewriter || isInitialMessage,
     };
-    return <ChatBubble message={bubbleMessage} />;
-  }, []);
+    return (
+      <ChatBubble
+        message={bubbleMessage}
+        onTypewriterComplete={() => handleTypewriterComplete(item.id)}
+        onTypewriterProgress={handleTypewriterProgress}
+      />
+    );
+  }, [handleTypewriterComplete, handleTypewriterProgress]);
 
-  const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
+  const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 
   const renderFooter = useCallback(() => {
     if (!isLoading) return null;
@@ -146,12 +237,12 @@ export function ChatInterface({
     >
       <FlatList
         ref={flatListRef}
-        data={messages}
+        data={listItems}
         keyExtractor={keyExtractor}
-        renderItem={renderMessage}
+        renderItem={renderItem}
         contentContainerStyle={[
           styles.messageList,
-          messages.length === 0 && styles.messageListEmpty,
+          listItems.length === 0 && styles.messageListEmpty,
         ]}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmptyState}

@@ -32,7 +32,7 @@
     "production": {
       "env": {
         "EXPO_PUBLIC_API_URL": "https://meet-without-fear-api.onrender.com",
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cmVhZHktamF5LTUyLmNsZXJrLmFjY291bnRzLmRldiQ"
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubWVldHdpdGhvdXRmZWFyLmNvbSQ"
       }
     },
     "android-apk": {

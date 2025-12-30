@@ -215,6 +215,31 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     // Count user turns for AI context
     const userTurnCount = history.filter((m) => m.role === 'USER').length;
 
+    // Detect stage transition: check if this is the first message in Stage 1
+    // A stage transition happens when:
+    // 1. There are previous messages in the session (from Stage 0 invitation phase)
+    // 2. This is the first Stage 1 message from this user (excluding the just-saved message)
+    const previousStage1Messages = history.filter(
+      (m) => m.stage === 1 && m.senderId === user.id && m.id !== userMessage.id
+    );
+    // history includes the just-saved message, so we check if there are OTHER Stage 1 messages
+    const hasStage0Messages = history.some((m) => m.stage === 0);
+    const isStageTransition = hasStage0Messages && previousStage1Messages.length === 0;
+
+    // If it's a stage transition, determine the previous stage
+    let previousStage: number | undefined;
+    if (isStageTransition) {
+      const previousStages = history
+        .filter((m) => m.stage !== currentStage)
+        .map((m) => m.stage);
+      if (previousStages.length > 0) {
+        previousStage = Math.max(...previousStages);
+      }
+      console.log(
+        `[sendMessage] Stage transition detected: ${previousStage ?? 'unknown'} → ${currentStage}`
+      );
+    }
+
     // Get partner name for context
     const partnerId = await getPartnerUserId(sessionId, user.id);
     let partnerName: string | undefined;
@@ -267,6 +292,8 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       isFirstTurnInSession,
       isInvitationPhase: isInvitationPhase || isRefiningInvitation,
       isRefiningInvitation,
+      isStageTransition,
+      previousStage,
     };
 
     // Get AI response using full orchestration pipeline

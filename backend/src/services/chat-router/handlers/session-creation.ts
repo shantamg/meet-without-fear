@@ -295,7 +295,7 @@ async function createSession(
     creationState.delete(userId);
 
     const summary = mapSessionToSummary(session, userId);
-    const invitationUrl = `${process.env.APP_URL || 'https://meetwithoutfear.com'}/invite/${invitation.id}`;
+    const invitationUrl = `${process.env.APP_URL || 'https://meetwithoutfear.com'}/invitation/${invitation.id}`;
 
     const message = await generateConversationalResponse({
       action: 'session_created',

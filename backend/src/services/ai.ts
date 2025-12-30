@@ -55,6 +55,10 @@ export interface FullAIContext extends WitnessContext {
   isInvitationPhase?: boolean;
   /** Whether user is refining their invitation after Stage 1/2 processing */
   isRefiningInvitation?: boolean;
+  /** Whether this is the first turn after advancing to a new stage (stage transition intro) */
+  isStageTransition?: boolean;
+  /** The stage we just transitioned from (for context gathering) */
+  previousStage?: number;
 }
 
 // Re-export orchestrator types for convenience
@@ -279,6 +283,8 @@ export async function getOrchestratedResponse(
     isFirstTurnInSession: context.isFirstTurnInSession,
     isInvitationPhase: context.isInvitationPhase,
     isRefiningInvitation: context.isRefiningInvitation,
+    isStageTransition: context.isStageTransition,
+    previousStage: context.previousStage,
   };
 
   return orchestrateResponse(orchestratorContext);

@@ -123,6 +123,27 @@ export async function processSessionMessage(
 
   const userTurnCount = history.filter((m) => m.role === 'USER').length;
 
+  // Detect stage transition: check if this is the first message in the current stage
+  // A stage transition is detected when:
+  // 1. There are previous messages in the session (not first message ever)
+  // 2. No previous messages exist at the current stage for this user
+  const previousStageMessages = history.filter(
+    (m) => m.stage === currentStage && m.senderId === userId
+  );
+  const isStageTransition = history.length > 0 && previousStageMessages.length === 0;
+
+  // If it's a stage transition, determine the previous stage
+  let previousStage: number | undefined;
+  if (isStageTransition && history.length > 0) {
+    // Get the highest stage from previous messages
+    const previousStages = history
+      .filter((m) => m.stage !== currentStage)
+      .map((m) => m.stage);
+    if (previousStages.length > 0) {
+      previousStage = Math.max(...previousStages);
+    }
+  }
+
   // Get partner name for context
   const partnerId = await getPartnerUserId(sessionId, userId);
   let partnerName: string | undefined;
@@ -168,7 +189,15 @@ export async function processSessionMessage(
     sessionDurationMinutes,
     isFirstTurnInSession: userTurnCount === 1,
     isInvitationPhase,
+    isStageTransition,
+    previousStage,
   };
+
+  if (isStageTransition) {
+    console.log(
+      `[SessionProcessor] Stage transition detected: ${previousStage ?? 'unknown'} → ${currentStage}`
+    );
+  }
 
   // Get AI response
   const orchestratorResult = await getOrchestratedResponse(

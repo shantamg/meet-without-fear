@@ -377,14 +377,14 @@ describe('Session Creation Handler', () => {
         },
         data: {
           invitationId: 'inv-1',
-          invitationUrl: 'https://meetwithoutfear.com/invite/inv-1',
+          invitationUrl: 'https://meetwithoutfear.com/invitation/inv-1',
         },
       };
 
       expect(result.actionType).toBe('CREATE_SESSION');
       expect(result.sessionChange?.type).toBe('created');
       expect(result.sessionChange?.sessionId).toBe('session-1');
-      expect(result.data?.invitationUrl).toContain('/invite/');
+      expect(result.data?.invitationUrl).toContain('/invitation/');
     });
 
     it('returns correct structure for error', () => {

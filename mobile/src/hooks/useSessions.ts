@@ -26,6 +26,7 @@ import {
   InvitationDTO,
 } from '@meet-without-fear/shared';
 import { stageKeys } from './useStages';
+import { messageKeys } from './useMessages';
 
 // ============================================================================
 // Query Keys
@@ -442,6 +443,8 @@ export function useConfirmInvitationMessage(
       return post<{
         confirmed: boolean;
         invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean };
+        advancedToStage?: number;
+        transitionMessage?: { id: string; content: string; timestamp: string };
       }>(`/sessions/${sessionId}/invitation/confirm`, { message });
     },
     onSuccess: (_, { sessionId }) => {
@@ -455,6 +458,10 @@ export function useConfirmInvitationMessage(
       // Invalidate stage progress since backend advances to Stage 1
       queryClient.invalidateQueries({
         queryKey: stageKeys.progress(sessionId),
+      });
+      // Invalidate messages to show the new transition message
+      queryClient.invalidateQueries({
+        queryKey: messageKeys.list(sessionId),
       });
     },
     ...options,

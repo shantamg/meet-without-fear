@@ -19,6 +19,8 @@ import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
 import { notifyPartner } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
+import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
+import { extractJsonSafe } from '../utils/json-extractor';
 
 // ============================================================================
 // Controllers
@@ -933,6 +935,87 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
       },
     });
 
+    // Generate proactive transition message from AI
+    // Get conversation history from Stage 0 (invitation phase)
+    const history = await prisma.message.findMany({
+      where: {
+        sessionId,
+        OR: [{ senderId: user.id }, { role: 'AI', senderId: null }],
+      },
+      orderBy: { timestamp: 'asc' },
+      take: 20,
+    });
+
+    // Get partner name for context
+    const partnerName = invitation.name || undefined;
+
+    // Build AI context for transition
+    const aiContext: FullAIContext = {
+      sessionId,
+      userId: user.id,
+      userName: user.name || 'there',
+      partnerName,
+      stage: 1,
+      turnCount: 0, // Starting fresh in Stage 1
+      emotionalIntensity: 5,
+      sessionDurationMinutes: 0,
+      isFirstTurnInSession: false,
+      isInvitationPhase: false,
+      isStageTransition: true,
+      previousStage: 0,
+    };
+
+    // Generate transition message
+    let transitionMessage: { id: string; content: string; timestamp: string } | undefined;
+    try {
+      // Add a synthetic trigger message to signal the transition
+      // This tells the AI that the invitation was sent and the user is ready to continue
+      const historyWithTrigger = [
+        ...history.map((m) => ({
+          role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+          content: m.content,
+        })),
+        { role: 'user' as const, content: '[I just sent the invitation and am ready to continue.]' },
+      ];
+
+      const orchestratorResult = await getOrchestratedResponse(
+        historyWithTrigger,
+        aiContext
+      );
+
+      // Parse the JSON response to get just the response text
+      let aiResponseContent = orchestratorResult.response;
+      const parsed = extractJsonSafe<{ response?: string }>(
+        orchestratorResult.response,
+        { response: orchestratorResult.response }
+      );
+      if (parsed.response) {
+        aiResponseContent = parsed.response;
+      }
+
+      // Save the transition message
+      const aiMessage = await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          role: 'AI',
+          content: aiResponseContent,
+          stage: 1,
+        },
+      });
+
+      transitionMessage = {
+        id: aiMessage.id,
+        content: aiMessage.content,
+        timestamp: aiMessage.timestamp.toISOString(),
+      };
+
+      console.log('[confirmInvitationMessage] Generated transition message:', aiMessage.id);
+    } catch (err) {
+      console.warn('[confirmInvitationMessage] Failed to generate transition message:', err);
+      // Non-fatal - continue without transition message
+    }
+
     successResponse(res, {
       confirmed: true,
       invitation: {
@@ -941,6 +1024,7 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
         messageConfirmed: updatedInvitation.messageConfirmed,
       },
       advancedToStage: 1,
+      transitionMessage,
     });
   } catch (error) {
     console.error('[confirmInvitationMessage] Error:', error);

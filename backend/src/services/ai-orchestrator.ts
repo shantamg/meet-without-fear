@@ -52,6 +52,10 @@ export interface OrchestratorContext {
   isInvitationPhase?: boolean;
   /** Whether user is refining their invitation after Stage 1/2 processing */
   isRefiningInvitation?: boolean;
+  /** Whether this is the first turn after advancing to a new stage (stage transition intro) */
+  isStageTransition?: boolean;
+  /** The stage we just transitioned from (for context gathering) */
+  previousStage?: number;
 }
 
 export interface OrchestratorResult {
@@ -153,6 +157,8 @@ export async function orchestrateResponse(
     {
       isInvitationPhase: context.isInvitationPhase,
       isRefiningInvitation: context.isRefiningInvitation,
+      isStageTransition: context.isStageTransition,
+      previousStage: context.previousStage,
     }
   );
 
