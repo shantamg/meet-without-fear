@@ -14,11 +14,11 @@ export default function WelcomeScreen() {
   };
 
   const handleTerms = () => {
-    Linking.openURL('https://meetwithoutfear.app/terms');
+    Linking.openURL('https://meetwithoutfear.com/terms');
   };
 
   const handlePrivacy = () => {
-    Linking.openURL('https://meetwithoutfear.app/privacy');
+    Linking.openURL('https://meetwithoutfear.com/privacy');
   };
 
   return (
