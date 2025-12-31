@@ -68,6 +68,12 @@ interface ChatInterfaceProps {
   renderAboveInput?: () => React.ReactNode;
   /** Callback when the most recent AI message finishes typewriter effect */
   onLastAIMessageComplete?: () => void;
+  /** Callback to load more (older) messages */
+  onLoadMore?: () => void;
+  /** Whether there are more messages to load */
+  hasMore?: boolean;
+  /** Whether currently loading more messages */
+  isLoadingMore?: boolean;
 }
 
 // ============================================================================
@@ -93,6 +99,9 @@ export function ChatInterface({
   compactEmotionSlider = false,
   renderAboveInput,
   onLastAIMessageComplete,
+  onLoadMore,
+  hasMore = false,
+  isLoadingMore = false,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -110,12 +119,19 @@ export function ChatInterface({
   // Track which messages have completed typewriter effect
   const [completedMessages, setCompletedMessages] = useState<Set<string>>(new Set());
 
-  // Track message IDs that existed on initial mount - these should skip typewriter
-  const initialMessageIdsRef = useRef<Set<string> | null>(null);
-  if (initialMessageIdsRef.current === null) {
-    // First render - capture all existing message IDs
-    initialMessageIdsRef.current = new Set(messages.map(m => m.id));
-  }
+  // Track message IDs that should skip typewriter (existed before current "session")
+  // We use a ref to persist across renders, but only set it once messages have actually loaded
+  const initialMessageIdsRef = useRef<Set<string>>(new Set());
+  const hasSetInitialRef = useRef(false);
+
+  // Only capture initial message IDs once when we first have messages
+  // This prevents the issue where empty messages array on mount causes all messages to animate
+  useEffect(() => {
+    if (!hasSetInitialRef.current && messages.length > 0) {
+      initialMessageIdsRef.current = new Set(messages.map(m => m.id));
+      hasSetInitialRef.current = true;
+    }
+  }, [messages]);
 
   // Find the last AI message ID for typewriter completion tracking
   // Only consider messages that weren't in the initial set (i.e., new messages)
@@ -148,14 +164,6 @@ export function ChatInterface({
       onLastAIMessageComplete();
     }
   }, [lastAIMessageId, onLastAIMessageComplete]);
-
-  // If there's no new AI message to wait for (all historical), signal completion immediately
-  // This lets the parent know it doesn't need to wait for typewriter
-  useEffect(() => {
-    if (lastAIMessageId === null && messages.length > 0 && onLastAIMessageComplete) {
-      onLastAIMessageComplete();
-    }
-  }, [lastAIMessageId, messages.length, onLastAIMessageComplete]);
 
   // Handle typewriter progress - scroll to keep new content visible
   const handleTypewriterProgress = useCallback(() => {
@@ -198,8 +206,9 @@ export function ChatInterface({
       return <ChatIndicator type={item.indicatorType} timestamp={item.timestamp} />;
     }
 
-    // Skip typewriter for messages that existed on initial mount (loaded from history)
-    const isInitialMessage = initialMessageIdsRef.current?.has(item.id) ?? false;
+    // Skip typewriter for messages that existed on initial load (loaded from history)
+    // If we haven't set initial messages yet, skip typewriter to be safe
+    const isInitialMessage = !hasSetInitialRef.current || initialMessageIdsRef.current.has(item.id);
 
     // Render message
     const bubbleMessage: ChatBubbleMessage = {
@@ -238,6 +247,28 @@ export function ChatInterface({
     );
   }, [isLoading, emptyStateTitle, emptyStateMessage]);
 
+  // Header shows loading indicator when fetching older messages
+  const renderHeader = useCallback(() => {
+    if (!isLoadingMore) return null;
+    return (
+      <View style={styles.loadingMore}>
+        <TypingIndicator />
+      </View>
+    );
+  }, [isLoadingMore]);
+
+  // Handle scroll to detect when near top (to load more older messages)
+  const handleScroll = useCallback(
+    (event: { nativeEvent: { contentOffset: { y: number } } }) => {
+      const { y } = event.nativeEvent.contentOffset;
+      // When scrolled near the top (within 100px), load more if available
+      if (y < 100 && hasMore && !isLoadingMore && onLoadMore) {
+        onLoadMore();
+      }
+    },
+    [hasMore, isLoadingMore, onLoadMore]
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -253,10 +284,13 @@ export function ChatInterface({
           styles.messageList,
           listItems.length === 0 && styles.messageListEmpty,
         ]}
+        ListHeaderComponent={renderHeader}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmptyState}
         showsVerticalScrollIndicator={false}
         testID="chat-message-list"
+        onScroll={handleScroll}
+        scrollEventThrottle={100}
         onContentSizeChange={(_, height) => {
           contentHeightRef.current = height;
         }}
@@ -296,6 +330,10 @@ const useStyles = () =>
     },
     messageListEmpty: {
       justifyContent: 'center',
+    },
+    loadingMore: {
+      paddingVertical: t.spacing.md,
+      alignItems: 'center',
     },
     emptyState: {
       flex: 1,

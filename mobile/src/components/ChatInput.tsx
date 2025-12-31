@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { View, TextInput, TouchableOpacity, Text } from 'react-native';
+import { useState, useCallback, useRef } from 'react';
+import { View, TextInput, TouchableOpacity, Text, type TextInput as TextInputType } from 'react-native';
 import { Send } from 'lucide-react-native';
 import { createStyles } from '../theme/styled';
 import { theme } from '../theme';
@@ -36,6 +36,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const styles = useStyles();
   const [input, setInput] = useState('');
+  const inputRef = useRef<TextInputType>(null);
 
   const canSend = input.trim().length > 0 && !disabled;
   const characterRatio = input.length / maxLength;
@@ -44,7 +45,9 @@ export function ChatInput({
   const handleSend = useCallback(() => {
     if (!canSend) return;
     const message = input.trim();
+    // Clear both React state and native TextInput to ensure sync
     setInput('');
+    inputRef.current?.clear();
     onSend(message);
   }, [input, canSend, onSend]);
 
@@ -56,6 +59,7 @@ export function ChatInput({
     <View style={styles.container}>
       <View style={styles.inputWrapper}>
         <TextInput
+          ref={inputRef}
           style={styles.input}
           value={input}
           onChangeText={handleChangeText}

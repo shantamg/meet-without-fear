@@ -40,21 +40,30 @@ export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
     }
   };
 
-  const getIndicatorStyle = () => {
+  const getLineStyle = () => {
     switch (type) {
       case 'invitation-sent':
-        return styles.invitationSent;
+        return styles.invitationSentLine;
       default:
-        return styles.default;
+        return styles.defaultLine;
+    }
+  };
+
+  const getTextStyle = () => {
+    switch (type) {
+      case 'invitation-sent':
+        return styles.invitationSentText;
+      default:
+        return styles.defaultText;
     }
   };
 
   return (
     <View style={styles.container} testID={testID || `chat-indicator-${type}`}>
       <View style={styles.lineContainer}>
-        <View style={[styles.line, getIndicatorStyle()]} />
-        <Text style={[styles.text, getIndicatorStyle()]}>{getIndicatorText()}</Text>
-        <View style={[styles.line, getIndicatorStyle()]} />
+        <View style={[styles.line, getLineStyle()]} />
+        <Text style={[styles.text, getTextStyle()]}>{getIndicatorText()}</Text>
+        <View style={[styles.line, getLineStyle()]} />
       </View>
     </View>
   );
@@ -88,13 +97,17 @@ const useStyles = () =>
       textTransform: 'uppercase',
       letterSpacing: 1,
     },
-    // Invitation sent: yellow/amber tint
-    invitationSent: {
+    // Invitation sent: yellow/amber tint - separate line and text styles
+    invitationSentLine: {
       backgroundColor: 'rgba(245, 158, 11, 0.3)',
+    },
+    invitationSentText: {
       color: 'rgba(245, 158, 11, 0.9)',
     },
-    default: {
+    defaultLine: {
       backgroundColor: t.colors.border,
+    },
+    defaultText: {
       color: t.colors.textMuted,
     },
   }));
