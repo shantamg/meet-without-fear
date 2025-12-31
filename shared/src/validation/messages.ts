@@ -22,9 +22,11 @@ export {
 // ============================================================================
 
 export const getMessagesQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
   before: z.string().optional(),
   after: z.string().optional(),
+  /** Order by timestamp: 'asc' (oldest first) or 'desc' (newest first, for initial load) */
+  order: z.enum(['asc', 'desc']).default('desc'),
 });
 
 export type GetMessagesQueryInput = z.infer<typeof getMessagesQuerySchema>;

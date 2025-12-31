@@ -33,7 +33,7 @@ describe('getMessagesQuerySchema', () => {
     const result = getMessagesQuerySchema.safeParse({});
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.limit).toBe(50);
+      expect(result.data.limit).toBe(25);
     }
   });
 

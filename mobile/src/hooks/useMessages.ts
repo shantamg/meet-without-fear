@@ -11,7 +11,7 @@ import {
   UseQueryOptions,
   UseMutationOptions,
   useInfiniteQuery,
-  UseInfiniteQueryOptions,
+  InfiniteData,
 } from '@tanstack/react-query';
 import { get, post, ApiClientError } from '../lib/api';
 import {
@@ -95,40 +95,71 @@ export function useMessages(
   });
 }
 
+/** Options for useInfiniteMessages hook */
+export interface UseInfiniteMessagesOptions {
+  enabled?: boolean;
+}
+
+/** Return type for useInfiniteMessages hook */
+export interface UseInfiniteMessagesResult {
+  data: InfiniteData<GetMessagesResponse> | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  fetchNextPage: () => void;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  refetch: () => void;
+}
+
 /**
  * Fetch messages with infinite scroll pagination.
+ * Initial load gets newest messages (order: desc, reversed on server).
+ * Loading more fetches older messages using 'before' cursor.
  */
 export function useInfiniteMessages(
   params: Omit<GetMessagesParams, 'cursor'>,
-  options?: Omit<
-    UseInfiniteQueryOptions<GetMessagesResponse, ApiClientError>,
-    'queryKey' | 'queryFn' | 'getNextPageParam' | 'initialPageParam'
-  >
-) {
-  const { sessionId, stage, limit } = params;
+  options?: UseInfiniteMessagesOptions
+): UseInfiniteMessagesResult {
+  const { sessionId, stage, limit = 25 } = params;
 
-  return useInfiniteQuery({
+  const result = useInfiniteQuery({
     queryKey: messageKeys.list(sessionId, stage),
     queryFn: async ({ pageParam }) => {
       const queryParams = new URLSearchParams();
       if (stage !== undefined) queryParams.set('stage', stage.toString());
-      if (limit) queryParams.set('limit', limit.toString());
-      if (pageParam) queryParams.set('cursor', pageParam as string);
+      queryParams.set('limit', limit.toString());
 
-      const queryString = queryParams.toString();
-      const url = queryString
-        ? `/sessions/${sessionId}/messages?${queryString}`
-        : `/sessions/${sessionId}/messages`;
+      // First page: get newest messages (default order is 'desc')
+      // Subsequent pages: get older messages using 'before' cursor with 'asc' order
+      if (pageParam) {
+        queryParams.set('before', pageParam as string);
+        queryParams.set('order', 'asc');
+      }
 
+      const url = `/sessions/${sessionId}/messages?${queryParams.toString()}`;
       return get<GetMessagesResponse>(url);
     },
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) =>
-      lastPage.hasMore ? lastPage.cursor : undefined,
-    enabled: !!sessionId,
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.hasMore || lastPage.messages.length === 0) return undefined;
+      // Return the oldest message's timestamp as the cursor for the next page
+      return lastPage.messages[0]?.timestamp;
+    },
+    enabled: options?.enabled ?? !!sessionId,
     staleTime: 10_000,
-    ...options,
   });
+
+  return {
+    data: result.data,
+    isLoading: result.isLoading,
+    isError: result.isError,
+    error: result.error,
+    fetchNextPage: result.fetchNextPage,
+    hasNextPage: result.hasNextPage ?? false,
+    isFetchingNextPage: result.isFetchingNextPage,
+    refetch: result.refetch,
+  };
 }
 
 // ============================================================================

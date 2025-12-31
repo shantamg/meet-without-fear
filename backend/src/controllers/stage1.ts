@@ -546,7 +546,7 @@ export async function getConversationHistory(
       return;
     }
 
-    const { limit, before, after } = parseResult.data;
+    const { limit, before, after, order } = parseResult.data;
 
     // Check session exists and user has access
     const session = await prisma.session.findFirst({
@@ -584,13 +584,19 @@ export async function getConversationHistory(
         ],
         ...cursorCondition,
       },
-      orderBy: { timestamp: 'asc' },
+      orderBy: { timestamp: order },
       take: limit + 1, // Fetch one extra to check for more
     });
 
     // Check if there are more messages
     const hasMore = messages.length > limit;
-    const resultMessages = hasMore ? messages.slice(0, limit) : messages;
+    let resultMessages = hasMore ? messages.slice(0, limit) : messages;
+
+    // If fetched in descending order, reverse to return chronological order for display
+    // This allows us to fetch the latest N messages but display them oldest-first
+    if (order === 'desc') {
+      resultMessages = resultMessages.reverse();
+    }
 
     successResponse(res, {
       messages: resultMessages.map((m) => ({
