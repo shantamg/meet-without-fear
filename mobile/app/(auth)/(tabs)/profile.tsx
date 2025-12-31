@@ -61,32 +61,28 @@ export default function ProfileScreen() {
       icon: Settings,
       label: 'Account Settings',
       onPress: () => {
-        // TODO: Navigate to account settings
-        Alert.alert('Coming Soon', 'Account settings will be available soon');
+        router.push('/settings/account');
       },
     },
     {
       icon: Bell,
       label: 'Notifications',
       onPress: () => {
-        // TODO: Navigate to notification settings
-        Alert.alert('Coming Soon', 'Notification settings will be available soon');
+        router.push('/settings/notifications');
       },
     },
     {
       icon: Shield,
       label: 'Privacy',
       onPress: () => {
-        // TODO: Navigate to privacy settings
-        Alert.alert('Coming Soon', 'Privacy settings will be available soon');
+        router.push('/settings/privacy');
       },
     },
     {
       icon: HelpCircle,
       label: 'Help & Support',
       onPress: () => {
-        // TODO: Navigate to help
-        Alert.alert('Coming Soon', 'Help & Support will be available soon');
+        router.push('/settings/help');
       },
     },
   ];

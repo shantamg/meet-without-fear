@@ -66,6 +66,9 @@ export type AppRoutes = {
 
   // Settings routes
   '/settings/notifications': undefined;
+  '/settings/account': undefined;
+  '/settings/privacy': undefined;
+  '/settings/help': undefined;
 };
 
 // Type for router.push with params
