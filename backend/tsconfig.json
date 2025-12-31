@@ -15,7 +15,8 @@
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "paths": {
-      "@shared/*": ["shared/src/*"]
+      "@shared/*": ["shared/src/*"],
+      "@meet-without-fear/shared": ["shared/src/index.ts"]
     }
   },
   "include": [

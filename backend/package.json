@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "dev:watch": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "start": "node dist/backend/src/server.js",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -36,6 +36,7 @@
     "express": "^4.21.0",
     "helmet": "^8.0.0",
     "resend": "^6.6.0",
+    "tsc-alias": "^1.8.16",
     "typescript": "^5.7.2",
     "zod": "^3.23.8"
   },
