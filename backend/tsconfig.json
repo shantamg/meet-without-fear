@@ -18,13 +18,17 @@
       "@shared/*": ["shared/src/*"]
     }
   },
-  "include": ["src/**/*", "../shared/src/**/*"],
+  "include": [
+    "src/**/*",
+    "../shared/src/*.ts",
+    "../shared/src/contracts/*.ts",
+    "../shared/src/dto/**/*.ts",
+    "../shared/src/validation/*.ts"
+  ],
   "exclude": [
     "node_modules",
     "dist",
     "**/__tests__/**",
-    "**/*.test.ts",
-    "../shared/src/**/__tests__/**",
-    "../shared/src/**/*.test.ts"
+    "**/*.test.ts"
   ]
 }
