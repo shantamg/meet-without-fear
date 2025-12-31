@@ -9,10 +9,8 @@ import {
   QueryClient,
   QueryClientProvider,
   focusManager,
-  onlineManager,
 } from '@tanstack/react-query';
 import { AppState, AppStateStatus, Platform } from 'react-native';
-import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 
 // ============================================================================
 // App Focus Management
@@ -35,23 +33,6 @@ function setupFocusManager(): () => void {
   return () => subscription.remove();
 }
 
-/**
- * Configure React Query to track online/offline status.
- */
-function setupOnlineManager(): () => void {
-  // NetInfo may not be installed yet - check if available
-  if (typeof NetInfo !== 'undefined' && NetInfo.addEventListener) {
-    return NetInfo.addEventListener((state: NetInfoState) => {
-      onlineManager.setOnline(
-        state.isConnected != null &&
-          state.isConnected &&
-          Boolean(state.isInternetReachable)
-      );
-    });
-  }
-
-  return () => {};
-}
 
 // ============================================================================
 // Query Client Configuration
@@ -108,7 +89,6 @@ type QueryProviderProps = PropsWithChildren;
  *
  * Features:
  * - Automatic refetch on app focus
- * - Online/offline awareness
  * - Optimistic caching
  * - Retry with exponential backoff
  *
@@ -129,14 +109,12 @@ export function QueryProvider({ children }: QueryProviderProps): React.ReactElem
   // Create client once per app lifecycle
   const [queryClient] = useState(() => createQueryClient());
 
-  // Setup focus and online managers on mount
+  // Setup focus manager on mount
   React.useEffect(() => {
     const unsubscribeFocus = setupFocusManager();
-    const unsubscribeOnline = setupOnlineManager();
 
     return () => {
       unsubscribeFocus();
-      unsubscribeOnline();
     };
   }, []);
 
