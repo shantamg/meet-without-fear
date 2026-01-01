@@ -137,12 +137,9 @@ export function ChatInterface({
     // Update ref immediately
     newestMessageTimestampRef.current = currentTimestamp;
 
-    // If this is the very first load (previous is 0), scroll to ensure visibility
-    // For inverted FlatList, offset 0 is the "bottom" where newest messages appear
+    // If this is the very first load (previous is 0), no special scroll needed
+    // Let the inverted FlatList naturally show content at the bottom
     if (previousTimestamp === 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-      }, 50);
       return;
     }
 
