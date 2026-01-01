@@ -197,33 +197,19 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // Track Invitation Confirmation for Indicator
   // -------------------------------------------------------------------------
-  // Track when we're waiting for typewriter to complete before showing invitation panel
-  const [waitingForTypewriter, setWaitingForTypewriter] = useState(false);
-  const prevInvitationMessageRef = useRef(invitationMessage);
-
-  // Track if the session has "woken up" (user has sent a message)
-  const hasSessionBeenActiveRef = useRef(false);
 
   // Track when the user taps "I've sent it" - for optimistic UI
   const [isConfirmingInvitation, setIsConfirmingInvitation] = useState(false);
   // Store the timestamp when invitation was confirmed (for indicator positioning)
   const [invitationConfirmedAt, setInvitationConfirmedAt] = useState<string | null>(null);
 
-  // Update the ref whenever isSending becomes true
-  useEffect(() => {
-    if (isSending) {
-      hasSessionBeenActiveRef.current = true;
-    }
-  }, [isSending]);
-
   // Animation for the invitation panel slide-up
   const invitationPanelAnim = useRef(new Animated.Value(0)).current;
 
-  // Calculate whether panel should show: have message, in right phase, not waiting for typewriter
+  // Calculate whether panel should show: have message, in right phase
   const shouldShowInvitationPanel = !!(
     invitationMessage &&
     (isInvitationPhase || isRefiningInvitation) &&
-    !waitingForTypewriter &&
     !isConfirmingInvitation // Hide panel when confirming
   );
 
@@ -249,30 +235,6 @@ export function UnifiedSessionScreen({
     }
   }, [invitationConfirmed, invitationConfirmedAt, messages]);
 
-  // Track when invitation message appears or changes
-  useEffect(() => {
-    const prev = prevInvitationMessageRef.current;
-    const curr = invitationMessage;
-
-    // Only run if the message actually changed or appeared
-    if (curr && prev !== curr) {
-      // If the session has been active (user sent a message), wait for typewriter
-      // If the session has never been active (fresh load), show immediately
-      if (hasSessionBeenActiveRef.current) {
-        setWaitingForTypewriter(true);
-      } else {
-        setWaitingForTypewriter(false);
-      }
-    }
-
-    prevInvitationMessageRef.current = curr;
-  }, [invitationMessage]);
-
-  // Callback when the last AI message finishes typing
-  const handleLastAIMessageComplete = useCallback(() => {
-    // Stop waiting for typewriter - this will make panel visible
-    setWaitingForTypewriter(false);
-  }, []);
 
   // Build indicators array
   const indicators = useMemo((): ChatIndicatorItem[] => {
@@ -868,7 +830,6 @@ export function UnifiedSessionScreen({
             }
           }}
           compactEmotionSlider
-          onLastAIMessageComplete={handleLastAIMessageComplete}
           onLoadMore={fetchMoreMessages}
           hasMore={hasMoreMessages}
           isLoadingMore={isFetchingMoreMessages}

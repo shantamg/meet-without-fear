@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import { useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   ListRenderItem,
+  ActivityIndicator,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
-import type { MessageDTO, MessageRole } from '@meet-without-fear/shared';
+import type { MessageDTO } from '@meet-without-fear/shared';
 import { ChatBubble, ChatBubbleMessage, MessageDeliveryStatus } from './ChatBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { ChatInput } from './ChatInput';
@@ -19,17 +22,12 @@ import { createStyles } from '../theme/styled';
 // Types
 // ============================================================================
 
-/** Extended message type that includes optional delivery status */
 export interface ChatMessage extends MessageDTO {
   status?: MessageDeliveryStatus;
-  /** If true, skip typewriter effect (for messages loaded from history) */
-  skipTypewriter?: boolean;
 }
 
-// Re-export indicator type for use by parent components
 export { ChatIndicatorType } from './ChatIndicator';
 
-/** Indicator item to display inline in chat */
 export interface ChatIndicatorItem {
   type: 'indicator';
   indicatorType: ChatIndicatorType;
@@ -37,42 +35,28 @@ export interface ChatIndicatorItem {
   timestamp?: string;
 }
 
-/** Union type for items that can appear in chat list */
 export type ChatListItem = ChatMessage | ChatIndicatorItem;
 
-/** Type guard to check if item is an indicator */
 function isIndicator(item: ChatListItem): item is ChatIndicatorItem {
   return 'type' in item && item.type === 'indicator';
 }
 
 interface ChatInterfaceProps {
   messages: ChatMessage[];
-  /** Optional indicators to display inline (e.g., "Invitation Sent") */
   indicators?: ChatIndicatorItem[];
   onSendMessage: (content: string) => void;
   isLoading?: boolean;
   disabled?: boolean;
   emptyStateTitle?: string;
   emptyStateMessage?: string;
-  /** Whether to show emotion slider */
   showEmotionSlider?: boolean;
-  /** Current emotion value (1-10) */
   emotionValue?: number;
-  /** Callback when emotion value changes */
   onEmotionChange?: (value: number) => void;
-  /** Callback when emotion reaches high threshold */
   onHighEmotion?: (value: number) => void;
-  /** Use compact emotion slider for low-profile display */
   compactEmotionSlider?: boolean;
-  /** Content to render above the input (e.g., invitation share button) */
   renderAboveInput?: () => React.ReactNode;
-  /** Callback when the most recent AI message finishes typewriter effect */
-  onLastAIMessageComplete?: () => void;
-  /** Callback to load more (older) messages */
   onLoadMore?: () => void;
-  /** Whether there are more messages to load */
   hasMore?: boolean;
-  /** Whether currently loading more messages */
   isLoadingMore?: boolean;
 }
 
@@ -98,147 +82,98 @@ export function ChatInterface({
   onHighEmotion,
   compactEmotionSlider = false,
   renderAboveInput,
-  onLastAIMessageComplete,
   onLoadMore,
   hasMore = false,
   isLoadingMore = false,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
-  const contentHeightRef = useRef(0);
-  const layoutHeightRef = useRef(0);
 
-  // Scroll helper that uses offset for more reliable scrolling
-  const scrollToBottom = useCallback((animated = true) => {
-    const scrollOffset = contentHeightRef.current - layoutHeightRef.current;
-    if (scrollOffset > 0) {
-      flatListRef.current?.scrollToOffset({ offset: scrollOffset, animated });
-    }
-  }, []);
-
-  // Track which messages have started typewriter effect (to prevent re-animation on remount)
-  // This persists across FlatList virtualization unmount/remount cycles
-  const startedMessagesRef = useRef<Set<string>>(new Set());
-
-  // Track message IDs that should skip typewriter (existed before current "session")
-  // We use a ref to persist across renders, but only set it once messages have actually loaded
-  const initialMessageIdsRef = useRef<Set<string>>(new Set());
-  const hasSetInitialRef = useRef(false);
-
-  // Only capture initial message IDs once when we first have messages
-  // This prevents the issue where empty messages array on mount causes all messages to animate
-  useEffect(() => {
-    if (!hasSetInitialRef.current && messages.length > 0) {
-      initialMessageIdsRef.current = new Set(messages.map(m => m.id));
-      hasSetInitialRef.current = true;
-    }
-  }, [messages]);
-
-  // Find the last AI message ID for typewriter completion tracking
-  // Only consider messages that weren't in the initial set (i.e., new messages)
-  const lastAIMessageId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
-      if (msg.role !== 'USER' && !initialMessageIdsRef.current?.has(msg.id)) {
-        return msg.id;
-      }
-    }
-    return null;
-  }, [messages]);
-
-  // Merge messages and indicators, sorted by timestamp
+  // STABLE SORT: Ensure order never flip-flops if timestamps are identical
   const listItems = useMemo((): ChatListItem[] => {
     const items: ChatListItem[] = [...messages, ...indicators];
     return items.sort((a, b) => {
       const aTime = 'timestamp' in a && a.timestamp ? new Date(a.timestamp).getTime() : 0;
       const bTime = 'timestamp' in b && b.timestamp ? new Date(b.timestamp).getTime() : 0;
-      return aTime - bTime;
+      // Primary sort: Time (newest first)
+      if (bTime !== aTime) return bTime - aTime;
+      // Secondary sort: ID (stable tie-breaker)
+      return b.id.localeCompare(a.id);
     });
   }, [messages, indicators]);
 
-  // Mark a message as having started its typewriter animation
-  const markTypewriterStarted = useCallback((messageId: string) => {
-    startedMessagesRef.current.add(messageId);
-  }, []);
+  const scrollMetricsRef = useRef({
+    offset: 0,
+    contentHeight: 0,
+  });
 
-  // Handle typewriter completion for a specific message
-  const handleTypewriterComplete = useCallback((messageId: string) => {
-    // If this is the last AI message, call the callback
-    if (messageId === lastAIMessageId && onLastAIMessageComplete) {
-      onLastAIMessageComplete();
-    }
-  }, [lastAIMessageId, onLastAIMessageComplete]);
+  // Track when we're actively loading history to prevent scroll interference
+  const isLoadingHistoryRef = useRef(false);
 
-  // Handle typewriter progress - scroll to keep new content visible
-  const handleTypewriterProgress = useCallback(() => {
-    scrollToBottom(false);
-  }, [scrollToBottom]);
+  // Snapshot of scroll state when history load started - used to restore position
+  const historyLoadSnapshotRef = useRef<{
+    contentHeight: number;
+    scrollOffset: number;
+  } | null>(null);
 
-  // Auto-scroll to bottom when new messages arrive
+  // SCROLL LOGIC: Track newest message TIMESTAMP to detect new messages vs history
+  const newestMessageTimestampRef = useRef<number>(0);
+
   useEffect(() => {
-    if (listItems.length > 0) {
-      // Multiple scroll attempts to ensure new content is visible
-      const timers = [50, 150, 300].map(delay =>
-        setTimeout(() => scrollToBottom(delay > 100), delay)
-      );
-      return () => timers.forEach(clearTimeout);
+    // Skip scroll-to-bottom logic entirely while loading/restoring history
+    if (isLoadingHistoryRef.current) {
+      return;
     }
-  }, [listItems.length, scrollToBottom]);
 
-  // Also scroll when content above input changes (e.g., invitation draft appears)
-  useEffect(() => {
-    if (renderAboveInput) {
-      const timer = setTimeout(() => scrollToBottom(true), 150);
-      return () => clearTimeout(timer);
-    }
-  }, [renderAboveInput, scrollToBottom]);
+    const newestItem = listItems[0];
+    if (!newestItem) return;
 
-  // Also scroll when loading state changes (typing indicator appears)
-  useEffect(() => {
-    if (isLoading) {
-      // Multiple scroll attempts to ensure the typing indicator is visible
-      const timers = [50, 150, 300, 500].map(delay =>
-        setTimeout(() => scrollToBottom(delay > 100), delay)
-      );
-      return () => timers.forEach(clearTimeout);
+    const currentTimestamp = 'timestamp' in newestItem && newestItem.timestamp
+      ? new Date(newestItem.timestamp).getTime()
+      : 0;
+
+    const previousTimestamp = newestMessageTimestampRef.current;
+
+    // Update ref immediately
+    newestMessageTimestampRef.current = currentTimestamp;
+
+    // If this is the very first load (previous is 0), don't animate
+    if (previousTimestamp === 0) {
+      return;
     }
-  }, [isLoading, scrollToBottom]);
+
+    // If the new message is NEWER than what we saw before, it's a new chat message
+    // SCROLL TO BOTTOM
+    if (currentTimestamp > previousTimestamp) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }, 100);
+    }
+
+    // If currentTimestamp === previousTimestamp, we just loaded history
+    // DO NOT SCROLL - the newest message hasn't changed
+  }, [listItems]);
 
   const renderItem: ListRenderItem<ChatListItem> = useCallback(({ item }) => {
-    // Render indicator
     if (isIndicator(item)) {
       return <ChatIndicator type={item.indicatorType} timestamp={item.timestamp} />;
     }
 
-    // Skip typewriter for messages that existed on initial load (loaded from history)
-    // If we haven't set initial messages yet, skip typewriter to be safe
-    const isInitialMessage = !hasSetInitialRef.current || initialMessageIdsRef.current.has(item.id);
-
-    // Also skip typewriter if this message already started animating (prevents re-animation on remount)
-    const hasAlreadyStarted = startedMessagesRef.current.has(item.id);
-
-    // Render message
     const bubbleMessage: ChatBubbleMessage = {
       id: item.id,
       role: item.role,
       content: item.content,
       timestamp: item.timestamp,
       status: item.status,
-      skipTypewriter: item.skipTypewriter || isInitialMessage || hasAlreadyStarted,
+      skipTypewriter: true, // Always skip typewriter - feature removed
     };
-    return (
-      <ChatBubble
-        message={bubbleMessage}
-        onTypewriterStart={() => markTypewriterStarted(item.id)}
-        onTypewriterComplete={() => handleTypewriterComplete(item.id)}
-        onTypewriterProgress={handleTypewriterProgress}
-      />
-    );
-  }, [handleTypewriterComplete, handleTypewriterProgress, markTypewriterStarted]);
+    return <ChatBubble message={bubbleMessage} />;
+  }, []);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 
-  const renderFooter = useCallback(() => {
+  // In inverted list: Header is visually at BOTTOM (for typing indicator)
+  const renderHeader = useCallback(() => {
     if (!isLoading) return null;
     return <TypingIndicator />;
   }, [isLoading]);
@@ -253,29 +188,83 @@ export function ChatInterface({
         ) : null}
       </View>
     );
-  }, [isLoading, emptyStateTitle, emptyStateMessage]);
+  }, [isLoading, emptyStateTitle, emptyStateMessage, styles.emptyState, styles.emptyStateTitle, styles.emptyStateMessage]);
 
-  // Header shows loading indicator when fetching older messages
-  const renderHeader = useCallback(() => {
+  // In inverted list: Footer is visually at TOP (for loading older messages spinner)
+  const renderFooter = useCallback(() => {
     if (!isLoadingMore) return null;
     return (
       <View style={styles.loadingMore}>
-        <TypingIndicator />
+        <ActivityIndicator size="small" color={styles.loadingSpinner.color} />
       </View>
     );
-  }, [isLoadingMore]);
+  }, [isLoadingMore, styles.loadingMore, styles.loadingSpinner.color]);
 
-  // Handle scroll to detect when near top (to load more older messages)
-  const handleScroll = useCallback(
-    (event: { nativeEvent: { contentOffset: { y: number } } }) => {
-      const { y } = event.nativeEvent.contentOffset;
-      // When scrolled near the top (within 100px), load more if available
-      if (y < 100 && hasMore && !isLoadingMore && onLoadMore) {
-        onLoadMore();
-      }
-    },
-    [hasMore, isLoadingMore, onLoadMore]
-  );
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize } = event.nativeEvent;
+    scrollMetricsRef.current = {
+      offset: contentOffset.y,
+      contentHeight: contentSize.height,
+    };
+  }, []);
+
+  const handleContentSizeChange = useCallback((_width: number, height: number) => {
+    const snapshot = historyLoadSnapshotRef.current;
+
+    // Always keep scroll metrics updated
+    scrollMetricsRef.current.contentHeight = height;
+
+    // If we're not in history loading mode, nothing to restore
+    if (!isLoadingHistoryRef.current || !snapshot) {
+      return;
+    }
+
+    // Check if content has grown (history was prepended)
+    if (snapshot.contentHeight > 0 && height > snapshot.contentHeight) {
+      // Calculate how much content was added above the current view
+      const delta = height - snapshot.contentHeight;
+
+      // Restore scroll position: add the delta to maintain viewport anchor
+      flatListRef.current?.scrollToOffset({
+        offset: snapshot.scrollOffset + delta,
+        animated: false,
+      });
+
+      // Clear the snapshot and loading flag - restoration complete
+      historyLoadSnapshotRef.current = null;
+      isLoadingHistoryRef.current = false;
+    }
+  }, []);
+
+  const handleEndReached = useCallback(() => {
+    if (hasMore && !isLoadingMore && onLoadMore) {
+      // Set flag BEFORE calling onLoadMore to prevent any scroll effects
+      isLoadingHistoryRef.current = true;
+
+      // Capture current scroll state to restore after content loads
+      historyLoadSnapshotRef.current = {
+        contentHeight: scrollMetricsRef.current.contentHeight,
+        scrollOffset: scrollMetricsRef.current.offset,
+      };
+
+      onLoadMore();
+    }
+  }, [hasMore, isLoadingMore, onLoadMore]);
+
+  // Cleanup: If loading finishes but no content was added, reset state
+  useEffect(() => {
+    if (!isLoadingMore && isLoadingHistoryRef.current) {
+      // Give handleContentSizeChange a chance to fire first
+      const timeoutId = setTimeout(() => {
+        if (isLoadingHistoryRef.current) {
+          isLoadingHistoryRef.current = false;
+          historyLoadSnapshotRef.current = null;
+        }
+      }, 500);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isLoadingMore]);
 
   return (
     <KeyboardAvoidingView
@@ -285,26 +274,31 @@ export function ChatInterface({
     >
       <FlatList
         ref={flatListRef}
+        inverted
         data={listItems}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
+        style={styles.flatList}
+        // Stabilizer: maintains position when spinners appear/disappear
+        maintainVisibleContentPosition={{
+          minIndexForVisible: 0,
+        }}
+        // Dynamic layout: only force 'flex-end' (visual top) when list is short
         contentContainerStyle={[
           styles.messageList,
           listItems.length === 0 && styles.messageListEmpty,
+          listItems.length > 0 && listItems.length < 3 ? { justifyContent: 'flex-end' } : undefined,
         ]}
         ListHeaderComponent={renderHeader}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmptyState}
         showsVerticalScrollIndicator={false}
         testID="chat-message-list"
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.2}
         onScroll={handleScroll}
-        scrollEventThrottle={100}
-        onContentSizeChange={(_, height) => {
-          contentHeightRef.current = height;
-        }}
-        onLayout={(event) => {
-          layoutHeightRef.current = event.nativeEvent.layout.height;
-        }}
+        scrollEventThrottle={16}
+        onContentSizeChange={handleContentSizeChange}
       />
       {showEmotionSlider && onEmotionChange && (
         <EmotionSlider
@@ -331,20 +325,30 @@ const useStyles = () =>
       flex: 1,
       backgroundColor: t.colors.bgPrimary,
     },
+    flatList: {
+      flex: 1,
+    },
     messageList: {
       paddingVertical: t.spacing.lg,
       flexGrow: 1,
       gap: t.spacing.xs,
     },
     messageListEmpty: {
+      flexGrow: 1,
       justifyContent: 'center',
     },
     loadingMore: {
-      paddingVertical: t.spacing.md,
+      // In inverted list, this appears at visual TOP
+      paddingVertical: t.spacing.xl,
       alignItems: 'center',
+    },
+    loadingSpinner: {
+      color: t.colors.textSecondary,
     },
     emptyState: {
       flex: 1,
+      // Counter-flip the inverted list for empty state text
+      transform: [{ scaleY: -1 }],
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: t.spacing['3xl'],
