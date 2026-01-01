@@ -59,6 +59,8 @@ export interface FullAIContext extends WitnessContext {
   isStageTransition?: boolean;
   /** The stage we just transitioned from (for context gathering) */
   previousStage?: number;
+  /** Current invitation message (for refinement context) */
+  currentInvitationMessage?: string | null;
 }
 
 // Re-export orchestrator types for convenience
@@ -285,6 +287,7 @@ export async function getOrchestratedResponse(
     isRefiningInvitation: context.isRefiningInvitation,
     isStageTransition: context.isStageTransition,
     previousStage: context.previousStage,
+    currentInvitationMessage: context.currentInvitationMessage,
   };
 
   return orchestrateResponse(orchestratorContext);

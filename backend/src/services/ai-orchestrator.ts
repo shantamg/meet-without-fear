@@ -31,6 +31,7 @@ import {
   formatRetrievedContext,
   type RetrievedContext,
 } from './context-retriever';
+import { extractJsonFromResponse } from '../utils/json-extractor';
 
 // ============================================================================
 // Types
@@ -56,6 +57,8 @@ export interface OrchestratorContext {
   isStageTransition?: boolean;
   /** The stage we just transitioned from (for context gathering) */
   previousStage?: number;
+  /** Current invitation message (for refinement context) */
+  currentInvitationMessage?: string | null;
 }
 
 export interface OrchestratorResult {
@@ -65,6 +68,10 @@ export interface OrchestratorResult {
   retrievalPlan?: RetrievalPlan;
   retrievedContext?: RetrievedContext;
   usedMock: boolean;
+  /** For Stage 1: AI determined user is ready for feel-heard check */
+  offerFeelHeardCheck?: boolean;
+  /** For Stage 0: Proposed invitation message */
+  invitationMessage?: string | null;
 }
 
 // ============================================================================
@@ -153,6 +160,7 @@ export async function orchestrateResponse(
       emotionalIntensity: context.emotionalIntensity,
       contextBundle,
       isFirstMessage: context.isFirstTurnInSession,
+      invitationMessage: context.currentInvitationMessage,
     },
     {
       isInvitationPhase: context.isInvitationPhase,
@@ -185,6 +193,15 @@ export async function orchestrateResponse(
 
   let response: string;
   let usedMock = false;
+  let offerFeelHeardCheck = false;
+  let invitationMessage: string | null = null;
+
+  // Determine if we should expect structured JSON output
+  // Stage 0 (invitation phase), invitation refinement, and Stage 1 (witness) use structured JSON
+  const expectsStructuredOutput =
+    (context.stage === 0 && context.isInvitationPhase) ||
+    context.isRefiningInvitation ||
+    context.stage === 1;
 
   try {
     // Note: Extended thinking is not supported by Claude 3.5 Sonnet v2 on Bedrock
@@ -197,7 +214,20 @@ export async function orchestrateResponse(
     });
 
     if (sonnetResponse) {
-      response = stripAnalysisTags(sonnetResponse);
+      if (expectsStructuredOutput) {
+        // Parse structured JSON response
+        const parsed = parseStructuredResponse(sonnetResponse);
+        response = parsed.response;
+        offerFeelHeardCheck = parsed.offerFeelHeardCheck ?? false;
+        invitationMessage = parsed.invitationMessage ?? null;
+
+        if (parsed.analysis) {
+          console.log(`[AI Orchestrator] Analysis: ${parsed.analysis.substring(0, 100)}...`);
+        }
+      } else {
+        // Strip analysis tags for non-structured stages
+        response = stripAnalysisTags(sonnetResponse);
+      }
     } else {
       response = getMockResponse(context);
       usedMock = true;
@@ -218,6 +248,8 @@ export async function orchestrateResponse(
     retrievalPlan,
     retrievedContext,
     usedMock,
+    offerFeelHeardCheck,
+    invitationMessage,
   };
 }
 
@@ -263,6 +295,55 @@ function buildMessagesWithContext(
 function stripAnalysisTags(response: string): string {
   const stripped = response.replace(/<analysis>[\s\S]*?<\/analysis>/gi, '').trim();
   return stripped || response;
+}
+
+/**
+ * Parsed structured response from AI (for Stage 0 and Stage 1)
+ */
+interface ParsedStructuredResponse {
+  response: string;
+  offerFeelHeardCheck?: boolean;
+  invitationMessage?: string | null;
+  analysis?: string;
+}
+
+/**
+ * Parse structured JSON response from AI.
+ * Handles both Stage 0 (invitation) and Stage 1 (witness with offerFeelHeardCheck).
+ * Uses the robust extractJsonFromResponse utility.
+ */
+function parseStructuredResponse(rawResponse: string): ParsedStructuredResponse {
+  try {
+    const parsed = extractJsonFromResponse(rawResponse) as Record<string, unknown>;
+
+    // Validate we have a response field
+    if (typeof parsed.response !== 'string') {
+      console.warn('[AI Orchestrator] Parsed JSON missing response field, using raw response');
+      return {
+        response: stripAnalysisTags(rawResponse),
+        offerFeelHeardCheck: false,
+        invitationMessage: null,
+      };
+    }
+
+    return {
+      response: parsed.response,
+      offerFeelHeardCheck: typeof parsed.offerFeelHeardCheck === 'boolean' ? parsed.offerFeelHeardCheck : false,
+      invitationMessage: typeof parsed.invitationMessage === 'string' && parsed.invitationMessage !== 'null'
+        ? parsed.invitationMessage
+        : null,
+      analysis: typeof parsed.analysis === 'string' ? parsed.analysis : undefined,
+    };
+  } catch (error) {
+    // Fallback: treat as plain text response
+    console.log('[AI Orchestrator] JSON extraction failed, treating as plain text:', error);
+    const strippedResponse = stripAnalysisTags(rawResponse);
+    return {
+      response: strippedResponse,
+      offerFeelHeardCheck: false,
+      invitationMessage: null,
+    };
+  }
 }
 
 /**

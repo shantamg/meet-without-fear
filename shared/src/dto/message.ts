@@ -39,6 +39,12 @@ export interface SendMessageResponse {
   // If emotional intensity was high, AI might suggest a pause
   suggestPause?: boolean;
   pauseReason?: string;
+
+  /** Stage 1: AI determined user may be ready for feel-heard confirmation */
+  offerFeelHeardCheck?: boolean;
+
+  /** Stage 0: Proposed invitation message from AI */
+  invitationMessage?: string | null;
 }
 
 // ============================================================================

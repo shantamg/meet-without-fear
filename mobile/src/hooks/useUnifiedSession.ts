@@ -5,7 +5,7 @@
  * Manages state across all stages while keeping the chat interface as the primary view.
  */
 
-import { useMemo, useCallback, useReducer, useEffect, useRef } from 'react';
+import { useMemo, useCallback, useReducer, useEffect, useRef, useState } from 'react';
 import { Stage, MessageRole, StrategyPhase } from '@meet-without-fear/shared';
 
 import {
@@ -331,6 +331,13 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const lastActivityTime = useRef<number>(Date.now());
   const prevMessageCountRef = useRef(0);
 
+  // Track live invitation message from AI responses (for refinement flow)
+  // This captures the proposed message before it's saved to database
+  const [liveInvitationMessage, setLiveInvitationMessage] = useState<string | null>(null);
+
+  // Track AI recommendation for feel-heard check
+  const [aiRecommendsFeelHeardCheck, setAiRecommendsFeelHeardCheck] = useState(false);
+
   // -------------------------------------------------------------------------
   // Core Data Hooks
   // -------------------------------------------------------------------------
@@ -451,7 +458,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const invitation = invitationData?.invitation;
   const isInvitationPhase =
     session?.status === 'CREATED' && !invitation?.messageConfirmed;
-  const invitationMessage = invitation?.invitationMessage ?? null;
+  // Use live invitation message from AI response if available, fallback to database record
+  const invitationMessage = liveInvitationMessage ?? invitation?.invitationMessage ?? null;
   const invitationConfirmed = invitation?.messageConfirmed ?? false;
   const myProgress = progressData?.myProgress;
   const partnerProgress = progressData?.partnerProgress;
@@ -460,11 +468,14 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Count user messages for barometer trigger
   const userMessageCount = messages.filter((m) => m.role === MessageRole.USER).length;
 
-  // Check if AI is asking about feeling heard (Stage 1)
+  // Fallback: Also check text for backward compatibility
   const lastAiMessage = [...messages].reverse().find((m) => m.role === MessageRole.AI);
-  const isAskingAboutHeard =
+  const textBasedHeardDetection =
     lastAiMessage?.content.toLowerCase().includes('feel heard') ||
     lastAiMessage?.content.toLowerCase().includes('fully heard');
+
+  // Use AI recommendation OR fallback text detection
+  const isAskingAboutHeard = aiRecommendsFeelHeardCheck || textBasedHeardDetection;
 
   // Needs confirmation state
   const needs = useMemo(() => needsData?.needs ?? [], [needsData?.needs]);
@@ -828,6 +839,16 @@ export function useUnifiedSession(sessionId: string | undefined) {
       sendMessage(
         { sessionId, content },
         {
+          onSuccess: (data) => {
+            // Update feel-heard check recommendation from AI
+            if (data.offerFeelHeardCheck !== undefined) {
+              setAiRecommendsFeelHeardCheck(data.offerFeelHeardCheck);
+            }
+            // Capture live invitation message from AI (for refinement flow)
+            if (data.invitationMessage !== undefined) {
+              setLiveInvitationMessage(data.invitationMessage);
+            }
+          },
           onError: () => removeOptimisticMessage(sessionId, optimisticId),
         }
       );

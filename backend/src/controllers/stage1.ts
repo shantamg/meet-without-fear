@@ -21,7 +21,6 @@ import {
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
-import { extractInvitationResponse } from '../utils/json-extractor';
 
 // ============================================================================
 // Helpers
@@ -279,6 +278,20 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       content.toLowerCase().includes('refine') &&
       content.toLowerCase().includes('invitation');
 
+    // Fetch current invitation message for refinement context
+    let currentInvitationMessage: string | null = null;
+    if (isRefiningInvitation || isInvitationPhase) {
+      const invitation = await prisma.invitation.findFirst({
+        where: { sessionId, invitedById: user.id },
+        select: { invitationMessage: true, name: true },
+      });
+      currentInvitationMessage = invitation?.invitationMessage || null;
+      // Also get partner name from invitation if not already set
+      if (!partnerName && invitation?.name) {
+        partnerName = invitation.name;
+      }
+    }
+
     // Build full context for orchestrated response
     const aiContext: FullAIContext = {
       sessionId,
@@ -294,6 +307,7 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       isRefiningInvitation,
       isStageTransition,
       previousStage,
+      currentInvitationMessage,
     };
 
     // Get AI response using full orchestration pipeline
@@ -309,15 +323,11 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       `[sendMessage] Orchestrator: intent=${orchestratorResult.memoryIntent.intent}, depth=${orchestratorResult.memoryIntent.depth}, mock=${orchestratorResult.usedMock}`
     );
 
-    // Always try to parse JSON response in case AI returns structured output
-    // This handles cases where AI returns JSON even outside invitation phase
-    let aiResponseContent = orchestratorResult.response;
-    let extractedInvitationMessage: string | null = null;
-
-    // Try to extract JSON response - will return raw content if not JSON
-    const invitationResult = extractInvitationResponse(orchestratorResult.response);
-    aiResponseContent = invitationResult.response;
-    extractedInvitationMessage = invitationResult.invitationMessage;
+    // The orchestrator already parses structured JSON responses and extracts:
+    // - response: the text to show in chat
+    // - invitationMessage: the proposed invitation (if any)
+    const aiResponseContent = orchestratorResult.response;
+    const extractedInvitationMessage = orchestratorResult.invitationMessage ?? null;
 
     // Only save invitation message during invitation phase
     if ((isInvitationPhase || isRefiningInvitation) && extractedInvitationMessage) {
@@ -360,6 +370,9 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
         stage: aiMessage.stage,
         timestamp: aiMessage.timestamp.toISOString(),
       },
+      // Include structured response fields from AI
+      offerFeelHeardCheck: orchestratorResult.offerFeelHeardCheck,
+      invitationMessage: extractedInvitationMessage,
     });
   } catch (error) {
     console.error('[sendMessage] Error:', error);
