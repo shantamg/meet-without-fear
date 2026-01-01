@@ -18,7 +18,7 @@ import { BreathingExercise } from '../components/BreathingExercise';
 import { GroundingExercise } from '../components/GroundingExercise';
 import { BodyScanExercise } from '../components/BodyScanExercise';
 import { SupportOptionsModal, SupportOption } from '../components/SupportOptionsModal';
-import { WaitingStatusMessage } from '../components/WaitingStatusMessage';
+// WaitingStatusMessage removed - we no longer show "waiting for partner" messages
 import { EmpathyAttemptCard } from '../components/EmpathyAttemptCard';
 import { AccuracyFeedback } from '../components/AccuracyFeedback';
 import { ConsentPrompt, SharingOption } from '../components/ConsentPrompt';
@@ -28,11 +28,11 @@ import { StrategyPool } from '../components/StrategyPool';
 import { StrategyRanking } from '../components/StrategyRanking';
 import { OverlapReveal } from '../components/OverlapReveal';
 import { AgreementCard } from '../components/AgreementCard';
-import { CuriosityCompact } from '../components/CuriosityCompact';
+import { CuriosityCompactOverlay } from '../components/CuriosityCompactOverlay';
 import { InvitationShareButton } from '../components/InvitationShareButton';
 import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 
-import { useUnifiedSession, InlineChatCard, WaitingStatusType } from '../hooks/useUnifiedSession';
+import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth } from '../hooks/useAuth';
 import { createStyles } from '../theme/styled';
@@ -95,6 +95,7 @@ export function UnifiedSessionScreen({
     messages,
     inlineCards,
     isSending,
+    isSigningCompact,
     fetchMoreMessages,
     hasMoreMessages,
     isFetchingMoreMessages,
@@ -229,9 +230,6 @@ export function UnifiedSessionScreen({
   // Prepare Messages for Display
   // -------------------------------------------------------------------------
   const displayMessages = useMemo((): ChatMessage[] => {
-    // If we're fetching the initial message, show empty (typing indicator will show)
-    // If we have messages, show them
-    // The initial AI message will be added to the cache when fetch completes
     return messages;
   }, [messages]);
 
@@ -241,15 +239,7 @@ export function UnifiedSessionScreen({
   const renderInlineCard = useCallback(
     (card: InlineChatCard) => {
       switch (card.type) {
-        case 'waiting-status':
-          return (
-            <WaitingStatusMessage
-              key={card.id}
-              type={card.props.statusType as WaitingStatusType}
-              partnerName={card.props.partnerName as string}
-              testID="waiting-status-message"
-            />
-          );
+        // Note: 'waiting-status' case removed - we no longer show "waiting for partner" messages
 
         case 'feel-heard-confirmation':
           return (
@@ -652,18 +642,7 @@ export function UnifiedSessionScreen({
           </View>
         );
 
-      case 'curiosity-compact':
-        return (
-          <View style={styles.overlayContainer}>
-            <CuriosityCompact
-              sessionId={sessionId}
-              onSign={() => {
-                handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING));
-                closeOverlay();
-              }}
-            />
-          </View>
-        );
+      // curiosity-compact is now handled as a separate overlay using CuriosityCompactOverlay
 
       default:
         return null;
@@ -704,26 +683,16 @@ export function UnifiedSessionScreen({
   }
 
   // -------------------------------------------------------------------------
-  // Onboarding Stage - Show Compact First (but not during invitation phase)
+  // Curiosity Compact Overlay - shown when compact needs to be signed
   // -------------------------------------------------------------------------
-  // During invitation phase, we show the chat to craft the invitation message
-  // After invitation is sent, we show the compact
-  if (currentStage === Stage.ONBOARDING && !compactData?.mySigned && !isInvitationPhase) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <SessionChatHeader
-          partnerName={partnerName}
-          partnerOnline={false}
-          briefStatus={getBriefStatus(session?.status)}
-          testID="session-chat-header"
-        />
-        <CuriosityCompact
-          sessionId={sessionId}
-          onSign={() => handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING))}
-        />
-      </SafeAreaView>
-    );
-  }
+  // The compact is shown as an overlay while the chat loads in the background.
+  // This allows the initial AI message to be fetched while the user reviews the compact.
+  // Shows regardless of invitation phase - compact must be signed first before any chat interaction.
+  // Important: Only show AFTER compactData has loaded to prevent flashing
+  const shouldShowCompactOverlay =
+    currentStage === Stage.ONBOARDING &&
+    compactData !== undefined &&
+    compactData.mySigned === false;
 
   // -------------------------------------------------------------------------
   // Strategy Ranking Phase - Full Screen Overlay
@@ -868,6 +837,14 @@ export function UnifiedSessionScreen({
           onClose={() => setShowRefineDrawer(false)}
         />
       )}
+
+      {/* Curiosity Compact Overlay - blocks interaction until signed */}
+      <CuriosityCompactOverlay
+        visible={shouldShowCompactOverlay}
+        onSign={() => handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING))}
+        onNavigateBack={onNavigateBack}
+        isPending={isSigningCompact}
+      />
     </SafeAreaView>
   );
 }

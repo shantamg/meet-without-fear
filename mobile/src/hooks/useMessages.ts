@@ -150,7 +150,8 @@ export function useInfiniteMessages(
       return lastPage.messages[0]?.timestamp;
     },
     enabled: options?.enabled ?? !!sessionId,
-    staleTime: 10_000,
+    staleTime: 60_000, // 1 minute - keep data fresh longer
+    gcTime: 300_000, // 5 minutes - keep in cache longer (formerly cacheTime)
   });
 
   return {
@@ -538,12 +539,14 @@ export function useFetchInitialMessage(
 
   return useMutation({
     mutationFn: async ({ sessionId }: { sessionId: string }) => {
+      console.log('[useFetchInitialMessage] Calling API for session:', sessionId);
       return post<InitialMessageResponse, Record<string, never>>(
         `/sessions/${sessionId}/messages/initial`,
         {}
       );
     },
     onSuccess: (data, { sessionId }) => {
+      console.log('[useFetchInitialMessage] Success! Message:', data.message.content.substring(0, 50));
       const stage = data.message.stage;
 
       // Add the AI message to the cache
@@ -597,6 +600,10 @@ export function useFetchInitialMessage(
         messageKeys.infinite(sessionId),
         updateInfiniteCache
       );
+      console.log('[useFetchInitialMessage] Cache updated for session:', sessionId);
+    },
+    onError: (error, { sessionId }) => {
+      console.error('[useFetchInitialMessage] Error fetching initial message:', error, 'session:', sessionId);
     },
     ...options,
   });

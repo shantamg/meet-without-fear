@@ -695,21 +695,18 @@ export async function getInitialMessage(
     // Determine if this is the invitation phase
     const isInvitationPhase = session.status === 'CREATED';
 
-    // Get partner name from invitation if available
-    let partnerName: string | undefined;
+    // Get user's first name and partner name from invitation
+    const userName = user.firstName || user.name || 'there';
     const invitation = await prisma.invitation.findFirst({
       where: { sessionId, invitedById: user.id },
       select: { name: true },
     });
-    partnerName = invitation?.name || undefined;
+    const partnerName = invitation?.name || undefined;
 
     // Build the initial message prompt
     const prompt = buildInitialMessagePrompt(
       currentStage,
-      {
-        userName: user.name || 'there',
-        partnerName,
-      },
+      { userName, partnerName },
       isInvitationPhase
     );
 
@@ -727,18 +724,18 @@ export async function getInitialMessage(
         const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
         responseContent = typeof parsed.response === 'string'
           ? parsed.response
-          : 'Hi! I\'m here to help you have a meaningful conversation. What\'s on your mind?';
+          : `Hey ${userName}, what's going on with ${partnerName || 'them'}?`;
       } else {
         // Fallback if AI unavailable
         responseContent = isInvitationPhase
-          ? `Hi ${user.name || 'there'}! I'm here to help you prepare for a conversation. What's been on your mind lately?`
-          : `Hi ${user.name || 'there'}! I'm ready to listen. What would you like to share?`;
+          ? `Hey ${userName}, what's going on with ${partnerName || 'them'}?`
+          : `Hey ${userName}, what's on your mind?`;
       }
     } catch (error) {
       console.error('[getInitialMessage] AI response error:', error);
       responseContent = isInvitationPhase
-        ? `Hi ${user.name || 'there'}! I'm here to help you prepare for a conversation. What's been on your mind lately?`
-        : `Hi ${user.name || 'there'}! I'm ready to listen. What would you like to share?`;
+        ? `Hey ${userName}, what's going on with ${partnerName || 'them'}?`
+        : `Hey ${userName}, what's on your mind?`;
     }
 
     // Save the AI message

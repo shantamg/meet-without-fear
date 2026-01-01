@@ -413,7 +413,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { mutate: sendMessage, isPending: isSending } = useSendMessage();
   const { mutate: recordEmotion } = useRecordEmotion();
   const { mutate: confirmHeard } = useConfirmFeelHeard();
-  const { mutate: signCompact } = useSignCompact();
+  const { mutate: signCompact, isPending: isSigningCompact } = useSignCompact();
   const { mutate: confirmInvitationMessage } = useConfirmInvitationMessage();
   const { mutate: advanceStage } = useAdvanceStage();
   const { mutate: saveDraft } = useSaveEmpathyDraft();
@@ -445,10 +445,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // with older pages first: [page2, page1, page0].flatMap(p => p.messages)
   const messages = useMemo(() => {
     // messagesData is InfiniteData<GetMessagesResponse> with pages array
+    // Pages are in reverse chronological order (newest first)
+    // but each page's messages are in chronological order, so we flatten
+    // with older pages first: [page2, page1, page0].flatMap(p => p.messages)
     const pages = messagesData?.pages;
     if (!pages || pages.length === 0) return [];
-    // Pages are stored newest-first, but we want chronological order for display
-    // Reverse pages so older messages come first, then flatten
     return [...pages].reverse().flatMap(page => page.messages);
   }, [messagesData]);
   // Only show 'Partner' fallback after data has loaded, otherwise show empty string
@@ -536,21 +537,12 @@ export function useUnifiedSession(sessionId: string | undefined) {
   useEffect(() => {
     let newWaitingStatus: WaitingStatusState = null;
 
-    // Stage 0: Waiting for partner to sign compact
-    if (currentStage === Stage.ONBOARDING && compactData?.mySigned && !compactData?.partnerSigned) {
-      newWaitingStatus = 'compact-pending';
-    }
-    // Stage 0: Partner just signed (transition)
-    else if (
-      currentStage === Stage.ONBOARDING &&
-      compactData?.mySigned &&
-      compactData?.partnerSigned &&
-      state.previousWaitingStatus === 'compact-pending'
-    ) {
-      newWaitingStatus = 'partner-signed';
-    }
+    // Note: We intentionally don't show compact-pending status during Stage 0.
+    // The user should focus on the invitation phase after signing the compact,
+    // not on waiting for their partner.
+
     // Stage 1: Waiting for partner to complete witness
-    else if (
+    if (
       myProgress?.stage === Stage.PERSPECTIVE_STRETCH &&
       partnerProgress?.stage === Stage.WITNESS
     ) {
@@ -624,6 +616,15 @@ export function useUnifiedSession(sessionId: string | undefined) {
     // - Still loading session or messages
     // - Already fetched or fetching
     // - Messages already exist
+    console.log('[useUnifiedSession] Initial message effect:', {
+      sessionId,
+      loadingSession,
+      loadingMessages,
+      hasFetched: hasFetchedInitialMessage.current,
+      isFetching: isFetchingInitialMessage,
+      pagesCount: messagesData?.pages?.length,
+    });
+
     if (
       !sessionId ||
       loadingSession ||
@@ -637,6 +638,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
     // Check if messages are empty after loading completes
     const messagesPages = messagesData?.pages;
     const hasMessages = messagesPages && messagesPages.some(page => page.messages.length > 0);
+    console.log('[useUnifiedSession] Checking messages:', {
+      pagesLength: messagesPages?.length,
+      hasMessages,
+      firstPageMessages: messagesPages?.[0]?.messages?.length,
+    });
 
     if (!hasMessages) {
       console.log('[useUnifiedSession] No messages found, fetching initial message...');
@@ -658,18 +664,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const inlineCards = useMemo((): InlineChatCard[] => {
     const cards: InlineChatCard[] = [];
 
-    // Cross-stage: Waiting status notification (appears first)
-    if (state.waitingStatus) {
-      cards.push({
-        id: `waiting-status-${state.waitingStatus}`,
-        type: 'waiting-status',
-        position: 'end',
-        props: {
-          statusType: state.waitingStatus,
-          partnerName,
-        },
-      });
-    }
+    // Note: Waiting status cards have been removed.
+    // We don't show "waiting for partner" messages anymore.
 
     // Stage 1: Witness cards
     if (currentStage === Stage.WITNESS) {
@@ -936,13 +932,21 @@ export function useUnifiedSession(sessionId: string | undefined) {
         { sessionId },
         {
           onSuccess: () => {
-            // Auto-advance to stage 1 after signing compact
-            advanceStage({ sessionId }, { onSuccess });
+            // Fetch initial message if none exist
+            const messagesPages = messagesData?.pages;
+            const hasMessages = messagesPages && messagesPages.some(page => page.messages.length > 0);
+            if (!hasMessages && !hasFetchedInitialMessage.current) {
+              console.log('[useUnifiedSession] Fetching initial message after signing compact...');
+              hasFetchedInitialMessage.current = true;
+              fetchInitialMessage({ sessionId });
+            }
+            // Call success callback (which triggers stage completion)
+            onSuccess?.();
           },
         }
       );
     },
-    [sessionId, signCompact, advanceStage]
+    [sessionId, signCompact, messagesData?.pages, fetchInitialMessage]
   );
 
   const handleConfirmInvitationMessage = useCallback(
@@ -1096,6 +1100,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     messages,
     inlineCards,
     isSending,
+    isSigningCompact,
 
     // Pagination for loading older messages
     fetchMoreMessages: fetchNextPage,

@@ -137,8 +137,12 @@ export function ChatInterface({
     // Update ref immediately
     newestMessageTimestampRef.current = currentTimestamp;
 
-    // If this is the very first load (previous is 0), don't animate
+    // If this is the very first load (previous is 0), scroll to ensure visibility
+    // For inverted FlatList, offset 0 is the "bottom" where newest messages appear
     if (previousTimestamp === 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      }, 50);
       return;
     }
 
@@ -283,11 +287,9 @@ export function ChatInterface({
         maintainVisibleContentPosition={{
           minIndexForVisible: 0,
         }}
-        // Dynamic layout: only force 'flex-end' (visual top) when list is short
         contentContainerStyle={[
           styles.messageList,
           listItems.length === 0 && styles.messageListEmpty,
-          listItems.length > 0 && listItems.length < 3 ? { justifyContent: 'flex-end' } : undefined,
         ]}
         ListHeaderComponent={renderHeader}
         ListFooterComponent={renderFooter}

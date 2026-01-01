@@ -760,14 +760,14 @@ export function buildInitialMessagePrompt(
 
   // Invitation phase - starting to craft an invitation
   if (isInvitationPhase) {
-    return `You are Meet Without Fear, a Process Guardian. ${context.userName} just started a new session to have a conversation with ${partnerName}.
+    return `You are Meet Without Fear, a Process Guardian. ${context.userName} wants to have a conversation with ${partnerName}.
 
 ${BASE_GUIDANCE}
 
 YOUR TASK:
-Generate a warm, brief opening message (1-2 sentences) to start the conversation. You want to understand what's going on so you can help them craft an invitation.
+Generate a warm, brief opening message (1-2 sentences) asking what's going on with ${partnerName}.
 
-Keep it simple and open - invite them to share what's on their mind without being too formal or clinical.
+Be casual and direct - just ask what's happening between them and ${partnerName}. Use ${context.userName}'s first name naturally. Don't be clinical or overly formal.
 
 Respond in JSON format:
 \`\`\`json

@@ -305,17 +305,8 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       },
     });
 
-    // Create initial AI message to start the invitation crafting conversation
-    const partnerDisplayName = inviteName || 'them';
-    await prisma.message.create({
-      data: {
-        sessionId: session.id,
-        senderId: null,
-        role: 'AI',
-        content: `First, tell me what's going on so we can craft an invitation to ${partnerDisplayName}.`,
-        stage: 0,
-      },
-    });
+    // Note: Initial AI message is now generated via POST /messages/initial
+    // when the user first enters the session (fetched by mobile app)
 
     successResponse(
       res,

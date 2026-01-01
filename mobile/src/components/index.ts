@@ -39,6 +39,7 @@ export type { SupportOption } from './SupportOptionsModal';
 // Stage 0 components
 export { CompactTerms } from './CompactTerms';
 export { CuriosityCompact } from './CuriosityCompact';
+export { CuriosityCompactOverlay } from './CuriosityCompactOverlay';
 export { WaitingRoom } from './WaitingRoom';
 export { WaitingStatusMessage } from './WaitingStatusMessage';
 export type { WaitingStatusType, WaitingStatusMessageProps } from './WaitingStatusMessage';
