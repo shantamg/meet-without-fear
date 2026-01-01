@@ -39,6 +39,9 @@ export const messageKeys = {
   lists: () => [...messageKeys.all, 'list'] as const,
   list: (sessionId: string, stage?: Stage) =>
     [...messageKeys.lists(), sessionId, stage] as const,
+  // Separate key for infinite queries to avoid cache structure conflicts
+  infinite: (sessionId: string, stage?: Stage) =>
+    [...messageKeys.all, 'infinite', sessionId, stage] as const,
   emotions: () => [...messageKeys.all, 'emotions'] as const,
   emotionHistory: (sessionId: string, stage?: Stage) =>
     [...messageKeys.emotions(), sessionId, stage] as const,
@@ -124,7 +127,7 @@ export function useInfiniteMessages(
   const { sessionId, stage, limit = 25 } = params;
 
   const result = useInfiniteQuery({
-    queryKey: messageKeys.list(sessionId, stage),
+    queryKey: messageKeys.infinite(sessionId, stage),
     queryFn: async ({ pageParam }) => {
       const queryParams = new URLSearchParams();
       if (stage !== undefined) queryParams.set('stage', stage.toString());
@@ -216,13 +219,31 @@ export function useSendMessage(
         }
         // Filter out optimistic messages (they start with 'optimistic-')
         // and add the real messages from the API response
-        const existingMessages = old.messages.filter(
+        const existingMessages = (old.messages || []).filter(
           (m) => !m.id.startsWith('optimistic-')
         );
         return {
           ...old,
           messages: [...existingMessages, data.userMessage, data.aiResponse],
         };
+      };
+
+      // Update infinite query cache (used by useUnifiedSession)
+      const updateInfiniteCache = (
+        old: InfiniteData<GetMessagesResponse> | undefined
+      ): InfiniteData<GetMessagesResponse> | undefined => {
+        if (!old || old.pages.length === 0) return old;
+        // Update the first page (newest messages)
+        const updatedPages = [...old.pages];
+        const firstPage = updatedPages[0];
+        const existingMessages = (firstPage.messages || []).filter(
+          (m) => !m.id.startsWith('optimistic-')
+        );
+        updatedPages[0] = {
+          ...firstPage,
+          messages: [...existingMessages, data.userMessage, data.aiResponse],
+        };
+        return { ...old, pages: updatedPages };
       };
 
       // Update stage-specific cache (what witness screen uses)
@@ -239,11 +260,25 @@ export function useSendMessage(
         updateCache
       );
 
+      // Update infinite query caches
+      if (stage !== undefined) {
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId, stage),
+          updateInfiniteCache
+        );
+      }
+      queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId),
+        updateInfiniteCache
+      );
+
       // Invalidate to get fresh data
       if (stage !== undefined) {
         queryClient.invalidateQueries({ queryKey: messageKeys.list(sessionId, stage) });
+        queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId, stage) });
       }
       queryClient.invalidateQueries({ queryKey: messageKeys.list(sessionId) });
+      queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
 
       // Session might have progressed - invalidate session detail and progress
       // Progress invalidation is critical: when user sends first message at Stage 0,
@@ -385,8 +420,29 @@ export function useOptimisticMessage() {
         }
         return {
           ...old,
-          messages: [...old.messages, optimisticMessage],
+          messages: [...(old.messages || []), optimisticMessage],
         };
+      };
+
+      // Update infinite query cache
+      const updateInfiniteCache = (
+        old: InfiniteData<GetMessagesResponse> | undefined
+      ): InfiniteData<GetMessagesResponse> | undefined => {
+        if (!old || old.pages.length === 0) {
+          // Create initial structure for infinite query
+          return {
+            pages: [{ messages: [optimisticMessage], hasMore: false }],
+            pageParams: [undefined],
+          };
+        }
+        // Update the first page (newest messages)
+        const updatedPages = [...old.pages];
+        const firstPage = updatedPages[0];
+        updatedPages[0] = {
+          ...firstPage,
+          messages: [...(firstPage.messages || []), optimisticMessage],
+        };
+        return { ...old, pages: updatedPages };
       };
 
       // Update stage-specific cache (what witness screen uses)
@@ -395,12 +451,20 @@ export function useOptimisticMessage() {
           messageKeys.list(sessionId, stage),
           updateCache
         );
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId, stage),
+          updateInfiniteCache
+        );
       }
 
       // Also update non-stage-filtered cache
       queryClient.setQueryData<GetMessagesResponse>(
         messageKeys.list(sessionId),
         updateCache
+      );
+      queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId),
+        updateInfiniteCache
       );
 
       return optimisticMessage.id;
@@ -411,8 +475,20 @@ export function useOptimisticMessage() {
         if (!old) return old;
         return {
           ...old,
-          messages: old.messages.filter((m) => m.id !== optimisticId),
+          messages: (old.messages || []).filter((m) => m.id !== optimisticId),
         };
+      };
+
+      // Update infinite query cache
+      const updateInfiniteCache = (
+        old: InfiniteData<GetMessagesResponse> | undefined
+      ): InfiniteData<GetMessagesResponse> | undefined => {
+        if (!old || old.pages.length === 0) return old;
+        const updatedPages = old.pages.map((page) => ({
+          ...page,
+          messages: (page.messages || []).filter((m) => m.id !== optimisticId),
+        }));
+        return { ...old, pages: updatedPages };
       };
 
       // Remove from stage-specific cache
@@ -421,12 +497,20 @@ export function useOptimisticMessage() {
           messageKeys.list(sessionId, stage),
           updateCache
         );
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId, stage),
+          updateInfiniteCache
+        );
       }
 
       // Remove from non-stage-filtered cache
       queryClient.setQueryData<GetMessagesResponse>(
         messageKeys.list(sessionId),
         updateCache
+      );
+      queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId),
+        updateInfiniteCache
       );
     },
   };

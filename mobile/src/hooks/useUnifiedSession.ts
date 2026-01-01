@@ -359,10 +359,17 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Stage 0: Compact
   const { data: compactData } = useCompactStatus(sessionId);
 
-  // Invitation - fetch for invitation phase detection
-  // We enable this when session status is CREATED (sessionData is available)
+  // Invitation - fetch for invitation phase detection and "invitation sent" indicator
+  // We enable this for all active session states to show "invitation sent" indicator
+  // - CREATED: user is composing/refining the invitation message
+  // - INVITED: invitation was sent, partner hasn't joined yet
+  // - ACTIVE: both users in session, still need messageConfirmed for "invitation sent" indicator
   const { data: invitationData } = useSessionInvitation(sessionId, {
-    enabled: !!sessionId && sessionData?.session?.status === 'CREATED',
+    enabled:
+      !!sessionId &&
+      (sessionData?.session?.status === 'CREATED' ||
+        sessionData?.session?.status === 'INVITED' ||
+        sessionData?.session?.status === 'ACTIVE'),
   });
 
   // Stage 2: Empathy - only fetch when in stage 2 or later

@@ -106,6 +106,7 @@ enum SessionStatus {
   WAITING // One user ahead, waiting for other
   RESOLVED // Process completed
   ABANDONED // Timeout or withdrawal
+  ARCHIVED // User has archived this session
 }
 
 // ============================================================================

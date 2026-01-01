@@ -624,6 +624,162 @@ export async function declineInvitation(req: Request, res: Response): Promise<vo
 }
 
 /**
+ * List people the user has relationships with
+ * GET /people
+ */
+export async function listPeople(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    // Find all relationships where user is a member
+    const memberships = await prisma.relationshipMember.findMany({
+      where: { userId: user.id },
+      include: {
+        relationship: {
+          include: {
+            members: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    firstName: true,
+                    lastName: true,
+                  },
+                },
+              },
+            },
+            sessions: {
+              orderBy: { updatedAt: 'desc' },
+              take: 1,
+              select: {
+                id: true,
+                status: true,
+                updatedAt: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { joinedAt: 'desc' },
+    });
+
+    // Transform to person DTOs
+    const people = memberships
+      .map((membership) => {
+        // Find the partner (the other member in the relationship)
+        const partnerMember = membership.relationship.members.find(
+          (m) => m.userId !== user.id
+        );
+
+        // Skip if no partner yet (invitation not accepted)
+        if (!partnerMember) return null;
+
+        const latestSession = membership.relationship.sessions[0];
+
+        // Compute display name: nickname I gave them > their first name > their full name
+        const displayName = membership.nickname ||
+          partnerMember.user.firstName ||
+          partnerMember.user.name ||
+          'Unknown';
+
+        // Generate initials
+        const initials = displayName
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .toUpperCase()
+          .slice(0, 2);
+
+        return {
+          id: partnerMember.userId,
+          relationshipId: membership.relationshipId,
+          name: displayName,
+          nickname: membership.nickname,
+          initials,
+          connectedSince: membership.joinedAt.toISOString(),
+          lastSession: latestSession
+            ? {
+                id: latestSession.id,
+                status: latestSession.status,
+                updatedAt: latestSession.updatedAt.toISOString(),
+              }
+            : null,
+        };
+      })
+      .filter((p): p is NonNullable<typeof p> => p !== null);
+
+    successResponse(res, { people });
+  } catch (error) {
+    console.error('[listPeople] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to list people', 500);
+  }
+}
+
+/**
+ * Archive a session
+ * POST /sessions/:id/archive
+ */
+export async function archiveSession(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+
+    // Find the session and verify user has access
+    const session = await prisma.session.findFirst({
+      where: {
+        id,
+        relationship: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+
+    // Only allow archiving of sessions that are RESOLVED, ABANDONED, CREATED, or INVITED
+    const archivableStatuses = ['RESOLVED', 'ABANDONED', 'CREATED', 'INVITED'];
+    if (!archivableStatuses.includes(session.status)) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Only resolved, abandoned, or pending sessions can be archived',
+        400
+      );
+      return;
+    }
+
+    // Update session status to ARCHIVED
+    const updatedSession = await prisma.session.update({
+      where: { id },
+      data: { status: 'ARCHIVED' },
+    });
+
+    successResponse(res, {
+      archived: true,
+      archivedAt: updatedSession.updatedAt.toISOString(),
+    });
+  } catch (error) {
+    console.error('[archiveSession] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to archive session', 500);
+  }
+}
+
+/**
  * Update nickname for partner in a relationship
  * PATCH /relationships/:relationshipId/nickname
  */

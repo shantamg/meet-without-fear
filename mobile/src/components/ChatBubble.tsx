@@ -26,6 +26,8 @@ interface ChatBubbleProps {
   showTimestamp?: boolean;
   /** Enable typewriter effect for AI messages */
   enableTypewriter?: boolean;
+  /** Callback when typewriter effect starts (to track animation state) */
+  onTypewriterStart?: () => void;
   /** Callback when typewriter effect completes */
   onTypewriterComplete?: () => void;
   /** Callback during typewriter animation (for scrolling) */
@@ -47,6 +49,7 @@ export function ChatBubble({
   message,
   showTimestamp = false,
   enableTypewriter = true,
+  onTypewriterStart,
   onTypewriterComplete,
   onTypewriterProgress,
 }: ChatBubbleProps) {
@@ -59,11 +62,14 @@ export function ChatBubble({
   // Typewriter state
   const [displayedText, setDisplayedText] = useState('');
   const hasCompletedRef = useRef(false);
+  const hasStartedRef = useRef(false);
   const messageIdRef = useRef(message.id);
 
   // Store callbacks in refs to avoid restarting animation when they change
+  const onStartRef = useRef(onTypewriterStart);
   const onCompleteRef = useRef(onTypewriterComplete);
   const onProgressRef = useRef(onTypewriterProgress);
+  onStartRef.current = onTypewriterStart;
   onCompleteRef.current = onTypewriterComplete;
   onProgressRef.current = onTypewriterProgress;
 
@@ -76,6 +82,7 @@ export function ChatBubble({
     if (messageIdRef.current !== message.id) {
       messageIdRef.current = message.id;
       hasCompletedRef.current = false;
+      hasStartedRef.current = false;
       setDisplayedText('');
     }
 
@@ -89,6 +96,12 @@ export function ChatBubble({
     if (hasCompletedRef.current) {
       setDisplayedText(message.content);
       return;
+    }
+
+    // Notify parent that typewriter has started (so it can track this message)
+    if (!hasStartedRef.current) {
+      hasStartedRef.current = true;
+      onStartRef.current?.();
     }
 
     // Start typewriter animation

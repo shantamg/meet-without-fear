@@ -6,8 +6,10 @@ import {
   acceptInvitation,
   declineInvitation,
   updateNickname,
+  listPeople,
+  archiveSession,
 } from '../controllers/invitations';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireSessionAccess } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errors';
 
 const router = Router();
@@ -53,5 +55,19 @@ router.post('/invitations/:id/decline', requireAuth, asyncHandler(declineInvitat
  * @access Private - requires authentication
  */
 router.patch('/relationships/:relationshipId/nickname', requireAuth, asyncHandler(updateNickname));
+
+/**
+ * @route GET /api/v1/people
+ * @description List people the user has relationships with
+ * @access Private - requires authentication
+ */
+router.get('/people', requireAuth, asyncHandler(listPeople));
+
+/**
+ * @route POST /api/v1/sessions/:id/archive
+ * @description Archive a session (for resolved, abandoned, or pending sessions)
+ * @access Private - requires authentication and session access
+ */
+router.post('/sessions/:id/archive', requireAuth, requireSessionAccess, asyncHandler(archiveSession));
 
 export default router;

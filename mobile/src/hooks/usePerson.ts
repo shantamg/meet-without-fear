@@ -9,7 +9,7 @@ import {
   UseQueryOptions,
 } from '@tanstack/react-query';
 import { get, ApiClientError } from '../lib/api';
-import { Stage } from '@meet-without-fear/shared';
+import { Stage, PersonSummaryDTO, ListPeopleResponse } from '@meet-without-fear/shared';
 
 // ============================================================================
 // Query Keys
@@ -125,6 +125,32 @@ export function usePastSessions(
     },
     enabled: !!personId,
     staleTime: 60_000, // 1 minute
+    ...options,
+  });
+}
+
+// ============================================================================
+// List People Hook
+// ============================================================================
+
+/**
+ * Fetch all people the user has relationships with.
+ *
+ * @param options - React Query options
+ */
+export function usePeople(
+  options?: Omit<
+    UseQueryOptions<PersonSummaryDTO[], ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: personKeys.lists(),
+    queryFn: async () => {
+      const response = await get<ListPeopleResponse>('/people');
+      return response.people;
+    },
+    staleTime: 30_000, // 30 seconds
     ...options,
   });
 }

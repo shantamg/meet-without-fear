@@ -22,6 +22,7 @@ jest.mock('../../lib/prisma', () => ({
       create: jest.fn(),
       update: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
     },
     invitation: {
       create: jest.fn(),
@@ -35,6 +36,9 @@ jest.mock('../../lib/prisma', () => ({
       create: jest.fn(),
     },
     sharedVessel: {
+      create: jest.fn(),
+    },
+    message: {
       create: jest.fn(),
     },
   },
@@ -104,6 +108,7 @@ describe('Invitations API', () => {
       (prisma.stageProgress.create as jest.Mock).mockResolvedValue({});
       (prisma.userVessel.create as jest.Mock).mockResolvedValue({});
       (prisma.sharedVessel.create as jest.Mock).mockResolvedValue({});
+      (prisma.message.create as jest.Mock).mockResolvedValue({});
 
       const req = createMockRequest({
         user: mockUser,

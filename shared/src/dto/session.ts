@@ -151,3 +151,34 @@ export interface UpdateNicknameRequest {
 export interface UpdateNicknameResponse {
   nickname: string | null;
 }
+
+// ============================================================================
+// People (Relationship Partners)
+// ============================================================================
+
+export interface PersonSummaryDTO {
+  id: string;
+  relationshipId: string;
+  name: string;
+  nickname: string | null;
+  initials: string;
+  connectedSince: string;
+  lastSession: {
+    id: string;
+    status: string;
+    updatedAt: string;
+  } | null;
+}
+
+export interface ListPeopleResponse {
+  people: PersonSummaryDTO[];
+}
+
+// ============================================================================
+// Archive Session
+// ============================================================================
+
+export interface ArchiveSessionResponse {
+  archived: boolean;
+  archivedAt: string;
+}

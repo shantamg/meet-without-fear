@@ -116,8 +116,9 @@ export function ChatInterface({
     }
   }, []);
 
-  // Track which messages have completed typewriter effect
-  const [completedMessages, setCompletedMessages] = useState<Set<string>>(new Set());
+  // Track which messages have started typewriter effect (to prevent re-animation on remount)
+  // This persists across FlatList virtualization unmount/remount cycles
+  const startedMessagesRef = useRef<Set<string>>(new Set());
 
   // Track message IDs that should skip typewriter (existed before current "session")
   // We use a ref to persist across renders, but only set it once messages have actually loaded
@@ -155,10 +156,13 @@ export function ChatInterface({
     });
   }, [messages, indicators]);
 
+  // Mark a message as having started its typewriter animation
+  const markTypewriterStarted = useCallback((messageId: string) => {
+    startedMessagesRef.current.add(messageId);
+  }, []);
+
   // Handle typewriter completion for a specific message
   const handleTypewriterComplete = useCallback((messageId: string) => {
-    setCompletedMessages(prev => new Set(prev).add(messageId));
-
     // If this is the last AI message, call the callback
     if (messageId === lastAIMessageId && onLastAIMessageComplete) {
       onLastAIMessageComplete();
@@ -210,6 +214,9 @@ export function ChatInterface({
     // If we haven't set initial messages yet, skip typewriter to be safe
     const isInitialMessage = !hasSetInitialRef.current || initialMessageIdsRef.current.has(item.id);
 
+    // Also skip typewriter if this message already started animating (prevents re-animation on remount)
+    const hasAlreadyStarted = startedMessagesRef.current.has(item.id);
+
     // Render message
     const bubbleMessage: ChatBubbleMessage = {
       id: item.id,
@@ -217,16 +224,17 @@ export function ChatInterface({
       content: item.content,
       timestamp: item.timestamp,
       status: item.status,
-      skipTypewriter: item.skipTypewriter || isInitialMessage,
+      skipTypewriter: item.skipTypewriter || isInitialMessage || hasAlreadyStarted,
     };
     return (
       <ChatBubble
         message={bubbleMessage}
+        onTypewriterStart={() => markTypewriterStarted(item.id)}
         onTypewriterComplete={() => handleTypewriterComplete(item.id)}
         onTypewriterProgress={handleTypewriterProgress}
       />
     );
-  }, [handleTypewriterComplete, handleTypewriterProgress]);
+  }, [handleTypewriterComplete, handleTypewriterProgress, markTypewriterStarted]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 

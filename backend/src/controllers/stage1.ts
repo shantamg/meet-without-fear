@@ -309,24 +309,25 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       `[sendMessage] Orchestrator: intent=${orchestratorResult.memoryIntent.intent}, depth=${orchestratorResult.memoryIntent.depth}, mock=${orchestratorResult.usedMock}`
     );
 
-    // During invitation phase or refinement, parse JSON response for structured output
+    // Always try to parse JSON response in case AI returns structured output
+    // This handles cases where AI returns JSON even outside invitation phase
     let aiResponseContent = orchestratorResult.response;
     let extractedInvitationMessage: string | null = null;
 
-    if (isInvitationPhase || isRefiningInvitation) {
-      const invitationResult = extractInvitationResponse(orchestratorResult.response);
-      aiResponseContent = invitationResult.response;
-      extractedInvitationMessage = invitationResult.invitationMessage;
+    // Try to extract JSON response - will return raw content if not JSON
+    const invitationResult = extractInvitationResponse(orchestratorResult.response);
+    aiResponseContent = invitationResult.response;
+    extractedInvitationMessage = invitationResult.invitationMessage;
 
-      if (extractedInvitationMessage) {
-        console.log(`[sendMessage] Extracted invitation draft: "${extractedInvitationMessage}"`);
+    // Only save invitation message during invitation phase
+    if ((isInvitationPhase || isRefiningInvitation) && extractedInvitationMessage) {
+      console.log(`[sendMessage] Extracted invitation draft: "${extractedInvitationMessage}"`);
 
-        // Save draft to invitation record
-        await prisma.invitation.updateMany({
-          where: { sessionId, invitedById: user.id },
-          data: { invitationMessage: extractedInvitationMessage },
-        });
-      }
+      // Save draft to invitation record
+      await prisma.invitation.updateMany({
+        where: { sessionId, invitedById: user.id },
+        data: { invitationMessage: extractedInvitationMessage },
+      });
     }
 
     // Save AI response (just the conversational part)

@@ -17,6 +17,7 @@ export enum SessionStatus {
   WAITING = 'WAITING', // One user ahead, waiting for other
   RESOLVED = 'RESOLVED', // Process completed successfully
   ABANDONED = 'ABANDONED', // Timeout or withdrawal
+  ARCHIVED = 'ARCHIVED', // User has archived this session
 }
 
 export enum StageStatus {

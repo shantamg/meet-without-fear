@@ -9,7 +9,8 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "http://localhost:3000",
-        "EXPO_PUBLIC_BUNDLE_ID": "com.meetwithoutfear.app.dev"
+        "EXPO_PUBLIC_BUNDLE_ID": "com.meetwithoutfear.app.dev",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cmVhZHktamF5LTUyLmNsZXJrLmFjY291bnRzLmRldiQ"
       }
     },
     "development-production": {
@@ -28,7 +29,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "http://localhost:3000",
-        "EXPO_PUBLIC_BUNDLE_ID": "com.meetwithoutfear.app.dev"
+        "EXPO_PUBLIC_BUNDLE_ID": "com.meetwithoutfear.app.dev",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cmVhZHktamF5LTUyLmNsZXJrLmFjY291bnRzLmRldiQ"
       }
     },
     "preview": {

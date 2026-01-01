@@ -143,6 +143,10 @@ const styles = StyleSheet.create({
   sliderContainer: {
     width: '100%',
     marginBottom: 40,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
   },
   slider: {
     width: '100%',
@@ -151,8 +155,8 @@ const styles = StyleSheet.create({
   labels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 4,
-    paddingHorizontal: 4,
+    marginTop: 8,
+    paddingHorizontal: 8,
   },
   scaleLabel: {
     fontSize: 12,

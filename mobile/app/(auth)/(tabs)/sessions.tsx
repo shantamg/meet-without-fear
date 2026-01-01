@@ -1,3 +1,4 @@
+import { useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -5,25 +6,35 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Animated,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Plus } from 'lucide-react-native';
+import { Plus, Archive } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Swipeable } from 'react-native-gesture-handler';
 
 import { SessionCard } from '@/src/components/SessionCard';
-import { useSessions } from '@/src/hooks/useSessions';
+import { useSessions, useArchiveSession } from '@/src/hooks/useSessions';
 import type { SessionSummaryDTO } from '@meet-without-fear/shared';
+import { SessionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '@/src/theme/styled';
 
 /**
  * Sessions tab screen
- * Lists all user's sessions
+ * Lists all user's sessions with swipe-to-archive for eligible sessions
  */
 export default function SessionsScreen() {
   const styles = useStyles();
   const router = useRouter();
   const { data, isLoading, refetch, isRefetching } = useSessions();
-  const sessions = data?.items ?? [];
+  const archiveSession = useArchiveSession();
+  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
+
+  // Filter out archived sessions from display
+  const sessions = (data?.items ?? []).filter(
+    (s) => s.status !== SessionStatus.ARCHIVED
+  );
 
   const handleNewSession = () => {
     router.push('/session/new');
@@ -32,6 +43,117 @@ export default function SessionsScreen() {
   const handleSessionPress = (sessionId: string) => {
     router.push(`/session/${sessionId}`);
   };
+
+  // Check if a session can be archived
+  const canArchive = (status: SessionStatus): boolean => {
+    return [
+      SessionStatus.RESOLVED,
+      SessionStatus.ABANDONED,
+      SessionStatus.CREATED,
+      SessionStatus.INVITED,
+    ].includes(status);
+  };
+
+  const handleArchive = useCallback(
+    (session: SessionSummaryDTO) => {
+      // Close the swipeable
+      swipeableRefs.current.get(session.id)?.close();
+
+      Alert.alert(
+        'Archive Session',
+        `Archive your session with ${session.partner.name || 'this person'}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Archive',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await archiveSession.mutateAsync({ sessionId: session.id });
+              } catch (error) {
+                console.error('Failed to archive session:', error);
+                Alert.alert('Error', 'Failed to archive session. Please try again.');
+              }
+            },
+          },
+        ]
+      );
+    },
+    [archiveSession]
+  );
+
+  const renderRightActions = useCallback(
+    (
+      _progress: Animated.AnimatedInterpolation<number>,
+      dragX: Animated.AnimatedInterpolation<number>,
+      session: SessionSummaryDTO
+    ) => {
+      if (!canArchive(session.status)) {
+        return null;
+      }
+
+      const scale = dragX.interpolate({
+        inputRange: [-100, 0],
+        outputRange: [1, 0.5],
+        extrapolate: 'clamp',
+      });
+
+      return (
+        <TouchableOpacity
+          style={styles.archiveAction}
+          onPress={() => handleArchive(session)}
+          accessibilityRole="button"
+          accessibilityLabel="Archive session"
+        >
+          <Animated.View style={{ transform: [{ scale }] }}>
+            <Archive color="#FFFFFF" size={24} />
+          </Animated.View>
+          <Animated.Text
+            style={[styles.archiveText, { transform: [{ scale }] }]}
+          >
+            Archive
+          </Animated.Text>
+        </TouchableOpacity>
+      );
+    },
+    [handleArchive, styles]
+  );
+
+  const renderSessionItem = useCallback(
+    ({ item }: { item: SessionSummaryDTO }) => {
+      const isArchivable = canArchive(item.status);
+
+      if (isArchivable) {
+        return (
+          <Swipeable
+            ref={(ref) => {
+              if (ref) {
+                swipeableRefs.current.set(item.id, ref);
+              } else {
+                swipeableRefs.current.delete(item.id);
+              }
+            }}
+            renderRightActions={(progress, dragX) =>
+              renderRightActions(progress, dragX, item)
+            }
+            overshootRight={false}
+            rightThreshold={40}
+          >
+            <TouchableOpacity onPress={() => handleSessionPress(item.id)}>
+              <SessionCard session={item} />
+            </TouchableOpacity>
+          </Swipeable>
+        );
+      }
+
+      return (
+        <TouchableOpacity onPress={() => handleSessionPress(item.id)}>
+          <SessionCard session={item} />
+        </TouchableOpacity>
+      );
+    },
+    [renderRightActions, handleSessionPress]
+  );
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
@@ -61,11 +183,7 @@ export default function SessionsScreen() {
       ) : (
         <FlatList
           data={sessions}
-          renderItem={({ item }: { item: SessionSummaryDTO }) => (
-            <TouchableOpacity onPress={() => handleSessionPress(item.id)}>
-              <SessionCard session={item} />
-            </TouchableOpacity>
-          )}
+          renderItem={renderSessionItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -162,5 +280,20 @@ const useStyles = () =>
     loadingText: {
       color: t.colors.textSecondary,
       fontSize: 16,
+    },
+    // Archive swipe action
+    archiveAction: {
+      backgroundColor: t.colors.error,
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: 80,
+      borderRadius: 12,
+      marginLeft: t.spacing.sm,
+    },
+    archiveText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '600',
+      marginTop: 4,
     },
   }));

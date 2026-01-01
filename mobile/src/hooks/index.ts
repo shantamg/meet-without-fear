@@ -44,6 +44,7 @@ export {
   useCreateSession,
   usePauseSession,
   useResumeSession,
+  useArchiveSession,
   // Invitation hooks
   useInvitation,
   useAcceptInvitation,
@@ -160,6 +161,7 @@ export {
   // Hooks
   usePerson,
   usePastSessions,
+  usePeople,
 } from './usePerson';
 
 // ============================================================================

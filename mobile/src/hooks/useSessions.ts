@@ -502,3 +502,38 @@ export function useConfirmInvitationMessage(
     ...options,
   });
 }
+
+// ============================================================================
+// Archive Session Hook
+// ============================================================================
+
+/**
+ * Archive a session (for resolved, abandoned, or pending sessions).
+ */
+export function useArchiveSession(
+  options?: Omit<
+    UseMutationOptions<
+      { archived: boolean; archivedAt: string },
+      ApiClientError,
+      { sessionId: string }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId }) => {
+      return post<{ archived: boolean; archivedAt: string }>(
+        `/sessions/${sessionId}/archive`
+      );
+    },
+    onSuccess: (_, { sessionId }) => {
+      // Invalidate session lists to remove the archived session
+      queryClient.invalidateQueries({ queryKey: sessionKeys.lists() });
+      // Invalidate the specific session detail
+      queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+    },
+    ...options,
+  });
+}
