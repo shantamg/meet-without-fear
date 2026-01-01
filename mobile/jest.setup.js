@@ -514,6 +514,7 @@ const silencedLogPatterns = [
   /^\[Mock Ably\]/, // Mock Ably presence logs from useRealtime tests
   /^\[Invitation\]/, // Invitation processing logs
   /^\[Auth\]/, // Authentication flow logs
+  /^\[Clerk\]/, // Clerk SDK debug logs
 ];
 
 // Patterns for expected console.warn output that should be silenced
@@ -526,6 +527,7 @@ const silencedWarnPatterns = [
 const silencedErrorPatterns = [
   /not wrapped in act\(\.\.\.\)/, // React Query async updates
   /^\[useInvitationDetails\] Error fetching invitation/, // Expected in error handling tests
+  /^\[useAuth\] Failed to sync backend profile/, // Expected in error handling tests
 ];
 
 console.log = (...args) => {

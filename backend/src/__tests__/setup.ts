@@ -16,12 +16,15 @@ const silencedLogPatterns = [
 const silencedWarnPatterns = [
   /^\[Bedrock\] AWS credentials not configured/, // Expected when testing without AWS creds
   /^\[Push\]/,  // Push service warnings
+  /^No JSON found in invitation text/, // Expected when testing invitation parsing
+  /^\[JSON Extractor\]/, // Expected when testing invitation response extraction
 ];
 
 const silencedErrorPatterns = [
   /^Error recording emotion:/, // Expected in error handling tests
   /^Error getting emotions:/,  // Expected in error handling tests
   /^Error completing exercise:/, // Expected in error handling tests
+  /^\[AI Service\]/, // Expected in AI service error handling tests
 ];
 
 beforeAll(() => {
