@@ -507,6 +507,39 @@ export function UnifiedSessionScreen({
   }, [invitation?.id]);
 
   // -------------------------------------------------------------------------
+  // Curiosity Compact Overlay - shown when compact needs to be signed
+  // -------------------------------------------------------------------------
+  // The compact is shown as an overlay while the chat loads in the background.
+  // This allows the initial AI message to be fetched while the user reviews the compact.
+  // Shows regardless of invitation phase - compact must be signed first before any chat interaction.
+  // Important: Only show AFTER compactData has loaded to prevent flashing
+  const shouldShowCompactOverlay =
+    currentStage === Stage.ONBOARDING &&
+    compactData !== undefined &&
+    compactData.mySigned === false;
+
+  // -------------------------------------------------------------------------
+  // Session Entry Mood Check - shown after compact signed, before chat
+  // -------------------------------------------------------------------------
+  // Asks user "How are you feeling right now?" to set accurate barometer value.
+  // Only shows once per session entry (resets when navigating away and back).
+  // Skipped if user is currently in an exercise overlay (will set intensity after).
+  // NOTE: This must be before early returns to maintain hook order
+  const shouldShowMoodCheck = useMemo(() => {
+    // Don't show if still loading
+    if (isLoading) return false;
+    // Don't show if compact overlay is showing (must sign compact first)
+    if (shouldShowCompactOverlay) return false;
+    // Don't show if already completed mood check this session entry
+    if (hasCompletedMoodCheck) return false;
+    // Don't show if currently in an exercise overlay (user will set intensity after)
+    if (activeOverlay) return false;
+
+    // Show mood check for all session entries
+    return true;
+  }, [isLoading, shouldShowCompactOverlay, hasCompletedMoodCheck, activeOverlay]);
+
+  // -------------------------------------------------------------------------
   // Render Overlays
   // -------------------------------------------------------------------------
   const renderOverlay = useCallback(() => {
@@ -703,38 +736,6 @@ export function UnifiedSessionScreen({
       </View>
     );
   }
-
-  // -------------------------------------------------------------------------
-  // Curiosity Compact Overlay - shown when compact needs to be signed
-  // -------------------------------------------------------------------------
-  // The compact is shown as an overlay while the chat loads in the background.
-  // This allows the initial AI message to be fetched while the user reviews the compact.
-  // Shows regardless of invitation phase - compact must be signed first before any chat interaction.
-  // Important: Only show AFTER compactData has loaded to prevent flashing
-  const shouldShowCompactOverlay =
-    currentStage === Stage.ONBOARDING &&
-    compactData !== undefined &&
-    compactData.mySigned === false;
-
-  // -------------------------------------------------------------------------
-  // Session Entry Mood Check - shown after compact signed, before chat
-  // -------------------------------------------------------------------------
-  // Asks user "How are you feeling right now?" to set accurate barometer value.
-  // Only shows once per session entry (resets when navigating away and back).
-  // Skipped if user is currently in an exercise overlay (will set intensity after).
-  const shouldShowMoodCheck = useMemo(() => {
-    // Don't show if still loading
-    if (isLoading) return false;
-    // Don't show if compact overlay is showing (must sign compact first)
-    if (shouldShowCompactOverlay) return false;
-    // Don't show if already completed mood check this session entry
-    if (hasCompletedMoodCheck) return false;
-    // Don't show if currently in an exercise overlay (user will set intensity after)
-    if (activeOverlay) return false;
-
-    // Show mood check for all session entries
-    return true;
-  }, [isLoading, shouldShowCompactOverlay, hasCompletedMoodCheck, activeOverlay]);
 
   // -------------------------------------------------------------------------
   // Strategy Ranking Phase - Full Screen Overlay
