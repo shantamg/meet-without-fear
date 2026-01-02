@@ -709,7 +709,8 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
 
     const sessionId = req.params.id;
 
-    // Get session with invitation
+    // Get session with any invitation (not just user's)
+    // This allows both inviter and invitee to see the invitation
     const session = await prisma.session.findFirst({
       where: {
         id: sessionId,
@@ -721,7 +722,6 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
       },
       include: {
         invitations: {
-          where: { invitedById: user.id },
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
@@ -739,6 +739,9 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
       return;
     }
 
+    // Determine if the current user is the inviter or invitee
+    const isInviter = invitation.invitedById === user.id;
+
     successResponse(res, {
       invitation: {
         id: invitation.id,
@@ -746,8 +749,10 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
         invitationMessage: invitation.invitationMessage,
         messageConfirmed: invitation.messageConfirmed,
         messageConfirmedAt: invitation.messageConfirmedAt?.toISOString() ?? null,
+        acceptedAt: invitation.acceptedAt?.toISOString() ?? null,
         status: invitation.status,
         expiresAt: invitation.expiresAt.toISOString(),
+        isInviter,
       },
     });
   } catch (error) {

@@ -368,8 +368,12 @@ interface SessionInvitationResponse {
     messageConfirmed: boolean;
     /** When the user confirmed the invitation message (for chat indicator positioning) */
     messageConfirmedAt: string | null;
+    /** When the invitation was accepted by the invitee */
+    acceptedAt: string | null;
     status: string;
     expiresAt: string;
+    /** Whether the current user is the inviter (true) or invitee (false) */
+    isInviter: boolean;
   };
 }
 

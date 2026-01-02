@@ -88,6 +88,8 @@ export interface PromptContext {
 export interface InitialMessageContext {
   userName: string;
   partnerName?: string;
+  /** Whether the user is the invitee (joined via invitation from partner) */
+  isInvitee?: boolean;
 }
 
 // ============================================================================
@@ -805,6 +807,35 @@ export function buildInitialMessagePrompt(
   isInvitationPhase?: boolean
 ): string {
   const partnerName = context.partnerName || 'your partner';
+
+  // Invitee joining session - welcome them and prompt to talk about the inviter
+  if (context.isInvitee) {
+    return `You are Meet Without Fear, a Process Guardian. ${context.userName} has just accepted an invitation from ${partnerName} to have a meaningful conversation.
+
+${BASE_GUIDANCE}
+
+CONTEXT:
+${partnerName} reached out to ${context.userName} through this app because they wanted to have a real conversation about something between them. ${context.userName} has accepted the invitation and is ready to begin.
+
+YOUR TASK:
+Generate a warm, welcoming message (2-3 sentences) that:
+1. Welcomes them to the conversation
+2. Acknowledges that ${partnerName} reached out to them
+3. Gently asks what's going on from their perspective with ${partnerName}
+
+Be warm and curious - make them feel safe to share. Don't be clinical or overly formal. The goal is to help them feel comfortable opening up about their side of whatever is happening with ${partnerName}.
+
+EXAMPLE GOOD MESSAGES:
+- "Hey ${context.userName}, thanks for accepting ${partnerName}'s invitation to talk. I'm here to help both of you feel heard. What's been on your mind about things with ${partnerName}?"
+- "Welcome, ${context.userName}. ${partnerName} wanted to have a real conversation with you, and you showed up - that takes courage. What's going on between you two from your perspective?"
+
+Respond in JSON format:
+\`\`\`json
+{
+  "response": "Your welcoming message"
+}
+\`\`\``;
+  }
 
   // Invitation phase - starting to craft an invitation
   if (isInvitationPhase) {

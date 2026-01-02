@@ -56,6 +56,28 @@ async function hasPartnerCompletedStage1(
   return gates?.feelHeard === true;
 }
 
+/**
+ * Get a fallback initial message when AI is unavailable
+ */
+function getFallbackInitialMessage(
+  userName: string,
+  partnerName: string | undefined,
+  isInvitationPhase: boolean,
+  isInvitee: boolean
+): string {
+  const partner = partnerName || 'them';
+
+  if (isInvitee) {
+    return `Hey ${userName}, thanks for accepting ${partner}'s invitation to talk. What's been on your mind about things with ${partner}?`;
+  }
+
+  if (isInvitationPhase) {
+    return `Hey ${userName}, what's going on with ${partner}?`;
+  }
+
+  return `Hey ${userName}, what's on your mind?`;
+}
+
 // ============================================================================
 // Controllers
 // ============================================================================
@@ -807,18 +829,36 @@ export async function getInitialMessage(
     // Determine if this is the invitation phase
     const isInvitationPhase = session.status === 'CREATED';
 
-    // Get user's first name and partner name from invitation
+    // Get user's first name
     const userName = user.firstName || user.name || 'there';
+
+    // Find the session's invitation to determine inviter/invitee status
     const invitation = await prisma.invitation.findFirst({
-      where: { sessionId, invitedById: user.id },
-      select: { name: true },
+      where: { sessionId },
+      select: { name: true, invitedById: true },
     });
-    const partnerName = invitation?.name || undefined;
+
+    // Determine if the current user is the invitee (NOT the person who sent the invitation)
+    const isInvitee = invitation ? invitation.invitedById !== user.id : false;
+
+    // Get partner name - for inviter it's from the invitation, for invitee it's from the inviter
+    let partnerName: string | undefined;
+    if (isInvitee) {
+      // Invitee: partner is the inviter
+      const inviter = await prisma.user.findUnique({
+        where: { id: invitation?.invitedById },
+        select: { firstName: true, name: true },
+      });
+      partnerName = inviter?.firstName || inviter?.name || undefined;
+    } else {
+      // Inviter: partner name is from the invitation
+      partnerName = invitation?.name || undefined;
+    }
 
     // Build the initial message prompt
     const prompt = buildInitialMessagePrompt(
       currentStage,
-      { userName, partnerName },
+      { userName, partnerName, isInvitee },
       isInvitationPhase
     );
 
@@ -837,18 +877,14 @@ export async function getInitialMessage(
         const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
         responseContent = typeof parsed.response === 'string'
           ? parsed.response
-          : `Hey ${userName}, what's going on with ${partnerName || 'them'}?`;
+          : getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
       } else {
         // Fallback if AI unavailable
-        responseContent = isInvitationPhase
-          ? `Hey ${userName}, what's going on with ${partnerName || 'them'}?`
-          : `Hey ${userName}, what's on your mind?`;
+        responseContent = getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
       }
     } catch (error) {
       console.error('[getInitialMessage] AI response error:', error);
-      responseContent = isInvitationPhase
-        ? `Hey ${userName}, what's going on with ${partnerName || 'them'}?`
-        : `Hey ${userName}, what's on your mind?`;
+      responseContent = getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
     }
 
     // Save the AI message

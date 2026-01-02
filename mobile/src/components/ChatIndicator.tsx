@@ -12,7 +12,7 @@ import { createStyles } from '../theme/styled';
 // Types
 // ============================================================================
 
-export type ChatIndicatorType = 'invitation-sent' | 'stage-transition' | 'session-start' | 'feel-heard';
+export type ChatIndicatorType = 'invitation-sent' | 'invitation-accepted' | 'stage-transition' | 'session-start' | 'feel-heard';
 
 interface ChatIndicatorProps {
   type: ChatIndicatorType;
@@ -31,6 +31,8 @@ export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
     switch (type) {
       case 'invitation-sent':
         return 'Invitation Sent';
+      case 'invitation-accepted':
+        return 'Accepted Invitation';
       case 'stage-transition':
         return 'Moving Forward';
       case 'session-start':
@@ -45,6 +47,7 @@ export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
   const getLineStyle = () => {
     switch (type) {
       case 'invitation-sent':
+      case 'invitation-accepted':
         return styles.invitationSentLine;
       case 'feel-heard':
         return styles.feelHeardLine;
@@ -56,6 +59,7 @@ export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
   const getTextStyle = () => {
     switch (type) {
       case 'invitation-sent':
+      case 'invitation-accepted':
         return styles.invitationSentText;
       case 'feel-heard':
         return styles.feelHeardText;

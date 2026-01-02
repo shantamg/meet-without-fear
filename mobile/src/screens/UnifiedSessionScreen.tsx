@@ -214,10 +214,13 @@ export function UnifiedSessionScreen({
   // Use messageConfirmedAt from API for reliable positioning across reloads
   const indicators = useMemo((): ChatIndicatorItem[] => {
     const items: ChatIndicatorItem[] = [];
-    // Show invitation sent indicator if invitation was confirmed
+
+    // For inviters: Show "Invitation Sent" when they confirmed the invitation message
     // Use the API timestamp for reliable positioning, or optimistic timestamp during confirmation
     const confirmedAt = invitation?.messageConfirmedAt ?? optimisticConfirmTimestamp;
-    if ((invitationConfirmed || isConfirmingInvitation) && confirmedAt) {
+    const isInviter = invitation?.isInviter ?? true; // Default to inviter for backwards compatibility
+
+    if (isInviter && (invitationConfirmed || isConfirmingInvitation) && confirmedAt) {
       items.push({
         type: 'indicator',
         indicatorType: 'invitation-sent',
@@ -225,6 +228,18 @@ export function UnifiedSessionScreen({
         timestamp: confirmedAt,
       });
     }
+
+    // For invitees: Show "Accepted Invitation" when they joined the session
+    // Use acceptedAt timestamp from the invitation for positioning
+    if (!isInviter && invitation?.acceptedAt) {
+      items.push({
+        type: 'indicator',
+        indicatorType: 'invitation-accepted',
+        id: 'invitation-accepted',
+        timestamp: invitation.acceptedAt,
+      });
+    }
+
     // Show "Fully Heard" indicator if user confirmed they feel heard (Stage 1 completion)
     // Milestones persist across stage transitions so this shows even after advancing to Stage 2+
     if (milestones?.feelHeardConfirmedAt) {
@@ -236,7 +251,7 @@ export function UnifiedSessionScreen({
       });
     }
     return items;
-  }, [invitationConfirmed, isConfirmingInvitation, invitation?.messageConfirmedAt, optimisticConfirmTimestamp, milestones?.feelHeardConfirmedAt]);
+  }, [invitationConfirmed, isConfirmingInvitation, invitation?.messageConfirmedAt, invitation?.acceptedAt, invitation?.isInviter, optimisticConfirmTimestamp, milestones?.feelHeardConfirmedAt]);
 
   // -------------------------------------------------------------------------
   // Effective Stage (accounts for compact signed but stage not yet updated)
