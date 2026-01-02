@@ -42,6 +42,7 @@ model User {
   strategyRankings    StrategyRanking[]
   exerciseCompletions EmotionalExerciseCompletion[]
   invitationsSent     Invitation[]                  @relation("InvitedBy")
+  innerWorkSessions   InnerWorkSession[]
 }
 
 model Relationship {
@@ -77,6 +78,7 @@ model Session {
   relationship   Relationship  @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
   relationshipId String
   status         SessionStatus @default(CREATED)
+  type           SessionType   @default(CONFLICT_RESOLUTION)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   resolvedAt     DateTime?
@@ -97,6 +99,12 @@ model Session {
 
   @@index([relationshipId])
   @@index([status])
+  @@index([type])
+}
+
+enum SessionType {
+  CONFLICT_RESOLUTION // Partner-based conflict resolution (4-stage process)
+  INNER_WORK // Solo self-reflection and pattern recognition
 }
 
 enum SessionStatus {
@@ -108,6 +116,48 @@ enum SessionStatus {
   RESOLVED // Process completed
   ABANDONED // Timeout or withdrawal
   ARCHIVED // User has archived this session
+}
+
+// ============================================================================
+// Inner Work Session (Solo Self-Reflection)
+// ============================================================================
+
+model InnerWorkSession {
+  id        String              @id @default(cuid())
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  title     String?             // Optional user-provided or AI-generated title
+  summary   String?             @db.Text // AI-generated summary of the session
+  theme     String?             // Detected theme (e.g., "anxiety", "relationship patterns")
+  status    InnerWorkStatus     @default(ACTIVE)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  // Messages in this inner work session
+  messages InnerWorkMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([status])
+}
+
+enum InnerWorkStatus {
+  ACTIVE    // Ongoing inner work session
+  COMPLETED // User marked as complete or AI determined closure
+  ARCHIVED  // User archived this session
+}
+
+model InnerWorkMessage {
+  id        String           @id @default(cuid())
+  session   InnerWorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  role      MessageRole
+  content   String           @db.Text
+  timestamp DateTime         @default(now())
+
+  // Embedding for semantic search and cross-session retrieval
+  embedding Unsupported("vector(1536)")?
+
+  @@index([sessionId, timestamp])
 }
 
 // ============================================================================

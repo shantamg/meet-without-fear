@@ -29,6 +29,12 @@ npm run test    # Tests across all workspaces
 - Commit and push often (small, focused commits)
 - Each commit should pass check and test
 
+### Database Migrations
+
+- **Never use `prisma db push`** - Always create proper migrations
+- Use `npx prisma migrate dev --name <description>` to create migrations
+- Migration files are tracked in git and applied consistently across environments
+
 ## Project Structure
 
 - `shared/` - Types, DTOs, contracts shared between backend and mobile
