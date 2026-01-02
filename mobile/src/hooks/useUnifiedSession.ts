@@ -7,6 +7,8 @@
 
 import { useMemo, useCallback, useReducer, useEffect, useRef, useState } from 'react';
 import { Stage, MessageRole, StrategyPhase } from '@meet-without-fear/shared';
+import { useToast } from '../contexts/ToastContext';
+import { ApiClientError } from '../lib/api';
 
 import {
   useSession,
@@ -332,6 +334,9 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const lastActivityTime = useRef<number>(Date.now());
   const prevMessageCountRef = useRef(0);
 
+  // Toast for error feedback
+  const { showError } = useToast();
+
   // Track live invitation message from AI responses (for refinement flow)
   // This captures the proposed message before it's saved to database
   const [liveInvitationMessage, setLiveInvitationMessage] = useState<string | null>(null);
@@ -365,7 +370,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // -------------------------------------------------------------------------
 
   // Stage 0: Compact
-  const { data: compactData } = useCompactStatus(sessionId);
+  const { data: compactData, isLoading: loadingCompact } = useCompactStatus(sessionId);
 
   // Invitation - fetch for invitation phase detection and "invitation sent" indicator
   // We enable this for all active session states to show "invitation sent" indicator
@@ -885,7 +890,14 @@ export function useUnifiedSession(sessionId: string | undefined) {
               setLiveInvitationMessage(data.invitationMessage);
             }
           },
-          onError: () => removeOptimisticMessage(sessionId, optimisticId),
+          onError: (error) => {
+            removeOptimisticMessage(sessionId, optimisticId);
+            // Show error message to user
+            const message = error instanceof ApiClientError
+              ? error.message
+              : 'Failed to send message. Please try again.';
+            showError('Message not sent', message);
+          },
         }
       );
     },
@@ -895,6 +907,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
       sendMessage,
       addOptimisticMessage,
       removeOptimisticMessage,
+      showError,
     ]
   );
 
@@ -1136,6 +1149,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
     // Stage-specific data
     compactData,
+    loadingCompact,
     empathyDraftData,
     partnerEmpathyData,
     needsData,

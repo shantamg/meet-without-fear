@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+import Ably from 'ably';
 import {
   ConnectionStatus,
   ConnectionState,
@@ -62,104 +63,11 @@ export interface RealtimeActions {
 }
 
 // ============================================================================
-// Mock Ably Client (for development without Ably SDK)
+// Ably Types
 // ============================================================================
 
-interface MockChannel {
-  subscribe: (callback: (message: { name: string; data: unknown }) => void) => void;
-  unsubscribe: () => void;
-  publish: (event: string, data: unknown) => Promise<void>;
-  presence: {
-    enter: (data?: unknown) => Promise<void>;
-    leave: () => Promise<void>;
-    subscribe: (event: string, callback: (member: { clientId: string; data?: unknown }) => void) => void;
-    unsubscribe: () => void;
-    get: () => Promise<{ clientId: string; data?: unknown }[]>;
-  };
-}
-
-interface MockAblyClient {
-  connection: {
-    state: string;
-    on: (callback: (stateChange: { current: string; reason?: { message: string } }) => void) => void;
-    off: () => void;
-    connect: () => void;
-    close: () => void;
-  };
-  channels: {
-    get: (channelName: string) => MockChannel;
-  };
-}
-
-function createMockAblyClient(clientId: string): MockAblyClient {
-  const subscribers = new Map<string, ((message: { name: string; data: unknown }) => void)[]>();
-  const presenceSubscribers = new Map<string, ((member: { clientId: string; data?: unknown }) => void)[]>();
-  const connectionCallbacks: ((stateChange: { current: string; reason?: { message: string } }) => void)[] = [];
-
-  return {
-    connection: {
-      state: 'connected',
-      on: (callback) => {
-        connectionCallbacks.push(callback);
-        // Simulate immediate connection
-        setTimeout(() => callback({ current: 'connected' }), 0);
-      },
-      off: () => {
-        connectionCallbacks.length = 0;
-      },
-      connect: () => {
-        connectionCallbacks.forEach(cb => cb({ current: 'connected' }));
-      },
-      close: () => {
-        connectionCallbacks.forEach(cb => cb({ current: 'closed' }));
-      },
-    },
-    channels: {
-      get: (channelName: string): MockChannel => ({
-        subscribe: (callback) => {
-          const channelSubs = subscribers.get(channelName) || [];
-          channelSubs.push(callback);
-          subscribers.set(channelName, channelSubs);
-        },
-        unsubscribe: () => {
-          subscribers.delete(channelName);
-        },
-        publish: async (event, data) => {
-          console.log(`[Mock Ably] Publishing to ${channelName}:`, event, data);
-          // Simulate event received by other clients
-          const channelSubs = subscribers.get(channelName) || [];
-          channelSubs.forEach(cb => cb({ name: event, data }));
-        },
-        presence: {
-          enter: async (data) => {
-            console.log(`[Mock Ably] Presence enter on ${channelName}:`, clientId, data);
-          },
-          leave: async () => {
-            console.log(`[Mock Ably] Presence leave on ${channelName}:`, clientId);
-          },
-          subscribe: (event, callback) => {
-            const key = `${channelName}:${event}`;
-            const subs = presenceSubscribers.get(key) || [];
-            subs.push(callback);
-            presenceSubscribers.set(key, subs);
-          },
-          unsubscribe: () => {
-            // Remove all presence subscribers for this channel
-            for (const key of presenceSubscribers.keys()) {
-              if (key.startsWith(channelName)) {
-                presenceSubscribers.delete(key);
-              }
-            }
-          },
-          get: async () => {
-            // Return mock presence data
-            return [{ clientId }];
-          },
-        },
-      }),
-    },
-  };
-}
+type AblyRealtimeChannel = Ably.RealtimeChannel;
+type AblyRealtimeClient = Ably.Realtime;
 
 // ============================================================================
 // Connection State Mapping
@@ -207,7 +115,7 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
   } = config;
 
   const { user } = useAuth();
-  useAblyToken(); // Token hook kept for side effects
+  const { data: tokenData, refetch: refetchToken } = useAblyToken();
 
   // State
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(
@@ -219,8 +127,8 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
   const [error, setError] = useState<string | undefined>();
 
   // Refs
-  const ablyRef = useRef<MockAblyClient | null>(null);
-  const channelRef = useRef<MockChannel | null>(null);
+  const ablyRef = useRef<AblyRealtimeClient | null>(null);
+  const channelRef = useRef<AblyRealtimeChannel | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -260,33 +168,49 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
       return;
     }
 
-    try {
-      // For now, use mock client - in production, would use real Ably SDK
-      // const ably = new Ably.Realtime({
-      //   authCallback: async (_, callback) => {
-      //     const { data } = await refetchToken();
-      //     if (data?.tokenRequest) {
-      //       callback(null, data.tokenRequest);
-      //     } else {
-      //       callback(new Error('Failed to get token'), null);
-      //     }
-      //   },
-      //   clientId: user.id,
-      // });
+    console.log('[Realtime] Connecting as user:', user.id, 'to session:', sessionId);
 
-      const ably = createMockAblyClient(user.id);
+    try {
+      // Create real Ably client with token-based authentication
+      const ably = new Ably.Realtime({
+        authCallback: async (_, callback) => {
+          console.log('[Realtime] Auth callback triggered, fetching token...');
+          try {
+            const { data } = await refetchToken();
+            if (data?.tokenRequest) {
+              console.log('[Realtime] Token received, clientId:', data.tokenRequest.clientId);
+              callback(null, data.tokenRequest);
+            } else {
+              console.error('[Realtime] No token in response');
+              callback('Failed to get token', null);
+            }
+          } catch (err) {
+            console.error('[Realtime] Token fetch error:', err);
+            callback(err instanceof Error ? err.message : 'Token fetch failed', null);
+          }
+        },
+        clientId: user.id,
+        autoConnect: true,
+      });
       ablyRef.current = ably;
 
       // Listen for connection state changes
-      ably.connection.on(handleConnectionStateChange);
+      ably.connection.on((stateChange) => {
+        console.log('[Realtime] Connection state:', stateChange.current, stateChange.reason?.message || '');
+        handleConnectionStateChange({
+          current: stateChange.current,
+          reason: stateChange.reason ? { message: stateChange.reason.message || 'Unknown error' } : undefined,
+        });
+      });
 
       // Subscribe to session channel
       const channelName = REALTIME_CHANNELS.session(sessionId);
+      console.log('[Realtime] Subscribing to channel:', channelName);
       const channel = ably.channels.get(channelName);
       channelRef.current = channel;
 
       // Subscribe to all events
-      channel.subscribe((message: { name: string; data: unknown }) => {
+      channel.subscribe((message: Ably.Message) => {
         const eventName = message.name as SessionEventType;
         const eventData = message.data as SessionEventData;
 
@@ -343,27 +267,33 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
 
       // Enter presence if enabled
       if (enablePresence) {
+        console.log('[Realtime] Entering presence...');
         await channel.presence.enter({ name: user.name });
+        console.log('[Realtime] Presence entered successfully');
 
         // Subscribe to presence events
-        channel.presence.subscribe('enter', (member) => {
+        channel.presence.subscribe('enter', (member: Ably.PresenceMessage) => {
+          console.log('[Realtime] Presence enter event:', member.clientId);
           if (member.clientId !== user.id) {
             setPartnerOnline(true);
-            onPresenceChange?.(member.clientId, PresenceStatus.ONLINE);
+            onPresenceChange?.(member.clientId || '', PresenceStatus.ONLINE);
           }
         });
 
-        channel.presence.subscribe('leave', (member) => {
+        channel.presence.subscribe('leave', (member: Ably.PresenceMessage) => {
+          console.log('[Realtime] Presence leave event:', member.clientId);
           if (member.clientId !== user.id) {
             setPartnerOnline(false);
             setPartnerTyping(false);
-            onPresenceChange?.(member.clientId, PresenceStatus.OFFLINE);
+            onPresenceChange?.(member.clientId || '', PresenceStatus.OFFLINE);
           }
         });
 
         // Get current presence
         const members = await channel.presence.get();
-        const partnerPresent = members.some((m) => m.clientId !== user.id);
+        console.log('[Realtime] Current presence members:', members.map(m => m.clientId));
+        const partnerPresent = members.some((m: Ably.PresenceMessage) => m.clientId !== user.id);
+        console.log('[Realtime] Partner present:', partnerPresent);
         setPartnerOnline(partnerPresent);
       }
     } catch (err) {
@@ -376,6 +306,7 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
     sessionId,
     enablePresence,
     handleConnectionStateChange,
+    refetchToken,
     onPresenceChange,
     onTypingChange,
     onSessionEvent,
@@ -386,13 +317,16 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
     if (channelRef.current) {
       channelRef.current.unsubscribe();
       channelRef.current.presence.unsubscribe();
-      channelRef.current.presence.leave();
+      // Leave presence (fire and forget)
+      channelRef.current.presence.leave().catch((err) => {
+        console.warn('[Realtime] Error leaving presence:', err);
+      });
       channelRef.current = null;
     }
 
     if (ablyRef.current) {
       ablyRef.current.connection.off();
-      ablyRef.current.connection.close();
+      ablyRef.current.close();
       ablyRef.current = null;
     }
 
@@ -461,19 +395,31 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
-        // App came to foreground - reconnect if needed
+        // App came to foreground - re-enter presence
+        if (channelRef.current && enablePresence && user?.id) {
+          console.log('[Realtime] App active - re-entering presence');
+          channelRef.current.presence.enter({ name: user.name }).catch((err) => {
+            console.warn('[Realtime] Failed to re-enter presence:', err);
+          });
+        }
+        // Reconnect if needed
         if (connectionStatus !== ConnectionStatus.CONNECTED) {
           reconnect();
         }
       } else if (nextAppState === 'background') {
-        // App went to background - could optionally disconnect
-        // For now, keep connection alive for push notifications
+        // App went to background - leave presence so partner sees offline immediately
+        if (channelRef.current && enablePresence) {
+          console.log('[Realtime] App background - leaving presence');
+          channelRef.current.presence.leave().catch((err) => {
+            console.warn('[Realtime] Failed to leave presence:', err);
+          });
+        }
       }
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
-  }, [connectionStatus, reconnect]);
+  }, [connectionStatus, reconnect, enablePresence, user]);
 
   // ============================================================================
   // Lifecycle

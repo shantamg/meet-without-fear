@@ -2,6 +2,62 @@
 // Jest setup file for React Native / Expo
 // Add mocks as needed
 
+// Mock WebSocket globally for Ably SDK
+global.WebSocket = class MockWebSocket {
+  constructor() {
+    this.readyState = 1; // OPEN
+  }
+  send() {}
+  close() {}
+  addEventListener() {}
+  removeEventListener() {}
+};
+
+// Mock Ably SDK for tests
+jest.mock('ably', () => {
+  const mockPresence = {
+    enter: jest.fn().mockResolvedValue(undefined),
+    leave: jest.fn().mockResolvedValue(undefined),
+    subscribe: jest.fn(),
+    unsubscribe: jest.fn(),
+    get: jest.fn().mockResolvedValue([]),
+  };
+
+  const mockChannel = {
+    subscribe: jest.fn(),
+    unsubscribe: jest.fn(),
+    publish: jest.fn().mockResolvedValue(undefined),
+    presence: mockPresence,
+  };
+
+  const mockConnection = {
+    state: 'connected',
+    on: jest.fn((callback) => {
+      // Simulate connected state
+      setTimeout(() => callback({ current: 'connected' }), 0);
+    }),
+    off: jest.fn(),
+  };
+
+  class MockRealtime {
+    constructor() {
+      this.connection = mockConnection;
+      this.channels = {
+        get: jest.fn(() => mockChannel),
+      };
+    }
+    close() {}
+  }
+
+  return {
+    __esModule: true,
+    default: {
+      Realtime: MockRealtime,
+    },
+    Realtime: MockRealtime,
+  };
+});
+
 // Mock the native module bridge before anything else
 jest.mock('react-native/Libraries/TurboModule/TurboModuleRegistry', () => ({
   getEnforcing: jest.fn((name) => {

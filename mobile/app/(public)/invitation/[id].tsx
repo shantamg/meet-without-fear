@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '@/src/hooks/useAuth';
 import { useInvitationDetails } from '@/src/hooks/useInvitation';
+import { useAcceptInvitation } from '@/src/hooks/useSessions';
 import { colors } from '@/src/theme';
 
 const PENDING_INVITATION_KEY = 'pending_invitation';
@@ -284,6 +285,15 @@ export default function InvitationScreen() {
     refetch,
   } = useInvitationDetails(id);
 
+  const acceptInvitation = useAcceptInvitation({
+    onSuccess: async (data) => {
+      // Clear the pending invitation since we've now accepted it
+      await AsyncStorage.removeItem(PENDING_INVITATION_KEY);
+      // Navigate to the session using the session ID from the response
+      router.replace(`/session/${data.session.id}`);
+    },
+  });
+
   useEffect(() => {
     const handleValidInvitation = async () => {
       // Wait for both auth and invitation data
@@ -301,14 +311,17 @@ export default function InvitationScreen() {
         return;
       }
 
-      // Store the invitation ID for later use
+      // Store the invitation ID for later use (in case user needs to log in)
       if (id) {
         await AsyncStorage.setItem(PENDING_INVITATION_KEY, id);
       }
 
       if (isAuthenticated) {
-        // User is authenticated, go directly to session
-        router.replace(`/session/${id}`);
+        // User is authenticated - accept the invitation
+        // This will set the session to ACTIVE and navigate on success
+        if (!acceptInvitation.isPending) {
+          acceptInvitation.mutate({ invitationId: id });
+        }
       } else {
         // User needs to login first
         router.replace('/(public)');
@@ -316,11 +329,21 @@ export default function InvitationScreen() {
     };
 
     handleValidInvitation();
-  }, [id, invitation, isAuthenticated, isAuthLoading, isInvitationLoading, error, isExpired]);
+  }, [id, invitation, isAuthenticated, isAuthLoading, isInvitationLoading, error, isExpired, acceptInvitation]);
 
-  // Show loading state while fetching data
-  if (isAuthLoading || isInvitationLoading) {
+  // Show loading state while fetching data or accepting invitation
+  if (isAuthLoading || isInvitationLoading || acceptInvitation.isPending) {
     return <LoadingState />;
+  }
+
+  // Show error if invitation acceptance failed
+  if (acceptInvitation.isError) {
+    return (
+      <ErrorState
+        message={acceptInvitation.error?.message || 'Failed to accept invitation'}
+        onRetry={() => acceptInvitation.mutate({ invitationId: id })}
+      />
+    );
   }
 
   // Show not found state

@@ -36,6 +36,7 @@ import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
+import { useRealtime } from '../hooks/useRealtime';
 import { createStyles } from '../theme/styled';
 
 // ============================================================================
@@ -81,6 +82,12 @@ export function UnifiedSessionScreen({
   const { user, updateUser } = useAuth();
   const { mutate: updateMood } = useUpdateMood();
 
+  // Real-time presence tracking
+  const { partnerOnline, connectionStatus } = useRealtime({
+    sessionId,
+    enablePresence: true,
+  });
+
   const {
     // Loading
     isLoading,
@@ -119,6 +126,7 @@ export function UnifiedSessionScreen({
 
     // Stage-specific data
     compactData,
+    loadingCompact,
     empathyDraftData,
     partnerEmpathyData,
     allNeedsConfirmed,
@@ -527,11 +535,11 @@ export function UnifiedSessionScreen({
   // The compact is shown as an overlay while the chat loads in the background.
   // This allows the initial AI message to be fetched while the user reviews the compact.
   // Shows regardless of invitation phase - compact must be signed first before any chat interaction.
-  // Important: Only show AFTER compactData has loaded to prevent flashing
+  // Important: Show overlay while compact status is loading OR if compact is not signed.
+  // This prevents users from interacting with chat before compact status is confirmed.
   const shouldShowCompactOverlay =
     currentStage === Stage.ONBOARDING &&
-    compactData !== undefined &&
-    compactData.mySigned === false;
+    (loadingCompact || !compactData?.mySigned);
 
   // -------------------------------------------------------------------------
   // Session Entry Mood Check - shown after compact signed, before chat
@@ -760,7 +768,8 @@ export function UnifiedSessionScreen({
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <SessionChatHeader
           partnerName={partnerName}
-          partnerOnline={false}
+          partnerOnline={partnerOnline}
+          connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status)}
           testID="session-chat-header"
         />
@@ -783,7 +792,8 @@ export function UnifiedSessionScreen({
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <SessionChatHeader
         partnerName={partnerName}
-        partnerOnline={false}
+        partnerOnline={partnerOnline}
+        connectionStatus={connectionStatus}
         briefStatus={getBriefStatus(session?.status)}
         hideOnlineStatus={isInvitationPhase}
         onBriefStatusPress={

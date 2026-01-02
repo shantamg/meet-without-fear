@@ -197,22 +197,23 @@ export const getAblyToken = asyncHandler(async (req: Request, res: Response): Pr
     return;
   }
 
-  // Get user's active session IDs for capability scoping
+  // Get user's session IDs for capability scoping
+  // Include all non-resolved sessions so users can connect during invitation phase too
   const sessions = await prisma.session.findMany({
     where: {
       relationship: {
         members: { some: { userId: user.id } },
       },
-      status: { in: ['ACTIVE', 'WAITING', 'PAUSED'] },
+      status: { in: ['CREATED', 'INVITED', 'ACTIVE', 'WAITING', 'PAUSED'] },
     },
     select: { id: true },
   });
 
   // Build capability object - scope to user's active sessions
+  // Note: 'presence' capability must be on the same channel as subscribe/publish
   const capability: Record<string, string[]> = {};
   for (const session of sessions) {
-    capability[`meetwithoutfear:session:${session.id}`] = ['subscribe', 'publish'];
-    capability[`meetwithoutfear:session:${session.id}:presence`] = ['presence'];
+    capability[`meetwithoutfear:session:${session.id}`] = ['subscribe', 'publish', 'presence'];
   }
 
   // If no active sessions, allow basic user channel
