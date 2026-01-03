@@ -36,12 +36,10 @@ export default function AppDownloadPage() {
             <ArrowLeft className="w-5 h-5" />
             <span>Back</span>
           </Link>
-          <Link href="/" className="flex items-center gap-3">
-            <Image src="/logo.svg" alt="Meet Without Fear" width={40} height={34} />
-            <div className="flex flex-col leading-tight">
-              <span className="text-xl font-bold text-white">meet</span>
-              <span className="text-sm text-brand-cyan">without fear</span>
-            </div>
+          <Link href="/" className="flex items-center gap-2">
+            <Image src="/logo.svg" alt="Meet Without Fear" width={48} height={40} />
+            <span className="hidden min-[430px]:inline text-xl font-bold text-white">meet</span>
+            <span className="hidden min-[430px]:inline text-xl font-bold text-brand-cyan">without fear</span>
           </Link>
         </div>
       </header>

@@ -11,17 +11,15 @@ export default function HomePage() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-lg border-b border-border">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            <Image src="/logo.svg" alt="Meet Without Fear" width={40} height={34} />
-            <div className="flex flex-col leading-tight">
-              <span className="text-xl font-bold text-white">meet</span>
-              <span className="text-sm text-brand-cyan">without fear</span>
-            </div>
+          <Link href="/" className="flex items-center gap-2">
+            <Image src="/logo.svg" alt="Meet Without Fear" width={48} height={40} />
+            <span className="hidden min-[430px]:inline text-xl font-bold text-white">meet</span>
+            <span className="hidden min-[430px]:inline text-xl font-bold text-brand-cyan">without fear</span>
           </Link>
           <nav className="flex items-center gap-4">
             <Link
               href="/app"
-              className="bg-brand-orange text-accent-foreground px-4 py-2 rounded-lg font-medium hover:bg-brand-orange/90 transition-colors"
+              className="hidden min-[430px]:inline-flex bg-brand-orange text-accent-foreground px-4 py-2 rounded-lg font-medium hover:bg-brand-orange/90 transition-colors"
             >
               Get Started
             </Link>
@@ -33,15 +31,15 @@ export default function HomePage() {
       <section className="py-20 md:py-32 relative overflow-hidden">
         <div className="container mx-auto px-6 text-center">
           {/* Large Logo */}
-          <div className="flex justify-center mb-8">
-            <Image src="/logo.svg" alt="Meet Without Fear Logo" width={160} height={134} priority />
+          <div className="flex justify-center -mb-2">
+            <Image src="/logo.svg" alt="Meet Without Fear Logo" width={220} height={185} priority />
           </div>
 
           {/* Brand Name with Swoosh */}
           <div className="mb-8">
-            <h1 className="text-5xl md:text-7xl font-bold text-white mb-2">meet</h1>
+            <h1 className="text-6xl md:text-7xl font-bold text-white mb-2">meet</h1>
             <div className="inline-block swoosh-underline">
-              <span className="text-2xl md:text-3xl text-muted-foreground">without fear</span>
+              <span className="text-3xl md:text-3xl text-muted-foreground">without fear</span>
             </div>
           </div>
 
@@ -127,7 +125,7 @@ export default function HomePage() {
           </p>
           <Link
             href="/app"
-            className="inline-flex items-center justify-center gap-2 bg-brand-orange text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-brand-orange/90 transition-all hover:scale-105"
+            className="inline-flex items-center justify-center gap-2 bg-brand-orange text-black px-8 py-4 rounded-xl font-semibold text-lg hover:bg-brand-orange/90 transition-all hover:scale-105"
           >
             Download the App
             <ArrowRight className="w-5 h-5" />
