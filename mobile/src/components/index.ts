@@ -89,3 +89,6 @@ export type {
 
 // Biometric authentication components
 export { BiometricPrompt } from './BiometricPrompt';
+
+// Branding
+export { Logo } from './Logo';

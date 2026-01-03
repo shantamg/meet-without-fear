@@ -17,7 +17,7 @@ const config: Config = {
         border: '#262626',
         muted: '#525252',
         'muted-foreground': '#a3a3a3',
-        accent: '#6366f1', // Indigo accent
+        accent: '#c2410c', // Orange accent
         'accent-foreground': '#ffffff',
         success: '#22c55e',
         warning: '#eab308',

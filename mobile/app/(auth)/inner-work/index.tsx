@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useInnerWorkSessions, useCreateInnerWorkSession } from '@/src/hooks';
 import { createStyles } from '@/src/theme/styled';
+import { colors } from '@/src/theme';
 import { InnerWorkSessionSummaryDTO } from '@meet-without-fear/shared';
 
 // Simple time ago formatter
@@ -89,7 +90,7 @@ export default function InnerWorkListScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ title: 'Inner Work' }} />
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#10a37f" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>

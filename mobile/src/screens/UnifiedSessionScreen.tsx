@@ -51,13 +51,16 @@ interface UnifiedSessionScreenProps {
 
 /**
  * Get brief status text for the header based on session status
+ * @param status - The session status
+ * @param isInviter - Whether the current user is the inviter (only inviter sees "invited" badge)
  */
-function getBriefStatus(status?: SessionStatus): string | undefined {
+function getBriefStatus(status?: SessionStatus, isInviter?: boolean): string | undefined {
   switch (status) {
     case SessionStatus.CREATED:
       return undefined; // No badge during invitation crafting phase
     case SessionStatus.INVITED:
-      return 'invited';
+      // Only show "invited" badge to the inviter, not the invitee
+      return isInviter ? 'invited' : undefined;
     case SessionStatus.ACTIVE:
       return undefined; // No badge needed when active
     case SessionStatus.PAUSED:
@@ -770,7 +773,7 @@ export function UnifiedSessionScreen({
           partnerName={partnerName}
           partnerOnline={partnerOnline}
           connectionStatus={connectionStatus}
-          briefStatus={getBriefStatus(session?.status)}
+          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
           testID="session-chat-header"
         />
         <StrategyRanking
@@ -794,10 +797,10 @@ export function UnifiedSessionScreen({
         partnerName={partnerName}
         partnerOnline={partnerOnline}
         connectionStatus={connectionStatus}
-        briefStatus={getBriefStatus(session?.status)}
+        briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
         hideOnlineStatus={isInvitationPhase}
         onBriefStatusPress={
-          session?.status === SessionStatus.INVITED
+          session?.status === SessionStatus.INVITED && invitation?.isInviter
             ? () => setShowRefineDrawer(true)
             : undefined
         }

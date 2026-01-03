@@ -11,8 +11,8 @@ export const colors = {
   textMuted: '#8e8e8e',
 
   // Accent
-  accent: '#10a37f',
-  accentHover: '#1a7f64',
+  accent: '#c2410c',
+  accentHover: '#9a3412',
 
   // Semantic
   userBg: '#2f2f2f',

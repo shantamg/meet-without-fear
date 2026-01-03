@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1284 2778" width="1284" height="2778">
+  <!-- Background -->
+  <rect width="1284" height="2778" fill="#111827"/>
+
+  <!-- Left circle - centered in canvas -->
+  <circle cx="567" cy="1389" r="180"
+          fill="none"
+          stroke="#c2410c"
+          stroke-width="36" />
+
+  <!-- Right circle -->
+  <circle cx="717" cy="1389" r="180"
+          fill="none"
+          stroke="#c2410c"
+          stroke-width="36" />
+</svg>

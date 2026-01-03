@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '@/theme';
+import { Logo } from '@/src/components';
 
 /**
  * Welcome screen - the first screen users see
@@ -26,6 +27,7 @@ export default function WelcomeScreen() {
       <View style={styles.content}>
         {/* Centered Branding Section */}
         <View style={styles.brandingSection}>
+          <Logo size={160} />
           <Text style={styles.logo}>Meet Without Fear</Text>
           <Text style={styles.tagline}>Work through conflict together</Text>
         </View>
@@ -73,6 +75,7 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: 'bold',
     color: colors.textPrimary,
+    marginTop: 24,
     marginBottom: 16,
     textAlign: 'center',
   },

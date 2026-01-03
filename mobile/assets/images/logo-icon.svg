@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="#111827"/>
+
+  <!-- Left circle - larger and centered -->
+  <circle cx="437" cy="512" r="230"
+          fill="none"
+          stroke="#c2410c"
+          stroke-width="46" />
+
+  <!-- Right circle -->
+  <circle cx="587" cy="512" r="230"
+          fill="none"
+          stroke="#c2410c"
+          stroke-width="46" />
+</svg>

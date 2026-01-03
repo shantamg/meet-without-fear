@@ -19,6 +19,7 @@ import { useSessions, useArchiveSession } from '@/src/hooks/useSessions';
 import type { SessionSummaryDTO } from '@meet-without-fear/shared';
 import { SessionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '@/src/theme/styled';
+import { colors } from '@/src/theme';
 
 /**
  * Sessions tab screen
@@ -175,7 +176,7 @@ export default function SessionsScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10a37f" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Loading your sessions…</Text>
         </View>
       ) : sessions.length === 0 ? (

@@ -14,6 +14,7 @@ import { MessageRole } from '@meet-without-fear/shared';
 import { ChatInterface, ChatMessage } from '../components/ChatInterface';
 import { useInnerWorkSession, useSendInnerWorkMessage } from '../hooks';
 import { createStyles } from '../theme/styled';
+import { colors } from '../theme';
 
 // ============================================================================
 // Types
@@ -74,7 +75,7 @@ export function InnerWorkScreen({
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#10a37f" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
@@ -112,7 +113,7 @@ export function InnerWorkScreen({
 
         <View style={styles.headerContent}>
           <View style={styles.headerTitleRow}>
-            <Heart color="#10a37f" size={16} />
+            <Heart color={colors.accent} size={16} />
             <Text style={styles.headerTitle} numberOfLines={1}>
               {title}
             </Text>

@@ -21,8 +21,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/hooks/useAuth';
 import { useBiometricAuth } from '@/src/hooks';
 import { useSessions } from '../../../src/hooks/useSessions';
-import { BiometricPrompt } from '../../../src/components/BiometricPrompt';
+import { BiometricPrompt, Logo } from '../../../src/components';
 import { createStyles } from '@/src/theme/styled';
+import { colors } from '@/src/theme';
 
 // ============================================================================
 // Component
@@ -90,7 +91,7 @@ export default function HomeScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#10a37f" />
+          <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
@@ -102,6 +103,7 @@ export default function HomeScreen() {
       <View style={styles.content}>
         {/* Main greeting section - centered */}
         <View style={styles.greetingSection}>
+          <Logo size={120} />
           <Text style={styles.greeting}>Hi {userName}</Text>
           <Text style={styles.question}>
             What can I help you work through today?
@@ -194,6 +196,7 @@ const useStyles = () =>
       fontSize: 36,
       fontWeight: '700',
       color: t.colors.textPrimary,
+      marginTop: t.spacing.xl,
       marginBottom: t.spacing.lg,
       textAlign: 'center',
     },
