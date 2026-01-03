@@ -5,37 +5,80 @@ import { ArrowRight, Shield, Heart, MessageCircle, Users } from "lucide-react";
 export default function HomePage() {
   return (
     <main className="min-h-screen">
+      {/* Gradient Top Bar */}
+      <div className="h-1 bg-gradient-top" />
+
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
+      <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-lg border-b border-border">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
-            <Image src="/logo.svg" alt="Meet Without Fear" width={48} height={28} />
-            <span className="text-2xl font-bold text-accent">Meet Without Fear</span>
+            <Image src="/logo.svg" alt="Meet Without Fear" width={40} height={34} />
+            <div className="flex flex-col leading-tight">
+              <span className="text-xl font-bold text-white">meet</span>
+              <span className="text-sm text-brand-cyan">without fear</span>
+            </div>
           </Link>
           <nav className="flex items-center gap-4">
             <Link
               href="/app"
-              className="text-muted-foreground hover:text-foreground transition-colors"
+              className="bg-brand-orange text-accent-foreground px-4 py-2 rounded-lg font-medium hover:bg-brand-orange/90 transition-colors"
             >
-              Get the App
+              Get Started
             </Link>
           </nav>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="py-20 md:py-32">
+      <section className="py-20 md:py-32 relative overflow-hidden">
         <div className="container mx-auto px-6 text-center">
-          <h1 className="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-accent to-purple-400 bg-clip-text text-transparent">
-            Meet Without Fear
-          </h1>
+          {/* Large Logo */}
+          <div className="flex justify-center mb-8">
+            <Image src="/logo.svg" alt="Meet Without Fear Logo" width={160} height={134} priority />
+          </div>
+
+          {/* Brand Name with Swoosh */}
+          <div className="mb-8">
+            <h1 className="text-5xl md:text-7xl font-bold text-white mb-2">meet</h1>
+            <div className="inline-block swoosh-underline">
+              <span className="text-2xl md:text-3xl text-muted-foreground">without fear</span>
+            </div>
+          </div>
+
+          {/* Transformation Pairs */}
+          <div className="mb-12">
+            <div className="flex flex-wrap justify-center items-center gap-6 md:gap-10 text-sm md:text-base">
+              <span className="flex items-center gap-2">
+                <span className="text-muted-foreground">Heated</span>
+                <span className="text-brand-cyan">→</span>
+                <span className="text-foreground font-medium">Heard</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="text-muted-foreground">Enemy</span>
+                <span className="text-brand-cyan">→</span>
+                <span className="text-foreground font-medium">Human</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="text-muted-foreground">Blame</span>
+                <span className="text-brand-cyan">→</span>
+                <span className="text-foreground font-medium">Needs</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="text-muted-foreground">Opposition</span>
+                <span className="text-brand-cyan">→</span>
+                <span className="text-foreground font-medium">Win-Win</span>
+              </span>
+            </div>
+          </div>
+
           <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto mb-10">
             Transform difficult conversations into opportunities for connection and understanding.
           </p>
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/app"
-              className="inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-accent/90 transition-all hover:scale-105"
+              className="inline-flex items-center justify-center gap-2 bg-brand-orange text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-brand-orange/90 transition-all hover:scale-105"
             >
               Get Started
               <ArrowRight className="w-5 h-5" />
@@ -52,22 +95,22 @@ export default function HomePage() {
           </h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             <FeatureCard
-              icon={<Heart className="w-8 h-8 text-accent" />}
+              icon={<Heart className="w-8 h-8 text-brand-orange" />}
               title="Build Connection"
               description="Strengthen your relationships through guided, meaningful conversations."
             />
             <FeatureCard
-              icon={<MessageCircle className="w-8 h-8 text-accent" />}
+              icon={<MessageCircle className="w-8 h-8 text-brand-blue" />}
               title="AI-Guided Support"
               description="Receive gentle, personalized guidance to navigate difficult topics."
             />
             <FeatureCard
-              icon={<Shield className="w-8 h-8 text-accent" />}
+              icon={<Shield className="w-8 h-8 text-brand-navy" />}
               title="Safe Space"
               description="Your conversations are private and secure, creating a judgment-free zone."
             />
             <FeatureCard
-              icon={<Users className="w-8 h-8 text-accent" />}
+              icon={<Users className="w-8 h-8 text-brand-orange" />}
               title="Together"
               description="Work through challenges as partners, not adversaries."
             />
@@ -84,7 +127,7 @@ export default function HomePage() {
           </p>
           <Link
             href="/app"
-            className="inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-accent/90 transition-all hover:scale-105"
+            className="inline-flex items-center justify-center gap-2 bg-brand-orange text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-brand-orange/90 transition-all hover:scale-105"
           >
             Download the App
             <ArrowRight className="w-5 h-5" />

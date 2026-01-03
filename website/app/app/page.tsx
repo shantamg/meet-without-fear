@@ -26,16 +26,22 @@ export default function AppDownloadPage() {
 
   return (
     <main className="min-h-screen bg-background">
+      {/* Gradient Top Bar */}
+      <div className="h-1 bg-gradient-top" />
+
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
+      <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-lg border-b border-border">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-5 h-5" />
             <span>Back</span>
           </Link>
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.svg" alt="Meet Without Fear" width={40} height={24} />
-            <span className="text-xl font-bold text-accent">Meet Without Fear</span>
+          <Link href="/" className="flex items-center gap-3">
+            <Image src="/logo.svg" alt="Meet Without Fear" width={40} height={34} />
+            <div className="flex flex-col leading-tight">
+              <span className="text-xl font-bold text-white">meet</span>
+              <span className="text-sm text-brand-cyan">without fear</span>
+            </div>
           </Link>
         </div>
       </header>
@@ -56,8 +62,8 @@ export default function AppDownloadPage() {
               onClick={() => setSelectedPlatform("ios")}
               className={`flex items-center gap-3 px-6 py-4 rounded-xl font-semibold transition-all ${
                 selectedPlatform === "ios"
-                  ? "bg-accent text-accent-foreground"
-                  : "bg-card border border-border text-foreground hover:border-accent/50"
+                  ? "bg-brand-blue text-white"
+                  : "bg-card border border-border text-foreground hover:border-brand-blue/50"
               }`}
             >
               <Apple className="w-6 h-6" />
@@ -67,8 +73,8 @@ export default function AppDownloadPage() {
               onClick={() => setSelectedPlatform("android")}
               className={`flex items-center gap-3 px-6 py-4 rounded-xl font-semibold transition-all ${
                 selectedPlatform === "android"
-                  ? "bg-accent text-accent-foreground"
-                  : "bg-card border border-border text-foreground hover:border-accent/50"
+                  ? "bg-brand-blue text-white"
+                  : "bg-card border border-border text-foreground hover:border-brand-blue/50"
               }`}
             >
               <Smartphone className="w-6 h-6" />
@@ -98,7 +104,7 @@ export default function AppDownloadPage() {
                     href={testFlightUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-accent hover:underline text-sm"
+                    className="text-brand-blue hover:underline text-sm"
                   >
                     Or open TestFlight link directly →
                   </a>
@@ -109,7 +115,7 @@ export default function AppDownloadPage() {
                   href={testFlightUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="md:hidden inline-flex items-center justify-center gap-3 bg-accent text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-accent/90 transition-all"
+                  className="md:hidden inline-flex items-center justify-center gap-3 bg-brand-orange text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-brand-orange/90 transition-all"
                 >
                   <Apple className="w-6 h-6" />
                   Download from TestFlight
@@ -133,7 +139,7 @@ export default function AppDownloadPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   download
-                  className="md:hidden inline-flex items-center justify-center gap-3 bg-accent text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-accent/90 transition-all"
+                  className="md:hidden inline-flex items-center justify-center gap-3 bg-brand-orange text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-brand-orange/90 transition-all"
                 >
                   <Smartphone className="w-6 h-6" />
                   Download APK
@@ -141,7 +147,7 @@ export default function AppDownloadPage() {
 
                 {/* Android Instructions for mobile only */}
                 <div className="md:hidden bg-card border border-border rounded-2xl p-6 text-left max-w-md mx-auto">
-                  <h3 className="text-accent font-semibold mb-4">Installation Instructions</h3>
+                  <h3 className="text-brand-orange font-semibold mb-4">Installation Instructions</h3>
                   <div className="space-y-3 text-sm text-muted-foreground">
                     <p>
                       <strong className="text-foreground">Android 8.0 and higher:</strong>{" "}
@@ -157,7 +163,7 @@ export default function AppDownloadPage() {
 
                 {/* Message for desktop only */}
                 <div className="hidden md:inline-block bg-card border border-border rounded-2xl p-8">
-                  <Smartphone className="w-16 h-16 text-accent mx-auto mb-4" />
+                  <Smartphone className="w-16 h-16 text-brand-orange mx-auto mb-4" />
                   <p className="text-muted-foreground text-sm max-w-md">
                     Android download is available on your Android device.
                     Visit this page on your phone to download the APK.

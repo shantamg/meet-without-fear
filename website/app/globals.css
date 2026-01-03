@@ -9,8 +9,8 @@ html {
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: #0a0a0a;
-  color: #e5e5e5;
+  background-color: #0f172a;
+  color: #f1f5f9;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -22,21 +22,45 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #171717;
+  background: #1e293b;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #404040;
+  background: #334155;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #525252;
+  background: #475569;
 }
 
 /* Focus styles for accessibility */
 :focus-visible {
-  outline: 2px solid #6366f1;
+  outline: 2px solid #5ba4d9;
   outline-offset: 2px;
+}
+
+/* Brand gradient text */
+.gradient-text {
+  background: linear-gradient(90deg, #5ba4d9 0%, #f5a623 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Swoosh underline effect */
+.swoosh-underline {
+  position: relative;
+}
+
+.swoosh-underline::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #2d4a7c 0%, #5ba4d9 40%, #f5a623 100%);
+  border-radius: 2px;
 }
 
