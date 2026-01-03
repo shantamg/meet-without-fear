@@ -8,6 +8,7 @@ High-level documentation for the Meet Without Fear AI-Facilitated Conflict Resol
 - **[User Journey](./user-journey.md)** - Complete flow through the system with success/failure paths
 - **[Inner Work](./inner-work.md)** - Personal growth mode for therapeutic insights and skill building
 - **[Information Architecture](./information-architecture.md)** - Navigation hierarchy and screen relationships
+- **[Product Philosophy](./product-philosophy.md)** - Core value proposition, business model, and strategic positioning
 
 ---
 
