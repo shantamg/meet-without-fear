@@ -94,23 +94,23 @@ export default function HomePage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             <FeatureCard
               icon={<Heart className="w-8 h-8 text-brand-orange" />}
-              title="Build Connection"
-              description="Strengthen your relationships through guided, meaningful conversations."
+              title="Feel Heard"
+              description="Speak to the system, not directly to each other. Your words are reflected back clearly and calmly."
             />
             <FeatureCard
-              icon={<MessageCircle className="w-8 h-8 text-brand-blue" />}
-              title="AI-Guided Support"
-              description="Receive gentle, personalized guidance to navigate difficult topics."
+              icon={<Shield className="w-8 h-8 text-brand-blue" />}
+              title="Neutral Ground"
+              description="The AI doesn't take sides. It helps both people feel understood without judgment."
             />
             <FeatureCard
-              icon={<Shield className="w-8 h-8 text-brand-navy" />}
-              title="Safe Space"
-              description="Your conversations are private and secure, creating a judgment-free zone."
+              icon={<MessageCircle className="w-8 h-8 text-brand-navy" />}
+              title="Your Memory"
+              description="Your conversation history stays with you, not locked to any AI provider. Switch models without losing continuity."
             />
             <FeatureCard
               icon={<Users className="w-8 h-8 text-brand-orange" />}
-              title="Together"
-              description="Work through challenges as partners, not adversaries."
+              title="Shared Understanding"
+              description="Move past blame and defensiveness. Actually understand each other and find common ground."
             />
           </div>
         </div>
