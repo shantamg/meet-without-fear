@@ -13,6 +13,10 @@ export const metadata: Metadata = {
   description: "Transform difficult conversations into opportunities for connection and understanding.",
   keywords: ["communication", "relationships", "conflict resolution", "therapy", "couples"],
   authors: [{ name: "Meet Without Fear" }],
+  icons: {
+    icon: "/favicon.png",
+    apple: "/favicon.png",
+  },
   openGraph: {
     title: "Meet Without Fear",
     description: "Transform difficult conversations into opportunities for connection and understanding.",
