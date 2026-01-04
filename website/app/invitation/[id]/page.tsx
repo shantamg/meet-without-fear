@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useAuth, useUser, SignIn } from "@clerk/nextjs";
+import { useAuth, useUser, useClerk, SignIn } from "@clerk/nextjs";
 import Link from "next/link";
 import {
   Loader2,
@@ -21,6 +21,7 @@ type InvitationState =
   | "expired"
   | "accepted"
   | "declined"
+  | "signing_out"
   | "needs_auth"
   | "accepting"
   | "success"
@@ -33,23 +34,70 @@ export default function InvitationPage() {
 
   const { isSignedIn, isLoaded: isAuthLoaded, getToken } = useAuth();
   const { user } = useUser();
+  const { signOut } = useClerk();
 
   const [state, setState] = useState<InvitationState>("loading");
   const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hasSignedOut, setHasSignedOut] = useState(false);
 
-  // Fetch invitation details
+  // Sign out any existing session when visiting invitation page
+  // This ensures invitees start with a fresh auth state
+  useEffect(() => {
+    async function ensureSignedOut() {
+      console.log("[Invitation] ensureSignedOut check:", { isAuthLoaded, isSignedIn, hasSignedOut });
+
+      if (!isAuthLoaded) {
+        console.log("[Invitation] Waiting for Clerk to load...");
+        return;
+      }
+      if (hasSignedOut) {
+        console.log("[Invitation] Already handled sign-out, skipping");
+        return;
+      }
+
+      if (isSignedIn) {
+        console.log("[Invitation] User is signed in, signing out for fresh auth...");
+        setState("signing_out");
+        try {
+          await signOut();
+          console.log("[Invitation] Sign out successful");
+        } catch (err) {
+          console.error("[Invitation] Error signing out:", err);
+        }
+      } else {
+        console.log("[Invitation] No existing session, proceeding");
+      }
+      setHasSignedOut(true);
+    }
+
+    ensureSignedOut();
+  }, [isAuthLoaded, isSignedIn, signOut, hasSignedOut]);
+
+  // Fetch invitation details (only after we've handled sign-out)
   useEffect(() => {
     async function fetchInvitation() {
+      console.log("[Invitation] fetchInvitation check:", { invitationId, hasSignedOut });
+
       if (!invitationId) {
+        console.log("[Invitation] No invitation ID, marking not_found");
         setState("not_found");
         return;
       }
 
+      // Wait for sign-out logic to complete
+      if (!hasSignedOut) {
+        console.log("[Invitation] Waiting for sign-out to complete before fetching...");
+        return;
+      }
+
+      console.log("[Invitation] Fetching invitation details...");
       try {
         const data = await getInvitation(invitationId);
+        console.log("[Invitation] API response:", data);
 
         if (!data) {
+          console.log("[Invitation] No invitation data, marking not_found");
           setState("not_found");
           return;
         }
@@ -58,51 +106,79 @@ export default function InvitationPage() {
 
         // Check invitation status
         if (data.status === "EXPIRED") {
+          console.log("[Invitation] Status: EXPIRED");
           setState("expired");
         } else if (data.status === "ACCEPTED") {
+          console.log("[Invitation] Status: ACCEPTED");
           setState("accepted");
         } else if (data.status === "DECLINED") {
+          console.log("[Invitation] Status: DECLINED");
           setState("declined");
         } else {
-          // Invitation is pending - check auth status
+          console.log("[Invitation] Status: PENDING, needs auth");
           setState("needs_auth");
         }
       } catch (err) {
-        console.error("Error fetching invitation:", err);
+        console.error("[Invitation] Error fetching invitation:", err);
         setError("Failed to load invitation. Please try again.");
         setState("error");
       }
     }
 
     fetchInvitation();
-  }, [invitationId]);
+  }, [invitationId, hasSignedOut]);
 
   // Handle accepting invitation after auth
   useEffect(() => {
     async function handleAcceptInvitation() {
-      if (!isAuthLoaded || !isSignedIn || !invitation) return;
-      if (state !== "needs_auth") return;
+      console.log("[Invitation] handleAcceptInvitation check:", {
+        isAuthLoaded,
+        isSignedIn,
+        hasInvitation: !!invitation,
+        state,
+      });
 
+      if (!isAuthLoaded || !isSignedIn || !invitation) {
+        console.log("[Invitation] Not ready to accept - missing:", {
+          needsAuthLoaded: !isAuthLoaded,
+          needsSignIn: !isSignedIn,
+          needsInvitation: !invitation,
+        });
+        return;
+      }
+      if (state !== "needs_auth") {
+        console.log("[Invitation] State is not needs_auth, skipping accept");
+        return;
+      }
+
+      console.log("[Invitation] User signed in, accepting invitation...");
       setState("accepting");
 
       try {
         const token = await getToken();
+        console.log("[Invitation] Got token:", token ? "yes" : "no");
+
         if (!token) {
+          console.error("[Invitation] No token received");
           setError("Authentication failed. Please try again.");
           setState("error");
           return;
         }
 
+        console.log("[Invitation] Calling accept API...");
         const result = await acceptInvitation(invitationId, token);
+        console.log("[Invitation] Accept result:", result);
 
         if (result.success) {
+          console.log("[Invitation] Accept successful!");
           setState("success");
         } else {
+          console.error("[Invitation] Accept failed:", result.error);
           setError(result.error || "Failed to accept invitation");
           setState("error");
         }
       } catch (err) {
-        console.error("Error accepting invitation:", err);
+        console.error("[Invitation] Error accepting invitation:", err);
         setError("Failed to accept invitation. Please try again.");
         setState("error");
       }
@@ -112,7 +188,9 @@ export default function InvitationPage() {
   }, [isAuthLoaded, isSignedIn, invitation, state, invitationId, getToken]);
 
   // Render based on state
-  if (state === "loading") {
+  console.log("[Invitation] Rendering with state:", state, { isSignedIn, isAuthLoaded });
+
+  if (state === "loading" || state === "signing_out") {
     return <LoadingState />;
   }
 
@@ -132,7 +210,9 @@ export default function InvitationPage() {
     return <DeclinedState inviterName={invitation?.invitedBy.name || null} />;
   }
 
-  if (state === "needs_auth" && !isSignedIn && isAuthLoaded) {
+  // Show auth UI when invitation needs auth - don't require isAuthLoaded
+  // because Clerk's SignIn component handles its own loading state
+  if (state === "needs_auth" && !isSignedIn) {
     return (
       <AuthRequiredState
         invitation={invitation}
