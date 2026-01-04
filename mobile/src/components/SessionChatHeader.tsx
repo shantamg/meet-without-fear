@@ -2,7 +2,7 @@
  * SessionChatHeader Component
  *
  * A minimal, chat-centric header for session screens.
- * Layout: nickname with online/offline indicator on left, brief status on right.
+ * Layout: [Back Arrow] - [Centered Partner Name + Status] - [Inner Thoughts Button + Brief Status]
  * No spinners - just clean, simple status display.
  * Designed to feel like a messaging app rather than a dashboard.
  */
@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
+import { ArrowLeft, Layers } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -35,7 +36,13 @@ export interface SessionChatHeaderProps {
   briefStatus?: string;
   /** Hide the online/offline status row (e.g., during invitation crafting before partner exists) */
   hideOnlineStatus?: boolean;
-  /** Optional callback when header is pressed (e.g., to show session info) */
+  /** Callback when back button is pressed */
+  onBackPress?: () => void;
+  /** Callback when Inner Thoughts button is pressed */
+  onInnerThoughtsPress?: () => void;
+  /** Show the Inner Thoughts button */
+  showInnerThoughtsButton?: boolean;
+  /** Optional callback when header center is pressed (e.g., to show session info) */
   onPress?: () => void;
   /** Optional callback when brief status is pressed (e.g., to show invitation options) */
   onBriefStatusPress?: () => void;
@@ -83,6 +90,9 @@ export function SessionChatHeader({
   connectionStatus = ConnectionStatus.CONNECTED,
   briefStatus,
   hideOnlineStatus = false,
+  onBackPress,
+  onInnerThoughtsPress,
+  showInnerThoughtsButton = false,
   onPress,
   onBriefStatusPress,
   style,
@@ -106,50 +116,94 @@ export function SessionChatHeader({
 
   const displayName = partnerName || 'Meet Without Fear';
 
-  const content = (
+  // Center content (partner name + status)
+  const centerContent = (
+    <View style={styles.centerSection}>
+      <Text
+        style={styles.partnerName}
+        numberOfLines={1}
+        testID={`${testID}-partner-name`}
+      >
+        {displayName}
+      </Text>
+      {!hideOnlineStatus && (
+        <View style={styles.statusRow}>
+          <StatusDot isOnline={isOnline} />
+          <Text
+            style={[styles.onlineText, isOnline && styles.onlineTextActive]}
+            testID={`${testID}-online-status`}
+          >
+            {getOnlineText()}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+
+  return (
     <View style={[styles.container, style]} testID={testID}>
-      {/* Left section: nickname with online/offline indicator below */}
+      {/* Left section: Back button */}
       <View style={styles.leftSection}>
-        <Text
-          style={styles.partnerName}
-          numberOfLines={1}
-          testID={`${testID}-partner-name`}
-        >
-          {displayName}
-        </Text>
-        {!hideOnlineStatus && (
-          <View style={styles.statusRow}>
-            <StatusDot isOnline={isOnline} />
-            <Text
-              style={[styles.onlineText, isOnline && styles.onlineTextActive]}
-              testID={`${testID}-online-status`}
-            >
-              {getOnlineText()}
-            </Text>
-          </View>
+        {onBackPress ? (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={onBackPress}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            testID={`${testID}-back-button`}
+          >
+            <ArrowLeft color={colors.textPrimary} size={24} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.backButtonSpacer} />
         )}
       </View>
 
-      {/* Right section: brief status (invited, active, etc.) */}
-      {briefStatus && (
-        onBriefStatusPress ? (
+      {/* Center section: Partner name + status (optionally tappable) */}
+      {onPress ? (
+        <TouchableOpacity
+          style={styles.centerTouchable}
+          onPress={onPress}
+          activeOpacity={0.7}
+          testID={`${testID}-center-touchable`}
+        >
+          {centerContent}
+        </TouchableOpacity>
+      ) : (
+        centerContent
+      )}
+
+      {/* Right section: Inner Thoughts button + Brief status */}
+      <View style={styles.rightSection}>
+        {showInnerThoughtsButton && onInnerThoughtsPress && (
           <TouchableOpacity
-            style={styles.briefStatusPill}
-            onPress={onBriefStatusPress}
-            activeOpacity={0.6}
-            testID={`${testID}-brief-status-touchable`}
+            style={styles.innerThoughtsButton}
+            onPress={onInnerThoughtsPress}
+            accessibilityRole="button"
+            accessibilityLabel="Open Inner Thoughts"
+            testID={`${testID}-inner-thoughts-button`}
           >
-            <Text
-              style={styles.briefStatusText}
-              numberOfLines={1}
-              testID={`${testID}-brief-status`}
-            >
-              {briefStatus}
-            </Text>
-            <Text style={styles.briefStatusChevron}>›</Text>
+            <Layers color={colors.textSecondary} size={20} />
           </TouchableOpacity>
-        ) : (
-          <View style={styles.rightSection}>
+        )}
+        {briefStatus && (
+          onBriefStatusPress ? (
+            <TouchableOpacity
+              style={styles.briefStatusPill}
+              onPress={onBriefStatusPress}
+              activeOpacity={0.6}
+              testID={`${testID}-brief-status-touchable`}
+            >
+              <Text
+                style={styles.briefStatusText}
+                numberOfLines={1}
+                testID={`${testID}-brief-status`}
+              >
+                {briefStatus}
+              </Text>
+              <Text style={styles.briefStatusChevron}>›</Text>
+            </TouchableOpacity>
+          ) : (
             <Text
               style={styles.briefStatus}
               numberOfLines={1}
@@ -157,26 +211,15 @@ export function SessionChatHeader({
             >
               {briefStatus}
             </Text>
-          </View>
-        )
-      )}
+          )
+        )}
+        {/* Spacer if no right content to balance the layout */}
+        {!showInnerThoughtsButton && !briefStatus && (
+          <View style={styles.rightSpacer} />
+        )}
+      </View>
     </View>
   );
-
-  // Wrap in TouchableOpacity if onPress is provided
-  if (onPress) {
-    return (
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.7}
-        testID={`${testID}-touchable`}
-      >
-        {content}
-      </TouchableOpacity>
-    );
-  }
-
-  return content;
 }
 
 // ============================================================================
@@ -188,24 +231,51 @@ const useStyles = () =>
     container: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: t.spacing.md,
+      paddingHorizontal: t.spacing.sm,
       paddingVertical: t.spacing.sm,
       backgroundColor: t.colors.bgSecondary,
       borderBottomWidth: 1,
       borderBottomColor: t.colors.border,
-      minHeight: 48,
+      minHeight: 56,
     },
     leftSection: {
+      width: 44,
+      alignItems: 'flex-start',
+    },
+    backButton: {
+      padding: t.spacing.xs,
+    },
+    backButtonSpacer: {
+      width: 32,
+    },
+    centerSection: {
       flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    centerTouchable: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     rightSection: {
-      marginLeft: t.spacing.sm,
+      minWidth: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: t.spacing.xs,
+    },
+    rightSpacer: {
+      width: 32,
+    },
+    innerThoughtsButton: {
+      padding: t.spacing.xs,
     },
     partnerName: {
       fontSize: t.typography.fontSize.lg,
       fontWeight: '600',
       color: t.colors.textPrimary,
+      textAlign: 'center',
     },
     statusRow: {
       flexDirection: 'row',

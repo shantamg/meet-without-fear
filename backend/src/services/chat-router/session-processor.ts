@@ -41,6 +41,10 @@ export interface SessionMessageResult {
   offerFeelHeardCheck?: boolean;
   /** Stage 0: Proposed invitation message from AI */
   invitationMessage?: string | null;
+  /** Stage 2: AI determined user is ready to share their empathy attempt */
+  offerReadyToShare?: boolean;
+  /** Stage 2: AI's proposed empathy statement summarizing user's understanding of partner */
+  proposedEmpathyStatement?: string | null;
 }
 
 /**
@@ -242,6 +246,37 @@ export async function processSessionMessage(
     console.warn('[SessionProcessor] Failed to embed AI message:', err)
   );
 
+  // Stage 2: If AI is offering ready-to-share, auto-save the empathy draft
+  // Save with readyToShare: false so user sees low-profile confirmation prompt first
+  // User must explicitly confirm to see the full preview card
+  if (currentStage === 2 && orchestratorResult.offerReadyToShare && orchestratorResult.proposedEmpathyStatement) {
+    try {
+      await prisma.empathyDraft.upsert({
+        where: {
+          sessionId_userId: {
+            sessionId,
+            userId,
+          },
+        },
+        create: {
+          sessionId,
+          userId,
+          content: orchestratorResult.proposedEmpathyStatement,
+          readyToShare: false, // User must confirm before seeing full preview
+          version: 1,
+        },
+        update: {
+          content: orchestratorResult.proposedEmpathyStatement,
+          // Don't change readyToShare if draft already exists - user may have confirmed
+          version: { increment: 1 },
+        },
+      });
+      console.log(`[SessionProcessor] Stage 2: Auto-saved empathy draft for user ${userId}`);
+    } catch (err) {
+      console.error('[SessionProcessor] Failed to auto-save empathy draft:', err);
+    }
+  }
+
   return {
     userMessage: {
       id: userMessage.id,
@@ -263,5 +298,7 @@ export async function processSessionMessage(
     },
     offerFeelHeardCheck: orchestratorResult.offerFeelHeardCheck,
     invitationMessage: orchestratorResult.invitationMessage,
+    offerReadyToShare: orchestratorResult.offerReadyToShare,
+    proposedEmpathyStatement: orchestratorResult.proposedEmpathyStatement,
   };
 }

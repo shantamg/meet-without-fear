@@ -377,20 +377,6 @@ export function UnifiedSessionScreen({
             </View>
           );
 
-        case 'hint-card':
-          return (
-            <View style={styles.hintCard} key={card.id}>
-              <Text style={styles.hintLabel}>Hint</Text>
-              <Text style={styles.hintText}>{card.props.hint as string}</Text>
-              <TouchableOpacity
-                style={styles.dismissHintButton}
-                onPress={() => dismissCard(card.id)}
-              >
-                <Text style={styles.dismissHintText}>Got it</Text>
-              </TouchableOpacity>
-            </View>
-          );
-
         case 'ready-to-share-confirmation':
           return (
             <View style={styles.inlineCard} key={card.id}>
@@ -886,6 +872,7 @@ export function UnifiedSessionScreen({
           hasMore={hasMoreMessages}
           isLoadingMore={isFetchingMoreMessages}
           renderAboveInput={
+            // Show invitation panel during invitation phase
             (isInvitationPhase || isRefiningInvitation) && invitationMessage && invitationUrl
               ? () => (
                   <Animated.View
@@ -932,17 +919,31 @@ export function UnifiedSessionScreen({
                     </TouchableOpacity>
                   </Animated.View>
                 )
+              // Show waiting banner when waiting for partner's empathy
+              : waitingStatus === 'empathy-pending'
+              ? () => (
+                  <View style={styles.waitingBanner}>
+                    <Text style={styles.waitingBannerText}>
+                      Waiting for {partnerName || 'your partner'} to share their empathy statement.
+                    </Text>
+                    {onNavigateToInnerThoughts && (
+                      <TouchableOpacity
+                        style={styles.innerThoughtsLink}
+                        onPress={() => onNavigateToInnerThoughts(sessionId)}
+                      >
+                        <Text style={styles.innerThoughtsLinkText}>
+                          Continue with Inner Thoughts while you wait →
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )
               : undefined
           }
+          hideInput={waitingStatus === 'empathy-pending'}
         />
 
-        {waitingStatus === 'empathy-pending' && (
-          <View style={styles.waitingBanner}>
-            <Text style={styles.waitingBannerText}>
-              Waiting for {partnerName || 'your partner'} to share their empathy statement before we continue.
-            </Text>
-          </View>
-        )}
+        {/* Waiting banner removed - now handled in renderAboveInput */}
 
         {/* Render inline cards at the end of the chat */}
         {inlineCards.map((card) => renderInlineCard(card))}
@@ -1209,18 +1210,27 @@ const useStyles = () =>
       color: t.colors.textPrimary,
     },
     waitingBanner: {
-      marginHorizontal: t.spacing.lg,
-      marginBottom: t.spacing.sm,
-      padding: t.spacing.md,
+      paddingHorizontal: t.spacing.lg,
+      paddingVertical: t.spacing.md,
       backgroundColor: t.colors.bgSecondary,
-      borderRadius: t.radius.lg,
-      borderWidth: 1,
-      borderColor: t.colors.border,
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
     },
     waitingBannerText: {
       color: t.colors.textSecondary,
       fontSize: t.typography.fontSize.sm,
       lineHeight: 20,
+      textAlign: 'center',
+    },
+    innerThoughtsLink: {
+      marginTop: t.spacing.sm,
+      paddingVertical: t.spacing.xs,
+      alignItems: 'center',
+    },
+    innerThoughtsLinkText: {
+      color: t.colors.brandBlue,
+      fontSize: t.typography.fontSize.sm,
+      fontWeight: '600',
     },
     cardTitle: {
       fontSize: 18,
@@ -1333,40 +1343,6 @@ const useStyles = () =>
     },
     interventionContinueButtonText: {
       color: t.colors.textSecondary,
-      fontSize: 14,
-      fontWeight: '500',
-    },
-
-    // Hint Card
-    hintCard: {
-      margin: 16,
-      marginTop: 8,
-      padding: 16,
-      backgroundColor: 'rgba(16, 163, 127, 0.1)',
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: t.colors.accent,
-    },
-    hintLabel: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: t.colors.accent,
-      marginBottom: 8,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
-    hintText: {
-      fontSize: 14,
-      color: t.colors.textPrimary,
-      lineHeight: 20,
-      marginBottom: 12,
-    },
-    dismissHintButton: {
-      alignSelf: 'flex-end',
-      padding: 8,
-    },
-    dismissHintText: {
-      color: t.colors.accent,
       fontSize: 14,
       fontWeight: '500',
     },

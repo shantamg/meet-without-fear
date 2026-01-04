@@ -291,6 +291,8 @@ export function useConsentToShareEmpathy(
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      // Invalidate messages to show the empathy statement in chat
+      queryClient.invalidateQueries({ queryKey: messageKeys.all });
     },
     ...options,
   });

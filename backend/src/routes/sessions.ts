@@ -8,6 +8,7 @@
  * - GET /sessions/:id/progress - Get stage progress
  * - POST /sessions/:id/resolve - Resolve session
  * - POST /sessions/:id/stages/advance - Advance to next stage
+ * - GET /sessions/:id/inner-thoughts - Get linked Inner Thoughts session
  */
 
 import { Router } from 'express';
@@ -24,6 +25,7 @@ import {
   updateInvitationMessage,
   confirmInvitationMessage,
 } from '../controllers/sessions';
+import { getLinkedInnerThoughts } from '../controllers/inner-work';
 
 const router = Router();
 
@@ -89,5 +91,12 @@ router.put('/sessions/:id/invitation/message', requireAuth, requireSessionAccess
  * @access Private - requires authentication and session access
  */
 router.post('/sessions/:id/invitation/confirm', requireAuth, requireSessionAccess, asyncHandler(confirmInvitationMessage));
+
+/**
+ * @route GET /api/v1/sessions/:id/inner-thoughts
+ * @description Get linked Inner Thoughts session for this partner session
+ * @access Private - requires authentication
+ */
+router.get('/sessions/:id/inner-thoughts', requireAuth, getLinkedInnerThoughts);
 
 export default router;

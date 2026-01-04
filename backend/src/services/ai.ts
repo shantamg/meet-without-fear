@@ -61,6 +61,10 @@ export interface FullAIContext extends WitnessContext {
   previousStage?: number;
   /** Current invitation message (for refinement context) */
   currentInvitationMessage?: string | null;
+  /** Current empathy draft (for refinement in Stage 2) */
+  currentEmpathyDraft?: string | null;
+  /** Whether the user is actively refining their empathy draft */
+  isRefiningEmpathy?: boolean;
 }
 
 // Re-export orchestrator types for convenience
@@ -288,6 +292,8 @@ export async function getOrchestratedResponse(
     isStageTransition: context.isStageTransition,
     previousStage: context.previousStage,
     currentInvitationMessage: context.currentInvitationMessage,
+    currentEmpathyDraft: context.currentEmpathyDraft,
+    isRefiningEmpathy: context.isRefiningEmpathy,
   };
 
   return orchestrateResponse(orchestratorContext);

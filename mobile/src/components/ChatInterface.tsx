@@ -47,6 +47,8 @@ interface ChatInterfaceProps {
   onSendMessage: (content: string) => void;
   isLoading?: boolean;
   disabled?: boolean;
+  /** Hide the input area entirely (e.g., when waiting for partner) */
+  hideInput?: boolean;
   emptyStateTitle?: string;
   emptyStateMessage?: string;
   showEmotionSlider?: boolean;
@@ -74,6 +76,7 @@ export function ChatInterface({
   onSendMessage,
   isLoading = false,
   disabled = false,
+  hideInput = false,
   emptyStateTitle = DEFAULT_EMPTY_TITLE,
   emptyStateMessage = DEFAULT_EMPTY_MESSAGE,
   showEmotionSlider = false,
@@ -309,7 +312,9 @@ export function ChatInterface({
         />
       )}
       {renderAboveInput?.()}
-      <ChatInput onSend={onSendMessage} disabled={disabled || isLoading} />
+      {!hideInput && (
+        <ChatInput onSend={onSendMessage} disabled={disabled || isLoading} />
+      )}
     </KeyboardAvoidingView>
   );
 }

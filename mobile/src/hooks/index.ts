@@ -254,19 +254,30 @@ export {
 } from './useRouterChat';
 
 // ============================================================================
-// Inner Work (Solo Self-Reflection)
+// Inner Thoughts (Solo Self-Reflection, optionally linked to partner sessions)
 // ============================================================================
 
 export {
   // Query keys
-  innerWorkKeys,
+  innerThoughtsKeys,
+  innerWorkKeys, // Legacy alias
   // Types
-  type ListInnerWorkParams,
-  // Hooks
+  type ListInnerThoughtsParams,
+  type CreateInnerThoughtsRequest,
+  // Hooks - New names
+  useInnerThoughtsSessions,
+  useInnerThoughtsSessionsInfinite,
+  useInnerThoughtsSession,
+  useCreateInnerThoughtsSession,
+  useSendInnerThoughtsMessage,
+  useUpdateInnerThoughtsSession,
+  useArchiveInnerThoughtsSession,
+  useLinkedInnerThoughts,
+  // Legacy aliases
   useInnerWorkSessions,
   useInnerWorkSession,
   useCreateInnerWorkSession,
   useSendInnerWorkMessage,
   useUpdateInnerWorkSession,
   useArchiveInnerWorkSession,
-} from './useInnerWork';
+} from './useInnerThoughts';

@@ -1,13 +1,13 @@
 /**
- * Inner Work Layout
+ * Inner Thoughts Layout
  *
- * Stack navigator for inner work screens.
+ * Stack navigator for Inner Thoughts screens.
  */
 
 import { Stack } from 'expo-router';
 import { colors } from '@/theme';
 
-export default function InnerWorkLayout() {
+export default function InnerThoughtsLayout() {
   return (
     <Stack
       screenOptions={{
@@ -20,6 +20,7 @@ export default function InnerWorkLayout() {
         headerTitleStyle: {
           color: colors.textPrimary,
         },
+        headerShadowVisible: false,
         contentStyle: {
           backgroundColor: colors.bgPrimary,
         },
@@ -28,7 +29,7 @@ export default function InnerWorkLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: 'Inner Work',
+          headerShown: false, // Using custom header in the screen
         }}
       />
       <Stack.Screen

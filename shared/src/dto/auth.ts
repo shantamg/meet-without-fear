@@ -31,6 +31,8 @@ export interface GetMeResponse {
 
 export interface UpdateProfileRequest {
   name?: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 export interface UpdateProfileResponse {
@@ -151,4 +153,26 @@ export interface UpdateMemoryPreferencesRequest {
 
 export interface UpdateMemoryPreferencesResponse {
   preferences: MemoryPreferencesDTO;
+}
+
+// ============================================================================
+// Account Deletion
+// ============================================================================
+
+/**
+ * Response for account deletion request.
+ * Includes summary of what was deleted/archived.
+ */
+export interface DeleteAccountResponse {
+  /** Whether the deletion was successful */
+  success: boolean;
+  /** Summary of what was deleted/affected */
+  summary: {
+    /** Number of active sessions that were abandoned and partners notified */
+    sessionsAbandoned: number;
+    /** Number of partners that were notified */
+    partnersNotified: number;
+    /** Total data records deleted (messages, sessions, etc.) */
+    dataRecordsDeleted: number;
+  };
 }

@@ -3,9 +3,11 @@
  *
  * Displayed when waiting for the partner to complete a stage gate.
  * Shows partner info, stage progress, and a friendly waiting message.
+ * Optionally shows a button to continue reflecting in Inner Thoughts.
  */
 
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Layers } from 'lucide-react-native';
 import { colors } from '@/theme';
 
 // Avatar gradient colors (purple gradient approximation)
@@ -22,6 +24,8 @@ interface WaitingRoomProps {
   currentStage?: number;
   totalStages?: number;
   partnerProgress?: number; // 0-100 percentage
+  /** Callback when user wants to continue in Inner Thoughts */
+  onContinueInInnerThoughts?: () => void;
 }
 
 // ============================================================================
@@ -47,6 +51,7 @@ export function WaitingRoom({
   currentStage = 1,
   totalStages = 5,
   partnerProgress,
+  onContinueInInnerThoughts,
 }: WaitingRoomProps) {
   const displayInitial = partnerInitial || (partnerName ? partnerName[0].toUpperCase() : '?');
   const stageName = STAGE_NAMES[currentStage] || `Stage ${currentStage}`;
@@ -117,6 +122,25 @@ export function WaitingRoom({
         <Text style={styles.waitingText}>
           Waiting for {partnerName} to complete this step
         </Text>
+      )}
+
+      {/* Inner Thoughts CTA */}
+      {onContinueInInnerThoughts && (
+        <View style={styles.innerThoughtsContainer}>
+          <Text style={styles.innerThoughtsLabel}>
+            While you wait, you're welcome to chat further
+          </Text>
+          <TouchableOpacity
+            style={styles.innerThoughtsButton}
+            onPress={onContinueInInnerThoughts}
+            activeOpacity={0.8}
+          >
+            <Layers size={20} color={colors.accent} />
+            <Text style={styles.innerThoughtsButtonText}>
+              Open Inner Thoughts
+            </Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -242,6 +266,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  innerThoughtsContainer: {
+    marginTop: 32,
+    alignItems: 'center',
+    width: '100%',
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  innerThoughtsLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  innerThoughtsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.bgTertiary,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  innerThoughtsButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.accent,
   },
 });
 

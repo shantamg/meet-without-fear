@@ -14,6 +14,7 @@ import {
   type RetrievalDepth,
   getTurnBufferSize,
 } from './memory-intent';
+import { findSimilarInnerThoughtsWithBoost } from './embedding';
 
 // ============================================================================
 // Types
@@ -63,6 +64,20 @@ export interface PriorThemes {
 }
 
 /**
+ * Inner Thoughts context - private reflections linked to this session
+ */
+export interface InnerThoughtsContext {
+  /** Relevant messages from user's Inner Thoughts (with boost for linked sessions) */
+  relevantReflections: Array<{
+    content: string;
+    similarity: number;
+    isFromLinkedSession: boolean;
+  }>;
+  /** Whether a linked Inner Thoughts session exists */
+  hasLinkedSession: boolean;
+}
+
+/**
  * The assembled context bundle provided to the AI
  */
 export interface ContextBundle {
@@ -81,6 +96,9 @@ export interface ContextBundle {
 
   // Session summary (for long sessions)
   sessionSummary?: SessionSummary;
+
+  // Inner Thoughts reflections (if depth allows)
+  innerThoughtsContext?: InnerThoughtsContext;
 
   // Stage-specific data
   stageContext: {
@@ -171,6 +189,11 @@ export async function assembleContextBundle(
     ? await buildSessionSummary(sessionId, userId)
     : undefined;
 
+  // Build Inner Thoughts context (if depth allows)
+  const innerThoughtsContext = depth === 'full' || depth === 'light'
+    ? await buildInnerThoughtsContext(sessionId, userId, conversationContext)
+    : undefined;
+
   return {
     conversationContext: {
       recentTurns: conversationContext,
@@ -180,6 +203,7 @@ export async function assembleContextBundle(
     emotionalThread,
     priorThemes,
     sessionSummary,
+    innerThoughtsContext,
     stageContext: {
       stage,
       gatesSatisfied,
@@ -387,6 +411,72 @@ async function buildSessionSummary(
 }
 
 /**
+ * Build Inner Thoughts context - private reflections that may inform the partner session.
+ * Messages from linked Inner Thoughts sessions get a similarity boost.
+ */
+async function buildInnerThoughtsContext(
+  sessionId: string,
+  userId: string,
+  conversationContext: ContextMessage[]
+): Promise<InnerThoughtsContext | undefined> {
+  // Check if user has a linked Inner Thoughts session
+  const linkedSession = await prisma.innerWorkSession.findFirst({
+    where: {
+      userId,
+      linkedPartnerSessionId: sessionId,
+      status: 'ACTIVE',
+    },
+  });
+
+  // If no recent conversation to search with, skip retrieval
+  if (conversationContext.length === 0) {
+    return {
+      relevantReflections: [],
+      hasLinkedSession: !!linkedSession,
+    };
+  }
+
+  // Use the last user message as search query
+  const lastUserMessage = [...conversationContext]
+    .reverse()
+    .find((m) => m.role === 'user');
+
+  if (!lastUserMessage) {
+    return {
+      relevantReflections: [],
+      hasLinkedSession: !!linkedSession,
+    };
+  }
+
+  try {
+    // Search Inner Thoughts with boost for linked sessions
+    const results = await findSimilarInnerThoughtsWithBoost(
+      userId,
+      lastUserMessage.content,
+      sessionId, // Partner session ID - messages from linked sessions get boost
+      1.3, // 30% boost
+      3, // Top 3 results
+      0.5 // Threshold
+    );
+
+    return {
+      relevantReflections: results.map((r) => ({
+        content: r.content,
+        similarity: r.similarity,
+        isFromLinkedSession: r.isLinked,
+      })),
+      hasLinkedSession: !!linkedSession,
+    };
+  } catch (error) {
+    console.warn('[Context Assembler] Failed to retrieve Inner Thoughts:', error);
+    return {
+      relevantReflections: [],
+      hasLinkedSession: !!linkedSession,
+    };
+  }
+}
+
+/**
  * Format context bundle for prompt injection
  */
 export function formatContextForPrompt(bundle: ContextBundle): string {
@@ -427,6 +517,18 @@ export function formatContextForPrompt(bundle: ContextBundle): string {
     parts.push(`SESSION SUMMARY:`);
     parts.push(`Key themes: ${bundle.sessionSummary.keyThemes.join(', ')}`);
     parts.push(`Current focus: ${bundle.sessionSummary.currentFocus}`);
+    parts.push('');
+  }
+
+  // Inner Thoughts context (private reflections)
+  if (bundle.innerThoughtsContext && bundle.innerThoughtsContext.relevantReflections.length > 0) {
+    parts.push(`FROM ${bundle.userName.toUpperCase()}'S PRIVATE REFLECTIONS:`);
+    parts.push(`(These are from their Inner Thoughts - private processing they've done.`);
+    parts.push(`Reference gently, don't quote directly, and respect their privacy.)`);
+    for (const reflection of bundle.innerThoughtsContext.relevantReflections) {
+      const marker = reflection.isFromLinkedSession ? '[linked to this session]' : '';
+      parts.push(`- "${reflection.content}" ${marker}`);
+    }
     parts.push('');
   }
 

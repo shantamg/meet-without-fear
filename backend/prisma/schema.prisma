@@ -100,6 +100,9 @@ model Session {
   invitations         Invitation[]
   notifications       Notification[]
 
+  // Linked Inner Thoughts sessions for private reflection during partner session
+  linkedInnerThoughts InnerWorkSession[] @relation("LinkedInnerThoughts")
+
   @@index([relationshipId])
   @@index([status])
   @@index([type])
@@ -139,8 +142,16 @@ model InnerWorkSession {
   // Messages in this inner work session
   messages InnerWorkMessage[]
 
+  // Link to partner session for context-aware Inner Thoughts
+  // When set, AI has access to partner session context and can reference it
+  linkedPartnerSession   Session? @relation("LinkedInnerThoughts", fields: [linkedPartnerSessionId], references: [id], onDelete: SetNull)
+  linkedPartnerSessionId String?
+  linkedAtStage          Int?     // Stage when Inner Thoughts was opened (1, 2, 3, 4)
+  linkedTrigger          String?  // Why it was opened: "empathy_wait", "voluntary", "witness_wait"
+
   @@index([userId, updatedAt])
   @@index([status])
+  @@index([linkedPartnerSessionId])
 }
 
 enum InnerWorkStatus {
@@ -334,8 +345,8 @@ model ConsentedContent {
   id                 String          @id @default(cuid())
   sharedVessel       SharedVessel    @relation(fields: [sharedVesselId], references: [id], onDelete: Cascade)
   sharedVesselId     String
-  sourceUser         User            @relation(fields: [sourceUserId], references: [id], onDelete: Cascade)
-  sourceUserId       String
+  sourceUser         User?           @relation(fields: [sourceUserId], references: [id], onDelete: SetNull)
+  sourceUserId       String?
   originalNeed       IdentifiedNeed? @relation(fields: [originalNeedId], references: [id], onDelete: SetNull)
   originalNeedId     String?         @unique
   transformedContent String          @db.Text // Heat removed, need preserved
@@ -534,12 +545,12 @@ model EmpathyDraft {
 
 model EmpathyAttempt {
   id              String         @id @default(cuid())
-  draft           EmpathyDraft   @relation(fields: [draftId], references: [id], onDelete: Cascade)
-  draftId         String
+  draft           EmpathyDraft?  @relation(fields: [draftId], references: [id], onDelete: SetNull)
+  draftId         String?
   session         Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId       String
-  sourceUser      User           @relation(fields: [sourceUserId], references: [id], onDelete: Cascade)
-  sourceUserId    String
+  sourceUser      User?          @relation(fields: [sourceUserId], references: [id], onDelete: SetNull)
+  sourceUserId    String?
   content         String         @db.Text
   sharedAt        DateTime       @default(now())
   consentRecord   ConsentRecord? @relation(fields: [consentRecordId], references: [id], onDelete: SetNull)
@@ -556,8 +567,8 @@ model EmpathyValidation {
   attemptId      String
   session        Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId      String
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId         String // Recipient validating partner attempt
+  user           User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId         String? // Recipient validating partner attempt (null if user deleted)
   validated      Boolean
   feedback       String?        @db.Text
   feedbackShared Boolean        @default(false)
@@ -816,4 +827,5 @@ enum NotificationType {
   AGREEMENT_CONFIRMED
   SESSION_RESOLVED
   FOLLOW_UP_REMINDER
+  SESSION_ABANDONED
 }

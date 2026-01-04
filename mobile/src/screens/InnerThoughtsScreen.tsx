@@ -1,18 +1,19 @@
 /**
- * InnerWorkScreen Component
+ * InnerThoughtsScreen Component
  *
- * A chat-centric interface for inner work (solo self-reflection) sessions.
+ * A chat-centric interface for Inner Thoughts (solo self-reflection) sessions.
+ * Can be linked to a partner session for context-aware private reflection.
  * Reuses the ChatInterface component for consistency with partner sessions.
  */
 
 import { useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Heart } from 'lucide-react-native';
+import { ArrowLeft, Layers } from 'lucide-react-native';
 import { MessageRole } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage } from '../components/ChatInterface';
-import { useInnerWorkSession, useSendInnerWorkMessage } from '../hooks';
+import { useInnerThoughtsSession, useSendInnerThoughtsMessage } from '../hooks';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 
@@ -20,27 +21,39 @@ import { colors } from '../theme';
 // Types
 // ============================================================================
 
-interface InnerWorkScreenProps {
+interface InnerThoughtsScreenProps {
   sessionId: string;
+  /** If linked to a partner session, show context about it */
+  linkedPartnerName?: string;
   onNavigateBack?: () => void;
+  /** Navigate back to the linked partner session */
+  onNavigateToPartnerSession?: () => void;
+  /** Whether a new session is being created (shows typing indicator) */
+  isCreating?: boolean;
 }
 
 // ============================================================================
 // Component
 // ============================================================================
 
-export function InnerWorkScreen({
+export function InnerThoughtsScreen({
   sessionId,
+  linkedPartnerName,
   onNavigateBack,
-}: InnerWorkScreenProps) {
+  onNavigateToPartnerSession,
+  isCreating = false,
+}: InnerThoughtsScreenProps) {
   const styles = useStyles();
 
-  const { data, isLoading, error } = useInnerWorkSession(sessionId);
-  const sendMessage = useSendInnerWorkMessage(sessionId);
+  // Only fetch session if we have a valid sessionId (not creating)
+  const { data, isLoading, error } = useInnerThoughtsSession(
+    isCreating ? undefined : sessionId
+  );
+  const sendMessage = useSendInnerThoughtsMessage(sessionId);
 
   const session = data?.session;
 
-  // Convert inner work messages to ChatMessage format
+  // Convert inner thoughts messages to ChatMessage format
   const messages: ChatMessage[] = useMemo(() => {
     if (!session?.messages) return [];
 
@@ -50,7 +63,7 @@ export function InnerWorkScreen({
       senderId: msg.role === 'USER' ? 'user' : null,
       role: msg.role === 'USER' ? MessageRole.USER : MessageRole.AI,
       content: msg.content,
-      stage: 1, // Inner work doesn't use stages, but ChatMessage requires it
+      stage: 1, // Inner thoughts doesn't use stages, but ChatMessage requires it
       timestamp: msg.timestamp,
     }));
   }, [session?.messages, sessionId]);
@@ -60,7 +73,7 @@ export function InnerWorkScreen({
       try {
         await sendMessage.mutateAsync({ content });
       } catch (err) {
-        console.error('Failed to send inner work message:', err);
+        console.error('Failed to send inner thoughts message:', err);
       }
     },
     [sendMessage]
@@ -70,8 +83,8 @@ export function InnerWorkScreen({
     onNavigateBack?.();
   }, [onNavigateBack]);
 
-  // Loading state
-  if (isLoading) {
+  // Loading state - but NOT when creating (we show typing indicator instead)
+  if (isLoading && !isCreating) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
@@ -82,8 +95,8 @@ export function InnerWorkScreen({
     );
   }
 
-  // Error state
-  if (error || !session) {
+  // Error state - but NOT when creating
+  if (!isCreating && (error || !session)) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
@@ -96,7 +109,8 @@ export function InnerWorkScreen({
     );
   }
 
-  const title = session.title || session.theme || 'Inner Work';
+  const title = isCreating ? 'Inner Thoughts' : (session?.title || session?.theme || 'Inner Thoughts');
+  const isLinked = !!linkedPartnerName;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -113,16 +127,22 @@ export function InnerWorkScreen({
 
         <View style={styles.headerContent}>
           <View style={styles.headerTitleRow}>
-            <Heart color={colors.accent} size={16} />
+            <Layers color={colors.accent} size={16} />
             <Text style={styles.headerTitle} numberOfLines={1}>
               {title}
             </Text>
           </View>
-          {session.theme && session.title && (
+          {isLinked ? (
+            <TouchableOpacity onPress={onNavigateToPartnerSession}>
+              <Text style={styles.linkedSubtitle} numberOfLines={1}>
+                ↩ Back to session with {linkedPartnerName}
+              </Text>
+            </TouchableOpacity>
+          ) : !isCreating && session?.theme && session?.title ? (
             <Text style={styles.headerSubtitle} numberOfLines={1}>
               {session.theme}
             </Text>
-          )}
+          ) : null}
         </View>
 
         {/* Spacer to balance the back button */}
@@ -133,10 +153,10 @@ export function InnerWorkScreen({
       <ChatInterface
         messages={messages}
         onSendMessage={handleSendMessage}
-        isLoading={sendMessage.isPending}
-        disabled={sendMessage.isPending}
-        emptyStateTitle="Inner Work"
-        emptyStateMessage="A space for self-reflection. Share what's on your mind."
+        isLoading={isCreating || sendMessage.isPending}
+        disabled={isCreating || sendMessage.isPending}
+        emptyStateTitle="Inner Thoughts"
+        emptyStateMessage="A private space for reflection. Share what's on your mind."
       />
     </SafeAreaView>
   );
@@ -207,6 +227,11 @@ const useStyles = () =>
     headerSubtitle: {
       fontSize: 12,
       color: t.colors.textMuted,
+      marginTop: 2,
+    },
+    linkedSubtitle: {
+      fontSize: 12,
+      color: t.colors.accent,
       marginTop: 2,
     },
   }));

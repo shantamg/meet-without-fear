@@ -24,6 +24,8 @@ import { getSonnetResponse } from '../lib/bedrock';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import { embedMessage } from '../services/embedding';
 import { notifyEmpathyShared } from '../services/notification';
+import { runReconciler } from '../services/reconciler';
+import { isSessionCreator } from '../utils/session';
 
 // ============================================================================
 // Types
@@ -105,10 +107,20 @@ export async function saveDraft(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Check session is active
+    // Check session allows saving draft
+    // Allow ACTIVE status for all users, and INVITED status for the session creator
     if (session.status !== 'ACTIVE') {
-      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
-      return;
+      if (session.status === 'INVITED') {
+        const isCreator = await isSessionCreator(sessionId, user.id);
+        if (!isCreator) {
+          errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+          return;
+        }
+        // Creator can proceed while session is INVITED
+      } else {
+        errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+        return;
+      }
     }
 
     // Get user's current stage progress
@@ -296,10 +308,20 @@ export async function consentToShare(
       return;
     }
 
-    // Check session is active
+    // Check session allows consent
+    // Allow ACTIVE status for all users, and INVITED status for the session creator
     if (session.status !== 'ACTIVE') {
-      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
-      return;
+      if (session.status === 'INVITED') {
+        const isCreator = await isSessionCreator(sessionId, user.id);
+        if (!isCreator) {
+          errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+          return;
+        }
+        // Creator can proceed while session is INVITED
+      } else {
+        errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+        return;
+      }
     }
 
     // Get user's current stage progress
@@ -406,6 +428,13 @@ export async function consentToShare(
         sourceUserId: partnerId ?? undefined,
       },
     });
+
+    // If both have shared, kick off reconciler in the background
+    if (partnerAttempt) {
+      runReconciler(sessionId, user.id).catch((err) =>
+        console.warn('[consentToShare] Failed to run reconciler after both shared:', err)
+      );
+    }
 
     // Create notification for partner
     if (partnerId) {
@@ -645,10 +674,20 @@ export async function validateEmpathy(
       return;
     }
 
-    // Check session is active
+    // Check session allows validation
+    // Allow ACTIVE status for all users, and INVITED status for the session creator
     if (session.status !== 'ACTIVE') {
-      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
-      return;
+      if (session.status === 'INVITED') {
+        const isCreator = await isSessionCreator(sessionId, user.id);
+        if (!isCreator) {
+          errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+          return;
+        }
+        // Creator can proceed while session is INVITED
+      } else {
+        errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+        return;
+      }
     }
 
     // Get user's current stage progress

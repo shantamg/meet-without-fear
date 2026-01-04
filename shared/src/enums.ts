@@ -138,4 +138,5 @@ export enum NotificationType {
   AGREEMENT_CONFIRMED = 'AGREEMENT_CONFIRMED', // Agreement mutually confirmed
   SESSION_RESOLVED = 'SESSION_RESOLVED', // Session completed successfully
   FOLLOW_UP_REMINDER = 'FOLLOW_UP_REMINDER', // Follow-up reminder for agreement
+  SESSION_ABANDONED = 'SESSION_ABANDONED', // Partner left/deleted account during active session
 }

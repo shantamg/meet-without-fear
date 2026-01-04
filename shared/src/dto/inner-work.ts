@@ -76,6 +76,10 @@ export interface SendInnerWorkMessageResponse {
 
 export interface ListInnerWorkSessionsResponse {
   sessions: InnerWorkSessionSummaryDTO[];
+  /** Total count of sessions (for pagination) */
+  total: number;
+  /** Whether there are more sessions to load */
+  hasMore: boolean;
 }
 
 // ============================================================================

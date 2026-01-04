@@ -16,7 +16,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowRight, Plus, Heart, UserPlus } from 'lucide-react-native';
+import { ArrowRight, Plus, Layers, UserPlus } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/src/hooks/useAuth';
@@ -100,9 +100,9 @@ export default function HomeScreen() {
     }
   };
 
-  const handleInnerWork = () => {
-    // Navigate to inner work list
-    router.push('/inner-work');
+  const handleInnerThoughts = () => {
+    // Navigate to Inner Thoughts list
+    router.push('/inner-thoughts');
   };
 
   const handleAcceptInvitation = () => {
@@ -186,15 +186,15 @@ export default function HomeScreen() {
             <Text style={styles.actionText}>New Session</Text>
           </TouchableOpacity>
 
-          {/* Inner Work */}
+          {/* Inner Thoughts */}
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={handleInnerWork}
+            onPress={handleInnerThoughts}
             accessibilityRole="button"
-            accessibilityLabel="Inner work"
+            accessibilityLabel="Inner Thoughts"
           >
-            <Heart color="#888" size={18} />
-            <Text style={styles.actionText}>Inner Work</Text>
+            <Layers color="#888" size={18} />
+            <Text style={styles.actionText}>Inner Thoughts</Text>
           </TouchableOpacity>
         </View>
       </View>

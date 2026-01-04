@@ -18,6 +18,7 @@ import {
   UpdateBiometricPreferenceResponse,
   GetMemoryPreferencesResponse,
   UpdateMemoryPreferencesResponse,
+  DeleteAccountResponse,
   MemoryPreferencesDTO,
   DEFAULT_MEMORY_PREFERENCES,
   updateProfileRequestSchema,
@@ -25,6 +26,7 @@ import {
   updateBiometricPreferenceRequestSchema,
   updateMemoryPreferencesRequestSchema,
 } from '@meet-without-fear/shared';
+import { deleteAccountWithNotifications } from '../services/account-deletion';
 
 // ============================================================================
 // Helper Functions
@@ -89,14 +91,18 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response): P
     });
   }
 
-  const { name } = parseResult.data;
+  const { name, firstName, lastName } = parseResult.data;
+
+  // Build update data - only include fields that were provided
+  const updateData: { name?: string; firstName?: string; lastName?: string } = {};
+  if (name !== undefined) updateData.name = name;
+  if (firstName !== undefined) updateData.firstName = firstName;
+  if (lastName !== undefined) updateData.lastName = lastName;
 
   // Update user profile
   const updatedUser = await prisma.user.update({
     where: { id: user.id },
-    data: {
-      name: name !== undefined ? name : undefined,
-    },
+    data: updateData,
   });
 
   const response: ApiResponse<UpdateProfileResponse> = {
@@ -433,6 +439,37 @@ export const updateMood = asyncHandler(async (req: Request, res: Response): Prom
     success: true,
     data: {
       lastMoodIntensity: intensity,
+    },
+  };
+
+  res.json(response);
+});
+
+// ============================================================================
+// DELETE /auth/me - Delete Account
+// ============================================================================
+
+/**
+ * Permanently delete the user's account.
+ *
+ * This performs a complete account deletion with the following behavior:
+ * 1. Active sessions are marked as ABANDONED
+ * 2. Partners in active sessions are notified via SESSION_ABANDONED notification
+ * 3. Data shared with partners is preserved but anonymized (source user set to null)
+ * 4. All private user data is permanently deleted
+ * 5. The user is removed from all relationships
+ */
+export const deleteAccount = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const user = getUser(req);
+
+  // Perform the deletion with notifications
+  const summary = await deleteAccountWithNotifications(user.id, user.name ?? user.firstName ?? 'Your partner');
+
+  const response: ApiResponse<DeleteAccountResponse> = {
+    success: true,
+    data: {
+      success: true,
+      summary,
     },
   };
 

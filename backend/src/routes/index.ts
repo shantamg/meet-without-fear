@@ -3,7 +3,7 @@ import authRoutes from './auth';
 import chatRoutes from './chat';
 import consentRoutes from './consent';
 import emotionsRoutes from './emotions';
-import innerWorkRoutes from './inner-work';
+import innerThoughtsRoutes from './inner-thoughts';
 import invitationsRoutes from './invitations';
 import notificationsRoutes from './notifications';
 import reconcilerRoutes from './reconciler';
@@ -20,7 +20,7 @@ const router = Router();
 router.use('/auth', authRoutes);
 router.use(chatRoutes); // Unified chat router
 router.use(invitationsRoutes); // Must be before innerWorkRoutes (has public endpoints)
-router.use(innerWorkRoutes); // Inner work (solo self-reflection)
+router.use(innerThoughtsRoutes); // Inner Thoughts (solo self-reflection, optionally linked to partner sessions)
 router.use(notificationsRoutes); // In-app notifications
 router.use(sessionsRoutes);
 router.use(consentRoutes);

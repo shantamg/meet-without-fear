@@ -78,7 +78,6 @@ export type InlineCardType =
   // Stage 2: Perspective Stretch
   | 'empathy-draft-preview'
   | 'mirror-intervention'
-  | 'hint-card'
   | 'consent-prompt'
   | 'ready-to-share-confirmation'
   | 'accuracy-feedback'
@@ -129,8 +128,6 @@ interface UnifiedSessionState {
   lastBarometerMessageCount: number;
   mirrorIntervention: MirrorIntervention | null;
   pendingMessage: string | null;
-  showHint: boolean;
-  currentHint: string | null;
   showCoolingSuggestion: boolean;
   showFinalCheck: boolean;
   pendingConfirmation: boolean;
@@ -146,17 +143,6 @@ interface UnifiedSessionState {
 
 const BAROMETER_MESSAGE_INTERVAL = 5;
 const HIGH_INTENSITY_THRESHOLD = 8;
-const HINT_DELAY_MS = 60000;
-
-const EMPATHY_HINTS = [
-  'Try thinking about what they might be feeling in this situation.',
-  'Consider what underlying needs they might be expressing.',
-  'What experiences from their life might shape their perspective?',
-  'How might they describe this situation to a close friend?',
-  'What fears or hopes might be driving their position?',
-  'Try starting with "It sounds like you feel..."',
-  'Consider what they might need to feel heard right now.',
-];
 
 const HARMFUL_PATTERNS = {
   judgmental: [
@@ -224,11 +210,6 @@ function detectHarmfulLanguage(text: string): MirrorIntervention {
   return { detected: false, message: '', patterns: [] };
 }
 
-function getRandomHint(): string {
-  const index = Math.floor(Math.random() * EMPATHY_HINTS.length);
-  return EMPATHY_HINTS[index];
-}
-
 // ============================================================================
 // State Reducer
 // ============================================================================
@@ -243,8 +224,6 @@ type SessionAction =
       payload: { intervention: MirrorIntervention; pendingMessage: string };
     }
   | { type: 'CLEAR_MIRROR_INTERVENTION' }
-  | { type: 'SET_HINT'; payload: string }
-  | { type: 'CLEAR_HINT' }
   | { type: 'SET_FOLLOW_UP_DATE'; payload: Date | null }
   | { type: 'SET_LAST_BAROMETER_COUNT'; payload: number }
   | { type: 'SHOW_COOLING_SUGGESTION'; payload: boolean }
@@ -278,10 +257,6 @@ function sessionReducer(
       };
     case 'CLEAR_MIRROR_INTERVENTION':
       return { ...state, mirrorIntervention: null, pendingMessage: null };
-    case 'SET_HINT':
-      return { ...state, showHint: true, currentHint: action.payload };
-    case 'CLEAR_HINT':
-      return { ...state, showHint: false, currentHint: null };
     case 'SET_FOLLOW_UP_DATE':
       return { ...state, followUpDate: action.payload };
     case 'SET_LAST_BAROMETER_COUNT':
@@ -314,8 +289,6 @@ const initialState: UnifiedSessionState = {
   lastBarometerMessageCount: 0,
   mirrorIntervention: null,
   pendingMessage: null,
-  showHint: false,
-  currentHint: null,
   showCoolingSuggestion: false,
   showFinalCheck: false,
   pendingConfirmation: false,
@@ -400,6 +373,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId, {
     enabled: !!sessionId && currentStage >= Stage.PERSPECTIVE_STRETCH,
   });
+  const partnerEmpathy = partnerEmpathyData?.attempt || null;
 
   // Stage 3: Needs - only fetch when in stage 3 or later
   const { data: needsData } = useNeeds(sessionId, {
@@ -522,23 +496,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
   }, [userMessageCount, state.lastBarometerMessageCount, currentStage]);
 
   // -------------------------------------------------------------------------
-  // Hint Timer Effect (Stage 2)
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    if (currentStage !== Stage.PERSPECTIVE_STRETCH) return;
-
-    const checkInactivity = () => {
-      const timeSinceActivity = Date.now() - lastActivityTime.current;
-      if (timeSinceActivity >= HINT_DELAY_MS && !state.showHint) {
-        dispatch({ type: 'SET_HINT', payload: getRandomHint() });
-      }
-    };
-
-    const interval = setInterval(checkInactivity, 10000);
-    return () => clearInterval(interval);
-  }, [currentStage, state.showHint]);
-
-  // -------------------------------------------------------------------------
   // Waiting Status Effect
   // -------------------------------------------------------------------------
   // Compute and update waiting status based on session state
@@ -565,13 +522,12 @@ export function useUnifiedSession(sessionId: string | undefined) {
       newWaitingStatus = 'partner-completed-witness';
     }
     // Stage 2: Waiting for partner to share empathy
-    else if (empathyDraftData?.alreadyConsented && partnerEmpathyData?.waitingForPartner) {
+    else if (empathyDraftData?.alreadyConsented && !partnerEmpathy) {
       newWaitingStatus = 'empathy-pending';
     }
     // Stage 2: Partner just shared empathy (transition)
     else if (
-      partnerEmpathyData?.attempt &&
-      !partnerEmpathyData.validated &&
+      partnerEmpathy &&
       state.previousWaitingStatus === 'empathy-pending'
     ) {
       newWaitingStatus = 'partner-shared-empathy';
@@ -603,9 +559,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     myProgress?.stage,
     partnerProgress?.stage,
     empathyDraftData?.alreadyConsented,
-    partnerEmpathyData?.waitingForPartner,
-    partnerEmpathyData?.attempt,
-    partnerEmpathyData?.validated,
+    partnerEmpathy,
     allNeedsConfirmed,
     commonGround.length,
     strategyPhase,
@@ -613,6 +567,24 @@ export function useUnifiedSession(sessionId: string | undefined) {
     state.waitingStatus,
     state.previousWaitingStatus,
   ]);
+
+  // -------------------------------------------------------------------------
+  // Initialize Empathy State from Database Effect
+  // -------------------------------------------------------------------------
+  // When loading a session with an existing draft (not yet marked ready),
+  // restore the local state so the "View your understanding" button appears
+  useEffect(() => {
+    if (
+      empathyDraftData?.draft?.content &&
+      !empathyDraftData.draft.readyToShare &&
+      !empathyDraftData.alreadyConsented
+    ) {
+      // Restore the proposed statement from database
+      setLiveProposedEmpathyStatement(empathyDraftData.draft.content);
+      // Show the ready-to-share card
+      setAiRecommendsReadyToShare(true);
+    }
+  }, [empathyDraftData?.draft?.content, empathyDraftData?.draft?.readyToShare, empathyDraftData?.alreadyConsented]);
 
   // -------------------------------------------------------------------------
   // Initial Message Effect
@@ -716,17 +688,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
         });
       }
 
-      // Hint card
-      if (state.showHint && state.currentHint) {
-        cards.push({
-          id: 'hint-card',
-          type: 'hint-card',
-          position: 'end',
-          props: { hint: state.currentHint },
-          dismissible: true,
-        });
-      }
-
       // Ready to share prompt - shown when AI recommends it but user hasn't marked draft as ready yet
       // Similar to feel-heard confirmation in Stage 1
       // Shows even if no draft exists yet - clicking "Yes" will prompt user to formalize their understanding
@@ -760,14 +721,14 @@ export function useUnifiedSession(sessionId: string | undefined) {
       }
 
       // Partner's empathy for validation
-      if (partnerEmpathyData?.attempt && !partnerEmpathyData.validated) {
+      if (partnerEmpathy) {
         cards.push({
           id: 'accuracy-feedback',
           type: 'accuracy-feedback',
           position: 'end',
           props: {
             partnerName,
-            content: partnerEmpathyData.attempt.content,
+            content: partnerEmpathy.content,
           },
         });
       }
@@ -883,7 +844,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
       // Reset activity timer
       lastActivityTime.current = Date.now();
-      dispatch({ type: 'CLEAR_HINT' });
 
       // Check for mirror intervention (Stage 2)
       if (currentStage === Stage.PERSPECTIVE_STRETCH) {
@@ -924,8 +884,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
               setLiveInvitationMessage(data.invitationMessage);
             }
             // Capture AI-proposed empathy statement (Stage 2)
+            // Save to database immediately so it persists across reloads
             if (data.proposedEmpathyStatement !== undefined && data.proposedEmpathyStatement !== null) {
               setLiveProposedEmpathyStatement(data.proposedEmpathyStatement);
+              // Save to database with readyToShare: false (user hasn't confirmed yet)
+              saveDraft({ sessionId, content: data.proposedEmpathyStatement, readyToShare: false });
             }
           },
           onError: (error) => {
@@ -1204,7 +1167,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
     // Local state
     barometerValue: state.barometerValue,
-    currentHint: state.currentHint,
     mirrorIntervention: state.mirrorIntervention,
     pendingMessage: state.pendingMessage,
     showCoolingSuggestion: state.showCoolingSuggestion,
@@ -1270,7 +1232,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
     // Utility actions
     clearMirrorIntervention: () => dispatch({ type: 'CLEAR_MIRROR_INTERVENTION' }),
-    clearHint: () => dispatch({ type: 'CLEAR_HINT' }),
     showCooling: (show: boolean) =>
       dispatch({ type: 'SHOW_COOLING_SUGGESTION', payload: show }),
     showFinal: (show: boolean) =>

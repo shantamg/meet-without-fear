@@ -416,3 +416,70 @@ export async function findSimilarInnerWorkMessages(
     }))
     .filter((r) => r.similarity >= threshold);
 }
+
+/**
+ * Find inner thoughts messages with a boost for linked sessions.
+ * When a partner session ID is provided, messages from Inner Thoughts
+ * sessions linked to that partner session get a similarity boost.
+ */
+export async function findSimilarInnerThoughtsWithBoost(
+  userId: string,
+  queryText: string,
+  linkedPartnerSessionId: string,
+  boostFactor: number = 1.3, // 30% boost for linked sessions
+  limit: number = 5,
+  threshold: number = 0.5
+): Promise<Array<{
+  messageId: string;
+  sessionId: string;
+  content: string;
+  similarity: number;
+  isLinked: boolean;
+}>> {
+  const queryEmbedding = await getEmbedding(queryText);
+  if (!queryEmbedding) {
+    return [];
+  }
+
+  // Query all user's Inner Thoughts messages with their linked status
+  const results = await prisma.$queryRaw<
+    Array<{
+      id: string;
+      session_id: string;
+      content: string;
+      distance: number;
+      is_linked: boolean;
+    }>
+  >`
+    SELECT
+      m.id,
+      m."sessionId" as session_id,
+      m.content,
+      m.embedding <=> ${vectorToSql(queryEmbedding)}::vector as distance,
+      (s."linkedPartnerSessionId" = ${linkedPartnerSessionId}) as is_linked
+    FROM "InnerWorkMessage" m
+    JOIN "InnerWorkSession" s ON m."sessionId" = s.id
+    WHERE s."userId" = ${userId}
+      AND m.embedding IS NOT NULL
+    ORDER BY distance ASC
+    LIMIT ${limit * 2}
+  `;
+
+  // Apply boost to linked sessions and re-sort
+  return results
+    .map((r) => {
+      const baseSimilarity = 1 - r.distance / 2;
+      // Apply boost for linked sessions
+      const similarity = r.is_linked ? Math.min(baseSimilarity * boostFactor, 1) : baseSimilarity;
+      return {
+        messageId: r.id,
+        sessionId: r.session_id,
+        content: r.content,
+        similarity,
+        isLinked: r.is_linked,
+      };
+    })
+    .filter((r) => r.similarity >= threshold)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
+}

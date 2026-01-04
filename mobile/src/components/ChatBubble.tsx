@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text } from 'react-native';
 import { MessageRole } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
@@ -175,16 +175,26 @@ export function ChatBubble({
     return styles.text;
   };
 
+  const renderContent = () => {
+    if (!isEmpathyStatement) {
+      return <Text style={getTextStyle()}>{textToDisplay}</Text>;
+    }
+
+    return (
+      <View>
+        <Text style={styles.empathyStatementHeader}>What you shared</Text>
+        <Text style={styles.empathyStatementText}>{textToDisplay}</Text>
+      </View>
+    );
+  };
+
   return (
     <View
       style={[styles.container, getContainerStyle()]}
       testID={`chat-bubble-${message.id}`}
     >
-      {isEmpathyStatement && (
-        <Text style={styles.empathyStatementHeader}>Empathy statement sent</Text>
-      )}
       <View style={[styles.bubble, isAI && styles.aiBubbleContainer, getBubbleStyle()]}>
-        <Text style={getTextStyle()}>{textToDisplay}</Text>
+        {renderContent()}
       </View>
       <View style={styles.metaContainer}>
         {showTimestamp && (
@@ -264,38 +274,33 @@ const useStyles = () =>
       borderTopLeftRadius: 0,
       borderBottomLeftRadius: 0,
     },
-    // Empathy statement container: centered like system messages
+    // Empathy statement container: centered
     empathyStatementContainer: {
-      alignItems: 'flex-start',
+      alignItems: 'center',
     },
-    // Empathy statement header
+    // Empathy statement header: centered
     empathyStatementHeader: {
-      fontSize: t.typography.fontSize.xs,
-      fontWeight: '600',
-      color: '#BFA200', // Muted amber
-      marginBottom: t.spacing.xs,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
-    // Empathy statement: dark yellow/amber background with left border
-    empathyStatementBubble: {
-      backgroundColor: '#3D3500', // Dark yellow/amber background
-      borderLeftWidth: 3,
-      borderLeftColor: '#FFB800', // Bright amber accent
-      paddingVertical: t.spacing.md,
-      paddingHorizontal: t.spacing.lg,
-      borderTopRightRadius: 12,
-      borderBottomRightRadius: 12,
-      borderTopLeftRadius: 0,
-      borderBottomLeftRadius: 0,
-    },
-    // Empathy statement text: italic, light amber
-    empathyStatementText: {
       fontSize: t.typography.fontSize.md,
-      lineHeight: 22,
-      color: '#FFE082', // Light amber for text
-      fontFamily: t.typography.fontFamily.regular,
+      fontWeight: '700',
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginBottom: t.spacing.sm,
+    },
+    // Empathy statement: matches drawer styling (bgSecondary, left border accent)
+    empathyStatementBubble: {
+      backgroundColor: colors.bgSecondary,
+      borderRadius: 12,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.brandBlue,
+      padding: 20,
+    },
+    // Empathy statement text: italic, matches drawer
+    empathyStatementText: {
+      fontSize: 17,
       fontStyle: 'italic',
+      lineHeight: 26,
+      color: colors.textPrimary,
+      fontFamily: t.typography.fontFamily.regular,
     },
     text: {
       fontSize: t.typography.fontSize.md,

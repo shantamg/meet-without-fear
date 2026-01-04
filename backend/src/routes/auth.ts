@@ -19,6 +19,7 @@ import {
   getMemoryPreferences,
   updateMemoryPreferences,
   updateMood,
+  deleteAccount,
 } from '../controllers/auth';
 
 const router = Router();
@@ -136,5 +137,23 @@ router.put('/me/memory-preferences', updateMemoryPreferences);
  * Response: { lastMoodIntensity: number }
  */
 router.patch('/me/mood', updateMood);
+
+/**
+ * DELETE /auth/me
+ *
+ * Permanently delete the user's account.
+ *
+ * This action:
+ * - Marks active sessions as ABANDONED
+ * - Notifies partners in active sessions via SESSION_ABANDONED notification
+ * - Preserves shared content for partners (anonymized - source user becomes null)
+ * - Deletes all private user data (inner work, drafts, progress, etc.)
+ * - Removes user from all relationships
+ *
+ * Response: DeleteAccountResponse
+ * - success: boolean
+ * - summary: { sessionsAbandoned, partnersNotified, dataRecordsDeleted }
+ */
+router.delete('/me', deleteAccount);
 
 export default router;

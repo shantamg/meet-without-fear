@@ -71,6 +71,10 @@ export interface OrchestratorContext {
   previousStage?: number;
   /** Current invitation message (for refinement context) */
   currentInvitationMessage?: string | null;
+  /** Current empathy draft (for Stage 2 refinement context) */
+  currentEmpathyDraft?: string | null;
+  /** Whether the user is actively refining their empathy draft */
+  isRefiningEmpathy?: boolean;
 }
 
 export interface OrchestratorResult {
@@ -218,6 +222,8 @@ export async function orchestrateResponse(
       contextBundle,
       isFirstMessage: context.isFirstTurnInSession,
       invitationMessage: context.currentInvitationMessage,
+      empathyDraft: context.currentEmpathyDraft,
+      isRefiningEmpathy: context.isRefiningEmpathy,
       surfacingStyle: surfacingDecision.style,
     },
     {

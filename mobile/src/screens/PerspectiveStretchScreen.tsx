@@ -14,7 +14,6 @@
  *
  * Features:
  * - Mirror Intervention: Detects harmful language patterns (judgmental, accusatory)
- * - Hint System: Helps stuck users with contextual suggestions
  * - Revision Loop: Allows revision when partner rates empathy as inaccurate
  */
 
@@ -33,6 +32,7 @@ import {
   useValidateEmpathy,
 } from '../hooks/useStages';
 import { useMessages, useSendMessage } from '../hooks/useMessages';
+import { useCreateInnerThoughtsSession, useLinkedInnerThoughts } from '../hooks/useInnerThoughts';
 import { ChatInterface } from '../components/ChatInterface';
 import { ChatHeader } from '../components/ChatHeader';
 import { EmpathyAttemptCard } from '../components/EmpathyAttemptCard';
@@ -129,28 +129,6 @@ function detectHarmfulLanguage(text: string): MirrorIntervention {
 }
 
 // ============================================================================
-// Hint System
-// ============================================================================
-
-const EMPATHY_HINTS = [
-  'Try thinking about what they might be feeling in this situation.',
-  'Consider what underlying needs they might be expressing.',
-  'What experiences from their life might shape their perspective?',
-  'How might they describe this situation to a close friend?',
-  'What fears or hopes might be driving their position?',
-  'Try starting with "It sounds like you feel..."',
-  'Consider what they might need to feel heard right now.',
-];
-
-/**
- * Gets a random hint from the available hints.
- */
-function getRandomHint(): string {
-  const index = Math.floor(Math.random() * EMPATHY_HINTS.length);
-  return EMPATHY_HINTS[index];
-}
-
-// ============================================================================
 // Phase Determination
 // ============================================================================
 
@@ -212,15 +190,13 @@ export function PerspectiveStretchScreen() {
   const { mutate: consentToShare } = useConsentToShareEmpathy();
   const { mutate: validateEmpathy } = useValidateEmpathy();
 
+  // Inner Thoughts hooks for linked session
+  const { data: linkedData } = useLinkedInnerThoughts(sessionId);
+  const createInnerThoughts = useCreateInnerThoughtsSession();
+
   // Mirror intervention state
   const [mirrorIntervention, setMirrorIntervention] = useState<MirrorIntervention | null>(null);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
-
-  // Hint system state
-  const [showHint, setShowHint] = useState(false);
-  const [currentHint, setCurrentHint] = useState<string | null>(null);
-  const lastActivityTime = useRef<number>(Date.now());
-  const hintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Revision state (for when partner rates empathy as inaccurate)
   const [needsRevision, setNeedsRevision] = useState(false);
@@ -236,41 +212,6 @@ export function PerspectiveStretchScreen() {
     () => determinePhase(progressData, empathyDraftData, partnerEmpathyData, needsRevision),
     [progressData, empathyDraftData, partnerEmpathyData, needsRevision]
   );
-
-  // Setup hint timer for stuck users
-  useEffect(() => {
-    const HINT_DELAY_MS = 60000; // Show hint after 1 minute of inactivity
-
-    if (phase === 'building' || phase === 'revision') {
-      const checkInactivity = () => {
-        const timeSinceActivity = Date.now() - lastActivityTime.current;
-        if (timeSinceActivity >= HINT_DELAY_MS && !showHint) {
-          setCurrentHint(getRandomHint());
-          setShowHint(true);
-        }
-      };
-
-      hintTimeoutRef.current = setInterval(checkInactivity, 10000);
-
-      return () => {
-        if (hintTimeoutRef.current) {
-          clearInterval(hintTimeoutRef.current);
-        }
-      };
-    }
-  }, [phase, showHint]);
-
-  // Reset activity timer on user interaction
-  const resetActivityTimer = useCallback(() => {
-    lastActivityTime.current = Date.now();
-    setShowHint(false);
-  }, []);
-
-  // Handle getting a new hint
-  const handleGetHint = useCallback(() => {
-    setCurrentHint(getRandomHint());
-    setShowHint(true);
-  }, []);
 
   // Navigate away when complete
   useEffect(() => {
@@ -367,9 +308,6 @@ export function PerspectiveStretchScreen() {
   const handleSendMessage = (content: string) => {
     if (!sessionId) return;
 
-    // Reset activity timer
-    resetActivityTimer();
-
     // Check for harmful language patterns
     const intervention = detectHarmfulLanguage(content);
     if (intervention.detected) {
@@ -415,6 +353,45 @@ export function PerspectiveStretchScreen() {
     setPartnerFeedback(null);
   };
 
+  // Navigate to Inner Thoughts (create linked session if needed)
+  const handleContinueInInnerThoughts = useCallback(async () => {
+    if (!sessionId) return;
+
+    // If a linked session already exists, navigate to it
+    if (linkedData?.innerThoughtsSessionId) {
+      router.push({
+        pathname: '/inner-thoughts/[id]',
+        params: {
+          id: linkedData.innerThoughtsSessionId,
+          linkedPartnerSessionId: sessionId,
+          linkedPartnerName: partnerName,
+        },
+      });
+      return;
+    }
+
+    // Create a new linked Inner Thoughts session
+    try {
+      const result = await createInnerThoughts.mutateAsync({
+        linkedPartnerSessionId: sessionId,
+        linkedTrigger: 'empathy_wait',
+      });
+
+      if (result?.session?.id) {
+        router.push({
+          pathname: '/inner-thoughts/[id]',
+          params: {
+            id: result.session.id,
+            linkedPartnerSessionId: sessionId,
+            linkedPartnerName: partnerName,
+          },
+        });
+      }
+    } catch (error) {
+      console.error('[PerspectiveStretch] Failed to create Inner Thoughts session:', error);
+    }
+  }, [sessionId, linkedData, partnerName, router, createInnerThoughts]);
+
   // Render mirror intervention card
   const renderMirrorIntervention = () => {
     if (!mirrorIntervention) return null;
@@ -446,40 +423,6 @@ export function PerspectiveStretchScreen() {
     );
   };
 
-  // Render hint card
-  const renderHintCard = () => {
-    if (!showHint || !currentHint) return null;
-
-    return (
-      <View style={styles.hintCard}>
-        <Text style={styles.hintLabel}>Hint</Text>
-        <Text style={styles.hintText}>{currentHint}</Text>
-        <TouchableOpacity
-          style={styles.dismissHintButton}
-          onPress={() => setShowHint(false)}
-          accessibilityRole="button"
-        >
-          <Text style={styles.dismissHintText}>Got it</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  // Render "Need a hint?" button
-  const renderHintButton = () => {
-    if (showHint) return null;
-
-    return (
-      <TouchableOpacity
-        style={styles.needHintButton}
-        onPress={handleGetHint}
-        accessibilityRole="button"
-      >
-        <Text style={styles.needHintText}>Need a hint?</Text>
-      </TouchableOpacity>
-    );
-  };
-
   // Render phase-specific content
   const renderContent = () => {
     switch (phase) {
@@ -498,9 +441,7 @@ export function PerspectiveStretchScreen() {
               <Text style={styles.subtitle}>
                 Work with the AI to understand your partner's perspective
               </Text>
-              {renderHintButton()}
             </View>
-            {renderHintCard()}
             {renderMirrorIntervention()}
             <ChatInterface
               messages={messages}
@@ -540,6 +481,8 @@ export function PerspectiveStretchScreen() {
           <WaitingRoom
             message={`You've shared your empathy attempt. Waiting for ${partnerName} to share theirs.`}
             partnerName={partnerName}
+            currentStage={2}
+            onContinueInInnerThoughts={handleContinueInInnerThoughts}
           />
         );
 
@@ -574,7 +517,6 @@ export function PerspectiveStretchScreen() {
               <Text style={styles.subtitle}>
                 {partnerName} provided feedback on your empathy attempt
               </Text>
-              {renderHintButton()}
             </View>
             {partnerFeedback && (
               <View style={styles.feedbackCard}>
@@ -586,7 +528,6 @@ export function PerspectiveStretchScreen() {
               attempt={empathyDraftData?.draft?.content || ''}
               testID="my-empathy-attempt-revision"
             />
-            {renderHintCard()}
             {renderMirrorIntervention()}
             <View style={styles.revisionActions}>
               <ChatInterface
@@ -731,50 +672,6 @@ const styles = StyleSheet.create({
   },
   continueButtonText: {
     color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-
-  // Hint system styles
-  hintCard: {
-    margin: 16,
-    marginTop: 8,
-    padding: 16,
-    backgroundColor: 'rgba(16, 163, 127, 0.1)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.accent,
-  },
-  hintLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.accent,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  hintText: {
-    fontSize: 14,
-    color: colors.textPrimary,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  dismissHintButton: {
-    alignSelf: 'flex-end',
-    padding: 8,
-  },
-  dismissHintText: {
-    color: colors.accent,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  needHintButton: {
-    marginTop: 8,
-    padding: 8,
-    alignSelf: 'flex-start',
-  },
-  needHintText: {
-    color: colors.accent,
     fontSize: 14,
     fontWeight: '500',
   },

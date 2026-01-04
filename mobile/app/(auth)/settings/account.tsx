@@ -14,37 +14,46 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Linking,
 } from 'react-native';
-import { Stack } from 'expo-router';
-import { User, Download, Trash2, Save } from 'lucide-react-native';
+import { Stack, useRouter } from 'expo-router';
+import { User, Trash2, Save } from 'lucide-react-native';
+import { useClerk } from '@clerk/clerk-expo';
 import { colors } from '@/src/theme';
-import { useProfile, useUpdateProfile, useExportData } from '@/src/hooks/useProfile';
+import { useProfile, useUpdateProfile, useDeleteAccount } from '@/src/hooks/useProfile';
+import { useAuth } from '@/src/hooks/useAuth';
 
 export default function AccountSettingsScreen() {
   const { data: profileData } = useProfile();
   const user = profileData?.user;
   const updateProfile = useUpdateProfile();
-  const exportData = useExportData();
+  const deleteAccount = useDeleteAccount();
+  const { signOut } = useAuth();
+  const { signOut: clerkSignOut } = useClerk();
+  const router = useRouter();
 
-  const [name, setName] = useState(user?.name || '');
+  const [firstName, setFirstName] = useState(user?.firstName || '');
+  const [lastName, setLastName] = useState(user?.lastName || '');
   const [isEditing, setIsEditing] = useState(false);
 
   // Sync name state when profile data changes (e.g., after save)
   useEffect(() => {
-    if (user?.name && !isEditing) {
-      setName(user.name);
+    if (!isEditing) {
+      setFirstName(user?.firstName || '');
+      setLastName(user?.lastName || '');
     }
-  }, [user?.name, isEditing]);
+  }, [user?.firstName, user?.lastName, isEditing]);
 
   const handleSaveProfile = async () => {
-    if (!name.trim()) {
-      Alert.alert('Error', 'Name cannot be empty');
+    if (!firstName.trim()) {
+      Alert.alert('Error', 'First name cannot be empty');
       return;
     }
 
     try {
-      await updateProfile.mutateAsync({ name: name.trim() });
+      await updateProfile.mutateAsync({
+        firstName: firstName.trim(),
+        lastName: lastName.trim() || undefined,
+      });
       setIsEditing(false);
       Alert.alert('Success', 'Profile updated successfully');
     } catch {
@@ -52,41 +61,48 @@ export default function AccountSettingsScreen() {
     }
   };
 
-  const handleExportData = async () => {
-    Alert.alert(
-      'Export Your Data',
-      'We will prepare a download of all your data. This may take a few moments.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Export',
-          onPress: async () => {
-            try {
-              const result = await exportData.mutateAsync();
-              Alert.alert(
-                'Export Ready',
-                `Your data export is ready. It will be available until ${new Date(result.expiresAt).toLocaleDateString()}.`,
-                [{ text: 'OK' }]
-              );
-            } catch {
-              Alert.alert('Error', 'Failed to export data. Please try again later.');
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Account',
-      'This action is permanent and cannot be undone. All your data, sessions, and connections will be permanently deleted.\n\nTo confirm, please contact support at support@meetwithoutfear.com.',
+      'This action is permanent and cannot be undone. All your data, sessions, and connections will be permanently deleted.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Contact Support',
+          text: 'Delete',
+          style: 'destructive',
           onPress: () => {
-            Linking.openURL('mailto:support@meetwithoutfear.com?subject=Account Deletion Request');
+            // Second confirmation with email input
+            Alert.prompt(
+              'Confirm Deletion',
+              `Type your email (${user?.email}) to confirm account deletion:`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete Forever',
+                  style: 'destructive',
+                  onPress: async (inputEmail?: string) => {
+                    if (inputEmail?.toLowerCase() !== user?.email?.toLowerCase()) {
+                      Alert.alert('Error', 'Email does not match. Account not deleted.');
+                      return;
+                    }
+
+                    try {
+                      await deleteAccount.mutateAsync();
+                      // Sign out from Clerk first (clears OAuth session)
+                      await clerkSignOut();
+                      // Then clear local auth state
+                      await signOut();
+                      router.replace('/(public)');
+                    } catch {
+                      Alert.alert('Error', 'Failed to delete account. Please try again.');
+                    }
+                  },
+                },
+              ],
+              'plain-text',
+              '',
+              'email-address'
+            );
           },
         },
       ]
@@ -120,18 +136,33 @@ export default function AccountSettingsScreen() {
               <User color={colors.textPrimary} size={32} />
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.label}>Name</Text>
               {isEditing ? (
-                <TextInput
-                  style={styles.input}
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Your name"
-                  placeholderTextColor={colors.textMuted}
-                  autoFocus
-                />
+                <>
+                  <Text style={styles.label}>First Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={firstName}
+                    onChangeText={setFirstName}
+                    placeholder="First name"
+                    placeholderTextColor={colors.textMuted}
+                    autoFocus
+                  />
+                  <Text style={styles.label}>Last Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={lastName}
+                    onChangeText={setLastName}
+                    placeholder="Last name (optional)"
+                    placeholderTextColor={colors.textMuted}
+                  />
+                </>
               ) : (
-                <Text style={styles.value}>{user?.name || 'Not set'}</Text>
+                <>
+                  <Text style={styles.label}>Name</Text>
+                  <Text style={styles.value}>
+                    {[user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Not set'}
+                  </Text>
+                </>
               )}
               <Text style={styles.label}>Email</Text>
               <Text style={styles.value}>{user?.email}</Text>
@@ -142,7 +173,8 @@ export default function AccountSettingsScreen() {
               <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={() => {
-                  setName(user?.name || '');
+                  setFirstName(user?.firstName || '');
+                  setLastName(user?.lastName || '');
                   setIsEditing(false);
                 }}
               >
@@ -171,29 +203,6 @@ export default function AccountSettingsScreen() {
               <Text style={styles.editButtonText}>Edit Profile</Text>
             </TouchableOpacity>
           )}
-        </View>
-
-        {/* Data Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Data</Text>
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={handleExportData}
-            disabled={exportData.isPending}
-          >
-            <View style={styles.menuItemLeft}>
-              <Download color={colors.accent} size={22} />
-              <View>
-                <Text style={styles.menuItemLabel}>Export Your Data</Text>
-                <Text style={styles.menuItemDescription}>
-                  Download a copy of all your data
-                </Text>
-              </View>
-            </View>
-            {exportData.isPending && (
-              <ActivityIndicator color={colors.accent} size="small" />
-            )}
-          </TouchableOpacity>
         </View>
 
         {/* Danger Zone */}

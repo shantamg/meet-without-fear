@@ -1,15 +1,15 @@
 /**
  * ViewEmpathyStatementDrawer Component
  *
- * A full-screen drawer that displays the full empathy statement.
- * For longer statements that are truncated in the inline card,
- * users can tap to open this drawer and see the complete text.
- * To refine, they close the drawer and type instructions in chat.
+ * A scrollable drawer that displays the full empathy statement.
+ * Users can tap to open this drawer and see the complete text.
+ * Two actions: Share (sends to partner) or Refine Further (open inline composer).
  */
 
-import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
+import { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, Send } from 'lucide-react-native';
+import { X, Send, MessageCircle } from 'lucide-react-native';
 import { colors } from '@/theme';
 
 export interface ViewEmpathyStatementDrawerProps {
@@ -23,6 +23,8 @@ export interface ViewEmpathyStatementDrawerProps {
   onShare: () => void;
   /** Callback when drawer is closed */
   onClose: () => void;
+  /** Callback when user sends a refinement request from the drawer */
+  onSendRefinement?: (message: string) => void;
 }
 
 export function ViewEmpathyStatementDrawer({
@@ -31,7 +33,21 @@ export function ViewEmpathyStatementDrawer({
   partnerName = 'your partner',
   onShare,
   onClose,
+  onSendRefinement,
 }: ViewEmpathyStatementDrawerProps) {
+  const [isRefining, setIsRefining] = useState(false);
+  const [refinementText, setRefinementText] = useState('');
+
+  const handleSendRefinement = () => {
+    const trimmed = refinementText.trim();
+    if (!trimmed) return;
+
+    onSendRefinement?.(trimmed);
+    setRefinementText('');
+    setIsRefining(false);
+    onClose();
+  };
+
   return (
     <Modal
       visible={visible}
@@ -54,47 +70,91 @@ export function ViewEmpathyStatementDrawer({
           </TouchableOpacity>
         </View>
 
-        {/* Main content */}
-        <View style={styles.content}>
-          <Text style={styles.title}>Your understanding</Text>
+        {/* Scrollable content - entire drawer scrolls */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={true}
+        >
+          <Text style={styles.title}>What you'll share</Text>
           <Text style={styles.subtitle}>
             This is what you'll share with {partnerName} to show you understand their perspective.
-            {'\n\n'}
-            To make changes, close this and tell me what you'd like to adjust.
           </Text>
 
-          {/* Scrollable empathy statement */}
+          {/* Empathy statement - styled subtly */}
           <View style={styles.messageContainer}>
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={true}
-            >
-              <Text style={styles.messageText}>{statement}</Text>
-            </ScrollView>
+            <Text style={styles.messageText}>{statement}</Text>
           </View>
-        </View>
 
-        {/* Footer with close and share buttons */}
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={styles.closeFooterButton}
-            onPress={onClose}
-            testID="close-empathy-button"
-            activeOpacity={0.8}
-          >
-            <Text style={styles.closeFooterText}>Close</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.shareButton}
-            onPress={onShare}
-            testID="share-empathy-button"
-            activeOpacity={0.8}
-          >
-            <Send color="white" size={20} />
-            <Text style={styles.shareButtonText}>Share</Text>
-          </TouchableOpacity>
-        </View>
+          {isRefining ? (
+            <View style={styles.refineComposer}>
+              <View style={styles.refineComposerHeader}>
+                <Text style={styles.refineComposerTitle}>How would you like to tweak this?</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setIsRefining(false);
+                    setRefinementText('');
+                  }}
+                  accessibilityLabel="Close refinement"
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  testID="close-refine-composer"
+                >
+                  <X color={colors.textSecondary} size={20} />
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={styles.refineInput}
+                multiline
+                placeholder="Tell the AI what to change or add..."
+                placeholderTextColor={colors.textMuted}
+                value={refinementText}
+                onChangeText={setRefinementText}
+                testID="refine-empathy-input"
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendRefineButton,
+                  !refinementText.trim() && styles.sendRefineButtonDisabled,
+                ]}
+                onPress={handleSendRefinement}
+                disabled={!refinementText.trim()}
+                activeOpacity={0.8}
+                testID="send-refine-empathy-button"
+              >
+                <Send color={refinementText.trim() ? 'white' : colors.textMuted} size={20} />
+                <Text
+                  style={[
+                    styles.sendRefineButtonText,
+                    !refinementText.trim() && styles.sendRefineButtonTextDisabled,
+                  ]}
+                >
+                  Send and update
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.footer}>
+              <TouchableOpacity
+                style={styles.refineButton}
+                onPress={() => setIsRefining(true)}
+                testID="refine-empathy-button"
+                activeOpacity={0.8}
+              >
+                <MessageCircle color={colors.textSecondary} size={20} />
+                <Text style={styles.refineButtonText}>Refine further</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.shareButton}
+                onPress={onShare}
+                testID="share-empathy-button"
+                activeOpacity={0.8}
+              >
+                <Send color="white" size={20} />
+                <Text style={styles.shareButtonText}>Share</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
       </SafeAreaView>
     </Modal>
   );
@@ -117,10 +177,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgSecondary,
     borderRadius: 20,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: 24,
-    paddingTop: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
   title: {
     fontSize: 28,
@@ -138,43 +201,86 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   messageContainer: {
-    flex: 1,
-    backgroundColor: '#3D3500', // Dark yellow/amber background
-    borderRadius: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FFB800', // Bright amber accent
-    marginBottom: 24,
-    maxHeight: 300,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.brandBlue,
     padding: 20,
+    marginBottom: 32,
   },
   messageText: {
-    fontSize: 18,
+    fontSize: 17,
     fontStyle: 'italic',
-    color: '#FFE082', // Light amber for text
-    lineHeight: 28,
+    color: colors.textPrimary,
+    lineHeight: 26,
   },
   footer: {
     flexDirection: 'row',
-    paddingHorizontal: 24,
-    paddingBottom: 16,
     gap: 12,
   },
-  closeFooterButton: {
+  refineComposer: {
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+  },
+  refineComposerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  refineComposerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
     flex: 1,
+    marginRight: 12,
+  },
+  refineInput: {
+    minHeight: 100,
+    backgroundColor: colors.bgPrimary,
+    borderRadius: 12,
+    padding: 12,
+    color: colors.textPrimary,
+    fontSize: 15,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sendRefineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandBlue,
+    borderRadius: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    gap: 8,
+  },
+  sendRefineButtonDisabled: {
+    backgroundColor: colors.bgSecondary,
+  },
+  sendRefineButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: 'white',
+  },
+  sendRefineButtonTextDisabled: {
+    color: colors.textMuted,
+  },
+  refineButton: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bgSecondary,
     borderRadius: 24,
     paddingVertical: 16,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
+    gap: 8,
   },
-  closeFooterText: {
-    fontSize: 16,
+  refineButtonText: {
+    fontSize: 15,
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -183,16 +289,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brandBlue,
     borderRadius: 24,
     paddingVertical: 16,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     gap: 8,
   },
   shareButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: colors.textOnAccent,
+    color: 'white',
   },
 });
 

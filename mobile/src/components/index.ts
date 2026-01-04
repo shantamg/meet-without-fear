@@ -90,3 +90,6 @@ export { BiometricPrompt } from './BiometricPrompt';
 
 // Branding
 export { Logo } from './Logo';
+
+// Screen layout
+export { ScreenHeader } from './ScreenHeader';

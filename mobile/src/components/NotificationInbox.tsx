@@ -27,6 +27,7 @@ import {
   FileText,
   Handshake,
   Trophy,
+  UserX,
 } from 'lucide-react-native';
 import { NotificationType } from '@shared';
 import { colors } from '@/src/theme';
@@ -84,6 +85,7 @@ const NOTIFICATION_ICONS: Record<NotificationType, typeof Bell> = {
   [NotificationType.AGREEMENT_CONFIRMED]: CheckCircle,
   [NotificationType.SESSION_RESOLVED]: Trophy,
   [NotificationType.FOLLOW_UP_REMINDER]: Calendar,
+  [NotificationType.SESSION_ABANDONED]: UserX,
 };
 
 const NOTIFICATION_COLORS: Record<NotificationType, string> = {
@@ -98,6 +100,7 @@ const NOTIFICATION_COLORS: Record<NotificationType, string> = {
   [NotificationType.AGREEMENT_CONFIRMED]: colors.success,
   [NotificationType.SESSION_RESOLVED]: colors.success,
   [NotificationType.FOLLOW_UP_REMINDER]: colors.warning,
+  [NotificationType.SESSION_ABANDONED]: colors.error,
 };
 
 // ============================================================================

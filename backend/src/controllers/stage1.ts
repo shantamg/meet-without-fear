@@ -112,6 +112,7 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     }
 
     const { content } = parseResult.data;
+    const lowerContent = content.toLowerCase();
 
     // Check session exists and user has access
     const session = await prisma.session.findFirst({
@@ -312,8 +313,8 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     // Check if user is trying to refine their invitation (session is INVITED and they ask to refine)
     const isRefiningInvitation =
       session.status === 'INVITED' &&
-      content.toLowerCase().includes('refine') &&
-      content.toLowerCase().includes('invitation');
+      lowerContent.includes('refine') &&
+      lowerContent.includes('invitation');
 
     // Fetch current invitation message for refinement context
     let currentInvitationMessage: string | null = null;
@@ -327,6 +328,30 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       if (!partnerName && invitation?.name) {
         partnerName = invitation.name;
       }
+    }
+
+    // Fetch current empathy draft for refinement context (Stage 2)
+    let currentEmpathyDraft: string | null = null;
+    let isRefiningEmpathy = false;
+    if (currentStage === 2) {
+      const draft = await prisma.empathyDraft.findUnique({
+        where: {
+          sessionId_userId: {
+            sessionId,
+            userId: user.id,
+          },
+        },
+        select: { content: true },
+      });
+
+      currentEmpathyDraft = draft?.content || null;
+
+      const refinementKeywords = ['refine empathy draft', 'refine', 'edit', 'change', 'update', 'tweak', 'adjust', 'revise', 'direct', 'tone', 'shorter', 'longer'];
+      isRefiningEmpathy =
+        refinementKeywords.some((keyword) => lowerContent.includes(keyword)) ||
+        lowerContent.includes('add more') ||
+        lowerContent.includes('make it shorter') ||
+        lowerContent.includes('make it longer');
     }
 
     // Build full context for orchestrated response
@@ -345,6 +370,8 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       isStageTransition,
       previousStage,
       currentInvitationMessage,
+      currentEmpathyDraft,
+      isRefiningEmpathy,
     };
 
     // Get AI response using full orchestration pipeline
@@ -375,6 +402,41 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
         where: { sessionId, invitedById: user.id },
         data: { invitationMessage: extractedInvitationMessage },
       });
+    }
+
+    // Stage 2: If AI is offering ready-to-share, auto-save the empathy draft
+    // Save with readyToShare: false so user sees low-profile confirmation prompt first
+    // User must explicitly confirm to see the full preview card
+    if (
+      currentStage === 2 &&
+      orchestratorResult.offerReadyToShare &&
+      orchestratorResult.proposedEmpathyStatement
+    ) {
+      try {
+        await prisma.empathyDraft.upsert({
+          where: {
+            sessionId_userId: {
+              sessionId,
+              userId: user.id,
+            },
+          },
+          create: {
+            sessionId,
+            userId: user.id,
+            content: orchestratorResult.proposedEmpathyStatement,
+            readyToShare: false, // User must confirm before seeing full preview
+            version: 1,
+          },
+          update: {
+            content: orchestratorResult.proposedEmpathyStatement,
+            // Don't change readyToShare if draft already exists - user may have confirmed
+            version: { increment: 1 },
+          },
+        });
+        console.log(`[sendMessage] Stage 2: Auto-saved empathy draft for user ${user.id}`);
+      } catch (err) {
+        console.error('[sendMessage] Failed to auto-save empathy draft:', err);
+      }
     }
 
     // Save AI response (just the conversational part)

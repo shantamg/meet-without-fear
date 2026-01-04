@@ -38,6 +38,8 @@ export type GetMeResponseInput = z.infer<typeof getMeResponseSchema>;
 
 export const updateProfileRequestSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name too long').optional(),
+  firstName: z.string().min(1, 'First name is required').max(50, 'First name too long').optional(),
+  lastName: z.string().max(50, 'Last name too long').optional(),
 });
 
 export type UpdateProfileRequestInput = z.infer<typeof updateProfileRequestSchema>;

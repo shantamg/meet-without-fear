@@ -1,13 +1,16 @@
 /**
- * Inner Work Controller
+ * Inner Thoughts Controller (formerly Inner Work)
  *
- * Handles inner work (solo self-reflection) session operations:
- * - POST /inner-work - Create new inner work session
- * - GET /inner-work - List inner work sessions
- * - GET /inner-work/:id - Get inner work session with messages
- * - POST /inner-work/:id/messages - Send message and get AI response
- * - PATCH /inner-work/:id - Update session (title, status)
- * - DELETE /inner-work/:id - Archive session
+ * Handles Inner Thoughts (solo self-reflection) session operations:
+ * - POST /inner-thoughts - Create new session (optionally linked to partner session)
+ * - GET /inner-thoughts - List sessions
+ * - GET /inner-thoughts/:id - Get session with messages
+ * - POST /inner-thoughts/:id/messages - Send message and get AI response
+ * - PATCH /inner-thoughts/:id - Update session (title, status)
+ * - DELETE /inner-thoughts/:id - Archive session
+ *
+ * Sessions can be linked to partner sessions for context-aware reflection.
+ * When linked, the AI has access to partner session context.
  */
 
 import { Request, Response } from 'express';
@@ -32,7 +35,7 @@ import {
   listInnerWorkSessionsQuerySchema,
 } from '@meet-without-fear/shared';
 import { getCompletion, getHaikuJson } from '../lib/bedrock';
-import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildInnerWorkSummaryPrompt } from '../services/stage-prompts';
+import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildInnerWorkSummaryPrompt, buildLinkedInnerThoughtsPrompt, LinkedPartnerSessionContext } from '../services/stage-prompts';
 import { extractJsonSafe } from '../utils/json-extractor';
 import { embedInnerWorkMessage } from '../services/embedding';
 
@@ -148,15 +151,128 @@ async function updateSessionMetadata(sessionId: string): Promise<void> {
   }
 }
 
+/**
+ * Fetch context from a linked partner session for Inner Thoughts AI.
+ * Only returns the user's perspective - not partner's private messages.
+ */
+async function fetchLinkedPartnerSessionContext(
+  userId: string,
+  partnerSessionId: string
+): Promise<LinkedPartnerSessionContext | null> {
+  try {
+    // Fetch the partner session with relationship and invitation info
+    const session = await prisma.session.findFirst({
+      where: {
+        id: partnerSessionId,
+        relationship: {
+          members: {
+            some: { userId },
+          },
+        },
+      },
+      include: {
+        relationship: {
+          include: {
+            members: {
+              include: { user: true },
+            },
+          },
+        },
+        stageProgress: {
+          orderBy: { stage: 'desc' },
+          take: 1,
+        },
+        invitations: {
+          take: 1,
+        },
+        empathyDrafts: true,
+        empathyAttempts: true,
+      },
+    });
+
+    if (!session) {
+      return null;
+    }
+
+    // Get the partner's info
+    const partner = session.relationship.members.find((m) => m.userId !== userId);
+    const partnerName = partner?.nickname || partner?.user?.firstName || partner?.user?.name || 'Partner';
+
+    // Get current stage from stageProgress
+    const currentStage = session.stageProgress[0]?.stage || 1;
+
+    // Get user's messages from this session (not partner's private messages)
+    const userMessages = await prisma.message.findMany({
+      where: {
+        sessionId: partnerSessionId,
+        senderId: userId,
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 10,
+    });
+
+    // Get AI messages that were sent to this user
+    const aiMessages = await prisma.message.findMany({
+      where: {
+        sessionId: partnerSessionId,
+        role: 'AI',
+        forUserId: userId,
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 10,
+    });
+
+    // Combine and sort messages to reconstruct the user's conversation view
+    const combinedMessages = [...userMessages, ...aiMessages]
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+      .map((m) => ({
+        role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+        content: m.content,
+      }));
+
+    // Get empathy data from empathyDrafts and empathyAttempts
+    const userDraft = session.empathyDrafts.find((d) => d.userId === userId);
+    const empathyDraft = userDraft?.content;
+    const empathyShared = userDraft?.readyToShare || false;
+
+    // Get partner's empathy ONLY if they shared it (has an attempt record)
+    const partnerAttempt = session.empathyAttempts.find((a) => a.sourceUserId !== userId);
+    const partnerEmpathy = partnerAttempt?.content;
+
+    // Determine waiting status
+    let waitingStatus: string | undefined;
+    if (currentStage === 2 && empathyShared && !partnerEmpathy) {
+      waitingStatus = `Waiting for ${partnerName} to share their empathy statement`;
+    }
+
+    // Get session topic from invitation
+    const sessionTopic = session.invitations[0]?.invitationMessage || undefined;
+
+    return {
+      partnerName,
+      currentStage,
+      waitingStatus,
+      userMessages: combinedMessages,
+      empathyDraft,
+      empathyShared,
+      partnerEmpathy,
+      sessionTopic,
+    };
+  } catch (error) {
+    console.error('[Inner Thoughts] Failed to fetch partner context:', error);
+    return null;
+  }
+}
+
 // ============================================================================
-// POST /inner-work - Create new inner work session
+// POST /inner-thoughts - Create new Inner Thoughts session
 // ============================================================================
 
 export const createInnerWorkSession = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const user = getUser(req);
 
-    // Validate request body
+    // Validate request body (with optional linked session fields)
     const parseResult = createInnerWorkSessionRequestSchema.safeParse(req.body);
     if (!parseResult.success) {
       throw new ValidationError('Invalid request data', {
@@ -166,12 +282,38 @@ export const createInnerWorkSession = asyncHandler(
 
     const { title } = parseResult.data;
 
+    // Extract optional linked session fields (not in shared schema yet)
+    const linkedPartnerSessionId = req.body.linkedPartnerSessionId as string | undefined;
+    const linkedAtStage = req.body.linkedAtStage as number | undefined;
+    const linkedTrigger = req.body.linkedTrigger as string | undefined;
+
+    // If linking to a partner session, verify it exists and user is a participant
+    if (linkedPartnerSessionId) {
+      const partnerSession = await prisma.session.findFirst({
+        where: {
+          id: linkedPartnerSessionId,
+          relationship: {
+            members: {
+              some: { userId: user.id },
+            },
+          },
+        },
+      });
+
+      if (!partnerSession) {
+        throw new ValidationError('Partner session not found or you are not a participant');
+      }
+    }
+
     // Create the session
     const session = await prisma.innerWorkSession.create({
       data: {
         userId: user.id,
         title,
         status: 'ACTIVE',
+        linkedPartnerSessionId,
+        linkedAtStage,
+        linkedTrigger,
       },
       include: {
         _count: { select: { messages: true } },
@@ -231,13 +373,20 @@ export const listInnerWorkSessions = asyncHandler(
       });
     }
 
-    const { status, limit, offset } = parseResult.data;
+    const { status, limit = 20, offset = 0 } = parseResult.data;
 
+    // Build where clause - use Prisma's enum type for 'not' filter
+    const whereClause = {
+      userId: user.id,
+      status: status || { not: 'ARCHIVED' as const }, // Default: exclude archived
+    };
+
+    // Get total count for pagination
+    const total = await prisma.innerWorkSession.count({ where: whereClause });
+
+    // Fetch sessions sorted by updatedAt (which tracks last message time)
     const sessions = await prisma.innerWorkSession.findMany({
-      where: {
-        userId: user.id,
-        status: status || { not: 'ARCHIVED' }, // Default: exclude archived
-      },
+      where: whereClause,
       orderBy: { updatedAt: 'desc' },
       take: limit,
       skip: offset,
@@ -250,6 +399,8 @@ export const listInnerWorkSessions = asyncHandler(
       success: true,
       data: {
         sessions: sessions.map(mapSessionToSummary),
+        total,
+        hasMore: offset + sessions.length < total,
       },
     };
 
@@ -318,7 +469,7 @@ export const sendInnerWorkMessage = asyncHandler(
 
     const { content } = parseResult.data;
 
-    // Verify session exists and belongs to user
+    // Verify session exists and belongs to user (include linked partner session ID)
     const session = await prisma.innerWorkSession.findFirst({
       where: {
         id: sessionId,
@@ -359,15 +510,47 @@ export const sendInnerWorkMessage = asyncHandler(
     // Get recent themes for context
     const recentThemes = await getRecentThemes(user.id, sessionId);
 
-    // Build prompt and get AI response
+    // Build prompt - use linked prompt if this session is connected to a partner session
     const userName = user.firstName || user.name || 'there';
-    const prompt = buildInnerWorkPrompt({
-      userName,
-      turnCount: session.messages.length + 1,
-      emotionalIntensity: 5, // Could be enhanced with intensity detection
-      sessionSummary: session.summary || undefined,
-      recentThemes: recentThemes.length > 0 ? recentThemes : undefined,
-    });
+    let prompt: string;
+
+    if (session.linkedPartnerSessionId) {
+      // Fetch context from the linked partner session
+      const linkedContext = await fetchLinkedPartnerSessionContext(
+        user.id,
+        session.linkedPartnerSessionId
+      );
+
+      if (linkedContext) {
+        // Use the linked Inner Thoughts prompt with partner session context
+        prompt = buildLinkedInnerThoughtsPrompt({
+          userName,
+          turnCount: session.messages.length + 1,
+          emotionalIntensity: 5,
+          sessionSummary: session.summary || undefined,
+          recentThemes: recentThemes.length > 0 ? recentThemes : undefined,
+          linkedContext,
+        });
+      } else {
+        // Fallback to regular prompt if context fetch fails
+        prompt = buildInnerWorkPrompt({
+          userName,
+          turnCount: session.messages.length + 1,
+          emotionalIntensity: 5,
+          sessionSummary: session.summary || undefined,
+          recentThemes: recentThemes.length > 0 ? recentThemes : undefined,
+        });
+      }
+    } else {
+      // Not linked - use regular Inner Thoughts prompt
+      prompt = buildInnerWorkPrompt({
+        userName,
+        turnCount: session.messages.length + 1,
+        emotionalIntensity: 5,
+        sessionSummary: session.summary || undefined,
+        recentThemes: recentThemes.length > 0 ? recentThemes : undefined,
+      });
+    }
 
     const fallbackResponse = "I'm here with you. Tell me more about what's on your mind.";
     const aiResponse = await getCompletion({
@@ -509,6 +692,52 @@ export const archiveInnerWorkSession = asyncHandler(
       data: {
         archived: true,
         archivedAt: now.toISOString(),
+      },
+    };
+
+    res.json(response);
+  }
+);
+
+// ============================================================================
+// GET /sessions/:id/inner-thoughts - Get linked Inner Thoughts session
+// ============================================================================
+
+export const getLinkedInnerThoughts = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const user = getUser(req);
+    const partnerSessionId = req.params.id;
+
+    // Verify user is a participant in the partner session
+    const partnerSession = await prisma.session.findFirst({
+      where: {
+        id: partnerSessionId,
+        relationship: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+      },
+    });
+
+    if (!partnerSession) {
+      throw new ValidationError('Partner session not found or you are not a participant');
+    }
+
+    // Find existing linked Inner Thoughts session
+    const linkedSession = await prisma.innerWorkSession.findFirst({
+      where: {
+        userId: user.id,
+        linkedPartnerSessionId: partnerSessionId,
+        status: { not: 'ARCHIVED' },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const response: ApiResponse<{ innerThoughtsSessionId: string | null }> = {
+      success: true,
+      data: {
+        innerThoughtsSessionId: linkedSession?.id || null,
       },
     };
 

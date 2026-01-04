@@ -119,6 +119,10 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, { title: string; b
     title: 'Follow-up Reminder',
     bodyTemplate: 'How is your agreement with {actorName} going?',
   },
+  [NotificationType.SESSION_ABANDONED]: {
+    title: 'Session Ended',
+    bodyTemplate: '{actorName} has left the session. The session has been archived.',
+  },
 };
 
 /**

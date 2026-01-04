@@ -185,21 +185,31 @@ export function useAblyToken(
 // Account Actions
 // ============================================================================
 
+/** Response from delete account endpoint */
+interface DeleteAccountApiResponse {
+  success: boolean;
+  summary: {
+    sessionsAbandoned: number;
+    partnersNotified: number;
+    dataRecordsDeleted: number;
+  };
+}
+
 /**
  * Delete the current user's account.
  * This is a destructive action that cannot be undone.
  */
 export function useDeleteAccount(
   options?: Omit<
-    UseMutationOptions<{ deleted: boolean }, ApiClientError, { confirmEmail: string }>,
+    UseMutationOptions<DeleteAccountApiResponse, ApiClientError, void>,
     'mutationFn'
   >
 ) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ confirmEmail }) => {
-      return post<{ deleted: boolean }>('/me/delete', { confirmEmail });
+    mutationFn: async () => {
+      return del<DeleteAccountApiResponse>('/auth/me');
     },
     onSuccess: () => {
       // Clear all cached data
