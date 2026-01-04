@@ -37,6 +37,8 @@ export function ChatInput({
   const styles = useStyles();
   const [input, setInput] = useState('');
   const inputRef = useRef<TextInputType>(null);
+  // Flag to ignore onChangeText events right after sending (prevents autocorrect race condition)
+  const justSentRef = useRef(false);
 
   const canSend = input.trim().length > 0 && !disabled;
   const characterRatio = input.length / maxLength;
@@ -45,13 +47,21 @@ export function ChatInput({
   const handleSend = useCallback(() => {
     if (!canSend) return;
     const message = input.trim();
+    // Set flag to ignore autocorrect events that fire after clearing
+    justSentRef.current = true;
     // Clear both React state and native TextInput to ensure sync
     setInput('');
     inputRef.current?.clear();
     onSend(message);
+    // Reset flag after a short delay to allow autocorrect events to be ignored
+    setTimeout(() => {
+      justSentRef.current = false;
+    }, 500);
   }, [input, canSend, onSend]);
 
   const handleChangeText = useCallback((text: string) => {
+    // Ignore autocorrect events that fire right after sending
+    if (justSentRef.current) return;
     setInput(text);
   }, []);
 
