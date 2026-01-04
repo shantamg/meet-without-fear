@@ -11,6 +11,7 @@ import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { NotificationInbox } from '@/src/components/NotificationInbox';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 import { useNotifications } from '@/src/hooks/useNotifications';
 import { colors } from '@/src/theme';
 
@@ -42,22 +43,9 @@ export default function NotificationsScreen() {
   if (isLoading && notifications.length === 0) {
     return (
       <>
-        <Stack.Screen
-          options={{
-            title: 'Notifications',
-            headerShown: true,
-            headerBackTitle: '',
-            headerStyle: {
-              backgroundColor: colors.bgSecondary,
-            },
-            headerTintColor: colors.textPrimary,
-            headerTitleStyle: {
-              color: colors.textPrimary,
-              fontWeight: '600',
-            },
-          }}
-        />
+        <Stack.Screen options={{ headerShown: false }} />
         <SafeAreaView style={styles.container} edges={['bottom']}>
+          <ScreenHeader title="Notifications" />
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.accent} />
           </View>
@@ -70,22 +58,9 @@ export default function NotificationsScreen() {
   if (isError && notifications.length === 0) {
     return (
       <>
-        <Stack.Screen
-          options={{
-            title: 'Notifications',
-            headerShown: true,
-            headerBackTitle: '',
-            headerStyle: {
-              backgroundColor: colors.bgSecondary,
-            },
-            headerTintColor: colors.textPrimary,
-            headerTitleStyle: {
-              color: colors.textPrimary,
-              fontWeight: '600',
-            },
-          }}
-        />
+        <Stack.Screen options={{ headerShown: false }} />
         <SafeAreaView style={styles.container} edges={['bottom']}>
+          <ScreenHeader title="Notifications" />
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>Failed to load notifications</Text>
             <Text style={styles.errorSubtext}>Pull down to try again</Text>
@@ -97,23 +72,9 @@ export default function NotificationsScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: 'Notifications',
-          headerShown: true,
-          headerBackTitle: '',
-          headerStyle: {
-            backgroundColor: colors.bgSecondary,
-          },
-          headerTintColor: colors.textPrimary,
-          headerTitleStyle: {
-            color: colors.textPrimary,
-            fontWeight: '600',
-          },
-        }}
-      />
-
+      <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={styles.container} edges={['bottom']}>
+        <ScreenHeader title="Notifications" />
         <View style={styles.content}>
           <NotificationInbox
             notifications={notifications}

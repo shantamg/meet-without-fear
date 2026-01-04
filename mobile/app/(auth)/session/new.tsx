@@ -116,7 +116,7 @@ export default function NewSessionScreen() {
                 >
                   <User
                     size={18}
-                    color={mode === 'pick' ? colors.accent : colors.textSecondary}
+                    color={mode === 'pick' ? colors.brandBlue : colors.textSecondary}
                   />
                   <Text
                     style={[styles.tabText, mode === 'pick' && styles.tabTextActive]}
@@ -132,7 +132,7 @@ export default function NewSessionScreen() {
                 >
                   <UserPlus
                     size={18}
-                    color={mode === 'new' ? colors.accent : colors.textSecondary}
+                    color={mode === 'new' ? colors.brandBlue : colors.textSecondary}
                   />
                   <Text
                     style={[styles.tabText, mode === 'new' && styles.tabTextActive]}
@@ -147,7 +147,7 @@ export default function NewSessionScreen() {
             {effectiveMode === 'pick' && hasPeople && (
               <View style={styles.peopleList}>
                 {peopleLoading ? (
-                  <ActivityIndicator color={colors.accent} />
+                  <ActivityIndicator color={colors.brandBlue} />
                 ) : (
                   people.map((person) => (
                     <TouchableOpacity
@@ -173,7 +173,7 @@ export default function NewSessionScreen() {
                       </View>
                       {selectedPerson?.id === person.id && (
                         <View style={styles.checkIcon}>
-                          <Check size={20} color={colors.accent} />
+                          <Check size={20} color={colors.brandBlue} />
                         </View>
                       )}
                     </TouchableOpacity>
@@ -231,11 +231,11 @@ export default function NewSessionScreen() {
               accessibilityLabel="Create session"
             >
               {isPending ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
+                <ActivityIndicator color={colors.textPrimary} size="small" />
               ) : (
                 <>
                   <Text style={styles.submitButtonText}>Create Session</Text>
-                  <Send color="#FFFFFF" size={20} />
+                  <Send color={colors.textPrimary} size={20} />
                 </>
               )}
             </TouchableOpacity>
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   tabTextActive: {
-    color: colors.accent,
+    color: colors.brandBlue,
   },
   // People list
   peopleList: {
@@ -343,8 +343,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   personCardSelected: {
-    borderColor: colors.accent,
-    backgroundColor: `${colors.accent}10`,
+    borderColor: colors.brandBlue,
+    backgroundColor: `${colors.brandBlue}10`,
   },
   personAvatar: {
     width: 44,
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accent,
+    backgroundColor: colors.brandBlue,
     borderRadius: 12,
     padding: 16,
     gap: 8,
@@ -413,6 +413,6 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: colors.textPrimary,
   },
 });

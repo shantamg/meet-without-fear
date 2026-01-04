@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stage, MessageRole, StrategyPhase, SessionStatus } from '@meet-without-fear/shared';
 
@@ -23,7 +23,6 @@ import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
 // WaitingStatusMessage removed - we no longer show "waiting for partner" messages
 import { EmpathyAttemptCard } from '../components/EmpathyAttemptCard';
 import { AccuracyFeedback } from '../components/AccuracyFeedback';
-import { ConsentPrompt, SharingOption } from '../components/ConsentPrompt';
 import { NeedsSection } from '../components/NeedsSection';
 import { CommonGroundCard } from '../components/CommonGroundCard';
 import { StrategyPool } from '../components/StrategyPool';
@@ -48,6 +47,7 @@ import { createStyles } from '../theme/styled';
 interface UnifiedSessionScreenProps {
   sessionId: string;
   onNavigateBack?: () => void;
+  onNavigateToInnerThoughts?: (linkedSessionId?: string) => void;
   onStageComplete?: (stage: Stage) => void;
 }
 
@@ -81,6 +81,7 @@ function getBriefStatus(status?: SessionStatus, isInviter?: boolean): string | u
 export function UnifiedSessionScreen({
   sessionId,
   onNavigateBack,
+  onNavigateToInnerThoughts,
   onStageComplete,
 }: UnifiedSessionScreenProps) {
   const styles = useStyles();
@@ -133,7 +134,6 @@ export function UnifiedSessionScreen({
     compactData,
     loadingCompact,
     empathyDraftData,
-    partnerEmpathyData,
     liveProposedEmpathyStatement,
     allNeedsConfirmed,
     commonGround,
@@ -142,6 +142,7 @@ export function UnifiedSessionScreen({
     overlappingStrategies,
     agreements,
     isGenerating,
+    waitingStatus,
 
     // Actions
     sendMessage,
@@ -186,6 +187,7 @@ export function UnifiedSessionScreen({
   // Local State for View Empathy Statement Drawer (Stage 2)
   // -------------------------------------------------------------------------
   const [showEmpathyDrawer, setShowEmpathyDrawer] = useState(false);
+  const [showShareConfirm, setShowShareConfirm] = useState(false);
 
   // -------------------------------------------------------------------------
   // Local State for Session Entry Mood Check
@@ -296,6 +298,23 @@ export function UnifiedSessionScreen({
   }, [currentStage, compactData?.mySigned]);
 
   // -------------------------------------------------------------------------
+  // Inner Thoughts Button Visibility
+  // -------------------------------------------------------------------------
+  // Show inner thoughts button only after Stage 2 (PERSPECTIVE_STRETCH) is completed,
+  // or when user is waiting for partner to finish Stage 2.
+  const shouldShowInnerThoughts = useMemo(() => {
+    if (!onNavigateToInnerThoughts) return false;
+
+    // Show if stage 2 is completed (we're in stage 3 or 4)
+    if (currentStage > Stage.PERSPECTIVE_STRETCH) return true;
+
+    // Show if in stage 2 and waiting for partner to share their empathy
+    if (currentStage === Stage.PERSPECTIVE_STRETCH && waitingStatus === 'empathy-pending') return true;
+
+    return false;
+  }, [onNavigateToInnerThoughts, currentStage, waitingStatus]);
+
+  // -------------------------------------------------------------------------
   // Prepare Messages for Display
   // -------------------------------------------------------------------------
   const displayMessages = useMemo((): ChatMessage[] => {
@@ -376,10 +395,6 @@ export function UnifiedSessionScreen({
           return (
             <View style={styles.inlineCard} key={card.id}>
               <ReadyToShareConfirmation
-                onConfirm={handleConfirmReadyToShare}
-                onContinue={handleDismissReadyToShare}
-                partnerName={partnerName}
-                proposedStatement={card.props.proposedStatement as string | null | undefined}
                 onViewFull={() => setShowEmpathyDrawer(true)}
               />
             </View>
@@ -392,19 +407,21 @@ export function UnifiedSessionScreen({
                 attempt={card.props.content as string}
                 testID="empathy-draft-preview"
               />
-              <ConsentPrompt
-                title="Share your attempt?"
-                description={`${partnerName} will see your attempt to understand their perspective.`}
-                onSelect={(option: SharingOption) => {
-                  if (option === 'full') {
-                    handleShareEmpathy();
-                  } else if (option === 'private') {
-                    handleSaveEmpathyDraft(card.props.content as string, false);
-                  }
-                }}
-                simplified
-                testID="consent-prompt"
-              />
+              <View style={styles.shareActions}>
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => setShowEmpathyDrawer(true)}
+                >
+                  <Text style={styles.secondaryButtonText}>Edit draft</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.primaryButton}
+                  onPress={() => setShowShareConfirm(true)}
+                  testID="send-empathy-button"
+                >
+                  <Text style={styles.primaryButtonText}>Send empathy statement</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           );
 
@@ -812,6 +829,9 @@ export function UnifiedSessionScreen({
           partnerOnline={partnerOnline}
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+          onBackPress={onNavigateBack}
+          onInnerThoughtsPress={onNavigateToInnerThoughts ? () => onNavigateToInnerThoughts() : undefined}
+          showInnerThoughtsButton={shouldShowInnerThoughts}
           testID="session-chat-header"
         />
         <StrategyRanking
@@ -837,6 +857,9 @@ export function UnifiedSessionScreen({
         connectionStatus={connectionStatus}
         briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
         hideOnlineStatus={isInvitationPhase}
+        onBackPress={onNavigateBack}
+        onInnerThoughtsPress={onNavigateToInnerThoughts ? () => onNavigateToInnerThoughts() : undefined}
+        showInnerThoughtsButton={shouldShowInnerThoughts}
         onBriefStatusPress={
           session?.status === SessionStatus.INVITED && invitation?.isInviter
             ? () => setShowRefineDrawer(true)
@@ -913,12 +936,63 @@ export function UnifiedSessionScreen({
           }
         />
 
+        {waitingStatus === 'empathy-pending' && (
+          <View style={styles.waitingBanner}>
+            <Text style={styles.waitingBannerText}>
+              Waiting for {partnerName || 'your partner'} to share their empathy statement before we continue.
+            </Text>
+          </View>
+        )}
+
         {/* Render inline cards at the end of the chat */}
         {inlineCards.map((card) => renderInlineCard(card))}
       </View>
 
       {/* Overlays */}
       {renderOverlay()}
+
+      {/* Share Empathy Confirmation */}
+      <Modal
+        visible={showShareConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowShareConfirm(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Send empathy statement?</Text>
+            <Text style={styles.modalSubtitle}>
+              {partnerName
+                ? `We'll share this with ${partnerName} now.`
+                : 'We will share your understanding now.'}
+            </Text>
+            <View style={styles.modalPreview}>
+              <Text style={styles.modalPreviewLabel}>What you'll share</Text>
+              <Text style={styles.modalPreviewText}>
+                {empathyDraftData?.draft?.content || liveProposedEmpathyStatement || 'Draft is empty'}
+              </Text>
+            </View>
+            <View style={styles.shareActions}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => setShowShareConfirm(false)}
+              >
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={() => {
+                  handleConfirmReadyToShare();
+                  handleShareEmpathy();
+                  setShowShareConfirm(false);
+                }}
+              >
+                <Text style={styles.primaryButtonText}>Send now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Refine Invitation Drawer */}
       {invitationMessage && invitationUrl && (
@@ -954,9 +1028,18 @@ export function UnifiedSessionScreen({
           statement={liveProposedEmpathyStatement}
           partnerName={partnerName}
           onShare={() => {
-            // Close drawer, confirm ready to share, then share
+            // Close drawer and open a simple confirmation before sending
             setShowEmpathyDrawer(false);
-            handleConfirmReadyToShare();
+            setShowShareConfirm(true);
+          }}
+          onSendRefinement={(message) => {
+            const refined =
+              message.trim().toLowerCase().startsWith('refine empathy draft')
+                ? message
+                : `Refine empathy draft: ${message}`;
+            // Prefix to make intent clear to the AI/prompt that this is a draft update
+            sendMessage(refined);
+            setShowEmpathyDrawer(false);
           }}
           onClose={() => setShowEmpathyDrawer(false)}
         />
@@ -1052,6 +1135,92 @@ const useStyles = () =>
       padding: 16,
       backgroundColor: t.colors.bgSecondary,
       borderRadius: 12,
+    },
+    shareActions: {
+      flexDirection: 'row',
+      gap: t.spacing.sm,
+      marginTop: t.spacing.sm,
+    },
+    primaryButton: {
+      flex: 1,
+      backgroundColor: t.colors.brandBlue,
+      paddingVertical: t.spacing.sm,
+      borderRadius: t.radius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    primaryButtonText: {
+      color: 'white',
+      fontWeight: '700',
+      fontSize: t.typography.fontSize.md,
+    },
+    secondaryButton: {
+      flex: 1,
+      backgroundColor: t.colors.bgSecondary,
+      paddingVertical: t.spacing.sm,
+      borderRadius: t.radius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: t.colors.border,
+    },
+    secondaryButtonText: {
+      color: t.colors.textPrimary,
+      fontWeight: '600',
+      fontSize: t.typography.fontSize.md,
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      justifyContent: 'center',
+      padding: t.spacing.lg,
+    },
+    modalCard: {
+      backgroundColor: t.colors.bgPrimary,
+      borderRadius: t.radius.xl,
+      padding: t.spacing.lg,
+      gap: t.spacing.md,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: t.colors.textPrimary,
+    },
+    modalSubtitle: {
+      fontSize: 14,
+      color: t.colors.textSecondary,
+      lineHeight: 20,
+    },
+    modalPreview: {
+      backgroundColor: t.colors.bgSecondary,
+      borderRadius: t.radius.lg,
+      padding: t.spacing.md,
+    },
+    modalPreviewLabel: {
+      fontSize: 12,
+      color: t.colors.textSecondary,
+      marginBottom: t.spacing.xs,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    modalPreviewText: {
+      fontSize: 15,
+      lineHeight: 22,
+      color: t.colors.textPrimary,
+    },
+    waitingBanner: {
+      marginHorizontal: t.spacing.lg,
+      marginBottom: t.spacing.sm,
+      padding: t.spacing.md,
+      backgroundColor: t.colors.bgSecondary,
+      borderRadius: t.radius.lg,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+    },
+    waitingBannerText: {
+      color: t.colors.textSecondary,
+      fontSize: t.typography.fontSize.sm,
+      lineHeight: 20,
     },
     cardTitle: {
       fontSize: 18,
@@ -1234,34 +1403,10 @@ const useStyles = () =>
       fontWeight: '600',
     },
 
-    // Strategy Preview
+    // Strategy Preview (uses primaryButton/secondaryButton styles defined above)
     strategyPreviewButtons: {
       flexDirection: 'row',
       gap: 12,
-    },
-    primaryButton: {
-      flex: 1,
-      padding: 14,
-      backgroundColor: t.colors.accent,
-      borderRadius: 8,
-      alignItems: 'center',
-    },
-    primaryButtonText: {
-      color: t.colors.textOnAccent,
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    secondaryButton: {
-      flex: 1,
-      padding: 14,
-      borderWidth: 1,
-      borderColor: t.colors.border,
-      borderRadius: 8,
-      alignItems: 'center',
-    },
-    secondaryButtonText: {
-      color: t.colors.textPrimary,
-      fontSize: 14,
     },
 
     // Overlap & Agreement
