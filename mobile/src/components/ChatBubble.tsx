@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { View, Text } from 'react-native';
 import { MessageRole } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
+import { TypewriterText } from './TypewriterText';
 
 // ============================================================================
 // Types
@@ -38,8 +39,11 @@ interface ChatBubbleProps {
 // Constants
 // ============================================================================
 
-/** Typewriter speed in ms per character (faster = smaller number) */
-const TYPEWRITER_SPEED_MS = 8; // 8ms per character = ~125 chars/sec (quite fast)
+/** Delay between each word appearing (ms) */
+const WORD_DELAY_MS = 40;
+
+/** Duration of the fade-in animation for each word (ms) */
+const FADE_DURATION_MS = 120;
 
 // ============================================================================
 // Component
@@ -60,13 +64,17 @@ export function ChatBubble({
   const isAI = !isUser && !isSystem && !isEmpathyStatement;
   const isIntervention = message.isIntervention ?? false;
 
-  // Typewriter state
-  const [displayedText, setDisplayedText] = useState('');
-  const hasCompletedRef = useRef(false);
-  const hasStartedRef = useRef(false);
+  // Track if this specific message instance has completed animation
+  const hasAnimatedRef = useRef(false);
   const messageIdRef = useRef(message.id);
 
-  // Store callbacks in refs to avoid restarting animation when they change
+  // Reset animation state if message ID changes
+  if (messageIdRef.current !== message.id) {
+    messageIdRef.current = message.id;
+    hasAnimatedRef.current = false;
+  }
+
+  // Store callbacks in refs to avoid re-triggering animation
   const onStartRef = useRef(onTypewriterStart);
   const onCompleteRef = useRef(onTypewriterComplete);
   const onProgressRef = useRef(onTypewriterProgress);
@@ -75,61 +83,13 @@ export function ChatBubble({
   onProgressRef.current = onTypewriterProgress;
 
   // Determine if we should use typewriter effect
-  const shouldUseTypewriter = isAI && enableTypewriter && !message.skipTypewriter;
+  const shouldUseTypewriter = isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
 
-  // Typewriter effect for AI messages
-  useEffect(() => {
-    // Reset if message ID changes (new message)
-    if (messageIdRef.current !== message.id) {
-      messageIdRef.current = message.id;
-      hasCompletedRef.current = false;
-      hasStartedRef.current = false;
-      setDisplayedText('');
-    }
-
-    // Skip typewriter for non-AI messages or if disabled
-    if (!shouldUseTypewriter) {
-      setDisplayedText(message.content);
-      return;
-    }
-
-    // If already completed, show full text
-    if (hasCompletedRef.current) {
-      setDisplayedText(message.content);
-      return;
-    }
-
-    // Notify parent that typewriter has started (so it can track this message)
-    if (!hasStartedRef.current) {
-      hasStartedRef.current = true;
-      onStartRef.current?.();
-    }
-
-    // Start typewriter animation
-    let currentIndex = 0;
-
-    const interval = setInterval(() => {
-      if (currentIndex <= message.content.length) {
-        setDisplayedText(message.content.slice(0, currentIndex));
-        // Call progress callback every ~15 characters to trigger scroll
-        if (currentIndex % 15 === 0) {
-          onProgressRef.current?.();
-        }
-        currentIndex++;
-      } else {
-        clearInterval(interval);
-        hasCompletedRef.current = true;
-        onCompleteRef.current?.();
-      }
-    }, TYPEWRITER_SPEED_MS);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [message.id, message.content, shouldUseTypewriter]);
-
-  // For non-typewriter messages, always show full content
-  const textToDisplay = shouldUseTypewriter ? displayedText : message.content;
+  // Mark as animated when complete
+  const handleComplete = () => {
+    hasAnimatedRef.current = true;
+    onCompleteRef.current?.();
+  };
 
   const formatTime = (timestamp: string): string => {
     const date = new Date(timestamp);
@@ -176,16 +136,32 @@ export function ChatBubble({
   };
 
   const renderContent = () => {
-    if (!isEmpathyStatement) {
-      return <Text style={getTextStyle()}>{textToDisplay}</Text>;
+    // Empathy statements don't use typewriter
+    if (isEmpathyStatement) {
+      return (
+        <View>
+          <Text style={styles.empathyStatementHeader}>What you shared</Text>
+          <Text style={styles.empathyStatementText}>{message.content}</Text>
+        </View>
+      );
     }
 
-    return (
-      <View>
-        <Text style={styles.empathyStatementHeader}>What you shared</Text>
-        <Text style={styles.empathyStatementText}>{textToDisplay}</Text>
-      </View>
-    );
+    // Use typewriter for new AI messages
+    if (shouldUseTypewriter) {
+      return (
+        <TypewriterText
+          text={message.content}
+          style={getTextStyle()}
+          wordDelay={WORD_DELAY_MS}
+          fadeDuration={FADE_DURATION_MS}
+          onComplete={handleComplete}
+          onProgress={onProgressRef.current}
+        />
+      );
+    }
+
+    // Regular text for all other cases
+    return <Text style={getTextStyle()}>{message.content}</Text>;
   };
 
   return (

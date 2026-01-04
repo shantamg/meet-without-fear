@@ -158,9 +158,41 @@ export function ChatInterface({
     // DO NOT SCROLL - the newest message hasn't changed
   }, [listItems]);
 
+  // Track message IDs that should skip typewriter (existed on initial load or loaded as history)
+  const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  const isInitialLoadRef = useRef(true);
+
+  // Synchronously capture initial message IDs on first render
+  // This ensures first render already knows these are history messages
+  if (isInitialLoadRef.current && messages.length > 0) {
+    messages.forEach(m => knownMessageIdsRef.current.add(m.id));
+    isInitialLoadRef.current = false;
+  }
+
+  // Also add any messages loaded as history (from pagination)
+  // This happens when isLoadingMore transitions from true to false with new messages
+  useEffect(() => {
+    if (isLoadingHistoryRef.current) {
+      // Mark all current messages as known (they're being loaded from history)
+      messages.forEach(m => knownMessageIdsRef.current.add(m.id));
+    }
+  }, [messages]);
+
   const renderItem: ListRenderItem<ChatListItem> = useCallback(({ item }) => {
     if (isIndicator(item)) {
       return <ChatIndicator type={item.indicatorType} timestamp={item.timestamp} />;
+    }
+
+    // Skip typewriter for:
+    // 1. Messages that existed on initial load (history)
+    // 2. Optimistic messages (they may re-render with real IDs)
+    // 3. User messages (only AI messages get typewriter)
+    const isKnownMessage = knownMessageIdsRef.current.has(item.id);
+    const isOptimisticMessage = item.id.startsWith('optimistic-');
+
+    // After this message is seen, mark it as known for future renders
+    if (!isKnownMessage && !isOptimisticMessage) {
+      knownMessageIdsRef.current.add(item.id);
     }
 
     const bubbleMessage: ChatBubbleMessage = {
@@ -169,7 +201,7 @@ export function ChatInterface({
       content: item.content,
       timestamp: item.timestamp,
       status: item.status,
-      skipTypewriter: true, // Always skip typewriter - feature removed
+      skipTypewriter: isKnownMessage || isOptimisticMessage,
     };
     return <ChatBubble message={bubbleMessage} />;
   }, []);
