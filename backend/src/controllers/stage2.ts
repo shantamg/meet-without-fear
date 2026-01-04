@@ -421,19 +421,22 @@ export async function consentToShare(
       console.warn('[consentToShare] Failed to embed empathy statement:', err)
     );
 
-    // Check if partner has also consented
-    const partnerAttempt = await prisma.empathyAttempt.findFirst({
-      where: {
-        sessionId,
-        sourceUserId: partnerId ?? undefined,
-      },
-    });
+    // Check if partner has also consented (only if we have a partner)
+    let partnerAttempt = null;
+    if (partnerId) {
+      partnerAttempt = await prisma.empathyAttempt.findFirst({
+        where: {
+          sessionId,
+          sourceUserId: partnerId,
+        },
+      });
 
-    // If both have shared, kick off reconciler in the background
-    if (partnerAttempt) {
-      runReconciler(sessionId, user.id).catch((err) =>
-        console.warn('[consentToShare] Failed to run reconciler after both shared:', err)
-      );
+      // If both have shared, kick off reconciler in the background
+      if (partnerAttempt) {
+        runReconciler(sessionId, user.id).catch((err) =>
+          console.warn('[consentToShare] Failed to run reconciler after both shared:', err)
+        );
+      }
     }
 
     // Create notification for partner

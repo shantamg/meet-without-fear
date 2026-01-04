@@ -51,11 +51,23 @@ export interface EmpathyAttemptDTO {
   consentRecordId: string;
 }
 
+/** Message included in consent response for immediate display */
+export interface ConsentMessageDTO {
+  id: string;
+  content: string;
+  timestamp: string;
+  stage: number;
+}
+
 export interface ConsentToShareEmpathyResponse {
   consented: boolean;
-  consentedAt: string;
-  waitingForPartner: boolean;
-  partnerAttempt?: EmpathyAttemptDTO;
+  consentedAt: string | null;
+  partnerConsented: boolean;
+  canReveal: boolean;
+  /** The empathy statement message that was saved */
+  empathyMessage: ConsentMessageDTO;
+  /** AI transition message (optional, may fail to generate) */
+  transitionMessage: ConsentMessageDTO | null;
 }
 
 // ============================================================================

@@ -11,6 +11,7 @@ import {
   useQueryClient,
   UseQueryOptions,
   UseMutationOptions,
+  InfiniteData,
 } from '@tanstack/react-query';
 import { get, post, ApiClientError } from '../lib/api';
 import { messageKeys } from './useMessages';
@@ -52,6 +53,8 @@ import {
   ResolveSessionResponse,
   Stage,
   StageStatus,
+  GetMessagesResponse,
+  MessageRole,
 } from '@meet-without-fear/shared';
 import { sessionKeys } from './useSessions';
 
@@ -287,11 +290,90 @@ export function useConsentToShareEmpathy(
         { consent }
       );
     },
-    onSuccess: (_, { sessionId }) => {
+    onSuccess: (data, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-      // Invalidate messages to show the empathy statement in chat
+
+      // Add the returned messages directly to the cache for immediate display
+      const messagesToAdd: Array<{
+        id: string;
+        sessionId: string;
+        senderId: string | null;
+        role: MessageRole;
+        content: string;
+        stage: number;
+        timestamp: string;
+      }> = [];
+      if (data.empathyMessage) {
+        messagesToAdd.push({
+          id: data.empathyMessage.id,
+          sessionId,
+          senderId: null,
+          role: MessageRole.EMPATHY_STATEMENT,
+          content: data.empathyMessage.content,
+          stage: data.empathyMessage.stage,
+          timestamp: data.empathyMessage.timestamp,
+        });
+      }
+      if (data.transitionMessage) {
+        messagesToAdd.push({
+          id: data.transitionMessage.id,
+          sessionId,
+          senderId: null,
+          role: MessageRole.AI,
+          content: data.transitionMessage.content,
+          stage: data.transitionMessage.stage,
+          timestamp: data.transitionMessage.timestamp,
+        });
+      }
+
+      if (messagesToAdd.length > 0) {
+        // Update both list and infinite caches
+        const updateCache = (old: GetMessagesResponse | undefined): GetMessagesResponse => {
+          if (!old) return { messages: messagesToAdd, hasMore: false };
+          // Add new messages, avoiding duplicates
+          const existingIds = new Set(old.messages.map((m) => m.id));
+          const newMessages = messagesToAdd.filter((m) => !existingIds.has(m.id));
+          return { ...old, messages: [...old.messages, ...newMessages] };
+        };
+
+        const updateInfiniteCache = (
+          old: InfiniteData<GetMessagesResponse> | undefined
+        ): InfiniteData<GetMessagesResponse> | undefined => {
+          if (!old || old.pages.length === 0) {
+            return { pages: [{ messages: messagesToAdd, hasMore: false }], pageParams: [undefined] };
+          }
+          // Add to first page (newest messages)
+          const existingIds = new Set(old.pages[0].messages.map((m) => m.id));
+          const newMessages = messagesToAdd.filter((m) => !existingIds.has(m.id));
+          const updatedFirstPage = {
+            ...old.pages[0],
+            messages: [...old.pages[0].messages, ...newMessages],
+          };
+          return { ...old, pages: [updatedFirstPage, ...old.pages.slice(1)] };
+        };
+
+        // Update caches
+        queryClient.setQueryData<GetMessagesResponse>(
+          messageKeys.list(sessionId),
+          updateCache
+        );
+        queryClient.setQueryData<GetMessagesResponse>(
+          messageKeys.list(sessionId, 2),
+          updateCache
+        );
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId),
+          updateInfiniteCache
+        );
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId, 2),
+          updateInfiniteCache
+        );
+      }
+
+      // Also invalidate to ensure fresh data
       queryClient.invalidateQueries({ queryKey: messageKeys.all });
     },
     ...options,
