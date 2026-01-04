@@ -10,6 +10,17 @@ import { SessionStatus, Stage, StageStatus } from '../enums';
 // Session Summary (for lists and cards)
 // ============================================================================
 
+/**
+ * Status summary for display in session list.
+ * Generated server-side to provide meaningful, human-readable status messages.
+ */
+export interface SessionStatusSummary {
+  /** What the user should know about their own status, e.g., "You've shared your perspective" */
+  userStatus: string;
+  /** What's happening with the partner, e.g., "Waiting for Jason to share theirs" */
+  partnerStatus: string;
+}
+
 export interface SessionSummaryDTO {
   id: string;
   relationshipId: string;
@@ -28,7 +39,10 @@ export interface SessionSummaryDTO {
   myProgress: StageProgressDTO;
   partnerProgress: StageProgressDTO;
 
-  // Computed helpers for UI
+  // Human-readable status summary for session list display
+  statusSummary: SessionStatusSummary;
+
+  // Computed helpers for UI (kept for backwards compatibility)
   selfActionNeeded: string[]; // Gate keys the user still needs
   partnerActionNeeded: string[]; // Gate keys partner must satisfy to unlock next stage
 }

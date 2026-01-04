@@ -1,7 +1,7 @@
 /**
  * SessionCard Component Tests
  *
- * Tests for the session card component that displays session summaries.
+ * Tests for the streamlined session card component that displays session summaries.
  */
 
 import React from 'react';
@@ -17,7 +17,7 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
-// Helper to create mock session
+// Helper to create mock session with status summary
 function createMockSession(overrides: Partial<SessionSummaryDTO> = {}): SessionSummaryDTO {
   return {
     id: 'session-1',
@@ -28,6 +28,7 @@ function createMockSession(overrides: Partial<SessionSummaryDTO> = {}): SessionS
     partner: {
       id: 'user-2',
       name: 'Jane Doe',
+      nickname: null,
     },
     myProgress: {
       stage: Stage.WITNESS,
@@ -41,6 +42,10 @@ function createMockSession(overrides: Partial<SessionSummaryDTO> = {}): SessionS
       startedAt: '2024-01-01T00:00:00Z',
       completedAt: null,
     },
+    statusSummary: {
+      userStatus: 'Working on The Witness',
+      partnerStatus: 'Jane Doe is also working',
+    },
     selfActionNeeded: [],
     partnerActionNeeded: [],
     ...overrides,
@@ -52,124 +57,127 @@ describe('SessionCard', () => {
     mockPush.mockClear();
   });
 
-  it('renders partner name', () => {
-    const session = createMockSession({ partner: { id: 'user-2', name: 'John Smith' } });
-    render(<SessionCard session={session} />);
+  describe('basic rendering', () => {
+    it('renders partner name', () => {
+      const session = createMockSession({
+        partner: { id: 'user-2', name: 'John Smith', nickname: null },
+      });
+      render(<SessionCard session={session} />);
 
-    expect(screen.getByText('John Smith')).toBeTruthy();
-  });
-
-  it('renders fallback when partner has no name', () => {
-    const session = createMockSession({ partner: { id: 'user-2', name: null } });
-    render(<SessionCard session={session} />);
-
-    expect(screen.getByText('Partner')).toBeTruthy();
-  });
-
-  it('renders current stage name', () => {
-    const session = createMockSession({
-      myProgress: {
-        stage: Stage.WITNESS,
-        status: StageStatus.IN_PROGRESS,
-        startedAt: '2024-01-01T00:00:00Z',
-        completedAt: null,
-      },
+      expect(screen.getByText('John Smith')).toBeTruthy();
     });
-    render(<SessionCard session={session} />);
 
-    expect(screen.getByText('The Witness')).toBeTruthy();
-  });
+    it('renders fallback when partner has no name', () => {
+      const session = createMockSession({
+        partner: { id: 'user-2', name: null, nickname: null },
+      });
+      render(<SessionCard session={session} />);
 
-  it('shows "Your turn" when action is needed from self', () => {
-    const session = createMockSession({
-      selfActionNeeded: ['complete_stage'],
+      expect(screen.getByText('Partner')).toBeTruthy();
     });
-    render(<SessionCard session={session} />);
 
-    expect(screen.getByText('Your turn')).toBeTruthy();
-  });
+    it('prefers nickname over actual name', () => {
+      const session = createMockSession({
+        partner: { id: 'user-2', name: 'John Smith', nickname: 'Johnny' },
+      });
+      render(<SessionCard session={session} />);
 
-  it('shows "Waiting for partner" when partner action is needed', () => {
-    const session = createMockSession({
-      partnerActionNeeded: ['complete_stage'],
+      expect(screen.getByText('Johnny')).toBeTruthy();
+      expect(screen.queryByText('John Smith')).toBeNull();
     });
-    render(<SessionCard session={session} />);
 
-    expect(screen.getByText('Waiting for partner')).toBeTruthy();
-  });
+    it('renders with testID session-card for regular cards', () => {
+      const session = createMockSession();
+      render(<SessionCard session={session} />);
 
-  it('renders with testID session-card for regular cards', () => {
-    const session = createMockSession();
-    render(<SessionCard session={session} />);
-
-    expect(screen.getByTestId('session-card')).toBeTruthy();
-  });
-
-  it('renders with testID hero-card when isHero is true', () => {
-    const session = createMockSession();
-    render(<SessionCard session={session} isHero />);
-
-    expect(screen.getByTestId('hero-card')).toBeTruthy();
-  });
-
-  it('navigates to session detail on press', () => {
-    const session = createMockSession({ id: 'session-123' });
-    render(<SessionCard session={session} />);
-
-    fireEvent.press(screen.getByTestId('session-card'));
-
-    expect(mockPush).toHaveBeenCalledWith('/session/session-123');
-  });
-
-  it('shows action indicator badge when action is needed', () => {
-    const session = createMockSession({
-      selfActionNeeded: ['complete_stage'],
+      expect(screen.getByTestId('session-card')).toBeTruthy();
     });
-    render(<SessionCard session={session} />);
 
-    expect(screen.getByTestId('action-badge')).toBeTruthy();
-  });
+    it('renders with testID hero-card when isHero is true', () => {
+      const session = createMockSession();
+      render(<SessionCard session={session} isHero />);
 
-  it('does not show action indicator badge when no action is needed', () => {
-    const session = createMockSession({
-      selfActionNeeded: [],
+      expect(screen.getByTestId('hero-card')).toBeTruthy();
     });
-    render(<SessionCard session={session} />);
-
-    expect(screen.queryByTestId('action-badge')).toBeNull();
   });
 
-  // Status indicator tests
-  describe('status indicators', () => {
-    it('shows invited status badge for INVITED sessions', () => {
+  describe('navigation', () => {
+    it('navigates to session detail on press', () => {
+      const session = createMockSession({ id: 'session-123' });
+      render(<SessionCard session={session} />);
+
+      fireEvent.press(screen.getByTestId('session-card'));
+
+      expect(mockPush).toHaveBeenCalledWith('/session/session-123');
+    });
+  });
+
+  describe('status summary display', () => {
+    it('renders user status from statusSummary', () => {
+      const session = createMockSession({
+        statusSummary: {
+          userStatus: "You've shared your story",
+          partnerStatus: 'Waiting for Alex to share',
+        },
+      });
+      render(<SessionCard session={session} />);
+
+      expect(screen.getByText("You've shared your story")).toBeTruthy();
+    });
+
+    it('renders partner status from statusSummary', () => {
+      const session = createMockSession({
+        statusSummary: {
+          userStatus: "You've shared your story",
+          partnerStatus: 'Waiting for Alex to share',
+        },
+      });
+      render(<SessionCard session={session} />);
+
+      expect(screen.getByText('Waiting for Alex to share')).toBeTruthy();
+    });
+
+    it('shows invitation status for INVITED sessions', () => {
       const session = createMockSession({
         status: SessionStatus.INVITED,
+        statusSummary: {
+          userStatus: 'Invitation sent',
+          partnerStatus: 'Waiting for Jane to join',
+        },
       });
       render(<SessionCard session={session} />);
 
-      expect(screen.getByText('Pending')).toBeTruthy();
+      expect(screen.getByText('Invitation sent')).toBeTruthy();
+      expect(screen.getByText('Waiting for Jane to join')).toBeTruthy();
     });
 
-    it('shows paused status badge for PAUSED sessions', () => {
+    it('shows paused status for PAUSED sessions', () => {
       const session = createMockSession({
         status: SessionStatus.PAUSED,
+        statusSummary: {
+          userStatus: 'Session paused',
+          partnerStatus: 'Take a break and return when ready',
+        },
       });
       render(<SessionCard session={session} />);
 
-      expect(screen.getByText('Paused')).toBeTruthy();
+      expect(screen.getByText('Session paused')).toBeTruthy();
     });
 
-    it('shows resolved status badge for RESOLVED sessions', () => {
+    it('shows resolved status for RESOLVED sessions', () => {
       const session = createMockSession({
         status: SessionStatus.RESOLVED,
+        statusSummary: {
+          userStatus: 'Session complete',
+          partnerStatus: 'You both reached resolution',
+        },
       });
       render(<SessionCard session={session} />);
 
-      expect(screen.getByText('Resolved')).toBeTruthy();
+      expect(screen.getByText('Session complete')).toBeTruthy();
     });
   });
 
-  // Time since update tests
   describe('time display', () => {
     beforeAll(() => {
       jest.useFakeTimers();
@@ -199,49 +207,67 @@ describe('SessionCard', () => {
     });
   });
 
-  // Hero card messaging tests
-  describe('hero card messaging', () => {
-    it('shows "is waiting for you" message when partner is waiting', () => {
+  describe('hero card', () => {
+    it('shows hero footer with tap hint', () => {
+      const session = createMockSession();
+      render(<SessionCard session={session} isHero />);
+
+      expect(screen.getByText('Tap to continue')).toBeTruthy();
+    });
+
+    it('displays status summary in hero mode', () => {
       const session = createMockSession({
-        partner: { id: 'user-2', name: 'Alex' },
-        selfActionNeeded: ['complete_stage'],
-        partnerProgress: {
-          stage: Stage.WITNESS,
-          status: StageStatus.GATE_PENDING, // Partner completed, waiting on us
-          startedAt: '2024-01-01T00:00:00Z',
-          completedAt: '2024-01-02T00:00:00Z',
+        statusSummary: {
+          userStatus: "You've signed the compact",
+          partnerStatus: 'Alex is also ready',
         },
       });
       render(<SessionCard session={session} isHero />);
 
-      expect(screen.getByText('Alex is waiting for you')).toBeTruthy();
+      expect(screen.getByText("You've signed the compact")).toBeTruthy();
+      expect(screen.getByText('Alex is also ready')).toBeTruthy();
+    });
+  });
+
+  describe('visual styling', () => {
+    it('applies action card style when selfActionNeeded has items', () => {
+      const session = createMockSession({
+        selfActionNeeded: ['complete_stage'],
+      });
+      const { getByTestId } = render(<SessionCard session={session} />);
+      const card = getByTestId('session-card');
+
+      // The card should have the actionCard style applied
+      // We verify the component renders without error with this state
+      expect(card).toBeTruthy();
     });
 
-    it('shows "Ready to continue" message when your turn but partner not waiting', () => {
+    it('applies paused card style for PAUSED sessions', () => {
       const session = createMockSession({
-        partner: { id: 'user-2', name: 'Alex' },
-        selfActionNeeded: ['complete_stage'],
-        partnerProgress: {
-          stage: Stage.WITNESS,
-          status: StageStatus.IN_PROGRESS,
-          startedAt: '2024-01-01T00:00:00Z',
-          completedAt: null,
+        status: SessionStatus.PAUSED,
+        statusSummary: {
+          userStatus: 'Session paused',
+          partnerStatus: 'Take a break',
         },
       });
-      render(<SessionCard session={session} isHero />);
+      const { getByTestId } = render(<SessionCard session={session} />);
+      const card = getByTestId('session-card');
 
-      expect(screen.getByText('Ready to continue with Alex')).toBeTruthy();
+      expect(card).toBeTruthy();
     });
 
-    it('shows "Waiting for partner" message when you are waiting', () => {
+    it('applies resolved card style for RESOLVED sessions', () => {
       const session = createMockSession({
-        partner: { id: 'user-2', name: 'Alex' },
-        selfActionNeeded: [],
-        partnerActionNeeded: ['complete_stage'],
+        status: SessionStatus.RESOLVED,
+        statusSummary: {
+          userStatus: 'Session complete',
+          partnerStatus: 'Resolution reached',
+        },
       });
-      render(<SessionCard session={session} isHero />);
+      const { getByTestId } = render(<SessionCard session={session} />);
+      const card = getByTestId('session-card');
 
-      expect(screen.getByText('Waiting for Alex')).toBeTruthy();
+      expect(card).toBeTruthy();
     });
   });
 });

@@ -9,6 +9,7 @@ import {
   updateNickname,
   listPeople,
   archiveSession,
+  deleteSession,
 } from '../controllers/invitations';
 import { requireAuth, requireSessionAccess } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errors';
@@ -77,5 +78,19 @@ router.get('/people', requireAuth, asyncHandler(listPeople));
  * @access Private - requires authentication and session access
  */
 router.post('/sessions/:id/archive', requireAuth, requireSessionAccess, asyncHandler(archiveSession));
+
+/**
+ * @route DELETE /api/v1/sessions/:id
+ * @description Delete a session for the current user
+ *
+ * This action:
+ * - Marks active sessions as ABANDONED
+ * - Notifies partners in active sessions via SESSION_ABANDONED notification
+ * - Preserves shared content for partners (anonymized - source user becomes null)
+ * - Deletes all private user data for this session (vessel, drafts, progress, etc.)
+ * - Partner keeps access to their own data and the session
+ * @access Private - requires authentication and session access
+ */
+router.delete('/sessions/:id', requireAuth, requireSessionAccess, asyncHandler(deleteSession));
 
 export default router;

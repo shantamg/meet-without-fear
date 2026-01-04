@@ -14,7 +14,7 @@ import {
   UseInfiniteQueryOptions,
   InfiniteData,
 } from '@tanstack/react-query';
-import { get, post, put, ApiClientError } from '../lib/api';
+import { get, post, put, del, ApiClientError } from '../lib/api';
 import {
   SessionSummaryDTO,
   SessionDetailDTO,
@@ -544,6 +544,7 @@ export function useConfirmInvitationMessage(
 
 /**
  * Archive a session (for resolved, abandoned, or pending sessions).
+ * @deprecated Use useDeleteSession instead for proper data cleanup
  */
 export function useArchiveSession(
   options?: Omit<
@@ -568,6 +569,55 @@ export function useArchiveSession(
       queryClient.invalidateQueries({ queryKey: sessionKeys.lists() });
       // Invalidate the specific session detail
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+    },
+    ...options,
+  });
+}
+
+// ============================================================================
+// Delete Session Hook
+// ============================================================================
+
+interface DeleteSessionSummary {
+  sessionAbandoned: boolean;
+  partnerNotified: boolean;
+  dataRecordsDeleted: number;
+}
+
+/**
+ * Delete a session for the current user.
+ *
+ * This removes the user's data from the session but leaves the session
+ * available for the partner. The partner keeps access to their own data
+ * and any content that was shared.
+ *
+ * For active sessions, the partner is notified that the session was abandoned.
+ */
+export function useDeleteSession(
+  options?: Omit<
+    UseMutationOptions<
+      { deleted: boolean; summary: DeleteSessionSummary },
+      ApiClientError,
+      { sessionId: string }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId }) => {
+      return del<{ deleted: boolean; summary: DeleteSessionSummary }>(
+        `/sessions/${sessionId}`
+      );
+    },
+    onSuccess: (_, { sessionId }) => {
+      // Invalidate session lists to remove the deleted session
+      queryClient.invalidateQueries({ queryKey: sessionKeys.lists() });
+      // Remove the specific session detail from cache
+      queryClient.removeQueries({ queryKey: sessionKeys.detail(sessionId) });
+      // Remove session state from cache
+      queryClient.removeQueries({ queryKey: sessionKeys.state(sessionId) });
     },
     ...options,
   });

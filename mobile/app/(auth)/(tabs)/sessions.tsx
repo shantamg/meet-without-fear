@@ -10,12 +10,12 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Plus, Archive } from 'lucide-react-native';
+import { Plus, Trash2 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Swipeable } from 'react-native-gesture-handler';
 
 import { SessionCard } from '@/src/components/SessionCard';
-import { useSessions, useArchiveSession } from '@/src/hooks/useSessions';
+import { useSessions, useDeleteSession } from '@/src/hooks/useSessions';
 import type { SessionSummaryDTO } from '@meet-without-fear/shared';
 import { SessionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '@/src/theme/styled';
@@ -23,13 +23,13 @@ import { colors } from '@/src/theme';
 
 /**
  * Sessions tab screen
- * Lists all user's sessions with swipe-to-archive for eligible sessions
+ * Lists all user's sessions with swipe-to-delete
  */
 export default function SessionsScreen() {
   const styles = useStyles();
   const router = useRouter();
   const { data, isLoading, refetch, isRefetching } = useSessions();
-  const archiveSession = useArchiveSession();
+  const deleteSession = useDeleteSession();
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
   // Filter out archived sessions from display
@@ -45,42 +45,52 @@ export default function SessionsScreen() {
     router.push(`/session/${sessionId}`);
   };
 
-  // Check if a session can be archived
-  const canArchive = (status: SessionStatus): boolean => {
+  // All sessions can be deleted
+  const canDelete = (status: SessionStatus): boolean => {
     return [
       SessionStatus.RESOLVED,
       SessionStatus.ABANDONED,
       SessionStatus.CREATED,
       SessionStatus.INVITED,
+      SessionStatus.ACTIVE,
+      SessionStatus.PAUSED,
+      SessionStatus.WAITING,
     ].includes(status);
   };
 
-  const handleArchive = useCallback(
+  const handleDelete = useCallback(
     (session: SessionSummaryDTO) => {
       // Close the swipeable
       swipeableRefs.current.get(session.id)?.close();
 
-      Alert.alert(
-        'Archive Session',
-        `Archive your session with ${session.partner.name || 'this person'}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Archive',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await archiveSession.mutateAsync({ sessionId: session.id });
-              } catch (error) {
-                console.error('Failed to archive session:', error);
-                Alert.alert('Error', 'Failed to archive session. Please try again.');
-              }
-            },
+      const partnerName = session.partner.name || 'this person';
+      const isActive = [
+        SessionStatus.ACTIVE,
+        SessionStatus.PAUSED,
+        SessionStatus.WAITING,
+      ].includes(session.status);
+
+      const message = isActive
+        ? `Delete your session with ${partnerName}? Your partner will be notified and can keep their own data.`
+        : `Delete your session with ${partnerName}?`;
+
+      Alert.alert('Delete Session', message, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteSession.mutateAsync({ sessionId: session.id });
+            } catch (error) {
+              console.error('Failed to delete session:', error);
+              Alert.alert('Error', 'Failed to delete session. Please try again.');
+            }
           },
-        ]
-      );
+        },
+      ]);
     },
-    [archiveSession]
+    [deleteSession]
   );
 
   const renderRightActions = useCallback(
@@ -89,7 +99,7 @@ export default function SessionsScreen() {
       dragX: Animated.AnimatedInterpolation<number>,
       session: SessionSummaryDTO
     ) => {
-      if (!canArchive(session.status)) {
+      if (!canDelete(session.status)) {
         return null;
       }
 
@@ -101,30 +111,28 @@ export default function SessionsScreen() {
 
       return (
         <TouchableOpacity
-          style={styles.archiveAction}
-          onPress={() => handleArchive(session)}
+          style={styles.deleteAction}
+          onPress={() => handleDelete(session)}
           accessibilityRole="button"
-          accessibilityLabel="Archive session"
+          accessibilityLabel="Delete session"
         >
           <Animated.View style={{ transform: [{ scale }] }}>
-            <Archive color="#FFFFFF" size={24} />
+            <Trash2 color="#FFFFFF" size={24} />
           </Animated.View>
-          <Animated.Text
-            style={[styles.archiveText, { transform: [{ scale }] }]}
-          >
-            Archive
+          <Animated.Text style={[styles.deleteText, { transform: [{ scale }] }]}>
+            Delete
           </Animated.Text>
         </TouchableOpacity>
       );
     },
-    [handleArchive, styles]
+    [handleDelete, styles]
   );
 
   const renderSessionItem = useCallback(
     ({ item }: { item: SessionSummaryDTO }) => {
-      const isArchivable = canArchive(item.status);
+      const isDeletable = canDelete(item.status);
 
-      if (isArchivable) {
+      if (isDeletable) {
         return (
           <Swipeable
             ref={(ref) => {
@@ -141,7 +149,7 @@ export default function SessionsScreen() {
             rightThreshold={40}
           >
             <TouchableOpacity onPress={() => handleSessionPress(item.id)}>
-              <SessionCard session={item} />
+              <SessionCard session={item} noMargin />
             </TouchableOpacity>
           </Swipeable>
         );
@@ -149,7 +157,7 @@ export default function SessionsScreen() {
 
       return (
         <TouchableOpacity onPress={() => handleSessionPress(item.id)}>
-          <SessionCard session={item} />
+          <SessionCard session={item} noMargin />
         </TouchableOpacity>
       );
     },
@@ -282,16 +290,16 @@ const useStyles = () =>
       color: t.colors.textSecondary,
       fontSize: 16,
     },
-    // Archive swipe action
-    archiveAction: {
+    // Delete swipe action - matches inner-thoughts styling
+    deleteAction: {
       backgroundColor: t.colors.error,
       justifyContent: 'center',
       alignItems: 'center',
       width: 80,
-      borderRadius: 12,
-      marginLeft: t.spacing.sm,
+      borderTopRightRadius: t.radius.lg,
+      borderBottomRightRadius: t.radius.lg,
     },
-    archiveText: {
+    deleteText: {
       color: '#FFFFFF',
       fontSize: 12,
       fontWeight: '600',

@@ -1,14 +1,16 @@
 /**
  * SessionCard Component
  *
- * Displays a session summary with partner info, current stage, and action status.
- * Supports both regular and hero card variants for visual hierarchy.
+ * Displays a streamlined session summary with:
+ * - Partner name
+ * - Time since last activity
+ * - Status summary (what you've done, what's happening with partner)
  */
 
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { SessionSummaryDTO } from '@meet-without-fear/shared';
-import { STAGE_NAMES, SessionStatus, StageStatus } from '@meet-without-fear/shared';
+import { SessionStatus } from '@meet-without-fear/shared';
 import { colors } from '@/theme';
 
 // ============================================================================
@@ -20,6 +22,8 @@ interface SessionCardProps {
   session: SessionSummaryDTO;
   /** Whether to display as a hero card (larger, more prominent) */
   isHero?: boolean;
+  /** Whether to remove bottom margin (useful when inside a swipeable) */
+  noMargin?: boolean;
 }
 
 // ============================================================================
@@ -47,42 +51,10 @@ function formatRelativeTime(dateString: string): string {
 }
 
 /**
- * Get display text for session status badges
+ * Get partner display name (prefer nickname over actual name)
  */
-function getStatusBadgeText(status: SessionStatus): string | null {
-  switch (status) {
-    case SessionStatus.INVITED:
-    case SessionStatus.CREATED:
-      return 'Pending';
-    case SessionStatus.PAUSED:
-      return 'Paused';
-    case SessionStatus.RESOLVED:
-      return 'Resolved';
-    default:
-      return null;
-  }
-}
-
-/**
- * Get the appropriate hero card title based on session state
- */
-function getHeroTitle(session: SessionSummaryDTO): string {
-  const partnerName = session.partner.name || 'Partner';
-  const actionNeeded = session.selfActionNeeded.length > 0;
-  const waitingForPartner = session.partnerActionNeeded.length > 0;
-  const partnerCompleted = session.partnerProgress.status === StageStatus.GATE_PENDING ||
-                           session.partnerProgress.status === StageStatus.COMPLETED;
-
-  if (actionNeeded && partnerCompleted) {
-    return `${partnerName} is waiting for you`;
-  }
-  if (actionNeeded) {
-    return `Ready to continue with ${partnerName}`;
-  }
-  if (waitingForPartner) {
-    return `Waiting for ${partnerName}`;
-  }
-  return partnerName;
+function getPartnerDisplayName(session: SessionSummaryDTO): string {
+  return session.partner.nickname || session.partner.name || 'Partner';
 }
 
 // ============================================================================
@@ -90,32 +62,38 @@ function getHeroTitle(session: SessionSummaryDTO): string {
 // ============================================================================
 
 /**
- * SessionCard displays a summary of a session.
+ * SessionCard displays a streamlined session summary.
  *
  * Features:
  * - Partner name display
- * - Current stage indicator
- * - Action needed badge and text
- * - Status indicators (Pending, Paused, Resolved)
  * - Time since last update
- * - Hero variant for most urgent session with contextual messaging
+ * - Status summary (user status + partner status)
+ * - Visual styling based on session state
  * - Navigates to session detail on press
  */
-export function SessionCard({ session, isHero = false }: SessionCardProps) {
+export function SessionCard({ session, isHero = false, noMargin = false }: SessionCardProps) {
   const router = useRouter();
 
-  const currentStage = session.myProgress.stage;
-  const actionNeeded = session.selfActionNeeded.length > 0;
-  const waitingForPartner = session.partnerActionNeeded.length > 0;
-  const statusBadge = getStatusBadgeText(session.status);
+  const partnerName = getPartnerDisplayName(session);
   const timeAgo = formatRelativeTime(session.updatedAt);
+
+  // Fallback for sessions that don't have statusSummary yet (backwards compatibility)
+  const statusSummary = session.statusSummary ?? {
+    userStatus: session.selfActionNeeded.length > 0 ? 'Your turn' : 'In progress',
+    partnerStatus: session.partnerActionNeeded.length > 0 ? `Waiting for ${partnerName}` : '',
+  };
+  const { userStatus, partnerStatus } = statusSummary;
+
+  // Determine if this session needs attention (user has action to take)
+  const needsAttention = session.selfActionNeeded.length > 0;
+
+  // Determine card styling based on session status
+  const isPaused = session.status === SessionStatus.PAUSED;
+  const isResolved = session.status === SessionStatus.RESOLVED;
 
   const handlePress = () => {
     router.push(`/session/${session.id}`);
   };
-
-  // For hero cards, use contextual title
-  const heroTitle = isHero ? getHeroTitle(session) : null;
 
   return (
     <TouchableOpacity
@@ -123,98 +101,45 @@ export function SessionCard({ session, isHero = false }: SessionCardProps) {
       style={[
         styles.card,
         isHero && styles.heroCard,
-        actionNeeded && !isHero && styles.actionCard,
-        statusBadge === 'Paused' && styles.pausedCard,
-        statusBadge === 'Resolved' && styles.resolvedCard,
+        needsAttention && !isHero && styles.actionCard,
+        isPaused && styles.pausedCard,
+        isResolved && styles.resolvedCard,
+        noMargin && styles.noMargin,
       ]}
       onPress={handlePress}
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`Session with ${session.partner.name || 'Partner'}`}
+      accessibilityLabel={`Session with ${partnerName}`}
       accessibilityHint="Tap to view session details"
     >
+      {/* Header: Partner name and time */}
       <View style={styles.header}>
-        {isHero ? (
-          <Text
-            style={styles.heroPartnerName}
-            numberOfLines={2}
-          >
-            {heroTitle}
-          </Text>
-        ) : (
-          <Text
-            style={styles.partnerName}
-            numberOfLines={1}
-          >
-            {session.partner.name || 'Partner'}
-          </Text>
-        )}
-        {actionNeeded && (
-          <View
-            testID="action-badge"
-            style={[
-              styles.badge,
-              isHero && styles.heroBadge,
-            ]}
-            accessibilityLabel="Action needed"
-          />
-        )}
+        <Text
+          style={[styles.partnerName, isHero && styles.heroPartnerName]}
+          numberOfLines={1}
+        >
+          {partnerName}
+        </Text>
+        <Text style={[styles.timeAgo, isHero && styles.heroTimeAgo]}>
+          {timeAgo}
+        </Text>
       </View>
 
-      {/* Stage and time row */}
-      <View style={styles.metaRow}>
+      {/* Status summary */}
+      <View style={styles.statusContainer}>
         <Text
-          style={[
-            styles.stage,
-            isHero && styles.heroStage,
-          ]}
+          style={[styles.userStatus, isHero && styles.heroUserStatus]}
+          numberOfLines={1}
         >
-          {STAGE_NAMES[currentStage]}
+          {userStatus}
         </Text>
-        {!isHero && (
-          <Text style={styles.timeAgo}>{timeAgo}</Text>
-        )}
+        <Text
+          style={[styles.partnerStatus, isHero && styles.heroPartnerStatus]}
+          numberOfLines={1}
+        >
+          {partnerStatus}
+        </Text>
       </View>
-
-      {/* Status badge for non-active states */}
-      {statusBadge && !isHero && (
-        <View style={[
-          styles.statusBadge,
-          statusBadge === 'Pending' && styles.statusBadgePending,
-          statusBadge === 'Paused' && styles.statusBadgePaused,
-          statusBadge === 'Resolved' && styles.statusBadgeResolved,
-        ]}>
-          <Text style={[
-            styles.statusBadgeText,
-            statusBadge === 'Resolved' && styles.statusBadgeTextResolved,
-          ]}>
-            {statusBadge}
-          </Text>
-        </View>
-      )}
-
-      {/* Action/waiting text (only for active sessions without status badge) */}
-      {!statusBadge && actionNeeded && (
-        <Text
-          style={[
-            styles.actionText,
-            isHero && styles.heroActionText,
-          ]}
-        >
-          Your turn
-        </Text>
-      )}
-
-      {!statusBadge && !actionNeeded && waitingForPartner && (
-        <Text
-          style={[
-            styles.waitingText,
-            isHero && styles.heroWaitingText,
-          ]}
-        >
-          Waiting for partner
-        </Text>
-      )}
 
       {isHero && (
         <View style={styles.heroFooter}>
@@ -245,6 +170,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
 
+  // No margin variant (for use inside swipeables)
+  noMargin: {
+    marginBottom: 0,
+  },
+
   // Action needed card (subtle highlight)
   actionCard: {
     borderLeftWidth: 3,
@@ -265,7 +195,7 @@ const styles = StyleSheet.create({
   // Hero card variant
   heroCard: {
     backgroundColor: colors.accent,
-    padding: 24,
+    padding: 20,
     marginBottom: 20,
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -274,12 +204,12 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
 
-  // Header with name and badge
+  // Header with name and time
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
   },
 
   // Partner name
@@ -292,106 +222,48 @@ const styles = StyleSheet.create({
   },
   heroPartnerName: {
     color: '#FFFFFF',
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
-    flex: 1,
-    marginRight: 8,
-  },
-
-  // Action badge
-  badge: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.error,
-  },
-  heroBadge: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.warning,
-  },
-
-  // Meta row (stage + time)
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-
-  // Stage name
-  stage: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  heroStage: {
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 16,
-    marginTop: 4,
   },
 
   // Time ago text
   timeAgo: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.textMuted,
   },
-
-  // Status badge
-  statusBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginTop: 12,
-  },
-  statusBadgePending: {
-    backgroundColor: colors.bgTertiary,
-  },
-  statusBadgePaused: {
-    backgroundColor: colors.bgTertiary,
-  },
-  statusBadgeResolved: {
-    backgroundColor: 'rgba(16, 163, 127, 0.2)',
-  },
-  statusBadgeText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.warning,
-  },
-  statusBadgeTextResolved: {
-    color: colors.success,
-  },
-
-  // Action text
-  actionText: {
-    fontSize: 14,
-    color: colors.accent,
-    fontWeight: '600',
-    marginTop: 12,
-  },
-  heroActionText: {
-    color: colors.warning,
-    fontSize: 16,
-    marginTop: 16,
-  },
-
-  // Waiting text
-  waitingText: {
-    fontSize: 14,
-    color: colors.textMuted,
-    marginTop: 12,
-  },
-  heroWaitingText: {
+  heroTimeAgo: {
     color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 16,
-    marginTop: 16,
+  },
+
+  // Status container
+  statusContainer: {
+    gap: 4,
+  },
+
+  // User status (what you've done)
+  userStatus: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  heroUserStatus: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 15,
+  },
+
+  // Partner status (what's happening with partner)
+  partnerStatus: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  heroPartnerStatus: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 14,
   },
 
   // Hero footer
   heroFooter: {
     marginTop: 16,
-    paddingTop: 16,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.2)',
   },

@@ -3,8 +3,9 @@ import { prisma } from '../lib/prisma';
 import { notifyPartner } from '../services/realtime';
 import { notifyInvitationAccepted, notifyInvitationReceived, notifySessionJoined } from '../services/notification';
 import { z } from 'zod';
-import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
+import { ApiResponse, ErrorCode, SessionStatus, StageStatus, Stage } from '@meet-without-fear/shared';
 import { successResponse, errorResponse } from '../utils/response';
+import { generateSessionStatusSummary } from '../utils/session';
 
 // ============================================================================
 // Types
@@ -159,6 +160,24 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
         ? (myMember as { nickname?: string | null } | undefined)?.nickname || partnerMember.user.firstName || partnerMember.user.name
         : (myMember as { nickname?: string | null } | undefined)?.nickname || null;
 
+      // Generate human-readable status summary
+      const statusSummary = generateSessionStatusSummary(
+        session.status as SessionStatus,
+        {
+          stage: myProgress.stage as Stage,
+          status: myProgress.status as StageStatus,
+          startedAt: myProgress.startedAt,
+          completedAt: myProgress.completedAt,
+        },
+        {
+          stage: partnerProgress.stage as Stage,
+          status: partnerProgress.status as StageStatus,
+          startedAt: partnerProgress.startedAt,
+          completedAt: partnerProgress.completedAt,
+        },
+        partnerDisplayName || 'Partner'
+      );
+
       return {
         id: session.id,
         relationshipId: session.relationshipId,
@@ -174,6 +193,7 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
           : { id: '', name: partnerDisplayName, nickname: (myMember as { nickname?: string | null } | undefined)?.nickname || null },
         myProgress,
         partnerProgress,
+        statusSummary,
         selfActionNeeded,
         partnerActionNeeded,
       };
@@ -940,5 +960,46 @@ export async function acknowledgeInvitation(req: Request, res: Response): Promis
   } catch (error) {
     console.error('[acknowledgeInvitation] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to acknowledge invitation', 500);
+  }
+}
+
+/**
+ * Delete a session for the current user
+ * DELETE /sessions/:id
+ *
+ * This removes the user's data from the session but leaves the session
+ * available for the partner. The partner keeps access to their own data
+ * and any content that was shared.
+ */
+export async function deleteSession(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+
+    // Import the deletion service
+    const { deleteSessionForUser } = await import('../services/session-deletion');
+
+    // Get user display name for notifications
+    const displayName = user.firstName || user.name || 'Your partner';
+
+    // Perform the deletion
+    const summary = await deleteSessionForUser(id, user.id, displayName);
+
+    successResponse(res, {
+      deleted: true,
+      summary,
+    });
+  } catch (error) {
+    console.error('[deleteSession] Error:', error);
+    if (error instanceof Error && error.message === 'Session not found or access denied') {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to delete session', 500);
   }
 }

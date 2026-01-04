@@ -371,6 +371,7 @@ describe('Session Creation Handler', () => {
             partner: { id: 'p1', name: 'John', nickname: null },
             myProgress: { stage: Stage.ONBOARDING, status: StageStatus.NOT_STARTED, startedAt: null, completedAt: null },
             partnerProgress: { stage: Stage.ONBOARDING, status: StageStatus.NOT_STARTED, startedAt: null, completedAt: null },
+            statusSummary: { userStatus: 'Invitation sent', partnerStatus: 'Waiting for John to join' },
             selfActionNeeded: [],
             partnerActionNeeded: [],
           },
