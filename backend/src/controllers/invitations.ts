@@ -314,7 +314,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
     });
 
     // Generate invitation URL (user shares via their own channels)
-    const appUrl = process.env.APP_URL || 'https://meet-without-fear-website.vercel.app';
+    const appUrl = process.env.APP_URL || 'https://meetwithoutfear.com';
     const invitationUrl = `${appUrl}/invitation/${invitation.id}`;
 
     // Create initial stage progress for inviter

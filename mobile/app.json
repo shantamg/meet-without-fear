@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.galuten.meetwithoutfear",
-      "buildNumber": "21",
+      "buildNumber": "22",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "This app needs access to your microphone to record audio sessions."
@@ -35,7 +35,7 @@
       },
       "icon": "./assets/images/icon.png",
       "package": "com.meetwithoutfear.app",
-      "versionCode": 20,
+      "versionCode": 21,
       "permissions": [
         "RECORD_AUDIO"
       ]
@@ -67,7 +67,7 @@
         "projectId": "f381a744-a85d-478c-a8dd-75d54414aa5a"
       },
       "apiUrl": "https://api.meetwithoutfear.com",
-      "websiteUrl": "https://meet-without-fear-website.vercel.app",
+      "websiteUrl": "https://meetwithoutfear.com",
       "router": {
         "root": "./app"
       }

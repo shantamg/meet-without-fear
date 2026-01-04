@@ -186,7 +186,7 @@ function getWebsiteUrl(): string {
   return (
     Constants.expoConfig?.extra?.websiteUrl ||
     process.env.EXPO_PUBLIC_WEBSITE_URL ||
-    (__DEV__ ? 'http://localhost:3001' : 'https://meet-without-fear-website.vercel.app')
+    (__DEV__ ? 'http://localhost:3001' : 'https://meetwithoutfear.com')
   );
 }
 
