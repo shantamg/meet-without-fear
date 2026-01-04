@@ -666,30 +666,61 @@ export async function confirmFeelHeard(
           partnerName = invitation?.name || undefined;
         }
 
-        // Build a simple transition prompt for Stage 1 → Stage 2
+        // Fetch Stage 1 conversation history for context
+        const conversationHistory = await prisma.message.findMany({
+          where: {
+            sessionId,
+            stage: 1,
+            OR: [{ senderId: user.id }, { role: 'AI', forUserId: user.id }],
+          },
+          orderBy: { timestamp: 'asc' },
+          take: 15, // Get recent context
+          select: {
+            role: true,
+            content: true,
+          },
+        });
+
+        // Format conversation for context
+        const conversationContext = conversationHistory
+          .map((m) => `${m.role === 'USER' ? 'User' : 'AI'}: ${m.content}`)
+          .join('\n\n');
+
+        // Build a context-aware transition prompt for Stage 1 → Stage 2
         const userName = user.name || 'The user';
         const partner = partnerName || 'their partner';
         const transitionPrompt = `You are Meet Without Fear, a Process Guardian. ${userName} has been sharing their experience and has confirmed they feel fully heard. Now you'll help ${userName} build empathy by imagining ${partner}'s experience.
 
-Generate a brief, warm transition message (2-3 sentences) for ${userName} that:
-1. Acknowledges the important work ${userName} has done sharing and being heard
-2. Invites ${userName} to wonder about what ${partner} might be experiencing
-3. Ends with an open question asking ${userName} what they imagine ${partner} might be feeling or going through
+HERE IS THE CONVERSATION FROM STAGE 1 (what ${userName} shared while feeling heard):
+---
+${conversationContext}
+---
 
-Example: "You've shared so much, and I can tell you've been carrying a lot. Now I'm curious - have you ever wondered what might be going on for ${partner} in all this? What do you imagine they might be feeling?"
+Based on this specific conversation, generate a brief, warm transition message (2-3 sentences) that:
+1. References something SPECIFIC that ${userName} shared (an emotion, situation, or concern they mentioned)
+2. Acknowledges their experience in a way that shows you remember what they said
+3. Naturally bridges to wondering about ${partner}'s perspective with an open question
 
-Keep it natural and conversational.
+IMPORTANT GUIDANCE:
+- Your transition should feel like a continuation of THIS conversation, not a generic script
+- Reference actual themes, emotions, or situations ${userName} mentioned
+- The transition should feel seamless - like a natural next thought in the conversation
+- Avoid generic phrases like "you've shared so much" - be specific to what they actually shared
+- Keep the same warm, conversational tone from the witnessing phase
+
+Example (if user had shared feeling unheard and dismissed):
+"I hear how painful it's been to feel dismissed, like your concerns aren't being taken seriously. I'm wondering - have you ever thought about what ${partner} might be experiencing when those moments happen? What do you imagine might be going on for them?"
 
 Respond in JSON format:
 \`\`\`json
 {
-  "response": "Your transition message"
+  "response": "Your personalized transition message that references their specific sharing"
 }
 \`\`\``;
 
         const aiResponse = await getSonnetResponse({
           systemPrompt: transitionPrompt,
-          messages: [{ role: 'user', content: 'Generate the transition message.' }],
+          messages: [{ role: 'user', content: 'Generate the transition message based on the conversation above.' }],
           maxTokens: 512,
         });
 
