@@ -353,46 +353,24 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Stage 0: Compact
   const { data: compactData, isLoading: loadingCompact } = useCompactStatus(sessionId);
 
-  // Invitation - fetch for invitation phase detection and "invitation sent" indicator
-  // We enable this for all active session states to show "invitation sent" indicator
-  // - CREATED: user is composing/refining the invitation message
-  // - INVITED: invitation was sent, partner hasn't joined yet
-  // - ACTIVE: both users in session, still need messageConfirmed for "invitation sent" indicator
-  const { data: invitationData } = useSessionInvitation(sessionId, {
-    enabled:
-      !!sessionId &&
-      (sessionData?.session?.status === 'CREATED' ||
-        sessionData?.session?.status === 'INVITED' ||
-        sessionData?.session?.status === 'ACTIVE'),
-  });
+  // Invitation - always fetch when sessionId exists to avoid waterfall
+  // The API will return appropriate data for all states (CREATED, INVITED, ACTIVE)
+  const { data: invitationData } = useSessionInvitation(sessionId);
 
-  // Stage 2: Empathy - only fetch when in stage 2 or later
-  const { data: empathyDraftData } = useEmpathyDraft(sessionId, {
-    enabled: !!sessionId && currentStage >= Stage.PERSPECTIVE_STRETCH,
-  });
-  const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId, {
-    enabled: !!sessionId && currentStage >= Stage.PERSPECTIVE_STRETCH,
-  });
-  const partnerEmpathy = partnerEmpathyData?.attempt || null;
+  // Stage 2: Empathy - always fetch to avoid waterfall
+  // API returns null/empty when not in stage 2+, and React Query caches efficiently
+  const { data: empathyDraftData } = useEmpathyDraft(sessionId);
+  const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId);
+  const partnerEmpathy = partnerEmpathyData?.attempt ?? null;
 
-  // Stage 3: Needs - only fetch when in stage 3 or later
-  const { data: needsData } = useNeeds(sessionId, {
-    enabled: !!sessionId && currentStage >= Stage.NEED_MAPPING,
-  });
-  const { data: commonGroundData } = useCommonGround(sessionId, {
-    enabled: !!sessionId && currentStage >= Stage.NEED_MAPPING,
-  });
+  // Stage 3: Needs - always fetch to avoid waterfall
+  const { data: needsData } = useNeeds(sessionId);
+  const { data: commonGroundData } = useCommonGround(sessionId);
 
-  // Stage 4: Strategies - only fetch when in stage 4 or later
-  const { data: strategyData } = useStrategies(sessionId, {
-    enabled: !!sessionId && currentStage >= Stage.STRATEGIC_REPAIR,
-  });
-  const { data: revealData } = useStrategiesReveal(sessionId, {
-    enabled: !!sessionId && currentStage >= Stage.STRATEGIC_REPAIR,
-  });
-  const { data: agreementsData } = useAgreements(sessionId, {
-    enabled: !!sessionId && currentStage >= Stage.STRATEGIC_REPAIR,
-  });
+  // Stage 4: Strategies - always fetch to avoid waterfall
+  const { data: strategyData } = useStrategies(sessionId);
+  const { data: revealData } = useStrategiesReveal(sessionId);
+  const { data: agreementsData } = useAgreements(sessionId);
 
   // -------------------------------------------------------------------------
   // Mutation Hooks
