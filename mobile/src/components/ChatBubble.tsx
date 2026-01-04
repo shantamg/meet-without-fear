@@ -40,10 +40,10 @@ interface ChatBubbleProps {
 // ============================================================================
 
 /** Delay between each word appearing (ms) */
-const WORD_DELAY_MS = 40;
+const WORD_DELAY_MS = 70;
 
 /** Duration of the fade-in animation for each word (ms) */
-const FADE_DURATION_MS = 120;
+const FADE_DURATION_MS = 200;
 
 // ============================================================================
 // Component
