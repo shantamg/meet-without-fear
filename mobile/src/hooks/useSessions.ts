@@ -28,6 +28,7 @@ import {
   Stage,
   GetMessagesResponse,
   MessageRole,
+  SessionStateResponse,
 } from '@meet-without-fear/shared';
 import { stageKeys } from './useStages';
 import { messageKeys } from './useMessages';
@@ -43,6 +44,7 @@ export const sessionKeys = {
     [...sessionKeys.lists(), filters] as const,
   details: () => [...sessionKeys.all, 'detail'] as const,
   detail: (id: string) => [...sessionKeys.details(), id] as const,
+  state: (id: string) => [...sessionKeys.all, id, 'state'] as const,
   invitations: () => ['invitations'] as const,
   invitation: (id: string) => [...sessionKeys.invitations(), id] as const,
   sessionInvitation: (sessionId: string) =>
@@ -569,4 +571,66 @@ export function useArchiveSession(
     },
     ...options,
   });
+}
+
+// ============================================================================
+// Consolidated Session State Hook
+// ============================================================================
+
+/**
+ * Fetch consolidated session state in a single request.
+ *
+ * Returns core session data (session, progress, messages, invitation, compact)
+ * in one API call for efficient initial load.
+ *
+ * Also hydrates individual query caches so subsequent hook calls get cache hits.
+ *
+ * @param sessionId - The session ID to fetch
+ * @param options - React Query options
+ */
+export function useSessionState(
+  sessionId: string | undefined,
+  options?: Omit<
+    UseQueryOptions<SessionStateResponse, ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: sessionKeys.state(sessionId || ''),
+    queryFn: async () => {
+      if (!sessionId) throw new Error('Session ID is required');
+      const data = await get<SessionStateResponse>(`/sessions/${sessionId}/state`);
+
+      // Hydrate individual query caches from consolidated response
+      // This ensures subsequent hook calls get cache hits
+      queryClient.setQueryData(sessionKeys.detail(sessionId), {
+        session: data.session,
+      });
+
+      queryClient.setQueryData(stageKeys.progress(sessionId), data.progress);
+
+      // Hydrate messages as infinite query format
+      queryClient.setQueryData(messageKeys.list(sessionId), {
+        pages: [data.messages],
+        pageParams: [undefined],
+      });
+
+      if (data.invitation) {
+        queryClient.setQueryData(sessionKeys.sessionInvitation(sessionId), {
+          invitation: data.invitation,
+        });
+      }
+
+      queryClient.setQueryData(stageKeys.compact(sessionId), data.compact);
+
+      return data;
+    },
+    enabled: !!sessionId,
+    staleTime: 30_000,
+    ...options,
+  });
+
+  return query;
 }

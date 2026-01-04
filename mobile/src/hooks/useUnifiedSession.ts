@@ -11,8 +11,7 @@ import { useToast } from '../contexts/ToastContext';
 import { ApiClientError } from '../lib/api';
 
 import {
-  useSession,
-  useSessionInvitation,
+  useSessionState,
   useConfirmInvitationMessage,
 } from './useSessions';
 import {
@@ -23,8 +22,6 @@ import {
   useFetchInitialMessage,
 } from './useMessages';
 import {
-  useProgress,
-  useCompactStatus,
   useSignCompact,
   useAdvanceStage,
   useConfirmFeelHeard,
@@ -326,15 +323,26 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const [aiRecommendsReadyToShare, setAiRecommendsReadyToShare] = useState(false);
 
   // -------------------------------------------------------------------------
-  // Core Data Hooks
+  // Consolidated Session State (reduces initial requests from ~5 to 1)
+  // Returns session, progress, messages, invitation, and compact in one request
   // -------------------------------------------------------------------------
-  const { data: sessionData, isLoading: loadingSession } = useSession(sessionId);
-  const { data: progressData, isLoading: loadingProgress } = useProgress(sessionId);
+  const { data: stateData, isLoading: loadingState } = useSessionState(sessionId);
+
+  // Extract core data from consolidated state
+  const sessionData = stateData ? { session: stateData.session } : undefined;
+  const progressData = stateData?.progress;
+  const compactData = stateData?.compact;
+  const invitationData = stateData?.invitation ? { invitation: stateData.invitation } : undefined;
+
+  // Loading states - use consolidated loading for core data
+  const loadingSession = loadingState;
+  const loadingProgress = loadingState;
+  const loadingCompact = loadingState;
 
   const currentStage = progressData?.myProgress?.stage ?? Stage.ONBOARDING;
 
-  // Messages - fetch all messages with infinite scroll (no stage filter)
-  // This allows previous stage messages to remain visible after stage transitions
+  // Messages - use infinite scroll for pagination
+  // The useSessionState hook hydrates the messages cache, so this will get a cache hit
   const {
     data: messagesData,
     isLoading: loadingMessages,
@@ -345,17 +353,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
     { sessionId: sessionId!, limit: 25 },
     { enabled: !!sessionId }
   );
-
-  // -------------------------------------------------------------------------
-  // Stage-Specific Data Hooks (conditionally enabled based on current stage)
-  // -------------------------------------------------------------------------
-
-  // Stage 0: Compact
-  const { data: compactData, isLoading: loadingCompact } = useCompactStatus(sessionId);
-
-  // Invitation - always fetch when sessionId exists to avoid waterfall
-  // The API will return appropriate data for all states (CREATED, INVITED, ACTIVE)
-  const { data: invitationData } = useSessionInvitation(sessionId);
 
   // Stage 2: Empathy - always fetch to avoid waterfall
   // API returns null/empty when not in stage 2+, and React Query caches efficiently
@@ -1125,7 +1122,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     partnerProgress,
     myProgress,
     canAdvance,
-    gates: myProgress?.gates,
+    gates: myProgress?.gatesSatisfied,
     milestones: progressData?.milestones,
 
     // Messages and cards

@@ -3,6 +3,7 @@
  *
  * Routes for session-level operations:
  * - GET /sessions/:id - Get session details
+ * - GET /sessions/:id/state - Get consolidated session state (all data in one request)
  * - POST /sessions/:id/pause - Pause active session
  * - POST /sessions/:id/resume - Resume paused session
  * - GET /sessions/:id/progress - Get stage progress
@@ -25,6 +26,7 @@ import {
   updateInvitationMessage,
   confirmInvitationMessage,
 } from '../controllers/sessions';
+import { getSessionState } from '../controllers/session-state';
 import { getLinkedInnerThoughts } from '../controllers/inner-work';
 
 const router = Router();
@@ -35,6 +37,13 @@ const router = Router();
  * @access Private - requires authentication and session access
  */
 router.get('/sessions/:id', requireAuth, requireSessionAccess, asyncHandler(getSession));
+
+/**
+ * @route GET /api/v1/sessions/:id/state
+ * @description Get consolidated session state (all data in one request)
+ * @access Private - requires authentication and session access
+ */
+router.get('/sessions/:id/state', requireAuth, requireSessionAccess, asyncHandler(getSessionState));
 
 /**
  * @route POST /api/v1/sessions/:id/pause

@@ -12,6 +12,7 @@ export * from './api';
 
 // DTOs by domain
 export * from './dto/session';
+export * from './dto/session-state';
 export * from './dto/stage';
 export * from './dto/message';
 export * from './dto/consent';

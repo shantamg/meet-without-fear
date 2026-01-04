@@ -41,6 +41,7 @@ export {
   useSessions,
   useInfiniteSessions,
   useSession,
+  useSessionState,
   useCreateSession,
   usePauseSession,
   useResumeSession,
