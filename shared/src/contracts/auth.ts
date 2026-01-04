@@ -131,3 +131,39 @@ export const updateMemoryPreferencesResponseSchema = z.object({
 });
 
 export type UpdateMemoryPreferencesResponseInput = z.infer<typeof updateMemoryPreferencesResponseSchema>;
+
+// ============================================================================
+// Notification Preferences
+// ============================================================================
+
+export const notificationPreferencesDTOSchema = z.object({
+  pushEnabled: z.boolean(),
+  emailEnabled: z.boolean(),
+  newInvitations: z.boolean(),
+  partnerActions: z.boolean(),
+  followUpReminders: z.boolean(),
+});
+
+export type NotificationPreferencesDTOInput = z.infer<typeof notificationPreferencesDTOSchema>;
+
+export const getNotificationPreferencesResponseSchema = z.object({
+  preferences: notificationPreferencesDTOSchema,
+});
+
+export type GetNotificationPreferencesResponseInput = z.infer<typeof getNotificationPreferencesResponseSchema>;
+
+export const updateNotificationPreferencesRequestSchema = z.object({
+  pushEnabled: z.boolean().optional(),
+  emailEnabled: z.boolean().optional(),
+  newInvitations: z.boolean().optional(),
+  partnerActions: z.boolean().optional(),
+  followUpReminders: z.boolean().optional(),
+});
+
+export type UpdateNotificationPreferencesRequestInput = z.infer<typeof updateNotificationPreferencesRequestSchema>;
+
+export const updateNotificationPreferencesResponseSchema = z.object({
+  preferences: notificationPreferencesDTOSchema,
+});
+
+export type UpdateNotificationPreferencesResponseInput = z.infer<typeof updateNotificationPreferencesResponseSchema>;

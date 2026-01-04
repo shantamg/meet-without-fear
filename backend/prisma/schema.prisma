@@ -14,19 +14,20 @@ datasource db {
 // ============================================================================
 
 model User {
-  id                  String    @id @default(cuid())
-  clerkId             String?   @unique // Clerk authentication user ID
-  email               String    @unique
-  name                String?   // Full name (computed from firstName + lastName)
-  firstName           String?
-  lastName            String?
-  pushToken           String?   // Expo push token for realtime fallbacks
-  biometricEnabled    Boolean   @default(false)
-  biometricEnrolledAt DateTime?
-  memoryPreferences   Json?     // MemoryPreferencesDTO - AI memory settings
-  lastMoodIntensity   Int?      // Last mood intensity (1-10) for session entry default
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id                       String    @id @default(cuid())
+  clerkId                  String?   @unique // Clerk authentication user ID
+  email                    String    @unique
+  name                     String?   // Full name (computed from firstName + lastName)
+  firstName                String?
+  lastName                 String?
+  pushToken                String?   // Expo push token for realtime fallbacks
+  biometricEnabled         Boolean   @default(false)
+  biometricEnrolledAt      DateTime?
+  memoryPreferences        Json?     // MemoryPreferencesDTO - AI memory settings
+  notificationPreferences  Json?     // NotificationPreferencesDTO - notification settings
+  lastMoodIntensity        Int?      // Last mood intensity (1-10) for session entry default
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   // Relationships
   relationships       RelationshipMember[]

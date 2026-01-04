@@ -69,6 +69,14 @@ export interface NotificationPreferencesDTO {
   followUpReminders: boolean;
 }
 
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferencesDTO = {
+  pushEnabled: true,
+  emailEnabled: false,
+  newInvitations: true,
+  partnerActions: true,
+  followUpReminders: true,
+};
+
 export interface GetNotificationPreferencesResponse {
   preferences: NotificationPreferencesDTO;
 }

@@ -18,6 +18,8 @@ import {
   updateBiometricPreference,
   getMemoryPreferences,
   updateMemoryPreferences,
+  getNotificationPreferences,
+  updateNotificationPreferences,
   updateMood,
   deleteAccount,
 } from '../controllers/auth';
@@ -126,6 +128,33 @@ router.get('/me/memory-preferences', getMemoryPreferences);
  * - preferences: MemoryPreferencesDTO
  */
 router.put('/me/memory-preferences', updateMemoryPreferences);
+
+/**
+ * GET /auth/me/notification-preferences
+ *
+ * Get current notification preferences.
+ *
+ * Response: GetNotificationPreferencesResponse
+ * - preferences: NotificationPreferencesDTO
+ */
+router.get('/me/notification-preferences', getNotificationPreferences);
+
+/**
+ * PATCH /auth/me/notification-preferences
+ *
+ * Update notification preferences.
+ *
+ * Request: UpdateNotificationPreferencesRequest
+ * - pushEnabled?: boolean
+ * - emailEnabled?: boolean
+ * - newInvitations?: boolean
+ * - partnerActions?: boolean
+ * - followUpReminders?: boolean
+ *
+ * Response: UpdateNotificationPreferencesResponse
+ * - preferences: NotificationPreferencesDTO
+ */
+router.patch('/me/notification-preferences', updateNotificationPreferences);
 
 /**
  * PATCH /auth/me/mood

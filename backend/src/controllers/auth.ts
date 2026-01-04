@@ -18,13 +18,18 @@ import {
   UpdateBiometricPreferenceResponse,
   GetMemoryPreferencesResponse,
   UpdateMemoryPreferencesResponse,
+  GetNotificationPreferencesResponse,
+  UpdateNotificationPreferencesResponse,
   DeleteAccountResponse,
   MemoryPreferencesDTO,
+  NotificationPreferencesDTO,
   DEFAULT_MEMORY_PREFERENCES,
+  DEFAULT_NOTIFICATION_PREFERENCES,
   updateProfileRequestSchema,
   updatePushTokenRequestSchema,
   updateBiometricPreferenceRequestSchema,
   updateMemoryPreferencesRequestSchema,
+  updateNotificationPreferencesRequestSchema,
 } from '@meet-without-fear/shared';
 import { deleteAccountWithNotifications } from '../services/account-deletion';
 
@@ -439,6 +444,83 @@ export const updateMood = asyncHandler(async (req: Request, res: Response): Prom
     success: true,
     data: {
       lastMoodIntensity: intensity,
+    },
+  };
+
+  res.json(response);
+});
+
+// ============================================================================
+// GET /auth/me/notification-preferences
+// ============================================================================
+
+export const getNotificationPreferences = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const user = getUser(req);
+
+  // Get user with notification preferences
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { notificationPreferences: true },
+  });
+
+  // Parse stored preferences or use defaults
+  const storedPrefs = dbUser?.notificationPreferences as NotificationPreferencesDTO | null;
+  const preferences: NotificationPreferencesDTO = storedPrefs ?? DEFAULT_NOTIFICATION_PREFERENCES;
+
+  const response: ApiResponse<GetNotificationPreferencesResponse> = {
+    success: true,
+    data: {
+      preferences,
+    },
+  };
+
+  res.json(response);
+});
+
+// ============================================================================
+// PATCH /auth/me/notification-preferences
+// ============================================================================
+
+export const updateNotificationPreferences = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const user = getUser(req);
+
+  // Validate request body
+  const parseResult = updateNotificationPreferencesRequestSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    throw new ValidationError('Invalid notification preferences data', {
+      errors: parseResult.error.flatten().fieldErrors,
+    });
+  }
+
+  const updates = parseResult.data;
+
+  // Get current preferences
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { notificationPreferences: true },
+  });
+
+  const currentPrefs = (dbUser?.notificationPreferences as NotificationPreferencesDTO | null) ?? DEFAULT_NOTIFICATION_PREFERENCES;
+
+  // Merge updates with current preferences
+  const newPreferences: NotificationPreferencesDTO = {
+    pushEnabled: updates.pushEnabled ?? currentPrefs.pushEnabled,
+    emailEnabled: updates.emailEnabled ?? currentPrefs.emailEnabled,
+    newInvitations: updates.newInvitations ?? currentPrefs.newInvitations,
+    partnerActions: updates.partnerActions ?? currentPrefs.partnerActions,
+    followUpReminders: updates.followUpReminders ?? currentPrefs.followUpReminders,
+  };
+
+  // Update user preferences
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { notificationPreferences: newPreferences as object },
+  });
+
+  const response: ApiResponse<UpdateNotificationPreferencesResponse> = {
+    success: true,
+    data: {
+      preferences: newPreferences,
     },
   };
 

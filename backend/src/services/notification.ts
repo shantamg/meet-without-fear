@@ -13,6 +13,8 @@ import {
   NOTIFICATION_TEMPLATES,
   generateNotificationBody,
   NotificationType as SharedNotificationType,
+  NotificationPreferencesDTO,
+  DEFAULT_NOTIFICATION_PREFERENCES,
 } from '@meet-without-fear/shared';
 import { sendPushNotification } from './push';
 import type { SessionEvent } from './realtime';
@@ -35,7 +37,8 @@ export interface CreateNotificationParams {
 
 /**
  * Create a new notification for a user.
- * Optionally sends a push notification if the user has a push token.
+ * Optionally sends a push notification if the user has push enabled and the
+ * notification type is enabled in their preferences.
  */
 export async function createNotification(
   params: CreateNotificationParams
@@ -49,7 +52,7 @@ export async function createNotification(
     ? generateNotificationBody(type as unknown as SharedNotificationType, actorName)
     : template?.bodyTemplate ?? 'You have a new notification';
 
-  // Create the notification in database
+  // Create the notification in database (always created for in-app history)
   const notification = await prisma.notification.create({
     data: {
       userId,
@@ -62,13 +65,27 @@ export async function createNotification(
     },
   });
 
-  // Send push notification (fire and forget)
+  // Check user preferences before sending push notification
   if (sessionId) {
     const eventType = mapNotificationTypeToSessionEvent(type);
     if (eventType) {
-      sendPushNotification(userId, eventType, { notificationId: notification.id }, sessionId).catch(
-        (error) => console.error('[Notification] Push failed:', error)
-      );
+      // Get user's notification preferences
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { notificationPreferences: true },
+      });
+
+      const prefs = (user?.notificationPreferences as NotificationPreferencesDTO | null)
+        ?? DEFAULT_NOTIFICATION_PREFERENCES;
+
+      // Only send push if preferences allow
+      if (shouldSendPush(type, prefs)) {
+        sendPushNotification(userId, eventType, { notificationId: notification.id }, sessionId).catch(
+          (error) => console.error('[Notification] Push failed:', error)
+        );
+      } else {
+        console.log(`[Notification] Push skipped for user ${userId} - disabled in preferences`);
+      }
     }
   }
 
@@ -191,6 +208,57 @@ function mapNotificationTypeToSessionEvent(type: NotificationType): SessionEvent
     SESSION_RESOLVED: 'session.resolved',
   };
   return mapping[type] ?? null;
+}
+
+/**
+ * Check if push notification should be sent based on user preferences.
+ * Maps notification types to preference categories.
+ */
+function shouldSendPush(
+  type: NotificationType,
+  prefs: NotificationPreferencesDTO
+): boolean {
+  // Master toggle must be enabled
+  if (!prefs.pushEnabled) {
+    return false;
+  }
+
+  // Map notification types to preference categories
+  const invitationTypes: NotificationType[] = [
+    'INVITATION_RECEIVED',
+    'INVITATION_ACCEPTED',
+  ];
+
+  const partnerActionTypes: NotificationType[] = [
+    'COMPACT_SIGNED',
+    'SESSION_JOINED',
+    'PARTNER_MESSAGE',
+    'EMPATHY_SHARED',
+    'NEEDS_SHARED',
+    'AGREEMENT_PROPOSED',
+    'AGREEMENT_CONFIRMED',
+    'SESSION_RESOLVED',
+    'SESSION_ABANDONED',
+  ];
+
+  const followUpTypes: NotificationType[] = [
+    'FOLLOW_UP_REMINDER',
+  ];
+
+  if (invitationTypes.includes(type)) {
+    return prefs.newInvitations;
+  }
+
+  if (partnerActionTypes.includes(type)) {
+    return prefs.partnerActions;
+  }
+
+  if (followUpTypes.includes(type)) {
+    return prefs.followUpReminders;
+  }
+
+  // Default: allow if push is enabled
+  return true;
 }
 
 // ============================================================================

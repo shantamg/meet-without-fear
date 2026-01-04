@@ -14,6 +14,7 @@ import { prisma } from '../lib/prisma';
 import { extractNeedsFromConversation, findCommonGround } from '../services/needs';
 import { confirmNeedsRequestSchema, ConsentContentType, ApiResponse, ErrorCode } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
+import { notifyNeedsShared } from '../services/notification';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 
@@ -458,13 +459,22 @@ export async function consentToShareNeeds(
     // Check if partner has also shared
     const partnerShared = await hasPartnerSharedNeeds(sessionId, user.id);
 
-    // Notify partner
+    // Notify partner via real-time and create in-app notification
     const partnerId = await getPartnerUserId(sessionId, user.id);
     if (partnerId) {
       await notifyPartner(sessionId, partnerId, 'partner.needs_shared', {
         stage: 3,
         sharedBy: user.id,
       });
+
+      // Create in-app notification for notification center
+      await notifyNeedsShared(
+        partnerId,
+        user.name || user.firstName || 'Your partner',
+        sessionId
+      ).catch((err) =>
+        console.warn('[consentToShareNeeds] Failed to create in-app notification:', err)
+      );
     }
 
     // If both have shared, publish common ground ready event
