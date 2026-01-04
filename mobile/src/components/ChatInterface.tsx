@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   NativeScrollEvent,
 } from 'react-native';
 import type { MessageDTO } from '@meet-without-fear/shared';
+import { MessageRole } from '@meet-without-fear/shared';
 import { ChatBubble, ChatBubbleMessage, MessageDeliveryStatus } from './ChatBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { ChatInput } from './ChatInput';
@@ -60,6 +61,10 @@ interface ChatInterfaceProps {
   onLoadMore?: () => void;
   hasMore?: boolean;
   isLoadingMore?: boolean;
+  /** Callback when the latest AI message's typewriter animation completes */
+  onTypewriterComplete?: () => void;
+  /** Callback to report if typewriter is currently animating */
+  onTypewriterStateChange?: (isAnimating: boolean) => void;
 }
 
 // ============================================================================
@@ -88,9 +93,14 @@ export function ChatInterface({
   onLoadMore,
   hasMore = false,
   isLoadingMore = false,
+  onTypewriterComplete,
+  onTypewriterStateChange,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
+
+  // Track the ID of the message currently being animated via typewriter
+  const [animatingMessageId, setAnimatingMessageId] = useState<string | null>(null);
 
   // STABLE SORT: Ensure order never flip-flops if timestamps are identical
   const listItems = useMemo((): ChatListItem[] => {
@@ -178,6 +188,28 @@ export function ChatInterface({
     }
   }, [messages]);
 
+  // Find the newest AI message that should animate (for typewriter tracking)
+  const newestAnimatableAIMessageId = useMemo(() => {
+    // listItems is sorted newest first (descending by timestamp)
+    for (const item of listItems) {
+      if (isIndicator(item)) continue;
+      // Skip user messages and optimistic messages
+      if (item.role === MessageRole.USER) continue;
+      if (item.id.startsWith('optimistic-')) continue;
+      // Skip known messages (history)
+      if (knownMessageIdsRef.current.has(item.id)) continue;
+      // This is the newest AI message that needs animation
+      return item.id;
+    }
+    return null;
+  }, [listItems]);
+
+  // Notify parent when typewriter state changes
+  useEffect(() => {
+    const isAnimating = animatingMessageId !== null;
+    onTypewriterStateChange?.(isAnimating);
+  }, [animatingMessageId, onTypewriterStateChange]);
+
   const renderItem: ListRenderItem<ChatListItem> = useCallback(({ item }) => {
     if (isIndicator(item)) {
       return <ChatIndicator type={item.indicatorType} timestamp={item.timestamp} />;
@@ -189,11 +221,16 @@ export function ChatInterface({
     // 3. User messages (only AI messages get typewriter)
     const isKnownMessage = knownMessageIdsRef.current.has(item.id);
     const isOptimisticMessage = item.id.startsWith('optimistic-');
+    const isAIMessage = item.role !== MessageRole.USER;
+    const shouldAnimateTypewriter = isAIMessage && !isKnownMessage && !isOptimisticMessage;
 
     // After this message is seen, mark it as known for future renders
     if (!isKnownMessage && !isOptimisticMessage) {
       knownMessageIdsRef.current.add(item.id);
     }
+
+    // Track typewriter animation for the newest AI message
+    const isNewestAnimatable = item.id === newestAnimatableAIMessageId;
 
     const bubbleMessage: ChatBubbleMessage = {
       id: item.id,
@@ -201,10 +238,20 @@ export function ChatInterface({
       content: item.content,
       timestamp: item.timestamp,
       status: item.status,
-      skipTypewriter: isKnownMessage || isOptimisticMessage,
+      skipTypewriter: !shouldAnimateTypewriter,
     };
-    return <ChatBubble message={bubbleMessage} />;
-  }, []);
+
+    return (
+      <ChatBubble
+        message={bubbleMessage}
+        onTypewriterStart={isNewestAnimatable ? () => setAnimatingMessageId(item.id) : undefined}
+        onTypewriterComplete={isNewestAnimatable ? () => {
+          setAnimatingMessageId(null);
+          onTypewriterComplete?.();
+        } : undefined}
+      />
+    );
+  }, [newestAnimatableAIMessageId, onTypewriterComplete]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 

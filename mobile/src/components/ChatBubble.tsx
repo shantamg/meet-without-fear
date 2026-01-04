@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { View, Text } from 'react-native';
 import { MessageRole } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
@@ -66,12 +66,14 @@ export function ChatBubble({
 
   // Track if this specific message instance has completed animation
   const hasAnimatedRef = useRef(false);
+  const hasStartedRef = useRef(false);
   const messageIdRef = useRef(message.id);
 
   // Reset animation state if message ID changes
   if (messageIdRef.current !== message.id) {
     messageIdRef.current = message.id;
     hasAnimatedRef.current = false;
+    hasStartedRef.current = false;
   }
 
   // Store callbacks in refs to avoid re-triggering animation
@@ -84,6 +86,14 @@ export function ChatBubble({
 
   // Determine if we should use typewriter effect
   const shouldUseTypewriter = isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
+
+  // Call onStart when typewriter begins - use effect to avoid setState during render
+  useEffect(() => {
+    if (shouldUseTypewriter && !hasStartedRef.current && onStartRef.current) {
+      hasStartedRef.current = true;
+      onStartRef.current();
+    }
+  }, [shouldUseTypewriter]);
 
   // Mark as animated when complete
   const handleComplete = () => {

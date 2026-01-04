@@ -208,6 +208,24 @@ export function UnifiedSessionScreen({
   // Store optimistic timestamp for feel-heard confirmation
   const [optimisticFeelHeardTimestamp, setOptimisticFeelHeardTimestamp] = useState<string | null>(null);
 
+  // -------------------------------------------------------------------------
+  // Track Typewriter Animation State
+  // -------------------------------------------------------------------------
+  // Used to delay showing inline cards until typewriter completes
+  const [isTypewriterAnimating, setIsTypewriterAnimating] = useState(false);
+
+  // -------------------------------------------------------------------------
+  // Preserve Feel Heard State Across Re-renders
+  // -------------------------------------------------------------------------
+  // Once feel-heard is confirmed, keep showing the indicator even during re-renders
+  // This prevents the indicator from flashing away when new messages arrive
+  const hasEverConfirmedFeelHeard = useRef(false);
+
+  // Update ref when milestones confirm feel-heard
+  if (milestones?.feelHeardConfirmedAt && !hasEverConfirmedFeelHeard.current) {
+    hasEverConfirmedFeelHeard.current = true;
+  }
+
   // Animation for the invitation panel slide-up
   const invitationPanelAnim = useRef(new Animated.Value(0)).current;
 
@@ -275,8 +293,11 @@ export function UnifiedSessionScreen({
 
     // Show "Felt Heard" indicator when user confirms they feel heard
     // Use API timestamp for reliable positioning, or optimistic timestamp during confirmation
+    // IMPORTANT: Use hasEverConfirmedFeelHeard ref to prevent indicator from disappearing
+    // during re-renders when milestones cache is temporarily invalidated
     const feelHeardAt = milestones?.feelHeardConfirmedAt ?? optimisticFeelHeardTimestamp;
-    if ((milestones?.feelHeardConfirmedAt || isConfirmingFeelHeard) && feelHeardAt) {
+    const shouldShowFeelHeard = hasEverConfirmedFeelHeard.current || milestones?.feelHeardConfirmedAt || isConfirmingFeelHeard;
+    if (shouldShowFeelHeard && feelHeardAt) {
       items.push({
         type: 'indicator',
         indicatorType: 'feel-heard',
@@ -883,7 +904,7 @@ export function UnifiedSessionScreen({
           messages={displayMessages}
           indicators={indicators}
           onSendMessage={sendMessage}
-          isLoading={isSending || isConfirmingInvitation || isConfirmingFeelHeard || isFetchingInitialMessage}
+          isLoading={isSending || isFetchingInitialMessage}
           showEmotionSlider={effectiveStage === Stage.WITNESS && !isInvitationPhase && !isRefiningInvitation}
           emotionValue={barometerValue}
           onEmotionChange={handleBarometerChange}
@@ -896,6 +917,7 @@ export function UnifiedSessionScreen({
           onLoadMore={fetchMoreMessages}
           hasMore={hasMoreMessages}
           isLoadingMore={isFetchingMoreMessages}
+          onTypewriterStateChange={setIsTypewriterAnimating}
           renderAboveInput={
             // Show invitation panel during invitation phase
             (isInvitationPhase || isRefiningInvitation) && invitationMessage && invitationUrl
@@ -970,8 +992,9 @@ export function UnifiedSessionScreen({
 
         {/* Waiting banner removed - now handled in renderAboveInput */}
 
-        {/* Render inline cards at the end of the chat */}
-        {inlineCards.map((card) => renderInlineCard(card))}
+        {/* Render inline cards at the end of the chat - ONLY after typewriter animation completes */}
+        {/* This ensures UI elements like feel-heard confirmation appear after AI message finishes */}
+        {!isTypewriterAnimating && inlineCards.map((card) => renderInlineCard(card))}
       </View>
 
       {/* Overlays */}
