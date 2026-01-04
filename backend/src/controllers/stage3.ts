@@ -104,9 +104,13 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Check session is active
+    // Return empty data for non-active sessions (allows parallel fetching)
     if (session.status !== 'ACTIVE') {
-      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      successResponse(res, {
+        needs: [],
+        synthesizedAt: null,
+        isDirty: false,
+      });
       return;
     }
 
@@ -119,15 +123,14 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
       orderBy: { stage: 'desc' },
     });
 
-    // Check user is in stage 3
+    // If not in stage 3 yet, return empty data instead of error
     const currentStage = progress?.stage ?? 0;
-    if (currentStage !== 3) {
-      errorResponse(
-        res,
-        'VALIDATION_ERROR',
-        `Cannot get needs: you are in stage ${currentStage}, but stage 3 is required`,
-        400
-      );
+    if (currentStage < 3) {
+      successResponse(res, {
+        needs: [],
+        synthesizedAt: null,
+        isDirty: false,
+      });
       return;
     }
 
@@ -525,9 +528,13 @@ export async function getCommonGround(
       return;
     }
 
-    // Check session is active
+    // Return empty data for non-active sessions (allows parallel fetching without errors)
     if (session.status !== 'ACTIVE') {
-      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      successResponse(res, {
+        commonGround: [],
+        analysisComplete: false,
+        bothConfirmed: false,
+      });
       return;
     }
 
@@ -540,15 +547,14 @@ export async function getCommonGround(
       orderBy: { stage: 'desc' },
     });
 
-    // Check user is in stage 3
+    // If not in stage 3 yet, return empty data instead of error
     const currentStage = progress?.stage ?? 0;
-    if (currentStage !== 3) {
-      errorResponse(
-        res,
-        'VALIDATION_ERROR',
-        `Cannot get common ground: you are in stage ${currentStage}, but stage 3 is required`,
-        400
-      );
+    if (currentStage < 3) {
+      successResponse(res, {
+        commonGround: [],
+        analysisComplete: false,
+        bothConfirmed: false,
+      });
       return;
     }
 

@@ -287,7 +287,7 @@ describe('Stage 3 API', () => {
       );
     });
 
-    it('rejects request when user not in stage 3', async () => {
+    it('returns empty data when user not in stage 3', async () => {
       const mockStageProgress = {
         id: 'progress-1',
         sessionId: mockSessionId,
@@ -315,14 +315,16 @@ describe('Stage 3 API', () => {
 
       await getNeeds(req as Request, res as Response);
 
-      expect(statusMock).toHaveBeenCalledWith(400);
+      // Returns empty data instead of error to allow parallel fetching
+      expect(statusMock).toHaveBeenCalledWith(200);
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          success: false,
-          error: expect.objectContaining({
-            code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('stage 3'),
-          }),
+          success: true,
+          data: {
+            needs: [],
+            synthesizedAt: null,
+            isDirty: false,
+          },
         })
       );
     });

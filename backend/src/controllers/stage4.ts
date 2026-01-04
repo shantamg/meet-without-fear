@@ -119,9 +119,12 @@ export async function getStrategies(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Check session is active
+    // Return empty data for non-active sessions (allows parallel fetching)
     if (session.status !== 'ACTIVE') {
-      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      successResponse(res, {
+        strategies: [],
+        phase: 'collecting',
+      });
       return;
     }
 
@@ -412,9 +415,13 @@ export async function getOverlap(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Check session is active
+    // Return empty data for non-active sessions (allows parallel fetching)
     if (session.status !== 'ACTIVE') {
-      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      successResponse(res, {
+        overlap: null,
+        waitingForPartner: false,
+        agreementCandidates: null,
+      });
       return;
     }
 
