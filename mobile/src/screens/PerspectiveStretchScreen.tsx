@@ -716,7 +716,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rephraseButtonText: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 14,
     fontWeight: '600',
   },

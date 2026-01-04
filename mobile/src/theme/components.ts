@@ -35,7 +35,7 @@ export const commonStyles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   btnPrimaryText: {
-    color: '#ffffff',
+    color: colors.textOnAccent,
     fontWeight: '500',
     fontSize: typography.fontSize.base,
   },

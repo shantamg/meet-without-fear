@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   primaryButtonText: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 18,
     fontWeight: '600',
   },

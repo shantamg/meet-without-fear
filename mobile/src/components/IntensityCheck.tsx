@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   doneButtonText: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 18,
     fontWeight: '600',
   },

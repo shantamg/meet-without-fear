@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   continueButtonText: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',

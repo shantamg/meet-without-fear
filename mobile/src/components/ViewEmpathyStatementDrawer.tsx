@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
   shareButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'white',
+    color: colors.textOnAccent,
   },
 });
 

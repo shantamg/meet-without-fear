@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   confirmText: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 13,
     fontWeight: '600',
   },

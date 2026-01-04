@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   primaryButtonText: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 18,
     fontWeight: '600',
   },

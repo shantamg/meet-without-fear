@@ -9,6 +9,7 @@ export const colors = {
   textPrimary: '#f1f5f9',
   textSecondary: '#94a3b8',
   textMuted: '#64748b',
+  textOnAccent: '#000000', // Black text for orange/accent buttons
 
   // Brand colors
   brandBlue: '#5ba4d9',

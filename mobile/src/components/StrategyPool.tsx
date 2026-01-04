@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   readyText: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 14,
     fontWeight: '600',
   },

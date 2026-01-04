@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmText: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 14,
     fontWeight: '600',
   },

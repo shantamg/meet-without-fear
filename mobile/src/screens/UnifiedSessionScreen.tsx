@@ -1106,7 +1106,7 @@ const useStyles = () =>
     },
     coolingOptionTextAccent: {
       fontSize: 14,
-      color: 'white',
+      color: t.colors.textOnAccent,
       fontWeight: '600',
     },
 
@@ -1149,7 +1149,7 @@ const useStyles = () =>
       alignItems: 'center',
     },
     rephraseButtonText: {
-      color: 'white',
+      color: t.colors.textOnAccent,
       fontSize: 14,
       fontWeight: '600',
     },
@@ -1229,7 +1229,7 @@ const useStyles = () =>
       alignItems: 'center',
     },
     confirmText: {
-      color: 'white',
+      color: t.colors.textOnAccent,
       fontSize: 14,
       fontWeight: '600',
     },
@@ -1247,7 +1247,7 @@ const useStyles = () =>
       alignItems: 'center',
     },
     primaryButtonText: {
-      color: 'white',
+      color: t.colors.textOnAccent,
       fontSize: 14,
       fontWeight: '600',
     },
@@ -1298,7 +1298,7 @@ const useStyles = () =>
       alignItems: 'center',
     },
     closeOverlayText: {
-      color: 'white',
+      color: t.colors.textOnAccent,
       fontSize: 16,
       fontWeight: '600',
     },

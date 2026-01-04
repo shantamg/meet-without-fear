@@ -187,7 +187,7 @@ const useStyles = () =>
       borderColor: t.colors.accent,
     },
     checkmark: {
-      color: 'white',
+      color: t.colors.textOnAccent,
       fontSize: 16,
       fontWeight: 'bold',
     },
@@ -208,7 +208,7 @@ const useStyles = () =>
       backgroundColor: t.colors.textMuted,
     },
     signButtonText: {
-      color: 'white',
+      color: t.colors.textOnAccent,
       fontSize: 18,
       fontWeight: '600',
     },

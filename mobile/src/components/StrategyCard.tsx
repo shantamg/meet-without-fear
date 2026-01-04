@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rankNumber: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontWeight: '600',
     fontSize: 12,
   },

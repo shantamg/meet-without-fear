@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   primaryButtonText: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 16,
     fontWeight: '600',
   },

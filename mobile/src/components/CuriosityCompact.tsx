@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
   },
   checkmark: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 14,
     fontWeight: 'bold',
   },
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textMuted,
   },
   signButtonText: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 16,
     fontWeight: '600',
   },

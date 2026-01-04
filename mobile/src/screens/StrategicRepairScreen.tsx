@@ -834,7 +834,7 @@ const subStyles = StyleSheet.create({
     backgroundColor: colors.bgTertiary,
   },
   submitButtonText: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 14,
     fontWeight: '500',
   },
@@ -976,7 +976,7 @@ const subStyles = StyleSheet.create({
     borderColor: colors.accent,
   },
   checkmark: {
-    color: 'white',
+    color: colors.textOnAccent,
     fontSize: 14,
     fontWeight: '600',
   },
