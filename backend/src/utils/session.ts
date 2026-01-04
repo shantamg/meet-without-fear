@@ -41,6 +41,10 @@ type SessionWithIncludes = {
     completedAt: Date | null;
     gatesSatisfied?: unknown;
   }>;
+  // Optional: empathy attempts for Stage 2 status display
+  empathyAttempts?: Array<{
+    sourceUserId: string | null;
+  }>;
 };
 
 /**
@@ -91,6 +95,16 @@ export async function isSessionCreator(
 }
 
 /**
+ * Options for status summary generation
+ */
+interface StatusSummaryOptions {
+  /** Whether the current user has sent their empathy (EmpathyAttempt exists) */
+  userHasSentEmpathy?: boolean;
+  /** Whether the partner has sent their empathy (EmpathyAttempt exists) */
+  partnerHasSentEmpathy?: boolean;
+}
+
+/**
  * Generate human-readable status summary for session list display.
  *
  * This function creates contextual messages about:
@@ -106,7 +120,8 @@ export function generateSessionStatusSummary(
   sessionStatus: SessionStatus,
   myProgress: StageProgressDTO,
   partnerProgress: StageProgressDTO,
-  partnerName: string
+  partnerName: string,
+  options: StatusSummaryOptions = {}
 ): SessionStatusSummary {
   const name = partnerName || 'Partner';
 
@@ -130,7 +145,7 @@ export function generateSessionStatusSummary(
       // Show actual progress status for creator, partner is still pending acceptance
       const userStatus =
         myProgress.status === StageStatus.IN_PROGRESS
-          ? getInProgressStageMessage(myProgress.stage)
+          ? getInProgressStageMessage(myProgress.stage, options.userHasSentEmpathy)
           : myProgress.status === StageStatus.GATE_PENDING ||
               myProgress.status === StageStatus.COMPLETED
             ? getCompletedStageMessage(myProgress.stage)
@@ -185,7 +200,7 @@ export function generateSessionStatusSummary(
       userStatus = `Ready to start ${myStageName}`;
       break;
     case StageStatus.IN_PROGRESS:
-      userStatus = getInProgressStageMessage(myStage);
+      userStatus = getInProgressStageMessage(myStage, options.userHasSentEmpathy);
       break;
     case StageStatus.GATE_PENDING:
       userStatus = getCompletedStageMessage(myStage);
@@ -241,15 +256,18 @@ export function generateSessionStatusSummary(
 
 /**
  * Get a message describing what the user is currently doing in their stage.
+ * @param stage - The current stage
+ * @param hasSentEmpathy - For Stage 2, whether the user has already sent their empathy message
  */
-function getInProgressStageMessage(stage: Stage): string {
+function getInProgressStageMessage(stage: Stage, hasSentEmpathy?: boolean): string {
   switch (stage) {
     case Stage.ONBOARDING:
       return "Reviewing the compact";
     case Stage.WITNESS:
       return "Sharing your story";
     case Stage.PERSPECTIVE_STRETCH:
-      return "Crafting your empathy";
+      // If user has sent empathy, show that instead of "crafting"
+      return hasSentEmpathy ? "You've sent your empathy message" : "Crafting your empathy";
     case Stage.NEED_MAPPING:
       return "Identifying your needs";
     case Stage.STRATEGIC_REPAIR:
@@ -382,12 +400,21 @@ export function mapSessionToSummary(
     partnerMember?.user.name ??
     'Partner';
 
+  // Check for empathy attempts (if included in query)
+  const userHasSentEmpathy = session.empathyAttempts?.some(
+    (a) => a.sourceUserId === currentUserId
+  ) ?? false;
+  const partnerHasSentEmpathy = session.empathyAttempts?.some(
+    (a) => a.sourceUserId !== currentUserId
+  ) ?? false;
+
   // Generate human-readable status summary
   const statusSummary = generateSessionStatusSummary(
     session.status as SessionStatus,
     myProgress,
     partnerProgress,
-    partnerDisplayName
+    partnerDisplayName,
+    { userHasSentEmpathy, partnerHasSentEmpathy }
   );
 
   return {

@@ -209,6 +209,10 @@ async function createSession(
         },
         userVessels: true,
         stageProgress: true,
+        // Include empathy attempts for consistent status display (will be empty for new sessions)
+        empathyAttempts: {
+          select: { sourceUserId: true },
+        },
       },
     });
 

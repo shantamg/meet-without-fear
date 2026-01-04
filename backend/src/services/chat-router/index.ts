@@ -282,6 +282,10 @@ export async function getChatContext(userId: string) {
         },
       },
       stageProgress: true,
+      // Include empathy attempts to show correct Stage 2 status
+      empathyAttempts: {
+        select: { sourceUserId: true },
+      },
     },
     orderBy: { updatedAt: 'desc' },
     take: 5,

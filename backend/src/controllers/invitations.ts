@@ -82,6 +82,10 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
           },
         },
         stageProgress: true, // Get all stage progress records
+        // Include empathy attempts to show correct Stage 2 status
+        empathyAttempts: {
+          select: { sourceUserId: true },
+        },
       },
       orderBy: { updatedAt: 'desc' },
       take: takeLimit + 1,
@@ -160,6 +164,17 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
         ? (myMember as { nickname?: string | null } | undefined)?.nickname || partnerMember.user.firstName || partnerMember.user.name
         : (myMember as { nickname?: string | null } | undefined)?.nickname || null;
 
+      // Check for empathy attempts (Stage 2)
+      const empathyAttempts = (session as { empathyAttempts?: Array<{ sourceUserId: string | null }> }).empathyAttempts || [];
+      const userHasSentEmpathy = empathyAttempts.some(
+        (a: { sourceUserId: string | null }) => a.sourceUserId === user.id
+      );
+      const partnerHasSentEmpathy = partnerMember
+        ? empathyAttempts.some(
+            (a: { sourceUserId: string | null }) => a.sourceUserId === partnerMember.userId
+          )
+        : false;
+
       // Generate human-readable status summary
       const statusSummary = generateSessionStatusSummary(
         session.status as SessionStatus,
@@ -175,7 +190,8 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
           startedAt: partnerProgress.startedAt,
           completedAt: partnerProgress.completedAt,
         },
-        partnerDisplayName || 'Partner'
+        partnerDisplayName || 'Partner',
+        { userHasSentEmpathy, partnerHasSentEmpathy }
       );
 
       return {

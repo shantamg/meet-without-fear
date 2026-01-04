@@ -58,6 +58,10 @@ export const sessionSwitchHandler: IntentHandler = {
           },
           stageProgress: true,
           userVessels: true,
+          // Include empathy attempts to show correct Stage 2 status
+          empathyAttempts: {
+            select: { sourceUserId: true },
+          },
         },
       });
     }
@@ -82,6 +86,10 @@ export const sessionSwitchHandler: IntentHandler = {
           },
           stageProgress: true,
           userVessels: true,
+          // Include empathy attempts to show correct Stage 2 status
+          empathyAttempts: {
+            select: { sourceUserId: true },
+          },
         },
       });
 
