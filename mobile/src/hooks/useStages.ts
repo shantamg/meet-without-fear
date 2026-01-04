@@ -162,6 +162,24 @@ export function useSignCompact(
 
   return useMutation({
     mutationFn: async ({ sessionId }) => {
+      // Optimistically update the compact status BEFORE the request
+      // This hides the overlay immediately so users can't double-click
+      queryClient.setQueryData(
+        sessionKeys.state(sessionId),
+        (old: unknown) => {
+          if (!old || typeof old !== 'object') return old;
+          const state = old as Record<string, unknown>;
+          return {
+            ...state,
+            compact: {
+              ...(state.compact as Record<string, unknown>),
+              mySigned: true,
+              mySignedAt: new Date().toISOString(),
+            },
+          };
+        }
+      );
+
       return post<SignCompactResponse>(`/sessions/${sessionId}/compact/sign`, {
         agreed: true,
       });
@@ -170,6 +188,12 @@ export function useSignCompact(
       queryClient.invalidateQueries({ queryKey: stageKeys.compact(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      // Also invalidate consolidated state so shouldShowCompactOverlay updates
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+    },
+    onError: (_, { sessionId }) => {
+      // On error, invalidate to refetch the true state
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
     },
     ...options,
   });
