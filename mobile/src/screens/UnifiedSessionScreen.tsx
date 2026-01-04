@@ -805,6 +805,31 @@ export function UnifiedSessionScreen({
   }
 
   // -------------------------------------------------------------------------
+  // Session Entry Mood Check - Full Screen (before session content renders)
+  // -------------------------------------------------------------------------
+  // Shown as a full-screen view (not modal overlay) to prevent flash of
+  // session content behind it. Checks how user is feeling before they
+  // see any chat content.
+  if (shouldShowMoodCheck) {
+    return (
+      <SessionEntryMoodCheck
+        visible={true}
+        fullScreen={true}
+        initialValue={user?.lastMoodIntensity ?? 5}
+        onComplete={(intensity) => {
+          // Save to user profile (persists across sessions)
+          updateMood({ intensity });
+          // Update local user state immediately so next session uses it
+          updateUser({ lastMoodIntensity: intensity });
+          // Also update session-specific barometer
+          handleBarometerChange(intensity);
+          setHasCompletedMoodCheck(true);
+        }}
+      />
+    );
+  }
+
+  // -------------------------------------------------------------------------
   // Strategy Ranking Phase - Full Screen Overlay
   // -------------------------------------------------------------------------
   if (currentStage === Stage.STRATEGIC_REPAIR && strategyPhase === StrategyPhase.RANKING) {
@@ -1054,20 +1079,8 @@ export function UnifiedSessionScreen({
         isPending={isSigningCompact}
       />
 
-      {/* Session Entry Mood Check - asks how user is feeling on session entry */}
-      <SessionEntryMoodCheck
-        visible={shouldShowMoodCheck}
-        initialValue={user?.lastMoodIntensity ?? 5}
-        onComplete={(intensity) => {
-          // Save to user profile (persists across sessions)
-          updateMood({ intensity });
-          // Update local user state immediately so next session uses it
-          updateUser({ lastMoodIntensity: intensity });
-          // Also update session-specific barometer
-          handleBarometerChange(intensity);
-          setHasCompletedMoodCheck(true);
-        }}
-      />
+      {/* Note: SessionEntryMoodCheck is now handled via early return above
+          to prevent flash of session content behind it */}
     </SafeAreaView>
   );
 }

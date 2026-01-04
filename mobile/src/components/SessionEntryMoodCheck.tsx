@@ -49,6 +49,8 @@ function getIntensityLabel(value: number): string {
 export interface SessionEntryMoodCheckProps {
   /** Whether the modal is visible */
   visible: boolean;
+  /** Render as full-screen view instead of modal overlay (prevents content flash) */
+  fullScreen?: boolean;
   /** Initial slider value (defaults to 5) */
   initialValue?: number;
   /** Callback when user completes the check */
@@ -60,9 +62,13 @@ export interface SessionEntryMoodCheckProps {
  *
  * Displays a full-screen modal with a slider for users to indicate how they're
  * feeling before starting or resuming a chat conversation.
+ *
+ * When fullScreen is true, renders as a standalone view (not modal) to prevent
+ * flash of content behind it during screen transitions.
  */
 export function SessionEntryMoodCheck({
   visible,
+  fullScreen = false,
   initialValue = 5,
   onComplete,
 }: SessionEntryMoodCheckProps) {
@@ -78,6 +84,56 @@ export function SessionEntryMoodCheck({
     onComplete(value);
   }, [onComplete, value]);
 
+  // Shared content between modal and full-screen modes
+  const content = (
+    <View style={fullScreen ? styles.fullScreenOverlay : styles.overlay}>
+      <View style={styles.container}>
+        <Text style={styles.title}>How are you feeling right now?</Text>
+
+        <View style={styles.currentContainer}>
+          <Text style={[styles.currentValue, { color: currentColor }]}>
+            {value} - {currentLabel}
+          </Text>
+        </View>
+
+        <View style={styles.sliderContainer}>
+          <Slider
+            testID="mood-check-slider"
+            style={styles.slider}
+            minimumValue={1}
+            maximumValue={10}
+            step={1}
+            value={value}
+            onValueChange={handleValueChange}
+            minimumTrackTintColor={currentColor}
+            maximumTrackTintColor={colors.bgTertiary}
+            thumbTintColor={currentColor}
+          />
+
+          <View style={styles.labels}>
+            <Text style={styles.scaleLabel}>Calm</Text>
+            <Text style={styles.scaleLabel}>Elevated</Text>
+            <Text style={styles.scaleLabel}>Intense</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={styles.continueButton}
+          onPress={handleContinue}
+          testID="mood-check-continue-button"
+        >
+          <Text style={styles.continueButtonText}>Continue to chat</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // Full-screen mode: render directly without Modal wrapper
+  if (fullScreen) {
+    return visible ? content : null;
+  }
+
+  // Modal mode: wrap in Modal for overlay behavior
   return (
     <Modal
       visible={visible}
@@ -86,46 +142,7 @@ export function SessionEntryMoodCheck({
       statusBarTranslucent
       testID="session-entry-mood-check-modal"
     >
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          <Text style={styles.title}>How are you feeling right now?</Text>
-
-          <View style={styles.currentContainer}>
-            <Text style={[styles.currentValue, { color: currentColor }]}>
-              {value} - {currentLabel}
-            </Text>
-          </View>
-
-          <View style={styles.sliderContainer}>
-            <Slider
-              testID="mood-check-slider"
-              style={styles.slider}
-              minimumValue={1}
-              maximumValue={10}
-              step={1}
-              value={value}
-              onValueChange={handleValueChange}
-              minimumTrackTintColor={currentColor}
-              maximumTrackTintColor={colors.bgTertiary}
-              thumbTintColor={currentColor}
-            />
-
-            <View style={styles.labels}>
-              <Text style={styles.scaleLabel}>Calm</Text>
-              <Text style={styles.scaleLabel}>Elevated</Text>
-              <Text style={styles.scaleLabel}>Intense</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.continueButton}
-            onPress={handleContinue}
-            testID="mood-check-continue-button"
-          >
-            <Text style={styles.continueButtonText}>Continue to chat</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      {content}
     </Modal>
   );
 }
@@ -134,6 +151,12 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenOverlay: {
+    flex: 1,
+    backgroundColor: colors.bgPrimary,
     justifyContent: 'center',
     alignItems: 'center',
   },
