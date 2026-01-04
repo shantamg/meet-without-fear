@@ -244,14 +244,16 @@ describe('clearPendingInvitation', () => {
 describe('createInvitationLink', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockCreateURL.mockImplementation((path) => `meetwithoutfear://${path}`);
   });
 
-  it('creates invitation link with ID', () => {
+  it('creates invitation link with ID using website URL', () => {
+    // createInvitationLink now returns website URLs (not deep links)
+    // so recipients can open in browser, sign up, then be redirected to app
     const link = createInvitationLink('my-invitation-123');
 
-    expect(link).toBe('meetwithoutfear://invitation/my-invitation-123');
-    expect(mockCreateURL).toHaveBeenCalledWith('invitation/my-invitation-123');
+    // In test/dev environment, uses localhost
+    expect(link).toBe('http://localhost:3001/invitation/my-invitation-123');
+    // Note: mockCreateURL is NOT called because we use website URLs now
   });
 });
 

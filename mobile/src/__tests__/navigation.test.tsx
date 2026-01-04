@@ -5,8 +5,13 @@
  * Verifies that routes exist and that exports are properly defined.
  */
 
-// Mock expo-font before any imports
-// Import modules for testing - these will use the mocks above
+// Mock the components barrel to avoid loading NotificationInbox which imports @meet-without-fear/shared
+jest.mock('../components', () => ({
+  BiometricPrompt: () => null,
+  Logo: () => null,
+}));
+
+// Import modules for testing - these will use the mocks from jest.setup.js
 import * as RootLayout from '../../app/_layout';
 import * as AuthLayout from '../../app/(auth)/_layout';
 import * as TabsLayout from '../../app/(auth)/(tabs)/_layout';

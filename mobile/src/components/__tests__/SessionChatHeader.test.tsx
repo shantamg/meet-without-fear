@@ -111,13 +111,13 @@ describe('SessionChatHeader', () => {
   });
 
   describe('interactions', () => {
-    it('calls onPress when header is pressed', () => {
+    it('calls onPress when header center is pressed', () => {
       const onPress = jest.fn();
       const { getByTestId } = render(
         <SessionChatHeader onPress={onPress} />
       );
 
-      fireEvent.press(getByTestId('session-chat-header-touchable'));
+      fireEvent.press(getByTestId('session-chat-header-center-touchable'));
 
       expect(onPress).toHaveBeenCalledTimes(1);
     });
@@ -125,7 +125,7 @@ describe('SessionChatHeader', () => {
     it('does not render touchable wrapper when onPress is not provided', () => {
       const { queryByTestId } = render(<SessionChatHeader />);
 
-      expect(queryByTestId('session-chat-header-touchable')).toBeNull();
+      expect(queryByTestId('session-chat-header-center-touchable')).toBeNull();
     });
   });
 

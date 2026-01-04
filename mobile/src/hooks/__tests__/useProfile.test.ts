@@ -289,9 +289,16 @@ describe('useProfile', () => {
   });
 
   describe('useDeleteAccount hook', () => {
-    it('deletes account with email confirmation', async () => {
-      const responseData = { deleted: true };
-      mockPost.mockResolvedValueOnce(responseData);
+    it('deletes account', async () => {
+      const responseData = {
+        success: true,
+        summary: {
+          sessionsAbandoned: 2,
+          partnersNotified: 1,
+          dataRecordsDeleted: 50,
+        },
+      };
+      mockDel.mockResolvedValueOnce(responseData);
 
       const { result } = renderHook(() => useDeleteAccount(), {
         wrapper: createWrapper(),
@@ -299,21 +306,19 @@ describe('useProfile', () => {
 
       let mutationResult: typeof responseData | undefined;
       await act(async () => {
-        mutationResult = await result.current.mutateAsync({ confirmEmail: 'user@example.com' });
+        mutationResult = await result.current.mutateAsync();
       });
 
-      expect(mockPost).toHaveBeenCalledWith('/me/delete', {
-        confirmEmail: 'user@example.com',
-      });
-      expect(mutationResult?.deleted).toBe(true);
+      expect(mockDel).toHaveBeenCalledWith('/auth/me');
+      expect(mutationResult?.success).toBe(true);
     });
 
-    it('handles incorrect email confirmation', async () => {
+    it('handles deletion error', async () => {
       const error = new (api.ApiClientError as any)(
-        { code: 'VALIDATION_ERROR', message: 'Email confirmation does not match' },
-        400
+        { code: 'SERVER_ERROR', message: 'Failed to delete account' },
+        500
       );
-      mockPost.mockRejectedValueOnce(error);
+      mockDel.mockRejectedValueOnce(error);
 
       const { result } = renderHook(() => useDeleteAccount(), {
         wrapper: createWrapper(),
@@ -322,13 +327,13 @@ describe('useProfile', () => {
       let caughtError: Error | undefined;
       await act(async () => {
         try {
-          await result.current.mutateAsync({ confirmEmail: 'wrong@example.com' });
+          await result.current.mutateAsync();
         } catch (e) {
           caughtError = e as Error;
         }
       });
 
-      expect(caughtError?.message).toBe('Email confirmation does not match');
+      expect(caughtError?.message).toBe('Failed to delete account');
     });
   });
 

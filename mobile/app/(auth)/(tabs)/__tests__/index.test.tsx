@@ -24,6 +24,7 @@ jest.mock('lucide-react-native', () => ({
   Plus: () => 'PlusIcon',
   Heart: () => 'HeartIcon',
   UserPlus: () => 'UserPlusIcon',
+  Layers: () => 'LayersIcon',
 }));
 
 // Mock useSessions hook
@@ -77,8 +78,8 @@ jest.mock('@/src/hooks/useInvitation', () => ({
   useInvitationDetails: () => mockUseInvitationDetails(),
 }));
 
-// Mock BiometricPrompt component
-jest.mock('../../../../src/components/BiometricPrompt', () => ({
+// Mock the components barrel to avoid loading NotificationInbox which imports @meet-without-fear/shared
+jest.mock('../../../../src/components', () => ({
   BiometricPrompt: ({ visible, testID }: { visible: boolean; testID?: string }) => {
     const { View, Text } = require('react-native');
     if (!visible) return null;
@@ -88,6 +89,7 @@ jest.mock('../../../../src/components/BiometricPrompt', () => ({
       </View>
     );
   },
+  Logo: () => null,
 }));
 
 // Mock react-native-safe-area-context
@@ -119,6 +121,10 @@ function createMockSession(overrides: Partial<SessionSummaryDTO> = {}): SessionS
       status: StageStatus.IN_PROGRESS,
       startedAt: '2024-01-01T00:00:00Z',
       completedAt: null,
+    },
+    statusSummary: {
+      userStatus: 'Working on The Witness',
+      partnerStatus: 'Jane is also working',
     },
     selfActionNeeded: [],
     partnerActionNeeded: [],
@@ -225,7 +231,7 @@ describe('HomeScreen', () => {
     expect(screen.getByText('What can I help you work through today?')).toBeTruthy();
   });
 
-  it('shows New Session and Inner Work buttons', () => {
+  it('shows New Session and Inner Thoughts buttons', () => {
     mockUseSessions.mockReturnValue({
       data: { items: [], hasMore: false },
       isLoading: false,
@@ -234,7 +240,7 @@ describe('HomeScreen', () => {
     renderWithProviders(<HomeScreen />);
 
     expect(screen.getByText('New Session')).toBeTruthy();
-    expect(screen.getByText('Inner Work')).toBeTruthy();
+    expect(screen.getByText('Inner Thoughts')).toBeTruthy();
   });
 
   it('shows Continue button when there is a recent session with partner nickname', () => {
@@ -293,7 +299,7 @@ describe('HomeScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/session/new');
   });
 
-  it('navigates to inner work when Inner Work pressed', () => {
+  it('navigates to inner thoughts when Inner Thoughts pressed', () => {
     mockUseSessions.mockReturnValue({
       data: { items: [], hasMore: false },
       isLoading: false,
@@ -301,9 +307,9 @@ describe('HomeScreen', () => {
 
     renderWithProviders(<HomeScreen />);
 
-    fireEvent.press(screen.getByText('Inner Work'));
+    fireEvent.press(screen.getByText('Inner Thoughts'));
 
-    expect(mockPush).toHaveBeenCalledWith('/inner-work');
+    expect(mockPush).toHaveBeenCalledWith('/inner-thoughts');
   });
 
   it('navigates to session when Continue pressed', () => {

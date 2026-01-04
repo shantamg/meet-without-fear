@@ -159,6 +159,17 @@ jest.mock('../../hooks/useMessages', () => ({
   }),
 }));
 
+jest.mock('../../hooks/useInnerThoughts', () => ({
+  useLinkedInnerThoughts: () => ({
+    data: null,
+    isLoading: false,
+  }),
+  useCreateInnerThoughtsSession: () => ({
+    mutate: jest.fn(),
+    isPending: false,
+  }),
+}));
+
 // ============================================================================
 // Tests
 // ============================================================================

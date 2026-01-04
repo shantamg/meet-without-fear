@@ -8,6 +8,9 @@ module.exports = {
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
   moduleNameMapper: {
+    '^@meet-without-fear/shared$': '<rootDir>/../shared/src/index.ts',
+    '^@meet-without-fear/shared/(.*)$': '<rootDir>/../shared/src/$1',
+    '^@shared$': '<rootDir>/../shared/src/index.ts',
     '^@shared/(.*)$': '<rootDir>/../shared/src/$1',
     // Match tsconfig paths: @/* resolves to ./* or ./src/*
     '^@/theme$': '<rootDir>/src/theme',

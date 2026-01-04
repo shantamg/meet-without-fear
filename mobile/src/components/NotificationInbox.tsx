@@ -29,7 +29,7 @@ import {
   Trophy,
   UserX,
 } from 'lucide-react-native';
-import { NotificationType } from '@shared';
+import { NotificationType } from '@meet-without-fear/shared';
 import { colors } from '@/src/theme';
 
 // ============================================================================
