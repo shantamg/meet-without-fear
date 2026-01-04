@@ -166,6 +166,22 @@ export async function signCompact(req: Request, res: Response): Promise<void> {
     const partnerSigned = partner?.gatesSatisfied?.compactSigned ?? false;
     const canAdvance = partnerSigned;
 
+    // If both have signed, ensure session is ACTIVE
+    // This handles edge cases where invitation acceptance didn't update status
+    if (partnerSigned) {
+      const session = await prisma.session.findUnique({
+        where: { id: sessionId },
+        select: { status: true },
+      });
+      if (session && session.status !== 'ACTIVE' && session.status !== 'RESOLVED') {
+        await prisma.session.update({
+          where: { id: sessionId },
+          data: { status: 'ACTIVE' },
+        });
+        console.log(`[signCompact] Updated session ${sessionId} status to ACTIVE (both signed)`);
+      }
+    }
+
     // Notify partner via real-time and create in-app notification
     if (partner?.userId) {
       await notifyPartner(sessionId, partner.userId, 'partner.signed_compact', {
