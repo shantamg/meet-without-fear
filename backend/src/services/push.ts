@@ -43,6 +43,10 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'Empathy received',
     body: 'Your partner shared their understanding of your experience.',
   },
+  'partner.additional_context_shared': {
+    title: 'More context shared',
+    body: 'Your partner shared additional context to help you understand them better.',
+  },
   'partner.needs_shared': {
     title: 'Needs shared',
     body: 'Your partner shared their identified needs.',

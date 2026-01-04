@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { notifyPartner } from '../services/realtime';
+import { notifyInvitationAccepted, notifyInvitationReceived, notifySessionJoined } from '../services/notification';
 import { z } from 'zod';
 import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
 import { successResponse, errorResponse } from '../utils/response';
@@ -527,6 +528,15 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
       userName: user.name,
     });
 
+    // Create in-app notification for inviter
+    const accepterDisplayName = user.firstName || user.name || 'Someone';
+    await notifyInvitationAccepted(
+      invitation.invitedById,
+      accepterDisplayName,
+      invitation.sessionId,
+      invitation.id
+    );
+
     successResponse(res, {
       session: {
         id: session?.id,
@@ -819,5 +829,116 @@ export async function updateNickname(req: Request, res: Response): Promise<void>
   } catch (error) {
     console.error('[updateNickname] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to update nickname', 500);
+  }
+}
+
+/**
+ * Acknowledge a pending invitation (creates notification if not exists)
+ * POST /invitations/:id/acknowledge
+ *
+ * Called when a user views a pending invitation (e.g., from home screen).
+ * Creates a notification for the user so they can see the invitation in their inbox.
+ * Idempotent - won't create duplicate notifications.
+ */
+export async function acknowledgeInvitation(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id } = req.params;
+
+    // Get invitation details
+    const invitation = await prisma.invitation.findUnique({
+      where: { id },
+      include: {
+        invitedBy: {
+          select: {
+            id: true,
+            name: true,
+            firstName: true,
+          },
+        },
+        session: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!invitation) {
+      errorResponse(res, 'NOT_FOUND', 'Invitation not found', 404);
+      return;
+    }
+
+    // Can't acknowledge your own invitation
+    if (invitation.invitedById === user.id) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Cannot acknowledge your own invitation', 400);
+      return;
+    }
+
+    // Check if expired
+    const isExpired = new Date() > invitation.expiresAt;
+    if (isExpired || invitation.status !== 'PENDING') {
+      // Return the invitation status but don't create notification
+      successResponse(res, {
+        acknowledged: false,
+        reason: isExpired ? 'expired' : invitation.status.toLowerCase(),
+        invitation: {
+          id: invitation.id,
+          status: isExpired ? 'EXPIRED' : invitation.status,
+          invitedBy: {
+            id: invitation.invitedBy.id,
+            name: invitation.invitedBy.firstName || invitation.invitedBy.name,
+          },
+        },
+      });
+      return;
+    }
+
+    // Check if notification already exists for this user + invitation
+    const existingNotification = await prisma.notification.findFirst({
+      where: {
+        userId: user.id,
+        invitationId: invitation.id,
+        type: 'INVITATION_RECEIVED',
+      },
+    });
+
+    // Create notification if it doesn't exist
+    if (!existingNotification) {
+      const inviterDisplayName =
+        invitation.invitedBy.firstName || invitation.invitedBy.name || 'Someone';
+      await notifyInvitationReceived(
+        user.id,
+        inviterDisplayName,
+        invitation.session.id,
+        invitation.id
+      );
+    }
+
+    successResponse(res, {
+      acknowledged: true,
+      invitation: {
+        id: invitation.id,
+        status: invitation.status,
+        invitedBy: {
+          id: invitation.invitedBy.id,
+          name: invitation.invitedBy.firstName || invitation.invitedBy.name,
+        },
+        session: {
+          id: invitation.session.id,
+          status: invitation.session.status,
+        },
+        expiresAt: invitation.expiresAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('[acknowledgeInvitation] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to acknowledge invitation', 500);
   }
 }

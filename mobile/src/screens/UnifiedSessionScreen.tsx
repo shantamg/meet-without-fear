@@ -14,6 +14,7 @@ import { Stage, MessageRole, StrategyPhase, SessionStatus } from '@meet-without-
 import { ChatInterface, ChatMessage, ChatIndicatorItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
 import { FeelHeardConfirmation } from '../components/FeelHeardConfirmation';
+import { ReadyToShareConfirmation } from '../components/ReadyToShareConfirmation';
 import { BreathingExercise } from '../components/BreathingExercise';
 import { GroundingExercise } from '../components/GroundingExercise';
 import { BodyScanExercise } from '../components/BodyScanExercise';
@@ -32,6 +33,7 @@ import { AgreementCard } from '../components/AgreementCard';
 import { CuriosityCompactOverlay } from '../components/CuriosityCompactOverlay';
 import { InvitationShareButton } from '../components/InvitationShareButton';
 import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
+import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { createInvitationLink } from '../hooks/useInvitation';
@@ -132,6 +134,7 @@ export function UnifiedSessionScreen({
     loadingCompact,
     empathyDraftData,
     partnerEmpathyData,
+    liveProposedEmpathyStatement,
     allNeedsConfirmed,
     commonGround,
     strategyPhase,
@@ -150,6 +153,8 @@ export function UnifiedSessionScreen({
     handleBarometerChange,
     handleConfirmFeelHeard,
     handleDismissFeelHeard,
+    handleConfirmReadyToShare,
+    handleDismissReadyToShare,
     handleSignCompact,
     handleConfirmInvitationMessage,
     handleSaveEmpathyDraft,
@@ -178,6 +183,11 @@ export function UnifiedSessionScreen({
   const [isRefiningInvitation, setIsRefiningInvitation] = useState(false);
 
   // -------------------------------------------------------------------------
+  // Local State for View Empathy Statement Drawer (Stage 2)
+  // -------------------------------------------------------------------------
+  const [showEmpathyDrawer, setShowEmpathyDrawer] = useState(false);
+
+  // -------------------------------------------------------------------------
   // Local State for Session Entry Mood Check
   // -------------------------------------------------------------------------
   // Tracks if user has completed the mood check for this session entry
@@ -192,6 +202,9 @@ export function UnifiedSessionScreen({
   const [isConfirmingInvitation, setIsConfirmingInvitation] = useState(false);
   // Store optimistic timestamp for when confirmation is in progress
   const [optimisticConfirmTimestamp, setOptimisticConfirmTimestamp] = useState<string | null>(null);
+
+  // Store optimistic timestamp for feel-heard confirmation
+  const [optimisticFeelHeardTimestamp, setOptimisticFeelHeardTimestamp] = useState<string | null>(null);
 
   // Animation for the invitation panel slide-up
   const invitationPanelAnim = useRef(new Animated.Value(0)).current;
@@ -220,6 +233,13 @@ export function UnifiedSessionScreen({
       setOptimisticConfirmTimestamp(null);
     }
   }, [invitationConfirmed, isConfirmingInvitation]);
+
+  // Clear feel-heard optimistic state when API confirms
+  useEffect(() => {
+    if (milestones?.feelHeardConfirmedAt && optimisticFeelHeardTimestamp) {
+      setOptimisticFeelHeardTimestamp(null);
+    }
+  }, [milestones?.feelHeardConfirmedAt, optimisticFeelHeardTimestamp]);
 
   // Build indicators array
   // Use messageConfirmedAt from API for reliable positioning across reloads
@@ -251,18 +271,19 @@ export function UnifiedSessionScreen({
       });
     }
 
-    // Show "Fully Heard" indicator if user confirmed they feel heard (Stage 1 completion)
-    // Milestones persist across stage transitions so this shows even after advancing to Stage 2+
-    if (milestones?.feelHeardConfirmedAt) {
+    // Show "Felt Heard" indicator when user confirms they feel heard
+    // Use API timestamp for reliable positioning, or optimistic timestamp during confirmation
+    const feelHeardAt = milestones?.feelHeardConfirmedAt ?? optimisticFeelHeardTimestamp;
+    if ((milestones?.feelHeardConfirmedAt || isConfirmingFeelHeard) && feelHeardAt) {
       items.push({
         type: 'indicator',
         indicatorType: 'feel-heard',
         id: 'feel-heard',
-        timestamp: milestones.feelHeardConfirmedAt,
+        timestamp: feelHeardAt,
       });
     }
     return items;
-  }, [invitationConfirmed, isConfirmingInvitation, invitation?.messageConfirmedAt, invitation?.acceptedAt, invitation?.isInviter, optimisticConfirmTimestamp, milestones?.feelHeardConfirmedAt]);
+  }, [invitationConfirmed, isConfirmingInvitation, invitation?.messageConfirmedAt, invitation?.acceptedAt, invitation?.isInviter, optimisticConfirmTimestamp, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, optimisticFeelHeardTimestamp]);
 
   // -------------------------------------------------------------------------
   // Effective Stage (accounts for compact signed but stage not yet updated)
@@ -294,6 +315,8 @@ export function UnifiedSessionScreen({
             <View style={styles.inlineCard} key={card.id}>
               <FeelHeardConfirmation
                 onConfirm={() => {
+                  // Set optimistic timestamp immediately for instant indicator display
+                  setOptimisticFeelHeardTimestamp(new Date().toISOString());
                   handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
                 }}
                 onContinue={handleDismissFeelHeard}
@@ -346,6 +369,19 @@ export function UnifiedSessionScreen({
               >
                 <Text style={styles.dismissHintText}>Got it</Text>
               </TouchableOpacity>
+            </View>
+          );
+
+        case 'ready-to-share-confirmation':
+          return (
+            <View style={styles.inlineCard} key={card.id}>
+              <ReadyToShareConfirmation
+                onConfirm={handleConfirmReadyToShare}
+                onContinue={handleDismissReadyToShare}
+                partnerName={partnerName}
+                proposedStatement={card.props.proposedStatement as string | null | undefined}
+                onViewFull={() => setShowEmpathyDrawer(true)}
+              />
             </View>
           );
 
@@ -510,6 +546,8 @@ export function UnifiedSessionScreen({
       openOverlay,
       dismissCard,
       handleConfirmFeelHeard,
+      handleConfirmReadyToShare,
+      handleDismissReadyToShare,
       handleShareEmpathy,
       handleSaveEmpathyDraft,
       handleValidatePartnerEmpathy,
@@ -906,6 +944,21 @@ export function UnifiedSessionScreen({
             handleConfirmInvitationMessage(invitationMessage);
           }}
           onClose={() => setShowRefineDrawer(false)}
+        />
+      )}
+
+      {/* View Empathy Statement Drawer - for viewing full statement */}
+      {liveProposedEmpathyStatement && (
+        <ViewEmpathyStatementDrawer
+          visible={showEmpathyDrawer}
+          statement={liveProposedEmpathyStatement}
+          partnerName={partnerName}
+          onShare={() => {
+            // Close drawer, confirm ready to share, then share
+            setShowEmpathyDrawer(false);
+            handleConfirmReadyToShare();
+          }}
+          onClose={() => setShowEmpathyDrawer(false)}
         />
       )}
 

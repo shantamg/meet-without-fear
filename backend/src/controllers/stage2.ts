@@ -20,6 +20,10 @@ import {
 } from '@meet-without-fear/shared';
 import { notifyPartner } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
+import { getSonnetResponse } from '../lib/bedrock';
+import { extractJsonFromResponse } from '../utils/json-extractor';
+import { embedMessage } from '../services/embedding';
+import { notifyEmpathyShared } from '../services/notification';
 
 // ============================================================================
 // Types
@@ -203,6 +207,20 @@ export async function getDraft(req: Request, res: Response): Promise<void> {
       },
     });
 
+    // Check if user has already consented to share
+    const existingConsent = await prisma.consentRecord.findFirst({
+      where: {
+        userId: user.id,
+        sessionId,
+        targetType: 'EMPATHY_DRAFT',
+        decision: 'GRANTED',
+      },
+    });
+
+    // Can consent if draft exists and is ready to share
+    const canConsent = !!(draft && draft.readyToShare && !existingConsent);
+    const alreadyConsented = !!existingConsent;
+
     successResponse(res, {
       draft: draft
         ? {
@@ -213,6 +231,8 @@ export async function getDraft(req: Request, res: Response): Promise<void> {
             updatedAt: draft.updatedAt.toISOString(),
           }
         : null,
+      canConsent,
+      alreadyConsented,
     });
   } catch (error) {
     console.error('[getDraft] Error:', error);
@@ -351,6 +371,34 @@ export async function consentToShare(
     // Get partner ID from session data
     const partnerId = getPartnerUserIdFromSession(session, user.id);
 
+    // Get partner name for messages
+    let partnerName: string | undefined;
+    if (partnerId) {
+      const partner = await prisma.user.findUnique({
+        where: { id: partnerId },
+        select: { firstName: true, name: true },
+      });
+      partnerName = partner?.firstName || partner?.name || undefined;
+    }
+
+    // Save empathy statement as a message in the chat history
+    // This creates the "Empathy statement sent" line with the statement content
+    const empathyMessage = await prisma.message.create({
+      data: {
+        sessionId,
+        senderId: user.id,
+        forUserId: user.id,
+        role: 'EMPATHY_STATEMENT', // Special role for empathy statements
+        content: draft.content,
+        stage: 2,
+      },
+    });
+
+    // Embed for cross-session retrieval (non-blocking)
+    embedMessage(empathyMessage.id).catch((err) =>
+      console.warn('[consentToShare] Failed to embed empathy statement:', err)
+    );
+
     // Check if partner has also consented
     const partnerAttempt = await prisma.empathyAttempt.findFirst({
       where: {
@@ -359,12 +407,100 @@ export async function consentToShare(
       },
     });
 
-    // Notify partner
+    // Create notification for partner
     if (partnerId) {
+      await notifyEmpathyShared(
+        partnerId,
+        user.name || 'Your partner',
+        sessionId
+      ).catch((err) =>
+        console.warn('[consentToShare] Failed to create notification:', err)
+      );
+
+      // Also notify via real-time
       await notifyPartner(sessionId, partnerId, 'partner.empathy_shared', {
         stage: 2,
         sharedBy: user.id,
       });
+    }
+
+    // Generate transition message when user shares empathy
+    let transitionMessage: {
+      id: string;
+      content: string;
+      timestamp: string;
+      stage: number;
+    } | null = null;
+
+    try {
+      const userName = user.firstName || user.name || 'The user';
+      const partner = partnerName || 'their partner';
+
+      // Build a simple transition prompt for empathy sharing acknowledgment
+      const transitionPrompt = `You are Meet Without Fear, a Process Guardian. ${userName} has just shared their empathy statement with ${partner}, expressing their understanding of ${partner}'s perspective.
+
+Generate a brief, warm acknowledgment message (2-3 sentences) for ${userName} that:
+1. Acknowledges the courage it took to share their understanding
+2. Validates the importance of this step in building connection
+3. Gently prepares them for what comes next (waiting for ${partner} to receive and respond to their understanding)
+
+Keep it natural and conversational. Don't be overly effusive.
+
+Respond in JSON format:
+\`\`\`json
+{
+  "response": "Your acknowledgment message"
+}
+\`\`\``;
+
+      const aiResponse = await getSonnetResponse({
+        systemPrompt: transitionPrompt,
+        messages: [{ role: 'user', content: 'Generate the acknowledgment message.' }],
+        maxTokens: 512,
+      });
+
+      let transitionContent: string;
+      if (aiResponse) {
+        try {
+          const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
+          transitionContent = typeof parsed.response === 'string'
+            ? parsed.response
+            : `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now we wait to see how they receive it.`;
+        } catch {
+          transitionContent = `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now we wait to see how they receive it.`;
+        }
+      } else {
+        transitionContent = `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now we wait to see how they receive it.`;
+      }
+
+      // Save the transition message to the database
+      const aiMessage = await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          forUserId: user.id,
+          role: 'AI',
+          content: transitionContent,
+          stage: 2,
+        },
+      });
+
+      // Embed for cross-session retrieval (non-blocking)
+      embedMessage(aiMessage.id).catch((err) =>
+        console.warn('[consentToShare] Failed to embed transition message:', err)
+      );
+
+      transitionMessage = {
+        id: aiMessage.id,
+        content: aiMessage.content,
+        timestamp: aiMessage.timestamp.toISOString(),
+        stage: aiMessage.stage,
+      };
+
+      console.log(`[consentToShare] Generated transition message for session ${sessionId}`);
+    } catch (error) {
+      console.error('[consentToShare] Failed to generate transition message:', error);
+      // Continue without transition message - not a critical failure
     }
 
     successResponse(res, {
@@ -372,6 +508,13 @@ export async function consentToShare(
       consentedAt: empathyAttempt.sharedAt?.toISOString() ?? null,
       partnerConsented: !!partnerAttempt,
       canReveal: !!partnerAttempt && consent,
+      empathyMessage: {
+        id: empathyMessage.id,
+        content: empathyMessage.content,
+        timestamp: empathyMessage.timestamp.toISOString(),
+        stage: empathyMessage.stage,
+      },
+      transitionMessage,
     });
   } catch (error) {
     console.error('[consentToShare] Error:', error);

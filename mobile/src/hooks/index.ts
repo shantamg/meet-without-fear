@@ -187,10 +187,15 @@ export {
 
 export {
   useNotifications,
-  type NotificationData,
-  type NotificationPermissionStatus,
+  useNotificationCount,
+  notificationKeys,
   type UseNotificationsReturn,
 } from './useNotifications';
+
+export {
+  usePushNotifications,
+  type UsePushNotificationsReturn,
+} from './usePushNotifications';
 
 // ============================================================================
 // Unread Notification Count

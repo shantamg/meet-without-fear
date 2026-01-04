@@ -164,4 +164,7 @@ export interface ConfirmFeelHeardResponse {
     timestamp: string;
     stage: number;
   } | null;
+
+  // Stage the user was advanced to (2 if confirmed, null otherwise)
+  advancedToStage?: number | null;
 }

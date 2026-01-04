@@ -3,14 +3,14 @@ import { Home, FolderOpen, User, Bell } from 'lucide-react-native';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { colors } from '@/src/theme';
 import { NotificationBadge } from '@/src/components/NotificationBadge';
-import { useUnreadCount } from '@/src/hooks/useUnreadCount';
+import { useNotificationCount } from '@/src/hooks/useNotifications';
 
 /**
  * Header notification bell button with badge
  */
 function NotificationButton() {
   const router = useRouter();
-  const { unreadCount } = useUnreadCount();
+  const { unreadCount } = useNotificationCount();
 
   const handlePress = () => {
     router.push('/notifications');

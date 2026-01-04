@@ -82,8 +82,12 @@ export interface OrchestratorResult {
   usedMock: boolean;
   /** For Stage 1: AI determined user is ready for feel-heard check */
   offerFeelHeardCheck?: boolean;
+  /** For Stage 2: AI determined user is ready to share empathy attempt */
+  offerReadyToShare?: boolean;
   /** For Stage 0: Proposed invitation message */
   invitationMessage?: string | null;
+  /** For Stage 2: Proposed empathy statement summarizing user's understanding */
+  proposedEmpathyStatement?: string | null;
 }
 
 // ============================================================================
@@ -261,7 +265,9 @@ export async function orchestrateResponse(
   let response: string;
   let usedMock = false;
   let offerFeelHeardCheck = false;
+  let offerReadyToShare = false;
   let invitationMessage: string | null = null;
+  let proposedEmpathyStatement: string | null = null;
 
   // Determine if we should expect structured JSON output
   // All stages use structured JSON format in their prompts
@@ -279,11 +285,23 @@ export async function orchestrateResponse(
 
     if (sonnetResponse) {
       if (expectsStructuredOutput) {
+        // Debug: log raw response for Stage 2
+        if (context.stage === 2) {
+          console.log(`[AI Orchestrator] Stage 2 raw response: ${sonnetResponse.substring(0, 500)}...`);
+        }
+
         // Parse structured JSON response
         const parsed = parseStructuredResponse(sonnetResponse);
         response = parsed.response;
         offerFeelHeardCheck = parsed.offerFeelHeardCheck ?? false;
+        offerReadyToShare = parsed.offerReadyToShare ?? false;
         invitationMessage = parsed.invitationMessage ?? null;
+        proposedEmpathyStatement = parsed.proposedEmpathyStatement ?? null;
+
+        // Debug logging for Stage 2 readiness signal
+        if (context.stage === 2) {
+          console.log(`[AI Orchestrator] Stage 2 - Turn ${context.turnCount}, offerReadyToShare: ${offerReadyToShare}, proposedEmpathyStatement: ${proposedEmpathyStatement ? 'present' : 'null'}`);
+        }
 
         if (parsed.analysis) {
           console.log(`[AI Orchestrator] Analysis: ${parsed.analysis.substring(0, 100)}...`);
@@ -313,7 +331,9 @@ export async function orchestrateResponse(
     retrievedContext,
     usedMock,
     offerFeelHeardCheck,
+    offerReadyToShare,
     invitationMessage,
+    proposedEmpathyStatement,
   };
 }
 
@@ -362,18 +382,20 @@ function stripAnalysisTags(response: string): string {
 }
 
 /**
- * Parsed structured response from AI (for Stage 0 and Stage 1)
+ * Parsed structured response from AI (for Stage 0, Stage 1, and Stage 2)
  */
 interface ParsedStructuredResponse {
   response: string;
   offerFeelHeardCheck?: boolean;
+  offerReadyToShare?: boolean;
   invitationMessage?: string | null;
+  proposedEmpathyStatement?: string | null;
   analysis?: string;
 }
 
 /**
  * Parse structured JSON response from AI.
- * Handles both Stage 0 (invitation) and Stage 1 (witness with offerFeelHeardCheck).
+ * Handles Stage 0 (invitation), Stage 1 (witness with offerFeelHeardCheck), and Stage 2 (perspective with offerReadyToShare).
  * Uses the robust extractJsonFromResponse utility.
  */
 function parseStructuredResponse(rawResponse: string): ParsedStructuredResponse {
@@ -389,8 +411,12 @@ function parseStructuredResponse(rawResponse: string): ParsedStructuredResponse 
     return {
       response: parsed.response,
       offerFeelHeardCheck: typeof parsed.offerFeelHeardCheck === 'boolean' ? parsed.offerFeelHeardCheck : false,
+      offerReadyToShare: typeof parsed.offerReadyToShare === 'boolean' ? parsed.offerReadyToShare : false,
       invitationMessage: typeof parsed.invitationMessage === 'string' && parsed.invitationMessage !== 'null'
         ? parsed.invitationMessage
+        : null,
+      proposedEmpathyStatement: typeof parsed.proposedEmpathyStatement === 'string' && parsed.proposedEmpathyStatement !== 'null'
+        ? parsed.proposedEmpathyStatement
         : null,
       analysis: typeof parsed.analysis === 'string' ? parsed.analysis : undefined,
     };
@@ -416,7 +442,9 @@ function extractResponseFallback(rawResponse: string): ParsedStructuredResponse 
     return {
       response: extracted,
       offerFeelHeardCheck: false,
+      offerReadyToShare: false,
       invitationMessage: null,
+      proposedEmpathyStatement: null,
     };
   }
 
@@ -430,7 +458,9 @@ function extractResponseFallback(rawResponse: string): ParsedStructuredResponse 
     return {
       response: "I understand. Can you tell me more about what you're experiencing?",
       offerFeelHeardCheck: false,
+      offerReadyToShare: false,
       invitationMessage: null,
+      proposedEmpathyStatement: null,
     };
   }
 
@@ -438,7 +468,9 @@ function extractResponseFallback(rawResponse: string): ParsedStructuredResponse 
   return {
     response: strippedResponse,
     offerFeelHeardCheck: false,
+    offerReadyToShare: false,
     invitationMessage: null,
+    proposedEmpathyStatement: null,
   };
 }
 

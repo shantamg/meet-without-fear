@@ -23,12 +23,24 @@ jest.mock('lucide-react-native', () => ({
   ArrowRight: () => 'ArrowRightIcon',
   Plus: () => 'PlusIcon',
   Heart: () => 'HeartIcon',
+  UserPlus: () => 'UserPlusIcon',
 }));
 
 // Mock useSessions hook
 const mockUseSessions = jest.fn();
+const mockAcceptInvitation = jest.fn();
 jest.mock('../../../../src/hooks/useSessions', () => ({
   useSessions: () => mockUseSessions(),
+  useAcceptInvitation: (options: { onSuccess?: (data: { session: { id: string } }) => void; onError?: () => void }) => {
+    mockAcceptInvitation.mockImplementation((params: { invitationId: string }) => {
+      // Simulate successful acceptance
+      options.onSuccess?.({ session: { id: 'accepted-session' } });
+    });
+    return {
+      mutate: mockAcceptInvitation,
+      isPending: false,
+    };
+  },
 }));
 
 // Mock useAuth hook
@@ -37,7 +49,8 @@ jest.mock('@/src/hooks/useAuth', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
-// Mock useBiometricAuth hook to prevent async state updates
+// Mock useBiometricAuth and usePendingInvitation hooks to prevent async state updates
+const mockUsePendingInvitation = jest.fn();
 jest.mock('@/src/hooks', () => ({
   useBiometricAuth: () => ({
     isAvailable: false,
@@ -55,6 +68,13 @@ jest.mock('@/src/hooks', () => ({
     markPrompted: jest.fn(),
     refresh: jest.fn(),
   }),
+  usePendingInvitation: () => mockUsePendingInvitation(),
+}));
+
+// Mock useInvitationDetails hook
+const mockUseInvitationDetails = jest.fn();
+jest.mock('@/src/hooks/useInvitation', () => ({
+  useInvitationDetails: () => mockUseInvitationDetails(),
 }));
 
 // Mock BiometricPrompt component
@@ -127,11 +147,32 @@ describe('HomeScreen', () => {
     mockPush.mockClear();
     mockUseSessions.mockClear();
     mockUseAuth.mockClear();
+    mockUsePendingInvitation.mockClear();
+    mockUseInvitationDetails.mockClear();
+    mockAcceptInvitation.mockClear();
+
     // Default auth state - logged in user
     mockUseAuth.mockReturnValue({
       user: { id: 'user-1', name: 'Test User', firstName: 'Test', email: 'test@example.com' },
       isAuthenticated: true,
       isLoading: false,
+    });
+
+    // Default pending invitation state - no pending invitation
+    mockUsePendingInvitation.mockReturnValue({
+      pendingInvitation: null,
+      isLoading: false,
+      clearInvitation: jest.fn(),
+    });
+
+    // Default invitation details state - no invitation
+    mockUseInvitationDetails.mockReturnValue({
+      invitation: null,
+      isLoading: false,
+      error: null,
+      isExpired: false,
+      isNotFound: false,
+      refetch: jest.fn(),
     });
   });
 
@@ -262,7 +303,7 @@ describe('HomeScreen', () => {
 
     fireEvent.press(screen.getByText('Inner Work'));
 
-    expect(mockPush).toHaveBeenCalledWith('/session/new?mode=inner');
+    expect(mockPush).toHaveBeenCalledWith('/inner-work');
   });
 
   it('navigates to session when Continue pressed', () => {
@@ -317,5 +358,108 @@ describe('HomeScreen', () => {
 
     // Biometric prompt should not be visible since hasPrompted is true
     expect(screen.queryByTestId('biometric-prompt')).toBeNull();
+  });
+
+  it('shows Accept invitation button when there is a pending invitation', () => {
+    mockUseSessions.mockReturnValue({
+      data: { items: [], hasMore: false },
+      isLoading: false,
+    });
+    mockUsePendingInvitation.mockReturnValue({
+      pendingInvitation: 'invite-123',
+      isLoading: false,
+      clearInvitation: jest.fn(),
+    });
+    mockUseInvitationDetails.mockReturnValue({
+      invitation: {
+        id: 'invite-123',
+        invitedBy: { id: 'user-2', name: 'Jane' },
+        status: 'PENDING',
+        createdAt: '2024-01-01T00:00:00Z',
+        expiresAt: '2024-01-08T00:00:00Z',
+        name: null,
+        session: { id: 'session-1', status: 'CREATED' },
+      },
+      isLoading: false,
+      error: null,
+      isExpired: false,
+      isNotFound: false,
+      refetch: jest.fn(),
+    });
+
+    renderWithProviders(<HomeScreen />);
+
+    expect(screen.getByText("Accept Jane's invitation")).toBeTruthy();
+  });
+
+  it('does not show Continue button when there is a pending invitation', () => {
+    const session = createMockSession({
+      id: 'session-1',
+      partner: { id: 'user-2', name: 'Bob', nickname: 'Bob' },
+    });
+
+    mockUseSessions.mockReturnValue({
+      data: { items: [session], hasMore: false },
+      isLoading: false,
+    });
+    mockUsePendingInvitation.mockReturnValue({
+      pendingInvitation: 'invite-123',
+      isLoading: false,
+      clearInvitation: jest.fn(),
+    });
+    mockUseInvitationDetails.mockReturnValue({
+      invitation: {
+        id: 'invite-123',
+        invitedBy: { id: 'user-3', name: 'Jane' },
+        status: 'PENDING',
+        createdAt: '2024-01-01T00:00:00Z',
+        expiresAt: '2024-01-08T00:00:00Z',
+        name: null,
+        session: { id: 'session-2', status: 'CREATED' },
+      },
+      isLoading: false,
+      error: null,
+      isExpired: false,
+      isNotFound: false,
+      refetch: jest.fn(),
+    });
+
+    renderWithProviders(<HomeScreen />);
+
+    // Accept invitation should show, Continue should not
+    expect(screen.getByText("Accept Jane's invitation")).toBeTruthy();
+    expect(screen.queryByText('Continue with Bob')).toBeNull();
+  });
+
+  it('does not show Accept invitation when invitation is not PENDING', () => {
+    mockUseSessions.mockReturnValue({
+      data: { items: [], hasMore: false },
+      isLoading: false,
+    });
+    mockUsePendingInvitation.mockReturnValue({
+      pendingInvitation: 'invite-123',
+      isLoading: false,
+      clearInvitation: jest.fn(),
+    });
+    mockUseInvitationDetails.mockReturnValue({
+      invitation: {
+        id: 'invite-123',
+        invitedBy: { id: 'user-2', name: 'Jane' },
+        status: 'ACCEPTED', // Already accepted
+        createdAt: '2024-01-01T00:00:00Z',
+        expiresAt: '2024-01-08T00:00:00Z',
+        name: null,
+        session: { id: 'session-1', status: 'ACTIVE' },
+      },
+      isLoading: false,
+      error: null,
+      isExpired: false,
+      isNotFound: false,
+      refetch: jest.fn(),
+    });
+
+    renderWithProviders(<HomeScreen />);
+
+    expect(screen.queryByText(/Accept.*invitation/)).toBeNull();
   });
 });

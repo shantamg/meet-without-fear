@@ -53,6 +53,8 @@ export { FeelHeardConfirmation } from './FeelHeardConfirmation';
 export { EmpathyAttemptCard } from './EmpathyAttemptCard';
 export { ConsentPrompt } from './ConsentPrompt';
 export { AccuracyFeedback } from './AccuracyFeedback';
+export { ReadyToShareConfirmation } from './ReadyToShareConfirmation';
+export { ViewEmpathyStatementDrawer } from './ViewEmpathyStatementDrawer';
 
 // Stage 3 components - Need Mapping
 export { NeedCard } from './NeedCard';
@@ -81,11 +83,7 @@ export type { ToastProps, ToastAction } from './Toast';
 export { NotificationBanner, PermissionBanner } from './NotificationBanner';
 export type { NotificationBannerProps, PermissionBannerProps } from './NotificationBanner';
 export { NotificationInbox } from './NotificationInbox';
-export type {
-  NotificationInboxProps,
-  NotificationItem,
-  NotificationType,
-} from './NotificationInbox';
+export type { NotificationInboxProps, NotificationItem } from './NotificationInbox';
 
 // Biometric authentication components
 export { BiometricPrompt } from './BiometricPrompt';

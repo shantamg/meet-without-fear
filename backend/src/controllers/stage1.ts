@@ -207,12 +207,13 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
           return;
         }
       }
-    } else if (currentStage !== 1) {
-      console.log(`[sendMessage] User ${user.id} in session ${sessionId} is in stage ${currentStage}, not stage 1`);
+    } else if (currentStage < 1 || currentStage > 4) {
+      // Chat is available in stages 1-4
+      console.log(`[sendMessage] User ${user.id} in session ${sessionId} is in stage ${currentStage}, outside valid range 1-4`);
       errorResponse(
         res,
         'VALIDATION_ERROR',
-        `Cannot send messages: you are in stage ${currentStage}, but stage 1 is required`,
+        `Cannot send messages: you are in stage ${currentStage}, but chat requires stages 1-4`,
         400
       );
       return;
@@ -414,7 +415,9 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       },
       // Include structured response fields from AI
       offerFeelHeardCheck: orchestratorResult.offerFeelHeardCheck,
+      offerReadyToShare: orchestratorResult.offerReadyToShare,
       invitationMessage: extractedInvitationMessage,
+      proposedEmpathyStatement: orchestratorResult.proposedEmpathyStatement ?? null,
     });
   } catch (error) {
     console.error('[sendMessage] Error:', error);
@@ -523,7 +526,10 @@ export async function confirmFeelHeard(
       ...(feedback ? { feedback } : {}),
     } satisfies Prisma.InputJsonValue;
 
-    // Update stage progress
+    const now = new Date();
+    const confirmedAt = now.toISOString();
+
+    // Update stage progress - mark Stage 1 as COMPLETED when confirmed
     await prisma.stageProgress.update({
       where: {
         sessionId_userId_stage: {
@@ -534,11 +540,41 @@ export async function confirmFeelHeard(
       },
       data: {
         gatesSatisfied,
-        status: confirmed ? 'GATE_PENDING' : 'IN_PROGRESS',
+        status: confirmed ? 'COMPLETED' : 'IN_PROGRESS',
+        completedAt: confirmed ? now : null,
       },
     });
 
-    const confirmedAt = new Date().toISOString();
+    // When confirmed, advance user to Stage 2 immediately
+    // This ensures they get Stage 2 prompts with empathy statement capability
+    let advancedToStage2 = false;
+    if (confirmed) {
+      // Check if Stage 2 record already exists (shouldn't, but be safe)
+      const existingStage2 = await prisma.stageProgress.findUnique({
+        where: {
+          sessionId_userId_stage: {
+            sessionId,
+            userId: user.id,
+            stage: 2,
+          },
+        },
+      });
+
+      if (!existingStage2) {
+        await prisma.stageProgress.create({
+          data: {
+            sessionId,
+            userId: user.id,
+            stage: 2,
+            status: 'IN_PROGRESS',
+            startedAt: now,
+            gatesSatisfied: {},
+          },
+        });
+        advancedToStage2 = true;
+        console.log(`[confirmFeelHeard] Advanced user ${user.id} to Stage 2`);
+      }
+    }
 
     // Generate AI transition message when user confirms they feel heard
     let transitionMessage: {
@@ -569,14 +605,18 @@ export async function confirmFeelHeard(
         }
 
         // Build a simple transition prompt for Stage 1 → Stage 2
-        const transitionPrompt = `You are Meet Without Fear, a Process Guardian. ${user.name || 'The user'} has been sharing their experience in the Witness stage and has confirmed they feel fully heard. Now it's time to gently transition to exploring ${partnerName || 'their partner'}'s perspective.
+        const userName = user.name || 'The user';
+        const partner = partnerName || 'their partner';
+        const transitionPrompt = `You are Meet Without Fear, a Process Guardian. ${userName} has been sharing their experience and has confirmed they feel fully heard. Now you'll help ${userName} build empathy by imagining ${partner}'s experience.
 
-Generate a brief, warm transition message (2-3 sentences) that:
-1. Acknowledges the important work they've done sharing and feeling heard
-2. Gently introduces the idea of exploring ${partnerName || 'their partner'}'s perspective
-3. Ends with an open question to begin the perspective exploration
+Generate a brief, warm transition message (2-3 sentences) for ${userName} that:
+1. Acknowledges the important work ${userName} has done sharing and being heard
+2. Invites ${userName} to wonder about what ${partner} might be experiencing
+3. Ends with an open question asking ${userName} what they imagine ${partner} might be feeling or going through
 
-Keep it natural and conversational. Don't use clinical language or mention "stages".
+Example: "You've shared so much, and I can tell you've been carrying a lot. Now I'm curious - have you ever wondered what might be going on for ${partner} in all this? What do you imagine they might be feeling?"
+
+Keep it natural and conversational.
 
 Respond in JSON format:
 \`\`\`json
@@ -605,7 +645,8 @@ Respond in JSON format:
           transitionContent = `You've done important work sharing and being heard. When you're ready, I'm curious - have you ever wondered what ${partnerName || 'your partner'} might be experiencing in all this?`;
         }
 
-        // Save the transition message to the database
+        // Save the transition message to the database as Stage 2
+        // This is the first message in the perspective-taking phase
         const aiMessage = await prisma.message.create({
           data: {
             sessionId,
@@ -613,7 +654,7 @@ Respond in JSON format:
             forUserId: user.id, // Track which user this AI response is for (data isolation)
             role: 'AI',
             content: transitionContent,
-            stage: 1, // Still Stage 1, but this is the transition message
+            stage: 2, // Stage 2 - perspective stretch begins
           },
         });
 
@@ -626,7 +667,7 @@ Respond in JSON format:
           id: aiMessage.id,
           content: aiMessage.content,
           timestamp: aiMessage.timestamp.toISOString(),
-          stage: aiMessage.stage,
+          stage: 2, // Stage 2 transition message
         };
 
         console.log(`[confirmFeelHeard] Generated transition message for session ${sessionId}`);
@@ -665,6 +706,7 @@ Respond in JSON format:
       canAdvance,
       partnerCompleted,
       transitionMessage,
+      advancedToStage: advancedToStage2 ? 2 : null,
     });
   } catch (error) {
     console.error('[confirmFeelHeard] Error:', error);

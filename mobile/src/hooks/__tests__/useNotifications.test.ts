@@ -10,7 +10,8 @@ import {
   getExpoPushToken,
   configureNotificationHandler,
 } from '../../services/notifications';
-import { useNotifications } from '../useNotifications';
+import { usePushNotifications } from '../usePushNotifications';
+import { useNotifications, useNotificationCount } from '../useNotifications';
 
 // Mock expo-router
 const mockRouterPush = jest.fn();
@@ -40,6 +41,22 @@ jest.mock('../useProfile', () => ({
   }),
 }));
 
+// Mock apiClient for useNotifications
+jest.mock('../../lib/api', () => ({
+  apiClient: {
+    get: jest.fn().mockResolvedValue({
+      data: {
+        notifications: [],
+        nextCursor: null,
+        unreadCount: 0,
+      },
+    }),
+    patch: jest.fn().mockResolvedValue({
+      data: { success: true, unreadCount: 0 },
+    }),
+  },
+}));
+
 // Create a wrapper with QueryClient
 function createWrapper(): React.FC<{ children: React.ReactNode }> {
   const queryClient = new QueryClient({
@@ -53,7 +70,64 @@ function createWrapper(): React.FC<{ children: React.ReactNode }> {
     React.createElement(QueryClientProvider, { client: queryClient }, children);
 }
 
-describe('useNotifications', () => {
+describe('useNotifications (in-app notifications)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockIsAuthenticated.value = true;
+  });
+
+  it('returns empty notifications when loading', () => {
+    const { result } = renderHook(() => useNotifications(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.notifications).toEqual([]);
+    expect(result.current.isLoading).toBe(true);
+  });
+
+  it('provides markRead function', () => {
+    const { result } = renderHook(() => useNotifications(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(typeof result.current.markRead).toBe('function');
+  });
+
+  it('provides markAllRead function', () => {
+    const { result } = renderHook(() => useNotifications(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(typeof result.current.markAllRead).toBe('function');
+  });
+
+  it('provides loadMore function for infinite scroll', () => {
+    const { result } = renderHook(() => useNotifications(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(typeof result.current.loadMore).toBe('function');
+  });
+});
+
+describe('useNotificationCount', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockIsAuthenticated.value = true;
+  });
+
+  it('returns unread count', async () => {
+    const { result } = renderHook(() => useNotificationCount(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(typeof result.current.unreadCount).toBe('number');
+    });
+  });
+});
+
+describe('usePushNotifications', () => {
   // Get references to the mocked functions
   const mockGetPermissionsAsync = Notifications.getPermissionsAsync as jest.MockedFunction<
     typeof Notifications.getPermissionsAsync
@@ -179,9 +253,9 @@ describe('useNotifications', () => {
     });
   });
 
-  describe('useNotifications hook', () => {
+  describe('usePushNotifications hook', () => {
     it('registers push token with backend when authenticated', async () => {
-      renderHook(() => useNotifications(), {
+      renderHook(() => usePushNotifications(), {
         wrapper: createWrapper(),
       });
 
@@ -199,7 +273,7 @@ describe('useNotifications', () => {
     it('does not register when not authenticated', async () => {
       mockIsAuthenticated.value = false;
 
-      renderHook(() => useNotifications(), {
+      renderHook(() => usePushNotifications(), {
         wrapper: createWrapper(),
       });
 
@@ -212,7 +286,7 @@ describe('useNotifications', () => {
     });
 
     it('sets up notification listeners when authenticated', async () => {
-      renderHook(() => useNotifications(), {
+      renderHook(() => usePushNotifications(), {
         wrapper: createWrapper(),
       });
 
@@ -229,7 +303,7 @@ describe('useNotifications', () => {
         return { remove: jest.fn() };
       });
 
-      renderHook(() => useNotifications(), {
+      renderHook(() => usePushNotifications(), {
         wrapper: createWrapper(),
       });
 
@@ -260,7 +334,7 @@ describe('useNotifications', () => {
       mockAddNotificationReceivedListener.mockReturnValue({ remove: mockRemove });
       mockAddNotificationResponseReceivedListener.mockReturnValue({ remove: mockRemove });
 
-      const { unmount } = renderHook(() => useNotifications(), {
+      const { unmount } = renderHook(() => usePushNotifications(), {
         wrapper: createWrapper(),
       });
 
@@ -278,7 +352,7 @@ describe('useNotifications', () => {
 
   describe('notification preferences', () => {
     it('tracks permission status', async () => {
-      const { result } = renderHook(() => useNotifications(), {
+      const { result } = renderHook(() => usePushNotifications(), {
         wrapper: createWrapper(),
       });
 
@@ -288,7 +362,7 @@ describe('useNotifications', () => {
     });
 
     it('exposes method to request permissions', async () => {
-      const { result } = renderHook(() => useNotifications(), {
+      const { result } = renderHook(() => usePushNotifications(), {
         wrapper: createWrapper(),
       });
 
@@ -304,7 +378,7 @@ describe('useNotifications', () => {
         canAskAgain: true,
       } as Notifications.PermissionResponse);
 
-      const { result } = renderHook(() => useNotifications(), {
+      const { result } = renderHook(() => usePushNotifications(), {
         wrapper: createWrapper(),
       });
 

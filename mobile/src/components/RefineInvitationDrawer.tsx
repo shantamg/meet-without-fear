@@ -57,6 +57,7 @@ export function RefineInvitationDrawer({
             onPress={onClose}
             testID="refine-invitation-close"
             accessibilityLabel="Close"
+            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           >
             <X color={colors.textSecondary} size={24} />
           </TouchableOpacity>
@@ -113,10 +114,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   closeButton: {
-    padding: 8,
+    padding: 12,
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 20,
   },
   content: {
     flex: 1,

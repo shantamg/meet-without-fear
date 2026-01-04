@@ -5,6 +5,7 @@
  * - Big greeting: "Hi [username]"
  * - Main question: "What can I help you work through today?"
  * - Low-profile quick actions: Continue with [nickname], New Session, Inner Work
+ * - Pending invitation CTA: "Accept [name]'s invitation" (if invited)
  */
 
 import { useMemo, useState, useEffect } from 'react';
@@ -15,12 +16,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowRight, Plus, Heart } from 'lucide-react-native';
+import { ArrowRight, Plus, Heart, UserPlus } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/src/hooks/useAuth';
-import { useBiometricAuth } from '@/src/hooks';
-import { useSessions } from '../../../src/hooks/useSessions';
+import { useBiometricAuth, usePendingInvitation } from '@/src/hooks';
+import { useInvitationDetails } from '@/src/hooks/useInvitation';
+import { useSessions, useAcceptInvitation } from '../../../src/hooks/useSessions';
 import { BiometricPrompt, Logo } from '../../../src/components';
 import { createStyles } from '@/src/theme/styled';
 import { colors } from '@/src/theme';
@@ -36,8 +38,24 @@ export default function HomeScreen() {
   const { data, isLoading: isSessionsLoading } = useSessions();
   const { isAvailable, isEnrolled, hasPrompted, isLoading: biometricLoading } = useBiometricAuth();
 
-  // Wait for both auth and sessions to load
-  const isLoading = isAuthLoading || isSessionsLoading;
+  // Check for pending invitation from deep link
+  const { pendingInvitation, isLoading: isPendingLoading, clearInvitation } = usePendingInvitation();
+  const { invitation, isLoading: isInvitationLoading } = useInvitationDetails(pendingInvitation);
+
+  // Accept invitation mutation
+  const acceptInvitation = useAcceptInvitation({
+    onSuccess: async (data) => {
+      await clearInvitation();
+      router.push(`/session/${data.session.id}`);
+    },
+    onError: async () => {
+      // Clear the pending invitation on error (e.g., expired, already accepted)
+      await clearInvitation();
+    },
+  });
+
+  // Wait for auth, sessions, and pending invitation check to load
+  const isLoading = isAuthLoading || isSessionsLoading || isPendingLoading;
 
   // Biometric prompt state
   const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
@@ -68,6 +86,10 @@ export default function HomeScreen() {
   // Get the partner's nickname or name for the continue button
   const partnerDisplayName = mostRecentSession?.partner?.nickname || mostRecentSession?.partner?.name;
 
+  // Get inviter's name for pending invitation
+  const inviterName = invitation?.invitedBy?.name || 'Someone';
+  const hasPendingInvitation = pendingInvitation && invitation && invitation.status === 'PENDING';
+
   const handleNewSession = () => {
     router.push('/session/new');
   };
@@ -81,6 +103,12 @@ export default function HomeScreen() {
   const handleInnerWork = () => {
     // Navigate to inner work list
     router.push('/inner-work');
+  };
+
+  const handleAcceptInvitation = () => {
+    if (pendingInvitation) {
+      acceptInvitation.mutate({ invitationId: pendingInvitation });
+    }
   };
 
   // Get the user's display name
@@ -112,8 +140,28 @@ export default function HomeScreen() {
 
         {/* Low-profile action buttons at bottom */}
         <View style={styles.actionsSection}>
-          {/* Continue with partner - only show if there's a recent session */}
-          {mostRecentSession && partnerDisplayName && (
+          {/* Accept pending invitation - shown first if there's a pending invitation */}
+          {hasPendingInvitation && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.invitationButton]}
+              onPress={handleAcceptInvitation}
+              accessibilityRole="button"
+              accessibilityLabel={`Accept ${inviterName}'s invitation`}
+              disabled={acceptInvitation.isPending}
+            >
+              {acceptInvitation.isPending ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <UserPlus color={colors.accent} size={18} />
+              )}
+              <Text style={[styles.actionText, styles.invitationText]}>
+                Accept {inviterName}&apos;s invitation
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Continue with partner - only show if there's a recent session and no pending invitation */}
+          {!hasPendingInvitation && mostRecentSession && partnerDisplayName && (
             <TouchableOpacity
               style={styles.actionButton}
               onPress={handleContinueSession}
@@ -222,5 +270,14 @@ const useStyles = () =>
     actionText: {
       fontSize: 15,
       color: t.colors.textMuted,
+    },
+    invitationButton: {
+      backgroundColor: `${t.colors.accent}15`,
+      borderRadius: 12,
+      marginBottom: t.spacing.sm,
+    },
+    invitationText: {
+      color: t.colors.accent,
+      fontWeight: '600',
     },
   }));

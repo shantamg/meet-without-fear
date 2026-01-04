@@ -38,7 +38,7 @@ export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
       case 'session-start':
         return 'Session Started';
       case 'feel-heard':
-        return 'Fully Heard';
+        return 'Felt Heard';
       default:
         return '';
     }

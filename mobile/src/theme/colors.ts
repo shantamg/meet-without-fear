@@ -1,29 +1,35 @@
 export const colors = {
-  // Background
-  bgPrimary: '#212121',
-  bgSecondary: '#2f2f2f',
-  bgTertiary: '#3a3a3a',
-  bgPage: '#0d0d0d',
+  // Background - dark navy theme
+  bgPrimary: '#1e293b',
+  bgSecondary: '#334155',
+  bgTertiary: '#475569',
+  bgPage: '#0f172a',
 
   // Text
-  textPrimary: '#ececec',
-  textSecondary: '#b4b4b4',
-  textMuted: '#8e8e8e',
+  textPrimary: '#f1f5f9',
+  textSecondary: '#94a3b8',
+  textMuted: '#64748b',
 
-  // Accent
-  accent: '#c2410c',
-  accentHover: '#9a3412',
+  // Brand colors
+  brandBlue: '#5ba4d9',
+  brandOrange: '#f5a623',
+  brandNavy: '#2d4a7c',
+  brandCream: '#f5e6d3',
+
+  // Accent - primary is amber orange
+  accent: '#f5a623',
+  accentHover: '#d4922a',
 
   // Semantic
-  userBg: '#2f2f2f',
-  border: '#444444',
+  userBg: '#334155',
+  border: '#475569',
   success: '#10a37f',
   successBg: '#1a3a30',
-  warning: '#f59e0b',
+  warning: '#f5a623',
   error: '#ef4444',
 
   // Emotion gradient
   calm: '#10a37f',
-  elevated: '#f59e0b',
+  elevated: '#f5a623',
   intense: '#ef4444',
 } as const;

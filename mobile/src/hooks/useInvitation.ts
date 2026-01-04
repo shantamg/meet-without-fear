@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { get, ApiClientError } from '@/src/lib/api';
+import { get, post, ApiClientError } from '@/src/lib/api';
 import { ErrorCode } from '@meet-without-fear/shared';
 
 const PENDING_INVITATION_KEY = 'pending_invitation';
@@ -212,6 +212,7 @@ export function createInvitationLink(invitationId: string): string {
  * - Not found errors (404)
  * - Expired invitation detection
  * - Network errors with retry capability
+ * - Auto-acknowledges pending invitations (creates notification)
  *
  * @param invitationId - The invitation ID to fetch, or null/undefined to skip
  */
@@ -221,6 +222,7 @@ export function useInvitationDetails(
   const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<{ type: InvitationErrorType; message: string } | null>(null);
+  const [hasAcknowledged, setHasAcknowledged] = useState(false);
 
   const fetchInvitation = useCallback(async () => {
     if (!invitationId) {
@@ -259,6 +261,26 @@ export function useInvitationDetails(
   useEffect(() => {
     fetchInvitation();
   }, [fetchInvitation]);
+
+  // Auto-acknowledge pending invitations to create notification
+  useEffect(() => {
+    const acknowledgeInvitation = async () => {
+      if (!invitationId || !invitation || invitation.status !== 'PENDING' || hasAcknowledged) {
+        return;
+      }
+
+      try {
+        await post(`/v1/invitations/${invitationId}/acknowledge`, {});
+        setHasAcknowledged(true);
+        console.log('[useInvitationDetails] Invitation acknowledged');
+      } catch (err) {
+        // Silently fail - notification is nice-to-have, not critical
+        console.warn('[useInvitationDetails] Failed to acknowledge invitation:', err);
+      }
+    };
+
+    acknowledgeInvitation();
+  }, [invitationId, invitation, hasAcknowledged]);
 
   // Compute derived states
   const isExpired = invitation?.status === 'EXPIRED';

@@ -20,35 +20,30 @@ describe('FeelHeardConfirmation', () => {
 
   it('renders the question', () => {
     render(<FeelHeardConfirmation {...defaultProps} />);
-    expect(screen.getByText('Do you feel fully heard?')).toBeTruthy();
-  });
-
-  it('renders the subtitle', () => {
-    render(<FeelHeardConfirmation {...defaultProps} />);
-    expect(screen.getByText(/take your time/i)).toBeTruthy();
+    expect(screen.getByText('Feeling heard?')).toBeTruthy();
   });
 
   it('renders continue button', () => {
     render(<FeelHeardConfirmation {...defaultProps} />);
-    expect(screen.getByText(/not yet, I have more to share/i)).toBeTruthy();
+    expect(screen.getByText('Not yet')).toBeTruthy();
   });
 
   it('renders confirm button', () => {
     render(<FeelHeardConfirmation {...defaultProps} />);
-    expect(screen.getByText(/yes, I feel heard/i)).toBeTruthy();
+    expect(screen.getByText('Yes')).toBeTruthy();
   });
 
   it('calls onContinue when continue is pressed', () => {
     const onContinue = jest.fn();
     render(<FeelHeardConfirmation onConfirm={jest.fn()} onContinue={onContinue} />);
-    fireEvent.press(screen.getByText(/not yet, I have more to share/i));
+    fireEvent.press(screen.getByText('Not yet'));
     expect(onContinue).toHaveBeenCalled();
   });
 
   it('calls onConfirm when confirm is pressed', () => {
     const onConfirm = jest.fn();
     render(<FeelHeardConfirmation onConfirm={onConfirm} onContinue={jest.fn()} />);
-    fireEvent.press(screen.getByText(/yes, I feel heard/i));
+    fireEvent.press(screen.getByText('Yes'));
     expect(onConfirm).toHaveBeenCalled();
   });
 });

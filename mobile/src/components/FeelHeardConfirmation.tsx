@@ -1,8 +1,8 @@
 /**
  * FeelHeardConfirmation Component
  *
- * Stage 1 gate confirmation asking if the user feels fully heard.
- * Allows continuing the conversation or confirming completion.
+ * Compact inline banner for Stage 1 gate confirmation.
+ * Asks if user feels heard and allows continuing or confirming.
  */
 
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
@@ -27,18 +27,13 @@ export function FeelHeardConfirmation({
 }: FeelHeardConfirmationProps) {
   return (
     <View style={styles.container}>
-      <Text style={styles.question}>Do you feel fully heard?</Text>
-      <Text style={styles.subtitle}>
-        Take your time - there is no rush to move forward
-      </Text>
-
+      <Text style={styles.question}>Feeling heard?</Text>
       <View style={styles.buttons}>
         <TouchableOpacity style={styles.continueButton} onPress={onContinue}>
-          <Text style={styles.continueText}>Not yet, I have more to share</Text>
+          <Text style={styles.continueText}>Not yet</Text>
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.confirmButton} onPress={onConfirm}>
-          <Text style={styles.confirmText}>Yes, I feel heard</Text>
+          <Text style={styles.confirmText}>Yes</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -51,47 +46,45 @@ export function FeelHeardConfirmation({
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     backgroundColor: colors.bgSecondary,
-    borderRadius: 12,
+    borderRadius: 8,
     marginHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   question: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: '500',
     color: colors.textPrimary,
   },
-  subtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 16,
-  },
   buttons: {
+    flexDirection: 'row',
     gap: 8,
   },
   continueButton: {
-    padding: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
-    alignItems: 'center',
-    backgroundColor: colors.bgSecondary,
+    borderRadius: 6,
   },
   continueText: {
     color: colors.textSecondary,
-    fontSize: 14,
+    fontSize: 13,
   },
   confirmButton: {
-    padding: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     backgroundColor: colors.accent,
-    borderRadius: 8,
-    alignItems: 'center',
+    borderRadius: 6,
   },
   confirmText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
 });

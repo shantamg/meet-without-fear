@@ -262,16 +262,20 @@ Current reading: ${context.emotionalIntensity}/10
 ${context.emotionalIntensity >= 8 ? 'User is at high intensity. Stay in WITNESS MODE. Validate heavily. This is not the moment for insight.' : ''}
 
 MEMORY USAGE:
-${context.turnCount <= 3 ?
-`- Do NOT reference past sessions or name patterns
+${
+  context.turnCount <= 3
+    ? `- Do NOT reference past sessions or name patterns
 - Let context inform empathy silently
-- Stay fully present with what they share now` :
-`- Light retrieval for continuity allowed
+- Stay fully present with what they share now`
+    : `- Light retrieval for continuity allowed
 - No explicit pattern claims unless user asks
-- Patterns may inform your approach (silent use only)`}
+- Patterns may inform your approach (silent use only)`
+}
 
 Turn number: ${context.turnCount}
-${hasEnoughTurns ? `
+${
+  hasEnoughTurns
+    ? `
 FEEL-HEARD CHECK:
 After at least 5 turns, start looking for signals that the user may be feeling heard:
 - They affirm your reflections multiple times
@@ -281,18 +285,20 @@ After at least 5 turns, start looking for signals that the user may be feeling h
 - Their emotional intensity has decreased
 
 When you see these signals, set "offerFeelHeardCheck": true in your output. This will prompt the app to ask them directly if they feel heard. Don't force it - if they're still actively venting or exploring, keep witnessing.
-` : ''}
+`
+    : ''
+}
 
-Respond in JSON format:
+IMPORTANT: You MUST respond with a JSON object containing exactly these three fields:
 \`\`\`json
 {
   "analysis": "Your internal reasoning (stripped before delivery)",
   "response": "Your conversational response to the user",
-  "offerFeelHeardCheck": false
+  "offerFeelHeardCheck": false,
 }
 \`\`\`
 
-Set offerFeelHeardCheck to true when: user has 5+ turns, intensity below 7, and shows signs of feeling heard (affirming, softening, winding down).`;
+ALL THREE FIELDS ARE REQUIRED. Set "offerFeelHeardCheck" to true when: user has 5+ turns, intensity below 7, and shows signs of feeling heard (affirming, softening, winding down). Otherwise set it to false.`;
 }
 
 // ============================================================================
@@ -380,14 +386,51 @@ MEMORY USAGE:
 - Never state patterns as facts
 
 Turn number in Stage 2: ${context.turnCount}
+${
+  context.turnCount >= 5
+    ? `
+READY TO SHARE CHECK:
+After at least 5 turns, start looking for signals that the user may have developed a genuine understanding of ${partnerName}'s perspective:
+- They articulate ${partnerName}'s feelings and needs without judgment
+- They show curiosity rather than defensiveness
+- They express empathy for ${partnerName}'s position
+- Their language has shifted from "they always/never" to "they might feel/need"
+- They summarize ${partnerName}'s likely experience compassionately
 
-Respond in JSON format:
+When you see these signals:
+1. Set "offerReadyToShare": true
+2. Generate a "proposedEmpathyStatement" - a 2-4 sentence summary of what ${context.userName} has come to understand about ${partnerName}'s perspective. Write it in ${context.userName}'s voice, starting with "I think you might be feeling..." or similar. This will be shown to ${context.userName} for review before sharing with ${partnerName}.
+3. In your "response", briefly summarize what you're capturing (e.g., "It sounds like you're seeing that they might be feeling scared of losing connection and need reassurance that they matter to you."). This helps the user see your understanding AND provides context if they want to refine it.
+
+Don't force it - if they're still processing or seem judgmental, keep "offerReadyToShare": false and "proposedEmpathyStatement": null.
+
+REFINEMENT REQUESTS:
+If the user asks to refine, adjust, or change the empathy statement (e.g., "make it shorter", "change X to Y", "I don't want to say it that way", "can you rephrase...", or asks follow-up questions about sharing):
+1. Acknowledge their feedback naturally in your "response"
+2. Set "offerReadyToShare": true
+3. Generate an updated "proposedEmpathyStatement" that incorporates their requested changes based on the conversation context
+4. Keep the same empathetic voice and structure, just apply their adjustments
+5. In your response, briefly mention what you changed (e.g., "I've shortened it to focus on the key feelings.")
+`
+    : ''
+}
+
+IMPORTANT: You MUST respond with a JSON object containing exactly these four fields:
 \`\`\`json
 {
   "analysis": "Your internal reasoning (stripped before delivery)",
-  "response": "Your conversational response to the user"
+  "response": "Your conversational response to the user",
+  "offerReadyToShare": false,
+  "proposedEmpathyStatement": null
 }
-\`\`\``;
+\`\`\`
+
+ALL FOUR FIELDS ARE REQUIRED.
+- Set "offerReadyToShare" to true when the user shows genuine empathy for ${partnerName}.
+- When "offerReadyToShare" is true, include a "proposedEmpathyStatement" summarizing their understanding.
+- When "offerReadyToShare" is false, set "proposedEmpathyStatement" to null.
+
+Note: "response" is shown in chat, "proposedEmpathyStatement" appears separately for the user to review and refine before sharing.`;
 }
 
 // ============================================================================
@@ -574,11 +617,7 @@ Respond in JSON format:
  * Build a transition intro prompt when user moves from one stage to another.
  * These prompts acknowledge context from the previous stage and introduce the new phase.
  */
-function buildStageTransitionPrompt(
-  toStage: number,
-  fromStage: number | undefined,
-  context: PromptContext
-): string {
+function buildStageTransitionPrompt(toStage: number, fromStage: number | undefined, context: PromptContext): string {
   const partnerName = context.partnerName || 'your partner';
 
   // Transition from Stage 0 (Invitation) to Stage 1 (Witness)
@@ -804,7 +843,7 @@ Respond in JSON format:
 export function buildInitialMessagePrompt(
   stage: number,
   context: InitialMessageContext,
-  isInvitationPhase?: boolean
+  isInvitationPhase?: boolean,
 ): string {
   const partnerName = context.partnerName || 'your partner';
 
@@ -1010,31 +1049,47 @@ export function buildInnerWorkPrompt(context: {
 
 ${INNER_WORK_GUIDANCE}
 
-${sessionSummary ? `PREVIOUS CONTEXT:
+${
+  sessionSummary
+    ? `PREVIOUS CONTEXT:
 ${sessionSummary}
-` : ''}
-${recentThemes?.length ? `THEMES FROM PAST INNER WORK:
+`
+    : ''
+}
+${
+  recentThemes?.length
+    ? `THEMES FROM PAST INNER WORK:
 - ${recentThemes.join('\n- ')}
-` : ''}
+`
+    : ''
+}
 
 YOUR APPROACH:
 
-${isEarlySession ? `OPENING MODE (First few exchanges):
+${
+  isEarlySession
+    ? `OPENING MODE (First few exchanges):
 - Welcome them warmly
 - Ask open questions to understand what brought them here
 - Let them lead - this is their space
-- Be curious without prying` : `EXPLORATION MODE:
+- Be curious without prying`
+    : `EXPLORATION MODE:
 - Follow their lead while gently deepening the conversation
 - Reflect back what you're hearing
 - Ask questions that help them go deeper
-- Notice patterns if they emerge`}
+- Notice patterns if they emerge`
+}
 
-${isHighIntensity ? `
+${
+  isHighIntensity
+    ? `
 IMPORTANT: Emotional intensity is high. Stay in pure reflection mode:
 - Validate heavily
 - Don't push for insight
 - Be a steady, calm presence
-- This is not the moment for challenges or reframes` : ''}
+- This is not the moment for challenges or reframes`
+    : ''
+}
 
 TECHNIQUES:
 - Reflection: "It sounds like..." / "I'm hearing..."
@@ -1106,9 +1161,7 @@ Respond in JSON format:
  * Used to create/update the summary after messages are exchanged.
  */
 export function buildInnerWorkSummaryPrompt(messages: Array<{ role: 'user' | 'assistant'; content: string }>): string {
-  const conversationText = messages
-    .map((m) => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`)
-    .join('\n\n');
+  const conversationText = messages.map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`).join('\n\n');
 
   return `You are analyzing an inner work session to create metadata for the session list.
 
@@ -1152,11 +1205,7 @@ export interface BuildStagePromptOptions {
 /**
  * Build the appropriate stage prompt based on current stage.
  */
-export function buildStagePrompt(
-  stage: number,
-  context: PromptContext,
-  options?: BuildStagePromptOptions
-): string {
+export function buildStagePrompt(stage: number, context: PromptContext, options?: BuildStagePromptOptions): string {
   // Special case: Stage transition intro
   // When isStageTransition is true, use the transition prompt to introduce the new stage
   if (options?.isStageTransition) {
@@ -1196,4 +1245,310 @@ export function buildStagePrompt(
       console.warn(`[Stage Prompts] Unknown stage ${stage}, using Stage 1 prompt`);
       return buildStage1Prompt(context);
   }
+}
+
+// ============================================================================
+// Empathy Reconciler Prompts (Post-Stage 2 Gap Detection)
+// ============================================================================
+
+/**
+ * Context for reconciler analysis
+ */
+export interface ReconcilerContext {
+  /** The person who made the empathy guess */
+  guesserName: string;
+  /** The person being guessed about */
+  subjectName: string;
+  /** What the guesser thinks the subject is feeling */
+  empathyStatement: string;
+  /** What the subject actually expressed in witnessing */
+  witnessingContent: string;
+  /** Key themes extracted from subject's witnessing */
+  extractedThemes?: string[];
+}
+
+/**
+ * Build the main reconciler prompt that analyzes empathy gaps.
+ * This compares what one person guessed about the other vs what they actually expressed.
+ */
+export function buildReconcilerPrompt(context: ReconcilerContext): string {
+  const themesSection = context.extractedThemes?.length
+    ? `Key themes/feelings ${context.subjectName} expressed:\n- ${context.extractedThemes.join('\n- ')}`
+    : '';
+
+  return `You are the Empathy Reconciler for Meet Without Fear. Your role is to analyze empathy gaps and determine if additional sharing would benefit mutual understanding.
+
+CONTEXT:
+You are analyzing the empathy exchange between two people: ${context.guesserName} and ${context.subjectName}.
+
+WHAT YOU HAVE:
+
+[${context.guesserName}'s Empathy Guess about ${context.subjectName}]
+This is what ${context.guesserName} THINKS ${context.subjectName} is feeling:
+"${context.empathyStatement}"
+
+[What ${context.subjectName} Actually Expressed]
+This is what ${context.subjectName} ACTUALLY said about their own feelings during their witnessing session:
+"${context.witnessingContent}"
+
+${themesSection}
+
+YOUR TASK:
+Compare ${context.guesserName}'s guess about ${context.subjectName} with what ${context.subjectName} actually expressed. Identify:
+
+1. ALIGNMENT: What did ${context.guesserName} get right?
+   - Which feelings or needs did they accurately perceive?
+   - What aspects of ${context.subjectName}'s experience did they understand?
+
+2. GAPS: What did ${context.guesserName} miss or misunderstand?
+   - Which important feelings were not captured?
+   - What needs or fears were overlooked?
+   - Were there any misattributions (thinking ${context.subjectName} felt X when they actually felt Y)?
+
+3. DEPTH ASSESSMENT: How complete is the understanding?
+   - Surface-level match but missing underlying emotions?
+   - Got the emotions but missed the context or trigger?
+   - Fundamental misunderstanding vs. just incomplete picture?
+
+ASSESSMENT CRITERIA:
+
+HIGH ALIGNMENT (no sharing needed):
+- ${context.guesserName} captured 80%+ of ${context.subjectName}'s core feelings
+- No significant misattributions
+- Underlying needs are understood
+- Minor gaps are not emotionally charged
+-> Recommendation: PROCEED (no additional sharing needed)
+
+MODERATE GAP (optional sharing):
+- ${context.guesserName} got the general direction right
+- Some important feelings are missing
+- No harmful misattributions
+- Sharing could deepen understanding but isn't critical
+-> Recommendation: OFFER_OPTIONAL (ask ${context.subjectName} if they want to share more)
+
+SIGNIFICANT GAP (sharing recommended):
+- Key feelings or needs were missed
+- There's a misattribution that could cause harm if uncorrected
+- ${context.subjectName}'s core experience isn't reflected
+- Sharing specific information would meaningfully bridge the gap
+-> Recommendation: OFFER_SHARING (specific information would help)
+
+RESPOND IN THIS JSON FORMAT:
+\`\`\`json
+{
+  "alignment": {
+    "score": <number 0-100>,
+    "summary": "<1-2 sentences describing what was understood correctly>",
+    "correctlyIdentified": ["<list of feelings/needs ${context.guesserName} got right>"]
+  },
+  "gaps": {
+    "severity": "none" | "minor" | "moderate" | "significant",
+    "summary": "<1-2 sentences describing what was missed>",
+    "missedFeelings": ["<list of feelings/needs that were missed>"],
+    "misattributions": ["<list of any incorrect assumptions, or empty>"],
+    "mostImportantGap": "<the single most important thing ${context.guesserName} doesn't understand about ${context.subjectName}>" | null
+  },
+  "recommendation": {
+    "action": "PROCEED" | "OFFER_OPTIONAL" | "OFFER_SHARING",
+    "rationale": "<why this recommendation>",
+    "sharingWouldHelp": true | false,
+    "suggestedShareFocus": "<if sharing would help, what specific aspect should ${context.subjectName} consider sharing?>" | null
+  }
+}
+\`\`\`
+
+IMPORTANT PRINCIPLES:
+- Never suggest sharing sensitive information the person didn't already express
+- The suggested share focus should reference content ${context.subjectName} already shared in witnessing
+- Don't create new interpretations - only reference what was actually said
+- Err on the side of OFFER_OPTIONAL rather than OFFER_SHARING - let people choose
+- If the gap is about context/history that wasn't shared, acknowledge that honestly`;
+}
+
+/**
+ * Context for the share offer prompt
+ */
+export interface ShareOfferContext {
+  /** The person being asked to share */
+  userName: string;
+  /** Their partner who made the empathy guess */
+  partnerName: string;
+  /** Summary of what was missed */
+  gapSummary: string;
+  /** The most important thing the partner missed */
+  mostImportantGap: string;
+  /** A relevant quote from the user's witnessing */
+  relevantQuote?: string;
+}
+
+/**
+ * Build the prompt that asks a user if they'd like to share more
+ * to help their partner understand them better.
+ */
+export function buildShareOfferPrompt(context: ShareOfferContext): string {
+  const quoteSection = context.relevantQuote
+    ? `WHAT ${context.userName.toUpperCase()} ACTUALLY SAID ABOUT THIS:\n"${context.relevantQuote}"`
+    : '';
+
+  return `You are Meet Without Fear, gently asking ${context.userName} if they would be willing to share something to help ${context.partnerName} understand them better.
+
+CONTEXT:
+${context.userName} completed their empathy work, and we've compared what ${context.partnerName} guessed about ${context.userName}'s feelings with what ${context.userName} actually expressed.
+
+GAP IDENTIFIED:
+${context.gapSummary}
+
+MOST IMPORTANT THING ${context.partnerName.toUpperCase()} MISSED:
+${context.mostImportantGap}
+
+${quoteSection}
+
+YOUR TASK:
+Generate a warm, non-pressuring message asking ${context.userName} if they'd be willing to share something that would help ${context.partnerName} understand this gap.
+
+PRINCIPLES:
+1. VOLUNTARY: Make it 100% clear this is optional - no guilt
+2. SPECIFIC: Reference what they already shared, not new information
+3. GENTLE: Frame it as an opportunity, not a request
+4. BRIEF: Keep it to 2-3 sentences
+5. AGENCY: They control what and how much to share
+
+FORMAT:
+- Start by acknowledging their empathy work is complete
+- Note there's something that might help ${context.partnerName} understand them better
+- Ask if they'd be willing to share, with explicit "no pressure"
+
+EXAMPLE PATTERNS:
+- "Your empathy statement has been shared! There's one thing ${context.partnerName} might not fully see yet - how [gap area]. You mentioned [reference]. Would you be open to sharing a bit about that? Totally optional."
+
+- "You've done the hard work of understanding ${context.partnerName}. If you're up for it, sharing [specific aspect] could help them see you more clearly. Only if it feels right - no pressure at all."
+
+- "${context.partnerName} understood a lot, but might have missed [gap]. You spoke about [reference] earlier. Would you want to help them see that part? It's completely your choice."
+
+Respond in JSON:
+\`\`\`json
+{
+  "message": "<your 2-3 sentence invitation>",
+  "canQuote": true | false,
+  "suggestedQuote": "<if canQuote, a direct quote or paraphrase from their witnessing that could be shared>" | null
+}
+\`\`\``;
+}
+
+/**
+ * Context for quote selection
+ */
+export interface QuoteSelectionContext {
+  /** The person whose witnessing to extract from */
+  userName: string;
+  /** Their partner who will receive the quote */
+  partnerName: string;
+  /** Description of the gap to address */
+  gapDescription: string;
+  /** Full witnessing transcript/content */
+  witnessingTranscript: string;
+}
+
+/**
+ * Build the prompt that helps extract shareable quotes from witnessing content.
+ */
+export function buildQuoteSelectionPrompt(context: QuoteSelectionContext): string {
+  return `You are helping ${context.userName} select what to share with ${context.partnerName} to bridge an empathy gap.
+
+GAP TO ADDRESS:
+${context.gapDescription}
+
+${context.userName.toUpperCase()}'s WITNESSING CONTENT:
+"${context.witnessingTranscript}"
+
+YOUR TASK:
+Extract 2-3 potential quotes or paraphrased statements from ${context.userName}'s witnessing that would best address this gap. These should be:
+
+1. AUTHENTIC: Directly from or closely paraphrasing what they said
+2. FOCUSED: Specifically addresses the identified gap
+3. APPROPRIATE: Not too vulnerable or raw - something they'd likely be comfortable sharing
+4. CLEAR: Understandable without extensive context
+5. IMPACTFUL: Would genuinely help ${context.partnerName} understand
+
+For each option, provide:
+- The quote/paraphrase
+- Why it addresses the gap
+- Emotional intensity level (low/medium/high)
+
+Respond in JSON:
+\`\`\`json
+{
+  "options": [
+    {
+      "content": "<quote or paraphrase>",
+      "addressesGap": "<how this helps>",
+      "intensity": "low" | "medium" | "high",
+      "requiresContext": true | false
+    }
+  ],
+  "recommendation": "<which option and why>",
+  "noGoodOptions": true | false,
+  "noGoodOptionsReason": "<if true, why>" | null
+}
+\`\`\``;
+}
+
+/**
+ * Context for the reconciler summary shown to both users
+ */
+export interface ReconcilerSummaryContext {
+  userAName: string;
+  userBName: string;
+  /** How well A understood B */
+  aUnderstandingB: {
+    alignmentScore: number;
+    alignmentSummary: string;
+    gapSeverity: 'none' | 'minor' | 'moderate' | 'significant';
+  };
+  /** How well B understood A */
+  bUnderstandingA: {
+    alignmentScore: number;
+    alignmentSummary: string;
+    gapSeverity: 'none' | 'minor' | 'moderate' | 'significant';
+  };
+  /** Whether any additional sharing happened */
+  additionalSharingOccurred: boolean;
+}
+
+/**
+ * Build a summary message for both users after reconciliation is complete.
+ */
+export function buildReconcilerSummaryPrompt(context: ReconcilerSummaryContext): string {
+  return `You are Meet Without Fear, summarizing the empathy exchange between ${context.userAName} and ${context.userBName}.
+
+EMPATHY EXCHANGE RESULTS:
+
+${context.userAName}'s understanding of ${context.userBName}:
+- Alignment: ${context.aUnderstandingB.alignmentScore}%
+- ${context.aUnderstandingB.alignmentSummary}
+- Gap severity: ${context.aUnderstandingB.gapSeverity}
+
+${context.userBName}'s understanding of ${context.userAName}:
+- Alignment: ${context.bUnderstandingA.alignmentScore}%
+- ${context.bUnderstandingA.alignmentSummary}
+- Gap severity: ${context.bUnderstandingA.gapSeverity}
+
+Additional sharing occurred: ${context.additionalSharingOccurred ? 'Yes' : 'No'}
+
+YOUR TASK:
+Generate a brief, warm summary (3-4 sentences) that:
+1. Acknowledges the empathy work both have done
+2. Highlights what went well (without specific scores)
+3. If gaps existed, note that understanding deepened through sharing
+4. Transitions toward the next stage (Need Mapping)
+
+Keep it encouraging without being effusive. Focus on progress, not perfection.
+
+Respond in JSON:
+\`\`\`json
+{
+  "summary": "<your 3-4 sentence summary>",
+  "readyForNextStage": true | false
+}
+\`\`\``;
 }

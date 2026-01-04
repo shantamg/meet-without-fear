@@ -124,7 +124,7 @@ function StatusIndicator({ status, size = 8 }: StatusIndicatorProps) {
   const getColor = () => {
     switch (status) {
       case 'online':
-        return colors.accent;
+        return colors.success;
       case 'offline':
         return colors.textMuted;
       case 'connecting':
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   onlineText: {
-    color: colors.accent,
+    color: colors.success,
   },
   errorText: {
     color: colors.error,

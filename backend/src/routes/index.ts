@@ -5,6 +5,8 @@ import consentRoutes from './consent';
 import emotionsRoutes from './emotions';
 import innerWorkRoutes from './inner-work';
 import invitationsRoutes from './invitations';
+import notificationsRoutes from './notifications';
+import reconcilerRoutes from './reconciler';
 import sessionsRoutes from './sessions';
 import stage0Routes from './stage0';
 import stage1Routes from './stage1';
@@ -19,12 +21,14 @@ router.use('/auth', authRoutes);
 router.use(chatRoutes); // Unified chat router
 router.use(invitationsRoutes); // Must be before innerWorkRoutes (has public endpoints)
 router.use(innerWorkRoutes); // Inner work (solo self-reflection)
+router.use(notificationsRoutes); // In-app notifications
 router.use(sessionsRoutes);
 router.use(consentRoutes);
 router.use(emotionsRoutes);
 router.use(stage0Routes);
 router.use(stage1Routes);
 router.use(stage2Routes);
+router.use(reconcilerRoutes); // Post-Stage 2 empathy gap analysis
 router.use(stage3Routes);
 router.use(stage4Routes);
 

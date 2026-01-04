@@ -26,7 +26,7 @@ import {
   Settings,
 } from 'lucide-react-native';
 import { colors } from '../theme';
-import { useNotifications } from '../hooks/useNotifications';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import {
   useNotificationPreferences,
   useUpdateNotificationPreferences,
@@ -95,7 +95,7 @@ function ToggleItem({
 // ============================================================================
 
 export function NotificationSettings({ onUpdate }: NotificationSettingsProps) {
-  const { permissionStatus, requestPermission, isRegistered } = useNotifications();
+  const { permissionStatus, requestPermission, isRegistered } = usePushNotifications();
 
   const {
     data: preferences,

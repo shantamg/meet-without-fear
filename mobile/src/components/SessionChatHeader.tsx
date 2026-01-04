@@ -65,7 +65,7 @@ function StatusDot({
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: isOnline ? colors.accent : colors.textMuted,
+        backgroundColor: isOnline ? colors.success : colors.textMuted,
       }}
       testID="status-dot"
     />
@@ -218,7 +218,7 @@ const useStyles = () =>
       color: t.colors.textMuted,
     },
     onlineTextActive: {
-      color: t.colors.accent,
+      color: t.colors.success,
     },
     briefStatus: {
       fontSize: t.typography.fontSize.sm,

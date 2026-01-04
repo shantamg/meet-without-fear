@@ -297,6 +297,7 @@ describe('invitation flow integration', () => {
 // Mock API module for useInvitationDetails tests
 jest.mock('@/src/lib/api', () => ({
   get: jest.fn(),
+  post: jest.fn().mockResolvedValue({}), // Mock post for acknowledge endpoint
   ApiClientError: class ApiClientError extends Error {
     code: string;
     status: number;

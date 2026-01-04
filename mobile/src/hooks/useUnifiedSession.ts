@@ -80,6 +80,7 @@ export type InlineCardType =
   | 'mirror-intervention'
   | 'hint-card'
   | 'consent-prompt'
+  | 'ready-to-share-confirmation'
   | 'accuracy-feedback'
   // Stage 3: Need Mapping
   | 'need-card'
@@ -341,8 +342,15 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // This captures the proposed message before it's saved to database
   const [liveInvitationMessage, setLiveInvitationMessage] = useState<string | null>(null);
 
+  // Track AI-proposed empathy statement (Stage 2)
+  // This captures the proposed statement when AI determines user is ready to share
+  const [liveProposedEmpathyStatement, setLiveProposedEmpathyStatement] = useState<string | null>(null);
+
   // Track AI recommendation for feel-heard check
   const [aiRecommendsFeelHeardCheck, setAiRecommendsFeelHeardCheck] = useState(false);
+
+  // Track AI recommendation for ready-to-share empathy (Stage 2)
+  const [aiRecommendsReadyToShare, setAiRecommendsReadyToShare] = useState(false);
 
   // -------------------------------------------------------------------------
   // Core Data Hooks
@@ -719,6 +727,25 @@ export function useUnifiedSession(sessionId: string | undefined) {
         });
       }
 
+      // Ready to share prompt - shown when AI recommends it but user hasn't marked draft as ready yet
+      // Similar to feel-heard confirmation in Stage 1
+      // Shows even if no draft exists yet - clicking "Yes" will prompt user to formalize their understanding
+      if (
+        aiRecommendsReadyToShare &&
+        !empathyDraftData?.draft?.readyToShare &&
+        !empathyDraftData?.alreadyConsented
+      ) {
+        cards.push({
+          id: 'ready-to-share-confirmation',
+          type: 'ready-to-share-confirmation',
+          position: 'end',
+          props: {
+            partnerName,
+            proposedStatement: liveProposedEmpathyStatement,
+          },
+        });
+      }
+
       // Empathy draft preview when ready to share
       if (empathyDraftData?.canConsent && empathyDraftData?.draft?.readyToShare) {
         cards.push({
@@ -831,6 +858,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
     currentStage,
     state,
     showFeelHeardConfirmation,
+    aiRecommendsReadyToShare,
+    liveProposedEmpathyStatement,
     empathyDraftData,
     partnerEmpathyData,
     needs,
@@ -885,9 +914,18 @@ export function useUnifiedSession(sessionId: string | undefined) {
             if (data.offerFeelHeardCheck === true) {
               setAiRecommendsFeelHeardCheck(true);
             }
+            // Update ready-to-share recommendation from AI (Stage 2)
+            // Only set to true - once AI recommends ready-to-share, keep it sticky
+            if (data.offerReadyToShare === true) {
+              setAiRecommendsReadyToShare(true);
+            }
             // Capture live invitation message from AI (for refinement flow)
             if (data.invitationMessage !== undefined) {
               setLiveInvitationMessage(data.invitationMessage);
+            }
+            // Capture AI-proposed empathy statement (Stage 2)
+            if (data.proposedEmpathyStatement !== undefined && data.proposedEmpathyStatement !== null) {
+              setLiveProposedEmpathyStatement(data.proposedEmpathyStatement);
             }
           },
           onError: (error) => {
@@ -942,6 +980,40 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const handleDismissFeelHeard = useCallback(() => {
     setAiRecommendsFeelHeardCheck(false);
   }, []);
+
+  // Dismiss ready-to-share prompt (user clicks "Not yet")
+  // Resets the AI recommendation so it can be offered again later
+  const handleDismissReadyToShare = useCallback(() => {
+    setAiRecommendsReadyToShare(false);
+  }, []);
+
+  // Mark empathy draft as ready to share (user confirms from AI prompt)
+  // This saves the draft with readyToShare: true so the empathy-draft-preview card appears
+  const handleConfirmReadyToShare = useCallback(() => {
+    if (!sessionId) return;
+    // Reset the AI recommendation
+    setAiRecommendsReadyToShare(false);
+
+    if (empathyDraftData?.draft?.content) {
+      // If draft exists, mark it ready to share
+      saveDraft({ sessionId, content: empathyDraftData.draft.content, readyToShare: true });
+    } else if (liveProposedEmpathyStatement) {
+      // Use AI-proposed empathy statement - mark as ready so preview card appears
+      saveDraft({
+        sessionId,
+        content: liveProposedEmpathyStatement,
+        readyToShare: true
+      });
+    } else {
+      // If no draft or proposal exists, create a placeholder and mark ready
+      // This will show the preview card so user can edit before sharing
+      saveDraft({
+        sessionId,
+        content: 'Based on our conversation, I understand that you might be feeling...',
+        readyToShare: true
+      });
+    }
+  }, [sessionId, empathyDraftData?.draft?.content, liveProposedEmpathyStatement, saveDraft]);
 
   const handleSignCompact = useCallback(
     (onSuccess?: () => void) => {
@@ -1152,6 +1224,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     loadingCompact,
     empathyDraftData,
     partnerEmpathyData,
+    liveProposedEmpathyStatement,
     needsData,
     needs,
     allNeedsConfirmed,
@@ -1179,6 +1252,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
     handleBarometerChange,
     handleConfirmFeelHeard,
     handleDismissFeelHeard,
+    handleConfirmReadyToShare,
+    handleDismissReadyToShare,
     handleSignCompact,
     handleConfirmInvitationMessage,
     handleSaveEmpathyDraft,

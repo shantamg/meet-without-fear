@@ -37,6 +37,18 @@ jest.mock('../../lib/prisma', () => ({
     },
     consentRecord: {
       create: jest.fn(),
+      findFirst: jest.fn(),
+    },
+    user: {
+      findUnique: jest.fn(),
+    },
+    message: {
+      create: jest.fn().mockResolvedValue({
+        id: 'msg-1',
+        content: 'test',
+        timestamp: new Date(),
+        stage: 2,
+      }),
     },
   },
 }));
@@ -45,6 +57,26 @@ jest.mock('../../lib/prisma', () => ({
 jest.mock('../../services/realtime', () => ({
   notifyPartner: jest.fn().mockResolvedValue(undefined),
   publishSessionEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock notification service
+jest.mock('../../services/notification', () => ({
+  notifyEmpathyShared: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock bedrock
+jest.mock('../../lib/bedrock', () => ({
+  getSonnetResponse: jest.fn().mockResolvedValue('{"response": "Test transition"}'),
+}));
+
+// Mock json-extractor
+jest.mock('../../utils/json-extractor', () => ({
+  extractJsonFromResponse: jest.fn().mockReturnValue({ response: 'Test transition' }),
+}));
+
+// Mock embedding service
+jest.mock('../../services/embedding', () => ({
+  embedMessage: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Import controllers after mocks
@@ -212,6 +244,7 @@ describe('Stage 2 API', () => {
         version: 1,
         updatedAt: new Date(),
       });
+      (prisma.consentRecord.findFirst as jest.Mock).mockResolvedValue(null);
 
       await getDraft(req, res);
 
@@ -223,6 +256,8 @@ describe('Stage 2 API', () => {
               id: 'draft-1',
               content: 'My draft content',
             }),
+            canConsent: false, // readyToShare is false
+            alreadyConsented: false,
           }),
         })
       );
@@ -234,6 +269,7 @@ describe('Stage 2 API', () => {
 
       (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
       (prisma.empathyDraft.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.consentRecord.findFirst as jest.Mock).mockResolvedValue(null);
 
       await getDraft(req, res);
 
@@ -242,6 +278,8 @@ describe('Stage 2 API', () => {
           success: true,
           data: expect.objectContaining({
             draft: null,
+            canConsent: false,
+            alreadyConsented: false,
           }),
         })
       );

@@ -5,6 +5,7 @@ import {
   getInvitation,
   acceptInvitation,
   declineInvitation,
+  acknowledgeInvitation,
   updateNickname,
   listPeople,
   archiveSession,
@@ -48,6 +49,13 @@ router.post('/invitations/:id/accept', requireAuth, asyncHandler(acceptInvitatio
  * @access Private - requires authentication
  */
 router.post('/invitations/:id/decline', requireAuth, asyncHandler(declineInvitation));
+
+/**
+ * @route POST /api/v1/invitations/:id/acknowledge
+ * @description Acknowledge viewing a pending invitation (creates notification)
+ * @access Private - requires authentication
+ */
+router.post('/invitations/:id/acknowledge', requireAuth, asyncHandler(acknowledgeInvitation));
 
 /**
  * @route PATCH /api/v1/relationships/:relationshipId/nickname

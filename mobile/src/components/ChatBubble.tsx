@@ -56,7 +56,8 @@ export function ChatBubble({
   const styles = useStyles();
   const isUser = message.role === MessageRole.USER;
   const isSystem = message.role === MessageRole.SYSTEM;
-  const isAI = !isUser && !isSystem;
+  const isEmpathyStatement = message.role === MessageRole.EMPATHY_STATEMENT;
+  const isAI = !isUser && !isSystem && !isEmpathyStatement;
   const isIntervention = message.isIntervention ?? false;
 
   // Typewriter state
@@ -154,6 +155,7 @@ export function ChatBubble({
   const getContainerStyle = () => {
     if (isUser) return styles.userContainer;
     if (isSystem) return styles.systemContainer;
+    if (isEmpathyStatement) return styles.empathyStatementContainer;
     return styles.aiContainer;
   };
 
@@ -162,12 +164,14 @@ export function ChatBubble({
     if (isIntervention) return styles.interventionBubble;
     if (isUser) return styles.userBubble;
     if (isSystem) return styles.systemBubble;
+    if (isEmpathyStatement) return styles.empathyStatementBubble;
     return styles.aiBubble;
   };
 
   // Determine text style
   const getTextStyle = () => {
     if (isSystem && !isIntervention) return styles.systemText;
+    if (isEmpathyStatement) return styles.empathyStatementText;
     return styles.text;
   };
 
@@ -176,6 +180,9 @@ export function ChatBubble({
       style={[styles.container, getContainerStyle()]}
       testID={`chat-bubble-${message.id}`}
     >
+      {isEmpathyStatement && (
+        <Text style={styles.empathyStatementHeader}>Empathy statement sent</Text>
+      )}
       <View style={[styles.bubble, isAI && styles.aiBubbleContainer, getBubbleStyle()]}>
         <Text style={getTextStyle()}>{textToDisplay}</Text>
       </View>
@@ -256,6 +263,39 @@ const useStyles = () =>
       borderBottomRightRadius: 12,
       borderTopLeftRadius: 0,
       borderBottomLeftRadius: 0,
+    },
+    // Empathy statement container: centered like system messages
+    empathyStatementContainer: {
+      alignItems: 'flex-start',
+    },
+    // Empathy statement header
+    empathyStatementHeader: {
+      fontSize: t.typography.fontSize.xs,
+      fontWeight: '600',
+      color: '#BFA200', // Muted amber
+      marginBottom: t.spacing.xs,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    // Empathy statement: dark yellow/amber background with left border
+    empathyStatementBubble: {
+      backgroundColor: '#3D3500', // Dark yellow/amber background
+      borderLeftWidth: 3,
+      borderLeftColor: '#FFB800', // Bright amber accent
+      paddingVertical: t.spacing.md,
+      paddingHorizontal: t.spacing.lg,
+      borderTopRightRadius: 12,
+      borderBottomRightRadius: 12,
+      borderTopLeftRadius: 0,
+      borderBottomLeftRadius: 0,
+    },
+    // Empathy statement text: italic, light amber
+    empathyStatementText: {
+      fontSize: t.typography.fontSize.md,
+      lineHeight: 22,
+      color: '#FFE082', // Light amber for text
+      fontFamily: t.typography.fontFamily.regular,
+      fontStyle: 'italic',
     },
     text: {
       fontSize: t.typography.fontSize.md,

@@ -55,6 +55,7 @@ export enum MessageRole {
   USER = 'USER',
   AI = 'AI',
   SYSTEM = 'SYSTEM',
+  EMPATHY_STATEMENT = 'EMPATHY_STATEMENT', // User's shared empathy statement (shown in chat history)
 }
 
 export enum Attribution {
@@ -119,4 +120,22 @@ export enum AgreementStatus {
 export enum GlobalLibrarySource {
   CURATED = 'CURATED', // Admin/expert authored
   CONTRIBUTED = 'CONTRIBUTED', // User-contributed with explicit consent
+}
+
+// ============================================================================
+// Notifications
+// ============================================================================
+
+export enum NotificationType {
+  INVITATION_RECEIVED = 'INVITATION_RECEIVED', // You received an invitation to start a conversation
+  INVITATION_ACCEPTED = 'INVITATION_ACCEPTED', // User accepted your invitation
+  COMPACT_SIGNED = 'COMPACT_SIGNED', // Invited user signed curiosity compact
+  SESSION_JOINED = 'SESSION_JOINED', // Partner joined the session
+  PARTNER_MESSAGE = 'PARTNER_MESSAGE', // Partner sent a message
+  EMPATHY_SHARED = 'EMPATHY_SHARED', // Partner shared empathy attempt
+  NEEDS_SHARED = 'NEEDS_SHARED', // Partner shared their needs
+  AGREEMENT_PROPOSED = 'AGREEMENT_PROPOSED', // New agreement proposed
+  AGREEMENT_CONFIRMED = 'AGREEMENT_CONFIRMED', // Agreement mutually confirmed
+  SESSION_RESOLVED = 'SESSION_RESOLVED', // Session completed successfully
+  FOLLOW_UP_REMINDER = 'FOLLOW_UP_REMINDER', // Follow-up reminder for agreement
 }

@@ -1,16 +1,47 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <!-- Background -->
-  <rect width="1024" height="1024" fill="#111827"/>
+  <rect width="1024" height="1024" fill="#0f172a"/>
 
-  <!-- Left circle - larger and centered -->
-  <circle cx="437" cy="512" r="230"
+  <g transform="translate(57, 250) scale(3.5)">
+    <!-- Right ellipse bottom half with gap for tail (back layer) -->
+    <path d="M 105,70 A 60,45 0 0,0 185,112"
           fill="none"
-          stroke="#c2410c"
-          stroke-width="46" />
+          stroke="#f5a623"
+          stroke-width="10"
+          stroke-linecap="round" />
+    <path d="M 207,102 A 60,45 0 0,0 225,70"
+          fill="none"
+          stroke="#f5a623"
+          stroke-width="10"
+          stroke-linecap="round" />
 
-  <!-- Right circle -->
-  <circle cx="587" cy="512" r="230"
+    <!-- Right speech bubble tail (back layer) -->
+    <path d="M 207,102 Q 220,118 215,128 Q 198,115 185,112"
           fill="none"
-          stroke="#c2410c"
-          stroke-width="46" />
+          stroke="#f5a623"
+          stroke-width="10"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+    <!-- Left ellipse with gap for tail (middle layer) -->
+    <path d="M 53,102 A 60,45 0 1,1 75,112"
+          fill="none"
+          stroke="#5ba4d9"
+          stroke-width="10"
+          stroke-linecap="round" />
+
+    <!-- Speech bubble tail connecting the gap -->
+    <path d="M 53,102 Q 40,118 45,128 Q 62,115 75,112"
+          fill="none"
+          stroke="#5ba4d9"
+          stroke-width="10"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+    <!-- Right ellipse top half (front layer) -->
+    <path d="M 105,70 A 60,45 0 0,1 225,70"
+          fill="none"
+          stroke="#f5a623"
+          stroke-width="10" />
+  </g>
 </svg>

@@ -494,7 +494,7 @@ async function embedPreSessionMessage(messageId: string, content: string): Promi
 export async function getUnassociatedPreSessionMessages(userId: string): Promise<
   Array<{
     id: string;
-    role: 'USER' | 'AI' | 'SYSTEM';
+    role: 'USER' | 'AI' | 'SYSTEM' | 'EMPATHY_STATEMENT';
     content: string;
     timestamp: Date;
     emotionalTone: string | null;

@@ -44,6 +44,7 @@ model User {
   exerciseCompletions EmotionalExerciseCompletion[]
   invitationsSent     Invitation[]                  @relation("InvitedBy")
   innerWorkSessions   InnerWorkSession[]
+  notifications       Notification[]
 }
 
 model Relationship {
@@ -97,6 +98,7 @@ model Session {
   consentRecords      ConsentRecord[]
   exerciseCompletions EmotionalExerciseCompletion[]
   invitations         Invitation[]
+  notifications       Notification[]
 
   @@index([relationshipId])
   @@index([status])
@@ -471,6 +473,7 @@ enum MessageRole {
   USER
   AI
   SYSTEM
+  EMPATHY_STATEMENT // User's shared empathy statement (shown in chat history)
 }
 
 // ============================================================================
@@ -561,6 +564,90 @@ model EmpathyValidation {
   validatedAt    DateTime?      @default(now())
 
   @@unique([attemptId, userId])
+}
+
+// ============================================================================
+// Post-Stage 2: Empathy Reconciler
+// ============================================================================
+
+/// Stores the result of reconciler analysis comparing what one person
+/// guessed about the other vs what they actually expressed.
+model ReconcilerResult {
+  id        String   @id @default(cuid())
+  sessionId String
+
+  /// The user who made the empathy guess
+  guesserId     String
+  guesserName   String
+  /// The user being guessed about (whose feelings were analyzed)
+  subjectId     String
+  subjectName   String
+
+  // Alignment Analysis
+  alignmentScore     Int      // 0-100
+  alignmentSummary   String   @db.Text
+  correctlyIdentified String[] // Feelings/needs that were correctly identified
+
+  // Gap Analysis
+  gapSeverity       String   // none, minor, moderate, significant
+  gapSummary        String   @db.Text
+  missedFeelings    String[] // Feelings/needs that were missed
+  misattributions   String[] // Incorrect assumptions made
+  mostImportantGap  String?  @db.Text // The single most important gap
+
+  // Recommendation
+  recommendedAction   String  // PROCEED, OFFER_OPTIONAL, OFFER_SHARING
+  rationale           String  @db.Text
+  sharingWouldHelp    Boolean
+  suggestedShareFocus String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  // Relationship to share offer
+  shareOffer ReconcilerShareOffer?
+
+  @@unique([sessionId, guesserId, subjectId])
+  @@index([sessionId])
+}
+
+/// Tracks the share offer made to a user and their response.
+model ReconcilerShareOffer {
+  id        String   @id @default(cuid())
+  result    ReconcilerResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  resultId  String   @unique
+
+  /// The user being asked to share (the subject of the analysis)
+  userId    String
+
+  /// Status of the share offer
+  status    ReconcilerShareStatus @default(NOT_OFFERED)
+
+  /// The AI-generated message offering to share
+  offerMessage      String?  @db.Text
+  /// Quote options extracted from their witnessing
+  quoteOptions      Json?    // Array of QuoteOption objects
+  recommendedQuote  Int?     // Index of recommended quote
+
+  /// If they accepted, what was shared
+  sharedContent     String?  @db.Text
+  sharedAt          DateTime?
+
+  /// If they declined or skipped
+  declinedAt        DateTime?
+  skippedAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+}
+
+enum ReconcilerShareStatus {
+  NOT_OFFERED
+  OFFERED
+  ACCEPTED
+  DECLINED
+  SKIPPED
 }
 
 // ============================================================================
@@ -681,6 +768,7 @@ model Invitation {
   acceptedAt        DateTime?
   declinedAt        DateTime?
   declineReason     String?
+  notifications     Notification[]
 
   @@index([sessionId])
   @@index([status])
@@ -691,4 +779,41 @@ enum InvitationStatus {
   ACCEPTED
   DECLINED
   EXPIRED
+}
+
+// ============================================================================
+// Notifications
+// ============================================================================
+
+model Notification {
+  id           String           @id @default(cuid())
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  type         NotificationType
+  title        String
+  body         String           @db.Text
+  read         Boolean          @default(false)
+  session      Session?         @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  sessionId    String?
+  invitation   Invitation?      @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+  invitationId String?
+  actorName    String?          // Name of the person who triggered the notification
+  createdAt    DateTime         @default(now())
+
+  @@index([userId, read, createdAt])
+  @@index([userId, createdAt])
+}
+
+enum NotificationType {
+  INVITATION_RECEIVED
+  INVITATION_ACCEPTED
+  COMPACT_SIGNED
+  SESSION_JOINED
+  PARTNER_MESSAGE
+  EMPATHY_SHARED
+  NEEDS_SHARED
+  AGREEMENT_PROPOSED
+  AGREEMENT_CONFIRMED
+  SESSION_RESOLVED
+  FOLLOW_UP_REMINDER
 }

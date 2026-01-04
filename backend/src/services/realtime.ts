@@ -17,6 +17,7 @@ export type SessionEvent = Extract<
   | 'partner.stage_completed'
   | 'partner.advanced'
   | 'partner.empathy_shared'
+  | 'partner.additional_context_shared'
   | 'partner.needs_shared'
   | 'partner.ranking_submitted'
   | 'partner.common_ground_confirmed'

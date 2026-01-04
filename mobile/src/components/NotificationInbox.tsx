@@ -1,30 +1,50 @@
 /**
  * NotificationInbox Component for Meet Without Fear Mobile
  *
- * Displays a list of notifications with support for read/unread states
- * and deep linking on tap.
+ * Displays a list of notifications with support for read/unread states,
+ * infinite scroll, and deep linking on tap.
  */
 
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  RefreshControl,
+  ActivityIndicator,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { Mail, Users, MessageCircle, Calendar, CheckCircle, Bell } from 'lucide-react-native';
+import {
+  Mail,
+  MailPlus,
+  Users,
+  MessageCircle,
+  Calendar,
+  CheckCircle,
+  Bell,
+  Heart,
+  FileText,
+  Handshake,
+  Trophy,
+} from 'lucide-react-native';
+import { NotificationType } from '@shared';
 import { colors } from '@/src/theme';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type NotificationType = 'invite' | 'stage' | 'message' | 'followup' | 'general';
-
 export interface NotificationItem {
   id: string;
   type: NotificationType;
   title: string;
   body: string;
-  timestamp: string;
+  createdAt: string;
   read: boolean;
-  deepLink?: string;
   sessionId?: string;
+  invitationId?: string;
+  actorName?: string;
 }
 
 export interface NotificationInboxProps {
@@ -40,6 +60,12 @@ export interface NotificationInboxProps {
   onRefresh?: () => void;
   /** Called when inbox is empty and user taps action */
   onEmptyAction?: () => void;
+  /** Called when user scrolls near end (for infinite scroll) */
+  onEndReached?: () => void;
+  /** Whether more data is being loaded (infinite scroll) */
+  isLoadingMore?: boolean;
+  /** Whether there are more notifications to load */
+  hasMore?: boolean;
 }
 
 // ============================================================================
@@ -47,19 +73,31 @@ export interface NotificationInboxProps {
 // ============================================================================
 
 const NOTIFICATION_ICONS: Record<NotificationType, typeof Bell> = {
-  invite: Mail,
-  stage: Users,
-  message: MessageCircle,
-  followup: Calendar,
-  general: Bell,
+  [NotificationType.INVITATION_RECEIVED]: MailPlus,
+  [NotificationType.INVITATION_ACCEPTED]: Mail,
+  [NotificationType.COMPACT_SIGNED]: FileText,
+  [NotificationType.SESSION_JOINED]: Users,
+  [NotificationType.PARTNER_MESSAGE]: MessageCircle,
+  [NotificationType.EMPATHY_SHARED]: Heart,
+  [NotificationType.NEEDS_SHARED]: FileText,
+  [NotificationType.AGREEMENT_PROPOSED]: Handshake,
+  [NotificationType.AGREEMENT_CONFIRMED]: CheckCircle,
+  [NotificationType.SESSION_RESOLVED]: Trophy,
+  [NotificationType.FOLLOW_UP_REMINDER]: Calendar,
 };
 
 const NOTIFICATION_COLORS: Record<NotificationType, string> = {
-  invite: colors.accent,
-  stage: colors.success,
-  message: '#3B82F6',
-  followup: colors.warning,
-  general: colors.textMuted,
+  [NotificationType.INVITATION_RECEIVED]: colors.accent,
+  [NotificationType.INVITATION_ACCEPTED]: colors.accent,
+  [NotificationType.COMPACT_SIGNED]: colors.success,
+  [NotificationType.SESSION_JOINED]: colors.accent,
+  [NotificationType.PARTNER_MESSAGE]: '#3B82F6',
+  [NotificationType.EMPATHY_SHARED]: '#EC4899',
+  [NotificationType.NEEDS_SHARED]: colors.warning,
+  [NotificationType.AGREEMENT_PROPOSED]: '#8B5CF6',
+  [NotificationType.AGREEMENT_CONFIRMED]: colors.success,
+  [NotificationType.SESSION_RESOLVED]: colors.success,
+  [NotificationType.FOLLOW_UP_REMINDER]: colors.warning,
 };
 
 // ============================================================================
@@ -70,7 +108,7 @@ const NOTIFICATION_COLORS: Record<NotificationType, string> = {
  * Notification inbox component.
  *
  * Displays a list of notifications with icons based on type,
- * read/unread indicators, and deep linking support.
+ * read/unread indicators, infinite scroll, and deep linking support.
  *
  * @example
  * ```tsx
@@ -80,6 +118,9 @@ const NOTIFICATION_COLORS: Record<NotificationType, string> = {
  *   onMarkAllRead={handleMarkAllRead}
  *   refreshing={isRefreshing}
  *   onRefresh={handleRefresh}
+ *   onEndReached={handleLoadMore}
+ *   isLoadingMore={isLoadingMore}
+ *   hasMore={hasMore}
  * />
  * ```
  */
@@ -90,6 +131,9 @@ export function NotificationInbox({
   refreshing = false,
   onRefresh,
   onEmptyAction,
+  onEndReached,
+  isLoadingMore = false,
+  hasMore = false,
 }: NotificationInboxProps) {
   const router = useRouter();
 
@@ -98,9 +142,7 @@ export function NotificationInbox({
   const handlePress = (notification: NotificationItem) => {
     onMarkRead(notification.id);
 
-    if (notification.deepLink) {
-      router.push(notification.deepLink as any);
-    } else if (notification.sessionId) {
+    if (notification.sessionId) {
       router.push(`/session/${notification.sessionId}` as any);
     }
   };
@@ -123,7 +165,7 @@ export function NotificationInbox({
 
   const renderItem = ({ item }: { item: NotificationItem }) => {
     const Icon = NOTIFICATION_ICONS[item.type] || Bell;
-    const iconColor = NOTIFICATION_COLORS[item.type] || '#6B7280';
+    const iconColor = NOTIFICATION_COLORS[item.type] || colors.textMuted;
 
     return (
       <TouchableOpacity
@@ -142,7 +184,7 @@ export function NotificationInbox({
           <Text style={styles.body} numberOfLines={2}>
             {item.body}
           </Text>
-          <Text style={styles.timestamp}>{formatTimestamp(item.timestamp)}</Text>
+          <Text style={styles.timestamp}>{formatTimestamp(item.createdAt)}</Text>
         </View>
 
         {!item.read && <View style={styles.unreadDot} testID={`notification-unread-${item.id}`} />}
@@ -156,7 +198,7 @@ export function NotificationInbox({
     return (
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
-          Notifications {unreadCount > 0 && `(${unreadCount})`}
+          {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
         </Text>
         {unreadCount > 0 && onMarkAllRead && (
           <TouchableOpacity onPress={onMarkAllRead} testID="mark-all-read-button">
@@ -170,6 +212,16 @@ export function NotificationInbox({
     );
   };
 
+  const renderFooter = () => {
+    if (!isLoadingMore) return null;
+
+    return (
+      <View style={styles.loadingFooter}>
+        <ActivityIndicator size="small" color={colors.accent} />
+      </View>
+    );
+  };
+
   const renderEmpty = () => (
     <View style={styles.emptyContainer} testID="notification-inbox-empty">
       <View style={styles.emptyIconContainer}>
@@ -177,7 +229,7 @@ export function NotificationInbox({
       </View>
       <Text style={styles.emptyTitle}>No notifications</Text>
       <Text style={styles.emptyDescription}>
-        You will receive notifications when your partner responds or invites you to a session.
+        You will receive notifications when your partner responds or accepts your invitation.
       </Text>
       {onEmptyAction && (
         <TouchableOpacity style={styles.emptyAction} onPress={onEmptyAction}>
@@ -187,6 +239,12 @@ export function NotificationInbox({
     </View>
   );
 
+  const handleEndReached = () => {
+    if (hasMore && !isLoadingMore && onEndReached) {
+      onEndReached();
+    }
+  };
+
   return (
     <FlatList
       data={notifications}
@@ -194,10 +252,13 @@ export function NotificationInbox({
       renderItem={renderItem}
       ListHeaderComponent={renderHeader}
       ListEmptyComponent={renderEmpty}
+      ListFooterComponent={renderFooter}
       contentContainerStyle={notifications.length === 0 ? styles.emptyList : undefined}
+      onEndReached={handleEndReached}
+      onEndReachedThreshold={0.5}
       refreshControl={
         onRefresh ? (
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4F46E5" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
         ) : undefined
       }
       testID="notification-inbox"
@@ -220,9 +281,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
   markAllReadButton: {
     flexDirection: 'row',
@@ -281,6 +342,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignSelf: 'center',
     marginLeft: 8,
+  },
+  loadingFooter: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
   emptyList: {
     flexGrow: 1,
