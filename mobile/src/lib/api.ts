@@ -13,6 +13,7 @@ import axios, {
 } from 'axios';
 import Constants from 'expo-constants';
 import { ApiError, ApiResponse, ErrorCode } from '@meet-without-fear/shared';
+import { trackError } from '../services/analytics';
 
 // ============================================================================
 // Configuration
@@ -198,6 +199,9 @@ apiClient.interceptors.response.use(
         // If we couldn't refresh or token is invalid, the user needs to re-authenticate
         console.warn('[API] Unauthorized - session may have expired, please sign in again');
 
+        // Track auth error
+        trackError('auth', 'SESSION_EXPIRED', originalRequest?.url || 'unknown');
+
         // Sign out the user to force re-authentication
         await handleAuthFailure();
       }
@@ -208,11 +212,18 @@ apiClient.interceptors.response.use(
         message: error.message || 'An error occurred',
       };
 
+      // Track API errors (skip 401s as those are handled separately)
+      if (status !== 401) {
+        const endpoint = originalRequest?.url || 'unknown';
+        trackError('api', apiError.code, endpoint);
+      }
+
       return Promise.reject(new ApiClientError(apiError, status));
     }
 
     // Network error or timeout
     if (error.code === 'ECONNABORTED') {
+      trackError('network', 'TIMEOUT', error.config?.url || 'unknown');
       return Promise.reject(
         new ApiClientError(
           { code: ErrorCode.SERVICE_UNAVAILABLE, message: 'Request timed out' },
@@ -221,6 +232,7 @@ apiClient.interceptors.response.use(
       );
     }
 
+    trackError('network', 'NETWORK_ERROR', error.config?.url || 'unknown');
     return Promise.reject(
       new ApiClientError(
         { code: ErrorCode.SERVICE_UNAVAILABLE, message: 'Network error' },
