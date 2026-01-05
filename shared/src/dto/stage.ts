@@ -47,6 +47,8 @@ export interface Stage1Gates {
   feelHeardConfirmed: boolean;
   feelHeardConfirmedAt: string | null;
   finalEmotionalReading: number | null; // 1-10
+  /** AI has recommended showing the feel-heard check prompt */
+  feelHeardCheckOffered?: boolean;
 }
 
 export interface Stage2Gates {

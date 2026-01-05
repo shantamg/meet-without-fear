@@ -232,9 +232,10 @@ async function buildConversationContext(
     where: {
       sessionId,
       // Only get messages from this user's conversation (not partner's Stage 1)
+      // Fixed: AI messages must also be filtered by forUserId to prevent partner leakage
       OR: [
-        { senderId: userId },
-        { senderId: null }, // AI messages have null senderId in some schemas
+        { senderId: userId }, // User's own messages
+        { senderId: null, forUserId: userId }, // AI messages directed to this user
       ],
     },
     orderBy: { timestamp: 'desc' },

@@ -65,6 +65,10 @@ interface ChatInterfaceProps {
   onTypewriterComplete?: () => void;
   /** Callback to report if typewriter is currently animating */
   onTypewriterStateChange?: (isAnimating: boolean) => void;
+  /** Custom component to render when there are no messages (e.g., onboarding compact) */
+  renderCustomEmptyState?: () => React.ReactNode;
+  /** Keyboard vertical offset for iOS (accounts for header + status bar) */
+  keyboardVerticalOffset?: number;
 }
 
 // ============================================================================
@@ -95,12 +99,17 @@ export function ChatInterface({
   isLoadingMore = false,
   onTypewriterComplete,
   onTypewriterStateChange,
+  renderCustomEmptyState,
+  keyboardVerticalOffset = 100,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
 
   // Track the ID of the message currently being animated via typewriter
   const [animatingMessageId, setAnimatingMessageId] = useState<string | null>(null);
+
+  // Track messages that have completed typewriter animation (separate from initial load)
+  const animatedMessageIdsRef = useRef<Set<string>>(new Set());
 
   // STABLE SORT: Ensure order never flip-flops if timestamps are identical
   const listItems = useMemo((): ChatListItem[] => {
@@ -196,13 +205,17 @@ export function ChatInterface({
       // Skip user messages and optimistic messages
       if (item.role === MessageRole.USER) continue;
       if (item.id.startsWith('optimistic-')) continue;
-      // Skip known messages (history)
+      // Skip known messages (history from initial load or pagination)
       if (knownMessageIdsRef.current.has(item.id)) continue;
+      // Skip messages that have already completed animation
+      if (animatedMessageIdsRef.current.has(item.id)) continue;
+      // Skip the currently animating message (it's already being handled)
+      if (item.id === animatingMessageId) continue;
       // This is the newest AI message that needs animation
       return item.id;
     }
     return null;
-  }, [listItems]);
+  }, [listItems, animatingMessageId]);
 
   // Notify parent when typewriter state changes
   useEffect(() => {
@@ -216,18 +229,23 @@ export function ChatInterface({
     }
 
     // Skip typewriter for:
-    // 1. Messages that existed on initial load (history)
-    // 2. Optimistic messages (they may re-render with real IDs)
-    // 3. User messages (only AI messages get typewriter)
-    const isKnownMessage = knownMessageIdsRef.current.has(item.id);
+    // 1. Messages from initial load or pagination (in knownMessageIdsRef)
+    // 2. Messages that have already animated (in animatedMessageIdsRef)
+    // 3. The currently animating message (use stable state, don't restart)
+    // 4. Optimistic messages (they may re-render with real IDs)
+    // 5. User messages (only AI messages get typewriter)
+    const isFromHistory = knownMessageIdsRef.current.has(item.id);
+    const hasAlreadyAnimated = animatedMessageIdsRef.current.has(item.id);
+    const isCurrentlyAnimating = item.id === animatingMessageId;
     const isOptimisticMessage = item.id.startsWith('optimistic-');
     const isAIMessage = item.role !== MessageRole.USER;
-    const shouldAnimateTypewriter = isAIMessage && !isKnownMessage && !isOptimisticMessage;
 
-    // After this message is seen, mark it as known for future renders
-    if (!isKnownMessage && !isOptimisticMessage) {
-      knownMessageIdsRef.current.add(item.id);
-    }
+    // Animate if: AI message, not from history, not already animated, not optimistic
+    // For currently animating message, keep animating (don't skip)
+    const shouldAnimateTypewriter = isAIMessage &&
+      !isFromHistory &&
+      !hasAlreadyAnimated &&
+      !isOptimisticMessage;
 
     // Track typewriter animation for the newest AI message
     const isNewestAnimatable = item.id === newestAnimatableAIMessageId;
@@ -245,13 +263,15 @@ export function ChatInterface({
       <ChatBubble
         message={bubbleMessage}
         onTypewriterStart={isNewestAnimatable ? () => setAnimatingMessageId(item.id) : undefined}
-        onTypewriterComplete={isNewestAnimatable ? () => {
+        onTypewriterComplete={(isNewestAnimatable || isCurrentlyAnimating) ? () => {
+          // Mark this message as animated so it won't re-animate on future renders
+          animatedMessageIdsRef.current.add(item.id);
           setAnimatingMessageId(null);
           onTypewriterComplete?.();
         } : undefined}
       />
     );
-  }, [newestAnimatableAIMessageId, onTypewriterComplete]);
+  }, [newestAnimatableAIMessageId, animatingMessageId, onTypewriterComplete]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 
@@ -263,6 +283,14 @@ export function ChatInterface({
 
   const renderEmptyState = useCallback(() => {
     if (isLoading) return null;
+    // Use custom empty state if provided (e.g., onboarding compact)
+    if (renderCustomEmptyState) {
+      return (
+        <View style={styles.emptyState} testID="chat-custom-empty-state">
+          {renderCustomEmptyState()}
+        </View>
+      );
+    }
     return (
       <View style={styles.emptyState} testID="chat-empty-state">
         <Text style={styles.emptyStateTitle}>{emptyStateTitle}</Text>
@@ -271,7 +299,7 @@ export function ChatInterface({
         ) : null}
       </View>
     );
-  }, [isLoading, emptyStateTitle, emptyStateMessage, styles.emptyState, styles.emptyStateTitle, styles.emptyStateMessage]);
+  }, [isLoading, emptyStateTitle, emptyStateMessage, renderCustomEmptyState, styles.emptyState, styles.emptyStateTitle, styles.emptyStateMessage]);
 
   // In inverted list: Footer is visually at TOP (for loading older messages spinner)
   const renderFooter = useCallback(() => {
@@ -353,7 +381,7 @@ export function ChatInterface({
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={90}
+      keyboardVerticalOffset={keyboardVerticalOffset}
     >
       <FlatList
         ref={flatListRef}

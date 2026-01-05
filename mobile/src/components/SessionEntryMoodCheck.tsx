@@ -5,13 +5,14 @@
  * current emotional state. This ensures the emotional barometer reflects
  * how the user is actually feeling at the start of the conversation.
  *
- * Uses the same slider style as IntensityCheck for consistency.
+ * Polished, inviting design with clean slider and soothing aesthetic.
  */
 
 import { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
-import { colors } from '@/theme';
+import { colors, spacing, radius } from '@/theme';
 
 /**
  * Get interpolated color between green and red based on value (1-10)
@@ -84,47 +85,55 @@ export function SessionEntryMoodCheck({
     onComplete(value);
   }, [onComplete, value]);
 
+  // Get a softer pastel color for the label
+  const getSoftLabelColor = (label: string): string => {
+    if (label === 'Calm') return '#7dd3c0'; // Soft mint/teal
+    if (label === 'Elevated') return '#fbbf24'; // Soft amber
+    return '#f87171'; // Soft coral
+  };
+
+  const softLabelColor = getSoftLabelColor(currentLabel);
+
   // Shared content between modal and full-screen modes
   const content = (
     <View style={fullScreen ? styles.fullScreenOverlay : styles.overlay}>
-      <View style={styles.container}>
-        <Text style={styles.title}>How are you feeling right now?</Text>
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+        <View style={styles.container}>
+          <View style={styles.contentArea}>
+            <Text style={styles.title}>How are you feeling right now?</Text>
 
-        <View style={styles.currentContainer}>
-          <Text style={[styles.currentValue, { color: currentColor }]}>
-            {value} - {currentLabel}
-          </Text>
-        </View>
+            <View style={styles.labelContainer}>
+              <Text style={[styles.emotionLabel, { color: softLabelColor }]}>
+                {currentLabel}
+              </Text>
+            </View>
 
-        <View style={styles.sliderContainer}>
-          <Slider
-            testID="mood-check-slider"
-            style={styles.slider}
-            minimumValue={1}
-            maximumValue={10}
-            step={1}
-            value={value}
-            onValueChange={handleValueChange}
-            minimumTrackTintColor={currentColor}
-            maximumTrackTintColor={colors.bgTertiary}
-            thumbTintColor={currentColor}
-          />
+            <View style={styles.sliderContainer}>
+              <Slider
+                testID="mood-check-slider"
+                style={styles.slider}
+                minimumValue={1}
+                maximumValue={10}
+                step={1}
+                value={value}
+                onValueChange={handleValueChange}
+                minimumTrackTintColor={currentColor}
+                maximumTrackTintColor="rgba(148, 163, 184, 0.3)"
+                thumbTintColor={currentColor}
+              />
+            </View>
 
-          <View style={styles.labels}>
-            <Text style={styles.scaleLabel}>Calm</Text>
-            <Text style={styles.scaleLabel}>Elevated</Text>
-            <Text style={styles.scaleLabel}>Intense</Text>
+            <TouchableOpacity
+              style={styles.continueButton}
+              onPress={handleContinue}
+              testID="mood-check-continue-button"
+              activeOpacity={0.8}
+            >
+              <Text style={styles.continueButtonText}>Continue</Text>
+            </TouchableOpacity>
           </View>
         </View>
-
-        <TouchableOpacity
-          style={styles.continueButton}
-          onPress={handleContinue}
-          testID="mood-check-continue-button"
-        >
-          <Text style={styles.continueButtonText}>Continue to chat</Text>
-        </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     </View>
   );
 
@@ -151,72 +160,72 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   fullScreenOverlay: {
     flex: 1,
     backgroundColor: colors.bgPrimary,
+  },
+  safeArea: {
+    flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
   },
   container: {
-    width: '90%',
+    flex: 1,
+    width: '100%',
     maxWidth: 400,
-    backgroundColor: colors.bgPrimary,
-    borderRadius: 16,
-    padding: 24,
+    alignSelf: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing['2xl'],
+  },
+  contentArea: {
     alignItems: 'center',
+    width: '100%',
   },
   title: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: '500',
     color: colors.textPrimary,
-    marginBottom: 16,
+    marginBottom: spacing['3xl'],
     textAlign: 'center',
+    lineHeight: 32,
   },
-  currentContainer: {
+  labelContainer: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: spacing['3xl'],
   },
-  currentValue: {
-    fontSize: 32,
-    fontWeight: '700',
+  emotionLabel: {
+    fontSize: 48,
+    fontWeight: '600',
+    letterSpacing: -0.5,
   },
   sliderContainer: {
     width: '100%',
-    marginBottom: 32,
+    marginBottom: 64,
     backgroundColor: colors.bgSecondary,
     borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
   },
   slider: {
     width: '100%',
     height: 40,
   },
-  labels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    paddingHorizontal: 8,
-  },
-  scaleLabel: {
-    fontSize: 12,
-    color: colors.textMuted,
-  },
   continueButton: {
-    backgroundColor: colors.accent,
-    paddingVertical: 16,
-    paddingHorizontal: 48,
-    borderRadius: 12,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: 'rgba(148, 163, 184, 0.5)', // Soft muted border
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing['2xl'],
+    borderRadius: radius.full,
     width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   continueButtonText: {
-    color: colors.textOnAccent,
+    color: colors.textPrimary,
     fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: '500',
+    letterSpacing: 0.5,
   },
 });
 

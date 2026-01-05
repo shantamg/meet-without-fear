@@ -389,6 +389,33 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       `[sendMessage] Orchestrator: intent=${orchestratorResult.memoryIntent.intent}, depth=${orchestratorResult.memoryIntent.depth}, mock=${orchestratorResult.usedMock}`
     );
 
+    // Debug: Log feel-heard check recommendation from AI (Stage 1)
+    if (currentStage === 1) {
+      console.log(
+        `[sendMessage] Stage 1 feel-heard check: offerFeelHeardCheck=${orchestratorResult.offerFeelHeardCheck}, turnCount=${userTurnCount}`
+      );
+    }
+
+    // Stage 1: If AI recommends feel-heard check, persist to stage progress
+    // This allows mobile to restore the state on remount
+    if (currentStage === 1 && orchestratorResult.offerFeelHeardCheck && progress) {
+      try {
+        const currentGates = (progress.gatesSatisfied as Record<string, unknown>) ?? {};
+        await prisma.stageProgress.update({
+          where: { id: progress.id },
+          data: {
+            gatesSatisfied: {
+              ...currentGates,
+              feelHeardCheckOffered: true,
+            },
+          },
+        });
+        console.log(`[sendMessage] Stage 1: Persisted feelHeardCheckOffered=true for user ${user.id}`);
+      } catch (err) {
+        console.warn('[sendMessage] Failed to persist feelHeardCheckOffered:', err);
+      }
+    }
+
     // The orchestrator already parses structured JSON responses and extracts:
     // - response: the text to show in chat
     // - invitationMessage: the proposed invitation (if any)

@@ -228,6 +228,8 @@ export function useConfirmFeelHeard(
     onSuccess: (data, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      // Invalidate session state to update milestones (feelHeardConfirmedAt)
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       // Invalidate messages to fetch the transition message if one was generated
       if (data.transitionMessage) {
         queryClient.invalidateQueries({ queryKey: messageKeys.all });
