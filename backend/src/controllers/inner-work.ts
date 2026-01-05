@@ -38,6 +38,12 @@ import { getCompletion, getHaikuJson } from '../lib/bedrock';
 import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildInnerWorkSummaryPrompt, buildLinkedInnerThoughtsPrompt, LinkedPartnerSessionContext } from '../services/stage-prompts';
 import { extractJsonSafe } from '../utils/json-extractor';
 import { embedInnerWorkMessage } from '../services/embedding';
+import {
+  updateInnerThoughtsSummary,
+  getInnerThoughtsSummary,
+  formatInnerThoughtsSummaryForPrompt,
+  INNER_THOUGHTS_SUMMARIZATION_CONFIG,
+} from '../services/conversation-summarizer';
 
 // ============================================================================
 // Helper Functions
@@ -469,7 +475,8 @@ export const sendInnerWorkMessage = asyncHandler(
 
     const { content } = parseResult.data;
 
-    // Verify session exists and belongs to user (include linked partner session ID)
+    // Verify session exists and belongs to user
+    // Fetch ALL messages for accurate count, but we'll only use recent ones + summary for context
     const session = await prisma.innerWorkSession.findFirst({
       where: {
         id: sessionId,
@@ -478,7 +485,6 @@ export const sendInnerWorkMessage = asyncHandler(
       include: {
         messages: {
           orderBy: { timestamp: 'asc' },
-          take: 20, // Last 20 messages for context
         },
       },
     });
@@ -500,8 +506,20 @@ export const sendInnerWorkMessage = asyncHandler(
       },
     });
 
-    // Build conversation history
-    const history = session.messages.map((m) => ({
+    // Get conversation summary if it exists (for long conversations)
+    const summaryData = await getInnerThoughtsSummary(sessionId);
+    const conversationSummaryText = summaryData
+      ? formatInnerThoughtsSummaryForPrompt(summaryData)
+      : undefined;
+
+    // Build conversation history: use only recent messages for the prompt
+    // If we have a summary, we keep fewer messages; otherwise keep more
+    const recentMessageCount = summaryData
+      ? INNER_THOUGHTS_SUMMARIZATION_CONFIG.recentMessagesToKeep
+      : 20; // Keep more if no summary exists
+
+    const recentMessages = session.messages.slice(-recentMessageCount);
+    const history = recentMessages.map((m) => ({
       role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
       content: m.content,
     }));
@@ -510,9 +528,17 @@ export const sendInnerWorkMessage = asyncHandler(
     // Get recent themes for context
     const recentThemes = await getRecentThemes(user.id, sessionId);
 
+    // Build the rich session summary that includes conversation summary if available
+    const richSessionSummary = conversationSummaryText
+      ? `${conversationSummaryText}${session.summary ? `\n\nSession theme: ${session.summary}` : ''}`
+      : session.summary || undefined;
+
     // Build prompt - use linked prompt if this session is connected to a partner session
     const userName = user.firstName || user.name || 'there';
     let prompt: string;
+
+    // Calculate total turn count (all messages, not just recent)
+    const totalTurnCount = session.messages.length + 1;
 
     if (session.linkedPartnerSessionId) {
       // Fetch context from the linked partner session
@@ -525,9 +551,9 @@ export const sendInnerWorkMessage = asyncHandler(
         // Use the linked Inner Thoughts prompt with partner session context
         prompt = buildLinkedInnerThoughtsPrompt({
           userName,
-          turnCount: session.messages.length + 1,
+          turnCount: totalTurnCount,
           emotionalIntensity: 5,
-          sessionSummary: session.summary || undefined,
+          sessionSummary: richSessionSummary,
           recentThemes: recentThemes.length > 0 ? recentThemes : undefined,
           linkedContext,
         });
@@ -535,9 +561,9 @@ export const sendInnerWorkMessage = asyncHandler(
         // Fallback to regular prompt if context fetch fails
         prompt = buildInnerWorkPrompt({
           userName,
-          turnCount: session.messages.length + 1,
+          turnCount: totalTurnCount,
           emotionalIntensity: 5,
-          sessionSummary: session.summary || undefined,
+          sessionSummary: richSessionSummary,
           recentThemes: recentThemes.length > 0 ? recentThemes : undefined,
         });
       }
@@ -545,9 +571,9 @@ export const sendInnerWorkMessage = asyncHandler(
       // Not linked - use regular Inner Thoughts prompt
       prompt = buildInnerWorkPrompt({
         userName,
-        turnCount: session.messages.length + 1,
+        turnCount: totalTurnCount,
         emotionalIntensity: 5,
-        sessionSummary: session.summary || undefined,
+        sessionSummary: richSessionSummary,
         recentThemes: recentThemes.length > 0 ? recentThemes : undefined,
       });
     }
@@ -591,6 +617,13 @@ export const sendInnerWorkMessage = asyncHandler(
     // Update session metadata with Haiku (non-blocking, runs on every message)
     updateSessionMetadata(sessionId).catch((err) =>
       console.warn('[Inner Work] Failed to update metadata:', err)
+    );
+
+    // Update conversation summary for long sessions (non-blocking)
+    // This balances recent messages with rolling summarization
+    const totalMessageCount = session.messages.length + 2; // +2 for user and AI messages just added
+    updateInnerThoughtsSummary(sessionId).catch((err) =>
+      console.warn('[Inner Work] Failed to update conversation summary:', err)
     );
 
     const response: ApiResponse<SendInnerWorkMessageResponse> = {

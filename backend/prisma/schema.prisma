@@ -140,6 +140,10 @@ model InnerWorkSession {
   createdAt DateTime            @default(now())
   updatedAt DateTime            @updatedAt
 
+  // Rolling conversation summary for long sessions (like partner session vessels)
+  // Stores JSON: { text, keyThemes, emotionalJourney, unresolvedTopics, messageCount, generatedAt }
+  conversationSummary String? @db.Text
+
   // Messages in this inner work session
   messages InnerWorkMessage[]
 
