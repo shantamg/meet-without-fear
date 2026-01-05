@@ -1010,7 +1010,7 @@ export function UnifiedSessionScreen({
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
           isLoading={isSending || isFetchingInitialMessage || isConfirmingInvitation || isConfirmingFeelHeard}
-          showEmotionSlider={!isInvitationPhase && !isRefiningInvitation}
+          showEmotionSlider={true}
           emotionValue={barometerValue}
           onEmotionChange={handleBarometerChange}
           onHighEmotion={(value) => {
