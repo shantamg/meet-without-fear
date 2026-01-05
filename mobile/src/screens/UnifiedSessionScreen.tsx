@@ -713,25 +713,37 @@ export function UnifiedSessionScreen({
   const shouldShowCompactOverlay = false;
 
   // -------------------------------------------------------------------------
-  // Session Entry Mood Check - shown after compact signed, before chat
+  // Session Entry Mood Check - shown on re-entry to session (not during onboarding)
   // -------------------------------------------------------------------------
   // Asks user "How are you feeling right now?" to set accurate barometer value.
   // Only shows once per session entry (resets when navigating away and back).
   // Skipped if user is currently in an exercise overlay (will set intensity after).
+  // Skipped during entire onboarding stage (including compact display and signing).
   // NOTE: This must be before early returns to maintain hook order
   const shouldShowMoodCheck = useMemo(() => {
     // Don't show if still loading
     if (isLoading) return false;
-    // Don't show if still in onboarding with unsigned compact (must sign compact first)
-    if (isInOnboardingUnsigned) return false;
+    // Don't show during entire onboarding stage - compact must be signed and stage advanced
+    // This covers: viewing compact, signing compact, and any loading states during onboarding
+    if (currentStage === Stage.ONBOARDING) return false;
+    // Don't show if still loading compact data
+    if (loadingCompact) return false;
     // Don't show if already completed mood check this session entry
     if (hasCompletedMoodCheck) return false;
     // Don't show if currently in an exercise overlay (user will set intensity after)
     if (activeOverlay) return false;
 
-    // Show mood check for all session entries
+    // Show mood check for sessions that have progressed past onboarding
     return true;
-  }, [isLoading, isInOnboardingUnsigned, hasCompletedMoodCheck, activeOverlay]);
+  }, [isLoading, currentStage, loadingCompact, hasCompletedMoodCheck, activeOverlay]);
+
+  // -------------------------------------------------------------------------
+  // Memoized Empty State Element (prevents typewriter restart on re-render)
+  // -------------------------------------------------------------------------
+  // Use useMemo to create a stable element reference, not a render function
+  const compactEmptyStateElement = useMemo(() => {
+    return <CompactChatItem testID="inline-compact" />;
+  }, []);
 
   // -------------------------------------------------------------------------
   // Render Overlays
@@ -1013,7 +1025,7 @@ export function UnifiedSessionScreen({
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
           isLoading={isSending || isFetchingInitialMessage || isConfirmingInvitation || isConfirmingFeelHeard}
-          showEmotionSlider={true}
+          showEmotionSlider={!isInOnboardingUnsigned}
           emotionValue={barometerValue}
           onEmotionChange={handleBarometerChange}
           onHighEmotion={(value) => {
@@ -1027,10 +1039,8 @@ export function UnifiedSessionScreen({
           isLoadingMore={isFetchingMoreMessages}
           onTypewriterStateChange={setIsTypewriterAnimating}
           // Show compact as custom empty state during onboarding when not signed
-          renderCustomEmptyState={
-            isInOnboardingUnsigned
-              ? () => <CompactChatItem testID="inline-compact" />
-              : undefined
+          customEmptyState={
+            isInOnboardingUnsigned ? compactEmptyStateElement : undefined
           }
           renderAboveInput={
             // Show compact agreement bar during onboarding when compact not signed

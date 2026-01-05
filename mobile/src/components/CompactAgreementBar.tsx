@@ -41,20 +41,20 @@ export function CompactAgreementBar({
 
   return (
     <View style={styles.container} testID={testID || 'compact-agreement-bar'}>
-      <TouchableOpacity
-        testID="compact-agree-checkbox"
-        style={styles.checkbox}
-        onPress={() => setAgreed(!agreed)}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: agreed }}
-      >
-        <View style={[styles.checkboxBox, agreed && styles.checkboxChecked]}>
-          {agreed && <Text style={styles.checkmark}>&#10003;</Text>}
-        </View>
-        <Text style={styles.checkboxLabel}>I agree to proceed with curiosity</Text>
-      </TouchableOpacity>
+      <View style={styles.agreementRow}>
+        <TouchableOpacity
+          testID="compact-agree-checkbox"
+          style={styles.checkbox}
+          onPress={() => setAgreed(!agreed)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: agreed }}
+        >
+          <View style={[styles.checkboxBox, agreed && styles.checkboxChecked]}>
+            {agreed && <Text style={styles.checkmark}>&#10003;</Text>}
+          </View>
+          <Text style={styles.checkboxLabel}>I agree to proceed with curiosity</Text>
+        </TouchableOpacity>
 
-      <View style={styles.buttonRow}>
         <TouchableOpacity
           style={[styles.signButton, !agreed && styles.signButtonDisabled]}
           onPress={handleSign}
@@ -64,20 +64,20 @@ export function CompactAgreementBar({
           testID="compact-sign-button"
         >
           <Text style={styles.signButtonText}>
-            {isPending ? 'Signing...' : 'Sign and Begin'}
+            {isPending ? '...' : 'Begin'}
           </Text>
         </TouchableOpacity>
-
-        {onAskQuestion && (
-          <TouchableOpacity
-            style={styles.questionsButton}
-            onPress={onAskQuestion}
-            testID="compact-questions-button"
-          >
-            <Text style={styles.questionsText}>I have questions</Text>
-          </TouchableOpacity>
-        )}
       </View>
+
+      {onAskQuestion && (
+        <TouchableOpacity
+          style={styles.questionsButton}
+          onPress={onAskQuestion}
+          testID="compact-questions-button"
+        >
+          <Text style={styles.questionsText}>I have questions</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -95,14 +95,19 @@ const useStyles = () =>
       borderTopWidth: 1,
       borderTopColor: t.colors.border,
     },
-    checkbox: {
+    agreementRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: t.spacing.md,
+      gap: t.spacing.md,
+    },
+    checkbox: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
     },
     checkboxBox: {
-      width: 24,
-      height: 24,
+      width: 22,
+      height: 22,
       borderRadius: 6,
       borderWidth: 2,
       borderColor: t.colors.border,
@@ -115,27 +120,22 @@ const useStyles = () =>
     },
     checkmark: {
       color: t.colors.textOnAccent,
-      fontSize: 14,
+      fontSize: 12,
       fontWeight: 'bold',
     },
     checkboxLabel: {
       marginLeft: t.spacing.sm,
-      fontSize: t.typography.fontSize.md,
+      fontSize: t.typography.fontSize.sm,
       color: t.colors.textPrimary,
       flex: 1,
     },
-    buttonRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: t.spacing.md,
-    },
     signButton: {
-      flex: 1,
       backgroundColor: t.colors.accent,
       paddingVertical: t.spacing.sm,
       paddingHorizontal: t.spacing.lg,
       borderRadius: t.radius.lg,
       alignItems: 'center',
+      justifyContent: 'center',
     },
     signButtonDisabled: {
       backgroundColor: t.colors.textMuted,
@@ -148,6 +148,8 @@ const useStyles = () =>
     questionsButton: {
       paddingVertical: t.spacing.sm,
       paddingHorizontal: t.spacing.md,
+      alignItems: 'center',
+      marginTop: t.spacing.xs,
     },
     questionsText: {
       color: t.colors.accent,

@@ -65,8 +65,8 @@ interface ChatInterfaceProps {
   onTypewriterComplete?: () => void;
   /** Callback to report if typewriter is currently animating */
   onTypewriterStateChange?: (isAnimating: boolean) => void;
-  /** Custom component to render when there are no messages (e.g., onboarding compact) */
-  renderCustomEmptyState?: () => React.ReactNode;
+  /** Custom element to render when there are no messages (e.g., onboarding compact) */
+  customEmptyState?: React.ReactNode;
   /** Keyboard vertical offset for iOS (accounts for header + status bar) */
   keyboardVerticalOffset?: number;
 }
@@ -99,7 +99,7 @@ export function ChatInterface({
   isLoadingMore = false,
   onTypewriterComplete,
   onTypewriterStateChange,
-  renderCustomEmptyState,
+  customEmptyState,
   keyboardVerticalOffset = 100,
 }: ChatInterfaceProps) {
   const styles = useStyles();
@@ -281,13 +281,17 @@ export function ChatInterface({
     return <TypingIndicator />;
   }, [isLoading]);
 
-  const renderEmptyState = useCallback(() => {
+  // Memoize the empty state element (not a callback!) to prevent remounts
+  // NOTE: styles are excluded from deps because useStyles() creates new refs each render
+  // but the actual style values are stable (theme-based)
+  const emptyStateElement = useMemo(() => {
     if (isLoading) return null;
     // Use custom empty state if provided (e.g., onboarding compact)
-    if (renderCustomEmptyState) {
+    // Custom empty state starts at the top (flex-start) instead of centered
+    if (customEmptyState) {
       return (
-        <View style={styles.emptyState} testID="chat-custom-empty-state">
-          {renderCustomEmptyState()}
+        <View style={styles.customEmptyState} testID="chat-custom-empty-state">
+          {customEmptyState}
         </View>
       );
     }
@@ -299,7 +303,8 @@ export function ChatInterface({
         ) : null}
       </View>
     );
-  }, [isLoading, emptyStateTitle, emptyStateMessage, renderCustomEmptyState, styles.emptyState, styles.emptyStateTitle, styles.emptyStateMessage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, emptyStateTitle, emptyStateMessage, customEmptyState]);
 
   // In inverted list: Footer is visually at TOP (for loading older messages spinner)
   const renderFooter = useCallback(() => {
@@ -396,11 +401,11 @@ export function ChatInterface({
         }}
         contentContainerStyle={[
           styles.messageList,
-          listItems.length === 0 && styles.messageListEmpty,
+          listItems.length === 0 && (customEmptyState ? styles.customMessageListEmpty : styles.messageListEmpty),
         ]}
         ListHeaderComponent={renderHeader}
         ListFooterComponent={renderFooter}
-        ListEmptyComponent={renderEmptyState}
+        ListEmptyComponent={emptyStateElement}
         showsVerticalScrollIndicator={false}
         testID="chat-message-list"
         onEndReached={handleEndReached}
@@ -448,6 +453,11 @@ const useStyles = () =>
       flexGrow: 1,
       justifyContent: 'center',
     },
+    customMessageListEmpty: {
+      flexGrow: 1,
+      // In inverted list, flex-end aligns to visual TOP
+      justifyContent: 'flex-end',
+    },
     loadingMore: {
       // In inverted list, this appears at visual TOP
       paddingVertical: t.spacing.xl,
@@ -464,6 +474,13 @@ const useStyles = () =>
       alignItems: 'center',
       paddingHorizontal: t.spacing['3xl'],
       paddingVertical: t.spacing['3xl'],
+    },
+    customEmptyState: {
+      flex: 1,
+      // Counter-flip the inverted list for empty state content
+      transform: [{ scaleY: -1 }],
+      // Start content at the top (in flipped view this is flex-start)
+      justifyContent: 'flex-start',
     },
     emptyStateTitle: {
       fontSize: 28,
