@@ -29,6 +29,9 @@ import {
 import { initializeAppSession, getCurrentSessionId } from '../utils/appSession';
 
 const ALIAS_FLAG_PREFIX = '@mixpanel_aliased_';
+// Track if a reset() was called this session - if so, skip alias() since
+// there are no meaningful anonymous events to merge after a logout/reset
+const RESET_FLAG = '@mixpanel_reset_this_session';
 
 export function MixpanelInitializer() {
   const { isSignedIn, isLoaded } = useAuth();
@@ -82,10 +85,20 @@ export function MixpanelInitializer() {
         const aliasFlag = `${ALIAS_FLAG_PREFIX}${userId}`;
         const hasAliased = await AsyncStorage.getItem(aliasFlag);
 
-        if (!hasAliased) {
+        // Check if we just reset() Mixpanel (e.g., after logout)
+        // If so, skip alias() since there are no meaningful anonymous events
+        // to merge, and the SDK's distinctId may be invalid after reset()
+        const wasResetThisSession = await AsyncStorage.getItem(RESET_FLAG);
+
+        if (!hasAliased && !wasResetThisSession) {
           // First-time login: create alias to merge anonymous events
           alias(userId);
           await AsyncStorage.setItem(aliasFlag, 'true');
+        }
+
+        // Clear the reset flag now that we've handled the login
+        if (wasResetThisSession) {
+          await AsyncStorage.removeItem(RESET_FLAG);
         }
 
         // Identify the user
@@ -123,6 +136,9 @@ export function MixpanelInitializer() {
       if (!isSignedIn && prevSignedIn.current === true) {
         track('Logout');
         reset();
+        // Mark that we reset Mixpanel - this prevents alias() errors on next login
+        // since the SDK's anonymous distinctId may be invalid after reset()
+        await AsyncStorage.setItem(RESET_FLAG, 'true');
       }
 
       prevSignedIn.current = isSignedIn ?? false;
