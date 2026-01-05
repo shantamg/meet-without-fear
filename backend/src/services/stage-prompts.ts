@@ -337,14 +337,18 @@ ${
   hasEnoughTurns
     ? `
 FEEL-HEARD CHECK:
-After at least 5 turns, start looking for signals that the user may be feeling heard:
-- They affirm your reflections multiple times
-- Their tone has softened
-- They seem to be winding down or repeating themselves
-- They express gratitude or relief
+After at least 5 turns, look for ANY of these signals that the user may be ready for a feel-heard check:
+- They affirm even ONE of your reflections (e.g., "yes", "exactly", "that's right")
+- You've successfully reflected back their core concern or need
+- They've shared what they want/need from the situation
 - Their emotional intensity has decreased
+- They seem calmer or more settled than when they started
 
-When you see these signals, set "offerFeelHeardCheck": true in your output. This will prompt the app to ask them directly if they feel heard. Don't force it - if they're still actively venting or exploring, keep witnessing.
+IMPORTANT: Be proactive about offering the check. After 5+ turns where you've successfully reflected their experience and they've shared their core need or concern, set "offerFeelHeardCheck": true. This gives them the OPTION to say if they feel heard - they can decline if not ready. It's better to offer the check early than to keep them waiting.
+
+CRITICAL: When you set "offerFeelHeardCheck": true, do NOT ask "do you feel heard?" or similar in your response text. The UI will automatically show a panel asking them to confirm. Your response should continue naturally - perhaps acknowledge what they shared or reflect their core need. The feel-heard question is handled by the app, not your text.
+
+Only hold back if they're clearly still in high emotional distress or actively venting something new.
 `
     : ''
 }
@@ -358,7 +362,7 @@ IMPORTANT: You MUST respond with a JSON object containing exactly these three fi
 }
 \`\`\`
 
-ALL THREE FIELDS ARE REQUIRED. Set "offerFeelHeardCheck" to true when: user has 5+ turns, intensity below 7, and shows signs of feeling heard (affirming, softening, winding down). Otherwise set it to false.`;
+ALL THREE FIELDS ARE REQUIRED. Set "offerFeelHeardCheck" to true when: user has 5+ turns AND any of these apply: they affirmed a reflection, they shared their core need, or their intensity has decreased. Be proactive - they can always say "not yet" if they're not ready.`;
 }
 
 // ============================================================================
