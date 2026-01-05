@@ -348,6 +348,8 @@ IMPORTANT: Be proactive about offering the check. After 5+ turns where you've su
 
 CRITICAL: When you set "offerFeelHeardCheck": true, do NOT ask "do you feel heard?" or similar in your response text. The UI will automatically show a panel asking them to confirm. Your response should continue naturally - perhaps acknowledge what they shared or reflect their core need. The feel-heard question is handled by the app, not your text.
 
+PERSISTENCE: Once you determine the user is ready for the feel-heard check (they've shared their core need, affirmed reflections, or calmed down), keep setting "offerFeelHeardCheck": true on EVERY subsequent response until they explicitly indicate they don't feel heard yet. Don't flip back to false - the UI needs this to remain true.
+
 Only hold back if they're clearly still in high emotional distress or actively venting something new.
 `
     : ''
