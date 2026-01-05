@@ -374,9 +374,12 @@ export function UnifiedSessionScreen({
     }
 
     // Show "Compact Signed" indicator when user signs the compact
-    // Use optimistic timestamp during signing, or API signedAt timestamp
-    const compactSignedAt = compactData?.mySignedAt ?? optimisticCompactSignedTimestamp;
+    // Use optimistic timestamp during signing, API signedAt timestamp, or session creation as fallback
+    // Fallback ensures indicator shows even for older sessions without signedAt stored
     const shouldShowCompactSigned = hasEverSignedCompact.current || compactData?.mySigned || isSigningCompact;
+    const compactSignedAt = compactData?.mySignedAt
+      ?? optimisticCompactSignedTimestamp
+      ?? (shouldShowCompactSigned ? session?.createdAt : null);
     if (shouldShowCompactSigned && compactSignedAt) {
       items.push({
         type: 'indicator',
@@ -401,7 +404,7 @@ export function UnifiedSessionScreen({
       });
     }
     return items;
-  }, [invitationConfirmed, isConfirmingInvitation, invitation?.messageConfirmedAt, invitation?.acceptedAt, invitation?.isInviter, optimisticConfirmTimestamp, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, optimisticCompactSignedTimestamp, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, optimisticFeelHeardTimestamp]);
+  }, [invitationConfirmed, isConfirmingInvitation, localInvitationConfirmed, invitation?.messageConfirmedAt, invitation?.acceptedAt, invitation?.isInviter, optimisticConfirmTimestamp, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, optimisticCompactSignedTimestamp, session?.createdAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, optimisticFeelHeardTimestamp]);
 
   // -------------------------------------------------------------------------
   // Effective Stage (accounts for compact signed but stage not yet updated)
