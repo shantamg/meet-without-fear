@@ -15,6 +15,7 @@ import { setTokenProvider } from '@/src/lib/api';
 import { ToastProvider } from '@/src/contexts/ToastContext';
 import { useNotifications } from '@/src/hooks/useNotifications';
 import { configureNotificationHandler } from '@/src/services/notifications';
+import { MixpanelInitializer } from '@/src/components/MixpanelInitializer';
 
 // Configure notification handler at module load
 configureNotificationHandler();
@@ -102,6 +103,7 @@ function AuthProviderWrapper() {
         <AuthContext.Provider value={auth}>
           <QueryProvider>
             <ToastProvider>
+              <MixpanelInitializer />
               <NotificationInitializer />
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="(public)" />

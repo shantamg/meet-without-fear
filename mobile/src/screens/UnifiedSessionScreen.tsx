@@ -39,6 +39,16 @@ import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
 import { useRealtime } from '../hooks/useRealtime';
 import { createStyles } from '../theme/styled';
+import {
+  trackInvitationSent,
+  trackCompactSigned,
+  trackMessageSent,
+  trackFeltHeardResponse,
+  trackSessionResolved,
+  trackStageStarted,
+  trackStageCompleted,
+  trackCommonGroundFound,
+} from '../services/analytics';
 
 // ============================================================================
 // Types
@@ -173,6 +183,41 @@ export function UnifiedSessionScreen({
     showCooling,
     setPendingConfirmation,
   } = useUnifiedSession(sessionId);
+
+  // -------------------------------------------------------------------------
+  // Analytics-wrapped action handlers
+  // -------------------------------------------------------------------------
+  const stageStartTimeRef = useRef<number | null>(null);
+  const lastTrackedStageRef = useRef<Stage | null>(null);
+
+  // Track stage changes
+  useEffect(() => {
+    if (!currentStage || currentStage === lastTrackedStageRef.current) return;
+
+    // Track stage completion for previous stage
+    if (lastTrackedStageRef.current !== null && stageStartTimeRef.current) {
+      const duration = Math.floor((Date.now() - stageStartTimeRef.current) / 1000);
+      trackStageCompleted(sessionId, Stage[lastTrackedStageRef.current], duration);
+    }
+
+    // Track new stage start
+    trackStageStarted(sessionId, Stage[currentStage], lastTrackedStageRef.current !== null ? Stage[lastTrackedStageRef.current] : undefined);
+    stageStartTimeRef.current = Date.now();
+    lastTrackedStageRef.current = currentStage;
+  }, [currentStage, sessionId]);
+
+  // Track common ground when found (commonGround is an array of shared needs)
+  useEffect(() => {
+    if (commonGround && commonGround.length > 0) {
+      trackCommonGroundFound(sessionId, commonGround.length);
+    }
+  }, [commonGround?.length, sessionId]);
+
+  // Wrapped sendMessage with tracking
+  const sendMessageWithTracking = useCallback((message: string) => {
+    trackMessageSent(sessionId, message.length);
+    sendMessage(message);
+  }, [sessionId, sendMessage]);
 
   // -------------------------------------------------------------------------
   // Local State for Refine Invitation Drawer
@@ -355,11 +400,17 @@ export function UnifiedSessionScreen({
             <View style={styles.inlineCard} key={card.id}>
               <FeelHeardConfirmation
                 onConfirm={() => {
+                  // Track felt heard response
+                  trackFeltHeardResponse(sessionId, 'yes');
                   // Set optimistic timestamp immediately for instant indicator display
                   setOptimisticFeelHeardTimestamp(new Date().toISOString());
                   handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
                 }}
-                onContinue={handleDismissFeelHeard}
+                onContinue={() => {
+                  // Track felt heard response as "no" (continue conversation)
+                  trackFeltHeardResponse(sessionId, 'no');
+                  handleDismissFeelHeard();
+                }}
               />
             </View>
           );
@@ -777,6 +828,8 @@ export function UnifiedSessionScreen({
               }}
               onConfirm={() => {
                 handleConfirmAgreement(agreements[0].id, () => {
+                  // Track session resolved
+                  trackSessionResolved(sessionId, 'agreement');
                   handleResolveSession(() => onStageComplete?.(Stage.STRATEGIC_REPAIR));
                 });
                 closeOverlay();
@@ -903,7 +956,7 @@ export function UnifiedSessionScreen({
         <ChatInterface
           messages={displayMessages}
           indicators={indicators}
-          onSendMessage={sendMessage}
+          onSendMessage={sendMessageWithTracking}
           isLoading={isSending || isFetchingInitialMessage}
           showEmotionSlider={effectiveStage === Stage.WITNESS && !isInvitationPhase && !isRefiningInvitation}
           emotionValue={barometerValue}
@@ -952,6 +1005,8 @@ export function UnifiedSessionScreen({
                     <TouchableOpacity
                       style={styles.continueButton}
                       onPress={() => {
+                        // Track invitation sent
+                        trackInvitationSent(sessionId, 'share_sheet');
                         // Optimistic UI: immediately show loading state and indicator
                         setIsConfirmingInvitation(true);
                         setOptimisticConfirmTimestamp(new Date().toISOString());
@@ -1097,7 +1152,10 @@ export function UnifiedSessionScreen({
       {/* Curiosity Compact Overlay - blocks interaction until signed */}
       <CuriosityCompactOverlay
         visible={shouldShowCompactOverlay}
-        onSign={() => handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING))}
+        onSign={() => {
+          trackCompactSigned(sessionId, invitation?.isInviter ?? true);
+          handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING));
+        }}
         onNavigateBack={onNavigateBack}
         isPending={isSigningCompact}
       />

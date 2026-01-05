@@ -12,7 +12,9 @@
   "dependencies": {
     "@clerk/nextjs": "^6.12.0",
     "@clerk/themes": "^2.4.46",
+    "@types/mixpanel-browser": "^2.60.0",
     "lucide-react": "^0.469.0",
+    "mixpanel-browser": "^2.73.0",
     "next": "^16.1.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

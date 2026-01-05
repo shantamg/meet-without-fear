@@ -10,6 +10,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 
 import { InnerThoughtsScreen } from '@/src/screens/InnerThoughtsScreen';
 import { useCreateInnerThoughtsSession } from '@/src/hooks';
+import { trackInnerThoughtsCreated, trackInnerThoughtsLinked } from '@/src/services/analytics';
 
 export default function InnerThoughtsChatScreen() {
   const router = useRouter();
@@ -34,6 +35,14 @@ export default function InnerThoughtsChatScreen() {
         },
         {
           onSuccess: (result) => {
+            // Track inner thoughts creation
+            trackInnerThoughtsCreated(result.session.id);
+
+            // Track linking if connected to a partner session
+            if (partnerSessionId) {
+              trackInnerThoughtsLinked(result.session.id, partnerSessionId);
+            }
+
             // Replace the route with the real session ID
             router.replace({
               pathname: '/inner-thoughts/[id]',

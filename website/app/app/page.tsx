@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Apple, Smartphone, ArrowLeft } from "lucide-react";
+import { trackAppDownload } from "@/lib/mixpanel";
 
 type Platform = "ios" | "android";
 
@@ -23,6 +24,10 @@ export default function AppDownloadPage() {
 
   const testFlightUrl = process.env.NEXT_PUBLIC_TESTFLIGHT_URL || "https://testflight.apple.com/join/YOUR_CODE";
   const androidApkUrl = process.env.NEXT_PUBLIC_ANDROID_APK_URL || "https://github.com/YOUR_ORG/releases/latest/download/app.apk";
+
+  const handleDownloadClick = (platform: Platform) => {
+    trackAppDownload(platform, "app_page");
+  };
 
   return (
     <main className="min-h-screen bg-background">
@@ -102,6 +107,7 @@ export default function AppDownloadPage() {
                     href={testFlightUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={() => handleDownloadClick("ios")}
                     className="text-brand-blue hover:underline text-sm"
                   >
                     Or open TestFlight link directly →
@@ -113,6 +119,7 @@ export default function AppDownloadPage() {
                   href={testFlightUrl}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => handleDownloadClick("ios")}
                   className="md:hidden inline-flex items-center justify-center gap-3 bg-brand-orange text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-brand-orange/90 transition-all"
                 >
                   <Apple className="w-6 h-6" />
@@ -137,6 +144,7 @@ export default function AppDownloadPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   download
+                  onClick={() => handleDownloadClick("android")}
                   className="md:hidden inline-flex items-center justify-center gap-3 bg-brand-orange text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-brand-orange/90 transition-all"
                 >
                   <Smartphone className="w-6 h-6" />

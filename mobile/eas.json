@@ -10,7 +10,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "http://localhost:3000",
         "EXPO_PUBLIC_BUNDLE_ID": "com.meetwithoutfear.app.dev",
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cmVhZHktamF5LTUyLmNsZXJrLmFjY291bnRzLmRldiQ"
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cmVhZHktamF5LTUyLmNsZXJrLmFjY291bnRzLmRldiQ",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
       }
     },
     "development-production": {
@@ -18,7 +19,8 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.meetwithoutfear.com",
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubWVldHdpdGhvdXRmZWFyLmNvbSQ"
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubWVldHdpdGhvdXRmZWFyLmNvbSQ",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
       }
     },
     "development-simulator": {
@@ -30,19 +32,22 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "http://localhost:3000",
         "EXPO_PUBLIC_BUNDLE_ID": "com.meetwithoutfear.app.dev",
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cmVhZHktamF5LTUyLmNsZXJrLmFjY291bnRzLmRldiQ"
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cmVhZHktamF5LTUyLmNsZXJrLmFjY291bnRzLmRldiQ",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.meetwithoutfear.com"
+        "EXPO_PUBLIC_API_URL": "https://api.meetwithoutfear.com",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
       }
     },
     "production": {
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.meetwithoutfear.com",
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubWVldHdpdGhvdXRmZWFyLmNvbSQ"
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubWVldHdpdGhvdXRmZWFyLmNvbSQ",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
       }
     },
     "android-apk": {
@@ -50,7 +55,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.meetwithoutfear.com"
+        "EXPO_PUBLIC_API_URL": "https://api.meetwithoutfear.com",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
       }
     }
   },

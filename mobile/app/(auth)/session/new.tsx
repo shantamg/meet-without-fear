@@ -29,6 +29,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCreateSession } from '@/src/hooks/useSessions';
 import { usePeople } from '@/src/hooks/usePerson';
 import { colors } from '@/src/theme';
+import { trackSessionCreated, trackPersonSelected } from '@/src/services/analytics';
 import type { PersonSummaryDTO } from '@meet-without-fear/shared';
 
 // ============================================================================
@@ -53,10 +54,15 @@ export default function NewSessionScreen() {
 
   const handleSubmit = async () => {
     if (effectiveMode === 'pick' && selectedPerson) {
+      // Track person selection
+      trackPersonSelected(selectedPerson.id, false);
+
       try {
         const response = await createSession({
           personId: selectedPerson.id,
         });
+        // Track session creation
+        trackSessionCreated(response.session.id, selectedPerson.id);
         router.replace(`/session/${response.session.id}`);
       } catch (error) {
         console.error('Failed to create session:', error);
@@ -76,6 +82,10 @@ export default function NewSessionScreen() {
         const response = await createSession({
           inviteName,
         });
+        // Track person selection (new person) and session creation
+        // Note: personId not available in response, using relationshipId
+        trackPersonSelected(response.session.relationshipId, true);
+        trackSessionCreated(response.session.id, response.session.relationshipId);
         router.replace(`/session/${response.session.id}`);
       } catch (error) {
         console.error('Failed to create session:', error);

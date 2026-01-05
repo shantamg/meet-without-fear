@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth, useUser, useClerk, SignIn } from "@clerk/nextjs";
 import Link from "next/link";
@@ -14,6 +14,11 @@ import {
   Download,
 } from "lucide-react";
 import { getInvitation, acceptInvitation, InvitationDetails } from "@/lib/api";
+import {
+  trackInvitationViewed,
+  trackInvitationAccepted,
+  trackAppDownload,
+} from "@/lib/mixpanel";
 
 type InvitationState =
   | "loading"
@@ -40,6 +45,7 @@ export default function InvitationPage() {
   const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasSignedOut, setHasSignedOut] = useState(false);
+  const hasTrackedView = useRef(false);
 
   // Sign out any existing session when visiting invitation page
   // This ensures invitees start with a fresh auth state
@@ -82,6 +88,10 @@ export default function InvitationPage() {
       if (!invitationId) {
         console.log("[Invitation] No invitation ID, marking not_found");
         setState("not_found");
+        if (!hasTrackedView.current) {
+          trackInvitationViewed("unknown", "not_found");
+          hasTrackedView.current = true;
+        }
         return;
       }
 
@@ -99,24 +109,44 @@ export default function InvitationPage() {
         if (!data) {
           console.log("[Invitation] No invitation data, marking not_found");
           setState("not_found");
+          if (!hasTrackedView.current) {
+            trackInvitationViewed(invitationId, "not_found");
+            hasTrackedView.current = true;
+          }
           return;
         }
 
         setInvitation(data);
 
-        // Check invitation status
+        // Check invitation status and track view
         if (data.status === "EXPIRED") {
           console.log("[Invitation] Status: EXPIRED");
           setState("expired");
+          if (!hasTrackedView.current) {
+            trackInvitationViewed(invitationId, "expired");
+            hasTrackedView.current = true;
+          }
         } else if (data.status === "ACCEPTED") {
           console.log("[Invitation] Status: ACCEPTED");
           setState("accepted");
+          if (!hasTrackedView.current) {
+            trackInvitationViewed(invitationId, "accepted");
+            hasTrackedView.current = true;
+          }
         } else if (data.status === "DECLINED") {
           console.log("[Invitation] Status: DECLINED");
           setState("declined");
+          if (!hasTrackedView.current) {
+            trackInvitationViewed(invitationId, "declined");
+            hasTrackedView.current = true;
+          }
         } else {
           console.log("[Invitation] Status: PENDING, needs auth");
           setState("needs_auth");
+          if (!hasTrackedView.current) {
+            trackInvitationViewed(invitationId, "pending");
+            hasTrackedView.current = true;
+          }
         }
       } catch (err) {
         console.error("[Invitation] Error fetching invitation:", err);
@@ -172,6 +202,7 @@ export default function InvitationPage() {
         if (result.success) {
           console.log("[Invitation] Accept successful!");
           setState("success");
+          trackInvitationAccepted(invitationId, invitation?.invitedBy?.id);
         } else {
           console.error("[Invitation] Accept failed:", result.error);
           setError(result.error || "Failed to accept invitation");
@@ -304,6 +335,13 @@ function ExpiredState({ inviterName }: { inviterName: string | null }) {
 }
 
 function AlreadyAcceptedState({ inviterName }: { inviterName: string | null }) {
+  const handleDownloadClick = () => {
+    // Detect platform for tracking
+    const userAgent = navigator.userAgent || navigator.vendor;
+    const platform = /android/i.test(userAgent) ? "android" : "ios";
+    trackAppDownload(platform, "invitation_already_accepted");
+  };
+
   return (
     <main className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="text-center max-w-md">
@@ -317,6 +355,7 @@ function AlreadyAcceptedState({ inviterName }: { inviterName: string | null }) {
         </p>
         <Link
           href="/app"
+          onClick={handleDownloadClick}
           className="inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-6 py-3 rounded-xl font-semibold hover:bg-accent/90 transition-all"
         >
           <Download className="w-5 h-5" />
@@ -424,6 +463,13 @@ function AcceptingState() {
 }
 
 function SuccessState() {
+  const handleDownloadClick = () => {
+    // Detect platform for tracking
+    const userAgent = navigator.userAgent || navigator.vendor;
+    const platform = /android/i.test(userAgent) ? "android" : "ios";
+    trackAppDownload(platform, "invitation_success");
+  };
+
   return (
     <main className="min-h-screen flex items-center justify-center bg-background p-6">
       <div className="text-center max-w-md">
@@ -436,6 +482,7 @@ function SuccessState() {
         </p>
         <Link
           href="/app"
+          onClick={handleDownloadClick}
           className="inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-accent/90 transition-all"
         >
           <Download className="w-5 h-5" />
