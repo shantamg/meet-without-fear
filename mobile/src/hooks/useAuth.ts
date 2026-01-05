@@ -47,6 +47,7 @@ export function useAuth(): AuthContextValue {
 export function useAuthProvider(): AuthContextValue {
   const { isSignedIn, isLoaded, signOut: clerkSignOut, getToken } = useClerkAuth();
   const { user: clerkUser } = useClerkUser();
+  const queryClient = useQueryClient();
 
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
@@ -107,8 +108,11 @@ export function useAuthProvider(): AuthContextValue {
 
   const signOut = useCallback(async () => {
     setUser(null);
+    // Clear all React Query cache to prevent stale user data
+    // when signing back in with a different account
+    queryClient.clear();
     await clerkSignOut();
-  }, [clerkSignOut]);
+  }, [clerkSignOut, queryClient]);
 
   const getTokenFn = useCallback(async () => {
     return getToken();

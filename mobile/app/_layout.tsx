@@ -85,7 +85,9 @@ export default function RootLayout() {
       <ClerkLoaded>
         <HideSplashOnReady />
         <ClerkAuthSetup />
-        <AuthProviderWrapper />
+        <QueryProvider>
+          <AuthProviderWrapper />
+        </QueryProvider>
       </ClerkLoaded>
     </ClerkProvider>
   );
@@ -93,6 +95,7 @@ export default function RootLayout() {
 
 /**
  * Auth provider wrapper - must be inside ClerkLoaded so useAuthProvider can use Clerk hooks
+ * Must also be inside QueryProvider so useAuthProvider can clear cache on sign out
  */
 function AuthProviderWrapper() {
   const auth = useAuthProvider();
@@ -101,18 +104,16 @@ function AuthProviderWrapper() {
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaProvider>
         <AuthContext.Provider value={auth}>
-          <QueryProvider>
-            <ToastProvider>
-              <MixpanelInitializer />
-              <NotificationInitializer />
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(public)" />
-                <Stack.Screen name="(auth)" />
-                <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-              </Stack>
-              <StatusBar style="light" />
-            </ToastProvider>
-          </QueryProvider>
+          <ToastProvider>
+            <MixpanelInitializer />
+            <NotificationInitializer />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(public)" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+            </Stack>
+            <StatusBar style="light" />
+          </ToastProvider>
         </AuthContext.Provider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
