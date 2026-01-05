@@ -198,19 +198,15 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
           });
           currentStage = 1;
         } else {
-          // Compact not signed yet - they need to sign first
-          errorResponse(
-            res,
-            'VALIDATION_ERROR',
-            'Please sign the Curiosity Compact before starting your conversation',
-            400
-          );
-          return;
+          // Compact not signed yet - allow onboarding chat
+          // The onboarding prompt will help them understand the process
+          console.log(`[sendMessage] Allowing onboarding chat for user ${user.id} in Stage 0 (compact not signed)`);
+          // Stay at Stage 0, allow message with onboarding flag
         }
       }
-    } else if (currentStage < 1 || currentStage > 4) {
-      // Chat is available in stages 1-4
-      console.log(`[sendMessage] User ${user.id} in session ${sessionId} is in stage ${currentStage}, outside valid range 1-4`);
+    } else if (currentStage < 0 || currentStage > 4) {
+      // Chat is available in stages 0-4 (Stage 0 for onboarding, Stages 1-4 for main flow)
+      console.log(`[sendMessage] User ${user.id} in session ${sessionId} is in stage ${currentStage}, outside valid range 0-4`);
       errorResponse(
         res,
         'VALIDATION_ERROR',
@@ -310,6 +306,11 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     // Check if we're in the invitation crafting phase (session status is CREATED)
     const isInvitationPhase = session.status === 'CREATED';
 
+    // Check if we're in onboarding mode (Stage 0 with compact not signed)
+    // This happens when the user is viewing the Curiosity Compact and may have questions
+    const myGates = progress?.gatesSatisfied as Record<string, unknown> | null;
+    const isOnboarding = currentStage === 0 && !isInvitationPhase && !myGates?.compactSigned;
+
     // Check if user is trying to refine their invitation (session is INVITED and they ask to refine)
     const isRefiningInvitation =
       session.status === 'INVITED' &&
@@ -372,6 +373,7 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       currentInvitationMessage,
       currentEmpathyDraft,
       isRefiningEmpathy,
+      isOnboarding, // Stage 0 with compact not signed - use onboarding prompt
     };
 
     // Get AI response using full orchestration pipeline

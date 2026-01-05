@@ -75,6 +75,8 @@ export interface OrchestratorContext {
   currentEmpathyDraft?: string | null;
   /** Whether the user is actively refining their empathy draft */
   isRefiningEmpathy?: boolean;
+  /** Whether the user is in onboarding mode (compact not yet signed) */
+  isOnboarding?: boolean;
 }
 
 export interface OrchestratorResult {
@@ -231,6 +233,7 @@ export async function orchestrateResponse(
       isRefiningInvitation: context.isRefiningInvitation,
       isStageTransition: context.isStageTransition,
       previousStage: context.previousStage,
+      isOnboarding: context.isOnboarding,
     }
   );
 

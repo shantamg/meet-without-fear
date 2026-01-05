@@ -29,7 +29,9 @@ import { StrategyPool } from '../components/StrategyPool';
 import { StrategyRanking } from '../components/StrategyRanking';
 import { OverlapReveal } from '../components/OverlapReveal';
 import { AgreementCard } from '../components/AgreementCard';
-import { CuriosityCompactOverlay } from '../components/CuriosityCompactOverlay';
+// CuriosityCompactOverlay removed - now using inline approach
+import { CompactChatItem } from '../components/CompactChatItem';
+import { CompactAgreementBar } from '../components/CompactAgreementBar';
 import { InvitationShareButton } from '../components/InvitationShareButton';
 import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
@@ -253,6 +255,9 @@ export function UnifiedSessionScreen({
   // Store optimistic timestamp for feel-heard confirmation
   const [optimisticFeelHeardTimestamp, setOptimisticFeelHeardTimestamp] = useState<string | null>(null);
 
+  // Store optimistic timestamp for compact signing (for "Compact Signed" indicator)
+  const [optimisticCompactSignedTimestamp, setOptimisticCompactSignedTimestamp] = useState<string | null>(null);
+
   // -------------------------------------------------------------------------
   // Track Typewriter Animation State
   // -------------------------------------------------------------------------
@@ -269,6 +274,14 @@ export function UnifiedSessionScreen({
   // Update ref when milestones confirm feel-heard
   if (milestones?.feelHeardConfirmedAt && !hasEverConfirmedFeelHeard.current) {
     hasEverConfirmedFeelHeard.current = true;
+  }
+
+  // Once compact is signed, keep showing the indicator even during re-renders
+  const hasEverSignedCompact = useRef(false);
+
+  // Update ref when compact is signed
+  if (compactData?.mySigned && !hasEverSignedCompact.current) {
+    hasEverSignedCompact.current = true;
   }
 
   // Animation for the invitation panel slide-up
@@ -306,6 +319,13 @@ export function UnifiedSessionScreen({
     }
   }, [milestones?.feelHeardConfirmedAt, optimisticFeelHeardTimestamp]);
 
+  // Clear compact-signed optimistic state when API confirms
+  useEffect(() => {
+    if (compactData?.mySigned && optimisticCompactSignedTimestamp) {
+      setOptimisticCompactSignedTimestamp(null);
+    }
+  }, [compactData?.mySigned, optimisticCompactSignedTimestamp]);
+
   // Build indicators array
   // Use messageConfirmedAt from API for reliable positioning across reloads
   const indicators = useMemo((): ChatIndicatorItem[] => {
@@ -336,6 +356,19 @@ export function UnifiedSessionScreen({
       });
     }
 
+    // Show "Compact Signed" indicator when user signs the compact
+    // Use optimistic timestamp during signing, or API signedAt timestamp
+    const compactSignedAt = compactData?.mySignedAt ?? optimisticCompactSignedTimestamp;
+    const shouldShowCompactSigned = hasEverSignedCompact.current || compactData?.mySigned || isSigningCompact;
+    if (shouldShowCompactSigned && compactSignedAt) {
+      items.push({
+        type: 'indicator',
+        indicatorType: 'compact-signed',
+        id: 'compact-signed',
+        timestamp: compactSignedAt,
+      });
+    }
+
     // Show "Felt Heard" indicator when user confirms they feel heard
     // Use API timestamp for reliable positioning, or optimistic timestamp during confirmation
     // IMPORTANT: Use hasEverConfirmedFeelHeard ref to prevent indicator from disappearing
@@ -351,7 +384,7 @@ export function UnifiedSessionScreen({
       });
     }
     return items;
-  }, [invitationConfirmed, isConfirmingInvitation, invitation?.messageConfirmedAt, invitation?.acceptedAt, invitation?.isInviter, optimisticConfirmTimestamp, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, optimisticFeelHeardTimestamp]);
+  }, [invitationConfirmed, isConfirmingInvitation, invitation?.messageConfirmedAt, invitation?.acceptedAt, invitation?.isInviter, optimisticConfirmTimestamp, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, optimisticCompactSignedTimestamp, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, optimisticFeelHeardTimestamp]);
 
   // -------------------------------------------------------------------------
   // Effective Stage (accounts for compact signed but stage not yet updated)
@@ -646,16 +679,18 @@ export function UnifiedSessionScreen({
   }, [invitation?.id]);
 
   // -------------------------------------------------------------------------
-  // Curiosity Compact Overlay - shown when compact needs to be signed
+  // Onboarding State - determines if we show the inline compact
   // -------------------------------------------------------------------------
-  // The compact is shown as an overlay while the chat loads in the background.
-  // This allows the initial AI message to be fetched while the user reviews the compact.
-  // Shows regardless of invitation phase - compact must be signed first before any chat interaction.
-  // Important: Show overlay while compact status is loading OR if compact is not signed.
-  // This prevents users from interacting with chat before compact status is confirmed.
-  const shouldShowCompactOverlay =
+  // When in onboarding stage and compact is not signed, show the compact inline in chat
+  // with an agreement bar above the input. No overlay needed - it's all integrated.
+  const isInOnboardingUnsigned =
     currentStage === Stage.ONBOARDING &&
-    (loadingCompact || !compactData?.mySigned);
+    !loadingCompact &&
+    !compactData?.mySigned;
+
+  // Legacy: Keep shouldShowCompactOverlay for backwards compatibility during transition
+  // This should always be false now since we use inline approach
+  const shouldShowCompactOverlay = false;
 
   // -------------------------------------------------------------------------
   // Session Entry Mood Check - shown after compact signed, before chat
@@ -667,8 +702,8 @@ export function UnifiedSessionScreen({
   const shouldShowMoodCheck = useMemo(() => {
     // Don't show if still loading
     if (isLoading) return false;
-    // Don't show if compact overlay is showing (must sign compact first)
-    if (shouldShowCompactOverlay) return false;
+    // Don't show if still in onboarding with unsigned compact (must sign compact first)
+    if (isInOnboardingUnsigned) return false;
     // Don't show if already completed mood check this session entry
     if (hasCompletedMoodCheck) return false;
     // Don't show if currently in an exercise overlay (user will set intensity after)
@@ -676,7 +711,7 @@ export function UnifiedSessionScreen({
 
     // Show mood check for all session entries
     return true;
-  }, [isLoading, shouldShowCompactOverlay, hasCompletedMoodCheck, activeOverlay]);
+  }, [isLoading, isInOnboardingUnsigned, hasCompletedMoodCheck, activeOverlay]);
 
   // -------------------------------------------------------------------------
   // Render Overlays
@@ -972,8 +1007,22 @@ export function UnifiedSessionScreen({
           isLoadingMore={isFetchingMoreMessages}
           onTypewriterStateChange={setIsTypewriterAnimating}
           renderAboveInput={
-            // Show invitation panel during invitation phase
-            (isInvitationPhase || isRefiningInvitation) && invitationMessage && invitationUrl
+            // Show compact agreement bar during onboarding when compact not signed
+            isInOnboardingUnsigned
+              ? () => (
+                  <CompactAgreementBar
+                    onSign={() => {
+                      // Set optimistic timestamp for immediate indicator display
+                      setOptimisticCompactSignedTimestamp(new Date().toISOString());
+                      trackCompactSigned(sessionId, invitation?.isInviter ?? true);
+                      handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING));
+                    }}
+                    isPending={isSigningCompact}
+                    testID="compact-agreement-bar"
+                  />
+                )
+              // Show invitation panel during invitation phase
+              : (isInvitationPhase || isRefiningInvitation) && invitationMessage && invitationUrl
               ? () => (
                   <Animated.View
                     style={[
@@ -1046,6 +1095,11 @@ export function UnifiedSessionScreen({
         />
 
         {/* Waiting banner removed - now handled in renderAboveInput */}
+
+        {/* Show Compact Chat Item when in onboarding with unsigned compact */}
+        {isInOnboardingUnsigned && (
+          <CompactChatItem testID="inline-compact" />
+        )}
 
         {/* Render inline cards at the end of the chat - ONLY after typewriter animation completes */}
         {/* This ensures UI elements like feel-heard confirmation appear after AI message finishes */}
@@ -1149,16 +1203,7 @@ export function UnifiedSessionScreen({
         />
       )}
 
-      {/* Curiosity Compact Overlay - blocks interaction until signed */}
-      <CuriosityCompactOverlay
-        visible={shouldShowCompactOverlay}
-        onSign={() => {
-          trackCompactSigned(sessionId, invitation?.isInviter ?? true);
-          handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING));
-        }}
-        onNavigateBack={onNavigateBack}
-        isPending={isSigningCompact}
-      />
+      {/* Note: CuriosityCompactOverlay removed - now using inline CompactChatItem + CompactAgreementBar */}
 
       {/* Note: SessionEntryMoodCheck is now handled via early return above
           to prevent flash of session content behind it */}

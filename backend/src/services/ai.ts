@@ -65,6 +65,8 @@ export interface FullAIContext extends WitnessContext {
   currentEmpathyDraft?: string | null;
   /** Whether the user is actively refining their empathy draft */
   isRefiningEmpathy?: boolean;
+  /** Whether the user is in onboarding mode (compact not yet signed) */
+  isOnboarding?: boolean;
 }
 
 // Re-export orchestrator types for convenience
@@ -294,6 +296,7 @@ export async function getOrchestratedResponse(
     currentInvitationMessage: context.currentInvitationMessage,
     currentEmpathyDraft: context.currentEmpathyDraft,
     isRefiningEmpathy: context.isRefiningEmpathy,
+    isOnboarding: context.isOnboarding,
   };
 
   return orchestrateResponse(orchestratorContext);

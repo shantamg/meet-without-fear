@@ -12,7 +12,7 @@ import { createStyles } from '../theme/styled';
 // Types
 // ============================================================================
 
-export type ChatIndicatorType = 'invitation-sent' | 'invitation-accepted' | 'stage-transition' | 'session-start' | 'feel-heard';
+export type ChatIndicatorType = 'invitation-sent' | 'invitation-accepted' | 'stage-transition' | 'session-start' | 'feel-heard' | 'compact-signed';
 
 interface ChatIndicatorProps {
   type: ChatIndicatorType;
@@ -39,6 +39,8 @@ export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
         return 'Session Started';
       case 'feel-heard':
         return 'Felt Heard';
+      case 'compact-signed':
+        return 'Compact Signed';
       default:
         return '';
     }
@@ -51,6 +53,8 @@ export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
         return styles.invitationSentLine;
       case 'feel-heard':
         return styles.feelHeardLine;
+      case 'compact-signed':
+        return styles.compactSignedLine;
       default:
         return styles.defaultLine;
     }
@@ -63,6 +67,8 @@ export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
         return styles.invitationSentText;
       case 'feel-heard':
         return styles.feelHeardText;
+      case 'compact-signed':
+        return styles.compactSignedText;
       default:
         return styles.defaultText;
     }
@@ -120,6 +126,13 @@ const useStyles = () =>
     },
     feelHeardText: {
       color: 'rgba(20, 184, 166, 0.9)',
+    },
+    // Compact signed: dark blue tint for commitment
+    compactSignedLine: {
+      backgroundColor: 'rgba(59, 130, 246, 0.3)',
+    },
+    compactSignedText: {
+      color: 'rgba(59, 130, 246, 0.9)',
     },
     defaultLine: {
       backgroundColor: t.colors.border,
