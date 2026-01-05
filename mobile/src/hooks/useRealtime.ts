@@ -133,6 +133,8 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingRef = useRef<boolean>(false);
+  const isConnectingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   // ============================================================================
   // Connection Management
@@ -168,6 +170,19 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
       return;
     }
 
+    // Prevent multiple simultaneous connection attempts
+    if (isConnectingRef.current) {
+      console.log('[Realtime] Already connecting, skipping...');
+      return;
+    }
+
+    // If already connected, skip
+    if (ablyRef.current?.connection?.state === 'connected') {
+      console.log('[Realtime] Already connected, skipping...');
+      return;
+    }
+
+    isConnectingRef.current = true;
     console.log('[Realtime] Connecting as user:', user.id, 'to session:', sessionId);
 
     try {
@@ -295,12 +310,20 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
         console.log('[Realtime] Current presence members:', members.map(m => m.clientId));
         const partnerPresent = members.some((m: Ably.PresenceMessage) => m.clientId !== user.id);
         console.log('[Realtime] Partner present:', partnerPresent);
-        setPartnerOnline(partnerPresent);
+        if (isMountedRef.current) {
+          setPartnerOnline(partnerPresent);
+        }
       }
+
+      // Connection setup complete
+      isConnectingRef.current = false;
     } catch (err) {
       console.error('[Realtime] Connection error:', err);
-      setError(err instanceof Error ? err.message : 'Connection failed');
-      setConnectionStatus(ConnectionStatus.FAILED);
+      isConnectingRef.current = false;
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err.message : 'Connection failed');
+        setConnectionStatus(ConnectionStatus.FAILED);
+      }
     }
   }, [
     user,
@@ -315,19 +338,30 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
   ]);
 
   const disconnect = useCallback(() => {
+    console.log('[Realtime] Disconnecting...');
+    isConnectingRef.current = false;
+
     if (channelRef.current) {
-      channelRef.current.unsubscribe();
-      channelRef.current.presence.unsubscribe();
-      // Leave presence (fire and forget)
-      channelRef.current.presence.leave().catch((err) => {
-        console.warn('[Realtime] Error leaving presence:', err);
-      });
+      try {
+        channelRef.current.unsubscribe();
+        channelRef.current.presence.unsubscribe();
+        // Leave presence (fire and forget)
+        channelRef.current.presence.leave().catch((err) => {
+          console.warn('[Realtime] Error leaving presence:', err);
+        });
+      } catch (err) {
+        console.warn('[Realtime] Error during channel cleanup:', err);
+      }
       channelRef.current = null;
     }
 
     if (ablyRef.current) {
-      ablyRef.current.connection.off();
-      ablyRef.current.close();
+      try {
+        ablyRef.current.connection.off();
+        ablyRef.current.close();
+      } catch (err) {
+        console.warn('[Realtime] Error during ably cleanup:', err);
+      }
       ablyRef.current = null;
     }
 
@@ -336,9 +370,11 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
       reconnectTimeoutRef.current = null;
     }
 
-    setConnectionStatus(ConnectionStatus.DISCONNECTED);
-    setPartnerOnline(false);
-    setPartnerTyping(false);
+    if (isMountedRef.current) {
+      setConnectionStatus(ConnectionStatus.DISCONNECTED);
+      setPartnerOnline(false);
+      setPartnerTyping(false);
+    }
   }, []);
 
   const reconnect = useCallback(() => {
@@ -426,12 +462,29 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
   // Lifecycle
   // ============================================================================
 
+  // Track mounted state
   useEffect(() => {
-    connect();
+    isMountedRef.current = true;
     return () => {
-      disconnect();
+      isMountedRef.current = false;
     };
-  }, [connect, disconnect]);
+  }, []);
+
+  // Connect/disconnect based on sessionId and user
+  // Using refs for connect/disconnect to avoid dependency issues
+  const connectRef = useRef(connect);
+  const disconnectRef = useRef(disconnect);
+  connectRef.current = connect;
+  disconnectRef.current = disconnect;
+
+  useEffect(() => {
+    if (!sessionId || !user?.id) return;
+
+    connectRef.current();
+    return () => {
+      disconnectRef.current();
+    };
+  }, [sessionId, user?.id]);
 
   // ============================================================================
   // Return Value
