@@ -69,6 +69,8 @@ interface ChatInterfaceProps {
   customEmptyState?: React.ReactNode;
   /** Keyboard vertical offset for iOS (accounts for header + status bar) */
   keyboardVerticalOffset?: number;
+  /** Skip marking initial messages as history - animate them instead (e.g., after compact signing + mood check) */
+  skipInitialHistory?: boolean;
 }
 
 // ============================================================================
@@ -101,6 +103,7 @@ export function ChatInterface({
   onTypewriterStateChange,
   customEmptyState,
   keyboardVerticalOffset = 100,
+  skipInitialHistory = false,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -181,12 +184,30 @@ export function ChatInterface({
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
 
+  // Track previous value of customEmptyState to detect compact signing
+  const prevCustomEmptyStateRef = useRef(customEmptyState);
+
   // Synchronously capture initial message IDs on first render
   // This ensures first render already knows these are history messages
+  // Skip this if skipInitialHistory is true AND there's only one message
+  // (e.g., after compact signing + mood check with just the first AI message)
+  // If there are multiple messages, it's a returning session - treat as history
   if (isInitialLoadRef.current && messages.length > 0) {
-    messages.forEach(m => knownMessageIdsRef.current.add(m.id));
+    const shouldSkip = skipInitialHistory && messages.length === 1;
+    if (!shouldSkip) {
+      messages.forEach(m => knownMessageIdsRef.current.add(m.id));
+    }
     isInitialLoadRef.current = false;
   }
+
+  // Detect when custom empty state is removed (e.g., compact was signed)
+  // Mark initial load as complete so new messages after this get typewriter effect
+  useEffect(() => {
+    if (prevCustomEmptyStateRef.current !== undefined && customEmptyState === undefined) {
+      isInitialLoadRef.current = false;
+    }
+    prevCustomEmptyStateRef.current = customEmptyState;
+  }, [customEmptyState]);
 
   // Also add any messages loaded as history (from pagination)
   // This happens when isLoadingMore transitions from true to false with new messages

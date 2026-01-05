@@ -260,6 +260,10 @@ export function UnifiedSessionScreen({
   // Store optimistic timestamp for compact signing (for "Compact Signed" indicator)
   const [optimisticCompactSignedTimestamp, setOptimisticCompactSignedTimestamp] = useState<string | null>(null);
 
+  // Track if compact was just signed in this session (for typewriter animation)
+  // This is set when user signs compact and reset after first message animates
+  const [justSignedCompact, setJustSignedCompact] = useState(false);
+
   // -------------------------------------------------------------------------
   // Track Typewriter Animation State
   // -------------------------------------------------------------------------
@@ -713,29 +717,29 @@ export function UnifiedSessionScreen({
   const shouldShowCompactOverlay = false;
 
   // -------------------------------------------------------------------------
-  // Session Entry Mood Check - shown on re-entry to session (not during onboarding)
+  // Session Entry Mood Check - shown on session entry
   // -------------------------------------------------------------------------
   // Asks user "How are you feeling right now?" to set accurate barometer value.
   // Only shows once per session entry (resets when navigating away and back).
   // Skipped if user is currently in an exercise overlay (will set intensity after).
-  // Skipped during entire onboarding stage (including compact display and signing).
+  // Skipped while viewing the unsigned compact (would disrupt the signing flow).
   // NOTE: This must be before early returns to maintain hook order
   const shouldShowMoodCheck = useMemo(() => {
     // Don't show if still loading
     if (isLoading) return false;
-    // Don't show during entire onboarding stage - compact must be signed and stage advanced
-    // This covers: viewing compact, signing compact, and any loading states during onboarding
-    if (currentStage === Stage.ONBOARDING) return false;
     // Don't show if still loading compact data
     if (loadingCompact) return false;
+    // Don't show while viewing the unsigned compact (would disrupt the flow)
+    // This allows mood check during invitation phase and after compact is signed
+    if (isInOnboardingUnsigned) return false;
     // Don't show if already completed mood check this session entry
     if (hasCompletedMoodCheck) return false;
     // Don't show if currently in an exercise overlay (user will set intensity after)
     if (activeOverlay) return false;
 
-    // Show mood check for sessions that have progressed past onboarding
+    // Show mood check for all other cases
     return true;
-  }, [isLoading, currentStage, loadingCompact, hasCompletedMoodCheck, activeOverlay]);
+  }, [isLoading, loadingCompact, isInOnboardingUnsigned, hasCompletedMoodCheck, activeOverlay]);
 
   // -------------------------------------------------------------------------
   // Memoized Empty State Element (prevents typewriter restart on re-render)
@@ -1038,6 +1042,15 @@ export function UnifiedSessionScreen({
           hasMore={hasMoreMessages}
           isLoadingMore={isFetchingMoreMessages}
           onTypewriterStateChange={setIsTypewriterAnimating}
+          onTypewriterComplete={() => {
+            // Reset justSignedCompact after first message animates
+            if (justSignedCompact) {
+              setJustSignedCompact(false);
+            }
+          }}
+          // Skip initial history detection if compact was just signed and mood check completed
+          // This ensures the first AI message after compact signing gets typewriter animation
+          skipInitialHistory={justSignedCompact && hasCompletedMoodCheck}
           // Show compact as custom empty state during onboarding when not signed
           customEmptyState={
             isInOnboardingUnsigned ? compactEmptyStateElement : undefined
@@ -1050,6 +1063,8 @@ export function UnifiedSessionScreen({
                     onSign={() => {
                       // Set optimistic timestamp for immediate indicator display
                       setOptimisticCompactSignedTimestamp(new Date().toISOString());
+                      // Mark that compact was just signed (for typewriter animation after mood check)
+                      setJustSignedCompact(true);
                       trackCompactSigned(sessionId, invitation?.isInviter ?? true);
                       handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING));
                     }}
