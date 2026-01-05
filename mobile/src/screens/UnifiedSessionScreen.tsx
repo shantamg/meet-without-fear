@@ -141,6 +141,8 @@ export function UnifiedSessionScreen({
     invitationMessage,
     invitationConfirmed,
     invitation,
+    localInvitationConfirmed,
+    setLocalInvitationConfirmed,
 
     // Stage-specific data
     compactData,
@@ -288,10 +290,12 @@ export function UnifiedSessionScreen({
   const invitationPanelAnim = useRef(new Animated.Value(0)).current;
 
   // Calculate whether panel should show: have message, in right phase
+  // Uses localInvitationConfirmed from hook (survives component remounts)
   const shouldShowInvitationPanel = !!(
     invitationMessage &&
     (isInvitationPhase || isRefiningInvitation) &&
-    !isConfirmingInvitation // Hide panel when confirming
+    !isConfirmingInvitation && // Hide panel when confirming
+    !localInvitationConfirmed // Keep hidden permanently after user confirms (from hook)
   );
 
   // Animate panel when shouldShowInvitationPanel changes
@@ -306,11 +310,24 @@ export function UnifiedSessionScreen({
 
   // Clear optimistic state when API confirms
   useEffect(() => {
-    if (invitationConfirmed && isConfirmingInvitation) {
+    if (invitationConfirmed) {
+      if (isConfirmingInvitation) {
+        setIsConfirmingInvitation(false);
+      }
+      if (optimisticConfirmTimestamp) {
+        setOptimisticConfirmTimestamp(null);
+      }
+    }
+  }, [invitationConfirmed, isConfirmingInvitation, optimisticConfirmTimestamp]);
+
+  // If we've left the invitation phase (stage advanced) but optimistic loading
+  // is still set, clear it so the typing indicator/input re-enable correctly.
+  useEffect(() => {
+    if (!isInvitationPhase && isConfirmingInvitation) {
       setIsConfirmingInvitation(false);
       setOptimisticConfirmTimestamp(null);
     }
-  }, [invitationConfirmed, isConfirmingInvitation]);
+  }, [isInvitationPhase, isConfirmingInvitation]);
 
   // Clear feel-heard optimistic state when API confirms
   useEffect(() => {
@@ -336,7 +353,7 @@ export function UnifiedSessionScreen({
     const confirmedAt = invitation?.messageConfirmedAt ?? optimisticConfirmTimestamp;
     const isInviter = invitation?.isInviter ?? true; // Default to inviter for backwards compatibility
 
-    if (isInviter && (invitationConfirmed || isConfirmingInvitation) && confirmedAt) {
+    if (isInviter && (invitationConfirmed || isConfirmingInvitation || localInvitationConfirmed) && confirmedAt) {
       items.push({
         type: 'indicator',
         indicatorType: 'invitation-sent',
@@ -992,8 +1009,8 @@ export function UnifiedSessionScreen({
           messages={displayMessages}
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
-          isLoading={isSending || isFetchingInitialMessage}
-          showEmotionSlider={effectiveStage === Stage.WITNESS && !isInvitationPhase && !isRefiningInvitation}
+          isLoading={isSending || isFetchingInitialMessage || isConfirmingInvitation || isConfirmingFeelHeard}
+          showEmotionSlider={!isInvitationPhase && !isRefiningInvitation}
           emotionValue={barometerValue}
           onEmotionChange={handleBarometerChange}
           onHighEmotion={(value) => {
@@ -1006,6 +1023,12 @@ export function UnifiedSessionScreen({
           hasMore={hasMoreMessages}
           isLoadingMore={isFetchingMoreMessages}
           onTypewriterStateChange={setIsTypewriterAnimating}
+          // Show compact as custom empty state during onboarding when not signed
+          renderCustomEmptyState={
+            isInOnboardingUnsigned
+              ? () => <CompactChatItem testID="inline-compact" />
+              : undefined
+          }
           renderAboveInput={
             // Show compact agreement bar during onboarding when compact not signed
             isInOnboardingUnsigned
@@ -1021,8 +1044,8 @@ export function UnifiedSessionScreen({
                     testID="compact-agreement-bar"
                   />
                 )
-              // Show invitation panel during invitation phase
-              : (isInvitationPhase || isRefiningInvitation) && invitationMessage && invitationUrl
+              // Show invitation panel during invitation phase (use shouldShowInvitationPanel for consistency)
+              : shouldShowInvitationPanel && invitationUrl
               ? () => (
                   <Animated.View
                     style={[
@@ -1056,11 +1079,16 @@ export function UnifiedSessionScreen({
                       onPress={() => {
                         // Track invitation sent
                         trackInvitationSent(sessionId, 'share_sheet');
+                        // Mark as confirmed permanently in hook state (survives remounts)
+                        setLocalInvitationConfirmed(true);
                         // Optimistic UI: immediately show loading state and indicator
                         setIsConfirmingInvitation(true);
                         setOptimisticConfirmTimestamp(new Date().toISOString());
                         setIsRefiningInvitation(false); // Exit refinement mode
-                        handleConfirmInvitationMessage(invitationMessage);
+                        handleConfirmInvitationMessage(invitationMessage, () => {
+                          // Clear loading state when mutation completes
+                          setIsConfirmingInvitation(false);
+                        });
                       }}
                       testID="invitation-continue-button"
                     >
@@ -1096,10 +1124,7 @@ export function UnifiedSessionScreen({
 
         {/* Waiting banner removed - now handled in renderAboveInput */}
 
-        {/* Show Compact Chat Item when in onboarding with unsigned compact */}
-        {isInOnboardingUnsigned && (
-          <CompactChatItem testID="inline-compact" />
-        )}
+        {/* Note: Compact is now rendered via renderCustomEmptyState in ChatInterface */}
 
         {/* Render inline cards at the end of the chat - ONLY after typewriter animation completes */}
         {/* This ensures UI elements like feel-heard confirmation appear after AI message finishes */}
@@ -1168,12 +1193,17 @@ export function UnifiedSessionScreen({
             sendMessage("I'd like to refine the invitation message.");
           }}
           onShareSuccess={() => {
+            // Mark as confirmed permanently in hook state (survives remounts)
+            setLocalInvitationConfirmed(true);
             // Optimistic UI: immediately show loading state and indicator
             setIsConfirmingInvitation(true);
             setOptimisticConfirmTimestamp(new Date().toISOString());
             setShowRefineDrawer(false);
             // Confirm the invitation after sharing
-            handleConfirmInvitationMessage(invitationMessage);
+            handleConfirmInvitationMessage(invitationMessage, () => {
+              // Clear loading state when mutation completes
+              setIsConfirmingInvitation(false);
+            });
           }}
           onClose={() => setShowRefineDrawer(false)}
         />

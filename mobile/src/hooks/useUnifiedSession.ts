@@ -322,6 +322,10 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Track AI recommendation for ready-to-share empathy (Stage 2)
   const [aiRecommendsReadyToShare, setAiRecommendsReadyToShare] = useState(false);
 
+  // Track local invitation confirmation (survives component remounts)
+  // This is set when user clicks "I've sent it" and prevents panel from reappearing
+  const [localInvitationConfirmed, setLocalInvitationConfirmed] = useState(false);
+
   // -------------------------------------------------------------------------
   // Consolidated Session State (reduces initial requests from ~5 to 1)
   // Returns session, progress, messages, invitation, and compact in one request
@@ -562,30 +566,45 @@ export function useUnifiedSession(sessionId: string | undefined) {
   }, [empathyDraftData?.draft?.content, empathyDraftData?.draft?.readyToShare, empathyDraftData?.alreadyConsented]);
 
   // -------------------------------------------------------------------------
+  // Initialize Feel-Heard Check State from Backend
+  // -------------------------------------------------------------------------
+  // When loading a session where AI has already recommended feel-heard check,
+  // restore the local state so the confirmation prompt appears
+  useEffect(() => {
+    if (currentStage === Stage.WITNESS && progressData?.myProgress?.gatesSatisfied) {
+      const gates = progressData.myProgress.gatesSatisfied as Record<string, unknown>;
+      // Check if feelHeardCheckOffered is set (Stage 1 specific gate)
+      if (gates.feelHeardCheckOffered === true && !gates.feelHeardConfirmed) {
+        setAiRecommendsFeelHeardCheck(true);
+      }
+    }
+  }, [currentStage, progressData?.myProgress?.gatesSatisfied]);
+
+  // -------------------------------------------------------------------------
   // Initial Message Effect
   // -------------------------------------------------------------------------
   // Fetch AI-generated initial message when session loads with no messages
+  // IMPORTANT: Skip during onboarding when compact is not signed - the compact
+  // should be the only content shown until user signs it
   useEffect(() => {
     // Skip if:
     // - No session ID
-    // - Still loading session or messages
+    // - Still loading session or messages or compact
     // - Already fetched or fetching
     // - Messages already exist
-    console.log('[useUnifiedSession] Initial message effect:', {
-      sessionId,
-      loadingSession,
-      loadingMessages,
-      hasFetched: hasFetchedInitialMessage.current,
-      isFetching: isFetchingInitialMessage,
-      pagesCount: messagesData?.pages?.length,
-    });
+    // - In onboarding with unsigned compact (compact must be signed first)
+
+    // Skip if still loading or during onboarding with unsigned compact
+    const isOnboardingUnsigned = currentStage === Stage.ONBOARDING && !compactData?.mySigned;
 
     if (
       !sessionId ||
       loadingSession ||
       loadingMessages ||
+      loadingCompact ||
       hasFetchedInitialMessage.current ||
-      isFetchingInitialMessage
+      isFetchingInitialMessage ||
+      isOnboardingUnsigned
     ) {
       return;
     }
@@ -593,14 +612,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
     // Check if messages are empty after loading completes
     const messagesPages = messagesData?.pages;
     const hasMessages = messagesPages && messagesPages.some(page => page.messages.length > 0);
-    console.log('[useUnifiedSession] Checking messages:', {
-      pagesLength: messagesPages?.length,
-      hasMessages,
-      firstPageMessages: messagesPages?.[0]?.messages?.length,
-    });
 
     if (!hasMessages) {
-      console.log('[useUnifiedSession] No messages found, fetching initial message...');
       hasFetchedInitialMessage.current = true;
       fetchInitialMessage({ sessionId });
     }
@@ -608,9 +621,12 @@ export function useUnifiedSession(sessionId: string | undefined) {
     sessionId,
     loadingSession,
     loadingMessages,
+    loadingCompact,
     messagesData?.pages,
     isFetchingInitialMessage,
     fetchInitialMessage,
+    currentStage,
+    compactData?.mySigned,
   ]);
 
   // -------------------------------------------------------------------------
@@ -964,7 +980,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
             const messagesPages = messagesData?.pages;
             const hasMessages = messagesPages && messagesPages.some(page => page.messages.length > 0);
             if (!hasMessages && !hasFetchedInitialMessage.current) {
-              console.log('[useUnifiedSession] Fetching initial message after signing compact...');
               hasFetchedInitialMessage.current = true;
               fetchInitialMessage({ sessionId });
             }
@@ -1155,6 +1170,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
     invitationMessage,
     invitationConfirmed,
     invitation,
+    localInvitationConfirmed,
+    setLocalInvitationConfirmed,
 
     // Stage-specific data
     compactData,
