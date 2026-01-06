@@ -17,13 +17,17 @@ import { createStyles } from '../theme/styled';
 
 interface CompactChatItemProps {
   testID?: string;
+  /** Whether this is shown after accepting an invitation (adapts intro text) */
+  isAfterInvitationAcceptance?: boolean;
 }
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const INTRO_TEXT = "Before we begin, I'd like you to review The Curiosity Compact. These are the commitments you'll both make to ensure a safe and productive conversation.";
+const INTRO_TEXT_NEW_SESSION = "Before we begin, I'd like you to review The Curiosity Compact. These are the commitments you'll both make to ensure a safe and productive conversation.";
+
+const INTRO_TEXT_AFTER_ACCEPTANCE = "Thanks for accepting the invitation! Before we begin, I'd like you to review The Curiosity Compact. These are the commitments you'll both make to ensure a safe and productive conversation.";
 
 const COMMITMENTS = [
   'Approach this process with curiosity rather than certainty',
@@ -105,12 +109,14 @@ function CompactSection({
 // Component
 // ============================================================================
 
-export function CompactChatItem({ testID }: CompactChatItemProps) {
+export function CompactChatItem({ testID, isAfterInvitationAcceptance = false }: CompactChatItemProps) {
   const styles = useStyles();
   const [introComplete, setIntroComplete] = useState(false);
   const [showCompact, setShowCompact] = useState(false);
   const [compactProgress, setCompactProgress] = useState(0);
   const [currentAnimatingIndex, setCurrentAnimatingIndex] = useState(0);
+
+  const introText = isAfterInvitationAcceptance ? INTRO_TEXT_AFTER_ACCEPTANCE : INTRO_TEXT_NEW_SESSION;
 
   // Total items: title(1) + commitments title(1) + commitments(6) + understandings title(1) + understandings(4) = 13
   const totalItems = 1 + 1 + COMMITMENTS.length + 1 + UNDERSTANDINGS.length;
@@ -136,7 +142,7 @@ export function CompactChatItem({ testID }: CompactChatItemProps) {
       {/* AI-style intro with typewriter effect */}
       <View style={styles.messageContainer}>
         <TypewriterText
-          text={INTRO_TEXT}
+          text={introText}
           style={styles.messageText}
           onComplete={() => setIntroComplete(true)}
         />

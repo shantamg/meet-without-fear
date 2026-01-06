@@ -712,10 +712,31 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // When in onboarding stage and compact is not signed, show the compact inline in chat
   // with an agreement bar above the input. No overlay needed - it's all integrated.
-  const isInOnboardingUnsigned =
-    currentStage === Stage.ONBOARDING &&
-    !loadingCompact &&
-    !compactData?.mySigned;
+  // Show compact if:
+  // - Stage is ONBOARDING (or progress hasn't loaded yet, which defaults to ONBOARDING)
+  // - User hasn't signed the compact yet (or compact data hasn't loaded yet)
+  // Important: For invitees who just accepted, we must show the compact even if data is still loading
+  const isInOnboardingUnsigned = useMemo(() => {
+    // If compact is already signed, never show it
+    if (compactData?.mySigned) {
+      return false;
+    }
+    
+    // If we're still loading and don't have progress data yet, default to showing compact
+    // This ensures invitees see the compact immediately after accepting
+    // (progress defaults to ONBOARDING stage when undefined)
+    if (isLoading && !myProgress) {
+      // Show compact optimistically if we're loading and don't have progress yet
+      // This handles the case where invitee just accepted and data is still loading
+      return true;
+    }
+    
+    // Once progress has loaded, check if we're in onboarding stage
+    const inOnboarding = currentStage === Stage.ONBOARDING;
+    
+    // Show compact if in onboarding and not signed
+    return inOnboarding;
+  }, [currentStage, isLoading, myProgress, compactData?.mySigned]);
 
   // Legacy: Keep shouldShowCompactOverlay for backwards compatibility during transition
   // This should always be false now since we use inline approach
@@ -750,9 +771,11 @@ export function UnifiedSessionScreen({
   // Memoized Empty State Element (prevents typewriter restart on re-render)
   // -------------------------------------------------------------------------
   // Use useMemo to create a stable element reference, not a render function
+  // Adapt intro text for invitees who accepted the invitation
+  const isInvitee = invitation && !invitation.isInviter;
   const compactEmptyStateElement = useMemo(() => {
-    return <CompactChatItem testID="inline-compact" />;
-  }, []);
+    return <CompactChatItem testID="inline-compact" isAfterInvitationAcceptance={isInvitee} />;
+  }, [isInvitee]);
 
   // -------------------------------------------------------------------------
   // Render Overlays
