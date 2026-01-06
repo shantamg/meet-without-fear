@@ -298,3 +298,111 @@ export {
   useApproveMemory,
   useRejectMemory,
 } from './useMemories';
+
+// ============================================================================
+// Needs Assessment ("Am I OK?")
+// ============================================================================
+
+export {
+  // Query keys
+  needsKeys,
+  // Hooks
+  useNeedsReference,
+  useNeedsState,
+  useSubmitBaseline,
+  useCheckInNeed,
+  useNeedHistory,
+  useUpdateNeedsPreferences,
+  // Helpers
+  groupNeedsByCategory,
+  getLowNeeds,
+  getHighNeeds,
+  calculateOverallScore,
+} from './useNeedsAssessment';
+
+// ============================================================================
+// Gratitude ("See the Positive")
+// ============================================================================
+
+export {
+  // Query keys
+  gratitudeKeys,
+  // Hooks
+  useGratitudeEntries,
+  useInfiniteGratitudeEntries,
+  useGratitudeEntry,
+  useCreateGratitude,
+  useDeleteGratitude,
+  useGratitudePatterns,
+  useGratitudePreferences,
+  useUpdateGratitudePreferences,
+  useGratitudePrompt,
+  // Helpers
+  calculateStreak,
+  getTodaysEntries,
+} from './useGratitude';
+
+// ============================================================================
+// Meditation ("Develop Loving Awareness")
+// ============================================================================
+
+export {
+  // Query keys
+  meditationKeys,
+  // Session hooks
+  useMeditationSessions,
+  useCreateMeditationSession,
+  useUpdateMeditationSession,
+  // Stats
+  useMeditationStats,
+  // AI features
+  useMeditationSuggestion,
+  useGenerateMeditationScript,
+  // Favorites
+  useMeditationFavorites,
+  useCreateMeditationFavorite,
+  useDeleteMeditationFavorite,
+  // Preferences
+  useMeditationPreferences,
+  useUpdateMeditationPreferences,
+  // Helpers
+  getDurationOptions,
+  getFocusAreaSuggestions,
+  formatDuration,
+  formatTotalTime,
+} from './useMeditation';
+
+// ============================================================================
+// Inner Work Hub (Overview & Cross-Feature Intelligence)
+// ============================================================================
+
+export {
+  // Query keys
+  innerWorkKeys as innerWorkHubKeys,
+  // Hooks
+  useInnerWorkOverview,
+  useCrossFeatureContext,
+  // Helpers
+  hasCompletedOnboarding,
+  getSuggestedAction,
+  calculateWellnessScore,
+} from './useInnerWorkOverview';
+
+// ============================================================================
+// Speech (Text-to-Speech)
+// ============================================================================
+
+export {
+  // Query keys
+  speechKeys,
+  // Hooks
+  useSpeech,
+  useAutoSpeech,
+  // Utilities
+  isSpeechAvailable,
+  // Types
+  type SpeechState,
+  type SpeechActions,
+  type UseSpeechReturn,
+  type UseAutoSpeechReturn,
+} from './useSpeech';

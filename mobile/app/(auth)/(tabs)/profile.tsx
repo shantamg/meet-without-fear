@@ -16,6 +16,7 @@ import {
   LogOut,
   ChevronRight,
   Star,
+  Volume2,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useClerk } from '@clerk/clerk-expo';
@@ -57,12 +58,19 @@ export default function ProfileScreen() {
     );
   };
 
-  const menuItems = [
+  const mainMenuItems = [
     {
       icon: Settings,
       label: 'Account Settings',
       onPress: () => {
         router.push('/settings/account');
+      },
+    },
+    {
+      icon: Volume2,
+      label: 'Voice Settings',
+      onPress: () => {
+        router.push('/settings/voice');
       },
     },
     {
@@ -79,6 +87,9 @@ export default function ProfileScreen() {
         router.push('/settings/memories');
       },
     },
+  ];
+
+  const supportMenuItems = [
     {
       icon: Shield,
       label: 'Privacy',
@@ -109,15 +120,36 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Menu items */}
+        {/* Main Menu items */}
         <View style={styles.menuSection}>
-          {menuItems.map((item, index) => (
+          {mainMenuItems.map((item, index) => (
             <TouchableOpacity
               key={item.label}
               style={[
                 styles.menuItem,
                 index === 0 && styles.menuItemFirst,
-                index === menuItems.length - 1 && styles.menuItemLast,
+                index === mainMenuItems.length - 1 && styles.menuItemLast,
+              ]}
+              onPress={item.onPress}
+            >
+              <View style={styles.menuItemLeft}>
+                <item.icon color={colors.accent} size={22} />
+                <Text style={styles.menuItemLabel}>{item.label}</Text>
+              </View>
+              <ChevronRight color={colors.textSecondary} size={20} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Support & Privacy Menu items */}
+        <View style={styles.menuSection}>
+          {supportMenuItems.map((item, index) => (
+            <TouchableOpacity
+              key={item.label}
+              style={[
+                styles.menuItem,
+                index === 0 && styles.menuItemFirst,
+                index === supportMenuItems.length - 1 && styles.menuItemLast,
               ]}
               onPress={item.onPress}
             >

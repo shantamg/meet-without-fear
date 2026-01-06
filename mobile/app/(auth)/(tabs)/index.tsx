@@ -6,6 +6,9 @@
  * - Main question: "What can I help you work through today?"
  * - Low-profile quick actions: Continue with [nickname], New Session, Inner Work
  * - Pending invitation CTA: "Accept [name]'s invitation" (if invited)
+ *
+ * Inner Work navigates to the hub for all inner work features:
+ * - Self-Reflection, Needs Assessment, Gratitude, Meditation
  */
 
 import { useMemo, useState, useEffect } from 'react';
@@ -100,9 +103,9 @@ export default function HomeScreen() {
     }
   };
 
-  const handleInnerThoughts = () => {
-    // Navigate to Inner Thoughts list
-    router.push('/inner-thoughts');
+  const handleInnerWork = () => {
+    // Navigate to Inner Work hub
+    router.push('/inner-work');
   };
 
   const handleAcceptInvitation = () => {
@@ -186,15 +189,15 @@ export default function HomeScreen() {
             <Text style={styles.actionText}>New Session</Text>
           </TouchableOpacity>
 
-          {/* Inner Thoughts */}
+          {/* Inner Work */}
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={handleInnerThoughts}
+            onPress={handleInnerWork}
             accessibilityRole="button"
-            accessibilityLabel="Inner Thoughts"
+            accessibilityLabel="Inner Work"
           >
             <Layers color="#888" size={18} />
-            <Text style={styles.actionText}>Inner Thoughts</Text>
+            <Text style={styles.actionText}>Inner Work</Text>
           </TouchableOpacity>
         </View>
       </View>
