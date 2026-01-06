@@ -193,6 +193,8 @@ export {
   type UseNotificationsReturn,
 } from './useNotifications';
 
+export { useNotificationChannel } from './useNotificationChannel';
+
 export {
   usePushNotifications,
   type UsePushNotificationsReturn,

@@ -14,6 +14,7 @@ import { QueryProvider } from '@/src/providers/QueryProvider';
 import { setTokenProvider } from '@/src/lib/api';
 import { ToastProvider } from '@/src/contexts/ToastContext';
 import { useNotifications } from '@/src/hooks/useNotifications';
+import { useNotificationChannel } from '@/src/hooks/useNotificationChannel';
 import { configureNotificationHandler } from '@/src/services/notifications';
 import { MixpanelInitializer } from '@/src/components/MixpanelInitializer';
 
@@ -46,9 +47,11 @@ function HideSplashOnReady() {
 
 /**
  * Notification initializer component
+ * Subscribes to user notification channel for real-time updates
  */
 function NotificationInitializer() {
   useNotifications();
+  useNotificationChannel();
   return null;
 }
 
