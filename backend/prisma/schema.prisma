@@ -47,6 +47,23 @@ model User {
   innerWorkSessions   InnerWorkSession[]
   notifications       Notification[]
   userMemories        UserMemory[]
+
+  // Inner Work: Needs Assessment
+  needScores          NeedScore[]
+  needsAssessmentState NeedsAssessmentState?
+
+  // Inner Work: People Tracking
+  people              Person[]
+
+  // Inner Work: Gratitude Practice
+  gratitudeEntries    GratitudeEntry[]
+  gratitudePreferences GratitudePreferences?
+
+  // Inner Work: Meditation
+  meditationSessions  MeditationSession[]
+  meditationStats     MeditationStats?
+  meditationFavorites MeditationFavorite[]
+  meditationPreferences MeditationPreferences?
 }
 
 model Relationship {
@@ -877,4 +894,243 @@ model UserMemory {
 
   @@index([userId])
   @@index([userId, sessionId])
+}
+
+// ============================================================================
+// Inner Work: Needs Assessment ("Am I OK?")
+// ============================================================================
+
+// Reference table for the 19 core human needs (seeded data)
+model Need {
+  id          Int          @id
+  name        String       // "Physical Safety"
+  slug        String       @unique // "physical-safety"
+  description String       @db.Text // Full question text
+  category    NeedsCategory
+  order       Int          // Display order within category
+
+  scores NeedScore[]
+}
+
+enum NeedsCategory {
+  FOUNDATION    // Physical safety, health, rest, material security
+  EMOTIONAL     // Emotional safety, self-compassion, regulation, agency
+  RELATIONAL    // Being seen, belonging, trust, contribution
+  INTEGRATION   // Purpose, learning, integrity, hope
+  TRANSCENDENCE // Presence, gratitude, connection to larger whole
+}
+
+// User's scores over time for each need
+model NeedScore {
+  id            String   @id @default(cuid())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  need          Need     @relation(fields: [needId], references: [id], onDelete: Cascade)
+  needId        Int
+  score         Int      // 0 = Not met, 1 = Somewhat met, 2 = Fully met
+  clarification String?  @db.Text // Optional user notes
+  createdAt     DateTime @default(now())
+
+  @@index([userId, needId])
+  @@index([userId, createdAt])
+}
+
+// Track baseline completion and check-in preferences
+model NeedsAssessmentState {
+  id                   String    @id @default(cuid())
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId               String    @unique
+  baselineCompleted    Boolean   @default(false)
+  baselineCompletedAt  DateTime?
+  checkInFrequencyDays Int       @default(7) // 1-10 days
+  lastCheckInNeedId    Int?      // Which need was last checked
+  lastCheckInAt        DateTime?
+  nextCheckInAt        DateTime?
+}
+
+// ============================================================================
+// Inner Work: People Tracking
+// ============================================================================
+
+// A person mentioned by the user across features
+model Person {
+  id             String   @id @default(cuid())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  name           String   // Primary name: "Sarah"
+  aliases        String[] @default([]) // ["my friend Sarah", "Sarah W."]
+  relationship   String?  // "friend", "partner", "family", "coworker", etc.
+  firstMentioned DateTime @default(now())
+  lastMentioned  DateTime @default(now())
+
+  // Mention counts by feature
+  mentionCountInnerThoughts Int @default(0)
+  mentionCountGratitude     Int @default(0)
+  mentionCountNeeds         Int @default(0)
+  mentionCountConflict      Int @default(0) // Partner sessions
+
+  // Which needs this person relates to (JSON: { "trust": 3, "belonging": 1 })
+  needsConnections Json @default("{}")
+
+  mentions PersonMention[]
+
+  @@unique([userId, name])
+  @@index([userId, lastMentioned])
+}
+
+// Individual mention instance
+model PersonMention {
+  id         String            @id @default(cuid())
+  person     Person            @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId   String
+  userId     String
+  sourceType MentionSourceType
+  sourceId   String            // ID of the source entity
+  context    String?           @db.Text // Surrounding text snippet
+  sentiment  Float?            // -1 to 1
+  createdAt  DateTime          @default(now())
+
+  @@index([personId, createdAt])
+  @@index([userId, sourceType])
+}
+
+enum MentionSourceType {
+  INNER_THOUGHTS  // InnerWorkMessage
+  GRATITUDE       // GratitudeEntry
+  NEEDS_CHECKIN   // NeedScore clarification
+  PARTNER_SESSION // Session message
+}
+
+// ============================================================================
+// Inner Work: Gratitude Practice ("See the Positive")
+// ============================================================================
+
+model GratitudeEntry {
+  id            String   @id @default(cuid())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  content       String   @db.Text // The gratitude text
+  voiceRecorded Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  // AI-extracted metadata (populated async)
+  extractedPeople     String[] @default([])
+  extractedPlaces     String[] @default([])
+  extractedActivities String[] @default([])
+  extractedEmotions   String[] @default([])
+  extractedThemes     String[] @default([])
+
+  // Connections
+  linkedNeedIds    Int[]   @default([]) // Which needs this touches
+  linkedConflictId String? // If mentioned an active conflict
+  sentimentScore   Float?  // -1 to 1, for trend tracking
+
+  // AI response to the gratitude
+  aiResponse String? @db.Text
+
+  // Embedding for semantic search
+  embedding Unsupported("vector(1024)")?
+
+  @@index([userId, createdAt])
+}
+
+// User preferences for gratitude practice
+model GratitudePreferences {
+  id              String   @id @default(cuid())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String   @unique
+  enabled         Boolean  @default(true)
+  frequency       Int      @default(1) // 0-3 times per day
+  preferredTimes  String[] @default(["20:00"]) // Array of HH:MM
+  weekdayOnly     Boolean  @default(false)
+  quietHoursStart String?  // HH:MM
+  quietHoursEnd   String?  // HH:MM
+}
+
+// ============================================================================
+// Inner Work: Meditation ("Develop Loving Awareness")
+// ============================================================================
+
+model MeditationSession {
+  id              String         @id @default(cuid())
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  type            MeditationType
+  durationMinutes Int
+  focusArea       String?        // e.g., "grounding", "self-compassion"
+  completed       Boolean        @default(false)
+  startedAt       DateTime       @default(now())
+  completedAt     DateTime?
+
+  // Guided-specific
+  scriptGenerated String? @db.Text // Full script text
+  voiceId         String? // TTS voice identifier
+  backgroundSound String? // "rain", "bowls", "silence"
+
+  // Favorites
+  savedAsFavorite Boolean       @default(false)
+  favoriteType    FavoriteType?
+
+  // Post-session
+  postNotes        String? @db.Text
+  linkedNeedIds    Int[]   @default([])
+  linkedConflictId String? // If done in preparation for conflict
+
+  @@index([userId, startedAt])
+}
+
+enum MeditationType {
+  GUIDED
+  UNGUIDED
+}
+
+enum FavoriteType {
+  EXACT // Replay exact script
+  THEME // Generate fresh variation
+}
+
+// Aggregated stats (computed on save)
+model MeditationStats {
+  id              String    @id @default(cuid())
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String    @unique
+  totalSessions   Int       @default(0)
+  guidedCount     Int       @default(0)
+  unguidedCount   Int       @default(0)
+  totalMinutes    Int       @default(0)
+  currentStreak   Int       @default(0)
+  longestStreak   Int       @default(0)
+  streakStartDate DateTime?
+  lastSessionDate DateTime?
+
+  // Favorite focus areas (JSON: { "grounding": 5, "compassion": 3 })
+  favoriteFocusAreas Json @default("{}")
+}
+
+// Saved meditation favorites
+model MeditationFavorite {
+  id              String       @id @default(cuid())
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  name            String       // User-given or auto-generated name
+  focusArea       String
+  durationMinutes Int
+  favoriteType    FavoriteType
+  script          String?      @db.Text // Only for EXACT type
+  savedAt         DateTime     @default(now())
+
+  @@index([userId])
+}
+
+// User preferences for meditation
+model MeditationPreferences {
+  id              String  @id @default(cuid())
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String  @unique
+  preferredVoice  String  @default("default")
+  voiceSpeed      Float   @default(1.0) // 0.8 - 1.2
+  defaultDuration Int     @default(10)
+  backgroundSound String  @default("silence")
+  reminderEnabled Boolean @default(false)
+  reminderTime    String? // HH:MM
 }
