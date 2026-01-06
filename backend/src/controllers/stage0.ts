@@ -182,16 +182,38 @@ export async function signCompact(req: Request, res: Response): Promise<void> {
       }
     }
 
-    // Notify partner via real-time and create in-app notification
-    if (partner?.userId) {
-      await notifyPartner(sessionId, partner.userId, 'partner.signed_compact', {
+    // Check if there's an invitation to determine if we should notify the inviter
+    const invitation = await prisma.invitation.findFirst({
+      where: {
+        sessionId,
+      },
+      select: {
+        invitedById: true,
+      },
+    });
+
+    // Determine who to notify: if the signing user is the invitee, notify the inviter
+    // Otherwise, notify the partner (for cases where there's no invitation or the inviter is signing)
+    let notificationTargetId: string | null = null;
+    if (invitation && invitation.invitedById !== user.id) {
+      // The signing user is the invitee, notify the inviter
+      notificationTargetId = invitation.invitedById;
+    } else if (partner?.userId) {
+      // No invitation or inviter is signing, notify the partner
+      notificationTargetId = partner.userId;
+    }
+
+    // Notify via real-time and create in-app notification
+    if (notificationTargetId) {
+      await notifyPartner(sessionId, notificationTargetId, 'partner.signed_compact', {
         signedAt,
       });
 
       // Create in-app notification for notification center
+      const signerDisplayName = user.firstName || user.name || 'Your partner';
       await notifyCompactSigned(
-        partner.userId,
-        user.name || user.firstName || 'Your partner',
+        notificationTargetId,
+        signerDisplayName,
         sessionId
       ).catch((err) =>
         console.warn('[signCompact] Failed to create in-app notification:', err)
