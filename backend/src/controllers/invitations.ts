@@ -1,11 +1,12 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { notifyPartner } from '../services/realtime';
+import { notifyPartnerWithFallback } from '../services/realtime';
 import { notifyInvitationAccepted, notifyInvitationReceived, notifySessionJoined } from '../services/notification';
 import { z } from 'zod';
 import { ApiResponse, ErrorCode, SessionStatus, StageStatus, Stage } from '@meet-without-fear/shared';
 import { successResponse, errorResponse } from '../utils/response';
 import { generateSessionStatusSummary } from '../utils/session';
+import { createInvitationUrl } from '../utils/urls';
 
 // ============================================================================
 // Types
@@ -314,8 +315,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
     });
 
     // Generate invitation URL (user shares via their own channels)
-    const appUrl = process.env.APP_URL || 'https://meetwithoutfear.com';
-    const invitationUrl = `${appUrl}/invitation/${invitation.id}`;
+    const invitationUrl = createInvitationUrl(invitation.id);
 
     // Create initial stage progress for inviter
     await prisma.stageProgress.create({
@@ -559,7 +559,9 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
     });
 
     // Notify inviter via realtime that partner joined
-    await notifyPartner(invitation.sessionId, invitation.invitedById, 'session.joined', {
+    // Use notifyPartnerWithFallback to ensure Ably message is always published
+    // and push is sent if user is offline
+    await notifyPartnerWithFallback(invitation.sessionId, invitation.invitedById, 'session.joined', {
       userId: user.id,
       userName: user.name,
     });

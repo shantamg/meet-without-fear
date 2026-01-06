@@ -17,6 +17,7 @@ import {
 import { generateConversationalResponse } from '../response-generator';
 import { embedSessionVessel, embedMessages } from '../../embedding';
 import { convertPreSessionToSessionMessages } from '../../witnessing';
+import { createInvitationUrl } from '../../../utils/urls';
 
 // State store for multi-turn session creation
 const creationState = createStateStore<SessionCreationState>();
@@ -299,7 +300,7 @@ async function createSession(
     creationState.delete(userId);
 
     const summary = mapSessionToSummary(session, userId);
-    const invitationUrl = `${process.env.APP_URL || 'https://meetwithoutfear.com'}/invitation/${invitation.id}`;
+    const invitationUrl = createInvitationUrl(invitation.id);
 
     const message = await generateConversationalResponse({
       action: 'session_created',
