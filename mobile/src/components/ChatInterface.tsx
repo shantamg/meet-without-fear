@@ -37,10 +37,19 @@ export interface ChatIndicatorItem {
   timestamp?: string;
 }
 
-export type ChatListItem = ChatMessage | ChatIndicatorItem;
+export interface CustomEmptyStateItem {
+  type: 'custom-empty-state';
+  id: string;
+}
+
+export type ChatListItem = ChatMessage | ChatIndicatorItem | CustomEmptyStateItem;
 
 function isIndicator(item: ChatListItem): item is ChatIndicatorItem {
   return 'type' in item && item.type === 'indicator';
+}
+
+function isCustomEmptyState(item: ChatListItem): item is CustomEmptyStateItem {
+  return 'type' in item && item.type === 'custom-empty-state';
 }
 
 interface ChatInterfaceProps {
@@ -123,8 +132,11 @@ export function ChatInterface({
 
   // STABLE SORT: Ensure order never flip-flops if timestamps are identical
   const listItems = useMemo((): ChatListItem[] => {
+    // 1. Combine messages and indicators
     const items: ChatListItem[] = [...messages, ...indicators];
-    return items.sort((a, b) => {
+    
+    // 2. Sort Newest First (standard chat sort)
+    items.sort((a, b) => {
       const aTime = 'timestamp' in a && a.timestamp ? new Date(a.timestamp).getTime() : 0;
       const bTime = 'timestamp' in b && b.timestamp ? new Date(b.timestamp).getTime() : 0;
       // Primary sort: Time (newest first)
@@ -132,7 +144,25 @@ export function ChatInterface({
       // Secondary sort: ID (stable tie-breaker)
       return b.id.localeCompare(a.id);
     });
-  }, [messages, indicators]);
+
+    // 3. Inject Compact Item (Custom Empty State)
+    // Condition: We have a custom state and NO messages
+    // This handles both:
+    // - New sessions (no indicators): Compact appears as first item
+    // - Accepted invitations (with indicators): Compact appears below indicators
+    if (customEmptyState && messages.length === 0) {
+      // Unshift adds to Index 0. 
+      // In an INVERTED list, Index 0 is the Visual BOTTOM (closest to input).
+      // For new sessions: Compact is the only item (appears at bottom)
+      // For accepted invitations: Compact appears below the "ACCEPTED INVITATION" indicator
+      items.unshift({
+        type: 'custom-empty-state',
+        id: 'custom-empty-state-item',
+      });
+    }
+
+    return items;
+  }, [messages, indicators, customEmptyState]);
 
   const scrollMetricsRef = useRef({
     offset: 0,
@@ -265,17 +295,20 @@ export function ChatInterface({
     // listItems is sorted newest first (descending by timestamp)
     for (const item of listItems) {
       if (isIndicator(item)) continue;
+      if (isCustomEmptyState(item)) continue;
+      // At this point, item must be a ChatMessage
+      const message = item as ChatMessage;
       // Skip user messages and optimistic messages
-      if (item.role === MessageRole.USER) continue;
-      if (item.id.startsWith('optimistic-')) continue;
+      if (message.role === MessageRole.USER) continue;
+      if (message.id.startsWith('optimistic-')) continue;
       // Skip known messages (history from initial load or pagination)
-      if (knownMessageIdsRef.current.has(item.id)) continue;
+      if (knownMessageIdsRef.current.has(message.id)) continue;
       // Skip messages that have already completed animation
-      if (animatedMessageIdsRef.current.has(item.id)) continue;
+      if (animatedMessageIdsRef.current.has(message.id)) continue;
       // Skip the currently animating message (it's already being handled)
-      if (item.id === animatingMessageId) continue;
+      if (message.id === animatingMessageId) continue;
       // This is the newest AI message that needs animation
-      return item.id;
+      return message.id;
     }
     return null;
   }, [listItems, animatingMessageId]);
@@ -287,21 +320,35 @@ export function ChatInterface({
   }, [animatingMessageId, onTypewriterStateChange]);
 
   const renderItem: ListRenderItem<ChatListItem> = useCallback(({ item }) => {
+    // 1. Render Custom Empty State (Compact)
+    if (isCustomEmptyState(item)) {
+      return (
+        <View style={styles.customEmptyStateItem} testID="chat-custom-empty-state-item">
+          {customEmptyState}
+        </View>
+      );
+    }
+
+    // 2. Render Indicators
     if (isIndicator(item)) {
       return <ChatIndicator type={item.indicatorType} timestamp={item.timestamp} />;
     }
 
+    // 3. Render Messages
+    // At this point, item must be a ChatMessage (we've already handled indicators and custom empty state)
+    const message = item as ChatMessage;
+    
     // Skip typewriter for:
     // 1. Messages from initial load or pagination (in knownMessageIdsRef)
     // 2. Messages that have already animated (in animatedMessageIdsRef)
     // 3. The currently animating message (use stable state, don't restart)
     // 4. Optimistic messages (they may re-render with real IDs)
     // 5. User messages (only AI messages get typewriter)
-    const isFromHistory = knownMessageIdsRef.current.has(item.id);
-    const hasAlreadyAnimated = animatedMessageIdsRef.current.has(item.id);
-    const isCurrentlyAnimating = item.id === animatingMessageId;
-    const isOptimisticMessage = item.id.startsWith('optimistic-');
-    const isAIMessage = item.role !== MessageRole.USER;
+    const isFromHistory = knownMessageIdsRef.current.has(message.id);
+    const hasAlreadyAnimated = animatedMessageIdsRef.current.has(message.id);
+    const isCurrentlyAnimating = message.id === animatingMessageId;
+    const isOptimisticMessage = message.id.startsWith('optimistic-');
+    const isAIMessage = message.role !== MessageRole.USER;
 
     // Animate if: AI message, not from history, not already animated, not optimistic
     // For currently animating message, keep animating (don't skip)
@@ -311,36 +358,36 @@ export function ChatInterface({
       !isOptimisticMessage;
 
     // Track typewriter animation for the newest AI message
-    const isNewestAnimatable = item.id === newestAnimatableAIMessageId;
+    const isNewestAnimatable = message.id === newestAnimatableAIMessageId;
 
     const bubbleMessage: ChatBubbleMessage = {
-      id: item.id,
-      role: item.role,
-      content: item.content,
-      timestamp: item.timestamp,
-      status: item.status,
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      timestamp: message.timestamp,
+      status: message.status,
       skipTypewriter: !shouldAnimateTypewriter,
     };
 
     return (
       <ChatBubble
         message={bubbleMessage}
-        onTypewriterStart={isNewestAnimatable ? () => setAnimatingMessageId(item.id) : undefined}
+        onTypewriterStart={isNewestAnimatable ? () => setAnimatingMessageId(message.id) : undefined}
         onTypewriterComplete={(isNewestAnimatable || isCurrentlyAnimating) ? () => {
           // Mark this message as animated so it won't re-animate on future renders
-          animatedMessageIdsRef.current.add(item.id);
+          animatedMessageIdsRef.current.add(message.id);
           setAnimatingMessageId(null);
           onTypewriterComplete?.();
         } : undefined}
-        isSpeaking={isSpeaking && currentId === item.id}
-        onSpeakerPress={isAIMessage ? () => handleSpeakerPress(item.content, item.id) : undefined}
+        isSpeaking={isSpeaking && currentId === message.id}
+        onSpeakerPress={isAIMessage ? () => handleSpeakerPress(message.content, message.id) : undefined}
       />
     );
-  }, [newestAnimatableAIMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress]);
+  }, [newestAnimatableAIMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 
-  // In inverted list: Header is visually at BOTTOM (for typing indicator)
+  // In inverted list: Header is visually at BOTTOM (Typing Indicator)
   const renderHeader = useCallback(() => {
     if (!isLoading) return null;
     return <TypingIndicator />;
@@ -371,7 +418,7 @@ export function ChatInterface({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, emptyStateTitle, emptyStateMessage, customEmptyState]);
 
-  // In inverted list: Footer is visually at TOP (for loading older messages spinner)
+  // In inverted list: Footer is visually at TOP (Loading Spinner)
   const renderFooter = useCallback(() => {
     if (!isLoadingMore) return null;
     return (
@@ -379,7 +426,7 @@ export function ChatInterface({
         <ActivityIndicator size="small" color={styles.loadingSpinner.color} />
       </View>
     );
-  }, [isLoadingMore, styles.loadingMore, styles.loadingSpinner.color]);
+  }, [isLoadingMore, styles]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize } = event.nativeEvent;
@@ -527,6 +574,11 @@ const useStyles = () =>
       // In inverted list, this appears at visual TOP
       paddingVertical: t.spacing.xl,
       alignItems: 'center',
+    },
+    customEmptyStateItem: {
+      // Add padding to separate it from the input or the item above it
+      paddingTop: t.spacing.md,
+      paddingBottom: t.spacing.md,
     },
     loadingSpinner: {
       color: t.colors.textSecondary,
