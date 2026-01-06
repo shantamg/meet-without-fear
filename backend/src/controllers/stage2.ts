@@ -489,6 +489,8 @@ Respond in JSON format:
         systemPrompt: transitionPrompt,
         messages: [{ role: 'user', content: 'Generate the acknowledgment message.' }],
         maxTokens: 512,
+        sessionId,
+        operation: 'stage2-transition',
       });
 
       let transitionContent: string;

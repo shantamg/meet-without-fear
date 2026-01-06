@@ -27,6 +27,7 @@ import {
   createInnerWorkSession,
   listInnerWorkSessions,
   getInnerWorkSession,
+  getInnerWorkOverview,
   sendInnerWorkMessage,
   updateInnerWorkSession,
   archiveInnerWorkSession,
@@ -54,6 +55,13 @@ router.post('/inner-thoughts', createInnerWorkSession);
  * @access Private
  */
 router.get('/inner-thoughts', listInnerWorkSessions);
+
+/**
+ * @route GET /api/v1/inner-thoughts/overview
+ * @description Get Inner Work hub overview (aggregated stats)
+ * @access Private
+ */
+router.get('/inner-thoughts/overview', getInnerWorkOverview);
 
 /**
  * @route GET /api/v1/inner-thoughts/:id
@@ -89,6 +97,7 @@ router.delete('/inner-thoughts/:id', archiveInnerWorkSession);
 
 router.post('/inner-work', createInnerWorkSession);
 router.get('/inner-work', listInnerWorkSessions);
+router.get('/inner-work/overview', getInnerWorkOverview); // Must be before /:id
 router.get('/inner-work/:id', getInnerWorkSession);
 router.post('/inner-work/:id/messages', sendInnerWorkMessage);
 router.patch('/inner-work/:id', updateInnerWorkSession);

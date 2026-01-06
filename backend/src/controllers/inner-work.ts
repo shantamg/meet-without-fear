@@ -28,6 +28,7 @@ import {
   SendInnerWorkMessageResponse,
   UpdateInnerWorkSessionResponse,
   ArchiveInnerWorkSessionResponse,
+  GetInnerWorkOverviewResponse,
   InnerWorkStatus,
   createInnerWorkSessionRequestSchema,
   sendInnerWorkMessageRequestSchema,
@@ -202,9 +203,12 @@ async function fetchLinkedPartnerSessionContext(
       return null;
     }
 
-    // Get the partner's info
-    const partner = session.relationship.members.find((m) => m.userId !== userId);
-    const partnerName = partner?.nickname || partner?.user?.firstName || partner?.user?.name || 'Partner';
+    // Get MY membership (where my nickname for the partner is stored)
+    const myMember = session.relationship.members.find((m) => m.userId === userId);
+    // Get the partner's membership (for their actual name)
+    const partnerMember = session.relationship.members.find((m) => m.userId !== userId);
+    // Use MY nickname for the partner (what I call them), then fall back to their actual name
+    const partnerName = myMember?.nickname || partnerMember?.user?.firstName || partnerMember?.user?.name || 'Partner';
 
     // Get current stage from stageProgress
     const currentStage = session.stageProgress[0]?.stage || 1;
@@ -814,6 +818,50 @@ export const getLinkedInnerThoughts = asyncHandler(
       success: true,
       data: {
         innerThoughtsSessionId: linkedSession?.id || null,
+      },
+    };
+
+    res.json(response);
+  }
+);
+
+// ============================================================================
+// GET /inner-work/overview - Get Inner Work hub overview
+// ============================================================================
+
+export const getInnerWorkOverview = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const user = getUser(req);
+
+    // For now, return stub data since needs/gratitude/meditation features
+    // are not yet fully implemented. This prevents the mobile app from crashing.
+    const response: ApiResponse<GetInnerWorkOverviewResponse> = {
+      success: true,
+      data: {
+        overview: {
+          needsAssessment: {
+            baselineCompleted: false,
+            overallScore: null,
+            lowNeedsCount: 0,
+            nextCheckInDue: null,
+          },
+          gratitude: {
+            totalEntries: 0,
+            streakDays: 0,
+            lastEntryDate: null,
+          },
+          meditation: {
+            totalSessions: 0,
+            currentStreak: 0,
+            totalMinutes: 0,
+            lastSessionDate: null,
+          },
+          people: {
+            totalTracked: 0,
+            recentlyMentioned: [],
+          },
+          recentInsights: [],
+        },
       },
     };
 

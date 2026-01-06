@@ -3,9 +3,13 @@ import authRoutes from './auth';
 import chatRoutes from './chat';
 import consentRoutes from './consent';
 import emotionsRoutes from './emotions';
+import gratitudeRoutes from './gratitude';
 import innerThoughtsRoutes from './inner-thoughts';
 import invitationsRoutes from './invitations';
+import meditationRoutes from './meditation';
 import memoriesRoutes from './memories';
+import needsAssessmentRoutes from './needs-assessment';
+import peopleRoutes from './people';
 import notificationsRoutes from './notifications';
 import reconcilerRoutes from './reconciler';
 import sessionsRoutes from './sessions';
@@ -23,6 +27,10 @@ router.use(chatRoutes); // Unified chat router
 router.use(invitationsRoutes); // Must be before innerWorkRoutes (has public endpoints)
 router.use(innerThoughtsRoutes); // Inner Thoughts (solo self-reflection, optionally linked to partner sessions)
 router.use(memoriesRoutes); // Things to Always Remember
+router.use('/needs', needsAssessmentRoutes); // Inner Work: Needs Assessment
+router.use('/gratitude', gratitudeRoutes); // Inner Work: Gratitude Practice
+router.use('/meditation', meditationRoutes); // Inner Work: Meditation
+router.use('/people', peopleRoutes); // Inner Work: People Tracking
 router.use(notificationsRoutes); // In-app notifications
 router.use(sessionsRoutes);
 router.use(consentRoutes);

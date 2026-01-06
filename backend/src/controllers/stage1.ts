@@ -751,6 +751,8 @@ Respond in JSON format:
           systemPrompt: transitionPrompt,
           messages: [{ role: 'user', content: 'Generate the transition message based on the conversation above.' }],
           maxTokens: 512,
+          sessionId,
+          operation: 'stage1-transition',
         });
 
         let transitionContent: string;
@@ -1042,6 +1044,8 @@ export async function getInitialMessage(
         systemPrompt: prompt,
         messages: [{ role: 'user', content: 'Please generate an initial greeting.' }],
         maxTokens: 512,
+        sessionId,
+        operation: 'stage1-initial-message',
       });
 
       if (aiResponse) {

@@ -20,7 +20,6 @@ import { notifyPartner } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
-import { extractJsonSafe } from '../utils/json-extractor';
 import { embedMessage } from '../services/embedding';
 
 // ============================================================================
@@ -1009,15 +1008,8 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
         aiContext
       );
 
-      // Parse the JSON response to get just the response text
-      let aiResponseContent = orchestratorResult.response;
-      const parsed = extractJsonSafe<{ response?: string }>(
-        orchestratorResult.response,
-        { response: orchestratorResult.response }
-      );
-      if (parsed.response) {
-        aiResponseContent = parsed.response;
-      }
+      // getOrchestratedResponse already extracts the response from JSON
+      const aiResponseContent = orchestratorResult.response;
 
       // Save the transition message
       const aiMessage = await prisma.message.create({
