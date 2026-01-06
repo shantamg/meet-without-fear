@@ -10,6 +10,8 @@ import { prisma } from '../../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../ai';
 import { getPartnerUserId } from '../../utils/session';
 import { embedMessage } from '../embedding';
+import { detectMemoryIntent } from '../memory-detector';
+import type { MemorySuggestion } from '@meet-without-fear/shared';
 
 export interface SessionMessageInput {
   sessionId: string;
@@ -45,6 +47,8 @@ export interface SessionMessageResult {
   offerReadyToShare?: boolean;
   /** Stage 2: AI's proposed empathy statement summarizing user's understanding of partner */
   proposedEmpathyStatement?: string | null;
+  /** Memory suggestion if AI detected a memory request in user's message */
+  memorySuggestion?: MemorySuggestion;
 }
 
 /**
@@ -246,6 +250,49 @@ export async function processSessionMessage(
     console.warn('[SessionProcessor] Failed to embed AI message:', err)
   );
 
+  // ============================================================================
+  // Memory Detection
+  // ============================================================================
+  // Run memory detection on user message to detect implicit memory requests
+  // (e.g., "call me Alex", "keep responses brief", "my partner's name is Jordan")
+  //
+  // Gating conditions to skip detection:
+  // 1. First few turns - let user settle in first (min 3 turns)
+  // 2. High emotional intensity - sensitive moments (intensity > 7)
+  // 3. Stage transitions - user is moving between stages
+
+  let memorySuggestion: MemorySuggestion | undefined;
+
+  const emotionalIntensity = aiContext.emotionalIntensity ?? 5; // Default to neutral if undefined
+  const shouldRunMemoryDetection =
+    userTurnCount >= 3 && // Let user settle in first
+    emotionalIntensity <= 7 && // Skip during high emotional moments
+    !isStageTransition; // Skip during stage transitions
+
+  if (shouldRunMemoryDetection) {
+    console.log(`[SessionProcessor] Running memory detection (turn ${userTurnCount}, intensity ${emotionalIntensity})`);
+    try {
+      const memoryDetection = await detectMemoryIntent(content, sessionId, 'partner-session');
+
+      if (memoryDetection.hasMemoryIntent && memoryDetection.suggestions.length > 0) {
+        // Take top suggestion
+        memorySuggestion = memoryDetection.suggestions[0];
+        console.log(`[SessionProcessor] Memory suggestion detected:`, {
+          category: memorySuggestion.category,
+          content: memorySuggestion.suggestedContent,
+          confidence: memorySuggestion.confidence,
+        });
+      } else {
+        console.log(`[SessionProcessor] No memory intent detected`);
+      }
+    } catch (err) {
+      console.warn('[SessionProcessor] Memory detection failed:', err);
+      // Continue without memory suggestion - non-blocking
+    }
+  } else {
+    console.log(`[SessionProcessor] Skipping memory detection (turn ${userTurnCount}, intensity ${emotionalIntensity}, stageTransition: ${isStageTransition})`);
+  }
+
   // Stage 2: If AI is offering ready-to-share, auto-save the empathy draft
   // Save with readyToShare: false so user sees low-profile confirmation prompt first
   // User must explicitly confirm to see the full preview card
@@ -300,5 +347,6 @@ export async function processSessionMessage(
     invitationMessage: orchestratorResult.invitationMessage,
     offerReadyToShare: orchestratorResult.offerReadyToShare,
     proposedEmpathyStatement: orchestratorResult.proposedEmpathyStatement,
+    memorySuggestion,
   };
 }

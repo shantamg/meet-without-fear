@@ -35,6 +35,7 @@ import { CompactAgreementBar } from '../components/CompactAgreementBar';
 import { InvitationShareButton } from '../components/InvitationShareButton';
 import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
+import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { createInvitationLink } from '../hooks/useInvitation';
@@ -157,6 +158,10 @@ export function UnifiedSessionScreen({
     agreements,
     isGenerating,
     waitingStatus,
+
+    // Memory suggestion
+    memorySuggestion,
+    clearMemorySuggestion,
 
     // Actions
     sendMessage,
@@ -1157,6 +1162,19 @@ export function UnifiedSessionScreen({
         {/* Render inline cards at the end of the chat - ONLY after typewriter animation completes */}
         {/* This ensures UI elements like feel-heard confirmation appear after AI message finishes */}
         {!isTypewriterAnimating && inlineCards.map((card) => renderInlineCard(card))}
+
+        {/* Memory suggestion card - shown when AI detects a "remember this" intent */}
+        {!isTypewriterAnimating && memorySuggestion && (
+          <MemorySuggestionCard
+            suggestion={memorySuggestion}
+            sessionId={sessionId}
+            onDismiss={clearMemorySuggestion}
+            onApproved={() => {
+              // Optional: could show a toast here for feedback
+            }}
+            testID="memory-suggestion-card"
+          />
+        )}
       </View>
 
       {/* Overlays */}
@@ -1244,9 +1262,10 @@ export function UnifiedSessionScreen({
           statement={liveProposedEmpathyStatement}
           partnerName={partnerName}
           onShare={() => {
-            // Close drawer and open a simple confirmation before sending
+            // Close drawer and share directly - drawer already shows preview
             setShowEmpathyDrawer(false);
-            setShowShareConfirm(true);
+            handleConfirmReadyToShare();
+            handleShareEmpathy();
           }}
           onSendRefinement={(message) => {
             const refined =

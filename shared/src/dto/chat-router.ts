@@ -8,6 +8,7 @@
 
 import { SessionSummaryDTO } from './session';
 import { MessageDTO } from './message';
+import type { MemorySuggestion } from './memory';
 
 // ============================================================================
 // Intent Types
@@ -266,6 +267,9 @@ export interface UnifiedChatMessage {
 
   // Action buttons (for router messages)
   actions?: ChatMessageAction[];
+
+  // Memory suggestion (if AI detected a memory request in user's message)
+  memorySuggestion?: MemorySuggestion;
 }
 
 export interface ChatMessageAction {

@@ -287,6 +287,8 @@ export function useSendMessage(
       // querying for Stage 0 messages while new messages are saved at Stage 1.
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      // Also invalidate consolidated state so stage-dependent UI (like feel-heard card) updates
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
 
       // Invitation message might have been updated during invitation phase
       // This ensures the share button appears immediately when AI proposes a message

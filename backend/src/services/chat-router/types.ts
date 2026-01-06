@@ -4,7 +4,7 @@
  * Core types for the extensible chat router system.
  */
 
-import { ChatIntent, IntentDetectionResult, SessionSummaryDTO } from '@meet-without-fear/shared';
+import { ChatIntent, IntentDetectionResult, SessionSummaryDTO, MemorySuggestion } from '@meet-without-fear/shared';
 import { Request } from 'express';
 
 // ============================================================================
@@ -59,6 +59,9 @@ export interface IntentHandlerResult {
 
   /** Additional data for the client */
   data?: Record<string, unknown>;
+
+  /** Memory suggestion if AI detected a memory request */
+  memorySuggestion?: MemorySuggestion;
 }
 
 /**

@@ -61,6 +61,7 @@ export const conversationHandler: IntentHandler = {
         userMessage: result.userMessage,
         aiResponse: result.aiResponse,
       },
+      memorySuggestion: result.memorySuggestion,
     };
   },
 };

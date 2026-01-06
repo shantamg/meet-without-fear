@@ -317,6 +317,16 @@ export function useConsentToShareEmpathy(
       );
     },
     onSuccess: (data, { sessionId }) => {
+      // Immediately hide the empathy draft preview card by updating cache
+      // This prevents the card from showing until refetch completes
+      queryClient.setQueryData<GetEmpathyDraftResponse>(
+        stageKeys.empathyDraft(sessionId),
+        (old) => {
+          if (!old) return { draft: null, canConsent: false, alreadyConsented: true };
+          return { ...old, canConsent: false, alreadyConsented: true };
+        }
+      );
+
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
@@ -399,6 +409,8 @@ export function useConsentToShareEmpathy(
         );
       }
 
+      // Invalidate consolidated session state for UI updates
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       // Also invalidate to ensure fresh data
       queryClient.invalidateQueries({ queryKey: messageKeys.all });
     },

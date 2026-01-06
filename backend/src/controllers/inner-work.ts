@@ -35,7 +35,7 @@ import {
   listInnerWorkSessionsQuerySchema,
 } from '@meet-without-fear/shared';
 import { getCompletion, getHaikuJson } from '../lib/bedrock';
-import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildInnerWorkSummaryPrompt, buildLinkedInnerThoughtsPrompt, LinkedPartnerSessionContext } from '../services/stage-prompts';
+import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildLinkedInnerThoughtsInitialMessagePrompt, buildInnerWorkSummaryPrompt, buildLinkedInnerThoughtsPrompt, LinkedPartnerSessionContext } from '../services/stage-prompts';
 import { extractJsonSafe } from '../utils/json-extractor';
 import { embedInnerWorkMessage } from '../services/embedding';
 import {
@@ -44,6 +44,8 @@ import {
   formatInnerThoughtsSummaryForPrompt,
   INNER_THOUGHTS_SUMMARIZATION_CONFIG,
 } from '../services/conversation-summarizer';
+import { detectMemoryIntent } from '../services/memory-detector';
+import type { MemorySuggestion } from '@meet-without-fear/shared';
 
 // ============================================================================
 // Helper Functions
@@ -328,21 +330,37 @@ export const createInnerWorkSession = asyncHandler(
 
     // Generate initial AI message
     const userName = user.firstName || user.name || 'there';
-    const prompt = buildInnerWorkInitialMessagePrompt(userName);
+
+    // Use context-aware prompt if linked to a partner session
+    let prompt: string;
+    let fallbackMessage = "Hey there. What's on your mind today?";
+
+    if (linkedPartnerSessionId) {
+      const linkedContext = await fetchLinkedPartnerSessionContext(user.id, linkedPartnerSessionId);
+      if (linkedContext) {
+        prompt = buildLinkedInnerThoughtsInitialMessagePrompt(userName, linkedContext);
+        fallbackMessage = `This is your private space to process what's happening with ${linkedContext.partnerName}. What's on your mind right now?`;
+      } else {
+        prompt = buildInnerWorkInitialMessagePrompt(userName);
+      }
+    } else {
+      prompt = buildInnerWorkInitialMessagePrompt(userName);
+    }
+
     const aiResponse = await getCompletion({
       systemPrompt: prompt,
       messages: [{ role: 'user', content: 'Start the conversation.' }],
       maxTokens: 256,
     });
     const parsed = extractJsonSafe<{ response?: string }>(aiResponse || '', {
-      response: "Hey there. What's on your mind today?",
+      response: fallbackMessage,
     });
 
     const aiMessage = await prisma.innerWorkMessage.create({
       data: {
         sessionId: session.id,
         role: 'AI',
-        content: parsed.response || "Hey there. What's on your mind today?",
+        content: parsed.response || fallbackMessage,
       },
     });
 
@@ -626,11 +644,36 @@ export const sendInnerWorkMessage = asyncHandler(
       console.warn('[Inner Work] Failed to update conversation summary:', err)
     );
 
+    // Run memory detection on user message
+    // For Inner Thoughts, we allow detection from turn 2+ (more relaxed than partner sessions)
+    let memorySuggestion: MemorySuggestion | null = null;
+    if (totalTurnCount >= 2) {
+      console.log(`[Inner Thoughts] Running memory detection (turn ${totalTurnCount})`);
+      try {
+        const memoryResult = await detectMemoryIntent(content, sessionId, 'inner-thoughts');
+        if (memoryResult.hasMemoryIntent && memoryResult.suggestions.length > 0) {
+          memorySuggestion = memoryResult.suggestions[0];
+          console.log(`[Inner Thoughts] Memory suggestion detected:`, {
+            category: memorySuggestion.category,
+            content: memorySuggestion.suggestedContent,
+            confidence: memorySuggestion.confidence,
+          });
+        } else {
+          console.log(`[Inner Thoughts] No memory intent detected`);
+        }
+      } catch (err) {
+        console.warn('[Inner Thoughts] Memory detection failed:', err);
+      }
+    } else {
+      console.log(`[Inner Thoughts] Skipping memory detection (turn ${totalTurnCount} < 2)`);
+    }
+
     const response: ApiResponse<SendInnerWorkMessageResponse> = {
       success: true,
       data: {
         userMessage: mapMessageToDTO(userMessage),
         aiMessage: mapMessageToDTO(aiMessage),
+        memorySuggestion,
       },
     };
 

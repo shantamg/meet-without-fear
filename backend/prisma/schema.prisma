@@ -46,6 +46,7 @@ model User {
   invitationsSent     Invitation[]                  @relation("InvitedBy")
   innerWorkSessions   InnerWorkSession[]
   notifications       Notification[]
+  userMemories        UserMemory[]
 }
 
 model Relationship {
@@ -100,6 +101,7 @@ model Session {
   exerciseCompletions EmotionalExerciseCompletion[]
   invitations         Invitation[]
   notifications       Notification[]
+  userMemories        UserMemory[]
 
   // Linked Inner Thoughts sessions for private reflection during partner session
   linkedInnerThoughts InnerWorkSession[] @relation("LinkedInnerThoughts")
@@ -833,4 +835,46 @@ enum NotificationType {
   SESSION_RESOLVED
   FOLLOW_UP_REMINDER
   SESSION_ABANDONED
+}
+
+// ============================================================================
+// User Memory (Things to Always Remember)
+// ============================================================================
+
+enum MemoryCategory {
+  AI_NAME       // "Call me Alex"
+  LANGUAGE      // "Respond in Spanish"
+  COMMUNICATION // "Keep responses brief"
+  PERSONAL_INFO // "Call me Sam", pronouns
+  RELATIONSHIP  // "Partner's name is Jordan"
+  PREFERENCE    // "Use examples when explaining"
+}
+
+enum MemoryStatus {
+  ACTIVE
+  REJECTED
+}
+
+enum MemorySource {
+  USER_APPROVED // AI suggested, user approved
+  USER_CREATED  // User created directly
+  USER_EDITED   // AI suggested, user edited before saving
+}
+
+model UserMemory {
+  id          String         @id @default(cuid())
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  session     Session?       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId   String?        // null = global memory
+  content     String         @db.Text
+  category    MemoryCategory
+  status      MemoryStatus   @default(ACTIVE)
+  source      MemorySource   @default(USER_APPROVED)
+  suggestedBy String?        @db.Text // AI's original suggestion if edited
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([userId, sessionId])
 }

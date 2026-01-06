@@ -3,9 +3,12 @@
  *
  * Expo Router wrapper for the InnerThoughtsScreen component.
  * Handles both existing sessions and creating new linked sessions.
+ *
+ * Key design: Uses state instead of router.replace() to avoid component remounting
+ * and the associated loading flicker. The cache is pre-populated by the mutation hook.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 
 import { InnerThoughtsScreen } from '@/src/screens/InnerThoughtsScreen';
@@ -21,6 +24,8 @@ export default function InnerThoughtsChatScreen() {
     linkedTrigger?: string;
   }>();
 
+  // Track the created session ID in state to avoid route replacement remounting
+  const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
   const createSession = useCreateInnerThoughtsSession();
   const hasStartedCreation = useRef(false);
 
@@ -43,15 +48,9 @@ export default function InnerThoughtsChatScreen() {
               trackInnerThoughtsLinked(result.session.id, partnerSessionId);
             }
 
-            // Replace the route with the real session ID
-            router.replace({
-              pathname: '/inner-thoughts/[id]',
-              params: {
-                id: result.session.id,
-                partnerSessionId: partnerSessionId || '',
-                partnerName: partnerName || '',
-              },
-            });
+            // Update state instead of router.replace() to avoid component remount
+            // The cache is already populated by useCreateInnerThoughtsSession's onSuccess
+            setCreatedSessionId(result.session.id);
           },
           onError: (err) => {
             console.error('Failed to create Inner Thoughts session:', err);
@@ -60,16 +59,17 @@ export default function InnerThoughtsChatScreen() {
         }
       );
     }
-  }, [id, partnerSessionId, linkedTrigger, partnerName, createSession, router]);
+  }, [id, partnerSessionId, linkedTrigger, createSession, router]);
 
-  // Show creating state when id="new"
-  const isCreating = id === 'new';
+  // Use created session ID if available, otherwise use URL id
+  const effectiveSessionId = createdSessionId || (id === 'new' ? '' : (id || ''));
+  const isCreating = id === 'new' && !createdSessionId;
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <InnerThoughtsScreen
-        sessionId={isCreating ? '' : (id || '')}
+        sessionId={effectiveSessionId}
         linkedPartnerName={partnerName}
         onNavigateBack={() => router.back()}
         onNavigateToPartnerSession={

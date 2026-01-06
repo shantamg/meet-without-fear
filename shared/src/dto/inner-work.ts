@@ -4,6 +4,8 @@
  * Data Transfer Objects for inner work (solo self-reflection) sessions.
  */
 
+import type { MemorySuggestion } from './memory';
+
 // ============================================================================
 // Inner Work Status
 // ============================================================================
@@ -68,6 +70,8 @@ export interface SendInnerWorkMessageRequest {
 export interface SendInnerWorkMessageResponse {
   userMessage: InnerWorkMessageDTO;
   aiMessage: InnerWorkMessageDTO;
+  /** Memory suggestion if detected in user message */
+  memorySuggestion?: MemorySuggestion | null;
 }
 
 // ============================================================================

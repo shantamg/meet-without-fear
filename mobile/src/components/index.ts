@@ -93,3 +93,6 @@ export { Logo } from './Logo';
 
 // Screen layout
 export { ScreenHeader } from './ScreenHeader';
+
+// Memory components
+export { MemorySuggestionCard } from './MemorySuggestionCard';

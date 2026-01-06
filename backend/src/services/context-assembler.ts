@@ -78,6 +78,14 @@ export interface InnerThoughtsContext {
 }
 
 /**
+ * User memories to honor in responses
+ */
+export interface UserMemoriesContext {
+  global: Array<{ content: string; category: string }>;
+  session: Array<{ content: string; category: string }>;
+}
+
+/**
  * The assembled context bundle provided to the AI
  */
 export interface ContextBundle {
@@ -99,6 +107,9 @@ export interface ContextBundle {
 
   // Inner Thoughts reflections (if depth allows)
   innerThoughtsContext?: InnerThoughtsContext;
+
+  // User memories ("Things to Always Remember")
+  userMemories?: UserMemoriesContext;
 
   // Stage-specific data
   stageContext: {
@@ -194,6 +205,9 @@ export async function assembleContextBundle(
     ? await buildInnerThoughtsContext(sessionId, userId, conversationContext)
     : undefined;
 
+  // Build user memories context (always include - these are user preferences)
+  const userMemories = await buildUserMemoriesContext(userId, sessionId);
+
   return {
     conversationContext: {
       recentTurns: conversationContext,
@@ -204,6 +218,7 @@ export async function assembleContextBundle(
     priorThemes,
     sessionSummary,
     innerThoughtsContext,
+    userMemories,
     stageContext: {
       stage,
       gatesSatisfied,
@@ -478,6 +493,39 @@ async function buildInnerThoughtsContext(
 }
 
 /**
+ * Load active user memories for context
+ */
+async function buildUserMemoriesContext(
+  userId: string,
+  sessionId: string
+): Promise<UserMemoriesContext> {
+  const memories = await prisma.userMemory.findMany({
+    where: {
+      userId,
+      status: 'ACTIVE',
+      OR: [
+        { sessionId: null }, // Global
+        { sessionId },       // This session
+      ],
+    },
+    select: {
+      content: true,
+      category: true,
+      sessionId: true,
+    },
+  });
+
+  return {
+    global: memories
+      .filter((m) => m.sessionId === null)
+      .map((m) => ({ content: m.content, category: m.category })),
+    session: memories
+      .filter((m) => m.sessionId === sessionId)
+      .map((m) => ({ content: m.content, category: m.category })),
+  };
+}
+
+/**
  * Format context bundle for prompt injection
  */
 export function formatContextForPrompt(bundle: ContextBundle): string {
@@ -531,6 +579,18 @@ export function formatContextForPrompt(bundle: ContextBundle): string {
       parts.push(`- "${reflection.content}" ${marker}`);
     }
     parts.push('');
+  }
+
+  // User memories (things to always remember)
+  if (bundle.userMemories) {
+    const allMemories = [...bundle.userMemories.global, ...bundle.userMemories.session];
+    if (allMemories.length > 0) {
+      parts.push('USER MEMORIES (Always Honor These):');
+      for (const memory of allMemories) {
+        parts.push(`- [${memory.category}] ${memory.content}`);
+      }
+      parts.push('');
+    }
   }
 
   return parts.join('\n');

@@ -25,6 +25,7 @@ export * from './dto/chat-router';
 export * from './dto/inner-work';
 export * from './dto/notification';
 export * from './dto/reconciler';
+export * from './dto/memory';
 
 // Validation schemas
 export * from './validation';

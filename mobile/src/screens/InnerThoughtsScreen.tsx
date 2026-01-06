@@ -6,13 +6,14 @@
  * Reuses the ChatInterface component for consistency with partner sessions.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Layers } from 'lucide-react-native';
-import { MessageRole } from '@meet-without-fear/shared';
+import { MessageRole, MemorySuggestion } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage } from '../components/ChatInterface';
+import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 import { useInnerThoughtsSession, useSendInnerThoughtsMessage } from '../hooks';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -45,6 +46,9 @@ export function InnerThoughtsScreen({
 }: InnerThoughtsScreenProps) {
   const styles = useStyles();
 
+  // Memory suggestion state
+  const [memorySuggestion, setMemorySuggestion] = useState<MemorySuggestion | null>(null);
+
   // Only fetch session if we have a valid sessionId (not creating)
   const { data, isLoading, error } = useInnerThoughtsSession(
     isCreating ? undefined : sessionId
@@ -71,13 +75,21 @@ export function InnerThoughtsScreen({
   const handleSendMessage = useCallback(
     async (content: string) => {
       try {
-        await sendMessage.mutateAsync({ content });
+        const result = await sendMessage.mutateAsync({ content });
+        // Check for memory suggestion in response
+        if (result.memorySuggestion) {
+          setMemorySuggestion(result.memorySuggestion);
+        }
       } catch (err) {
         console.error('Failed to send inner thoughts message:', err);
       }
     },
     [sendMessage]
   );
+
+  const handleDismissMemorySuggestion = useCallback(() => {
+    setMemorySuggestion(null);
+  }, []);
 
   const handleBack = useCallback(() => {
     onNavigateBack?.();
@@ -158,6 +170,18 @@ export function InnerThoughtsScreen({
         emptyStateTitle="Inner Thoughts"
         emptyStateMessage="A private space for reflection. Share what's on your mind."
       />
+
+      {/* Memory Suggestion Card - shown when AI detects a memory intent */}
+      {memorySuggestion && (
+        <View style={styles.memorySuggestionContainer}>
+          <MemorySuggestionCard
+            suggestion={memorySuggestion}
+            sessionId={undefined}  // Inner thoughts memories are global
+            onDismiss={handleDismissMemorySuggestion}
+            onApproved={handleDismissMemorySuggestion}
+          />
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -233,5 +257,12 @@ const useStyles = () =>
       fontSize: 12,
       color: t.colors.accent,
       marginTop: 2,
+    },
+    memorySuggestionContainer: {
+      position: 'absolute',
+      bottom: 80,  // Above the chat input
+      left: t.spacing.md,
+      right: t.spacing.md,
+      zIndex: 100,
     },
   }));

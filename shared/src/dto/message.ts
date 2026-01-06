@@ -5,6 +5,7 @@
  */
 
 import { MessageRole, Stage } from '../enums';
+import type { MemorySuggestion } from './memory';
 
 // ============================================================================
 // Messages
@@ -51,6 +52,9 @@ export interface SendMessageResponse {
 
   /** Stage 2: Proposed empathy statement summarizing user's understanding of partner */
   proposedEmpathyStatement?: string | null;
+
+  /** AI-detected memory suggestion from user's message */
+  memorySuggestion?: MemorySuggestion | null;
 }
 
 // ============================================================================

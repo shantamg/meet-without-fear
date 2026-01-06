@@ -474,9 +474,9 @@ export async function consentToShare(
 Generate a brief, warm acknowledgment message (2-3 sentences) for ${userName} that:
 1. Acknowledges the courage it took to share their understanding
 2. Validates the importance of this step in building connection
-3. Gently prepares them for what comes next (waiting for ${partner} to receive and respond to their understanding)
+3. Gently prepares them for what comes next: now ${partner} will work on sharing THEIR understanding of ${userName}'s perspective (not responding to what was shared, but creating their own empathy statement)
 
-Keep it natural and conversational. Don't be overly effusive.
+Keep it natural and conversational. Don't be overly effusive. Make it clear that both partners share empathy statements before moving forward together.
 
 Respond in JSON format:
 \`\`\`json
@@ -497,12 +497,12 @@ Respond in JSON format:
           const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
           transitionContent = typeof parsed.response === 'string'
             ? parsed.response
-            : `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now we wait to see how they receive it.`;
+            : `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours.`;
         } catch {
-          transitionContent = `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now we wait to see how they receive it.`;
+          transitionContent = `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours.`;
         }
       } else {
-        transitionContent = `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now we wait to see how they receive it.`;
+        transitionContent = `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours.`;
       }
 
       // Save the transition message to the database

@@ -15,6 +15,7 @@ import {
   HelpCircle,
   LogOut,
   ChevronRight,
+  Star,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useClerk } from '@clerk/clerk-expo';
@@ -69,6 +70,13 @@ export default function ProfileScreen() {
       label: 'Notifications',
       onPress: () => {
         router.push('/settings/notifications');
+      },
+    },
+    {
+      icon: Star,
+      label: 'Things to Remember',
+      onPress: () => {
+        router.push('/settings/memories');
       },
     },
     {

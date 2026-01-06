@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useCallback, useReducer, useEffect, useRef, useState } from 'react';
-import { Stage, MessageRole, StrategyPhase } from '@meet-without-fear/shared';
+import { Stage, MessageRole, StrategyPhase, MemorySuggestion } from '@meet-without-fear/shared';
 import { useToast } from '../contexts/ToastContext';
 import { ApiClientError } from '../lib/api';
 
@@ -321,6 +321,9 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
   // Track AI recommendation for ready-to-share empathy (Stage 2)
   const [aiRecommendsReadyToShare, setAiRecommendsReadyToShare] = useState(false);
+
+  // Track AI-detected memory suggestion
+  const [memorySuggestion, setMemorySuggestion] = useState<MemorySuggestion | null>(null);
 
   // Track local invitation confirmation (survives component remounts)
   // This is set when user clicks "I've sent it" and prevents panel from reappearing
@@ -881,6 +884,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
               // Save to database with readyToShare: false (user hasn't confirmed yet)
               saveDraft({ sessionId, content: data.proposedEmpathyStatement, readyToShare: false });
             }
+            // Capture AI-detected memory suggestion
+            // Only shows one suggestion at a time - replaces previous if any
+            if (data.memorySuggestion !== undefined) {
+              setMemorySuggestion(data.memorySuggestion);
+            }
           },
           onError: (error) => {
             removeOptimisticMessage(sessionId, optimisticId);
@@ -1164,6 +1172,10 @@ export function useUnifiedSession(sessionId: string | undefined) {
     pendingConfirmation: state.pendingConfirmation,
     followUpDate: state.followUpDate,
     waitingStatus: state.waitingStatus,
+
+    // Memory suggestion
+    memorySuggestion,
+    clearMemorySuggestion: () => setMemorySuggestion(null),
 
     // Invitation phase
     isInvitationPhase,

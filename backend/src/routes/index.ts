@@ -5,6 +5,7 @@ import consentRoutes from './consent';
 import emotionsRoutes from './emotions';
 import innerThoughtsRoutes from './inner-thoughts';
 import invitationsRoutes from './invitations';
+import memoriesRoutes from './memories';
 import notificationsRoutes from './notifications';
 import reconcilerRoutes from './reconciler';
 import sessionsRoutes from './sessions';
@@ -21,6 +22,7 @@ router.use('/auth', authRoutes);
 router.use(chatRoutes); // Unified chat router
 router.use(invitationsRoutes); // Must be before innerWorkRoutes (has public endpoints)
 router.use(innerThoughtsRoutes); // Inner Thoughts (solo self-reflection, optionally linked to partner sessions)
+router.use(memoriesRoutes); // Things to Always Remember
 router.use(notificationsRoutes); // In-app notifications
 router.use(sessionsRoutes);
 router.use(consentRoutes);

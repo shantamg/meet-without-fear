@@ -226,6 +226,7 @@ export async function processMessage(
         timestamp: new Date().toISOString(),
         sessionId: result.passThrough?.sessionId || result.sessionChange?.sessionId,
         actions: result.actions,
+        memorySuggestion: result.memorySuggestion,
       };
 
       return {
