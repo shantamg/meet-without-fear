@@ -44,7 +44,7 @@ export default function NotificationsScreen() {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
-        <SafeAreaView style={styles.container} edges={['bottom']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           <ScreenHeader title="Notifications" />
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.accent} />
@@ -59,7 +59,7 @@ export default function NotificationsScreen() {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
-        <SafeAreaView style={styles.container} edges={['bottom']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           <ScreenHeader title="Notifications" />
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>Failed to load notifications</Text>
@@ -73,7 +73,7 @@ export default function NotificationsScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <SafeAreaView style={styles.container} edges={['bottom']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <ScreenHeader title="Notifications" />
         <View style={styles.content}>
           <NotificationInbox
