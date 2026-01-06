@@ -51,7 +51,7 @@ function getAblyClient(): Ably.Rest {
 // Lazy-initialized Ably client
 let ablyClient: Ably.Rest | undefined;
 
-function getAbly(): Ably.Rest {
+export function getAbly(): Ably.Rest {
   if (ablyClient === undefined) {
     ablyClient = getAblyClient();
   }

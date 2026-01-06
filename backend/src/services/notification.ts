@@ -15,9 +15,11 @@ import {
   NotificationType as SharedNotificationType,
   NotificationPreferencesDTO,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  REALTIME_CHANNELS,
 } from '@meet-without-fear/shared';
 import { sendPushNotification } from './push';
 import type { SessionEvent } from './realtime';
+import { getAbly } from './realtime';
 
 // ============================================================================
 // Types
@@ -64,6 +66,21 @@ export async function createNotification(
       actorName,
     },
   });
+
+  // Publish notification to user's Ably channel for real-time updates
+  try {
+    const ably = getAbly();
+    const userChannel = ably.channels.get(REALTIME_CHANNELS.user(userId));
+    const notificationDTO = mapToDTO(notification);
+    await userChannel.publish('notification.created', {
+      notification: notificationDTO,
+      unreadCount: await getUnreadCount(userId),
+    });
+    console.log(`[Notification] Published to user channel for ${userId}`);
+  } catch (error) {
+    console.error(`[Notification] Failed to publish to user channel for ${userId}:`, error);
+    // Don't fail the notification creation if Ably publish fails
+  }
 
   // Check user preferences before sending push notification
   if (sessionId) {
