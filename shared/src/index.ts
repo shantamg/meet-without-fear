@@ -6,6 +6,7 @@
 
 // Enums (mirror Prisma enums for client use)
 export * from './enums';
+export * from './audit';
 
 // API response wrappers
 export * from './api';
@@ -26,6 +27,11 @@ export * from './dto/inner-work';
 export * from './dto/notification';
 export * from './dto/reconciler';
 export * from './dto/memory';
+export * from './dto/needs-assessment';
+export * from './dto/people-tracking';
+export * from './dto/gratitude';
+export * from './dto/meditation';
+export * from './dto/cross-feature';
 
 // Validation schemas
 export * from './validation';

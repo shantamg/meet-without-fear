@@ -140,3 +140,40 @@ export enum NotificationType {
   FOLLOW_UP_REMINDER = 'FOLLOW_UP_REMINDER', // Follow-up reminder for agreement
   SESSION_ABANDONED = 'SESSION_ABANDONED', // Partner left/deleted account during active session
 }
+
+// ============================================================================
+// Inner Work: Needs Assessment
+// ============================================================================
+
+export enum NeedsCategory {
+  FOUNDATION = 'FOUNDATION', // Physical safety, health, rest, material security
+  EMOTIONAL = 'EMOTIONAL', // Emotional safety, self-compassion, regulation, agency
+  RELATIONAL = 'RELATIONAL', // Being seen, belonging, trust, contribution
+  INTEGRATION = 'INTEGRATION', // Purpose, learning, integrity, hope
+  TRANSCENDENCE = 'TRANSCENDENCE', // Presence, gratitude, connection to larger whole
+}
+
+// ============================================================================
+// Inner Work: People Tracking
+// ============================================================================
+
+export enum MentionSourceType {
+  INNER_THOUGHTS = 'INNER_THOUGHTS', // InnerWorkMessage
+  GRATITUDE = 'GRATITUDE', // GratitudeEntry
+  NEEDS_CHECKIN = 'NEEDS_CHECKIN', // NeedScore clarification
+  PARTNER_SESSION = 'PARTNER_SESSION', // Session message
+}
+
+// ============================================================================
+// Inner Work: Meditation
+// ============================================================================
+
+export enum MeditationType {
+  GUIDED = 'GUIDED',
+  UNGUIDED = 'UNGUIDED',
+}
+
+export enum FavoriteType {
+  EXACT = 'EXACT', // Replay exact script
+  THEME = 'THEME', // Generate fresh variation
+}
