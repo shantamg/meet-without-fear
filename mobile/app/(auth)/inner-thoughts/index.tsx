@@ -21,6 +21,9 @@ import { createStyles } from '@/src/theme/styled';
 import { colors } from '@/src/theme';
 import { InnerWorkSessionSummaryDTO } from '@meet-without-fear/shared';
 
+// Animation types for delete
+type AnimationValues = { opacity: Animated.Value; height: Animated.Value };
+
 // Simple time ago formatter
 function formatTimeAgo(dateStr: string): string {
   const now = new Date();
@@ -97,19 +100,20 @@ export default function InnerThoughtsListScreen() {
   // Track open swipeable to close it when another opens
   const openSwipeableRef = useRef<Swipeable | null>(null);
 
-  // Track which session is being deleted for loading state
-  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+  // Animation refs for optimistic delete with slide-up
+  const animationRefs = useRef<Record<string, AnimationValues>>({});
+  const layoutHeightsRef = useRef<Record<string, number>>({});
+  const [deletingSessions, setDeletingSessions] = useState<Set<string>>(new Set());
 
-  const handleDeleteSession = async (sessionId: string) => {
-    try {
-      setDeletingSessionId(sessionId);
-      await archiveSession.mutateAsync({ sessionId });
-      refetch();
-    } catch (err) {
-      console.error('Failed to delete Inner Thoughts session:', err);
-    } finally {
-      setDeletingSessionId(null);
+  // Helper to get or create animation values for a session
+  const getAnimationValues = (sessionId: string): AnimationValues => {
+    if (!animationRefs.current[sessionId]) {
+      animationRefs.current[sessionId] = {
+        opacity: new Animated.Value(1),
+        height: new Animated.Value(0),
+      };
     }
+    return animationRefs.current[sessionId];
   };
 
   const confirmDeleteSession = (sessionId: string, title: string) => {
@@ -129,7 +133,51 @@ export default function InnerThoughtsListScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => handleDeleteSession(sessionId),
+          onPress: () => {
+            // Mark session as deleting immediately
+            setDeletingSessions(prev => new Set(prev).add(sessionId));
+
+            const animationValues = getAnimationValues(sessionId);
+
+            // Use measured height for collapse animation
+            const measuredHeight = layoutHeightsRef.current[sessionId] || 100;
+            animationValues.height.setValue(measuredHeight);
+
+            // Run fade and height collapse simultaneously
+            Animated.parallel([
+              Animated.timing(animationValues.opacity, {
+                toValue: 0,
+                duration: 200,
+                useNativeDriver: false,
+              }),
+              Animated.timing(animationValues.height, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: false,
+              }),
+            ]).start(async () => {
+              // After animation completes, delete from backend
+              try {
+                await archiveSession.mutateAsync({ sessionId });
+                refetch();
+                // Clean up animation refs
+                delete animationRefs.current[sessionId];
+                delete layoutHeightsRef.current[sessionId];
+              } catch (err) {
+                console.error('Failed to delete Inner Thoughts session:', err);
+                // Reset animations if deletion failed
+                animationValues.opacity.setValue(1);
+                animationValues.height.setValue(measuredHeight);
+                Alert.alert('Error', 'Failed to delete session. Please try again.');
+              } finally {
+                setDeletingSessions(prev => {
+                  const newSet = new Set(prev);
+                  newSet.delete(sessionId);
+                  return newSet;
+                });
+              }
+            });
+          },
         },
       ]
     );
@@ -148,7 +196,7 @@ export default function InnerThoughtsListScreen() {
       extrapolate: 'clamp',
     });
 
-    const isDeleting = deletingSessionId === sessionId;
+    const isDeleting = deletingSessions.has(sessionId);
 
     return (
       <TouchableOpacity
@@ -175,57 +223,73 @@ export default function InnerThoughtsListScreen() {
     const displaySummary = item.summary || 'Tap to continue...';
     // Note: linkedPartnerSessionId would be added to DTO in future iteration
     const isLinked = false; // TODO: item.linkedPartnerSessionId
+    const isDeleting = deletingSessions.has(item.id);
+    const animationValues = getAnimationValues(item.id);
 
     return (
-      <Swipeable
-        ref={(ref) => {
-          // Close previous swipeable when opening a new one
-          if (ref) {
-            ref.close = () => {
-              if (openSwipeableRef.current && openSwipeableRef.current !== ref) {
-                openSwipeableRef.current.close();
-              }
-            };
-          }
+      <Animated.View
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h > 0) layoutHeightsRef.current[item.id] = h;
         }}
-        onSwipeableWillOpen={() => {
-          if (openSwipeableRef.current) {
-            openSwipeableRef.current.close();
-          }
-        }}
-        onSwipeableOpen={(direction, swipeable) => {
-          openSwipeableRef.current = swipeable;
-        }}
-        renderRightActions={(progress, dragX) => renderRightActions(item.id, displayTitle, progress, dragX)}
-        rightThreshold={40}
-        overshootRight={false}
+        style={[
+          {
+            opacity: animationValues.opacity,
+            ...(isDeleting ? { height: animationValues.height, overflow: 'hidden' } : {}),
+          },
+        ]}
       >
-        <Pressable
-          style={({ pressed }) => [
-            styles.sessionCard,
-            pressed && styles.sessionCardPressed,
-          ]}
-          onPress={() => handleOpenSession(item.id)}
-          accessibilityRole="button"
-          accessibilityLabel={`Open ${displayTitle}`}
+        <Swipeable
+          ref={(ref) => {
+            // Close previous swipeable when opening a new one
+            if (ref) {
+              ref.close = () => {
+                if (openSwipeableRef.current && openSwipeableRef.current !== ref) {
+                  openSwipeableRef.current.close();
+                }
+              };
+            }
+          }}
+          onSwipeableWillOpen={() => {
+            if (openSwipeableRef.current) {
+              openSwipeableRef.current.close();
+            }
+          }}
+          onSwipeableOpen={(direction, swipeable) => {
+            openSwipeableRef.current = swipeable;
+          }}
+          renderRightActions={(progress, dragX) => renderRightActions(item.id, displayTitle, progress, dragX)}
+          rightThreshold={40}
+          overshootRight={false}
         >
-          <View style={styles.sessionContent}>
-            <View style={styles.sessionTitleRow}>
-              <Text style={styles.sessionTitle} numberOfLines={1}>
-                {displayTitle}
+          <Pressable
+            style={({ pressed }) => [
+              styles.sessionCard,
+              pressed && styles.sessionCardPressed,
+            ]}
+            onPress={() => handleOpenSession(item.id)}
+            disabled={isDeleting}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${displayTitle}`}
+          >
+            <View style={styles.sessionContent}>
+              <View style={styles.sessionTitleRow}>
+                <Text style={styles.sessionTitle} numberOfLines={1}>
+                  {displayTitle}
+                </Text>
+                {isLinked && (
+                  <Link color={colors.accent} size={14} />
+                )}
+              </View>
+              <Text style={styles.sessionSummary} numberOfLines={2}>
+                {displaySummary}
               </Text>
-              {isLinked && (
-                <Link color={colors.accent} size={14} />
-              )}
+              <Text style={styles.sessionTime}>{timeAgo}</Text>
             </View>
-            <Text style={styles.sessionSummary} numberOfLines={2}>
-              {displaySummary}
-            </Text>
-            <Text style={styles.sessionTime}>{timeAgo}</Text>
-          </View>
-          <ChevronRight color="#666" size={20} />
-        </Pressable>
-      </Swipeable>
+            <ChevronRight color="#666" size={20} />
+          </Pressable>
+        </Swipeable>
+      </Animated.View>
     );
   };
 

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,22 @@ export default function SessionsScreen() {
   const { data, isLoading, refetch, isRefetching } = useSessions();
   const deleteSession = useDeleteSession();
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
+
+  // Animation refs for optimistic delete with slide-up
+  const animationRefs = useRef<Record<string, { opacity: Animated.Value; height: Animated.Value }>>({});
+  const layoutHeightsRef = useRef<Record<string, number>>({});
+  const [deletingSessions, setDeletingSessions] = useState<Set<string>>(new Set());
+
+  // Helper to get or create animation values for a session
+  const getAnimationValues = (sessionId: string) => {
+    if (!animationRefs.current[sessionId]) {
+      animationRefs.current[sessionId] = {
+        opacity: new Animated.Value(1),
+        height: new Animated.Value(0),
+      };
+    }
+    return animationRefs.current[sessionId];
+  };
 
   // Filter out archived sessions from display
   const sessions = (data?.items ?? []).filter(
@@ -79,13 +95,49 @@ export default function SessionsScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteSession.mutateAsync({ sessionId: session.id });
-            } catch (error) {
-              console.error('Failed to delete session:', error);
-              Alert.alert('Error', 'Failed to delete session. Please try again.');
-            }
+          onPress: () => {
+            // Mark session as deleting immediately
+            setDeletingSessions(prev => new Set(prev).add(session.id));
+
+            const animationValues = getAnimationValues(session.id);
+
+            // Use measured height for collapse animation
+            const measuredHeight = layoutHeightsRef.current[session.id] || 100;
+            animationValues.height.setValue(measuredHeight);
+
+            // Run fade and height collapse simultaneously
+            Animated.parallel([
+              Animated.timing(animationValues.opacity, {
+                toValue: 0,
+                duration: 200,
+                useNativeDriver: false,
+              }),
+              Animated.timing(animationValues.height, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: false,
+              }),
+            ]).start(async () => {
+              // After animation completes, delete from backend
+              try {
+                await deleteSession.mutateAsync({ sessionId: session.id });
+                // Clean up animation refs
+                delete animationRefs.current[session.id];
+                delete layoutHeightsRef.current[session.id];
+              } catch (error) {
+                console.error('Failed to delete session:', error);
+                // Reset animations if deletion failed
+                animationValues.opacity.setValue(1);
+                animationValues.height.setValue(measuredHeight);
+                Alert.alert('Error', 'Failed to delete session. Please try again.');
+              } finally {
+                setDeletingSessions(prev => {
+                  const newSet = new Set(prev);
+                  newSet.delete(session.id);
+                  return newSet;
+                });
+              }
+            });
           },
         },
       ]);
@@ -131,37 +183,52 @@ export default function SessionsScreen() {
   const renderSessionItem = useCallback(
     ({ item }: { item: SessionSummaryDTO }) => {
       const isDeletable = canDelete(item.status);
+      const isDeleting = deletingSessions.has(item.id);
+      const animationValues = getAnimationValues(item.id);
 
-      if (isDeletable) {
-        return (
-          <Swipeable
-            ref={(ref) => {
-              if (ref) {
-                swipeableRefs.current.set(item.id, ref);
-              } else {
-                swipeableRefs.current.delete(item.id);
-              }
-            }}
-            renderRightActions={(progress, dragX) =>
-              renderRightActions(progress, dragX, item)
+      const content = isDeletable ? (
+        <Swipeable
+          ref={(ref) => {
+            if (ref) {
+              swipeableRefs.current.set(item.id, ref);
+            } else {
+              swipeableRefs.current.delete(item.id);
             }
-            overshootRight={false}
-            rightThreshold={40}
-          >
-            <TouchableOpacity onPress={() => handleSessionPress(item.id)}>
-              <SessionCard session={item} noMargin />
-            </TouchableOpacity>
-          </Swipeable>
-        );
-      }
-
-      return (
+          }}
+          renderRightActions={(progress, dragX) =>
+            renderRightActions(progress, dragX, item)
+          }
+          overshootRight={false}
+          rightThreshold={40}
+        >
+          <TouchableOpacity onPress={() => handleSessionPress(item.id)} disabled={isDeleting}>
+            <SessionCard session={item} noMargin />
+          </TouchableOpacity>
+        </Swipeable>
+      ) : (
         <TouchableOpacity onPress={() => handleSessionPress(item.id)}>
           <SessionCard session={item} noMargin />
         </TouchableOpacity>
       );
+
+      return (
+        <Animated.View
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            if (h > 0) layoutHeightsRef.current[item.id] = h;
+          }}
+          style={[
+            {
+              opacity: animationValues.opacity,
+              ...(isDeleting ? { height: animationValues.height, overflow: 'hidden' } : {}),
+            },
+          ]}
+        >
+          {content}
+        </Animated.View>
+      );
     },
-    [renderRightActions, handleSessionPress]
+    [renderRightActions, handleSessionPress, deletingSessions]
   );
 
   const renderEmptyState = () => (
