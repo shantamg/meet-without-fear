@@ -234,8 +234,18 @@ export function UnifiedSessionScreen({
   const [showRefineDrawer, setShowRefineDrawer] = useState(false);
 
   // Track when user is refining the invitation (after initial send, from Stage 1)
-  // This overrides Stage 1 UI to show invitation crafting UI instead
-  const [isRefiningInvitation, setIsRefiningInvitation] = useState(false);
+  // FIX: Initialize based on data so it persists on reload/navigation
+  // If we have a message but it's not confirmed, and we are already in INVITED state, we are refining.
+  const [isRefiningInvitation, setIsRefiningInvitation] = useState(() => {
+    return session?.status === SessionStatus.INVITED && invitationMessage && !invitationConfirmed;
+  });
+
+  // Update local state if data changes (e.g. after fetch completes)
+  useEffect(() => {
+    if (session?.status === SessionStatus.INVITED && invitationMessage && !invitationConfirmed) {
+      setIsRefiningInvitation(true);
+    }
+  }, [session?.status, invitationMessage, invitationConfirmed]);
 
   // -------------------------------------------------------------------------
   // Local State for View Empathy Statement Drawer (Stage 2)
@@ -298,22 +308,29 @@ export function UnifiedSessionScreen({
   // Animation for the invitation panel slide-up
   const invitationPanelAnim = useRef(new Animated.Value(0)).current;
 
-  // Calculate whether panel should show: have message, in right phase
-  // Uses localInvitationConfirmed from hook (survives component remounts)
+  // Calculate whether panel should show
+  // FIX: Only show to inviter (they are the ones who need to share the invitation)
+  // Invitees should never see this panel - they already accepted the invitation
+  // Relying on the data truth: If we have a message and it is NOT confirmed, it is a draft.
+  // Wait for typewriter animation to finish before showing the panel
+  const isInviter = invitation?.isInviter ?? true; // Default to inviter for backwards compatibility
   const shouldShowInvitationPanel = !!(
+    isInviter && // Only show to the inviter, not the invitee
     invitationMessage &&
-    (isInvitationPhase || isRefiningInvitation) &&
+    !invitationConfirmed && // It is a draft (not sent yet)
     !isConfirmingInvitation && // Hide panel when confirming
-    !localInvitationConfirmed // Keep hidden permanently after user confirms (from hook)
+    !localInvitationConfirmed && // Keep hidden permanently after user confirms (from hook)
+    !isTypewriterAnimating // Wait for text to finish
   );
 
   // Animate panel when shouldShowInvitationPanel changes
+  // This will trigger the "Slide Up" the moment isTypewriterAnimating becomes false
   useEffect(() => {
     Animated.spring(invitationPanelAnim, {
       toValue: shouldShowInvitationPanel ? 1 : 0,
-      useNativeDriver: true,
-      tension: 50,
-      friction: 8,
+      useNativeDriver: false, // Required for layout animations like maxHeight
+      tension: 40, // Slightly lower tension for a smoother slide
+      friction: 9, // Adjust friction for "weight"
     }).start();
   }, [shouldShowInvitationPanel, invitationPanelAnim]);
 
@@ -360,7 +377,7 @@ export function UnifiedSessionScreen({
     // For inviters: Show "Invitation Sent" when they confirmed the invitation message
     // Use the API timestamp for reliable positioning, or optimistic timestamp during confirmation
     const confirmedAt = invitation?.messageConfirmedAt ?? optimisticConfirmTimestamp;
-    const isInviter = invitation?.isInviter ?? true; // Default to inviter for backwards compatibility
+    // Note: isInviter is already calculated above at component level
 
     if (isInviter && (invitationConfirmed || isConfirmingInvitation || localInvitationConfirmed) && confirmedAt) {
       items.push({
@@ -413,7 +430,7 @@ export function UnifiedSessionScreen({
       });
     }
     return items;
-  }, [invitationConfirmed, isConfirmingInvitation, localInvitationConfirmed, invitation?.messageConfirmedAt, invitation?.acceptedAt, invitation?.isInviter, optimisticConfirmTimestamp, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, optimisticCompactSignedTimestamp, session?.createdAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, optimisticFeelHeardTimestamp]);
+  }, [invitationConfirmed, isConfirmingInvitation, localInvitationConfirmed, invitation?.messageConfirmedAt, invitation?.acceptedAt, isInviter, optimisticConfirmTimestamp, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, optimisticCompactSignedTimestamp, session?.createdAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, optimisticFeelHeardTimestamp]);
 
   // -------------------------------------------------------------------------
   // Effective Stage (accounts for compact signed but stage not yet updated)
@@ -1100,58 +1117,76 @@ export function UnifiedSessionScreen({
                     testID="compact-agreement-bar"
                   />
                 )
-              // Show invitation panel during invitation phase (use shouldShowInvitationPanel for consistency)
-              : shouldShowInvitationPanel && invitationUrl
+              // Only render if inviter has a draft message (not confirmed yet)
+              // Never render for invitees - they already accepted the invitation
+              : (isInviter && invitationMessage && invitationUrl && !invitationConfirmed && !localInvitationConfirmed)
               ? () => (
                   <Animated.View
-                    style={[
-                      styles.invitationDraftContainer,
-                      {
-                        opacity: invitationPanelAnim,
-                        transform: [
-                          {
-                            translateY: invitationPanelAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [100, 0],
-                            }),
-                          },
-                        ],
-                      },
-                    ]}
+                    style={{
+                      // 1. Animate Opacity
+                      opacity: invitationPanelAnim,
+                      
+                      // 2. Animate Height (Slide in effect)
+                      // We use maxHeight to safely animate from 0 to a value large enough to fit content
+                      maxHeight: invitationPanelAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 400], // 400 is arbitrary but large enough for your message + buttons
+                      }),
+                      
+                      // 3. Optional: Add a slight slide-up transform for visual flair
+                      transform: [{
+                        translateY: invitationPanelAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [20, 0],
+                        }),
+                      }],
+                      
+                      // 4. Clip content while closed so padding doesn't leak space
+                      overflow: 'hidden',
+                    }}
+                    // Disable touches when hidden
                     pointerEvents={shouldShowInvitationPanel ? 'auto' : 'none'}
                   >
-                    <Text style={styles.invitationDraftMessage}>
-                      "{invitationMessage}"
-                    </Text>
-                    <InvitationShareButton
-                      invitationMessage={invitationMessage}
-                      invitationUrl={invitationUrl}
-                      partnerName={partnerName}
-                      senderName={user?.name || user?.firstName || undefined}
-                      testID="invitation-share-button"
-                    />
-                    <TouchableOpacity
-                      style={styles.continueButton}
-                      onPress={() => {
-                        // Track invitation sent
-                        trackInvitationSent(sessionId, 'share_sheet');
-                        // Mark as confirmed permanently in hook state (survives remounts)
-                        setLocalInvitationConfirmed(true);
-                        // Optimistic UI: immediately show loading state and indicator
-                        setIsConfirmingInvitation(true);
-                        setOptimisticConfirmTimestamp(new Date().toISOString());
-                        setIsRefiningInvitation(false); // Exit refinement mode
-                        handleConfirmInvitationMessage(invitationMessage, () => {
-                          // Clear loading state when mutation completes
-                          setIsConfirmingInvitation(false);
-                        });
-                      }}
-                      testID="invitation-continue-button"
-                    >
-                      <Text style={styles.continueButtonText}>
-                        {isRefiningInvitation ? "I've sent it - Back to conversation" : "I've sent it - Continue"}
+                    {/* 5. INNER CONTAINER 
+                       Move the styles that contain padding/bg/borders HERE. 
+                       This ensures they don't take up space when the parent height is 0.
+                    */}
+                    <View style={styles.invitationDraftContainer}>
+                      <Text style={styles.invitationDraftMessage}>
+                        "{invitationMessage}"
                       </Text>
-                    </TouchableOpacity>
+                      
+                      <InvitationShareButton
+                        invitationMessage={invitationMessage}
+                        invitationUrl={invitationUrl}
+                        partnerName={partnerName}
+                        senderName={user?.name || user?.firstName || undefined}
+                        testID="invitation-share-button"
+                      />
+                      
+                      <TouchableOpacity
+                        style={styles.continueButton}
+                        onPress={() => {
+                          // Track invitation sent
+                          trackInvitationSent(sessionId, 'share_sheet');
+                          // Mark as confirmed permanently in hook state (survives remounts)
+                          setLocalInvitationConfirmed(true);
+                          // Optimistic UI: immediately show loading state and indicator
+                          setIsConfirmingInvitation(true);
+                          setOptimisticConfirmTimestamp(new Date().toISOString());
+                          setIsRefiningInvitation(false); // Exit refinement mode
+                          handleConfirmInvitationMessage(invitationMessage, () => {
+                            // Clear loading state when mutation completes
+                            setIsConfirmingInvitation(false);
+                          });
+                        }}
+                        testID="invitation-continue-button"
+                      >
+                        <Text style={styles.continueButtonText}>
+                          {isRefiningInvitation ? "I've sent it - Back to conversation" : "I've sent it - Continue"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </Animated.View>
                 )
               // Show waiting banner when waiting for partner's empathy
