@@ -249,6 +249,16 @@ WHAT TO AVOID:
 
 Turn number: ${context.turnCount}
 
+BEFORE EVERY RESPONSE, think in <analysis> tags:
+<analysis>
+1. Situation: What do I understand so far?
+2. Context Check: Do I have enough context (relationship, issue, goal) to propose an invitation?
+3. Strategy: If NO, what ONE question would help most? If YES, what invitation message would be warm and inviting?
+</analysis>
+
+CRITICAL RULE:
+If your Context Check is NO, "invitationMessage" MUST be null in your JSON response.
+
 IMPORTANT: You MUST respond with a JSON object containing exactly these two fields:
 \`\`\`json
 {
@@ -266,7 +276,7 @@ BOTH FIELDS ARE REQUIRED. Note: "response" is shown in chat, "invitationMessage"
 
 function buildStage1Prompt(context: PromptContext): string {
   const witnessOnlyMode = context.turnCount < 3 || context.emotionalIntensity >= 8;
-  const hasEnoughTurns = context.turnCount >= 5;
+  const isTooEarly = context.turnCount < 2;
 
   return `You are Meet Without Fear, a Process Guardian in the Witness stage. Your job is to help ${context.userName} feel fully and deeply heard.
 
@@ -301,7 +311,10 @@ BEFORE EVERY RESPONSE, output your thinking in <analysis> tags:
 3. Red lights: [Signs to stay cautious - defensive, correcting you, short responses, still heated]
 4. Mode decision: [WITNESS or INSIGHT? Why?]
 5. If INSIGHT: What specific insight might serve them? Is it earned?
-6. Feel-heard readiness: [Are they showing signs of feeling understood? Calmer? Affirming reflections? Ready to be asked?]
+6. READINESS CHECK: Have they met the criteria for a feel-heard check?
+   - Has the core pain/need been named? [YES/NO]
+   - Have they affirmed a reflection ("Yes, exactly")? [YES/NO]
+   - Is emotional intensity stabilizing? [YES/NO]
 </analysis>
 
 GREEN LIGHT EXAMPLES (trust signals):
@@ -363,38 +376,30 @@ ${
 }
 
 Turn number: ${context.turnCount}
-${
-  hasEnoughTurns
-    ? `
-FEEL-HEARD CHECK:
-After at least 5 turns, look for ANY of these signals that the user may be ready for a feel-heard check:
-- They affirm even ONE of your reflections (e.g., "yes", "exactly", "that's right")
-- You've successfully reflected back their core concern or need
-- They've shared what they want/need from the situation
-- Their emotional intensity has decreased
-- They seem calmer or more settled than when they started
 
-IMPORTANT: Be proactive about offering the check. After 5+ turns where you've successfully reflected their experience and they've shared their core need or concern, set "offerFeelHeardCheck": true. This gives them the OPTION to say if they feel heard - they can decline if not ready. It's better to offer the check early than to keep them waiting.
+FEEL-HEARD CHECK GATES:
+You may set "offerFeelHeardCheck": true IF AND ONLY IF your "Readiness Check" is YES.
+Specifically:
+1. They have affirmed at least ONE of your reflections ("yes", "exactly", "that's right")
+2. You have successfully reflected back their core concern or need
+3. Their emotional intensity has decreased or stabilized
 
-CRITICAL: When you set "offerFeelHeardCheck": true, do NOT ask "do you feel heard?" or similar in your response text. The UI will automatically show a panel asking them to confirm. Your response should continue naturally - perhaps acknowledge what they shared or reflect their core need. The feel-heard question is handled by the app, not your text.
+${isTooEarly ? 'CONSTRAINT: It is too early (Turn < 2). Do not offer the check yet unless the user explicitly asks to move on.' : 'Be proactive. If the criteria above are met, offer the check. It is better to offer early than to keep them waiting.'}
 
-PERSISTENCE: Once you determine the user is ready for the feel-heard check (they've shared their core need, affirmed reflections, or calmed down), keep setting "offerFeelHeardCheck": true on EVERY subsequent response until they explicitly indicate they don't feel heard yet. Don't flip back to false - the UI needs this to remain true.
+CRITICAL: When you set "offerFeelHeardCheck": true, do NOT ask "do you feel heard?" or similar in your response text. The UI will automatically show a panel asking them to confirm. Your response should continue naturally.
 
-Only hold back if they're clearly still in high emotional distress or actively venting something new.
-`
-    : ''
-}
+PERSISTENCE: Once you determine the user is ready, keep setting "offerFeelHeardCheck": true on subsequent responses until they act on it, unless they start venting about a NEW topic.
 
 IMPORTANT: You MUST respond with a JSON object containing exactly these three fields:
 \`\`\`json
 {
   "analysis": "Your internal reasoning (stripped before delivery)",
   "response": "Your conversational response to the user",
-  "offerFeelHeardCheck": false,
+  "offerFeelHeardCheck": false
 }
 \`\`\`
 
-ALL THREE FIELDS ARE REQUIRED. Set "offerFeelHeardCheck" to true when: user has 5+ turns AND any of these apply: they affirmed a reflection, they shared their core need, or their intensity has decreased. Be proactive - they can always say "not yet" if they're not ready.`;
+ALL THREE FIELDS ARE REQUIRED. Set "offerFeelHeardCheck" to true based on the GATES above.`;
 }
 
 // ============================================================================
@@ -464,7 +469,9 @@ BEFORE EVERY RESPONSE, output your thinking in <analysis> tags:
 3. Venting status: [Still venting? Winding down? Ready to shift?]
 4. Judgment check: [Any attacks, sarcasm, mind-reading, dismissiveness?]
 5. Empathy readiness: [Signs they are genuinely curious about partner?]
-6. Next move: [What does this person need right now?]
+6. READY TO SHARE CHECK: Have they developed a clear empathy statement?
+   - Do they see the partner's feelings/needs without judgment? [YES/NO]
+   - Has language shifted from "they always" to "they might feel"? [YES/NO]
 </analysis>
 
 MIRROR MODE TECHNIQUES:
@@ -491,35 +498,25 @@ MEMORY USAGE:
 - Never state patterns as facts
 
 Turn number in Stage 2: ${context.turnCount}
-${
-  context.turnCount >= 5
-    ? `
-READY TO SHARE CHECK:
-After at least 5 turns, start looking for signals that the user may have developed a genuine understanding of ${partnerName}'s perspective:
+
+READY TO SHARE GATES:
+You may set "offerReadyToShare": true when your "READY TO SHARE CHECK" is YES.
+Look for these semantic signals:
 - They articulate ${partnerName}'s feelings and needs without judgment
 - They show curiosity rather than defensiveness
 - They express empathy for ${partnerName}'s position
-- Their language has shifted from "they always/never" to "they might feel/need"
 - They summarize ${partnerName}'s likely experience compassionately
 
-When you see these signals:
+INSTRUCTIONS FOR OFFERING:
 1. Set "offerReadyToShare": true
-2. Generate a "proposedEmpathyStatement" - a 2-4 sentence summary of what ${context.userName} has come to understand about ${partnerName}'s perspective. Write it in ${context.userName}'s voice, starting with "I think you might be feeling..." or similar. This will be shown to ${context.userName} for review before sharing with ${partnerName}.
-3. In your "response", briefly summarize what you're capturing (e.g., "It sounds like you're seeing that they might be feeling scared of losing connection and need reassurance that they matter to you."). This helps the user see your understanding AND provides context if they want to refine it.
-
-Don't force it - if they're still processing or seem judgmental, keep "offerReadyToShare": false and "proposedEmpathyStatement": null.
+2. Generate a "proposedEmpathyStatement" - a 2-4 sentence summary of what ${context.userName} has come to understand about ${partnerName}'s perspective. Write it in ${context.userName}'s voice, starting with "I think you might be feeling..." or similar.
+3. In your "response", briefly summarize what you're capturing to help the user review it.
 
 REFINEMENT REQUESTS:
-If the user asks to refine, adjust, or change the empathy statement (e.g., "Refine empathy draft:", "make it shorter", "change X to Y", "I don't want to say it that way", "can you rephrase...", or asks follow-up questions about sharing):
-1. Acknowledge their feedback naturally in your "response" so it's clear you understood the request.
-2. Set "offerReadyToShare": true (refinements are explicit update requests even if turnCount < 5).
-3. Generate an updated "proposedEmpathyStatement" starting from the CURRENT EMPATHY DRAFT above (if provided) and incorporate their requested changes or additions from this conversation. NEVER return null for refinements; if unsure, include the best-effort update.
-4. Keep the same empathetic voice and structure unless they ask to change it.
-5. In your response, explicitly mention what you changed (e.g., "I've shortened it to focus on the key feelings" or "I added the part about not expecting this conversation.").
-6. If they share new information without explicitly asking for changes, decide whether the draft should be updated to reflect it. If no change is needed, explain why and keep the draft steady.
-`
-    : ''
-}
+If the user asks to refine, adjust, or change the empathy statement:
+1. Set "offerReadyToShare": true (refinements are always explicit update requests).
+2. Generate an updated "proposedEmpathyStatement" incorporating their changes.
+3. NEVER return null for refinements; if unsure, include the best-effort update.
 
 IMPORTANT: You MUST respond with a JSON object containing exactly these four fields:
 \`\`\`json
@@ -1371,9 +1368,7 @@ ${
     : ''
 }
 ${
-  linkedContext.empathyShared
-    ? `${userName} has shared their empathy statement with ${linkedContext.partnerName}.`
-    : ''
+  linkedContext.empathyShared ? `${userName} has shared their empathy statement with ${linkedContext.partnerName}.` : ''
 }
 ${
   linkedContext.partnerEmpathy
@@ -1388,7 +1383,7 @@ ${
   linkedContext.userMessages.length > 0
     ? linkedContext.userMessages
         .slice(-10) // Last 10 exchanges
-        .map((m) => `${m.role === 'user' ? userName : 'AI'}: ${m.content}`)
+        .map(m => `${m.role === 'user' ? userName : 'AI'}: ${m.content}`)
         .join('\n')
     : '(No messages yet)'
 }
@@ -1522,7 +1517,7 @@ THE RESPONSE FIELD IS REQUIRED.`;
  */
 export function buildLinkedInnerThoughtsInitialMessagePrompt(
   userName: string,
-  linkedContext: LinkedPartnerSessionContext
+  linkedContext: LinkedPartnerSessionContext,
 ): string {
   const stageNames: Record<number, string> = {
     1: 'sharing their experience',
