@@ -12,10 +12,15 @@ module.exports = ({ config }) => {
     config.android.package = process.env.EXPO_PUBLIC_BUNDLE_ID;
   }
 
-  // Add apiUrl to extra for access via Constants.expoConfig
+  // Add apiUrl and websiteUrl to extra for access via Constants.expoConfig
+  // websiteUrl is only set if explicitly provided via EXPO_PUBLIC_WEBSITE_URL
+  // Otherwise, the runtime code will use __DEV__ to determine the URL
   config.extra = {
     ...config.extra,
     apiUrl: process.env.EXPO_PUBLIC_API_URL,
+    ...(process.env.EXPO_PUBLIC_WEBSITE_URL && {
+      websiteUrl: process.env.EXPO_PUBLIC_WEBSITE_URL,
+    }),
   };
 
   return withPlugins(config, ['expo-secure-store']);
