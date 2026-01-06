@@ -112,6 +112,8 @@ export interface PromptContext {
   isRefiningInvitation?: boolean;
   /** How to surface pattern observations (from surfacing policy) */
   surfacingStyle?: SurfaceStyle;
+  /** Caution flag: true when emotional intensity is 8-9 (high but not critical) */
+  cautionAdvised?: boolean;
 }
 
 /** Simplified context for initial message generation (no context bundle needed) */
@@ -345,7 +347,9 @@ WHAT TO ALWAYS AVOID:
 
 EMOTIONAL INTENSITY:
 Current reading: ${context.emotionalIntensity}/10
-${context.emotionalIntensity >= 8 ? 'User is at high intensity. Stay in WITNESS MODE. Validate heavily. This is not the moment for insight.' : ''}
+${context.emotionalIntensity >= 9 ? 'CRITICAL: User is at very high intensity. Stay in WITNESS MODE. Validate heavily. This is not the moment for insight or memory recall.' : ''}
+${context.cautionAdvised ? 'CAUTION ADVISED: User is at high emotional intensity (8-9). You may use memory if it helps de-escalate, but be extra careful. Prioritize validation and presence. Stay in WITNESS MODE unless trust is clearly established.' : ''}
+${context.emotionalIntensity >= 8 && !context.cautionAdvised ? 'User is at high intensity. Stay in WITNESS MODE. Validate heavily. This is not the moment for insight.' : ''}
 
 MEMORY USAGE:
 ${

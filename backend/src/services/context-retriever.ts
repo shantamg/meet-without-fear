@@ -23,6 +23,8 @@ import {
   type TimeContext,
 } from '../utils/time-language';
 import { CONTEXT_LIMITS } from '../utils/token-budget';
+import { withHaikuCircuitBreaker, HAIKU_TIMEOUT_MS } from '../utils/circuit-breaker';
+import { auditLog } from './audit-logger';
 
 // ============================================================================
 // Types
@@ -86,6 +88,9 @@ export interface RetrievalOptions {
   /** Current session ID (if in a session) */
   currentSessionId?: string;
 
+  /** Turn ID for grouping logs (format: `${sessionId}-${turnCount}`) */
+  turnId?: string;
+
   /** Maximum messages to retrieve from other sessions */
   maxCrossSessionMessages?: number;
 
@@ -114,7 +119,10 @@ interface ReferenceDetectionResult {
 
 /**
  * Detect references to past content in the user's message.
- * Uses Haiku for fast detection.
+ * Uses Haiku for fast detection with circuit breaker protection.
+ * 
+ * Enhanced to catch commitment patterns like "But I thought...", "I thought we...",
+ * "I assumed...", "I believed..." which are more common than explicit "we agreed".
  */
 async function detectReferences(message: string): Promise<ReferenceDetectionResult> {
   const prompt = `Analyze this message for references to past events, people, agreements, or time periods.
@@ -124,9 +132,15 @@ Message: "${message}"
 Look for:
 - References to specific people (names, relationships like "my mom", "my partner")
 - References to past events ("last time", "when we talked", "remember when")
-- References to agreements or commitments ("we agreed", "you said", "I promised")
+- References to agreements or commitments:
+  * Explicit: "we agreed", "you said", "I promised", "we decided", "our agreement"
+  * Implicit: "But I thought...", "I thought we...", "I assumed...", "I believed...", 
+    "I was under the impression...", "I understood that...", "I thought you meant..."
 - References to past feelings ("I felt", "that time I was")
 - Time references ("yesterday", "last week", "before")
+
+IMPORTANT: Implicit commitment references (like "I thought...") are very common and should
+trigger needsRetrieval=true to help clarify misunderstandings.
 
 Respond with JSON:
 {
@@ -139,13 +153,25 @@ Respond with JSON:
 
 If no references, return empty arrays and needsRetrieval: false.`;
 
-  const result = await getHaikuJson<ReferenceDetectionResult>({
-    systemPrompt: 'You detect references to past content in messages. Output JSON only.',
-    messages: [{ role: 'user', content: prompt }],
-    maxTokens: 512,
-  });
+  // Use circuit breaker: if Haiku fails or times out, return safe fallback
+  const fallback: ReferenceDetectionResult = {
+    references: [],
+    needsRetrieval: false,
+    searchQueries: [],
+  };
 
-  return result || { references: [], needsRetrieval: false, searchQueries: [] };
+  return withHaikuCircuitBreaker(
+    async () => {
+      const result = await getHaikuJson<ReferenceDetectionResult>({
+        systemPrompt: 'You detect references to past content in messages. Output JSON only.',
+        messages: [{ role: 'user', content: prompt }],
+        maxTokens: 512,
+      });
+      return result;
+    },
+    fallback,
+    'detectReferences'
+  );
 }
 
 // ============================================================================
@@ -314,6 +340,11 @@ async function searchWithinSession(
  * Get full conversation history for current session.
  * No arbitrary limits - we trust the model's context window.
  * Data isolation: only returns this user's messages and AI responses to them.
+ * 
+ * IMPORTANT: This fetches raw rows from the database, NOT from the vector store.
+ * This ensures the AI sees messages sent 1 second ago even if they haven't been
+ * embedded yet. This prevents the "async blind spot" where recent messages
+ * might be missing from context.
  */
 async function getSessionHistory(
   sessionId: string,
@@ -432,6 +463,7 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
     userId,
     currentMessage,
     currentSessionId,
+    turnId,
     maxCrossSessionMessages = 10,
     similarityThreshold = 0.5,
     includePreSession = true,
@@ -445,15 +477,17 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
   const effectiveThreshold = memoryIntent?.threshold ?? similarityThreshold;
   const effectiveMaxCrossSession = memoryIntent?.maxCrossSession ?? maxCrossSessionMessages;
 
-  // Run detection and basic retrieval in parallel
+  // Run detection and basic retrieval in parallel using Promise.all()
+  // This is critical for performance - sequential execution would kill user experience
+  // All three operations are independent and can run simultaneously
   const [
     referenceDetection,
     conversationHistory,
     preSessionMessages,
   ] = await Promise.all([
-    detectReferences(currentMessage),
-    currentSessionId ? getSessionHistory(currentSessionId, userId) : Promise.resolve([]),
-    includePreSession ? getPreSessionMessages(userId) : Promise.resolve([]),
+    detectReferences(currentMessage), // Haiku call (with circuit breaker)
+    currentSessionId ? getSessionHistory(currentSessionId, userId) : Promise.resolve([]), // DB query
+    includePreSession ? getPreSessionMessages(userId) : Promise.resolve([]), // DB query
   ]);
 
   // If we detected references that need retrieval, do semantic search
@@ -461,6 +495,21 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
   let relevantFromCurrentSession: RelevantMessage[] = [];
 
   if (referenceDetection.needsRetrieval && referenceDetection.searchQueries.length > 0) {
+    // Log the search queries being used
+    auditLog('RETRIEVAL', 'Semantic search initiated', {
+      turnId,
+      sessionId: currentSessionId,
+      userId,
+      searchQueries: referenceDetection.searchQueries,
+      referencesDetected: referenceDetection.references.map(r => ({
+        type: r.type,
+        text: r.text,
+        confidence: r.confidence,
+      })),
+      threshold: effectiveThreshold,
+      maxCrossSession: effectiveMaxCrossSession,
+    });
+
     // Determine if cross-session recall is allowed
     // Cross-session is allowed if:
     // 1. memoryIntent says allowCrossSession is true, OR
@@ -482,7 +531,7 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
           ? searchWithinSession(currentSessionId, userId, query, 5, effectiveThreshold)
           : Promise.resolve([]),
       ]);
-      return { crossSession, withinSession };
+      return { query, crossSession, withinSession };
     });
 
     const searchResults = await Promise.all(searchPromises);
@@ -507,6 +556,28 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
         }
       }
     }
+
+    // Log search results
+    auditLog('RETRIEVAL', 'Semantic search completed', {
+      turnId,
+      sessionId: currentSessionId,
+      userId,
+      queryCount: referenceDetection.searchQueries.length,
+      crossSessionResults: relevantFromOtherSessions.length,
+      withinSessionResults: relevantFromCurrentSession.length,
+      topMatches: [
+        ...relevantFromOtherSessions.slice(0, 2).map(m => ({
+          content: m.content.substring(0, 150),
+          similarity: m.similarity.toFixed(3),
+          source: 'cross-session',
+        })),
+        ...relevantFromCurrentSession.slice(0, 2).map(m => ({
+          content: m.content.substring(0, 150),
+          similarity: m.similarity.toFixed(3),
+          source: 'within-session',
+        })),
+      ],
+    });
 
     // Sort by similarity and limit
     relevantFromOtherSessions = relevantFromOtherSessions

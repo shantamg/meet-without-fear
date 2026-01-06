@@ -145,17 +145,17 @@ export async function detectMemoryIntent(
 ): Promise<MemoryDetectionResult> {
   const logPrefix = `[Memory Detector][${context}]`;
 
-  console.log(`${logPrefix} Starting detection for message (${message.length} chars): "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`);
-
-  // Skip detection for very short messages
+  // Skip detection for null/undefined/very short messages
   if (!message || message.trim().length < 3) {
-    console.log(`${logPrefix} Skipping - message too short (${message?.trim().length || 0} chars)`);
+    console.log(`${logPrefix} Skipping - message missing or too short (${message?.trim().length || 0} chars)`);
     return {
       hasMemoryIntent: false,
       suggestions: [],
       topicContext: '',
     };
   }
+
+  console.log(`${logPrefix} Starting detection for message (${message.length} chars): "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`);
 
   const systemPrompt = `You are a memory detection assistant. Analyze messages for implicit memory requests.
 Output only valid JSON with no markdown formatting or extra text.`;

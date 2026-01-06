@@ -16,6 +16,8 @@ import {
   type InferenceConfiguration,
   type ConverseCommandInput,
 } from '@aws-sdk/client-bedrock-runtime';
+import { usageTracker } from '../services/usage-tracker';
+import { extractJsonFromResponse } from '../utils/json-extractor';
 
 // ============================================================================
 // Configuration - Two Model Stratification
@@ -84,19 +86,25 @@ export interface CompletionOptions {
   messages: SimpleMessage[];
   maxTokens?: number;
   thinkingBudget?: number;
+  sessionId?: string;
+  operation?: string;
+  turnId?: string;
 }
 
 export interface HaikuCompletionOptions {
   systemPrompt: string;
   messages: SimpleMessage[];
   maxTokens?: number;
+  sessionId?: string;
+  operation?: string;
 }
 
-export interface SonnetCompletionOptions {
-  systemPrompt: string;
-  messages: SimpleMessage[];
+export interface SonnetCompletionOptions extends CompletionOptions {
+  // Sonnet-specific options can be added here
   maxTokens?: number;
   thinkingBudget?: number;
+  sessionId?: string;
+  operation?: string;
 }
 
 export type ModelType = 'haiku' | 'sonnet';
@@ -113,6 +121,31 @@ function toBedrockMessages(messages: SimpleMessage[]): Message[] {
     role: m.role,
     content: [{ text: m.content }],
   }));
+}
+
+/**
+ * Record token usage from AWS Bedrock response.
+ */
+function recordUsage(params: {
+  sessionId?: string;
+  modelId: string;
+  operation: string;
+  usage?: { inputTokens?: number; outputTokens?: number };
+  turnId?: string;
+}): void {
+  const inputTokens = params.usage?.inputTokens ?? 0;
+  const outputTokens = params.usage?.outputTokens ?? 0;
+
+  if (inputTokens === 0 && outputTokens === 0) return;
+
+  usageTracker.track(
+    params.sessionId ?? 'unknown',
+    params.modelId,
+    params.operation,
+    inputTokens,
+    outputTokens,
+    params.turnId
+  );
 }
 
 /**
@@ -149,6 +182,12 @@ export async function getCompletion(options: CompletionOptions): Promise<string 
 
   const command = new ConverseCommand(commandInput);
   const response = await client.send(command);
+  recordUsage({
+    sessionId: options.sessionId,
+    modelId: BEDROCK_MODEL_ID,
+    operation: options.operation ?? 'converse',
+    usage: response.usage ?? undefined,
+  });
 
   const outputMessage = response.output?.message;
   if (!outputMessage?.content) {
@@ -202,6 +241,13 @@ export async function getModelCompletion(
 
   const command = new ConverseCommand(commandInput);
   const response = await client.send(command);
+  recordUsage({
+    sessionId: options.sessionId,
+    modelId,
+    operation: options.operation ?? `converse-${model}`,
+    usage: response.usage ?? undefined,
+    turnId: options.turnId,
+  });
 
   const outputMessage = response.output?.message;
   if (!outputMessage?.content) {
@@ -229,6 +275,7 @@ export async function getHaikuJson<T>(
   const response = await getModelCompletion('haiku', {
     ...options,
     maxTokens: options.maxTokens ?? 1024,
+    operation: options.operation ?? 'haiku-json',
   });
 
   if (!response) {
@@ -236,51 +283,7 @@ export async function getHaikuJson<T>(
   }
 
   try {
-    // Extract JSON from response (handle markdown code blocks and extra text)
-    let jsonStr = response.trim();
-
-    // Remove markdown code block if present
-    if (jsonStr.startsWith('```json')) {
-      jsonStr = jsonStr.slice(7);
-    } else if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.slice(3);
-    }
-    if (jsonStr.endsWith('```')) {
-      jsonStr = jsonStr.slice(0, -3);
-    }
-
-    jsonStr = jsonStr.trim();
-
-    // Extract just the JSON object/array if there's extra text after it
-    // This handles cases where the LLM adds explanatory text after the JSON
-    const firstBrace = jsonStr.indexOf('{');
-    const firstBracket = jsonStr.indexOf('[');
-
-    if (firstBrace !== -1 || firstBracket !== -1) {
-      const startChar = firstBrace === -1 ? '[' :
-                        firstBracket === -1 ? '{' :
-                        firstBrace < firstBracket ? '{' : '[';
-      const endChar = startChar === '{' ? '}' : ']';
-      const startIdx = startChar === '{' ? firstBrace : firstBracket;
-
-      // Find the matching closing brace/bracket
-      let depth = 0;
-      let endIdx = -1;
-      for (let i = startIdx; i < jsonStr.length; i++) {
-        if (jsonStr[i] === startChar) depth++;
-        else if (jsonStr[i] === endChar) depth--;
-        if (depth === 0) {
-          endIdx = i;
-          break;
-        }
-      }
-
-      if (endIdx !== -1) {
-        jsonStr = jsonStr.slice(startIdx, endIdx + 1);
-      }
-    }
-
-    return JSON.parse(jsonStr) as T;
+    return extractJsonFromResponse(response) as T;
   } catch (error) {
     console.error('[Bedrock] Failed to parse Haiku JSON response:', error);
     console.error('[Bedrock] Raw response:', response);
@@ -299,6 +302,7 @@ export async function getSonnetResponse(
   return getModelCompletion('sonnet', {
     ...options,
     maxTokens: options.maxTokens ?? 2048,
+    operation: options.operation ?? 'sonnet-response',
   });
 }
 
@@ -342,6 +346,10 @@ export async function getEmbedding(text: string): Promise<number[] | null> {
     });
 
     const response = await client.send(command);
+    recordUsage({
+      modelId: BEDROCK_TITAN_EMBED_MODEL_ID,
+      operation: 'embedding',
+    });
 
     if (!response.body) {
       return null;

@@ -32,6 +32,7 @@ import {
   formatRetrievedContext,
   type RetrievedContext,
 } from './context-retriever';
+import { auditLog } from './audit-logger';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import {
   decideSurfacing,
@@ -129,11 +130,28 @@ export async function orchestrateResponse(
   context: OrchestratorContext
 ): Promise<OrchestratorResult> {
   const startTime = Date.now();
+  const decisionStartTime = Date.now();
+
+  // Generate unique turn ID for grouping all logs from this message processing cycle
+  const turnId = `${context.sessionId}-${context.turnCount}`;
+
+  // Broadcast user message as the first event in this turn
+  auditLog('USER', 'User message received', {
+    turnId,
+    sessionId: context.sessionId,
+    userId: context.userId,
+    userName: context.userName,
+    stage: context.stage,
+    turnCount: context.turnCount,
+    userMessage: context.userMessage,
+    messageLength: context.userMessage.length,
+    isFirstTurnInSession: context.isFirstTurnInSession,
+  });
 
   // Step 0: Fetch user preferences
   const userPrefs = await getUserMemoryPreferences(context.userId);
 
-  // Step 1: Determine memory intent
+  // Step 1: Determine memory intent (DECISION LAYER - Time to Decision)
   const memoryIntentContext: MemoryIntentContext = {
     stage: context.stage,
     emotionalIntensity: context.emotionalIntensity,
@@ -144,7 +162,22 @@ export async function orchestrateResponse(
   };
 
   const memoryIntent = determineMemoryIntent(memoryIntentContext);
-  console.log(`[AI Orchestrator] Memory intent: ${memoryIntent.intent} (${memoryIntent.depth})`);
+  const decisionTime = Date.now() - decisionStartTime;
+  console.log(`[AI Orchestrator] Memory intent: ${memoryIntent.intent} (${memoryIntent.depth}) [Decision: ${decisionTime}ms]`);
+  auditLog('INTENT', 'Memory intent determined', {
+    turnId,
+    sessionId: context.sessionId,
+    intent: memoryIntent.intent,
+    depth: memoryIntent.depth,
+    reason: memoryIntent.reason,
+    userInput: context.userMessage,
+    emotionalIntensity: context.emotionalIntensity,
+    turnCount: context.turnCount,
+  });
+  
+  if (decisionTime > 1000) {
+    console.warn(`[AI Orchestrator] Decision layer took ${decisionTime}ms (>1s) - consider optimization`);
+  }
 
   // Step 2: Assemble context bundle
   const contextBundle = await assembleContextBundle(
@@ -156,6 +189,11 @@ export async function orchestrateResponse(
   console.log(
     `[AI Orchestrator] Context assembled: ${contextBundle.conversationContext.turnCount} turns`
   );
+  auditLog('RETRIEVAL', 'Context bundle assembled', {
+    sessionId: context.sessionId,
+    stage: context.stage,
+    turnCount: contextBundle.conversationContext.turnCount,
+  });
 
   // Step 2.5: Universal context retrieval
   // This ensures awareness of relevant content from other sessions or earlier history
@@ -166,6 +204,7 @@ export async function orchestrateResponse(
       userId: context.userId,
       currentMessage: context.userMessage,
       currentSessionId: context.sessionId,
+      turnId,
       includePreSession: true,
       // Use stage-aware config from memory intent
       maxCrossSessionMessages: memoryIntent.maxCrossSession,
@@ -176,18 +215,48 @@ export async function orchestrateResponse(
     console.log(
       `[AI Orchestrator] Context retrieved: ${retrievedContext.retrievalSummary}`
     );
+    auditLog('RETRIEVAL', 'Context retrieved', {
+      turnId,
+      sessionId: context.sessionId,
+      stage: context.stage,
+      summary: retrievedContext.retrievalSummary,
+      conversationHistoryCount: retrievedContext.conversationHistory.length,
+      crossSessionCount: retrievedContext.relevantFromOtherSessions.length,
+      withinSessionCount: retrievedContext.relevantFromCurrentSession.length,
+      preSessionCount: retrievedContext.preSessionMessages.length,
+      referencesDetected: retrievedContext.detectedReferences.length,
+      // Include sample of retrieved messages (first 3 of each type)
+      crossSessionSamples: retrievedContext.relevantFromOtherSessions.slice(0, 3).map(m => ({
+        content: m.content.substring(0, 200),
+        similarity: m.similarity.toFixed(3),
+        timeContext: m.timeContext,
+      })),
+      withinSessionSamples: retrievedContext.relevantFromCurrentSession.slice(0, 3).map(m => ({
+        content: m.content.substring(0, 200),
+        similarity: m.similarity.toFixed(3),
+        timeContext: m.timeContext,
+      })),
+    });
   } catch (error) {
     console.warn('[AI Orchestrator] Context retrieval failed, continuing without:', error);
+    auditLog('ERROR', 'Context retrieval failed', {
+      turnId,
+      sessionId: context.sessionId,
+      stage: context.stage,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 
   // Step 2.6: Apply surfacing policy
   // Determine how/whether to surface pattern observations
+  // TODO: Get lastSurfacingTurn from session metadata (for now, undefined = no cooldown check)
   const surfacingDecision = decideSurfacing(
     context.stage,
     context.turnCount,
     userAskedForPattern(context.userMessage),
     userPrefs.patternInsights,
-    countPatternEvidence(retrievedContext ?? null)
+    countPatternEvidence(retrievedContext ?? null),
+    undefined // lastSurfacingTurn - TODO: fetch from session metadata
   );
   console.log(
     `[AI Orchestrator] Surfacing decision: shouldSurface=${surfacingDecision.shouldSurface}, style=${surfacingDecision.style}`
@@ -207,13 +276,33 @@ export async function orchestrateResponse(
       console.log(
         `[AI Orchestrator] Retrieval planned: ${retrievalPlan.queries.length} queries`
       );
+      auditLog('RETRIEVAL', 'Retrieval plan created', {
+        turnId,
+        sessionId: context.sessionId,
+        stage: context.stage,
+        queryCount: retrievalPlan.queries.length,
+        queries: retrievalPlan.queries.map(q => ({
+          type: q.type,
+          source: q.source,
+        })),
+      });
     } catch (error) {
       console.warn('[AI Orchestrator] Retrieval planning failed, using mock plan:', error);
       retrievalPlan = getMockRetrievalPlan(context.stage, context.userId);
+      auditLog('ERROR', 'Retrieval planning failed, using mock plan', {
+        turnId,
+        sessionId: context.sessionId,
+        stage: context.stage,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   }
 
   // Step 4: Build the stage-specific prompt
+  // Add caution flag for high emotional intensity (8-9) - allows Sonnet to use memory
+  // if it helps de-escalate, but warns to be extra careful
+  const cautionAdvised = context.emotionalIntensity >= 8 && context.emotionalIntensity < 9;
+  
   const systemPrompt = buildStagePrompt(
     context.stage,
     {
@@ -227,6 +316,7 @@ export async function orchestrateResponse(
       empathyDraft: context.currentEmpathyDraft,
       isRefiningEmpathy: context.isRefiningEmpathy,
       surfacingStyle: surfacingDecision.style,
+      cautionAdvised,
     },
     {
       isInvitationPhase: context.isInvitationPhase,
@@ -236,6 +326,18 @@ export async function orchestrateResponse(
       isOnboarding: context.isOnboarding,
     }
   );
+
+  // Log the prompt being sent
+  auditLog('PROMPT', 'System prompt assembled', {
+    turnId,
+    sessionId: context.sessionId,
+    stage: context.stage,
+    promptLength: systemPrompt.length,
+    promptPreview: systemPrompt.substring(0, 500) + (systemPrompt.length > 500 ? '...' : ''),
+    fullPrompt: systemPrompt, // Include full prompt for expandable view
+    turnCount: context.turnCount,
+    cautionAdvised,
+  });
 
   // Step 5: Get response from Sonnet with token budget management
   const formattedContextBundle = formatContextForPrompt(contextBundle);
@@ -265,6 +367,27 @@ export async function orchestrateResponse(
     );
   }
 
+  // Log the context that will be inserted into the prompt
+  auditLog('PROMPT', 'Context injected into conversation', {
+    turnId,
+    sessionId: context.sessionId,
+    contextBundlePreview: formattedContextBundle.substring(0, 300) + (formattedContextBundle.length > 300 ? '...' : ''),
+    fullContextBundle: formattedContextBundle,
+    retrievedContextPreview: retrievedContext ? formatRetrievedContext({
+      ...retrievedContext,
+      conversationHistory: [],
+    }).substring(0, 300) + (formatRetrievedContext({
+      ...retrievedContext,
+      conversationHistory: [],
+    }).length > 300 ? '...' : '') : null,
+    fullRetrievedContext: retrievedContext ? formatRetrievedContext({
+      ...retrievedContext,
+      conversationHistory: [],
+    }) : null,
+    conversationHistoryCount: budgetedContext.conversationMessages.length,
+    truncatedCount: budgetedContext.truncated,
+  });
+
   const messagesWithContext = buildMessagesWithContext(
     budgetedContext.conversationMessages,
     context.userMessage,
@@ -282,6 +405,9 @@ export async function orchestrateResponse(
   // All stages use structured JSON format in their prompts
   const expectsStructuredOutput = true;
 
+  // Time to First Byte (Sonnet response generation)
+  const sonnetStartTime = Date.now();
+
   try {
     // Note: Extended thinking is not supported by Claude 3.5 Sonnet v2 on Bedrock
     // Disabling thinkingBudget for now to ensure real AI responses
@@ -289,7 +415,21 @@ export async function orchestrateResponse(
       systemPrompt,
       messages: messagesWithContext,
       maxTokens: 4096,
+      sessionId: context.sessionId,
+      operation: 'orchestrator-response',
+      turnId,
       // thinkingBudget: 1024, // Disabled - not supported on Bedrock Sonnet v2
+    });
+    
+    const sonnetTime = Date.now() - sonnetStartTime;
+    console.log(`[AI Orchestrator] Sonnet response generated in ${sonnetTime}ms [Time to First Byte]`);
+    auditLog('RESPONSE', 'Sonnet response generated', {
+      turnId,
+      sessionId: context.sessionId,
+      durationMs: sonnetTime,
+      stage: context.stage,
+      responseLength: sonnetResponse?.length || 0,
+      responsePreview: sonnetResponse?.substring(0, 300) || '',
     });
 
     if (sonnetResponse) {
@@ -325,12 +465,36 @@ export async function orchestrateResponse(
     }
   } catch (error) {
     console.error('[AI Orchestrator] Sonnet response failed:', error);
+    auditLog('ERROR', 'Sonnet response failed', {
+      turnId,
+      sessionId: context.sessionId,
+      stage: context.stage,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     response = getMockResponse(context);
     usedMock = true;
   }
 
-  const duration = Date.now() - startTime;
-  console.log(`[AI Orchestrator] Response generated in ${duration}ms (mock: ${usedMock})`);
+  const totalDuration = Date.now() - startTime;
+  console.log(`[AI Orchestrator] Total: ${totalDuration}ms | Decision: ${decisionTime}ms | Mock: ${usedMock}`);
+  auditLog('RESPONSE', 'AI response completed', {
+    turnId,
+    sessionId: context.sessionId,
+    stage: context.stage,
+    usedMock,
+    totalDuration,
+    responseLength: response.length,
+    responseText: response.substring(0, 500) + (response.length > 500 ? '...' : ''),
+    offerFeelHeardCheck,
+    offerReadyToShare,
+    hasInvitationMessage: !!invitationMessage,
+    hasEmpathyStatement: !!proposedEmpathyStatement,
+  });
+  
+  // Log latency breakdown for monitoring
+  if (totalDuration > 3000) {
+    console.warn(`[AI Orchestrator] Slow response: ${totalDuration}ms total (Decision: ${decisionTime}ms)`);
+  }
 
   return {
     response,

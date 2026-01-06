@@ -375,6 +375,7 @@ async function generateWitnessingResponseWithContext(
     systemPrompt,
     messages,
     maxTokens: 1024, // Increased for fuller responses
+    operation: 'pre-session-witnessing',
   });
 
   if (!response) {

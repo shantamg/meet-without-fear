@@ -74,7 +74,13 @@ export interface MemoryIntentResult {
 // ============================================================================
 
 /**
- * Patterns that indicate user is referencing a past commitment
+ * Patterns that indicate user is referencing a past commitment.
+ * 
+ * NOTE: This is a fallback for when Haiku-based detection in context-retriever
+ * fails. The primary detection happens in detectReferences() which uses Haiku
+ * to catch implicit patterns like "But I thought...", "I assumed...", etc.
+ * 
+ * These explicit patterns are kept here as a safety net.
  */
 const COMMITMENT_PATTERNS = [
   /we agreed/i,
@@ -200,26 +206,30 @@ export function determineMemoryIntent(
   // Get stage-aware config
   const stageConfig = getStageConfig(stage, turnCount);
 
-  // Safety first: high distress means avoid deep recall
+  // Safety first: critical distress (intensity >= 9) means avoid deep recall
+  // For intensities 8-9, we use a caution flag instead of hard block to allow
+  // Sonnet to use memory if it helps de-escalate
   if (emotionalIntensity >= 9 || DISTRESS_PATTERNS.some((p) => p.test(userMessage))) {
     return buildResult(
       {
         intent: 'avoid_recall',
         depth: 'none',
-        reason: 'High emotional distress detected - staying present without triggering past content',
+        reason: 'Critical emotional distress detected - staying present without triggering past content',
       },
       stageConfig,
       { allowCrossSession: false, maxCrossSession: 0, surfaceStyle: 'silent' }
     );
   }
 
-  // High intensity (but not critical) - minimal recall
+  // High intensity (8-9) - minimal recall with caution flag
+  // Sonnet will receive a caution_advised flag to be extra careful
+  // but can still use memory if it helps de-escalate
   if (emotionalIntensity >= 8) {
     return buildResult(
       {
         intent: 'emotional_validation',
         depth: 'minimal',
-        reason: 'High emotional intensity - focusing on validation with minimal context',
+        reason: 'High emotional intensity - focusing on validation with minimal context (caution advised)',
       },
       stageConfig,
       { allowCrossSession: false, maxCrossSession: 0, surfaceStyle: 'silent' }

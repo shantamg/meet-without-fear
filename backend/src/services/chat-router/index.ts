@@ -383,6 +383,8 @@ Just output the welcome message, nothing else.`;
       systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
       maxTokens: 100,
+      sessionId: recentSession.id,
+      operation: 'chat-router-welcome',
     });
 
     return response?.trim() || undefined;

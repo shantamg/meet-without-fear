@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 import { getHaikuJson } from '../lib/bedrock';
+import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 
 // ============================================================================
 // Retrieval Query Schema (from retrieval-contracts.md)
@@ -211,17 +212,25 @@ export async function planRetrieval(
   const systemPrompt = buildPlanningPrompt(stage, userId);
   const userPrompt = buildUserPrompt(userMessage, memoryIntent, stage);
 
-  // Get structured plan from Haiku
-  const rawPlan = await getHaikuJson<RetrievalPlan>({
-    systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
-    maxTokens: 512,
-  });
+  // Get structured plan from Haiku with circuit breaker protection
+  const fallbackPlan: RetrievalPlan = { queries: [], reasoning: 'Fallback: Haiku unavailable or timed out' };
+  
+  const rawPlan = await withHaikuCircuitBreaker(
+    async () => {
+      return await getHaikuJson<RetrievalPlan>({
+        systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+        maxTokens: 512,
+      });
+    },
+    fallbackPlan,
+    'planRetrieval'
+  );
 
   // If Haiku fails, return empty plan (fallback)
-  if (!rawPlan) {
-    console.warn('[Retrieval Planner] Haiku returned null, using empty plan');
-    return { queries: [], reasoning: 'Fallback: Haiku unavailable' };
+  if (!rawPlan || rawPlan.queries.length === 0) {
+    console.warn('[Retrieval Planner] Haiku unavailable, using empty plan');
+    return fallbackPlan;
   }
 
   // Validate the plan

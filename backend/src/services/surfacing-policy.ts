@@ -69,14 +69,26 @@ export function userAskedForPattern(message: string): boolean {
  * - Stage 1: Never surface unless explicitly asked
  * - Stage 2: Tentative questions with 2+ evidence
  * - Stage 3-4: Explicit observations with 3+ evidence and consent
+ * - Cooldown: Minimum 5 turns between surfacing to prevent nagging
  */
 export function decideSurfacing(
   stage: number,
   turnCount: number,
   userAskedForPatternFlag: boolean,
   patternInsightsEnabled: boolean,
-  evidenceCount: number
+  evidenceCount: number,
+  lastSurfacingTurn?: number
 ): SurfacingDecision {
+  // Cooldown: Don't surface if we surfaced recently (within last 5 turns)
+  // This prevents the AI from nagging the user with insights on every turn
+  if (lastSurfacingTurn !== undefined && turnCount - lastSurfacingTurn < 5) {
+    return {
+      shouldSurface: false,
+      style: 'silent',
+      requiresConsent: false,
+      evidenceCount,
+    };
+  }
   // Stage 1: Never unless user explicitly asks
   if (stage === 1 && !userAskedForPatternFlag) {
     return {

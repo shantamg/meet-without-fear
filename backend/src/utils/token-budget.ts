@@ -159,11 +159,13 @@ export function calculateMessageBudget(
 /**
  * Build context within token budget.
  *
- * Priority order:
- * 1. Recent conversation (last N messages) - HIGHEST
- * 2. Pre-session messages (if not in a session)
- * 3. Retrieved messages from current session
- * 4. Retrieved messages from other sessions - LOWEST
+ * STRICT TOKEN EVICTION HIERARCHY (drop from bottom up):
+ * 1. System/Stage Prompts (NEVER DROP - highest priority)
+ * 2. Recent History (Last 10 turns - PROTECT)
+ * 3. Retrieved Cross-Session Memories (Drop first if needed)
+ * 4. Oldest Session History (Drop first)
+ *
+ * This ensures critical context (recent conversation, system prompts) is always preserved.
  *
  * @param systemPrompt - The system prompt being used
  * @param conversationHistory - Full conversation history
@@ -179,33 +181,82 @@ export function buildBudgetedContext<T extends { role: 'user' | 'assistant'; con
   const systemTokens = estimateTokens(systemPrompt);
   const availableForContext = maxTotalTokens - systemTokens - MODEL_LIMITS.outputReservation;
 
-  // Allocate 70% to conversation, 30% to retrieved context
-  // Conversation is more important for continuity
-  const conversationBudget = Math.floor(availableForContext * 0.7);
-  const retrievedBudget = Math.floor(availableForContext * 0.3);
-
-  // Calculate conversation messages to include
-  const conversationPlan = calculateMessageBudget(conversationHistory, conversationBudget);
-  const includedMessages = conversationHistory.slice(-conversationPlan.included);
-
-  // Truncate retrieved context if needed
+  // STRICT HIERARCHY: Protect last 10 turns (20 messages) at all costs
+  const PROTECTED_TURNS = 10;
+  const PROTECTED_MESSAGES = PROTECTED_TURNS * 2; // user + assistant pairs
+  
+  // Split conversation into protected (last 10 turns) and evictable (older)
+  const protectedMessages = conversationHistory.slice(-PROTECTED_MESSAGES);
+  const evictableMessages = conversationHistory.slice(0, -PROTECTED_MESSAGES);
+  
+  // Calculate tokens for protected messages (these are NEVER dropped)
+  const protectedTokens = estimateMessagesTokens(protectedMessages);
+  
+  // Remaining budget after protecting recent history
+  const remainingBudget = availableForContext - protectedTokens;
+  
+  // Allocate remaining budget: 60% to older conversation, 40% to retrieved context
+  // If we're over budget, retrieved context gets dropped first (lowest priority)
+  const olderConversationBudget = Math.floor(remainingBudget * 0.6);
+  const retrievedBudget = Math.floor(remainingBudget * 0.4);
+  
+  // Calculate how many older messages to include
+  const olderConversationPlan = calculateMessageBudget(evictableMessages, olderConversationBudget, 0);
+  const includedOlderMessages = evictableMessages.slice(-olderConversationPlan.included);
+  
+  // Combine protected + older messages
+  const includedMessages = [...includedOlderMessages, ...protectedMessages];
+  
+  // Truncate retrieved context if needed (lowest priority - drop first)
   let finalRetrievedContext = retrievedContext;
   let retrievedTokens = estimateTokens(retrievedContext);
+  let truncatedRetrieved = false;
 
   if (retrievedTokens > retrievedBudget) {
     // Truncate retrieved context to fit budget
     const maxChars = retrievedBudget * 4; // Rough character limit
     finalRetrievedContext = truncateContextIntelligently(retrievedContext, maxChars);
     retrievedTokens = estimateTokens(finalRetrievedContext);
+    truncatedRetrieved = true;
+  }
+  
+  // If still over budget after truncating retrieved context, drop oldest conversation
+  const totalUsed = protectedTokens + olderConversationPlan.tokens + retrievedTokens;
+  let finalIncludedMessages = includedMessages;
+  let truncatedConversation = 0;
+  
+  if (totalUsed > availableForContext) {
+    // We're still over budget - drop oldest messages (but keep protected ones)
+    const overage = totalUsed - availableForContext;
+    const overageMessages = Math.ceil(overage / 50); // Rough estimate: ~50 tokens per message
+    
+    // Drop from the oldest (beginning of includedOlderMessages)
+    finalIncludedMessages = [
+      ...includedOlderMessages.slice(overageMessages),
+      ...protectedMessages
+    ];
+    truncatedConversation = overageMessages;
+  }
+
+  const finalConversationTokens = estimateMessagesTokens(finalIncludedMessages);
+  const totalTokens = systemTokens + finalConversationTokens + retrievedTokens;
+  const totalTruncated = evictableMessages.length - includedOlderMessages.length + truncatedConversation;
+
+  if (totalTruncated > 0 || truncatedRetrieved) {
+    console.log(
+      `[TokenBudget] Truncated: ${totalTruncated} conversation messages, ` +
+      `${truncatedRetrieved ? 'retrieved context' : 'none'} | ` +
+      `Protected: ${protectedMessages.length} messages (last ${PROTECTED_TURNS} turns)`
+    );
   }
 
   return {
-    conversationMessages: includedMessages,
+    conversationMessages: finalIncludedMessages,
     retrievedContext: finalRetrievedContext,
-    conversationTokens: conversationPlan.tokens,
+    conversationTokens: finalConversationTokens,
     retrievedTokens,
-    totalTokens: systemTokens + conversationPlan.tokens + retrievedTokens,
-    truncated: conversationHistory.length - conversationPlan.included,
+    totalTokens,
+    truncated: totalTruncated,
   };
 }
 

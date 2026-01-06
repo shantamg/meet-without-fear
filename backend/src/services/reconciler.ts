@@ -44,6 +44,8 @@ async function getSonnetJson<T>(options: {
   systemPrompt: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
   maxTokens: number;
+  sessionId?: string;
+  operation?: string;
 }): Promise<T | null> {
   const response = await getSonnetResponse(options);
   if (!response) return null;
@@ -259,6 +261,8 @@ async function analyzeEmpathyGap(
     systemPrompt: prompt,
     messages: [{ role: 'user', content: 'Analyze the empathy gap and provide your assessment.' }],
     maxTokens: 2048,
+    sessionId: input.sessionId,
+    operation: 'reconciler-analysis',
   });
 
   if (!result) {
@@ -361,6 +365,8 @@ export async function generateShareOffer(
       systemPrompt: buildShareOfferPrompt(shareOfferContext),
       messages: [{ role: 'user', content: 'Generate the share offer message.' }],
       maxTokens: 512,
+      sessionId,
+      operation: 'reconciler-share-offer',
     }),
     getSonnetJson<QuoteSelectionResult>({
       systemPrompt: buildQuoteSelectionPrompt({
@@ -371,6 +377,8 @@ export async function generateShareOffer(
       }),
       messages: [{ role: 'user', content: 'Extract shareable quotes.' }],
       maxTokens: 1024,
+      sessionId,
+      operation: 'reconciler-quote-selection',
     }),
   ]);
 
@@ -601,6 +609,8 @@ export async function generateReconcilerSummary(
     systemPrompt: buildReconcilerSummaryPrompt(context),
     messages: [{ role: 'user', content: 'Generate the reconciler summary.' }],
     maxTokens: 512,
+    sessionId,
+    operation: 'reconciler-summary',
   });
 
   return summary;
