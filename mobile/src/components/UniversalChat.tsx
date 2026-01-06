@@ -32,6 +32,7 @@ import { InlineCompact } from './InlineCompact';
 import { FeelHeardConfirmation } from './FeelHeardConfirmation';
 import { BreathingExercise } from './BreathingExercise';
 import { createStyles } from '../theme/styled';
+import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 
 // ============================================================================
 // Types
@@ -173,11 +174,54 @@ export function UniversalChat({
   const [breathingVisible, setBreathingVisible] = useState(false);
   const [breathingIntensity, setBreathingIntensity] = useState(5);
 
+  // Speech functionality
+  const { isSpeaking, currentId, toggle: toggleSpeech } = useSpeech();
+  const { isAutoSpeechEnabled } = useAutoSpeech();
+
+  // Track messages that existed on initial load (history - should not auto-speak)
+  const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  const isInitialLoadRef = useRef(true);
+
+  // Track messages that have already been auto-spoken
+  const spokenMessageIdsRef = useRef<Set<string>>(new Set());
+
+  // Capture initial message IDs on first render (these are history)
+  if (isInitialLoadRef.current && messages.length > 0) {
+    messages.forEach(m => knownMessageIdsRef.current.add(m.id));
+    isInitialLoadRef.current = false;
+  }
+
   // Derive header status from stage context if not provided
   const derivedStatus = headerStatus ?? deriveStatusFromContext(stageContext);
 
   // Transform messages into flat list items (messages + triggers)
   const listItems = transformToListItems(messages);
+
+  // Auto-speech: speak new AI messages when enabled
+  // Only speaks truly NEW messages (not history from initial load)
+  useEffect(() => {
+    if (!isAutoSpeechEnabled || messages.length === 0) return;
+
+    // Find the newest AI message that is truly NEW (not from history)
+    const newAIMessage = [...messages].reverse().find((m) => {
+      if (m.role === MessageRole.USER || m.role === MessageRole.SYSTEM) return false;
+      if (m.id.startsWith('optimistic-')) return false;
+      if (knownMessageIdsRef.current.has(m.id)) return false;
+      if (spokenMessageIdsRef.current.has(m.id)) return false;
+      return true;
+    });
+
+    if (!newAIMessage) return;
+
+    // Mark as spoken immediately to prevent duplicate triggers
+    spokenMessageIdsRef.current.add(newAIMessage.id);
+
+    // Small delay to allow typewriter to start
+    const timer = setTimeout(() => {
+      toggleSpeech(newAIMessage.content, newAIMessage.id);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [messages, isAutoSpeechEnabled, toggleSpeech]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -239,6 +283,14 @@ export function UniversalChat({
     [onTriggerAction, breathingIntensity]
   );
 
+  // Handle speaker button press
+  const handleSpeakerPress = useCallback(
+    (text: string, id: string) => {
+      toggleSpeech(text, id);
+    },
+    [toggleSpeech]
+  );
+
   // Render individual list items
   const renderItem: ListRenderItem<ChatItem> = useCallback(
     ({ item }) => {
@@ -252,13 +304,21 @@ export function UniversalChat({
           status: msg.status,
           isIntervention: msg.isIntervention,
         };
-        return <ChatBubble message={bubbleMessage} showTimestamp={false} />;
+        const isAI = msg.role !== MessageRole.USER && msg.role !== MessageRole.SYSTEM;
+        return (
+          <ChatBubble
+            message={bubbleMessage}
+            showTimestamp={false}
+            isSpeaking={isSpeaking && currentId === msg.id}
+            onSpeakerPress={isAI ? () => handleSpeakerPress(msg.content, msg.id) : undefined}
+          />
+        );
       }
 
       // Render trigger
       return renderTrigger(item.data, item.messageId, handleTriggerAction);
     },
-    [handleTriggerAction]
+    [handleTriggerAction, isSpeaking, currentId, handleSpeakerPress]
   );
 
   const keyExtractor = useCallback((item: ChatItem) => {

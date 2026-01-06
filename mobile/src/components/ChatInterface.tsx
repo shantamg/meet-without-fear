@@ -18,6 +18,7 @@ import { ChatInput } from './ChatInput';
 import { EmotionSlider } from './EmotionSlider';
 import { ChatIndicator, ChatIndicatorType } from './ChatIndicator';
 import { createStyles } from '../theme/styled';
+import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 
 // ============================================================================
 // Types
@@ -110,6 +111,12 @@ export function ChatInterface({
 
   // Track the ID of the message currently being animated via typewriter
   const [animatingMessageId, setAnimatingMessageId] = useState<string | null>(null);
+
+  // Speech functionality
+  const { isSpeaking, currentId, toggle: toggleSpeech } = useSpeech();
+  const { isAutoSpeechEnabled } = useAutoSpeech();
+  // Track messages that have already been auto-spoken (to avoid re-speaking)
+  const spokenMessageIdsRef = useRef<Set<string>>(new Set());
 
   // Track messages that have completed typewriter animation (separate from initial load)
   const animatedMessageIdsRef = useRef<Set<string>>(new Set());
@@ -218,6 +225,41 @@ export function ChatInterface({
     }
   }, [messages]);
 
+  // Auto-speech: speak new AI messages when enabled
+  // Uses the same "new message" logic as typewriter (checks knownMessageIdsRef)
+  useEffect(() => {
+    if (!isAutoSpeechEnabled || messages.length === 0) return;
+
+    // Find the newest AI message that is truly NEW (not from history)
+    // Same criteria as typewriter: not in knownMessageIdsRef, not optimistic, not user message
+    const newAIMessage = messages.find((m) => {
+      if (m.role === MessageRole.USER) return false;
+      if (m.id.startsWith('optimistic-')) return false;
+      if (knownMessageIdsRef.current.has(m.id)) return false;
+      if (spokenMessageIdsRef.current.has(m.id)) return false;
+      return true;
+    });
+
+    if (!newAIMessage) return;
+
+    // Mark as spoken immediately to prevent duplicate triggers
+    spokenMessageIdsRef.current.add(newAIMessage.id);
+
+    // Small delay to allow typewriter to start
+    const timer = setTimeout(() => {
+      toggleSpeech(newAIMessage.content, newAIMessage.id);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [messages, isAutoSpeechEnabled, toggleSpeech]);
+
+  // Handle speaker button press
+  const handleSpeakerPress = useCallback(
+    (text: string, id: string) => {
+      toggleSpeech(text, id);
+    },
+    [toggleSpeech]
+  );
+
   // Find the newest AI message that should animate (for typewriter tracking)
   const newestAnimatableAIMessageId = useMemo(() => {
     // listItems is sorted newest first (descending by timestamp)
@@ -290,9 +332,11 @@ export function ChatInterface({
           setAnimatingMessageId(null);
           onTypewriterComplete?.();
         } : undefined}
+        isSpeaking={isSpeaking && currentId === item.id}
+        onSpeakerPress={isAIMessage ? () => handleSpeakerPress(item.content, item.id) : undefined}
       />
     );
-  }, [newestAnimatableAIMessageId, animatingMessageId, onTypewriterComplete]);
+  }, [newestAnimatableAIMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 

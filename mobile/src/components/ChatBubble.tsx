@@ -4,6 +4,7 @@ import { MessageRole } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 import { TypewriterText } from './TypewriterText';
+import { SpeakerButton } from './SpeakerButton';
 
 // ============================================================================
 // Types
@@ -33,6 +34,12 @@ interface ChatBubbleProps {
   onTypewriterComplete?: () => void;
   /** Callback during typewriter animation (for scrolling) */
   onTypewriterProgress?: () => void;
+  /** Whether speech is currently playing for this message */
+  isSpeaking?: boolean;
+  /** Callback when speaker button is pressed */
+  onSpeakerPress?: () => void;
+  /** Hide speaker button (default: false for AI messages) */
+  hideSpeaker?: boolean;
 }
 
 // ============================================================================
@@ -56,6 +63,9 @@ export function ChatBubble({
   onTypewriterStart,
   onTypewriterComplete,
   onTypewriterProgress,
+  isSpeaking = false,
+  onSpeakerPress,
+  hideSpeaker = false,
 }: ChatBubbleProps) {
   const styles = useStyles();
   const isUser = message.role === MessageRole.USER;
@@ -183,6 +193,14 @@ export function ChatBubble({
         {renderContent()}
       </View>
       <View style={styles.metaContainer}>
+        {/* Speaker button for AI messages */}
+        {isAI && !hideSpeaker && onSpeakerPress && (
+          <SpeakerButton
+            isSpeaking={isSpeaking}
+            onPress={onSpeakerPress}
+            testID={`speaker-${message.id}`}
+          />
+        )}
         {showTimestamp && (
           <Text style={[styles.time, isSystem && styles.systemTime]}>
             {formatTime(message.timestamp)}

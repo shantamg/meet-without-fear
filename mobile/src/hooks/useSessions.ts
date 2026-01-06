@@ -471,15 +471,20 @@ export function useConfirmInvitationMessage(
       queryClient.invalidateQueries({
         queryKey: stageKeys.progress(sessionId),
       });
+      // Invalidate consolidated session state (used by useUnifiedSession for initial load)
+      queryClient.invalidateQueries({
+        queryKey: sessionKeys.state(sessionId),
+      });
       // Invalidate ALL messages queries for this session (both with and without stage filter)
       // This ensures the transition message appears when stage 1 loads
+      // Include both 'list' and 'infinite' query types
       queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey;
           return (
             Array.isArray(key) &&
             key[0] === 'messages' &&
-            key[1] === 'list' &&
+            (key[1] === 'list' || key[1] === 'infinite') &&
             key[2] === sessionId
           );
         },

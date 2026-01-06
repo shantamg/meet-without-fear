@@ -231,8 +231,19 @@ export function useConfirmFeelHeard(
       // Invalidate session state to update milestones (feelHeardConfirmedAt)
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       // Invalidate messages to fetch the transition message if one was generated
+      // Include both 'list' and 'infinite' query types to ensure React Query refetches
       if (data.transitionMessage) {
-        queryClient.invalidateQueries({ queryKey: messageKeys.all });
+        queryClient.invalidateQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) &&
+              key[0] === 'messages' &&
+              (key[1] === 'list' || key[1] === 'infinite') &&
+              key[2] === sessionId
+            );
+          },
+        });
       }
     },
     ...options,
@@ -411,8 +422,19 @@ export function useConsentToShareEmpathy(
 
       // Invalidate consolidated session state for UI updates
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-      // Also invalidate to ensure fresh data
-      queryClient.invalidateQueries({ queryKey: messageKeys.all });
+      // Invalidate ALL messages queries for this session (both with and without stage filter)
+      // Include both 'list' and 'infinite' query types to ensure React Query refetches
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key[0] === 'messages' &&
+            (key[1] === 'list' || key[1] === 'infinite') &&
+            key[2] === sessionId
+          );
+        },
+      });
     },
     ...options,
   });
