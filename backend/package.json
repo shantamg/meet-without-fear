@@ -31,6 +31,7 @@
     "@types/node": "^22.10.2",
     "ably": "^2.16.0",
     "cors": "^2.8.5",
+    "csv-writer": "^1.6.0",
     "dotenv": "^16.4.5",
     "expo-server-sdk": "^4.0.0",
     "express": "^4.21.0",
@@ -38,6 +39,7 @@
     "resend": "^6.6.0",
     "tsc-alias": "^1.8.16",
     "typescript": "^5.7.2",
+    "winston": "^3.19.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

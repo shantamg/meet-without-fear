@@ -49,6 +49,7 @@ export default function InvitationPage() {
 
   // Sign out any existing session when visiting invitation page
   // This ensures invitees start with a fresh auth state
+  // BUT: skip sign-out if user just returned from OAuth (detected via sessionStorage)
   useEffect(() => {
     async function ensureSignedOut() {
       console.log("[Invitation] ensureSignedOut check:", { isAuthLoaded, isSignedIn, hasSignedOut });
@@ -59,6 +60,14 @@ export default function InvitationPage() {
       }
       if (hasSignedOut) {
         console.log("[Invitation] Already handled sign-out, skipping");
+        return;
+      }
+
+      // Check if user just returned from OAuth - if so, don't sign them out
+      const pendingInvitation = sessionStorage.getItem(PENDING_INVITATION_KEY);
+      if (pendingInvitation === invitationId && isSignedIn) {
+        console.log("[Invitation] User returned from OAuth, keeping signed in to accept");
+        setHasSignedOut(true);
         return;
       }
 
@@ -78,7 +87,7 @@ export default function InvitationPage() {
     }
 
     ensureSignedOut();
-  }, [isAuthLoaded, isSignedIn, signOut, hasSignedOut]);
+  }, [isAuthLoaded, isSignedIn, signOut, hasSignedOut, invitationId]);
 
   // Fetch invitation details (only after we've handled sign-out)
   useEffect(() => {

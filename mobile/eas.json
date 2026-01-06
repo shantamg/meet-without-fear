@@ -11,7 +11,8 @@
         "EXPO_PUBLIC_API_URL": "http://localhost:3000",
         "EXPO_PUBLIC_BUNDLE_ID": "com.meetwithoutfear.app.dev",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cmVhZHktamF5LTUyLmNsZXJrLmFjY291bnRzLmRldiQ",
-        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec",
+        "EXPO_PUBLIC_ELEVENLABS_API_KEY": "sk_d00f891631447dd36f97b2fe05ee2343569b4b440ab5709c"
       }
     },
     "development-production": {
@@ -20,7 +21,8 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.meetwithoutfear.com",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubWVldHdpdGhvdXRmZWFyLmNvbSQ",
-        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec",
+        "EXPO_PUBLIC_ELEVENLABS_API_KEY": "sk_d00f891631447dd36f97b2fe05ee2343569b4b440ab5709c"
       }
     },
     "development-simulator": {
@@ -33,21 +35,24 @@
         "EXPO_PUBLIC_API_URL": "http://localhost:3000",
         "EXPO_PUBLIC_BUNDLE_ID": "com.meetwithoutfear.app.dev",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cmVhZHktamF5LTUyLmNsZXJrLmFjY291bnRzLmRldiQ",
-        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec",
+        "EXPO_PUBLIC_ELEVENLABS_API_KEY": "sk_d00f891631447dd36f97b2fe05ee2343569b4b440ab5709c"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.meetwithoutfear.com",
-        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec",
+        "EXPO_PUBLIC_ELEVENLABS_API_KEY": "sk_d00f891631447dd36f97b2fe05ee2343569b4b440ab5709c"
       }
     },
     "production": {
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.meetwithoutfear.com",
         "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubWVldHdpdGhvdXRmZWFyLmNvbSQ",
-        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec",
+        "EXPO_PUBLIC_ELEVENLABS_API_KEY": "sk_d00f891631447dd36f97b2fe05ee2343569b4b440ab5709c"
       }
     },
     "android-apk": {
@@ -56,7 +61,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.meetwithoutfear.com",
-        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec"
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "bde416691ec555209e6949a2aec8abec",
+        "EXPO_PUBLIC_ELEVENLABS_API_KEY": "sk_d00f891631447dd36f97b2fe05ee2343569b4b440ab5709c"
       }
     }
   },

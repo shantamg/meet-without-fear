@@ -31,6 +31,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Application logs
+logs/
+
 # Vercel
 .vercel
 
@@ -90,3 +93,7 @@ claude-flow
 hive-mind-prompt-*.txt
 *.orig
 *.bak
+
+# Expo native folders (regenerate with: npx expo prebuild)
+mobile/android/
+mobile/ios/
