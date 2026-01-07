@@ -526,19 +526,21 @@ export function ChatInterface({
         scrollEventThrottle={16}
         onContentSizeChange={handleContentSizeChange}
       />
-      {showEmotionSlider && onEmotionChange && (
-        <EmotionSlider
-          value={emotionValue}
-          onChange={onEmotionChange}
-          onHighEmotion={onHighEmotion}
-          compact={compactEmotionSlider}
-          testID="chat-emotion-slider"
-        />
-      )}
-      {renderAboveInput?.()}
-      {!hideInput && (
-        <ChatInput onSend={onSendMessage} disabled={disabled || isLoading} />
-      )}
+      <View style={styles.bottomContainer}>
+        {showEmotionSlider && onEmotionChange && (
+          <EmotionSlider
+            value={emotionValue}
+            onChange={onEmotionChange}
+            onHighEmotion={onHighEmotion}
+            compact={compactEmotionSlider}
+            testID="chat-emotion-slider"
+          />
+        )}
+        {renderAboveInput?.()}
+        {!hideInput && (
+          <ChatInput onSend={onSendMessage} disabled={disabled || isLoading} />
+        )}
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -612,5 +614,10 @@ const useStyles = () =>
       color: t.colors.textSecondary,
       textAlign: 'center',
       marginTop: t.spacing.md,
+    },
+    bottomContainer: {
+      // Container for emotion slider, panels above input, and input
+      // This ensures KeyboardAvoidingView adjusts relative to this container's bottom
+      // rather than just the input field itself
     },
   }));
