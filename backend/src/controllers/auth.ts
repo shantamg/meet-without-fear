@@ -223,13 +223,14 @@ export const getAblyToken = asyncHandler(async (req: Request, res: Response): Pr
   // Build capability object - scope to user's active sessions
   // Note: 'presence' capability must be on the same channel as subscribe/publish
   const capability: Record<string, string[]> = {};
+
+  // ALWAYS allow access to the user's private notification channel
+  // This is required for useNotificationChannel to work regardless of session state
+  capability[`meetwithoutfear:user:${user.id}`] = ['subscribe'];
+
+  // Add capabilities for specific sessions
   for (const session of sessions) {
     capability[`meetwithoutfear:session:${session.id}`] = ['subscribe', 'publish', 'presence'];
-  }
-
-  // If no active sessions, allow basic user channel
-  if (Object.keys(capability).length === 0) {
-    capability[`meetwithoutfear:user:${user.id}`] = ['subscribe'];
   }
 
   try {
