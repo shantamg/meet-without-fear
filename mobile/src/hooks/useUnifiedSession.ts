@@ -807,6 +807,12 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const handleSendMessage = useCallback(
     (content: string) => {
       if (!sessionId) return;
+      
+      // Prevent duplicate submissions
+      if (isSending) {
+        console.warn('[handleSendMessage] Already sending a message, ignoring duplicate call');
+        return;
+      }
 
       // Reset activity timer
       lastActivityTime.current = Date.now();
@@ -877,6 +883,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
       sessionId,
       currentStage,
       sendMessage,
+      isSending,
       addOptimisticMessage,
       removeOptimisticMessage,
       showError,

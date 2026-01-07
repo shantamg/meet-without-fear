@@ -207,6 +207,7 @@ export function useSendMessage(
         request
       );
     },
+    retry: false, // Disable automatic retries to prevent duplicate messages
     onSuccess: (data, { sessionId }) => {
       // Get the stage from the response to update the correct cache
       const stage = data.userMessage.stage;
@@ -219,13 +220,17 @@ export function useSendMessage(
           };
         }
         // Filter out optimistic messages (they start with 'optimistic-')
-        // and add the real messages from the API response
+        // and check for duplicates before adding the real messages from the API response
         const existingMessages = (old.messages || []).filter(
           (m) => !m.id.startsWith('optimistic-')
         );
+        const existingIds = new Set(existingMessages.map((m) => m.id));
+        const newMessages = [data.userMessage, data.aiResponse].filter(
+          (m) => !existingIds.has(m.id)
+        );
         return {
           ...old,
-          messages: [...existingMessages, data.userMessage, data.aiResponse],
+          messages: [...existingMessages, ...newMessages],
         };
       };
 
@@ -240,9 +245,13 @@ export function useSendMessage(
         const existingMessages = (firstPage.messages || []).filter(
           (m) => !m.id.startsWith('optimistic-')
         );
+        const existingIds = new Set(existingMessages.map((m) => m.id));
+        const newMessages = [data.userMessage, data.aiResponse].filter(
+          (m) => !existingIds.has(m.id)
+        );
         updatedPages[0] = {
           ...firstPage,
-          messages: [...existingMessages, data.userMessage, data.aiResponse],
+          messages: [...existingMessages, ...newMessages],
         };
         return { ...old, pages: updatedPages };
       };
@@ -273,13 +282,10 @@ export function useSendMessage(
         updateInfiniteCache
       );
 
-      // Invalidate to get fresh data
-      if (stage !== undefined) {
-        queryClient.invalidateQueries({ queryKey: messageKeys.list(sessionId, stage) });
-        queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId, stage) });
-      }
-      queryClient.invalidateQueries({ queryKey: messageKeys.list(sessionId) });
-      queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
+      // NOTE: We do NOT invalidate message queries here because we've already manually updated
+      // the cache with setQueryData above. Invalidating would trigger a refetch that could
+      // cause duplicate messages if the server returns the same messages we just added.
+      // Only invalidate related queries that need fresh data from the server.
 
       // Session might have progressed - invalidate session detail and progress
       // Progress invalidation is critical: when user sends first message at Stage 0,
