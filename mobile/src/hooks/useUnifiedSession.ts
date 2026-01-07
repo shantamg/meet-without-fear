@@ -73,7 +73,6 @@ export type InlineCardType =
   | 'feel-heard-confirmation'
   | 'cooling-suggestion'
   // Stage 2: Perspective Stretch
-  | 'empathy-draft-preview'
   | 'mirror-intervention'
   | 'consent-prompt'
   | 'ready-to-share-confirmation'
@@ -386,7 +385,14 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { mutate: confirmInvitationMessage } = useConfirmInvitationMessage();
   const { mutate: advanceStage } = useAdvanceStage();
   const { mutate: saveDraft } = useSaveEmpathyDraft();
-  const { mutate: consentToShare, isPending: isSharingEmpathy } = useConsentToShareEmpathy();
+  const { mutate: consentToShare, isPending: isSharingEmpathy } = useConsentToShareEmpathy({
+    onError: (error) => {
+      console.error('[useConsentToShareEmpathy] Mutation error', error);
+    },
+    onSuccess: (data) => {
+      console.log('[useConsentToShareEmpathy] Mutation success', data);
+    },
+  });
   const { mutate: validateEmpathy } = useValidateEmpathy();
   const { mutate: confirmNeeds } = useConfirmNeeds();
   const { mutate: consentShareNeeds } = useConsentShareNeeds();
@@ -682,37 +688,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
         });
       }
 
-      // Ready to share prompt - shown when AI recommends it but user hasn't marked draft as ready yet
-      // Similar to feel-heard confirmation in Stage 1
-      // Shows even if no draft exists yet - clicking "Yes" will prompt user to formalize their understanding
-      if (
-        aiRecommendsReadyToShare &&
-        !empathyDraftData?.draft?.readyToShare &&
-        !empathyDraftData?.alreadyConsented
-      ) {
-        cards.push({
-          id: 'ready-to-share-confirmation',
-          type: 'ready-to-share-confirmation',
-          position: 'end',
-          props: {
-            partnerName,
-            proposedStatement: liveProposedEmpathyStatement,
-          },
-        });
-      }
+      // Note: ready-to-share-confirmation card removed - now shown as panel above chat input
+      // The panel slides up when empathy statement is ready to review
 
-      // Empathy draft preview when ready to share
-      if (empathyDraftData?.canConsent && empathyDraftData?.draft?.readyToShare) {
-        cards.push({
-          id: 'empathy-draft-preview',
-          type: 'empathy-draft-preview',
-          position: 'end',
-          props: {
-            content: empathyDraftData.draft.content,
-            partnerName,
-          },
-        });
-      }
+      // Note: empathy-draft-preview card removed - users access empathy statement via the overlay drawer
+      // The ready-to-share-confirmation card opens the overlay, and after sending it appears as a message in chat
 
       // Partner's empathy for validation
       if (partnerEmpathy) {
@@ -950,7 +930,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   }, []);
 
   // Mark empathy draft as ready to share (user confirms from AI prompt)
-  // This saves the draft with readyToShare: true so the empathy-draft-preview card appears
+  // This saves the draft with readyToShare: true
   const handleConfirmReadyToShare = useCallback(() => {
     if (!sessionId) return;
     // Reset the AI recommendation
@@ -1019,11 +999,43 @@ export function useUnifiedSession(sessionId: string | undefined) {
     [sessionId, saveDraft]
   );
 
-  const handleShareEmpathy = useCallback(() => {
-    if (!sessionId) return;
+  const handleShareEmpathy = useCallback((content?: string) => {
+    if (!sessionId) {
+      console.warn('[handleShareEmpathy] No sessionId, aborting');
+      return;
+    }
+    if (!consentToShare) {
+      console.error('[handleShareEmpathy] consentToShare mutation is not available');
+      return;
+    }
     // Pass draft content for optimistic UI update
-    const draftContent = empathyDraftData?.draft?.content || liveProposedEmpathyStatement || undefined;
-    consentToShare({ sessionId, consent: true, draftContent });
+    // Use provided content, or fall back to draft/proposed statement
+    const draftContent = content || empathyDraftData?.draft?.content || liveProposedEmpathyStatement || undefined;
+    console.log('[handleShareEmpathy] Calling consentToShare', { 
+      sessionId, 
+      hasDraftContent: !!draftContent,
+      draftContentLength: draftContent?.length,
+      contentProvided: !!content,
+      hasEmpathyDraft: !!empathyDraftData?.draft?.content,
+      hasLiveProposed: !!liveProposedEmpathyStatement
+    });
+    try {
+      console.log('[handleShareEmpathy] About to call consentToShare mutation');
+      consentToShare(
+        { sessionId, consent: true, draftContent },
+        {
+          onError: (error) => {
+            console.error('[handleShareEmpathy] Mutation onError callback', error);
+          },
+          onSuccess: (data) => {
+            console.log('[handleShareEmpathy] Mutation onSuccess callback', data);
+          },
+        }
+      );
+      console.log('[handleShareEmpathy] consentToShare mutation called (async)');
+    } catch (error) {
+      console.error('[handleShareEmpathy] Synchronous error calling consentToShare', error);
+    }
   }, [sessionId, consentToShare, empathyDraftData?.draft?.content, liveProposedEmpathyStatement]);
 
   const handleValidatePartnerEmpathy = useCallback(
@@ -1193,6 +1205,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     empathyDraftData,
     partnerEmpathyData,
     liveProposedEmpathyStatement,
+    aiRecommendsReadyToShare,
     needsData,
     needs,
     allNeedsConfirmed,

@@ -324,67 +324,111 @@ export function useConsentToShareEmpathy(
 
   return useMutation({
     mutationFn: async ({ sessionId, consent }) => {
-      return post<ConsentToShareEmpathyResponse>(
-        `/sessions/${sessionId}/empathy/consent`,
-        { consent }
-      );
+      console.log('[useConsentToShareEmpathy] mutationFn called', { sessionId, consent });
+      try {
+        const result = await post<ConsentToShareEmpathyResponse>(
+          `/sessions/${sessionId}/empathy/consent`,
+          { consent }
+        );
+        console.log('[useConsentToShareEmpathy] mutationFn success', result);
+        return result;
+      } catch (error) {
+        console.error('[useConsentToShareEmpathy] mutationFn error', error);
+        throw error;
+      }
     },
     onMutate: async ({ sessionId, draftContent }): Promise<{ previousList: GetMessagesResponse | undefined; previousInfinite: InfiniteData<GetMessagesResponse> | undefined }> => {
-      // Cancel any outgoing refetches to avoid overwriting optimistic update
-      await queryClient.cancelQueries({ queryKey: messageKeys.list(sessionId) });
-      await queryClient.cancelQueries({ queryKey: messageKeys.infinite(sessionId) });
-
-      // Snapshot previous values for rollback
-      const previousList = queryClient.getQueryData<GetMessagesResponse>(messageKeys.list(sessionId));
-      const previousInfinite = queryClient.getQueryData<InfiniteData<GetMessagesResponse>>(messageKeys.infinite(sessionId));
-
-      // Only add optimistic message if we have draft content
-      if (draftContent) {
-        const optimisticMessage = {
-          id: `optimistic-empathy-${Date.now()}`,
-          sessionId,
-          senderId: null,
-          role: MessageRole.EMPATHY_STATEMENT,
-          content: draftContent,
-          stage: 2,
-          timestamp: new Date().toISOString(),
-        };
-
-        // Add optimistic empathy message to caches
-        const addOptimisticMessage = (old: GetMessagesResponse | undefined): GetMessagesResponse => {
-          if (!old) return { messages: [optimisticMessage], hasMore: false };
-          return { ...old, messages: [...old.messages, optimisticMessage] };
-        };
-
-        const addOptimisticToInfinite = (
-          old: InfiniteData<GetMessagesResponse> | undefined
-        ): InfiniteData<GetMessagesResponse> | undefined => {
-          if (!old || old.pages.length === 0) {
-            return { pages: [{ messages: [optimisticMessage], hasMore: false }], pageParams: [undefined] };
-          }
-          const updatedFirstPage = {
-            ...old.pages[0],
-            messages: [...old.pages[0].messages, optimisticMessage],
-          };
-          return { ...old, pages: [updatedFirstPage, ...old.pages.slice(1)] };
-        };
-
-        queryClient.setQueryData<GetMessagesResponse>(messageKeys.list(sessionId), addOptimisticMessage);
-        queryClient.setQueryData<GetMessagesResponse>(messageKeys.list(sessionId, 2), addOptimisticMessage);
-        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(messageKeys.infinite(sessionId), addOptimisticToInfinite);
-        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(messageKeys.infinite(sessionId, 2), addOptimisticToInfinite);
+      console.log('[useConsentToShareEmpathy] onMutate started');
+      
+      // Safety Check: Verify messageKeys exists (circular dependency protection)
+      if (!messageKeys || !messageKeys.list || !messageKeys.infinite) {
+        console.error('[useConsentToShareEmpathy] CRITICAL: messageKeys is undefined due to circular dependency');
+        // Return empty context so mutation continues despite optimistic error
+        return { previousList: undefined, previousInfinite: undefined };
       }
 
-      // Immediately hide the empathy draft preview card
-      queryClient.setQueryData<GetEmpathyDraftResponse>(
-        stageKeys.empathyDraft(sessionId),
-        (old) => {
-          if (!old) return { draft: null, canConsent: false, alreadyConsented: true };
-          return { ...old, canConsent: false, alreadyConsented: true };
-        }
-      );
+      try {
+        // Cancel any outgoing refetches to avoid overwriting optimistic update
+        await queryClient.cancelQueries({ queryKey: messageKeys.infinite(sessionId) });
 
-      return { previousList, previousInfinite };
+        // Snapshot previous state for rollback
+        const previousInfinite = queryClient.getQueryData<InfiniteData<GetMessagesResponse>>(messageKeys.infinite(sessionId));
+
+        // Only add optimistic message if we have draft content
+        if (draftContent) {
+          const optimisticMessage = {
+            id: `optimistic-empathy-${Date.now()}`,
+            sessionId,
+            senderId: null,
+            role: MessageRole.EMPATHY_STATEMENT,
+            content: draftContent,
+            stage: 2,
+            timestamp: new Date().toISOString(),
+          };
+
+          // Update infinite query cache with proper immutability
+          // For inverted lists (newest first), add to the START of the first page
+          queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+            messageKeys.infinite(sessionId),
+            (old: InfiniteData<GetMessagesResponse> | undefined) => {
+              if (!old || !old.pages || old.pages.length === 0) {
+                return {
+                  pages: [{ messages: [optimisticMessage], hasMore: false }],
+                  pageParams: [undefined],
+                };
+              }
+
+              // Deep clone to ensure immutability
+              const newPages = [...old.pages];
+              const firstPage = { ...newPages[0] };
+              
+              // Add to the START of the messages array (newest first in inverted list)
+              // This ensures it appears at the bottom visually (since list is inverted)
+              firstPage.messages = [optimisticMessage, ...firstPage.messages];
+              
+              newPages[0] = firstPage;
+              return { ...old, pages: newPages };
+            }
+          );
+
+          // Also update the stage-specific infinite query if it exists
+          queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+            messageKeys.infinite(sessionId, 2),
+            (old: InfiniteData<GetMessagesResponse> | undefined) => {
+              if (!old || !old.pages || old.pages.length === 0) {
+                return {
+                  pages: [{ messages: [optimisticMessage], hasMore: false }],
+                  pageParams: [undefined],
+                };
+              }
+
+              const newPages = [...old.pages];
+              const firstPage = { ...newPages[0] };
+              firstPage.messages = [optimisticMessage, ...firstPage.messages];
+              newPages[0] = firstPage;
+              return { ...old, pages: newPages };
+            }
+          );
+
+          console.log('[useConsentToShareEmpathy] Optimistic update applied to infinite query');
+        }
+
+        // Immediately hide the empathy draft preview card
+        queryClient.setQueryData<GetEmpathyDraftResponse>(
+          stageKeys.empathyDraft(sessionId),
+          (old) => {
+            if (!old) return { draft: null, canConsent: false, alreadyConsented: true };
+            return { ...old, canConsent: false, alreadyConsented: true };
+          }
+        );
+
+        return { previousList: undefined, previousInfinite };
+      } catch (err) {
+        console.error('[useConsentToShareEmpathy] Error in onMutate:', err);
+        // Return empty context so mutation continues despite optimistic error
+        // This ensures the network request still fires even if optimistic update fails
+        return { previousList: undefined, previousInfinite: undefined };
+      }
     },
     onSuccess: (data, { sessionId, draftContent }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
@@ -438,18 +482,24 @@ export function useConsentToShareEmpathy(
         const updateInfiniteCache = (
           old: InfiniteData<GetMessagesResponse> | undefined
         ): InfiniteData<GetMessagesResponse> | undefined => {
-          if (!old || old.pages.length === 0) {
+          if (!old || !old.pages || old.pages.length === 0) {
             return { pages: [{ messages: messagesToAdd, hasMore: false }], pageParams: [undefined] };
           }
-          // Remove optimistic from first page, add real messages
-          const filteredMessages = old.pages[0].messages.filter((m) => !m.id.startsWith('optimistic-empathy-'));
+          // Deep clone to ensure immutability
+          const newPages = [...old.pages];
+          const firstPage = { ...newPages[0] };
+          
+          // Remove optimistic message, add real messages
+          // For inverted lists (newest first), add to the START of the array
+          const filteredMessages = firstPage.messages.filter((m) => !m.id.startsWith('optimistic-empathy-'));
           const existingIds = new Set(filteredMessages.map((m) => m.id));
           const newMessages = messagesToAdd.filter((m) => !existingIds.has(m.id));
-          const updatedFirstPage = {
-            ...old.pages[0],
-            messages: [...filteredMessages, ...newMessages],
-          };
-          return { ...old, pages: [updatedFirstPage, ...old.pages.slice(1)] };
+          
+          // Add new messages to the start (newest first)
+          firstPage.messages = [...newMessages, ...filteredMessages];
+          newPages[0] = firstPage;
+          
+          return { ...old, pages: newPages };
         };
 
         queryClient.setQueryData<GetMessagesResponse>(messageKeys.list(sessionId), updateCache);
@@ -475,14 +525,15 @@ export function useConsentToShareEmpathy(
     },
     onError: (_err, { sessionId }, context) => {
       // Rollback to previous state on error
-      if (context?.previousList) {
-        queryClient.setQueryData(messageKeys.list(sessionId), context.previousList);
-      }
       if (context?.previousInfinite) {
         queryClient.setQueryData(messageKeys.infinite(sessionId), context.previousInfinite);
       }
       // Restore draft preview card
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
+    },
+    onSettled: (_data, _error, { sessionId }) => {
+      // Refetch to ensure server timestamp/ID are correct
+      queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
     },
     ...options,
   });

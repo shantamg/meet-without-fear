@@ -14,7 +14,6 @@ import { Stage, MessageRole, StrategyPhase, SessionStatus } from '@meet-without-
 import { ChatInterface, ChatMessage, ChatIndicatorItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
 import { FeelHeardConfirmation } from '../components/FeelHeardConfirmation';
-import { ReadyToShareConfirmation } from '../components/ReadyToShareConfirmation';
 import { BreathingExercise } from '../components/BreathingExercise';
 import { GroundingExercise } from '../components/GroundingExercise';
 import { BodyScanExercise } from '../components/BodyScanExercise';
@@ -150,6 +149,7 @@ export function UnifiedSessionScreen({
     loadingCompact,
     empathyDraftData,
     liveProposedEmpathyStatement,
+    aiRecommendsReadyToShare,
     allNeedsConfirmed,
     commonGround,
     strategyPhase,
@@ -253,6 +253,10 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   const [showEmpathyDrawer, setShowEmpathyDrawer] = useState(false);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
+  
+  // Local latch to prevent panel flashing during server refetches
+  // Once user clicks Share, this stays true even if server data temporarily reverts
+  const [hasSharedEmpathyLocal, setHasSharedEmpathyLocal] = useState(false);
 
   // -------------------------------------------------------------------------
   // Local State for Session Entry Mood Check
@@ -309,6 +313,9 @@ export function UnifiedSessionScreen({
   // Animation for the invitation panel slide-up
   const invitationPanelAnim = useRef(new Animated.Value(0)).current;
 
+  // Animation for the empathy statement review panel slide-up
+  const empathyPanelAnim = useRef(new Animated.Value(0)).current;
+
   // Calculate whether panel should show
   // FIX: Only show to inviter (they are the ones who need to share the invitation)
   // Invitees should never see this panel - they already accepted the invitation
@@ -334,6 +341,48 @@ export function UnifiedSessionScreen({
       friction: 9, // Adjust friction for "weight"
     }).start();
   }, [shouldShowInvitationPanel, invitationPanelAnim]);
+
+  // Calculate whether empathy review panel should show
+  // Show when empathy statement is ready to review but not yet sent
+  // Note: We don't check isSharingEmpathy here - we animate it closed instead of unmounting
+  // to prevent layout jumps
+  const shouldShowEmpathyPanel = useMemo(() => {
+    // Local latch: Once user clicks Share, never show panel again (prevents flash during refetch)
+    if (hasSharedEmpathyLocal) return false;
+    
+    return !!(
+      currentStage === Stage.PERSPECTIVE_STRETCH &&
+      !empathyDraftData?.alreadyConsented &&
+      ((aiRecommendsReadyToShare && !empathyDraftData?.draft?.readyToShare) ||
+        (empathyDraftData?.canConsent && empathyDraftData?.draft?.readyToShare)) &&
+      (liveProposedEmpathyStatement || empathyDraftData?.draft?.content) &&
+      !isTypewriterAnimating // Wait for text to finish
+    );
+  }, [
+    hasSharedEmpathyLocal, // Add dependency - prevents panel from flashing back
+    currentStage,
+    empathyDraftData?.alreadyConsented,
+    empathyDraftData?.canConsent,
+    empathyDraftData?.draft?.readyToShare,
+    aiRecommendsReadyToShare,
+    liveProposedEmpathyStatement,
+    empathyDraftData?.draft?.content,
+    isTypewriterAnimating,
+  ]);
+
+  // Animate empathy panel - close when sharing, otherwise follow shouldShowEmpathyPanel
+  // This prevents layout jumps by animating closed instead of unmounting
+  useEffect(() => {
+    // If we are sharing, force it to close (0). Otherwise follow the logic (1 or 0).
+    const targetValue = isSharingEmpathy ? 0 : (shouldShowEmpathyPanel ? 1 : 0);
+    
+    Animated.spring(empathyPanelAnim, {
+      toValue: targetValue,
+      useNativeDriver: false, // Required for layout animations like maxHeight
+      tension: 40,
+      friction: 9,
+    }).start();
+  }, [shouldShowEmpathyPanel, isSharingEmpathy, empathyPanelAnim]);
 
   // Clear optimistic state when API confirms
   useEffect(() => {
@@ -529,39 +578,8 @@ export function UnifiedSessionScreen({
             </View>
           );
 
-        case 'ready-to-share-confirmation':
-          return (
-            <View style={styles.inlineCard} key={card.id}>
-              <ReadyToShareConfirmation
-                onViewFull={() => setShowEmpathyDrawer(true)}
-              />
-            </View>
-          );
-
-        case 'empathy-draft-preview':
-          return (
-            <View style={styles.inlineCard} key={card.id}>
-              <EmpathyAttemptCard
-                attempt={card.props.content as string}
-                testID="empathy-draft-preview"
-              />
-              <View style={styles.shareActions}>
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() => setShowEmpathyDrawer(true)}
-                >
-                  <Text style={styles.secondaryButtonText}>Edit draft</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.primaryButton}
-                  onPress={() => setShowShareConfirm(true)}
-                  testID="send-empathy-button"
-                >
-                  <Text style={styles.primaryButtonText}>Send empathy statement</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
+        // Note: ready-to-share-confirmation case removed - now shown as panel above chat input
+        // Note: empathy-draft-preview case removed - users access empathy statement via the overlay drawer
 
         case 'accuracy-feedback':
           return (
@@ -1118,6 +1136,40 @@ export function UnifiedSessionScreen({
                     testID="compact-agreement-bar"
                   />
                 )
+              // Show empathy review panel when empathy statement is ready
+              : shouldShowEmpathyPanel
+              ? () => (
+                  <Animated.View
+                    style={{
+                      opacity: empathyPanelAnim,
+                      maxHeight: empathyPanelAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 100],
+                      }),
+                      transform: [{
+                        translateY: empathyPanelAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [20, 0],
+                        }),
+                      }],
+                      overflow: 'hidden',
+                    }}
+                    pointerEvents={shouldShowEmpathyPanel ? 'auto' : 'none'}
+                  >
+                    <View style={styles.empathyReviewContainer}>
+                      <TouchableOpacity
+                        style={styles.empathyReviewButton}
+                        onPress={() => setShowEmpathyDrawer(true)}
+                        activeOpacity={0.7}
+                        testID="empathy-review-button"
+                      >
+                        <Text style={styles.empathyReviewButtonText}>
+                          Review what you'll share
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </Animated.View>
+                )
               // Only render if inviter has a draft message (not confirmed yet)
               // Never render for invitees - they already accepted the invitation
               : (isInviter && invitationMessage && invitationUrl && !invitationConfirmed && !localInvitationConfirmed)
@@ -1218,12 +1270,13 @@ export function UnifiedSessionScreen({
 
         {/* Note: Compact is now rendered via renderCustomEmptyState in ChatInterface */}
 
-        {/* Render inline cards at the end of the chat - ONLY after typewriter animation completes */}
-        {/* This ensures UI elements like feel-heard confirmation appear after AI message finishes */}
-        {!isTypewriterAnimating && inlineCards.map((card) => renderInlineCard(card))}
+        {/* Render inline cards - always render to maintain layout stability */}
+        {/* Removing the isTypewriterAnimating check prevents layout jumps when cards unmount/remount */}
+        {inlineCards.map((card) => renderInlineCard(card))}
 
         {/* Memory suggestion card - shown when AI detects a "remember this" intent */}
-        {!isTypewriterAnimating && memorySuggestion && (
+        {/* Always render to maintain layout stability */}
+        {memorySuggestion && (
           <MemorySuggestionCard
             suggestion={memorySuggestion}
             sessionId={sessionId}
@@ -1270,6 +1323,8 @@ export function UnifiedSessionScreen({
               <TouchableOpacity
                 style={styles.primaryButton}
                 onPress={() => {
+                  // Set local latch immediately to prevent panel from flashing back
+                  setHasSharedEmpathyLocal(true);
                   handleConfirmReadyToShare();
                   handleShareEmpathy();
                   setShowShareConfirm(false);
@@ -1321,10 +1376,30 @@ export function UnifiedSessionScreen({
           statement={liveProposedEmpathyStatement}
           partnerName={partnerName}
           onShare={() => {
-            // Close drawer and share directly - drawer already shows preview
+            // Capture statement at click time to avoid stale closure
+            const statementToShare = liveProposedEmpathyStatement || empathyDraftData?.draft?.content;
+            console.log('[ViewEmpathyStatementDrawer] Share clicked', { 
+              hasStatement: !!statementToShare,
+              statementLength: statementToShare?.length,
+              hasLiveProposed: !!liveProposedEmpathyStatement,
+              hasDraft: !!empathyDraftData?.draft?.content
+            });
+            if (!statementToShare) {
+              console.error('[ViewEmpathyStatementDrawer] No statement to share!');
+              return;
+            }
+            // Set local latch immediately to prevent panel from flashing back during refetch
+            setHasSharedEmpathyLocal(true);
+            // Close drawer immediately
             setShowEmpathyDrawer(false);
+            // Mark draft as ready to share (if not already)
             handleConfirmReadyToShare();
-            handleShareEmpathy();
+            // Share empathy - pass statement directly to ensure it's used
+            // This will:
+            // 1. Add optimistic empathy message to chat (ghost dots will show)
+            // 2. Hide the review panel (via animation + local latch)
+            // 3. When API responds, replace optimistic with real message + AI response
+            handleShareEmpathy(statementToShare);
           }}
           onSendRefinement={(message) => {
             const refined =
@@ -1403,6 +1478,28 @@ const useStyles = () =>
       fontSize: t.typography.fontSize.md,
       color: t.colors.textSecondary,
       textDecorationLine: 'underline',
+    },
+
+    // Empathy Review Panel
+    empathyReviewContainer: {
+      paddingHorizontal: t.spacing.lg,
+      paddingVertical: t.spacing.md,
+      backgroundColor: t.colors.bgSecondary,
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
+    },
+    empathyReviewButton: {
+      paddingVertical: t.spacing.sm,
+      paddingHorizontal: t.spacing.md,
+      backgroundColor: t.colors.bgPrimary,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    empathyReviewButtonText: {
+      fontSize: t.typography.fontSize.md,
+      fontWeight: '500',
+      color: t.colors.brandBlue,
     },
 
     // Inline Cards
