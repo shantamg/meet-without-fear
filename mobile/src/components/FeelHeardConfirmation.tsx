@@ -1,8 +1,8 @@
 /**
  * FeelHeardConfirmation Component
  *
- * Compact inline banner for Stage 1 gate confirmation.
- * Asks if user feels heard and allows continuing or confirming.
+ * Low-profile panel above chat input for Stage 1 gate confirmation.
+ * Single button to confirm feeling heard.
  */
 
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
@@ -14,7 +14,7 @@ import { colors } from '@/theme';
 
 interface FeelHeardConfirmationProps {
   onConfirm: () => void;
-  onContinue: () => void;
+  isPending?: boolean;
 }
 
 // ============================================================================
@@ -23,19 +23,18 @@ interface FeelHeardConfirmationProps {
 
 export function FeelHeardConfirmation({
   onConfirm,
-  onContinue,
+  isPending = false,
 }: FeelHeardConfirmationProps) {
   return (
     <View style={styles.container}>
-      <Text style={styles.question}>Feeling heard?</Text>
-      <View style={styles.buttons}>
-        <TouchableOpacity style={styles.continueButton} onPress={onContinue}>
-          <Text style={styles.continueText}>Not yet</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.confirmButton} onPress={onConfirm}>
-          <Text style={styles.confirmText}>Yes</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={onConfirm}
+        disabled={isPending}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.buttonText}>I feel heard</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -46,45 +45,23 @@ export function FeelHeardConfirmation({
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: colors.bgSecondary,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  button: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.brandBlue,
     borderRadius: 8,
-    marginHorizontal: 16,
-    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  question: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.textPrimary,
-  },
-  buttons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  continueButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-  },
-  continueText: {
-    color: colors.textSecondary,
-    fontSize: 13,
-  },
-  confirmButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: colors.accent,
-    borderRadius: 6,
-  },
-  confirmText: {
-    color: colors.textOnAccent,
-    fontSize: 13,
+  buttonText: {
+    color: 'white',
+    fontSize: 15,
     fontWeight: '600',
   },
 });
