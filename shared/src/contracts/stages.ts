@@ -76,7 +76,9 @@ export type FeelHeardResponseInput = z.infer<typeof feelHeardResponseSchema>;
 
 export const saveEmpathyDraftRequestSchema = z.object({
   content: z.string().min(1, 'Content is required').max(2000, 'Draft too long'),
-  readyToShare: z.boolean().default(false),
+  // Optional so that "save draft content" doesn't accidentally reset readiness.
+  // When omitted, backend should preserve the existing readyToShare value.
+  readyToShare: z.boolean().optional(),
 });
 
 export type SaveEmpathyDraftRequestInput = z.infer<typeof saveEmpathyDraftRequestSchema>;

@@ -267,10 +267,15 @@ export function PerspectiveStretchScreen() {
       });
     } else {
       // Share with partner
-      consentToShare({
-        sessionId,
-        consent: true,
-      });
+      // Ensure draft is marked ready before consenting
+      if (empathyDraftData?.draft?.content) {
+        saveDraft({
+          sessionId,
+          content: empathyDraftData.draft.content,
+          readyToShare: true,
+        });
+      }
+      consentToShare({ sessionId, consent: true });
     }
   };
 

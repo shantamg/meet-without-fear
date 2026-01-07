@@ -384,7 +384,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { mutate: signCompact, isPending: isSigningCompact } = useSignCompact();
   const { mutate: confirmInvitationMessage } = useConfirmInvitationMessage();
   const { mutate: advanceStage } = useAdvanceStage();
-  const { mutate: saveDraft } = useSaveEmpathyDraft();
+  const { mutate: saveDraft, mutateAsync: saveDraftAsync } = useSaveEmpathyDraft();
   const { mutate: consentToShare, isPending: isSharingEmpathy } = useConsentToShareEmpathy({
     onError: (error) => {
       console.error('[useConsentToShareEmpathy] Mutation error', error);
@@ -1031,24 +1031,31 @@ export function useUnifiedSession(sessionId: string | undefined) {
       hasEmpathyDraft: !!empathyDraftData?.draft?.content,
       hasLiveProposed: !!liveProposedEmpathyStatement
     });
-    try {
-      console.log('[handleShareEmpathy] About to call consentToShare mutation');
-      consentToShare(
-        { sessionId, consent: true, draftContent },
-        {
-          onError: (error) => {
-            console.error('[handleShareEmpathy] Mutation onError callback', error);
-          },
-          onSuccess: (data) => {
-            console.log('[handleShareEmpathy] Mutation onSuccess callback', data);
-          },
+    (async () => {
+      try {
+        // Ensure the draft is marked ready BEFORE consenting (prevents backend 400 + retry race)
+        if (draftContent) {
+          await saveDraftAsync({ sessionId, content: draftContent, readyToShare: true });
         }
-      );
-      console.log('[handleShareEmpathy] consentToShare mutation called (async)');
-    } catch (error) {
-      console.error('[handleShareEmpathy] Synchronous error calling consentToShare', error);
-    }
-  }, [sessionId, consentToShare, empathyDraftData?.draft?.content, liveProposedEmpathyStatement]);
+
+        console.log('[handleShareEmpathy] About to call consentToShare mutation');
+        consentToShare(
+          { sessionId, consent: true, draftContent },
+          {
+            onError: (error) => {
+              console.error('[handleShareEmpathy] Mutation onError callback', error);
+            },
+            onSuccess: (data) => {
+              console.log('[handleShareEmpathy] Mutation onSuccess callback', data);
+            },
+          }
+        );
+        console.log('[handleShareEmpathy] consentToShare mutation called (async)');
+      } catch (error) {
+        console.error('[handleShareEmpathy] Failed during ready-to-share + consent flow', error);
+      }
+    })();
+  }, [sessionId, consentToShare, empathyDraftData?.draft?.content, liveProposedEmpathyStatement, saveDraftAsync]);
 
   const handleValidatePartnerEmpathy = useCallback(
     (validated: boolean, feedback?: string) => {

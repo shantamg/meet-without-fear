@@ -371,7 +371,8 @@ describe('Stage 2 API', () => {
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
-            partnerEmpathy: null,
+            attempt: null,
+            waitingForPartner: true,
           }),
         })
       );
@@ -388,7 +389,9 @@ describe('Stage 2 API', () => {
         content: 'Partner thinks I felt...',
         sharedAt,
         sourceUserId: 'partner-1',
+        consentRecordId: 'consent-1',
       });
+      (prisma.empathyValidation.findUnique as jest.Mock).mockResolvedValue(null);
 
       await getPartnerEmpathy(req, res);
 
@@ -396,10 +399,11 @@ describe('Stage 2 API', () => {
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
-            partnerEmpathy: expect.objectContaining({
+            attempt: expect.objectContaining({
               id: 'attempt-1',
               content: 'Partner thinks I felt...',
             }),
+            waitingForPartner: false,
           }),
         })
       );
@@ -423,18 +427,27 @@ describe('Stage 2 API', () => {
         id: 'attempt-1',
         sourceUserId: 'partner-1',
       });
-      (prisma.empathyValidation.create as jest.Mock).mockResolvedValue({
+      (prisma.empathyValidation.upsert as jest.Mock).mockResolvedValue({
         id: 'validation-1',
         validated: true,
         validatedAt: new Date(),
+        feedbackShared: false,
       });
       (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
         gatesSatisfied: { empathyValidated: true },
       });
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValueOnce({
+        id: 'attempt-1',
+        sourceUserId: 'partner-1',
+      }).mockResolvedValueOnce({
+        id: 'my-attempt-1',
+        sourceUserId: 'user-1',
+      });
+      (prisma.empathyValidation.findUnique as jest.Mock).mockResolvedValue(null);
 
       await validateEmpathy(req, res);
 
-      expect(prisma.empathyValidation.create).toHaveBeenCalled();
+      expect(prisma.empathyValidation.upsert).toHaveBeenCalled();
       expect(prisma.stageProgress.update).toHaveBeenCalled();
       expect(notifyPartner).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(
@@ -442,6 +455,7 @@ describe('Stage 2 API', () => {
           success: true,
           data: expect.objectContaining({
             validated: true,
+            canAdvance: true,
           }),
         })
       );

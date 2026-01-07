@@ -147,6 +147,15 @@ export async function saveDraft(req: Request, res: Response): Promise<void> {
     }
 
     // Upsert empathy draft
+    // Important: if readyToShare is omitted, preserve existing readyToShare value.
+    const updateData: { content: string; readyToShare?: boolean; version: { increment: number } } = {
+      content,
+      version: { increment: 1 },
+    };
+    if (typeof readyToShare === 'boolean') {
+      updateData.readyToShare = readyToShare;
+    }
+
     const draft = await prisma.empathyDraft.upsert({
       where: {
         sessionId_userId: {
@@ -158,14 +167,10 @@ export async function saveDraft(req: Request, res: Response): Promise<void> {
         sessionId,
         userId: user.id,
         content,
-        readyToShare,
+        readyToShare: typeof readyToShare === 'boolean' ? readyToShare : false,
         version: 1,
       },
-      update: {
-        content,
-        readyToShare,
-        version: { increment: 1 },
-      },
+      update: updateData,
     });
 
     successResponse(res, {
@@ -475,8 +480,26 @@ export async function consentToShare(
       const userName = user.firstName || user.name || 'The user';
       const partner = partnerName || 'their partner';
 
-      // Build a simple transition prompt for empathy sharing acknowledgment
-      const transitionPrompt = `You are Meet Without Fear, a Process Guardian. ${userName} has just shared their empathy statement with ${partner}, expressing their understanding of ${partner}'s perspective.
+      const bothShared = !!partnerAttempt;
+
+      // Build a transition prompt for empathy sharing acknowledgment
+      const transitionPrompt = bothShared
+        ? `You are Meet Without Fear, a Process Guardian. ${userName} has just shared their empathy statement with ${partner}. ${partner} has also shared their empathy statement.
+
+Generate a brief, warm message (2-3 sentences) for ${userName} that:
+1. Acknowledges the courage it took to share their understanding
+2. Notes that both empathy statements are now shared
+3. Clearly explains the next step: they'll read ${partner}'s empathy statement and mark whether it feels accurate (validation). If it feels inaccurate, they can give brief feedback; if accurate, they'll be able to advance to the next stage together.
+
+Keep it natural and conversational. Don't be overly effusive.
+
+Respond in JSON format:
+\`\`\`json
+{
+  "response": "Your message"
+}
+\`\`\``
+        : `You are Meet Without Fear, a Process Guardian. ${userName} has just shared their empathy statement with ${partner}, expressing their understanding of ${partner}'s perspective.
 
 Generate a brief, warm acknowledgment message (2-3 sentences) for ${userName} that:
 1. Acknowledges the courage it took to share their understanding
@@ -506,12 +529,18 @@ Respond in JSON format:
           const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
           transitionContent = typeof parsed.response === 'string'
             ? parsed.response
-            : `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours.`;
+            : bothShared
+              ? `Thank you for sharing your understanding. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
+              : `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours.`;
         } catch {
-          transitionContent = `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours.`;
+          transitionContent = bothShared
+            ? `Thank you for sharing your understanding. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
+            : `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours.`;
         }
       } else {
-        transitionContent = `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours.`;
+        transitionContent = bothShared
+          ? `Thank you for sharing your understanding. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
+          : `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours.`;
       }
 
       // Save the transition message to the database
@@ -620,14 +649,32 @@ export async function getPartnerEmpathy(
       },
     });
 
+    // Determine whether current user has validated partner attempt
+    const validation = partnerAttempt
+      ? await prisma.empathyValidation.findUnique({
+          where: {
+            attemptId_userId: {
+              attemptId: partnerAttempt.id,
+              userId: user.id,
+            },
+          },
+        })
+      : null;
+
     successResponse(res, {
-      partnerEmpathy: partnerAttempt
+      attempt: partnerAttempt
         ? {
             id: partnerAttempt.id,
+            sourceUserId: partnerAttempt.sourceUserId ?? '',
             content: partnerAttempt.content,
-            sharedAt: partnerAttempt.sharedAt?.toISOString() ?? null,
+            sharedAt: partnerAttempt.sharedAt.toISOString(),
+            consentRecordId: partnerAttempt.consentRecordId ?? '',
           }
         : null,
+      waitingForPartner: !partnerAttempt,
+      validated: validation ? validation.validated : false,
+      validatedAt: validation?.validatedAt?.toISOString() ?? null,
+      awaitingRevision: validation ? validation.validated === false : false,
     });
   } catch (error) {
     console.error('[getPartnerEmpathy] Error:', error);
@@ -747,12 +794,23 @@ export async function validateEmpathy(
 
     const now = new Date();
 
-    // Create validation record
-    await prisma.empathyValidation.create({
+    // Create or update validation record (unique on attemptId+userId)
+    const validationRecord = await prisma.empathyValidation.upsert({
+      where: {
+        attemptId_userId: {
+          attemptId: partnerAttempt.id,
+          userId: user.id,
+        },
+      },
       data: {
         attemptId: partnerAttempt.id,
         sessionId,
         userId: user.id,
+        validated,
+        feedback,
+        validatedAt: now,
+      },
+      update: {
         validated,
         feedback,
         validatedAt: now,
@@ -785,10 +843,31 @@ export async function validateEmpathy(
       });
     }
 
+    // Determine whether partner has validated my empathy attempt
+    const myAttempt = await prisma.empathyAttempt.findFirst({
+      where: {
+        sessionId,
+        sourceUserId: user.id,
+      },
+    });
+    const partnerValidation = partnerId && myAttempt
+      ? await prisma.empathyValidation.findUnique({
+          where: {
+            attemptId_userId: {
+              attemptId: myAttempt.id,
+              userId: partnerId,
+            },
+          },
+        })
+      : null;
+
     successResponse(res, {
       validated,
       validatedAt: now.toISOString(),
+      feedbackShared: validationRecord.feedbackShared,
+      awaitingRevision: validated === false,
       canAdvance: validated,
+      partnerValidated: partnerValidation ? partnerValidation.validated : false,
     });
   } catch (error) {
     console.error('[validateEmpathy] Error:', error);
