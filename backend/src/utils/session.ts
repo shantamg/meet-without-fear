@@ -134,33 +134,47 @@ export function generateSessionStatusSummary(
   }
 
   if (sessionStatus === SessionStatus.INVITED) {
-    // Check if creator has made progress while waiting for partner to accept
-    const hasUserProgress =
-      myProgress.stage > Stage.ONBOARDING ||
-      myProgress.status === StageStatus.IN_PROGRESS ||
-      myProgress.status === StageStatus.GATE_PENDING ||
-      myProgress.status === StageStatus.COMPLETED;
+    // Check if partner has actually joined and made progress
+    // (This handles cases where session status wasn't updated but partner has progress)
+    const hasPartnerProgress =
+      partnerProgress.stage > Stage.ONBOARDING ||
+      partnerProgress.status === StageStatus.IN_PROGRESS ||
+      partnerProgress.status === StageStatus.GATE_PENDING ||
+      partnerProgress.status === StageStatus.COMPLETED;
 
-    if (hasUserProgress) {
-      // Show actual progress status for creator, partner is still pending acceptance
-      const userStatus =
-        myProgress.status === StageStatus.IN_PROGRESS
-          ? getInProgressStageMessage(myProgress.stage, options.userHasSentEmpathy)
-          : myProgress.status === StageStatus.GATE_PENDING ||
-              myProgress.status === StageStatus.COMPLETED
-            ? getCompletedStageMessage(myProgress.stage)
-            : `Ready to start ${STAGE_NAMES[myProgress.stage]}`;
+    // If partner has made progress, treat as active session
+    if (hasPartnerProgress) {
+      // Fall through to active session logic below
+    } else {
+      // Partner hasn't joined yet - show invitation status
+      // Check if creator has made progress while waiting for partner to accept
+      const hasUserProgress =
+        myProgress.stage > Stage.ONBOARDING ||
+        myProgress.status === StageStatus.IN_PROGRESS ||
+        myProgress.status === StageStatus.GATE_PENDING ||
+        myProgress.status === StageStatus.COMPLETED;
+
+      if (hasUserProgress) {
+        // Show actual progress status for creator, partner is still pending acceptance
+        const userStatus =
+          myProgress.status === StageStatus.IN_PROGRESS
+            ? getInProgressStageMessage(myProgress.stage, options.userHasSentEmpathy)
+            : myProgress.status === StageStatus.GATE_PENDING ||
+                myProgress.status === StageStatus.COMPLETED
+              ? getCompletedStageMessage(myProgress.stage)
+              : `Ready to start ${STAGE_NAMES[myProgress.stage]}`;
+
+        return {
+          userStatus,
+          partnerStatus: `Waiting for ${name} to join`,
+        };
+      }
 
       return {
-        userStatus,
+        userStatus: 'Invitation sent',
         partnerStatus: `Waiting for ${name} to join`,
       };
     }
-
-    return {
-      userStatus: 'Invitation sent',
-      partnerStatus: `Waiting for ${name} to join`,
-    };
   }
 
   if (sessionStatus === SessionStatus.PAUSED) {

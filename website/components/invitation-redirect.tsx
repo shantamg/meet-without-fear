@@ -18,8 +18,13 @@ export function InvitationRedirect() {
   useEffect(() => {
     if (!isLoaded) return;
 
-    // Only redirect if signed in and NOT already on an invitation page
-    if (isSignedIn && !pathname.startsWith("/invitation/")) {
+    // Only redirect if signed in and NOT already on an invitation page or app download page
+    // Exclude /app to allow users to download the app after accepting invitation
+    if (
+      isSignedIn &&
+      !pathname.startsWith("/invitation/") &&
+      pathname !== "/app"
+    ) {
       const pendingInvitation = sessionStorage.getItem(PENDING_INVITATION_KEY);
       if (pendingInvitation) {
         // Clear it immediately to prevent redirect loops

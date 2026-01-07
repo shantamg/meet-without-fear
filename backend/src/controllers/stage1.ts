@@ -132,18 +132,21 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     }
 
     // Check session allows messaging
-    // Allow ACTIVE status for all users, and CREATED/INVITED status for the session creator
-    // CREATED: Creator is crafting invitation message
-    // INVITED: Creator is working on Stages 0-1 while waiting for partner
+    // ACTIVE: All members can send messages
+    // CREATED: Only creator can send messages (crafting invitation message)
+    // INVITED: All members can send messages (creator and invitee who accepted)
     if (session.status !== 'ACTIVE') {
-      if (session.status === 'CREATED' || session.status === 'INVITED') {
+      if (session.status === 'CREATED') {
+        // CREATED: Only creator can send messages while crafting invitation
         const isCreator = await isSessionCreator(sessionId, user.id);
         if (!isCreator) {
           console.log(`[sendMessage] Session ${sessionId} is ${session.status} and user ${user.id} is not the creator`);
           errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
           return;
         }
-        // Creator can proceed while session is CREATED or INVITED
+      } else if (session.status === 'INVITED') {
+        // INVITED: All members can send messages (user is already verified as a member above)
+        // This allows both creator and invitee to message after invitation is sent/accepted
       } else {
         console.log(`[sendMessage] Session ${sessionId} is not active: ${session.status}`);
         errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
@@ -427,9 +430,13 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       console.log(`[sendMessage] Extracted invitation draft: "${extractedInvitationMessage}"`);
 
       // Save draft to invitation record
+      // CRITICAL FIX: Mark as unconfirmed so it is treated as a draft
       await prisma.invitation.updateMany({
         where: { sessionId, invitedById: user.id },
-        data: { invitationMessage: extractedInvitationMessage },
+        data: { 
+          invitationMessage: extractedInvitationMessage,
+          messageConfirmed: false 
+        },
       });
     }
 

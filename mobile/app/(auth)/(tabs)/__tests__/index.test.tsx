@@ -240,7 +240,7 @@ describe('HomeScreen', () => {
     renderWithProviders(<HomeScreen />);
 
     expect(screen.getByText('New Session')).toBeTruthy();
-    expect(screen.getByText('Inner Thoughts')).toBeTruthy();
+    expect(screen.getByText('Inner Work')).toBeTruthy();
   });
 
   it('shows Continue button when there is a recent session with partner nickname', () => {
@@ -307,9 +307,9 @@ describe('HomeScreen', () => {
 
     renderWithProviders(<HomeScreen />);
 
-    fireEvent.press(screen.getByText('Inner Thoughts'));
+    fireEvent.press(screen.getByText('Inner Work'));
 
-    expect(mockPush).toHaveBeenCalledWith('/inner-thoughts');
+    expect(mockPush).toHaveBeenCalledWith('/inner-work');
   });
 
   it('navigates to session when Continue pressed', () => {

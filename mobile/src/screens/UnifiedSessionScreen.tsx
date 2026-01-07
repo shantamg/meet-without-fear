@@ -157,6 +157,7 @@ export function UnifiedSessionScreen({
     overlappingStrategies,
     agreements,
     isGenerating,
+    isSharingEmpathy,
     waitingStatus,
 
     // Memory suggestion
@@ -1073,7 +1074,7 @@ export function UnifiedSessionScreen({
           messages={displayMessages}
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
-          isLoading={isSending || isFetchingInitialMessage || isConfirmingInvitation || isConfirmingFeelHeard}
+          isLoading={isSending || isFetchingInitialMessage || isConfirmingInvitation || isConfirmingFeelHeard || isSharingEmpathy}
           showEmotionSlider={!isInOnboardingUnsigned}
           emotionValue={barometerValue}
           onEmotionChange={handleBarometerChange}

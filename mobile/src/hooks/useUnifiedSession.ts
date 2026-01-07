@@ -386,7 +386,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { mutate: confirmInvitationMessage } = useConfirmInvitationMessage();
   const { mutate: advanceStage } = useAdvanceStage();
   const { mutate: saveDraft } = useSaveEmpathyDraft();
-  const { mutate: consentToShare } = useConsentToShareEmpathy();
+  const { mutate: consentToShare, isPending: isSharingEmpathy } = useConsentToShareEmpathy();
   const { mutate: validateEmpathy } = useValidateEmpathy();
   const { mutate: confirmNeeds } = useConfirmNeeds();
   const { mutate: consentShareNeeds } = useConsentShareNeeds();
@@ -1021,8 +1021,10 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
   const handleShareEmpathy = useCallback(() => {
     if (!sessionId) return;
-    consentToShare({ sessionId, consent: true });
-  }, [sessionId, consentToShare]);
+    // Pass draft content for optimistic UI update
+    const draftContent = empathyDraftData?.draft?.content || liveProposedEmpathyStatement || undefined;
+    consentToShare({ sessionId, consent: true, draftContent });
+  }, [sessionId, consentToShare, empathyDraftData?.draft?.content, liveProposedEmpathyStatement]);
 
   const handleValidatePartnerEmpathy = useCallback(
     (validated: boolean, feedback?: string) => {
@@ -1205,6 +1207,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     agreementsData,
     agreements,
     isGenerating,
+    isSharingEmpathy,
     isProposing,
 
     // Actions

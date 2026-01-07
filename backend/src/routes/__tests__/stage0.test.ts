@@ -13,9 +13,13 @@ jest.mock('../../lib/prisma', () => ({
     },
     session: {
       findUnique: jest.fn(),
+      update: jest.fn(),
     },
     relationshipMember: {
       findMany: jest.fn(),
+    },
+    invitation: {
+      findFirst: jest.fn(),
     },
   },
 }));
@@ -92,6 +96,9 @@ describe('Stage 0 API', () => {
         status: 'IN_PROGRESS',
         gatesSatisfied: { compactSigned: true, signedAt: new Date().toISOString() },
       });
+
+      // Mock: no invitation (or invitation for notification lookup)
+      (prisma.invitation.findFirst as jest.Mock).mockResolvedValue(null);
 
       const req = createMockRequest({
         user: mockUser,
@@ -179,6 +186,12 @@ describe('Stage 0 API', () => {
         status: 'IN_PROGRESS',
         gatesSatisfied: { compactSigned: true, signedAt: new Date().toISOString() },
       });
+
+      // Mock: no invitation (or invitation for notification lookup)
+      (prisma.invitation.findFirst as jest.Mock).mockResolvedValue(null);
+
+      // Mock: session update when both have signed
+      (prisma.session.update as jest.Mock).mockResolvedValue({});
 
       const req = createMockRequest({
         user: mockUser,

@@ -20,6 +20,8 @@ import {
   trackAppDownload,
 } from "@/lib/mixpanel";
 
+const PENDING_INVITATION_KEY = "pending_invitation_id";
+
 type InvitationState =
   | "loading"
   | "not_found"
@@ -210,6 +212,8 @@ export default function InvitationPage() {
 
         if (result.success) {
           console.log("[Invitation] Accept successful!");
+          // Clear pending invitation from sessionStorage to prevent redirect loops
+          sessionStorage.removeItem(PENDING_INVITATION_KEY);
           setState("success");
           trackInvitationAccepted(invitationId, invitation?.invitedBy?.id);
         } else {
@@ -397,8 +401,6 @@ function DeclinedState({ inviterName }: { inviterName: string | null }) {
     </main>
   );
 }
-
-const PENDING_INVITATION_KEY = "pending_invitation_id";
 
 function AuthRequiredState({
   invitation,

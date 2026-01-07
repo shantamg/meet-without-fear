@@ -92,6 +92,7 @@ function createMockResponse(): {
 
 describe('Stage 1 API', () => {
   const mockUser = { id: 'user-1', email: 'test@example.com', name: 'Test User' };
+  const mockPartner = { id: 'user-2', email: 'partner@example.com', name: 'Partner User' };
   const mockSessionId = 'session-123';
 
   beforeEach(() => {
@@ -243,7 +244,8 @@ describe('Stage 1 API', () => {
       );
     });
 
-    it('rejects messages when user in stage 0 without compact signed', async () => {
+    it('allows onboarding messages when user in stage 0 without compact signed', async () => {
+      // Updated: Stage 0 messaging is now allowed for onboarding chat
       const mockStageProgress = {
         id: 'progress-1',
         sessionId: mockSessionId,
@@ -257,11 +259,49 @@ describe('Stage 1 API', () => {
         id: mockSessionId,
         status: 'ACTIVE',
         relationship: {
-          members: [{ userId: mockUser.id }],
+          members: [{ userId: mockUser.id }, { userId: mockPartner.id }],
         },
       });
 
       (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
+
+      // Mock message creation for the allowed case
+      const mockUserMessage = {
+        id: 'user-msg-1',
+        sessionId: mockSessionId,
+        senderId: mockUser.id,
+        role: 'USER',
+        content: 'Test message',
+        stage: 0,
+        timestamp: new Date(),
+      };
+      (prisma.message.create as jest.Mock).mockResolvedValue(mockUserMessage);
+      (prisma.message.findMany as jest.Mock).mockResolvedValue([mockUserMessage]);
+
+      // Mock AI response (with full structure expected by controller)
+      (aiService.getOrchestratedResponse as jest.Mock).mockResolvedValue({
+        response: 'AI onboarding response',
+        isTransitionMessage: false,
+        gatesProgressed: [],
+        memoryIntent: { intent: 'none', depth: 'none' },
+        usedMock: false,
+        offerFeelHeardCheck: false,
+      });
+
+      // Mock invitation for session context
+      (prisma.invitation.findFirst as jest.Mock).mockResolvedValue(null);
+
+      // Mock relationship member lookup (for partner name)
+      (prisma.relationshipMember.findMany as jest.Mock).mockResolvedValue([
+        { userId: mockUser.id, nickname: null, user: { firstName: 'Test' } },
+        { userId: mockPartner.id, nickname: null, user: { firstName: 'Partner' } },
+      ]);
+
+      // Mock user vessel
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
+
+      // Mock emotional readings
+      (prisma.emotionalReading.findMany as jest.Mock).mockResolvedValue([]);
 
       const req = createMockRequest({
         user: mockUser,
@@ -272,16 +312,8 @@ describe('Stage 1 API', () => {
 
       await sendMessage(req as Request, res as Response);
 
-      expect(statusMock).toHaveBeenCalledWith(400);
-      expect(jsonMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: false,
-          error: expect.objectContaining({
-            code: 'VALIDATION_ERROR',
-            message: expect.stringContaining('Curiosity Compact'),
-          }),
-        })
-      );
+      // Onboarding messages are now allowed
+      expect(statusMock).toHaveBeenCalledWith(200);
     });
 
     it('rejects messages when session is not active', async () => {
@@ -334,7 +366,8 @@ describe('Stage 1 API', () => {
       );
     });
 
-    it('rejects messages when user is not in stage 1', async () => {
+    it('rejects messages when user is in invalid stage (stage 5+)', async () => {
+      // Updated: Stage 0-4 messaging is now allowed, but stage 5+ should be blocked
       (prisma.session.findFirst as jest.Mock).mockResolvedValue({
         id: mockSessionId,
         status: 'ACTIVE',
@@ -343,16 +376,16 @@ describe('Stage 1 API', () => {
         },
       });
 
-      // User progress shows stage 0 (onboarding), so stage1 messages should be blocked
+      // User progress shows stage 5 (invalid - beyond allowed stages)
       (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
-        stage: 0,
+        stage: 5,
         status: 'IN_PROGRESS',
       });
 
       const req = createMockRequest({
         user: mockUser,
         params: { id: mockSessionId },
-        body: { content: 'Trying to send too early' },
+        body: { content: 'Trying to send in invalid stage' },
       });
       const { res, statusMock, jsonMock } = createMockResponse();
 

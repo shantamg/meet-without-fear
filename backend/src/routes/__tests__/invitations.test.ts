@@ -56,6 +56,7 @@ jest.mock('../../services/email', () => ({
 // Mock realtime service
 jest.mock('../../services/realtime', () => ({
   notifyPartner: jest.fn().mockResolvedValue(undefined),
+  notifyPartnerWithFallback: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock notification service

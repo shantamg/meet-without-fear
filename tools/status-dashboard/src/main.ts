@@ -9,7 +9,6 @@ const channel = client.channels.get('ai-audit-stream');
 
 // --- State ---
 let sessionCost = 0.0000;
-let messageCount = 0;
 const turnContainers = new Map<string, HTMLElement>();
 const turnMetadata = new Map<string, { timestamp: string; userInput?: string; sessionId?: string; turnCount?: number }>();
 
@@ -19,16 +18,11 @@ app.innerHTML = `
   <div class="dashboard-header">
     <div class="brand">
       <span class="pulse-dot" id="status-dot"></span>
-      <h1>Neural Monitor</h1>
+      <h1>Monitor</h1>
     </div>
     <div class="metrics">
       <div class="metric">
-        <span class="label">Session Cost</span>
         <span class="value" id="cost-display">$0.0000</span>
-      </div>
-      <div class="metric">
-        <span class="label">Events</span>
-        <span class="value" id="count-display">0</span>
       </div>
     </div>
   </div>
@@ -37,7 +31,6 @@ app.innerHTML = `
 
 const feed = document.getElementById('feed')!;
 const costDisplay = document.getElementById('cost-display')!;
-const countDisplay = document.getElementById('count-display')!;
 const statusDot = document.getElementById('status-dot')!;
 
 // --- Helpers ---
@@ -52,594 +45,291 @@ function escapeHtml(text: string): string {
 }
 
 function parseJsonSafely(text: string): any {
+  if (!text || typeof text !== 'string') return null;
+  
+  // Try parsing the whole text first
   try {
-    // Try to extract JSON from text if it's wrapped
+    return JSON.parse(text.trim());
+  } catch {
+    // Continue to try extracting JSON
+  }
+  
+  // Try to find JSON object in the text (handle markdown code blocks, etc.)
+  // Look for { ... } pattern, but be smarter about matching braces
+  let braceCount = 0;
+  let startIdx = -1;
+  let endIdx = -1;
+  
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{') {
+      if (startIdx === -1) startIdx = i;
+      braceCount++;
+    } else if (text[i] === '}') {
+      braceCount--;
+      if (braceCount === 0 && startIdx !== -1) {
+        endIdx = i;
+        break;
+      }
+    }
+  }
+  
+  if (startIdx !== -1 && endIdx !== -1) {
+    try {
+      let jsonStr = text.substring(startIdx, endIdx + 1);
+      
+      // Try to fix common JSON issues: unescaped newlines in strings
+      // This is a heuristic - try to escape newlines in string values
+      jsonStr = jsonStr.replace(/"([^"]*)\n([^"]*)"/g, (match, before, after) => {
+        // Only fix if it looks like a string value (not a key)
+        return `"${before}\\n${after}"`;
+      });
+      
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      // If that failed, try a more aggressive fix for newlines
+      try {
+        let jsonStr = text.substring(startIdx, endIdx + 1);
+        // Replace unescaped newlines in string values (between quotes)
+        jsonStr = jsonStr.replace(/(:"[^"]*?)\n([^"]*?")/g, '$1\\n$2');
+        jsonStr = jsonStr.replace(/(:"[^"]*?)\r\n([^"]*?")/g, '$1\\n$2');
+        return JSON.parse(jsonStr);
+      } catch {
+        // Continue to try regex fallback
+      }
+    }
+  }
+  
+  // Fallback: try regex match (less reliable but might catch some cases)
+  try {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+      let jsonStr = jsonMatch[0];
+      // Try to fix newlines
+      jsonStr = jsonStr.replace(/(:"[^"]*?)\n([^"]*?")/g, '$1\\n$2');
+      return JSON.parse(jsonStr);
     }
-    return JSON.parse(text);
   } catch {
-    return null;
+    // Give up
   }
+  
+  return null;
 }
 
-function renderJsonVisual(obj: any, depth = 0): string {
-  if (depth > 3) return escapeHtml(JSON.stringify(obj));
+function renderJsonKeyValue(obj: any, maxDepth = 3, currentDepth = 0): string {
+  if (currentDepth >= maxDepth) {
+    const str = JSON.stringify(obj);
+    return str.length > 100 ? `<span class="json-value-truncated">${escapeHtml(str.substring(0, 100))}...</span>` : escapeHtml(str);
+  }
   
-  if (obj === null) return '<span class="json-null">null</span>';
-  if (obj === undefined) return '<span class="json-undefined">undefined</span>';
-  if (typeof obj === 'string') return `<span class="json-string">"${escapeHtml(obj)}"</span>`;
-  if (typeof obj === 'number') return `<span class="json-number">${obj}</span>`;
-  if (typeof obj === 'boolean') return `<span class="json-boolean">${obj}</span>`;
+  if (obj === null) return '<span class="json-value-null">null</span>';
+  if (obj === undefined) return '<span class="json-value-undefined">undefined</span>';
+  if (typeof obj === 'string') return `<span class="json-value-string">${escapeHtml(obj)}</span>`;
+  if (typeof obj === 'number') return `<span class="json-value-number">${obj}</span>`;
+  if (typeof obj === 'boolean') return `<span class="json-value-boolean">${obj}</span>`;
   
   if (Array.isArray(obj)) {
-    if (obj.length === 0) return '<span class="json-empty">[]</span>';
-    return `<div class="json-array">[<div class="json-indent">${obj.map((item, i) => 
-      `<div class="json-item"><span class="json-key">${i}:</span> ${renderJsonVisual(item, depth + 1)}</div>`
-    ).join('')}</div>]</div>`;
+    if (obj.length === 0) return '<span class="json-value-empty">[]</span>';
+    // If array contains objects, render each as key-value pairs
+    if (obj.length > 0 && typeof obj[0] === 'object' && obj[0] !== null && !Array.isArray(obj[0])) {
+      return obj.map((item, i) => 
+        `<div class="json-array-item"><span class="json-array-index">[${i}]</span> ${renderJsonKeyValue(item, maxDepth, currentDepth + 1)}</div>`
+      ).join('');
+    }
+    // Simple array of primitives
+    if (obj.length <= 5) {
+      return `<span class="json-value-array">[${obj.map(item => renderJsonKeyValue(item, maxDepth, currentDepth + 1)).join(', ')}]</span>`;
+    }
+    return `<span class="json-value-array">[${obj.length} items: ${obj.slice(0, 3).map(item => renderJsonKeyValue(item, maxDepth, currentDepth + 1)).join(', ')}...]</span>`;
   }
   
   if (typeof obj === 'object') {
     const keys = Object.keys(obj);
-    if (keys.length === 0) return '<span class="json-empty">{}</span>';
-    return `<div class="json-object">{<div class="json-indent">${keys.map(key => 
-      `<div class="json-item"><span class="json-key">"${escapeHtml(key)}":</span> ${renderJsonVisual(obj[key], depth + 1)}</div>`
-    ).join('')}</div>}</div>`;
+    if (keys.length === 0) return '<span class="json-value-empty">{}</span>';
+    
+    return keys.map(key => {
+      const value = renderJsonKeyValue(obj[key], maxDepth, currentDepth + 1);
+      return `<div class="json-kv-item"><span class="json-key">${escapeHtml(key)}</span>: ${value}</div>`;
+    }).join('');
   }
   
   return escapeHtml(String(obj));
 }
 
-function createExpandableSection(title: string, content: string, defaultExpanded = false, explanation?: string): string {
-  const id = `expand-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  return `
-    <div class="expandable-section">
-      <button class="expand-toggle" data-target="${id}" aria-expanded="${defaultExpanded}">
-        <span class="expand-icon">${defaultExpanded ? '▼' : '▶'}</span>
-        <span class="expand-title">${escapeHtml(title)}</span>
-        ${explanation ? `<span class="explanation-icon" title="${escapeHtml(explanation)}">ℹ️</span>` : ''}
-      </button>
-      <div class="expand-content" id="${id}" style="display: ${defaultExpanded ? 'block' : 'none'}">
-        ${content}
-      </div>
-    </div>
-  `;
-}
 
 function createCard(data: any) {
+  // Show USER, INTENT, RETRIEVAL, RESPONSE, and COST sections
+  if (!['USER', 'INTENT', 'RETRIEVAL', 'RESPONSE', 'COST'].includes(data.section)) {
+    return null;
+  }
+
   const card = document.createElement('div');
-  card.className = `log-card type-${data.section} collapsible-card`;
+  card.className = `log-card type-${data.section}`;
   
   const time = new Date(data.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
   const meta = data.data || {};
-  const cardId = `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-  let summaryHtml = '';
   let contentHtml = '';
   
   if (data.section === 'USER') {
-    const preview = meta.userMessage ? (meta.userMessage.length > 60 ? meta.userMessage.substring(0, 60) + '...' : meta.userMessage) : '';
-    summaryHtml = `
-      <div class="card-summary">
-        <span class="summary-text">${escapeHtml(preview)}</span>
-        <span class="summary-meta">${meta.messageLength || 0}ch • S${meta.stage || 'N/A'}</span>
-      </div>
-    `;
-    contentHtml = `
-      <div class="user-message-details">
-        <div class="user-message-text">${escapeHtml(meta.userMessage || '')}</div>
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="info-label">Length:</span>
-            <span class="info-value">${meta.messageLength || 0} chars</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Stage:</span>
-            <span class="info-value">${meta.stage || 'N/A'}</span>
-          </div>
-          ${meta.isFirstTurnInSession ? `
-            <div class="info-item">
-              <span class="info-label">First Turn:</span>
-              <span class="info-value">Yes</span>
-            </div>
-          ` : ''}
-        </div>
-      </div>
-    `;
+    // Show full user message
+    const message = meta.userMessage || '';
+    contentHtml = `<div class="user-text">${escapeHtml(message)}</div>`;
   } else if (data.section === 'INTENT') {
-    const intentExplanations: Record<string, string> = {
-      'stage_enforcement': 'System is enforcing stage boundaries - minimal memory access',
-      'emotional_validation': 'Focusing on emotional support with limited context',
-      'recall_commitment': 'User referenced past agreement - full memory search needed',
-      'avoid_recall': 'Critical distress detected - staying present without past triggers',
-    };
-    
-    const depthExplanations: Record<string, string> = {
-      'none': 'No memory retrieval',
-      'minimal': 'Only current conversation',
-      'full': 'Full semantic search across all sessions',
-    };
-    
-    summaryHtml = `
-      <div class="card-summary">
-        <span class="summary-text">
-          <span class="badge">${escapeHtml(meta.intent || 'N/A')}</span>
-          <span class="summary-separator">•</span>
-          <span>${escapeHtml(meta.depth || 'N/A')}</span>
-        </span>
-        ${meta.reason ? `<span class="summary-meta">${escapeHtml(meta.reason.substring(0, 40))}${meta.reason.length > 40 ? '...' : ''}</span>` : ''}
-      </div>
-    `;
-    contentHtml = `
-      <div class="intent-details">
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="info-label">Intent:</span>
-            <span class="info-value badge">${escapeHtml(meta.intent || 'N/A')}</span>
-            ${meta.intent && intentExplanations[meta.intent] ? `<span class="info-hint" title="${intentExplanations[meta.intent]}">ℹ️</span>` : ''}
-          </div>
-          <div class="info-item">
-            <span class="info-label">Depth:</span>
-            <span class="info-value">${escapeHtml(meta.depth || 'N/A')}</span>
-            ${meta.depth && depthExplanations[meta.depth] ? `<span class="info-hint" title="${depthExplanations[meta.depth]}">ℹ️</span>` : ''}
-          </div>
-          ${meta.emotionalIntensity ? `
-            <div class="info-item">
-              <span class="info-label">Emotional Intensity:</span>
-              <span class="info-value">${meta.emotionalIntensity}/10</span>
-            </div>
-          ` : ''}
-        </div>
-        ${meta.reason ? `<div class="reason-text">${escapeHtml(meta.reason)}</div>` : ''}
-        ${meta.userInput ? `
-          <div class="user-input-section">
-            <div class="section-label">User Input:</div>
-            <div class="user-input-text">${escapeHtml(meta.userInput)}</div>
-          </div>
-        ` : ''}
-      </div>
-    `;
+    // Just show the reason/thought
+    contentHtml = meta.reason ? `<div class="thought-text">${escapeHtml(meta.reason)}</div>` : '';
   } else if (data.section === 'RETRIEVAL') {
+    // Show comprehensive retrieval information
+    const parts: string[] = [];
+    
+    // Show search queries if available
     if (meta.searchQueries && meta.searchQueries.length > 0) {
-      summaryHtml = `
-        <div class="card-summary">
-          <span class="summary-text">${meta.searchQueries.length} queries</span>
-          ${meta.referencesDetected && meta.referencesDetected.length > 0 ? `
-            <span class="summary-meta">• ${meta.referencesDetected.length} refs</span>
-          ` : ''}
-        </div>
-      `;
-      contentHtml = `
-        <div class="retrieval-details">
-          <div class="info-item">
-            <span class="info-label">Search Queries Generated:</span>
-            <span class="info-value">${meta.searchQueries.length}</span>
-          </div>
-          <ul class="query-list">
-            ${meta.searchQueries.map((q: string, i: number) => 
-              `<li><span class="query-number">${i + 1}.</span> ${escapeHtml(q)}</li>`
-            ).join('')}
-          </ul>
-          ${meta.referencesDetected && meta.referencesDetected.length > 0 ? `
-            <div class="references-section">
-              <div class="section-label">References Detected:</div>
-              <ul class="reference-list">
-                ${meta.referencesDetected.map((r: any) => 
-                  `<li>
-                    <span class="ref-type ${r.type}">${r.type}</span>
-                    <span class="ref-text">${escapeHtml(r.text)}</span>
-                    <span class="confidence ${r.confidence}">${r.confidence}</span>
-                  </li>`
-                ).join('')}
-              </ul>
+      parts.push(`<div class="retrieval-section"><span class="retrieval-label">Queries:</span> ${meta.searchQueries.map((q: string) => `<span class="retrieval-query">${escapeHtml(q)}</span>`).join(', ')}</div>`);
+    }
+    
+    // Show references detected
+    if (meta.referencesDetected && meta.referencesDetected.length > 0) {
+      parts.push(`<div class="retrieval-section"><span class="retrieval-label">References:</span> ${meta.referencesDetected.map((r: any) => `<span class="retrieval-ref">${escapeHtml(r.text)}</span>`).join(', ')}</div>`);
+    }
+    
+    // Show top matches
+    if (meta.topMatches && meta.topMatches.length > 0) {
+      parts.push(`<div class="retrieval-section"><span class="retrieval-label">Matches (${meta.topMatches.length}):</span></div>`);
+      parts.push(`
+        <div class="retrieval-memories">
+          ${meta.topMatches.map((m: any) => `
+            <div class="memory-item">
+              <span class="memory-source ${m.source === 'cross-session' ? 'cross' : 'within'}">${m.source === 'cross-session' ? 'other' : 'this'}</span>
+              <span class="memory-content">${escapeHtml(m.content)}</span>
             </div>
-          ` : ''}
+          `).join('')}
         </div>
-      `;
-    } else if (meta.topMatches && meta.topMatches.length > 0) {
-      summaryHtml = `
-        <div class="card-summary">
-          <span class="summary-text">
-            ${meta.crossSessionResults || 0} cross • ${meta.withinSessionResults || 0} within
-          </span>
-          <span class="summary-meta">• ${meta.topMatches.length} snippets</span>
-        </div>
-      `;
-      contentHtml = `
-        <div class="retrieval-details">
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="info-label">Cross-Session Matches:</span>
-              <span class="info-value">${meta.crossSessionResults || 0}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Within-Session Matches:</span>
-              <span class="info-value">${meta.withinSessionResults || 0}</span>
-            </div>
-          </div>
-          <div class="matches-section">
-            <div class="section-label">Top Retrieved Snippets:</div>
-            <div class="matches-list">
-              ${meta.topMatches.map((m: any, i: number) => `
-                <div class="match-item">
-                  <div class="match-header">
-                    <span class="match-number">#${i + 1}</span>
-                    <span class="match-source ${m.source}">${m.source === 'cross-session' ? 'Other Session' : 'This Session'}</span>
-                    <span class="match-similarity">${(parseFloat(m.similarity) * 100).toFixed(1)}% match</span>
-                  </div>
-                  <div class="match-content">${escapeHtml(m.content)}</div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-      `;
-    } else if (meta.crossSessionSamples || meta.withinSessionSamples) {
+      `);
+    }
+    
+    // Show samples
+    if (meta.crossSessionSamples || meta.withinSessionSamples) {
       const crossCount = meta.crossSessionSamples?.length || 0;
       const withinCount = meta.withinSessionSamples?.length || 0;
-      summaryHtml = `
-        <div class="card-summary">
-          <span class="summary-text">${escapeHtml((meta.summary || data.message).substring(0, 50))}${(meta.summary || data.message).length > 50 ? '...' : ''}</span>
-          ${crossCount > 0 || withinCount > 0 ? `
-            <span class="summary-meta">• ${crossCount} cross • ${withinCount} within</span>
-          ` : ''}
-        </div>
-      `;
-      const samples: string[] = [];
-      
-      if (meta.crossSessionSamples && meta.crossSessionSamples.length > 0) {
-        samples.push(`
-          <div class="samples-group">
-            <div class="section-label">From Other Sessions:</div>
-            ${meta.crossSessionSamples.map((m: any, i: number) => `
-              <div class="sample-item">
-                <div class="sample-header">
-                  <span class="sample-number">#${i + 1}</span>
-                  <span class="sample-similarity">${(parseFloat(m.similarity) * 100).toFixed(1)}% match</span>
-                  ${m.timeContext ? `<span class="sample-time">${escapeHtml(m.timeContext)}</span>` : ''}
-                </div>
-                <div class="sample-content">${escapeHtml(m.content)}</div>
+      if (crossCount > 0 || withinCount > 0) {
+        parts.push(`<div class="retrieval-section"><span class="retrieval-label">Samples:</span> ${crossCount} cross-session, ${withinCount} within-session</div>`);
+      }
+      const allSamples: any[] = [
+        ...(meta.crossSessionSamples || []).map((m: any) => ({...m, source: 'cross-session'})),
+        ...(meta.withinSessionSamples || []).map((m: any) => ({...m, source: 'within-session'}))
+      ];
+      if (allSamples.length > 0) {
+        parts.push(`
+          <div class="retrieval-memories">
+            ${allSamples.map((m: any) => `
+              <div class="memory-item">
+                <span class="memory-source ${m.source === 'cross-session' ? 'cross' : 'within'}">${m.source === 'cross-session' ? 'other' : 'this'}</span>
+                <span class="memory-content">${escapeHtml(m.content)}</span>
               </div>
             `).join('')}
           </div>
         `);
       }
-      
-      if (meta.withinSessionSamples && meta.withinSessionSamples.length > 0) {
-        samples.push(`
-          <div class="samples-group">
-            <div class="section-label">From This Session:</div>
-            ${meta.withinSessionSamples.map((m: any, i: number) => `
-              <div class="sample-item">
-                <div class="sample-header">
-                  <span class="sample-number">#${i + 1}</span>
-                  <span class="sample-similarity">${(parseFloat(m.similarity) * 100).toFixed(1)}% match</span>
-                  ${m.timeContext ? `<span class="sample-time">${escapeHtml(m.timeContext)}</span>` : ''}
-                </div>
-                <div class="sample-content">${escapeHtml(m.content)}</div>
-              </div>
-            `).join('')}
-          </div>
-        `);
-      }
-      
-      contentHtml = `
-        <div class="retrieval-details">
-          <div class="retrieval-summary">${escapeHtml(meta.summary || data.message)}</div>
-          ${samples.join('')}
-        </div>
-      `;
-    } else if (meta.queries && meta.queries.length > 0) {
-      summaryHtml = `
-        <div class="card-summary">
-          <span class="summary-text">Plan: ${meta.queryCount} queries</span>
-        </div>
-      `;
-      contentHtml = `
-        <div class="retrieval-details">
-          <div class="info-item">
-            <span class="info-label">Retrieval Plan:</span>
-            <span class="info-value">${meta.queryCount} queries</span>
-          </div>
-          <ul class="query-list">
-            ${meta.queries.map((q: any, i: number) => `
-              <li>
-                <span class="query-number">${i + 1}.</span>
-                <span class="query-text">${escapeHtml(q.query)}</span>
-                <span class="query-meta">[${q.intent || 'N/A'}, Stage ${q.stage || 'N/A'}]</span>
-              </li>
-            `).join('')}
-          </ul>
-        </div>
-      `;
-    } else {
-      summaryHtml = `<div class="card-summary"><span class="summary-text">${escapeHtml(meta.summary || data.message)}</span></div>`;
-      contentHtml = `<div class="retrieval-summary">${escapeHtml(meta.summary || data.message)}</div>`;
-    }
-  } else if (data.section === 'PROMPT') {
-    const promptKb = Math.round((meta.promptLength || 0) / 1000);
-    const hasContext = !!(meta.fullContextBundle || meta.contextBundlePreview);
-    const hasRetrieved = !!(meta.fullRetrievedContext || meta.retrievedContextPreview);
-    
-    summaryHtml = `
-      <div class="card-summary">
-        <span class="summary-text">${promptKb}k</span>
-        ${meta.conversationHistoryCount !== undefined ? `
-          <span class="summary-meta">• ${meta.conversationHistoryCount} msgs</span>
-        ` : ''}
-        ${meta.truncatedCount ? `
-          <span class="summary-meta warning">• ${meta.truncatedCount} trunc</span>
-        ` : ''}
-        ${hasContext || hasRetrieved ? `
-          <span class="summary-meta">• ctx</span>
-        ` : ''}
-      </div>
-    `;
-    
-    const sections: string[] = [];
-    
-    if (meta.fullPrompt) {
-      sections.push(createExpandableSection(
-        'Full System Prompt',
-        `<pre class="prompt-full">${escapeHtml(meta.fullPrompt)}</pre>`,
-        false,
-        'The complete system prompt that defines the AI\'s role and instructions'
-      ));
-    } else if (meta.promptPreview) {
-      sections.push(createExpandableSection(
-        'Prompt Preview',
-        `<pre class="prompt-preview">${escapeHtml(meta.promptPreview)}</pre>`,
-        false
-      ));
     }
     
-    if (meta.fullContextBundle) {
-      sections.push(createExpandableSection(
-        'Context Bundle (Inserted into Prompt)',
-        `<pre class="context-text">${escapeHtml(meta.fullContextBundle)}</pre>`,
-        false,
-        'Stage-scoped context including conversation history, emotional state, and session summary'
-      ));
-    } else if (meta.contextBundlePreview) {
-      sections.push(createExpandableSection(
-        'Context Bundle Preview',
-        `<pre class="context-text">${escapeHtml(meta.contextBundlePreview)}</pre>`,
-        false
-      ));
+    // Show counts
+    if (meta.crossSessionResults !== undefined || meta.withinSessionResults !== undefined) {
+      parts.push(`<div class="retrieval-section"><span class="retrieval-label">Results:</span> ${meta.crossSessionResults || 0} cross-session, ${meta.withinSessionResults || 0} within-session</div>`);
     }
     
-    if (meta.fullRetrievedContext) {
-      sections.push(createExpandableSection(
-        'Retrieved Context (Inserted into Prompt)',
-        `<pre class="context-text">${escapeHtml(meta.fullRetrievedContext)}</pre>`,
-        false,
-        'Semantically retrieved messages from other sessions or earlier in this session'
-      ));
-    } else if (meta.retrievedContextPreview) {
-      sections.push(createExpandableSection(
-        'Retrieved Context Preview',
-        `<pre class="context-text">${escapeHtml(meta.retrievedContextPreview)}</pre>`,
-        false
-      ));
+    // Show summary/message if no other data
+    if (parts.length === 0) {
+      parts.push(`<div class="retrieval-summary">${escapeHtml(meta.summary || data.message || 'No retrieval details')}</div>`);
     }
     
-    contentHtml = `
-      <div class="prompt-details">
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="info-label">Prompt Length:</span>
-            <span class="info-value">${meta.promptLength || 0} chars</span>
-          </div>
-          ${meta.turnCount ? `
-            <div class="info-item">
-              <span class="info-label">Turn:</span>
-              <span class="info-value">${meta.turnCount}</span>
-            </div>
-          ` : ''}
-          ${meta.conversationHistoryCount !== undefined ? `
-            <div class="info-item">
-              <span class="info-label">Messages Included:</span>
-              <span class="info-value">${meta.conversationHistoryCount}</span>
-            </div>
-          ` : ''}
-          ${meta.truncatedCount ? `
-            <div class="info-item warning">
-              <span class="info-label">Truncated:</span>
-              <span class="info-value">${meta.truncatedCount} messages</span>
-            </div>
-          ` : ''}
-          ${meta.cautionAdvised ? `
-            <div class="info-item caution">
-              <span class="info-label">⚠️ Caution Advised</span>
-            </div>
-          ` : ''}
-        </div>
-        ${sections.join('')}
-      </div>
-    `;
-  } else if (data.section === 'COST') {
-    const parsed = parseJsonSafely(data.message);
-    const costValue = meta.totalCost || 0;
-    const modelShort = meta.model ? meta.model.split('/').pop()?.split(':')[0] || meta.model : 'Unknown';
-    
-    summaryHtml = `
-      <div class="card-summary">
-        <span class="summary-text">
-          <span class="money">${formatCurrency(costValue)}</span>
-          <span class="summary-separator">•</span>
-          <span>${modelShort}</span>
-        </span>
-        <span class="summary-meta">${meta.inputTokens || 0} in • ${meta.outputTokens || 0} out</span>
-      </div>
-    `;
-    
-    contentHtml = `
-      <div class="cost-details">
-        <div class="cost-explanation">
-          <span class="explanation-icon" title="Each AI API call costs money based on tokens used. Input tokens are what you send, output tokens are what the AI generates.">ℹ️</span>
-          <span class="explanation-text">Micro-transaction: A single API call cost</span>
-        </div>
-        <div class="cost-breakdown">
-          <div class="cost-item">
-            <span class="cost-label">Model:</span>
-            <span class="cost-value model-name">${escapeHtml(meta.model || 'Unknown')}</span>
-          </div>
-          <div class="cost-item">
-            <span class="cost-label">Input Tokens:</span>
-            <span class="cost-value">${meta.inputTokens || 0}</span>
-            <span class="cost-hint">(text sent to AI)</span>
-          </div>
-          <div class="cost-item">
-            <span class="cost-label">Output Tokens:</span>
-            <span class="cost-value">${meta.outputTokens || 0}</span>
-            <span class="cost-hint">(text generated by AI)</span>
-          </div>
-          <div class="cost-item total">
-            <span class="cost-label">Total Cost:</span>
-            <span class="cost-value money">${formatCurrency(costValue)}</span>
-          </div>
-        </div>
-      </div>
-    `;
+    contentHtml = parts.join('');
   } else if (data.section === 'RESPONSE') {
-    const responseText = meta.responseText || meta.responsePreview || '';
-    const parsedJson = responseText ? parseJsonSafely(responseText) : null;
-    const responsePreview = responseText ? (responseText.length > 50 ? responseText.substring(0, 50) + '...' : responseText) : '';
+    // Show response text or JSON as key-value pairs
+    // Check multiple possible fields for the response
+    let responseText = meta.responseText || meta.responsePreview || data.message || '';
     
-    const flags: string[] = [];
-    if (meta.offerFeelHeardCheck) flags.push('FH');
-    if (meta.offerReadyToShare) flags.push('RTS');
-    if (meta.hasInvitationMessage) flags.push('Inv');
-    if (meta.hasEmpathyStatement) flags.push('Emp');
-    
-    summaryHtml = `
-      <div class="card-summary">
-        <span class="summary-text">${escapeHtml(responsePreview)}</span>
-        <span class="summary-meta">
-          ${meta.durationMs || meta.totalDuration || 'N/A'}ms
-          ${meta.usedMock ? ' • Mock' : ''}
-          ${flags.length > 0 ? ` • ${flags.join(',')}` : ''}
-        </span>
-      </div>
-    `;
-    
-    const sections: string[] = [];
-    
-    if (parsedJson) {
-      sections.push(createExpandableSection(
-        'Structured Response (JSON)',
-        `<div class="json-visual">${renderJsonVisual(parsedJson)}</div>`,
-        false,
-        'The AI response parsed as structured JSON'
-      ));
-      sections.push(createExpandableSection(
-        'Raw Response Text',
-        `<pre class="response-raw">${escapeHtml(responseText)}</pre>`,
-        false
-      ));
+    // Check if meta already has a parsed response object
+    if (meta.response && typeof meta.response === 'object' && !Array.isArray(meta.response)) {
+      contentHtml = `<div class="response-json">${renderJsonKeyValue(meta.response, 3)}</div>`;
     } else if (responseText) {
-      sections.push(createExpandableSection(
-        'Full Response',
-        `<div class="response-text">${escapeHtml(responseText)}</div>`,
-        false
-      ));
+      // Check if text looks like JSON (starts with { or [)
+      const trimmedText = responseText.trim();
+      const looksLikeJson = trimmedText.startsWith('{') || trimmedText.startsWith('[');
+      
+      if (looksLikeJson) {
+        // Try to parse as JSON - be more aggressive about finding complete JSON
+        let parsedJson = parseJsonSafely(responseText);
+        
+        // If parsing failed and text is truncated (ends with ...), try to reconstruct
+        if (!parsedJson && responseText.endsWith('...') && responseText.length >= 500) {
+          // The response might be truncated, but we can still try to parse what we have
+          // Remove the ... and try to close any open braces
+          let attemptText = responseText.replace(/\.\.\.$/, '');
+          // Try to close JSON if it's incomplete
+          let openBraces = (attemptText.match(/\{/g) || []).length;
+          let closeBraces = (attemptText.match(/\}/g) || []).length;
+          if (openBraces > closeBraces) {
+            attemptText += '}'.repeat(openBraces - closeBraces);
+          }
+          parsedJson = parseJsonSafely(attemptText);
+        }
+        
+        if (parsedJson && typeof parsedJson === 'object') {
+          // Render as compact key-value pairs
+          contentHtml = `<div class="response-json">${renderJsonKeyValue(parsedJson, 3)}</div>`;
+        } else {
+          // JSON parsing failed, but it looks like JSON - try to show it formatted anyway
+          // Extract what we can and show it
+          contentHtml = `<div class="response-text response-json-error">${escapeHtml(responseText)}</div>`;
+        }
+      } else {
+        // Show as plain text, full content
+        contentHtml = `<div class="response-text">${escapeHtml(responseText)}</div>`;
+      }
     }
-    
+  } else if (data.section === 'COST') {
+    const costValue = meta.totalCost || 0;
     contentHtml = `
-      <div class="response-details">
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="info-label">Duration:</span>
-            <span class="info-value">${meta.durationMs || meta.totalDuration || 'N/A'}ms</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Status:</span>
-            <span class="info-value">${meta.usedMock ? '⚠️ Mock' : '✅ Live'}</span>
-          </div>
-          ${meta.responseLength ? `
-            <div class="info-item">
-              <span class="info-label">Length:</span>
-              <span class="info-value">${meta.responseLength} chars</span>
-            </div>
-          ` : ''}
-        </div>
-        ${sections.join('')}
-        ${(meta.offerFeelHeardCheck !== undefined || meta.offerReadyToShare !== undefined || meta.hasInvitationMessage || meta.hasEmpathyStatement) ? `
-          <div class="response-flags">
-            ${meta.offerFeelHeardCheck ? '<span class="flag">Feel Heard Check</span>' : ''}
-            ${meta.offerReadyToShare ? '<span class="flag">Ready to Share</span>' : ''}
-            ${meta.hasInvitationMessage ? '<span class="flag">Has Invitation</span>' : ''}
-            ${meta.hasEmpathyStatement ? '<span class="flag">Has Empathy Statement</span>' : ''}
-          </div>
-        ` : ''}
+      <div class="cost-simple">
+        <span class="cost-amount">${formatCurrency(costValue)}</span>
+        <span class="cost-tokens">${meta.inputTokens || 0}/${meta.outputTokens || 0}</span>
       </div>
     `;
-  } else {
-    const json = JSON.stringify(meta, null, 2);
-    if (json !== '{}') {
-      contentHtml = `<pre class="json-dump">${escapeHtml(json)}</pre>`;
-    }
   }
 
-  const bodyId = `${cardId}-body`;
-  const hasContent = !!contentHtml;
+  if (!contentHtml) {
+    return null;
+  }
   
   card.innerHTML = `
     <div class="card-header">
       <span class="section-tag">${data.section}</span>
       <span class="timestamp">${time}</span>
     </div>
-    <div class="card-message">${data.message}</div>
-    ${summaryHtml ? `<div class="card-summary-container">${summaryHtml}</div>` : ''}
-    ${hasContent ? `
-      <button class="card-expand-toggle" data-target="${bodyId}" aria-expanded="false">
-        <span class="expand-icon">▶</span>
-        <span class="expand-label">Show Details</span>
-      </button>
-      <div class="card-body" id="${bodyId}" style="display: none;">
-        ${contentHtml}
-      </div>
-    ` : ''}
+    <div class="card-content">${contentHtml}</div>
   `;
-  
-  // Attach card expand/collapse handler
-  if (hasContent) {
-    const expandBtn = card.querySelector('.card-expand-toggle')!;
-    expandBtn.addEventListener('click', () => {
-      const targetId = expandBtn.getAttribute('data-target')!;
-      const content = card.querySelector(`#${targetId}`)!;
-      const icon = expandBtn.querySelector('.expand-icon')!;
-      const label = expandBtn.querySelector('.expand-label')!;
-      const isExpanded = content.style.display !== 'none';
-      
-      content.style.display = isExpanded ? 'none' : 'block';
-      icon.textContent = isExpanded ? '▶' : '▼';
-      label.textContent = isExpanded ? 'Show Details' : 'Hide Details';
-      expandBtn.setAttribute('aria-expanded', String(!isExpanded));
-    });
-  }
-  
-  // Attach nested expand handlers
-  card.querySelectorAll('.expand-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetId = btn.getAttribute('data-target')!;
-      const content = card.querySelector(`#${targetId}`)!;
-      const icon = btn.querySelector('.expand-icon')!;
-      const isExpanded = content.style.display !== 'none';
-      
-      content.style.display = isExpanded ? 'none' : 'block';
-      icon.textContent = isExpanded ? '▶' : '▼';
-      btn.setAttribute('aria-expanded', String(!isExpanded));
-    });
-  });
 
   return card;
 }
 
 // --- Turn Container Management ---
 function getOrCreateTurnContainer(turnId: string | undefined, data: any): HTMLElement {
-  const effectiveTurnId = turnId || `orphan-${Date.now()}`;
+  // Use turnId if available, otherwise try to construct from sessionId + turnCount
+  const meta = data.data || {};
+  const sessionId = meta.sessionId || data.data?.sessionId || '';
+  const turnCount = meta.turnCount || data.data?.turnCount;
+  
+  let effectiveTurnId = turnId;
+  if (!effectiveTurnId && sessionId && turnCount !== undefined) {
+    effectiveTurnId = `${sessionId}-${turnCount}`;
+  }
+  if (!effectiveTurnId) {
+    // Last resort: use timestamp-based orphan ID, but try to group by sessionId if available
+    if (sessionId) {
+      effectiveTurnId = `orphan-${sessionId}-${Date.now()}`;
+    } else {
+      effectiveTurnId = `orphan-${Date.now()}`;
+    }
+  }
   
   if (!turnContainers.has(effectiveTurnId)) {
     const container = document.createElement('div');
@@ -690,7 +380,7 @@ function getOrCreateTurnContainer(turnId: string | undefined, data: any): HTMLEl
       headerHtml += `
         <div class="turn-user-input">
           <span class="turn-user-label">User:</span>
-          <span class="turn-user-text">${escapeHtml(userInput.substring(0, 100))}${userInput.length > 100 ? '...' : ''}</span>
+          <span class="turn-user-text">${escapeHtml(userInput)}</span>
         </div>
       `;
     }
@@ -729,9 +419,6 @@ client.connection.on('connected', () => {
 
 channel.subscribe('log', (msg) => {
   const data = msg.data;
-  
-  messageCount++;
-  countDisplay.innerText = messageCount.toString();
 
   if (data.section === 'COST' && data.data?.totalCost) {
     sessionCost += data.data.totalCost;
@@ -747,7 +434,8 @@ channel.subscribe('log', (msg) => {
   // Update turn header with user input from USER or INTENT log
   if ((data.section === 'USER' && data.data?.userMessage) || (data.section === 'INTENT' && data.data?.userInput)) {
     const userMessage = data.section === 'USER' ? data.data.userMessage : data.data.userInput;
-    const meta = turnMetadata.get(turnId || '');
+    const effectiveTurnId = turnId || (data.data?.sessionId && data.data?.turnCount ? `${data.data.sessionId}-${data.data.turnCount}` : `orphan-${Date.now()}`);
+    const meta = turnMetadata.get(effectiveTurnId);
     if (meta && !meta.userInput) {
       meta.userInput = userMessage;
       const userInputEl = container.querySelector('.turn-user-input');
@@ -757,7 +445,7 @@ channel.subscribe('log', (msg) => {
         userInputDiv.className = 'turn-user-input';
         userInputDiv.innerHTML = `
           <span class="turn-user-label">User:</span>
-          <span class="turn-user-text">${escapeHtml(userMessage.substring(0, 100))}${userMessage.length > 100 ? '...' : ''}</span>
+          <span class="turn-user-text">${escapeHtml(userMessage)}</span>
         `;
         header.appendChild(userInputDiv);
       }
@@ -765,7 +453,9 @@ channel.subscribe('log', (msg) => {
   }
 
   const card = createCard(data);
-  cardsContainer.prepend(card);
+  if (card) {
+    cardsContainer.prepend(card);
+  }
   
   const allContainers = Array.from(turnContainers.values());
   if (allContainers.length > 20) {

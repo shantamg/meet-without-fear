@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { renderHook, waitFor, act } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Mock Clerk
 const mockGetToken = jest.fn().mockResolvedValue('mock-token');
@@ -44,6 +45,28 @@ jest.mock('../../lib/api', () => ({
 import { useAuthProvider, useAuth, AuthContext } from '../useAuth';
 
 /**
+ * Create a fresh QueryClient for each test
+ */
+function createTestQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+}
+
+/**
+ * Wrapper that provides QueryClientProvider for hooks that need it
+ */
+function createQueryClientWrapper(): React.FC<{ children: React.ReactNode }> {
+  const queryClient = createTestQueryClient();
+  return ({ children }) =>
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
+}
+
+/**
  * Helper to create a wrapper with AuthContext
  */
 function createAuthWrapper(
@@ -78,13 +101,15 @@ describe('useAuthProvider', () => {
   describe('initial state', () => {
     it('starts with loading state when Clerk not loaded', () => {
       mockIsLoaded = false;
-      const { result } = renderHook(() => useAuthProvider());
+      const wrapper = createQueryClientWrapper();
+      const { result } = renderHook(() => useAuthProvider(), { wrapper });
 
       expect(result.current.isLoading).toBe(true);
     });
 
     it('syncs backend profile when signed in', async () => {
-      const { result } = renderHook(() => useAuthProvider());
+      const wrapper = createQueryClientWrapper();
+      const { result } = renderHook(() => useAuthProvider(), { wrapper });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -99,7 +124,8 @@ describe('useAuthProvider', () => {
     it('is not authenticated when not signed in', async () => {
       mockIsSignedIn = false;
 
-      const { result } = renderHook(() => useAuthProvider());
+      const wrapper = createQueryClientWrapper();
+      const { result } = renderHook(() => useAuthProvider(), { wrapper });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -114,7 +140,8 @@ describe('useAuthProvider', () => {
     it('falls back to Clerk user data on API error', async () => {
       mockApiGet.mockRejectedValueOnce(new Error('API Error'));
 
-      const { result } = renderHook(() => useAuthProvider());
+      const wrapper = createQueryClientWrapper();
+      const { result } = renderHook(() => useAuthProvider(), { wrapper });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -130,7 +157,8 @@ describe('useAuthProvider', () => {
 
   describe('signOut', () => {
     it('calls Clerk signOut and clears user', async () => {
-      const { result } = renderHook(() => useAuthProvider());
+      const wrapper = createQueryClientWrapper();
+      const { result } = renderHook(() => useAuthProvider(), { wrapper });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -149,7 +177,8 @@ describe('useAuthProvider', () => {
 
   describe('getToken', () => {
     it('delegates to Clerk getToken', async () => {
-      const { result } = renderHook(() => useAuthProvider());
+      const wrapper = createQueryClientWrapper();
+      const { result } = renderHook(() => useAuthProvider(), { wrapper });
 
       const token = await result.current.getToken();
 
@@ -193,14 +222,15 @@ describe('useAuth', () => {
   });
 
   it('returns context value when inside AuthProvider', async () => {
-    const { result: providerResult } = renderHook(() => useAuthProvider());
+    const queryWrapper = createQueryClientWrapper();
+    const { result: providerResult } = renderHook(() => useAuthProvider(), { wrapper: queryWrapper });
 
     await waitFor(() => {
       expect(providerResult.current.isLoading).toBe(false);
     });
 
-    const wrapper = createAuthWrapper(providerResult.current);
-    const { result } = renderHook(() => useAuth(), { wrapper });
+    const authWrapper = createAuthWrapper(providerResult.current);
+    const { result } = renderHook(() => useAuth(), { wrapper: authWrapper });
 
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.user).toBeTruthy();

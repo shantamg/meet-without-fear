@@ -24,7 +24,7 @@ export function useNotificationChannel(): void {
   const channelRef = useRef<Ably.RealtimeChannel | null>(null);
 
   useEffect(() => {
-    if (!user?.id || !tokenData?.token) {
+    if (!user?.id || !tokenData?.tokenRequest) {
       return;
     }
 
@@ -36,7 +36,7 @@ export function useNotificationChannel(): void {
         // Create Ably client
         ably = new Ably.Realtime({
           authCallback: async (_, callback) => {
-            callback(null, { token: tokenData.token });
+            callback(null, tokenData.tokenRequest);
           },
         });
 
@@ -140,6 +140,6 @@ export function useNotificationChannel(): void {
       ablyRef.current = null;
       channelRef.current = null;
     };
-  }, [user?.id, tokenData?.token, queryClient]);
+  }, [user?.id, tokenData?.tokenRequest, queryClient]);
 }
 
