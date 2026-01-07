@@ -164,6 +164,9 @@ export function UnifiedSessionScreen({
     memorySuggestion,
     clearMemorySuggestion,
 
+    // Feel heard confirmation
+    showFeelHeardConfirmation,
+
     // Actions
     sendMessage,
     openOverlay,
@@ -524,25 +527,7 @@ export function UnifiedSessionScreen({
       switch (card.type) {
         // Note: 'waiting-status' case removed - we no longer show "waiting for partner" messages
 
-        case 'feel-heard-confirmation':
-          return (
-            <View style={styles.inlineCard} key={card.id}>
-              <FeelHeardConfirmation
-                onConfirm={() => {
-                  // Track felt heard response
-                  trackFeltHeardResponse(sessionId, 'yes');
-                  // Set optimistic timestamp immediately for instant indicator display
-                  setOptimisticFeelHeardTimestamp(new Date().toISOString());
-                  handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
-                }}
-                onContinue={() => {
-                  // Track felt heard response as "no" (continue conversation)
-                  trackFeltHeardResponse(sessionId, 'no');
-                  handleDismissFeelHeard();
-                }}
-              />
-            </View>
-          );
+        // Note: feel-heard-confirmation case removed - now shown as panel above chat input
 
         case 'cooling-suggestion':
           // Show the support options modal instead of inline card
@@ -1136,6 +1121,22 @@ export function UnifiedSessionScreen({
                     testID="compact-agreement-bar"
                   />
                 )
+              // Show feel-heard confirmation panel when AI recommends it
+              : showFeelHeardConfirmation && !milestones?.feelHeardConfirmedAt && !isConfirmingFeelHeard && !isTypewriterAnimating
+              ? () => (
+                  <View style={styles.feelHeardContainer}>
+                    <FeelHeardConfirmation
+                      onConfirm={() => {
+                        // Track felt heard response
+                        trackFeltHeardResponse(sessionId, 'yes');
+                        // Set optimistic timestamp immediately for instant indicator display
+                        setOptimisticFeelHeardTimestamp(new Date().toISOString());
+                        handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
+                      }}
+                      isPending={isConfirmingFeelHeard}
+                    />
+                  </View>
+                )
               // Show empathy review panel when empathy statement is ready
               : shouldShowEmpathyPanel
               ? () => (
@@ -1480,6 +1481,12 @@ const useStyles = () =>
       textDecorationLine: 'underline',
     },
 
+    // Feel Heard Panel
+    feelHeardContainer: {
+      backgroundColor: t.colors.bgSecondary,
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
+    },
     // Empathy Review Panel
     empathyReviewContainer: {
       paddingHorizontal: t.spacing.lg,

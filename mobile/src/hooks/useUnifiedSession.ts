@@ -662,15 +662,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
         });
       }
 
-      // Feel heard confirmation (only show if not already confirmed)
-      if (showFeelHeardConfirmation && !state.showFinalCheck && !state.showCoolingSuggestion && !state.hasConfirmedHeard) {
-        cards.push({
-          id: 'feel-heard-confirmation',
-          type: 'feel-heard-confirmation',
-          position: 'end',
-          props: {},
-        });
-      }
+      // Note: Feel heard confirmation is now rendered above chat input, not as inline card
     }
 
     // Stage 2: Perspective Stretch cards
@@ -1168,6 +1160,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     isSending,
     isSigningCompact,
     isConfirmingFeelHeard,
+    showFeelHeardConfirmation,
 
     // Pagination for loading older messages
     fetchMoreMessages: fetchNextPage,
