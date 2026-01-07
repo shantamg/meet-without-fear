@@ -18,13 +18,32 @@ import { NotificationItem } from '@/src/components/NotificationInbox';
 
 export function useNotificationChannel(): void {
   const { user } = useAuth();
-  const { data: tokenData } = useAblyToken();
+  const { refetch: refetchToken } = useAblyToken();
   const queryClient = useQueryClient();
   const ablyRef = useRef<Ably.Realtime | null>(null);
   const channelRef = useRef<Ably.RealtimeChannel | null>(null);
+  const isConnectingRef = useRef(false);
+
+  // Keep a ref to refetchToken so we can use it in authCallback without adding it to dependencies
+  const refetchTokenRef = useRef(refetchToken);
+  useEffect(() => {
+    refetchTokenRef.current = refetchToken;
+  }, [refetchToken]);
 
   useEffect(() => {
-    if (!user?.id || !tokenData?.tokenRequest) {
+    // FIX: Only wait for user.id. Do NOT wait for tokenData.
+    // The authCallback will handle getting the token when needed.
+    if (!user?.id) {
+      return;
+    }
+
+    // Prevent multiple simultaneous connection attempts
+    if (isConnectingRef.current) {
+      return;
+    }
+
+    // If already connected, skip
+    if (ablyRef.current?.connection?.state === 'connected') {
       return;
     }
 
@@ -32,12 +51,32 @@ export function useNotificationChannel(): void {
     let channel: Ably.RealtimeChannel | null = null;
 
     const connect = async () => {
+      isConnectingRef.current = true;
+      console.log('[NotificationChannel] Connecting as user:', user.id);
+
       try {
-        // Create Ably client
+        // Create Ably client with token-based authentication
+        // Note: Don't set clientId here - Ably will use the clientId from the token
+        // Setting it explicitly can cause mismatch errors if the token is cached
         ably = new Ably.Realtime({
           authCallback: async (_, callback) => {
-            callback(null, tokenData.tokenRequest);
+            console.log('[NotificationChannel] Auth callback triggered, fetching token...');
+            try {
+              // Use the ref to call refetchToken to avoid dependency cycles
+              const { data } = await refetchTokenRef.current();
+              if (data?.tokenRequest) {
+                console.log('[NotificationChannel] Token received, clientId:', data.tokenRequest.clientId);
+                callback(null, data.tokenRequest);
+              } else {
+                console.error('[NotificationChannel] No token in response');
+                callback('Failed to get token', null);
+              }
+            } catch (err) {
+              console.error('[NotificationChannel] Token fetch error:', err);
+              callback(err instanceof Error ? err.message : 'Token fetch failed', null);
+            }
           },
+          autoConnect: true,
         });
 
         ablyRef.current = ably;
@@ -58,6 +97,8 @@ export function useNotificationChannel(): void {
             reject(new Error(stateChange.reason?.message || 'Connection failed'));
           });
         });
+
+        isConnectingRef.current = false;
 
         // Subscribe to user notification channel
         const channelName = REALTIME_CHANNELS.user(user.id);
@@ -122,24 +163,40 @@ export function useNotificationChannel(): void {
 
         console.log('[NotificationChannel] Subscribed successfully');
       } catch (error) {
-        console.error('[NotificationChannel] Failed to connect:', error);
+        isConnectingRef.current = false;
+        // Only log error if we aren't unmounting/cleaning up
+        if (ablyRef.current) {
+          console.error('[NotificationChannel] Failed to connect:', error);
+        }
+        
+        if (channel) {
+          channel.unsubscribe();
+          channel.detach();
+        }
+        if (ably) {
+          ably.connection.close();
+        }
+        ablyRef.current = null;
+        channelRef.current = null;
       }
     };
 
     connect();
 
-    // Cleanup on unmount or when user/token changes
+    // Cleanup
     return () => {
-      if (channel) {
-        channel.unsubscribe();
-        channel.detach();
+      isConnectingRef.current = false;
+      if (channelRef.current) {
+        channelRef.current.unsubscribe();
+        channelRef.current.detach();
+        channelRef.current = null;
       }
-      if (ably) {
-        ably.connection.close();
+      if (ablyRef.current) {
+        ablyRef.current.connection.close();
+        ablyRef.current = null;
       }
-      ablyRef.current = null;
-      channelRef.current = null;
     };
-  }, [user?.id, tokenData?.tokenRequest, queryClient]);
+  // Dependency array now ONLY contains user.id and queryClient
+  }, [user?.id, queryClient]);
 }
 
