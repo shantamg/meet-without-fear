@@ -900,13 +900,26 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const handleConfirmFeelHeard = useCallback(
     (onSuccess?: () => void) => {
       if (!sessionId) return;
+      // Prevent duplicate submissions
+      if (isConfirmingFeelHeard) {
+        console.warn('[handleConfirmFeelHeard] Already confirming, ignoring duplicate call');
+        return;
+      }
       // Mark as confirmed to prevent looping
       dispatch({ type: 'SET_HAS_CONFIRMED_HEARD', payload: true });
       // Reset the AI recommendation state (cleanup)
       setAiRecommendsFeelHeardCheck(false);
-      confirmHeard({ sessionId, confirmed: true }, { onSuccess });
+      confirmHeard(
+        { sessionId, confirmed: true },
+        {
+          onSuccess,
+          onError: (error) => {
+            console.error('[handleConfirmFeelHeard] Error confirming feel-heard:', error);
+          },
+        }
+      );
     },
-    [sessionId, confirmHeard]
+    [sessionId, confirmHeard, isConfirmingFeelHeard]
   );
 
   // Dismiss feel-heard card without confirming (user clicks "Not yet")

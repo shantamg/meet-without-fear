@@ -298,10 +298,22 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // Once feel-heard is confirmed, keep showing the indicator even during re-renders
   // This prevents the indicator from flashing away when new messages arrive
+  // FIX: Initialize the ref based on optimistic state too, not just milestones.
+  // This ensures that the moment we click the button, this ref becomes true.
   const hasEverConfirmedFeelHeard = useRef(false);
 
-  // Update ref when milestones confirm feel-heard
+  // 1. Latch if we have server data
   if (milestones?.feelHeardConfirmedAt && !hasEverConfirmedFeelHeard.current) {
+    hasEverConfirmedFeelHeard.current = true;
+  }
+  
+  // 2. Latch if we are currently confirming (optimistic start)
+  if (isConfirmingFeelHeard && !hasEverConfirmedFeelHeard.current) {
+    hasEverConfirmedFeelHeard.current = true;
+  }
+  
+  // 3. Latch if we have an optimistic timestamp set
+  if (optimisticFeelHeardTimestamp && !hasEverConfirmedFeelHeard.current) {
     hasEverConfirmedFeelHeard.current = true;
   }
 
@@ -409,6 +421,8 @@ export function UnifiedSessionScreen({
   }, [isInvitationPhase, isConfirmingInvitation]);
 
   // Clear feel-heard optimistic state when API confirms
+  // FIX: Do NOT clear the optimistic timestamp if the server data hasn't arrived yet.
+  // Only clear it if milestones.feelHeardConfirmedAt is TRUTHY.
   useEffect(() => {
     if (milestones?.feelHeardConfirmedAt && optimisticFeelHeardTimestamp) {
       setOptimisticFeelHeardTimestamp(null);
@@ -469,11 +483,22 @@ export function UnifiedSessionScreen({
     }
 
     // Show "Felt Heard" indicator when user confirms they feel heard
-    // Use API timestamp for reliable positioning, or optimistic timestamp during confirmation
-    // IMPORTANT: Use hasEverConfirmedFeelHeard ref to prevent indicator from disappearing
-    // during re-renders when milestones cache is temporarily invalidated
-    const feelHeardAt = milestones?.feelHeardConfirmedAt ?? optimisticFeelHeardTimestamp;
-    const shouldShowFeelHeard = hasEverConfirmedFeelHeard.current || milestones?.feelHeardConfirmedAt || isConfirmingFeelHeard;
+    // FIX: Simplified logic. If the REF is true, we show it. 
+    // We prioritize the Server Date, fallback to Optimistic Date, fallback to Now.
+    
+    // Check if we should show it based on Ref OR Server Data OR Optimistic State
+    const shouldShowFeelHeard = 
+      hasEverConfirmedFeelHeard.current || 
+      milestones?.feelHeardConfirmedAt || 
+      optimisticFeelHeardTimestamp ||
+      isConfirmingFeelHeard;
+
+    // Determine the timestamp to display
+    const feelHeardAt = 
+      milestones?.feelHeardConfirmedAt ?? 
+      optimisticFeelHeardTimestamp ?? 
+      (shouldShowFeelHeard ? new Date().toISOString() : null);
+
     if (shouldShowFeelHeard && feelHeardAt) {
       items.push({
         type: 'indicator',

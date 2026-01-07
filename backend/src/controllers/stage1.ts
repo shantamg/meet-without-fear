@@ -579,23 +579,7 @@ export async function confirmFeelHeard(
       return;
     }
 
-    // Check session allows feel-heard confirmation
-    // Allow ACTIVE status for all users, and INVITED status for the session creator
-    if (session.status !== 'ACTIVE') {
-      if (session.status === 'INVITED') {
-        const isCreator = await isSessionCreator(sessionId, user.id);
-        if (!isCreator) {
-          errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
-          return;
-        }
-        // Creator can proceed while session is INVITED
-      } else {
-        errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
-        return;
-      }
-    }
-
-    // Get user's current stage progress
+    // Get user's current stage progress (needed for both status check and stage validation)
     const progress = await prisma.stageProgress.findFirst({
       where: {
         sessionId,
@@ -603,6 +587,36 @@ export async function confirmFeelHeard(
       },
       orderBy: { stage: 'desc' },
     });
+
+    // Check session allows feel-heard confirmation
+    // Allow ACTIVE status for all users, and INVITED status for:
+    // 1. The session creator, OR
+    // 2. Users who have already joined (have stage progress) - defensive check for edge cases
+    if (session.status !== 'ACTIVE') {
+      if (session.status === 'INVITED') {
+        const isCreator = await isSessionCreator(sessionId, user.id);
+        const hasJoined = !!progress; // User has stage progress, meaning they've joined
+        
+        if (!isCreator && !hasJoined) {
+          errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+          return;
+        }
+        
+        // If user has joined but session status is still INVITED, update it to ACTIVE
+        // This handles edge cases where status wasn't updated on invitation acceptance
+        if (hasJoined && !isCreator) {
+          await prisma.session.update({
+            where: { id: sessionId },
+            data: { status: 'ACTIVE' },
+          });
+          console.log(`[confirmFeelHeard] Updated session ${sessionId} status to ACTIVE (user has joined)`);
+        }
+        // Creator can proceed while session is INVITED
+      } else {
+        errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+        return;
+      }
+    }
 
     // Check user is in stage 1
     const currentStage = progress?.stage ?? 0;
