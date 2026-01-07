@@ -25,6 +25,7 @@ import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { embedMessage } from '../services/embedding';
+import { updateSessionSummary } from '../services/conversation-summarizer';
 
 // ============================================================================
 // Helpers
@@ -87,20 +88,29 @@ function getFallbackInitialMessage(
  * POST /sessions/:id/messages
  */
 export async function sendMessage(req: Request, res: Response): Promise<void> {
+  const requestStartTime = Date.now();
+  const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  
   try {
+    console.log(`[sendMessage:${requestId}] ========== REQUEST START ==========`);
+    console.log(`[sendMessage:${requestId}] Timestamp: ${new Date().toISOString()}`);
+    
     const user = req.user;
     if (!user) {
+      console.log(`[sendMessage:${requestId}] ERROR: No user in request`);
       errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
       return;
     }
 
     const { id: sessionId } = req.params;
+    console.log(`[sendMessage:${requestId}] Session ID: ${sessionId}`);
+    console.log(`[sendMessage:${requestId}] User ID: ${user.id}`);
 
     // Validate request body
     const parseResult = sendMessageRequestSchema.safeParse(req.body);
     if (!parseResult.success) {
-      console.log('[sendMessage] Validation failed:', JSON.stringify(parseResult.error.issues, null, 2));
-      console.log('[sendMessage] Request body:', JSON.stringify(req.body, null, 2));
+      console.log(`[sendMessage:${requestId}] Validation failed:`, JSON.stringify(parseResult.error.issues, null, 2));
+      console.log(`[sendMessage:${requestId}] Request body:`, JSON.stringify(req.body, null, 2));
       errorResponse(
         res,
         'VALIDATION_ERROR',
@@ -112,6 +122,8 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     }
 
     const { content } = parseResult.data;
+    console.log(`[sendMessage:${requestId}] Message content length: ${content.length}`);
+    console.log(`[sendMessage:${requestId}] Message content preview: "${content.substring(0, 100)}${content.length > 100 ? '...' : ''}"`);
     const lowerContent = content.toLowerCase();
 
     // Check session exists and user has access
@@ -220,6 +232,8 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     }
 
     // Save user message
+    console.log(`[sendMessage:${requestId}] Creating user message in database...`);
+    const userMessageStartTime = Date.now();
     const userMessage = await prisma.message.create({
       data: {
         sessionId,
@@ -229,14 +243,44 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
         stage: currentStage,
       },
     });
+    console.log(`[sendMessage:${requestId}] ✅ User message created: ID=${userMessage.id}, timestamp=${userMessage.timestamp.toISOString()}, stage=${userMessage.stage}`);
+    console.log(`[sendMessage:${requestId}] User message creation took ${Date.now() - userMessageStartTime}ms`);
+
+    // Check for duplicate user messages (same content, same user, within last 5 seconds)
+    const recentDuplicates = await prisma.message.findMany({
+      where: {
+        sessionId,
+        senderId: user.id,
+        role: 'USER',
+        content: content,
+        id: { not: userMessage.id },
+        timestamp: {
+          gte: new Date(Date.now() - 5000), // Last 5 seconds
+        },
+      },
+    });
+    if (recentDuplicates.length > 0) {
+      console.warn(`[sendMessage:${requestId}] ⚠️  WARNING: Found ${recentDuplicates.length} duplicate user message(s) in last 5 seconds!`);
+      recentDuplicates.forEach((dup, idx) => {
+        console.warn(`[sendMessage:${requestId}]   Duplicate ${idx + 1}: ID=${dup.id}, timestamp=${dup.timestamp.toISOString()}`);
+      });
+    }
 
     // Embed message for cross-session retrieval (non-blocking)
     embedMessage(userMessage.id).catch((err) =>
-      console.warn('[sendMessage] Failed to embed user message:', err)
+      console.warn(`[sendMessage:${requestId}] Failed to embed user message:`, err)
     );
 
     // Get conversation history for context (only this user's messages and AI responses to them)
-    const history = await prisma.message.findMany({
+    console.log(`[sendMessage:${requestId}] Fetching conversation history...`);
+    const historyStartTime = Date.now();
+    // IMPORTANT: We need the MOST RECENT messages for context.
+    // If we order ASC and take N, Prisma returns the OLDEST N messages, which means once a session
+    // has more than N messages, the "lastMessage" passed to the orchestrator will be stale and the
+    // AI can appear to repeat the same response forever.
+    //
+    // So we fetch newest-first and then reverse to preserve chronological order for the model.
+    const historyDesc = await prisma.message.findMany({
       where: {
         sessionId,
         OR: [
@@ -244,12 +288,20 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
           { role: 'AI', forUserId: user.id },
         ],
       },
-      orderBy: { timestamp: 'asc' },
-      take: 20, // Limit context window
+      orderBy: { timestamp: 'desc' },
+      take: 20, // Limit context window (newest 20)
     });
+    const history = historyDesc.slice().reverse();
+    console.log(`[sendMessage:${requestId}] ✅ History fetched: ${history.length} messages (took ${Date.now() - historyStartTime}ms)`);
+    console.log(`[sendMessage:${requestId}] History breakdown: ${history.filter(m => m.role === 'USER').length} user, ${history.filter(m => m.role === 'AI').length} AI`);
+    
+    // Log recent message IDs to detect duplicates
+    const recentMessages = history.slice(-5);
+    console.log(`[sendMessage:${requestId}] Recent 5 message IDs:`, recentMessages.map(m => `${m.role}:${m.id.substring(0, 8)}...`).join(', '));
 
     // Count user turns for AI context
     const userTurnCount = history.filter((m) => m.role === 'USER').length;
+    console.log(`[sendMessage:${requestId}] User turn count: ${userTurnCount}`);
 
     // Detect stage transition: check if this is the first message in Stage 1
     // A stage transition happens when:
@@ -380,6 +432,8 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     };
 
     // Get AI response using full orchestration pipeline
+    console.log(`[sendMessage:${requestId}] Calling orchestrator with ${history.length} messages...`);
+    const orchestratorStartTime = Date.now();
     const orchestratorResult = await getOrchestratedResponse(
       history.map((m) => ({
         role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
@@ -387,10 +441,13 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       })),
       aiContext
     );
-
+    const orchestratorTime = Date.now() - orchestratorStartTime;
+    console.log(`[sendMessage:${requestId}] ✅ Orchestrator completed in ${orchestratorTime}ms`);
     console.log(
-      `[sendMessage] Orchestrator: intent=${orchestratorResult.memoryIntent.intent}, depth=${orchestratorResult.memoryIntent.depth}, mock=${orchestratorResult.usedMock}`
+      `[sendMessage:${requestId}] Orchestrator result: intent=${orchestratorResult.memoryIntent.intent}, depth=${orchestratorResult.memoryIntent.depth}, mock=${orchestratorResult.usedMock}`
     );
+    console.log(`[sendMessage:${requestId}] AI response length: ${orchestratorResult.response.length}`);
+    console.log(`[sendMessage:${requestId}] AI response preview: "${orchestratorResult.response.substring(0, 150)}${orchestratorResult.response.length > 150 ? '...' : ''}"`);
 
     // Debug: Log feel-heard check recommendation from AI (Stage 1)
     if (currentStage === 1) {
@@ -476,6 +533,8 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     }
 
     // Save AI response (just the conversational part)
+    console.log(`[sendMessage:${requestId}] Creating AI message in database...`);
+    const aiMessageStartTime = Date.now();
     const aiMessage = await prisma.message.create({
       data: {
         sessionId,
@@ -486,12 +545,45 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
         stage: currentStage,
       },
     });
+    console.log(`[sendMessage:${requestId}] ✅ AI message created: ID=${aiMessage.id}, timestamp=${aiMessage.timestamp.toISOString()}, stage=${aiMessage.stage}`);
+    console.log(`[sendMessage:${requestId}] AI message creation took ${Date.now() - aiMessageStartTime}ms`);
+
+    // Check for duplicate AI messages (same content, same user, within last 5 seconds)
+    const recentAIDuplicates = await prisma.message.findMany({
+      where: {
+        sessionId,
+        role: 'AI',
+        forUserId: user.id,
+        content: aiResponseContent,
+        id: { not: aiMessage.id },
+        timestamp: {
+          gte: new Date(Date.now() - 5000), // Last 5 seconds
+        },
+      },
+    });
+    if (recentAIDuplicates.length > 0) {
+      console.warn(`[sendMessage:${requestId}] ⚠️  WARNING: Found ${recentAIDuplicates.length} duplicate AI message(s) in last 5 seconds!`);
+      recentAIDuplicates.forEach((dup, idx) => {
+        console.warn(`[sendMessage:${requestId}]   Duplicate ${idx + 1}: ID=${dup.id}, timestamp=${dup.timestamp.toISOString()}`);
+      });
+    }
 
     // Embed AI message for cross-session retrieval (non-blocking)
     embedMessage(aiMessage.id).catch((err) =>
-      console.warn('[sendMessage] Failed to embed AI message:', err)
+      console.warn(`[sendMessage:${requestId}] Failed to embed AI message:`, err)
     );
 
+    // Summarize older parts of the conversation (non-blocking)
+    // This creates/updates a rolling summary in UserVessel.conversationSummary once message count crosses thresholds.
+    updateSessionSummary(sessionId, user.id).catch((err) =>
+      console.warn(`[sendMessage:${requestId}] Failed to update session summary:`, err)
+    );
+
+    const totalTime = Date.now() - requestStartTime;
+    console.log(`[sendMessage:${requestId}] ========== REQUEST SUCCESS ==========`);
+    console.log(`[sendMessage:${requestId}] Total request time: ${totalTime}ms`);
+    console.log(`[sendMessage:${requestId}] Returning response with userMessage.id=${userMessage.id}, aiMessage.id=${aiMessage.id}`);
+    
     successResponse(res, {
       userMessage: {
         id: userMessage.id,
@@ -518,7 +610,12 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       proposedEmpathyStatement: orchestratorResult.proposedEmpathyStatement ?? null,
     });
   } catch (error) {
-    console.error('[sendMessage] Error:', error);
+    const totalTime = Date.now() - requestStartTime;
+    console.error(`[sendMessage:${requestId}] ========== REQUEST ERROR ==========`);
+    console.error(`[sendMessage:${requestId}] Error after ${totalTime}ms:`, error);
+    if (error instanceof Error) {
+      console.error(`[sendMessage:${requestId}] Error stack:`, error.stack);
+    }
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to send message', 500);
   }
 }
@@ -867,14 +964,18 @@ export async function getConversationHistory(
   req: Request,
   res: Response
 ): Promise<void> {
+  const requestId = `get-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   try {
+    console.log(`[getConversationHistory:${requestId}] ========== REQUEST START ==========`);
     const user = req.user;
     if (!user) {
+      console.log(`[getConversationHistory:${requestId}] ERROR: No user in request`);
       errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
       return;
     }
 
     const { id: sessionId } = req.params;
+    console.log(`[getConversationHistory:${requestId}] Session ID: ${sessionId}, User ID: ${user.id}`);
 
     // Validate query params
     const parseResult = getMessagesQuerySchema.safeParse(req.query);
@@ -918,6 +1019,7 @@ export async function getConversationHistory(
     }
 
     // Get messages - only user's own messages and AI responses to them (data isolation)
+    console.log(`[getConversationHistory:${requestId}] Fetching messages with limit=${limit}, before=${before || 'none'}, after=${after || 'none'}, order=${order}`);
     const messages = await prisma.message.findMany({
       where: {
         sessionId,
@@ -931,9 +1033,48 @@ export async function getConversationHistory(
       take: limit + 1, // Fetch one extra to check for more
     });
 
+    console.log(`[getConversationHistory:${requestId}] ✅ Fetched ${messages.length} messages from database`);
+    
+    // Check for duplicate message IDs
+    const messageIds = messages.map(m => m.id);
+    const duplicateIds = messageIds.filter((id, idx) => messageIds.indexOf(id) !== idx);
+    if (duplicateIds.length > 0) {
+      console.warn(`[getConversationHistory:${requestId}] ⚠️  WARNING: Found ${duplicateIds.length} duplicate message ID(s) in query result!`);
+      duplicateIds.forEach(id => {
+        const duplicates = messages.filter(m => m.id === id);
+        console.warn(`[getConversationHistory:${requestId}]   Duplicate ID ${id}: appears ${duplicates.length} times`);
+      });
+    }
+    
+    // Check for duplicate content (same content, same role, within 1 second)
+    const contentMap = new Map<string, typeof messages>();
+    messages.forEach(m => {
+      const key = `${m.role}:${m.content.substring(0, 100)}`;
+      if (!contentMap.has(key)) {
+        contentMap.set(key, []);
+      }
+      contentMap.get(key)!.push(m);
+    });
+    const duplicateContent = Array.from(contentMap.entries()).filter(([_, msgs]) => msgs.length > 1);
+    if (duplicateContent.length > 0) {
+      console.warn(`[getConversationHistory:${requestId}] ⚠️  WARNING: Found ${duplicateContent.length} message(s) with duplicate content!`);
+      duplicateContent.forEach(([key, msgs]) => {
+        console.warn(`[getConversationHistory:${requestId}]   Content "${key.substring(0, 50)}...": appears ${msgs.length} times`);
+        msgs.forEach((msg, idx) => {
+          console.warn(`[getConversationHistory:${requestId}]     ${idx + 1}. ID=${msg.id}, timestamp=${msg.timestamp.toISOString()}`);
+        });
+      });
+    }
+    
+    // Log recent message IDs
+    const recentMessages = messages.slice(0, 5);
+    console.log(`[getConversationHistory:${requestId}] Recent 5 message IDs:`, recentMessages.map(m => `${m.role}:${m.id.substring(0, 8)}...`).join(', '));
+
     // Check if there are more messages
     const hasMore = messages.length > limit;
     let resultMessages = hasMore ? messages.slice(0, limit) : messages;
+    
+    console.log(`[getConversationHistory:${requestId}] Returning ${resultMessages.length} messages (hasMore=${hasMore})`);
 
     // If fetched in descending order, reverse to return chronological order for display
     // This allows us to fetch the latest N messages but display them oldest-first
