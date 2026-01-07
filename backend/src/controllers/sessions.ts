@@ -21,6 +21,7 @@ import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
 import { embedMessage } from '../services/embedding';
+import { updateSessionSummary } from '../services/conversation-summarizer';
 
 // ============================================================================
 // Controllers
@@ -959,7 +960,10 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
 
     // Generate proactive transition message from AI
     // Get conversation history from Stage 0 (invitation phase) - only this user's messages (data isolation)
-    const history = await prisma.message.findMany({
+    //
+    // IMPORTANT: Use the most recent messages, then reverse for chronological order.
+    // ASC + take N returns the oldest N, which can make the transition prompt stale in long sessions.
+    const historyDesc = await prisma.message.findMany({
       where: {
         sessionId,
         OR: [
@@ -967,9 +971,10 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
           { role: 'AI', forUserId: user.id },
         ],
       },
-      orderBy: { timestamp: 'asc' },
+      orderBy: { timestamp: 'desc' },
       take: 20,
     });
+    const history = historyDesc.slice().reverse();
 
     // Get partner name for context
     const partnerName = invitation.name || undefined;
@@ -1026,6 +1031,11 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
       // Embed message for cross-session retrieval (non-blocking)
       embedMessage(aiMessage.id).catch((err) =>
         console.warn('[confirmInvitationMessage] Failed to embed message:', err)
+      );
+
+      // Summarize older parts of the conversation (non-blocking)
+      updateSessionSummary(sessionId, user.id).catch((err) =>
+        console.warn('[confirmInvitationMessage] Failed to update session summary:', err)
       );
 
       transitionMessage = {

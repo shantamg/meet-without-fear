@@ -10,6 +10,7 @@ import { prisma } from '../../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../ai';
 import { getPartnerUserId } from '../../utils/session';
 import { embedMessage } from '../embedding';
+import { updateSessionSummary } from '../conversation-summarizer';
 import { detectMemoryIntent } from '../memory-detector';
 import type { MemorySuggestion } from '@meet-without-fear/shared';
 
@@ -248,6 +249,11 @@ export async function processSessionMessage(
   // Embed AI message for cross-session retrieval (non-blocking)
   embedMessage(aiMessage.id).catch((err) =>
     console.warn('[SessionProcessor] Failed to embed AI message:', err)
+  );
+
+  // Summarize older parts of the conversation (non-blocking)
+  updateSessionSummary(sessionId, userId).catch((err) =>
+    console.warn('[SessionProcessor] Failed to update session summary:', err)
   );
 
   // ============================================================================

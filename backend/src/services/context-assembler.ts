@@ -15,6 +15,7 @@ import {
   getTurnBufferSize,
 } from './memory-intent';
 import { findSimilarInnerThoughtsWithBoost } from './embedding';
+import { getSessionSummary } from './conversation-summarizer';
 
 // ============================================================================
 // Types
@@ -196,7 +197,9 @@ export async function assembleContextBundle(
   const sessionDurationMinutes = Math.floor(
     (now.getTime() - session.createdAt.getTime()) / 60000
   );
-  const sessionSummary = sessionDurationMinutes >= 30 && depth !== 'none'
+  // Session summary (rolling, stored on the user's vessel). We try to load it whenever
+  // depth allows—it's cheap when absent and prevents long sessions from losing early context.
+  const sessionSummary = depth !== 'none'
     ? await buildSessionSummary(sessionId, userId)
     : undefined;
 
@@ -419,11 +422,20 @@ async function buildSessionSummary(
   sessionId: string,
   userId: string
 ): Promise<SessionSummary | undefined> {
-  // For now, return undefined - will be built by Haiku summarization in full implementation
-  // This requires a separate AI call to summarize the session
+  // NOTE: Summaries are generated asynchronously by ConversationSummarizer and stored
+  // in UserVessel.conversationSummary. This function just loads and formats them.
+  const summaryData = await getSessionSummary(sessionId, userId);
+  if (!summaryData) return undefined;
 
-  // TODO: Implement with Haiku summarization
-  return undefined;
+  return {
+    keyThemes: summaryData.keyThemes ?? [],
+    emotionalJourney: summaryData.emotionalJourney ?? '',
+    // The summarizer's narrative summary becomes our "currentFocus" block.
+    currentFocus: summaryData.summary.text ?? '',
+    // These are "unresolved topics" (follow-ups) rather than literal goals, but they serve
+    // the same purpose for continuity and future prompt grounding.
+    userStatedGoals: summaryData.unresolvedTopics ?? [],
+  };
 }
 
 /**
@@ -566,6 +578,12 @@ export function formatContextForPrompt(bundle: ContextBundle): string {
     parts.push(`SESSION SUMMARY:`);
     parts.push(`Key themes: ${bundle.sessionSummary.keyThemes.join(', ')}`);
     parts.push(`Current focus: ${bundle.sessionSummary.currentFocus}`);
+    if (bundle.sessionSummary.emotionalJourney) {
+      parts.push(`Emotional journey: ${bundle.sessionSummary.emotionalJourney}`);
+    }
+    if (bundle.sessionSummary.userStatedGoals && bundle.sessionSummary.userStatedGoals.length > 0) {
+      parts.push(`Topics that may need follow-up: ${bundle.sessionSummary.userStatedGoals.join(', ')}`);
+    }
     parts.push('');
   }
 

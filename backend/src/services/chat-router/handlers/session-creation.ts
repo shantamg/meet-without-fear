@@ -16,6 +16,7 @@ import {
 } from '../types';
 import { generateConversationalResponse } from '../response-generator';
 import { embedSessionVessel, embedMessages } from '../../embedding';
+import { updateSessionSummary } from '../../conversation-summarizer';
 import { convertPreSessionToSessionMessages } from '../../witnessing';
 import { createInvitationUrl } from '../../../utils/urls';
 
@@ -295,6 +296,13 @@ async function createSession(
         );
       }
     }
+
+    // If a lot of history was imported, summarize it (non-blocking).
+    // Most sessions won't hit the summarization threshold here, but if they do,
+    // this ensures the vessel summary exists immediately.
+    updateSessionSummary(session.id, userId).catch((err) =>
+      console.warn('[SessionCreation] Failed to update session summary:', err)
+    );
 
     // Clear creation state
     creationState.delete(userId);

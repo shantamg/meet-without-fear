@@ -23,6 +23,7 @@ import { successResponse, errorResponse } from '../utils/response';
 import { getSonnetResponse } from '../lib/bedrock';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import { embedMessage } from '../services/embedding';
+import { updateSessionSummary } from '../services/conversation-summarizer';
 import { notifyEmpathyShared } from '../services/notification';
 import { runReconciler } from '../services/reconciler';
 import { isSessionCreator } from '../utils/session';
@@ -421,6 +422,12 @@ export async function consentToShare(
       console.warn('[consentToShare] Failed to embed empathy statement:', err)
     );
 
+    // Summarize older parts of the conversation (non-blocking)
+    // Empathy statements are persisted as chat messages, so they should be included in the rolling summary.
+    updateSessionSummary(sessionId, user.id).catch((err) =>
+      console.warn('[consentToShare] Failed to update session summary:', err)
+    );
+
     // Check if partner has also consented (only if we have a partner)
     let partnerAttempt = null;
     if (partnerId) {
@@ -522,6 +529,11 @@ Respond in JSON format:
       // Embed for cross-session retrieval (non-blocking)
       embedMessage(aiMessage.id).catch((err) =>
         console.warn('[consentToShare] Failed to embed transition message:', err)
+      );
+
+      // Summarize older parts of the conversation (non-blocking)
+      updateSessionSummary(sessionId, user.id).catch((err) =>
+        console.warn('[consentToShare] Failed to update session summary after transition:', err)
       );
 
       transitionMessage = {
