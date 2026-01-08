@@ -26,6 +26,7 @@ import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { embedMessage } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
+import { prefetchTTS } from './tts';
 
 // ============================================================================
 // Helpers
@@ -572,6 +573,10 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     embedMessage(aiMessage.id).catch((err) =>
       console.warn(`[sendMessage:${requestId}] Failed to embed AI message:`, err)
     );
+
+    // Eager TTS generation - start generating audio immediately (non-blocking)
+    // By the time the client requests audio, it will likely be ready
+    prefetchTTS(aiResponseContent);
 
     // Summarize older parts of the conversation (non-blocking)
     // This creates/updates a rolling summary in UserVessel.conversationSummary once message count crosses thresholds.

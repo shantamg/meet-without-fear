@@ -97,3 +97,6 @@ hive-mind-prompt-*.txt
 # Expo native folders (regenerate with: npx expo prebuild)
 mobile/android/
 mobile/ios/
+
+# TTS audio cache
+backend/cache/

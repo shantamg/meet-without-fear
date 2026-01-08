@@ -214,8 +214,71 @@ async function getOrFetchTTSAudio(
 }
 
 /**
- * Play text using OpenAI TTS.
- * Handles fetching audio, playing, and cleanup.
+ * Check if audio is cached and return the URI if so.
+ * Returns null if not cached.
+ */
+async function getCachedAudioUri(
+  text: string,
+  voiceSettings: VoiceSettings,
+  slowSpeech: boolean
+): Promise<string | null> {
+  const { voiceId } = voiceSettings;
+  const model = voiceSettings.model || VoiceModel.TTS_1;
+  const cacheKey = hashText(text, voiceId, `${model}_${slowSpeech ? 'slow' : 'normal'}`);
+  const cacheDir = `${FileSystem.cacheDirectory}${TTS_CACHE_DIR}/`;
+  const fileUri = `${cacheDir}${cacheKey}.ogg`;
+
+  const fileInfo = await FileSystem.getInfoAsync(fileUri);
+  return fileInfo.exists ? fileUri : null;
+}
+
+/**
+ * Build the streaming TTS URL with query params.
+ */
+async function buildTTSStreamUrl(
+  text: string,
+  voiceSettings: VoiceSettings,
+  slowSpeech: boolean
+): Promise<{ url: string; token: string | null }> {
+  const token = await getAuthToken();
+  const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+  const baseUrl = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
+
+  const { voiceId } = voiceSettings;
+  const model = voiceSettings.model || VoiceModel.TTS_1;
+  const speed = slowSpeech ? 0.85 : 1.0;
+
+  const params = new URLSearchParams({
+    text: text,
+    voice: voiceId,
+    model: model,
+    speed: speed.toString(),
+  });
+
+  return { url: `${baseUrl}/tts?${params.toString()}`, token };
+}
+
+/**
+ * Cache audio in background after streaming playback starts.
+ * This downloads the audio to disk for future instant playback.
+ */
+async function cacheAudioInBackground(
+  text: string,
+  voiceSettings: VoiceSettings,
+  slowSpeech: boolean
+): Promise<void> {
+  try {
+    // Use the existing download function which handles caching
+    await getOrFetchTTSAudio(text, voiceSettings, slowSpeech);
+  } catch (error) {
+    // Silent fail - caching is best-effort
+    console.warn('[TTS] Background caching failed:', error);
+  }
+}
+
+/**
+ * Play text using OpenAI TTS with true streaming.
+ * Starts playback immediately from URL, caches in background for future plays.
  * @param slowSpeech - If true, uses slower speech rate for meditation
  */
 async function playTTS(
@@ -233,15 +296,32 @@ async function playTTS(
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
       shouldDuckAndroid: true,
-      // Fix for Android volume ducking/mixing
     });
 
-    // Get audio from cache or fetch from Backend
-    const audioPath = await getOrFetchTTSAudio(text, voiceSettings, slowSpeech);
+    // 1. Check cache first - instant playback if available
+    const cachedUri = await getCachedAudioUri(text, voiceSettings, slowSpeech);
 
-    // Create and play sound
+    let audioSource: { uri: string; headers?: Record<string, string> };
+
+    if (cachedUri) {
+      // Play from cache (instant)
+      audioSource = { uri: cachedUri };
+    } else {
+      // Stream from URL (starts playing as soon as buffer fills)
+      const { url, token } = await buildTTSStreamUrl(text, voiceSettings, slowSpeech);
+      audioSource = {
+        uri: url,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      };
+
+      // Start background caching so next play is instant
+      // Don't await - let it run in background
+      cacheAudioInBackground(text, voiceSettings, slowSpeech);
+    }
+
+    // Create and play sound (streams automatically for remote URLs)
     const { sound } = await Audio.Sound.createAsync(
-      { uri: audioPath },
+      audioSource,
       { shouldPlay: true },
       (status) => {
         if (status.isLoaded && status.didJustFinish) {
