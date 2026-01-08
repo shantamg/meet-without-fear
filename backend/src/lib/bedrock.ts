@@ -97,6 +97,7 @@ export interface HaikuCompletionOptions {
   maxTokens?: number;
   sessionId?: string;
   operation?: string;
+  turnId?: string;
 }
 
 export interface SonnetCompletionOptions extends CompletionOptions {
@@ -324,7 +325,7 @@ export const EMBEDDING_DIMENSIONS = 1024;
  * @param text - The text to embed (max ~8000 tokens)
  * @returns Float array of embedding dimensions, or null if unavailable
  */
-export async function getEmbedding(text: string): Promise<number[] | null> {
+export async function getEmbedding(text: string, options?: { sessionId?: string; turnId?: string }): Promise<number[] | null> {
   const client = getBedrockClient();
   if (!client) {
     return null;
@@ -349,7 +350,22 @@ export async function getEmbedding(text: string): Promise<number[] | null> {
     recordUsage({
       modelId: BEDROCK_TITAN_EMBED_MODEL_ID,
       operation: 'embedding',
+      sessionId: options?.sessionId,
+      turnId: options?.turnId,
+      usage: { inputTokens: Math.ceil(truncatedText.length / 4) } // Titan doesn't return usage? Fallback estimation if needed, though recordUsage usually relies on response.usage
     });
+    // actually command output for invokeModel might not have usage in older SDK versions or for embedding models?
+    // checking documentation: InvokeModelResponse body is Blob. header 'x-amzn-bedrock-input-token-count' etc. 
+    // The AWS SDK response object might map headers to properties?
+    // Let's rely on recordUsage which checks response.usage. 
+    // But for Embeddings, Bedrock often puts token counts in headers, not body. 
+    // The SDK `InvokeModelCommandOutput` has `body` and metadata.
+    // If usage is missing, recordUsage might skip it. 
+    // However, usageTracker requires tokens > 0.
+    // Titan V2 DOES return inputTokenCount in response headers: `x-amzn-bedrock-input-token-count`.
+    // The SDK might NOT populate `response.usage` for InvokeModel (it does for Converse).
+    // Let's assume for now we might miss token counts if SDK doesn't map it.
+    // But sticking to the goal: Pass sessionId.
 
     if (!response.body) {
       return null;

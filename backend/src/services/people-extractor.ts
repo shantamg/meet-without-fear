@@ -57,8 +57,13 @@ export async function extractAndTrackPeople(params: ExtractionParams): Promise<E
       where: { userId },
     }));
 
+  // Determine session ID for cost tracking
+  const sessionId = (sourceType === 'PARTNER_SESSION' || sourceType === 'INNER_THOUGHTS')
+    ? sourceId
+    : undefined;
+
   // Extract names using AI
-  const extracted = await extractNamesWithAI(content, existingPeople);
+  const extracted = await extractNamesWithAI(content, existingPeople, sessionId);
 
   if (!extracted || extracted.names.length === 0) {
     return { people: [], newPeople: [] };
@@ -103,15 +108,15 @@ export async function extractAndTrackPeople(params: ExtractionParams): Promise<E
 // AI Extraction
 // ============================================================================
 
-async function extractNamesWithAI(content: string, existingPeople: Person[]): Promise<ExtractedPeople | null> {
+async function extractNamesWithAI(content: string, existingPeople: Person[], sessionId?: string): Promise<ExtractedPeople | null> {
   const existingPeopleList =
     existingPeople.length > 0
       ? existingPeople
-          .map(
-            (p) =>
-              `- ${p.name} (id: ${p.id})${p.aliases.length ? ` [aliases: ${p.aliases.join(', ')}]` : ''}${p.relationship ? ` [${p.relationship}]` : ''}`
-          )
-          .join('\n')
+        .map(
+          (p) =>
+            `- ${p.name} (id: ${p.id})${p.aliases.length ? ` [aliases: ${p.aliases.join(', ')}]` : ''}${p.relationship ? ` [${p.relationship}]` : ''}`
+        )
+        .join('\n')
       : '(none yet)';
 
   const prompt = `Extract people mentioned in this text.
@@ -156,6 +161,7 @@ OUTPUT (JSON):
       systemPrompt: prompt,
       messages: [{ role: 'user', content: 'Extract people from the text above.' }],
       operation: 'people-extraction',
+      sessionId,
     });
 
     return result;

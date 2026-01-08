@@ -102,7 +102,9 @@ export type SessionEventType =
   | 'typing.stop'
   // Stage sync (new)
   | 'stage.progress'
-  | 'stage.waiting';
+  | 'stage.waiting'
+  // Memory (new)
+  | 'memory.suggested';
 
 export interface SessionEventData {
   sessionId: string;

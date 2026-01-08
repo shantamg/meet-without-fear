@@ -216,9 +216,9 @@ type SessionAction =
   | { type: 'DISMISS_CARD'; payload: string }
   | { type: 'SET_BAROMETER'; payload: number }
   | {
-      type: 'SET_MIRROR_INTERVENTION';
-      payload: { intervention: MirrorIntervention; pendingMessage: string };
-    }
+    type: 'SET_MIRROR_INTERVENTION';
+    payload: { intervention: MirrorIntervention; pendingMessage: string };
+  }
   | { type: 'CLEAR_MIRROR_INTERVENTION' }
   | { type: 'SET_FOLLOW_UP_DATE'; payload: Date | null }
   | { type: 'SET_LAST_BAROMETER_COUNT'; payload: number }
@@ -807,7 +807,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const handleSendMessage = useCallback(
     (content: string) => {
       if (!sessionId) return;
-      
+
       // Prevent duplicate submissions
       if (isSending) {
         console.warn('[handleSendMessage] Already sending a message, ignoring duplicate call');
@@ -1023,8 +1023,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
     // Pass draft content for optimistic UI update
     // Use provided content, or fall back to draft/proposed statement
     const draftContent = content || empathyDraftData?.draft?.content || liveProposedEmpathyStatement || undefined;
-    console.log('[handleShareEmpathy] Calling consentToShare', { 
-      sessionId, 
+    console.log('[handleShareEmpathy] Calling consentToShare', {
+      sessionId,
       hasDraftContent: !!draftContent,
       draftContentLength: draftContent?.length,
       contentProvided: !!content,
@@ -1209,6 +1209,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
     // Memory suggestion
     memorySuggestion,
+    setMemorySuggestion,
     clearMemorySuggestion: () => setMemorySuggestion(null),
 
     // Invitation phase

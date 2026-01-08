@@ -124,7 +124,11 @@ interface ReferenceDetectionResult {
  * Enhanced to catch commitment patterns like "But I thought...", "I thought we...",
  * "I assumed...", "I believed..." which are more common than explicit "we agreed".
  */
-async function detectReferences(message: string): Promise<ReferenceDetectionResult> {
+async function detectReferences(
+  message: string,
+  sessionId?: string,
+  turnId?: string
+): Promise<ReferenceDetectionResult> {
   const prompt = `Analyze this message for references to past events, people, agreements, or time periods.
 
 Message: "${message}"
@@ -166,6 +170,9 @@ If no references, return empty arrays and needsRetrieval: false.`;
         systemPrompt: 'You detect references to past content in messages. Output JSON only.',
         messages: [{ role: 'user', content: prompt }],
         maxTokens: 512,
+        sessionId,
+        turnId,
+        operation: 'retrieval-planning'
       });
       return result;
     },
@@ -188,7 +195,7 @@ async function searchAcrossSessions(
   limit: number = 5,
   threshold: number = 0.5
 ): Promise<RelevantMessage[]> {
-  const queryEmbedding = await getEmbedding(queryText);
+  const queryEmbedding = await getEmbedding(queryText, { sessionId: excludeSessionId });
   if (!queryEmbedding) {
     return [];
   }
@@ -485,7 +492,7 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
     conversationHistory,
     preSessionMessages,
   ] = await Promise.all([
-    detectReferences(currentMessage), // Haiku call (with circuit breaker)
+    detectReferences(currentMessage, currentSessionId, turnId), // Haiku call (with circuit breaker)
     currentSessionId ? getSessionHistory(currentSessionId, userId) : Promise.resolve([]), // DB query
     includePreSession ? getPreSessionMessages(userId) : Promise.resolve([]), // DB query
   ]);

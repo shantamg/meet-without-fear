@@ -141,6 +141,7 @@ function normalizeConfidence(confidence: string): 'high' | 'medium' | 'low' {
 export async function detectMemoryIntent(
   message: string,
   sessionId?: string,
+  turnId?: string,
   context: string = 'unknown'
 ): Promise<MemoryDetectionResult> {
   const logPrefix = `[Memory Detector][${context}]`;
@@ -169,6 +170,9 @@ Output only valid JSON with no markdown formatting or extra text.`;
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens: 512,
+      sessionId,
+      turnId,
+      operation: 'memory-detection',
     });
 
     console.log(`${logPrefix} Haiku raw response:`, JSON.stringify(response, null, 2));

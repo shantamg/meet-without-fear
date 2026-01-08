@@ -74,7 +74,8 @@ export interface ResponseInput {
  * Uses templates for common cases, AI for nuanced responses
  */
 export async function generateConversationalResponse(
-  input: ResponseInput
+  input: ResponseInput,
+  sessionId?: string
 ): Promise<string> {
   const { action, context = {} } = input;
 
@@ -85,7 +86,7 @@ export async function generateConversationalResponse(
   }
 
   // Fall back to AI generation for complex cases
-  return await generateWithAI(action, context);
+  return await generateWithAI(action, context, sessionId);
 }
 
 /**
@@ -93,7 +94,8 @@ export async function generateConversationalResponse(
  */
 async function generateWithAI(
   action: string,
-  context: ResponseContext
+  context: ResponseContext,
+  sessionId?: string
 ): Promise<string> {
   const systemPrompt = `You are a helpful assistant for Meet Without Fear, a conflict resolution app.
 
@@ -120,6 +122,8 @@ Output only JSON: { "response": "your response" }`;
     systemPrompt,
     messages: [{ role: 'user', content: prompt }],
     maxTokens: 256,
+    sessionId,
+    operation: 'chat-router-response',
   });
 
   return result?.response || TEMPLATES.fallback({});

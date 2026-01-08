@@ -101,10 +101,7 @@ export function UnifiedSessionScreen({
   const { mutate: updateMood } = useUpdateMood();
 
   // Real-time presence tracking
-  const { partnerOnline, connectionStatus } = useRealtime({
-    sessionId,
-    enablePresence: true,
-  });
+
 
   const {
     // Loading
@@ -162,6 +159,7 @@ export function UnifiedSessionScreen({
 
     // Memory suggestion
     memorySuggestion,
+    setMemorySuggestion,
     clearMemorySuggestion,
 
     // Feel heard confirmation
@@ -196,6 +194,19 @@ export function UnifiedSessionScreen({
     showCooling,
     setPendingConfirmation,
   } = useUnifiedSession(sessionId);
+
+  // Real-time presence and event tracking
+  const { partnerOnline, connectionStatus } = useRealtime({
+    sessionId,
+    enablePresence: true,
+    onSessionEvent: (event, data) => {
+      if (event === 'memory.suggested' && data) {
+        // Handle incoming memory suggestion from Ably
+        console.log('[UnifiedSessionScreen] Received memory suggestion:', data);
+        setMemorySuggestion(data as any);
+      }
+    },
+  });
 
   // -------------------------------------------------------------------------
   // Analytics-wrapped action handlers
@@ -256,7 +267,7 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   const [showEmpathyDrawer, setShowEmpathyDrawer] = useState(false);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
-  
+
   // Local latch to prevent panel flashing during server refetches
   // Once user clicks Share, this stays true even if server data temporarily reverts
   const [hasSharedEmpathyLocal, setHasSharedEmpathyLocal] = useState(false);
@@ -306,12 +317,12 @@ export function UnifiedSessionScreen({
   if (milestones?.feelHeardConfirmedAt && !hasEverConfirmedFeelHeard.current) {
     hasEverConfirmedFeelHeard.current = true;
   }
-  
+
   // 2. Latch if we are currently confirming (optimistic start)
   if (isConfirmingFeelHeard && !hasEverConfirmedFeelHeard.current) {
     hasEverConfirmedFeelHeard.current = true;
   }
-  
+
   // 3. Latch if we have an optimistic timestamp set
   if (optimisticFeelHeardTimestamp && !hasEverConfirmedFeelHeard.current) {
     hasEverConfirmedFeelHeard.current = true;
@@ -364,7 +375,7 @@ export function UnifiedSessionScreen({
   const shouldShowEmpathyPanel = useMemo(() => {
     // Local latch: Once user clicks Share, never show panel again (prevents flash during refetch)
     if (hasSharedEmpathyLocal) return false;
-    
+
     return !!(
       currentStage === Stage.PERSPECTIVE_STRETCH &&
       !empathyDraftData?.alreadyConsented &&
@@ -390,7 +401,7 @@ export function UnifiedSessionScreen({
   useEffect(() => {
     // If we are sharing, force it to close (0). Otherwise follow the logic (1 or 0).
     const targetValue = isSharingEmpathy ? 0 : (shouldShowEmpathyPanel ? 1 : 0);
-    
+
     Animated.spring(empathyPanelAnim, {
       toValue: targetValue,
       useNativeDriver: false, // Required for layout animations like maxHeight
@@ -485,18 +496,18 @@ export function UnifiedSessionScreen({
     // Show "Felt Heard" indicator when user confirms they feel heard
     // FIX: Simplified logic. If the REF is true, we show it. 
     // We prioritize the Server Date, fallback to Optimistic Date, fallback to Now.
-    
+
     // Check if we should show it based on Ref OR Server Data OR Optimistic State
-    const shouldShowFeelHeard = 
-      hasEverConfirmedFeelHeard.current || 
-      milestones?.feelHeardConfirmedAt || 
+    const shouldShowFeelHeard =
+      hasEverConfirmedFeelHeard.current ||
+      milestones?.feelHeardConfirmedAt ||
       optimisticFeelHeardTimestamp ||
       isConfirmingFeelHeard;
 
     // Determine the timestamp to display
-    const feelHeardAt = 
-      milestones?.feelHeardConfirmedAt ?? 
-      optimisticFeelHeardTimestamp ?? 
+    const feelHeardAt =
+      milestones?.feelHeardConfirmedAt ??
+      optimisticFeelHeardTimestamp ??
       (shouldShowFeelHeard ? new Date().toISOString() : null);
 
     if (shouldShowFeelHeard && feelHeardAt) {
@@ -767,7 +778,7 @@ export function UnifiedSessionScreen({
     if (compactData?.mySigned) {
       return false;
     }
-    
+
     // If we're still loading and don't have progress data yet, default to showing compact
     // This ensures invitees see the compact immediately after accepting
     // (progress defaults to ONBOARDING stage when undefined)
@@ -776,10 +787,10 @@ export function UnifiedSessionScreen({
       // This handles the case where invitee just accepted and data is still loading
       return true;
     }
-    
+
     // Once progress has loaded, check if we're in onboarding stage
     const inOnboarding = currentStage === Stage.ONBOARDING;
-    
+
     // Show compact if in onboarding and not signed
     return inOnboarding;
   }, [currentStage, isLoading, myProgress, compactData?.mySigned]);
@@ -1133,22 +1144,22 @@ export function UnifiedSessionScreen({
             // Show compact agreement bar during onboarding when compact not signed
             isInOnboardingUnsigned
               ? () => (
-                  <CompactAgreementBar
-                    onSign={() => {
-                      // Set optimistic timestamp for immediate indicator display
-                      setOptimisticCompactSignedTimestamp(new Date().toISOString());
-                      // Mark that compact was just signed (for typewriter animation after mood check)
-                      setJustSignedCompact(true);
-                      trackCompactSigned(sessionId, invitation?.isInviter ?? true);
-                      handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING));
-                    }}
-                    isPending={isSigningCompact}
-                    testID="compact-agreement-bar"
-                  />
-                )
+                <CompactAgreementBar
+                  onSign={() => {
+                    // Set optimistic timestamp for immediate indicator display
+                    setOptimisticCompactSignedTimestamp(new Date().toISOString());
+                    // Mark that compact was just signed (for typewriter animation after mood check)
+                    setJustSignedCompact(true);
+                    trackCompactSigned(sessionId, invitation?.isInviter ?? true);
+                    handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING));
+                  }}
+                  isPending={isSigningCompact}
+                  testID="compact-agreement-bar"
+                />
+              )
               // Show feel-heard confirmation panel when AI recommends it
               : showFeelHeardConfirmation && !milestones?.feelHeardConfirmedAt && !isConfirmingFeelHeard && !isTypewriterAnimating
-              ? () => (
+                ? () => (
                   <View style={styles.feelHeardContainer}>
                     <FeelHeardConfirmation
                       onConfirm={() => {
@@ -1162,132 +1173,132 @@ export function UnifiedSessionScreen({
                     />
                   </View>
                 )
-              // Show empathy review panel when empathy statement is ready
-              : shouldShowEmpathyPanel
-              ? () => (
-                  <Animated.View
-                    style={{
-                      opacity: empathyPanelAnim,
-                      maxHeight: empathyPanelAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, 100],
-                      }),
-                      transform: [{
-                        translateY: empathyPanelAnim.interpolate({
+                // Show empathy review panel when empathy statement is ready
+                : shouldShowEmpathyPanel
+                  ? () => (
+                    <Animated.View
+                      style={{
+                        opacity: empathyPanelAnim,
+                        maxHeight: empathyPanelAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [20, 0],
+                          outputRange: [0, 100],
                         }),
-                      }],
-                      overflow: 'hidden',
-                    }}
-                    pointerEvents={shouldShowEmpathyPanel ? 'auto' : 'none'}
-                  >
-                    <View style={styles.empathyReviewContainer}>
-                      <TouchableOpacity
-                        style={styles.empathyReviewButton}
-                        onPress={() => setShowEmpathyDrawer(true)}
-                        activeOpacity={0.7}
-                        testID="empathy-review-button"
+                        transform: [{
+                          translateY: empathyPanelAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [20, 0],
+                          }),
+                        }],
+                        overflow: 'hidden',
+                      }}
+                      pointerEvents={shouldShowEmpathyPanel ? 'auto' : 'none'}
+                    >
+                      <View style={styles.empathyReviewContainer}>
+                        <TouchableOpacity
+                          style={styles.empathyReviewButton}
+                          onPress={() => setShowEmpathyDrawer(true)}
+                          activeOpacity={0.7}
+                          testID="empathy-review-button"
+                        >
+                          <Text style={styles.empathyReviewButtonText}>
+                            Review what you'll share
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </Animated.View>
+                  )
+                  // Only render if inviter has a draft message (not confirmed yet)
+                  // Never render for invitees - they already accepted the invitation
+                  : (isInviter && invitationMessage && invitationUrl && !invitationConfirmed && !localInvitationConfirmed)
+                    ? () => (
+                      <Animated.View
+                        style={{
+                          // 1. Animate Opacity
+                          opacity: invitationPanelAnim,
+
+                          // 2. Animate Height (Slide in effect)
+                          // We use maxHeight to safely animate from 0 to a value large enough to fit content
+                          maxHeight: invitationPanelAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 400], // 400 is arbitrary but large enough for your message + buttons
+                          }),
+
+                          // 3. Optional: Add a slight slide-up transform for visual flair
+                          transform: [{
+                            translateY: invitationPanelAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [20, 0],
+                            }),
+                          }],
+
+                          // 4. Clip content while closed so padding doesn't leak space
+                          overflow: 'hidden',
+                        }}
+                        // Disable touches when hidden
+                        pointerEvents={shouldShowInvitationPanel ? 'auto' : 'none'}
                       >
-                        <Text style={styles.empathyReviewButtonText}>
-                          Review what you'll share
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </Animated.View>
-                )
-              // Only render if inviter has a draft message (not confirmed yet)
-              // Never render for invitees - they already accepted the invitation
-              : (isInviter && invitationMessage && invitationUrl && !invitationConfirmed && !localInvitationConfirmed)
-              ? () => (
-                  <Animated.View
-                    style={{
-                      // 1. Animate Opacity
-                      opacity: invitationPanelAnim,
-                      
-                      // 2. Animate Height (Slide in effect)
-                      // We use maxHeight to safely animate from 0 to a value large enough to fit content
-                      maxHeight: invitationPanelAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, 400], // 400 is arbitrary but large enough for your message + buttons
-                      }),
-                      
-                      // 3. Optional: Add a slight slide-up transform for visual flair
-                      transform: [{
-                        translateY: invitationPanelAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [20, 0],
-                        }),
-                      }],
-                      
-                      // 4. Clip content while closed so padding doesn't leak space
-                      overflow: 'hidden',
-                    }}
-                    // Disable touches when hidden
-                    pointerEvents={shouldShowInvitationPanel ? 'auto' : 'none'}
-                  >
-                    {/* 5. INNER CONTAINER 
+                        {/* 5. INNER CONTAINER 
                        Move the styles that contain padding/bg/borders HERE. 
                        This ensures they don't take up space when the parent height is 0.
                     */}
-                    <View style={styles.invitationDraftContainer}>
-                      <Text style={styles.invitationDraftMessage}>
-                        "{invitationMessage}"
-                      </Text>
-                      
-                      <InvitationShareButton
-                        invitationMessage={invitationMessage}
-                        invitationUrl={invitationUrl}
-                        partnerName={partnerName}
-                        senderName={user?.name || user?.firstName || undefined}
-                        testID="invitation-share-button"
-                      />
-                      
-                      <TouchableOpacity
-                        style={styles.continueButton}
-                        onPress={() => {
-                          // Track invitation sent
-                          trackInvitationSent(sessionId, 'share_sheet');
-                          // Mark as confirmed permanently in hook state (survives remounts)
-                          setLocalInvitationConfirmed(true);
-                          // Optimistic UI: immediately show loading state and indicator
-                          setIsConfirmingInvitation(true);
-                          setOptimisticConfirmTimestamp(new Date().toISOString());
-                          setIsRefiningInvitation(false); // Exit refinement mode
-                          handleConfirmInvitationMessage(invitationMessage, () => {
-                            // Clear loading state when mutation completes
-                            setIsConfirmingInvitation(false);
-                          });
-                        }}
-                        testID="invitation-continue-button"
-                      >
-                        <Text style={styles.continueButtonText}>
-                          {isRefiningInvitation ? "I've sent it - Back to conversation" : "I've sent it - Continue"}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </Animated.View>
-                )
-              // Show waiting banner when waiting for partner's empathy
-              : waitingStatus === 'empathy-pending'
-              ? () => (
-                  <View style={styles.waitingBanner}>
-                    <Text style={styles.waitingBannerText}>
-                      Waiting for {partnerName || 'your partner'} to share their empathy statement.
-                    </Text>
-                    {onNavigateToInnerThoughts && (
-                      <TouchableOpacity
-                        style={styles.innerThoughtsLink}
-                        onPress={() => onNavigateToInnerThoughts(sessionId)}
-                      >
-                        <Text style={styles.innerThoughtsLinkText}>
-                          Continue with Inner Thoughts while you wait →
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )
-              : undefined
+                        <View style={styles.invitationDraftContainer}>
+                          <Text style={styles.invitationDraftMessage}>
+                            "{invitationMessage}"
+                          </Text>
+
+                          <InvitationShareButton
+                            invitationMessage={invitationMessage}
+                            invitationUrl={invitationUrl}
+                            partnerName={partnerName}
+                            senderName={user?.name || user?.firstName || undefined}
+                            testID="invitation-share-button"
+                          />
+
+                          <TouchableOpacity
+                            style={styles.continueButton}
+                            onPress={() => {
+                              // Track invitation sent
+                              trackInvitationSent(sessionId, 'share_sheet');
+                              // Mark as confirmed permanently in hook state (survives remounts)
+                              setLocalInvitationConfirmed(true);
+                              // Optimistic UI: immediately show loading state and indicator
+                              setIsConfirmingInvitation(true);
+                              setOptimisticConfirmTimestamp(new Date().toISOString());
+                              setIsRefiningInvitation(false); // Exit refinement mode
+                              handleConfirmInvitationMessage(invitationMessage, () => {
+                                // Clear loading state when mutation completes
+                                setIsConfirmingInvitation(false);
+                              });
+                            }}
+                            testID="invitation-continue-button"
+                          >
+                            <Text style={styles.continueButtonText}>
+                              {isRefiningInvitation ? "I've sent it - Back to conversation" : "I've sent it - Continue"}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </Animated.View>
+                    )
+                    // Show waiting banner when waiting for partner's empathy
+                    : waitingStatus === 'empathy-pending'
+                      ? () => (
+                        <View style={styles.waitingBanner}>
+                          <Text style={styles.waitingBannerText}>
+                            Waiting for {partnerName || 'your partner'} to share their empathy statement.
+                          </Text>
+                          {onNavigateToInnerThoughts && (
+                            <TouchableOpacity
+                              style={styles.innerThoughtsLink}
+                              onPress={() => onNavigateToInnerThoughts(sessionId)}
+                            >
+                              <Text style={styles.innerThoughtsLinkText}>
+                                Continue with Inner Thoughts while you wait →
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )
+                      : undefined
           }
           hideInput={waitingStatus === 'empathy-pending'}
         />
@@ -1404,7 +1415,7 @@ export function UnifiedSessionScreen({
           onShare={() => {
             // Capture statement at click time to avoid stale closure
             const statementToShare = liveProposedEmpathyStatement || empathyDraftData?.draft?.content;
-            console.log('[ViewEmpathyStatementDrawer] Share clicked', { 
+            console.log('[ViewEmpathyStatementDrawer] Share clicked', {
               hasStatement: !!statementToShare,
               statementLength: statementToShare?.length,
               hasLiveProposed: !!liveProposedEmpathyStatement,

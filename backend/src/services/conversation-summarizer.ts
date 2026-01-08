@@ -79,7 +79,8 @@ async function generateConversationSummary(
   messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp: Date }>,
   userName: string,
   partnerName: string,
-  stage: number
+  stage: number,
+  sessionId: string
 ): Promise<SummarizationResult | null> {
   if (messages.length === 0) {
     return null;
@@ -119,6 +120,8 @@ ${conversationText}`;
     systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
     maxTokens: 800,
+    sessionId,
+    operation: 'conversation-summary'
   });
 
   return result;
@@ -247,7 +250,8 @@ export async function updateSessionSummary(
       })),
       userName,
       partnerName,
-      stage
+      stage,
+      sessionId
     );
 
     if (!summaryResult) {
@@ -395,7 +399,8 @@ export const INNER_THOUGHTS_SUMMARIZATION_CONFIG = {
 async function generateInnerThoughtsSummary(
   messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp: Date }>,
   userName: string,
-  existingTheme?: string | null
+  existingTheme: string | null | undefined,
+  sessionId: string
 ): Promise<SummarizationResult | null> {
   if (messages.length === 0) {
     return null;
@@ -439,8 +444,9 @@ ${conversationText}`;
     systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
     maxTokens: 800,
+    sessionId,
+    operation: 'inner-thoughts-summary'
   });
-
   return result;
 }
 
@@ -520,7 +526,8 @@ export async function updateInnerThoughtsSummary(
         timestamp: m.timestamp,
       })),
       userName,
-      session.theme
+      session.theme,
+      sessionId
     );
 
     if (!summaryResult) {

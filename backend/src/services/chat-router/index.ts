@@ -181,6 +181,7 @@ export async function processMessage(
     userSessions,
     semanticMatches,
     pendingState,
+    sessionId: activeSession?.id,
   });
 
   console.log('[ChatRouter] Intent detected:', {
@@ -235,10 +236,10 @@ export async function processMessage(
         sessionChange: result.sessionChange,
         passThrough: result.passThrough
           ? {
-              sessionId: result.passThrough.sessionId,
-              userMessage: userMessage as unknown as import('@meet-without-fear/shared').MessageDTO,
-              aiResponse: assistantResponse as unknown as import('@meet-without-fear/shared').MessageDTO,
-            }
+            sessionId: result.passThrough.sessionId,
+            userMessage: userMessage as unknown as import('@meet-without-fear/shared').MessageDTO,
+            aiResponse: assistantResponse as unknown as import('@meet-without-fear/shared').MessageDTO,
+          }
           : undefined,
       };
     }

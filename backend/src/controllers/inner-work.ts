@@ -142,6 +142,8 @@ async function updateSessionMetadata(sessionId: string): Promise<void> {
       systemPrompt: prompt,
       messages: [{ role: 'user', content: 'Generate the metadata.' }],
       maxTokens: 256,
+      sessionId,
+      operation: 'inner-work-metadata',
     });
 
     if (parsed && (parsed.title || parsed.summary || parsed.theme)) {
@@ -355,6 +357,8 @@ export const createInnerWorkSession = asyncHandler(
       systemPrompt: prompt,
       messages: [{ role: 'user', content: 'Start the conversation.' }],
       maxTokens: 256,
+      sessionId: session.id,
+      operation: 'inner-work-initial',
     });
     const parsed = extractJsonSafe<{ response?: string }>(aiResponse || '', {
       response: fallbackMessage,
@@ -605,6 +609,8 @@ export const sendInnerWorkMessage = asyncHandler(
       systemPrompt: prompt,
       messages: history,
       maxTokens: 1024,
+      sessionId,
+      operation: 'inner-work-response',
     });
     const parsed = extractJsonSafe<{ response?: string; analysis?: string }>(aiResponse || '', {
       response: fallbackResponse,

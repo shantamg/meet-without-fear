@@ -39,6 +39,8 @@ export interface DetectionInput {
   activeSessionPartnerName?: string;
   /** All sessions the user has, for context-aware detection */
   userSessions?: SessionInfo[];
+  /** ID of the current active session, for cost tracking */
+  sessionId?: string;
   /** Semantically similar sessions from vector search */
   semanticMatches?: SemanticMatch[];
   recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -194,6 +196,7 @@ export async function detectIntent(input: DetectionInput): Promise<IntentDetecti
     semanticMatches,
     recentMessages,
     pendingState,
+    sessionId,
   } = input;
 
   // Build context for the model
@@ -219,6 +222,8 @@ export async function detectIntent(input: DetectionInput): Promise<IntentDetecti
     systemPrompt: buildDetectionPrompt(userSessions, semanticMatches),
     messages: [{ role: 'user', content: userMessage }],
     maxTokens: 512,
+    sessionId,
+    operation: 'intent-detection',
   });
 
   // Handle null result (AI not available or parse error)

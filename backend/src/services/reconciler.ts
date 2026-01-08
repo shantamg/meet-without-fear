@@ -675,7 +675,7 @@ async function getWitnessingContent(
   // If no extracted emotions, try to extract key themes using AI (quick analysis)
   let themesList = Array.from(themes);
   if (themesList.length === 0 && userMessages.length > 0) {
-    themesList = await extractThemes(userMessages);
+    themesList = await extractThemes(userMessages, sessionId);
   }
 
   return {
@@ -687,11 +687,13 @@ async function getWitnessingContent(
 /**
  * Extract key themes from witnessing content using AI.
  */
-async function extractThemes(content: string): Promise<string[]> {
+async function extractThemes(content: string, sessionId: string): Promise<string[]> {
   const result = await getHaikuJson<{ themes: string[] }>({
     systemPrompt: `Extract 3-5 key emotional themes or feelings from this witnessing content. Return as JSON: {"themes": ["theme1", "theme2", ...]}`,
     messages: [{ role: 'user', content }],
     maxTokens: 256,
+    sessionId,
+    operation: 'reconciler-extract-themes',
   });
 
   return result?.themes || [];

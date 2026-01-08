@@ -214,13 +214,15 @@ export async function planRetrieval(
 
   // Get structured plan from Haiku with circuit breaker protection
   const fallbackPlan: RetrievalPlan = { queries: [], reasoning: 'Fallback: Haiku unavailable or timed out' };
-  
+
   const rawPlan = await withHaikuCircuitBreaker(
     async () => {
       return await getHaikuJson<RetrievalPlan>({
         systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
         maxTokens: 512,
+        sessionId,
+        operation: 'retrieval-planning',
       });
     },
     fallbackPlan,

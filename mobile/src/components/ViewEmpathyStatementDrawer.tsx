@@ -6,8 +6,18 @@
  * Two actions: Share (sends to partner) or Refine Further (open inline composer).
  */
 
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, TextInput } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  ScrollView,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Send, MessageCircle } from 'lucide-react-native';
 import { colors } from '@/theme';
@@ -37,6 +47,25 @@ export function ViewEmpathyStatementDrawer({
 }: ViewEmpathyStatementDrawerProps) {
   const [isRefining, setIsRefining] = useState(false);
   const [refinementText, setRefinementText] = useState('');
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  // When the refinement composer opens (and keyboard comes up), ensure we scroll the input into view.
+  useEffect(() => {
+    if (!isRefining) return;
+
+    // Run a couple times to handle layout + keyboard timing differences across iOS/Android.
+    const raf = requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    });
+    const t = setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 150);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
+  }, [isRefining]);
 
   const handleSendRefinement = () => {
     const trimmed = refinementText.trim();
@@ -57,104 +86,114 @@ export function ViewEmpathyStatementDrawer({
       onRequestClose={onClose}
     >
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        {/* Header with close button */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={onClose}
-            testID="view-empathy-close"
-            accessibilityLabel="Close"
-            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-          >
-            <X color={colors.textSecondary} size={24} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Scrollable content - entire drawer scrolls */}
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={true}
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoid}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
         >
-          <Text style={styles.title}>What you'll share</Text>
-          <Text style={styles.subtitle}>
-            This is what you'll share with {partnerName} to show you understand their perspective.
-          </Text>
-
-          {/* Empathy statement - styled subtly */}
-          <View style={styles.messageContainer}>
-            <Text style={styles.messageText}>{statement}</Text>
+          {/* Header with close button */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={onClose}
+              testID="view-empathy-close"
+              accessibilityLabel="Close"
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+            >
+              <X color={colors.textSecondary} size={24} />
+            </TouchableOpacity>
           </View>
 
-          {isRefining ? (
-            <View style={styles.refineComposer}>
-              <View style={styles.refineComposerHeader}>
-                <Text style={styles.refineComposerTitle}>How would you like to tweak this?</Text>
+          {/* Scrollable content - entire drawer scrolls */}
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={styles.title}>What you'll share</Text>
+            <Text style={styles.subtitle}>
+              This is what you'll share with {partnerName} to show you understand their perspective.
+            </Text>
+
+            {/* Empathy statement - styled subtly */}
+            <View style={styles.messageContainer}>
+              <Text style={styles.messageText}>{statement}</Text>
+            </View>
+
+            {isRefining ? (
+              <View style={styles.refineComposer}>
+                <View style={styles.refineComposerHeader}>
+                  <Text style={styles.refineComposerTitle}>How would you like to tweak this?</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIsRefining(false);
+                      setRefinementText('');
+                    }}
+                    accessibilityLabel="Close refinement"
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    testID="close-refine-composer"
+                  >
+                    <X color={colors.textSecondary} size={20} />
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  style={styles.refineInput}
+                  multiline
+                  placeholder="Tell the AI what to change or add..."
+                  placeholderTextColor={colors.textMuted}
+                  value={refinementText}
+                  onChangeText={setRefinementText}
+                  autoFocus
+                  onFocus={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+                  testID="refine-empathy-input"
+                />
                 <TouchableOpacity
-                  onPress={() => {
-                    setIsRefining(false);
-                    setRefinementText('');
-                  }}
-                  accessibilityLabel="Close refinement"
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  testID="close-refine-composer"
+                  style={[
+                    styles.sendRefineButton,
+                    !refinementText.trim() && styles.sendRefineButtonDisabled,
+                  ]}
+                  onPress={handleSendRefinement}
+                  disabled={!refinementText.trim()}
+                  activeOpacity={0.8}
+                  testID="send-refine-empathy-button"
                 >
-                  <X color={colors.textSecondary} size={20} />
+                  <Send color={refinementText.trim() ? 'white' : colors.textMuted} size={20} />
+                  <Text
+                    style={[
+                      styles.sendRefineButtonText,
+                      !refinementText.trim() && styles.sendRefineButtonTextDisabled,
+                    ]}
+                  >
+                    Send and update
+                  </Text>
                 </TouchableOpacity>
               </View>
-              <TextInput
-                style={styles.refineInput}
-                multiline
-                placeholder="Tell the AI what to change or add..."
-                placeholderTextColor={colors.textMuted}
-                value={refinementText}
-                onChangeText={setRefinementText}
-                testID="refine-empathy-input"
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendRefineButton,
-                  !refinementText.trim() && styles.sendRefineButtonDisabled,
-                ]}
-                onPress={handleSendRefinement}
-                disabled={!refinementText.trim()}
-                activeOpacity={0.8}
-                testID="send-refine-empathy-button"
-              >
-                <Send color={refinementText.trim() ? 'white' : colors.textMuted} size={20} />
-                <Text
-                  style={[
-                    styles.sendRefineButtonText,
-                    !refinementText.trim() && styles.sendRefineButtonTextDisabled,
-                  ]}
+            ) : (
+              <View style={styles.footer}>
+                <TouchableOpacity
+                  style={styles.refineButton}
+                  onPress={() => setIsRefining(true)}
+                  testID="refine-empathy-button"
+                  activeOpacity={0.8}
                 >
-                  Send and update
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.footer}>
-              <TouchableOpacity
-                style={styles.refineButton}
-                onPress={() => setIsRefining(true)}
-                testID="refine-empathy-button"
-                activeOpacity={0.8}
-              >
-                <MessageCircle color={colors.textSecondary} size={20} />
-                <Text style={styles.refineButtonText}>Refine further</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.shareButton}
-                onPress={onShare}
-                testID="share-empathy-button"
-                activeOpacity={0.8}
-              >
-                <Send color="white" size={20} />
-                <Text style={styles.shareButtonText}>Share</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </ScrollView>
+                  <MessageCircle color={colors.textSecondary} size={20} />
+                  <Text style={styles.refineButtonText}>Refine further</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.shareButton}
+                  onPress={onShare}
+                  testID="share-empathy-button"
+                  activeOpacity={0.8}
+                >
+                  <Send color="white" size={20} />
+                  <Text style={styles.shareButtonText}>Share</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
   );
@@ -164,6 +203,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bgPrimary,
+  },
+  keyboardAvoid: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',

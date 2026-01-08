@@ -20,6 +20,8 @@ import {
   type MemoryIntentContext,
   type MemoryIntentResult,
 } from './memory-intent';
+import { detectMemoryIntent } from './memory-detector';
+import { validateMemory } from './memory-validator';
 import {
   assembleContextBundle,
   formatContextForPrompt,
@@ -45,6 +47,8 @@ import {
   estimateTokens,
   getRecommendedLimits,
 } from '../utils/token-budget';
+import { publishSessionEvent } from './realtime';
+import { memoryService } from './memory-service';
 
 // ============================================================================
 // Types
@@ -174,10 +178,77 @@ export async function orchestrateResponse(
     emotionalIntensity: context.emotionalIntensity,
     turnCount: context.turnCount,
   });
-  
+
   if (decisionTime > 1000) {
     console.warn(`[AI Orchestrator] Decision layer took ${decisionTime}ms (>1s) - consider optimization`);
   }
+
+  // Non-blocking Memory Detection (Universal)
+  // We fire this off without awaiting it so it doesn't slow down the main response
+  detectMemoryIntent(context.userMessage, context.sessionId, turnId, 'partner-session')
+    .then(async (result) => {
+      if (result.hasMemoryIntent && result.suggestions.length > 0) {
+        // Validate each suggestion
+        result.suggestions.forEach(async suggestion => {
+          const validation = validateMemory(suggestion.suggestedContent, suggestion.category);
+
+          if (validation.valid) {
+            auditLog('MEMORY_DETECTION', 'Memory suggestion detected', {
+              turnId,
+              sessionId: context.sessionId,
+              content: suggestion.suggestedContent,
+              category: suggestion.category,
+              scope: suggestion.scope,
+              confidence: suggestion.confidence,
+              evidence: suggestion.evidence,
+              validation: 'valid'
+            });
+
+            // Persist as PENDING immediately
+            const memory = await memoryService.createPendingMemory({
+              userId: context.userId,
+              sessionId: context.sessionId,
+              content: suggestion.suggestedContent,
+              category: suggestion.category,
+              suggestedBy: `AI Confidence: ${suggestion.confidence} | Evidence: ${suggestion.evidence} | Scope: ${suggestion.scope}`
+            });
+
+            // BROADCAST TO APP with DB ID
+            publishSessionEvent(
+              context.sessionId,
+              'memory.suggested',
+              {
+                suggestion: {
+                  id: memory.id,
+                  content: suggestion.suggestedContent,
+                  category: suggestion.category,
+                  scope: suggestion.scope,
+                  confidence: suggestion.confidence,
+                  validation: 'valid' // UI needs to know it's valid
+                }
+              }
+            ).catch(err => console.warn('[AI Orchestrator] Failed to broadcast memory event:', err));
+
+          } else {
+            // Log rejected suggestions so the UI can inform the user why
+            auditLog('MEMORY_DETECTION', 'Memory suggestion rejected', {
+              turnId,
+              sessionId: context.sessionId,
+              content: suggestion.suggestedContent,
+              category: suggestion.category,
+              scope: suggestion.scope,
+              confidence: suggestion.confidence,
+              evidence: suggestion.evidence,
+              validation: 'invalid',
+              rejectionReason: validation.reason
+            });
+          }
+        });
+      }
+    })
+    .catch(err => {
+      console.warn('[AI Orchestrator] Background memory detection failed:', err);
+    });
 
   // Step 2: Assemble context bundle
   const contextBundle = await assembleContextBundle(
@@ -190,6 +261,7 @@ export async function orchestrateResponse(
     `[AI Orchestrator] Context assembled: ${contextBundle.conversationContext.turnCount} turns`
   );
   auditLog('RETRIEVAL', 'Context bundle assembled', {
+    turnId,
     sessionId: context.sessionId,
     stage: context.stage,
     turnCount: contextBundle.conversationContext.turnCount,
@@ -302,7 +374,7 @@ export async function orchestrateResponse(
   // Add caution flag for high emotional intensity (8-9) - allows Sonnet to use memory
   // if it helps de-escalate, but warns to be extra careful
   const cautionAdvised = context.emotionalIntensity >= 8 && context.emotionalIntensity < 9;
-  
+
   const systemPrompt = buildStagePrompt(
     context.stage,
     {
@@ -400,6 +472,7 @@ export async function orchestrateResponse(
   let offerReadyToShare = false;
   let invitationMessage: string | null = null;
   let proposedEmpathyStatement: string | null = null;
+  let analysis: string | undefined;
 
   // Determine if we should expect structured JSON output
   // All stages use structured JSON format in their prompts
@@ -407,11 +480,12 @@ export async function orchestrateResponse(
 
   // Time to First Byte (Sonnet response generation)
   const sonnetStartTime = Date.now();
+  let sonnetResponse: string | null = null;
 
   try {
     // Note: Extended thinking is not supported by Claude 3.5 Sonnet v2 on Bedrock
     // Disabling thinkingBudget for now to ensure real AI responses
-    const sonnetResponse = await getSonnetResponse({
+    sonnetResponse = await getSonnetResponse({
       systemPrompt,
       messages: messagesWithContext,
       maxTokens: 4096,
@@ -420,7 +494,7 @@ export async function orchestrateResponse(
       turnId,
       // thinkingBudget: 1024, // Disabled - not supported on Bedrock Sonnet v2
     });
-    
+
     const sonnetTime = Date.now() - sonnetStartTime;
     console.log(`[AI Orchestrator] Sonnet response generated in ${sonnetTime}ms [Time to First Byte]`);
     auditLog('RESPONSE', 'Sonnet response generated', {
@@ -430,6 +504,7 @@ export async function orchestrateResponse(
       stage: context.stage,
       responseLength: sonnetResponse?.length || 0,
       responsePreview: sonnetResponse?.substring(0, 300) || '',
+      responseText: sonnetResponse || '',
     });
 
     if (sonnetResponse) {
@@ -446,6 +521,7 @@ export async function orchestrateResponse(
         offerReadyToShare = parsed.offerReadyToShare ?? false;
         invitationMessage = parsed.invitationMessage ?? null;
         proposedEmpathyStatement = parsed.proposedEmpathyStatement ?? null;
+        analysis = parsed.analysis;
 
         // Debug logging for Stage 2 readiness signal
         if (context.stage === 2) {
@@ -484,13 +560,14 @@ export async function orchestrateResponse(
     usedMock,
     totalDuration,
     responseLength: response.length,
-    responseText: response.substring(0, 500) + (response.length > 500 ? '...' : ''),
+    responseText: sonnetResponse || response, // Use raw full text if available so dashboard can parse structure
     offerFeelHeardCheck,
     offerReadyToShare,
-    hasInvitationMessage: !!invitationMessage,
-    hasEmpathyStatement: !!proposedEmpathyStatement,
+    invitationMessage, // Include actual values, not just booleans
+    proposedEmpathyStatement,
+    analysis,
   });
-  
+
   // Log latency breakdown for monitoring
   if (totalDuration > 3000) {
     console.warn(`[AI Orchestrator] Slow response: ${totalDuration}ms total (Decision: ${decisionTime}ms)`);
@@ -572,13 +649,18 @@ interface ParsedStructuredResponse {
  * Uses the robust extractJsonFromResponse utility.
  */
 function parseStructuredResponse(rawResponse: string): ParsedStructuredResponse {
+  // Extract external <analysis> tags first (as they are outside the JSON)
+  const analysisMatch = rawResponse.match(/<analysis>([\s\S]*?)<\/analysis>/i);
+  const externalAnalysis = analysisMatch ? analysisMatch[1].trim() : undefined;
+
   try {
     const parsed = extractJsonFromResponse(rawResponse) as Record<string, unknown>;
 
     // Validate we have a response field
     if (typeof parsed.response !== 'string') {
       console.warn('[AI Orchestrator] Parsed JSON missing response field, attempting direct extraction');
-      return extractResponseFallback(rawResponse);
+      const fallback = extractResponseFallback(rawResponse);
+      return { ...fallback, analysis: externalAnalysis };
     }
 
     return {
@@ -591,12 +673,13 @@ function parseStructuredResponse(rawResponse: string): ParsedStructuredResponse 
       proposedEmpathyStatement: typeof parsed.proposedEmpathyStatement === 'string' && parsed.proposedEmpathyStatement !== 'null'
         ? parsed.proposedEmpathyStatement
         : null,
-      analysis: typeof parsed.analysis === 'string' ? parsed.analysis : undefined,
+      analysis: typeof parsed.analysis === 'string' ? parsed.analysis : externalAnalysis,
     };
   } catch (error) {
     // Fallback: try direct extraction methods
     console.log('[AI Orchestrator] JSON extraction failed, trying fallback:', error);
-    return extractResponseFallback(rawResponse);
+    const fallback = extractResponseFallback(rawResponse);
+    return { ...fallback, analysis: externalAnalysis };
   }
 }
 

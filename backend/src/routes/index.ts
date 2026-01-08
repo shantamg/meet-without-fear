@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import auditRoutes from './audit';
 import authRoutes from './auth';
 import chatRoutes from './chat';
 import consentRoutes from './consent';
@@ -22,11 +23,12 @@ import stage4Routes from './stage4';
 const router = Router();
 
 // Mount all route modules
+router.use('/audit', auditRoutes);
 router.use('/auth', authRoutes);
 router.use(chatRoutes); // Unified chat router
 router.use(invitationsRoutes); // Must be before innerWorkRoutes (has public endpoints)
 router.use(innerThoughtsRoutes); // Inner Thoughts (solo self-reflection, optionally linked to partner sessions)
-router.use(memoriesRoutes); // Things to Always Remember
+router.use('/memories', memoriesRoutes); // Things to Always Remember
 router.use('/needs', needsAssessmentRoutes); // Inner Work: Needs Assessment
 router.use('/gratitude', gratitudeRoutes); // Inner Work: Gratitude Practice
 router.use('/meditation', meditationRoutes); // Inner Work: Meditation

@@ -203,6 +203,8 @@ export async function extractNeedsFromConversation(
         },
       ],
       maxTokens: MAX_TOKENS,
+      sessionId,
+      operation: 'extract-needs',
     });
 
     if (!response) {
@@ -307,6 +309,8 @@ export async function findCommonGround(
         },
       ],
       maxTokens: MAX_TOKENS,
+      sessionId,
+      operation: 'common-ground',
     });
 
     if (!response) {

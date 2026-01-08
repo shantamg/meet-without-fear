@@ -1,10 +1,11 @@
-export type AuditSection = 
+export type AuditSection =
   | 'USER'        // User message received
   | 'INTENT'      // The brain's decision
   | 'RETRIEVAL'   // Memory access
   | 'PROMPT'      // Context assembly
   | 'RESPONSE'    // AI Output
   | 'COST'        // Financial impact
+  | 'MEMORY_DETECTION' // Memory suggestions from user input
   | 'ERROR';      // Failures
 
 export interface AuditLogEntry {
@@ -19,4 +20,6 @@ export interface AuditLogEntry {
   // COST: { model, inputTokens, outputTokens, totalCost }
   // RETRIEVAL: { queryCount, resultsFound }
   data?: Record<string, any>;
+  cost?: number;
+  sessionId?: string;
 }

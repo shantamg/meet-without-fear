@@ -39,26 +39,52 @@ const fileLogger = winston.createLogger({
   ],
 });
 
-export const auditLog = (section: AuditSection, message: string, data?: Record<string, any> & { turnId?: string }) => {
+import { prisma } from '../lib/prisma';
+
+export const auditLog = async (section: AuditSection, message: string, data?: Record<string, any> & { turnId?: string }) => {
   const turnId = data?.turnId;
   const dataWithoutTurnId = data ? { ...data } : undefined;
   if (dataWithoutTurnId && 'turnId' in dataWithoutTurnId) {
     delete dataWithoutTurnId.turnId;
   }
-  
+
+  // Ensure we don't pass undefined/null as data to Prisma (it expects Json or InputJsonValue)
+  // And strip undefined values which might cause issues in some environments
+  if (dataWithoutTurnId) {
+    Object.keys(dataWithoutTurnId).forEach(key => {
+      if (dataWithoutTurnId[key] === undefined) {
+        delete dataWithoutTurnId[key];
+      }
+    });
+  }
+
+  // Extract sessionId if available in data
+  const sessionId = data?.sessionId || data?.data?.sessionId;
+
+  // Extract cost if available in COST section
+  let cost: number | undefined;
+  if (section === 'COST' && data?.totalCost) {
+    cost = data.totalCost;
+  }
+
   const logEntry: AuditLogEntry = {
     timestamp: new Date().toISOString(),
     section,
     message,
     turnId,
     data: dataWithoutTurnId,
+    cost,
+    sessionId,
   };
 
-  // 1. Write to Disk (Sync/Fast)
+  if (process.env.NODE_ENV === 'development') {
+    // console.log('[AuditLogger] Processing log:', { section, message, sessionId, turnId, dataKeys: Object.keys(dataWithoutTurnId || {}) });
+  }
+
+  // 1. Write to Disk (Sync/Fast - via Winston which handles async internally)
   fileLogger.info({ message, section, ...data });
 
   // 2. Broadcast to Ably (Fire-and-Forget)
-  // We do NOT await this promise. We catch errors to prevent backend crashes.
   if (process.env.ENABLE_AUDIT_STREAM === 'true') {
     const ably = getAblyClient();
     if (ably) {
@@ -69,5 +95,36 @@ export const auditLog = (section: AuditSection, message: string, data?: Record<s
         }
       });
     }
+  }
+
+  // 3. Persist to Database (Fire-and-Forget)
+  try {
+    // We don't await the create to return immediately, but we catch errors
+    prisma.auditLog.create({
+      data: {
+        section,
+        message,
+        turnId,
+        sessionId,
+        data: dataWithoutTurnId || {},
+        cost,
+      },
+    }).catch((err) => {
+      console.error('[AuditLogger] DB persist failed:', err.message);
+      getAblyClient()?.channels.get('ai-audit-stream').publish('log', {
+        timestamp: new Date().toISOString(),
+        section: 'ERROR',
+        message: `DB Persist Failed: ${err.message}`,
+        data: { error: err.toString() }
+      }).catch(() => { });
+    });
+  } catch (err) {
+    console.error('[AuditLogger] Unexpected error during persist:', err);
+    getAblyClient()?.channels.get('ai-audit-stream').publish('log', {
+      timestamp: new Date().toISOString(),
+      section: 'ERROR',
+      message: `Unexpected Error: ${err instanceof Error ? err.message : String(err)}`,
+      data: { error: String(err) }
+    }).catch(() => { });
   }
 };

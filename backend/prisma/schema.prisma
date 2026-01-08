@@ -869,6 +869,7 @@ enum MemoryCategory {
 
 enum MemoryStatus {
   ACTIVE
+  PENDING
   REJECTED
 }
 
@@ -1133,4 +1134,23 @@ model MeditationPreferences {
   backgroundSound String  @default("silence")
   reminderEnabled Boolean @default(false)
   reminderTime    String? // HH:MM
+}
+
+// ============================================================================
+// Core System
+// ============================================================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  timestamp DateTime @default(now())
+  section   String   // AuditSection enum string
+  message   String   @db.Text
+  turnId    String?
+  sessionId String?
+  data      Json?
+  cost      Float?
+  
+  @@index([sessionId])
+  @@index([turnId])
+  @@index([timestamp])
 }

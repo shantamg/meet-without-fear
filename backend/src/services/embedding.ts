@@ -384,9 +384,10 @@ export async function findSimilarInnerWorkMessages(
   userId: string,
   queryText: string,
   limit: number = 5,
-  threshold: number = 0.6
+  threshold: number = 0.6,
+  sessionId?: string
 ): Promise<Array<{ messageId: string; sessionId: string; content: string; similarity: number }>> {
-  const queryEmbedding = await getEmbedding(queryText);
+  const queryEmbedding = await getEmbedding(queryText, { sessionId });
   if (!queryEmbedding) {
     return [];
   }
@@ -436,7 +437,7 @@ export async function findSimilarInnerThoughtsWithBoost(
   similarity: number;
   isLinked: boolean;
 }>> {
-  const queryEmbedding = await getEmbedding(queryText);
+  const queryEmbedding = await getEmbedding(queryText, { sessionId: linkedPartnerSessionId });
   if (!queryEmbedding) {
     return [];
   }

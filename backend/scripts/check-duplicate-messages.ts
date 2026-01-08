@@ -6,7 +6,7 @@ import { prisma } from '../src/lib/prisma';
 
 async function checkDuplicates() {
   const sessionId = process.argv[2];
-  
+
   if (!sessionId) {
     console.error('Usage: ts-node check-duplicate-messages.ts <sessionId>');
     console.error('Example: ts-node check-duplicate-messages.ts cmk374gnk000ipxf6pkm9z1z3');
@@ -37,7 +37,7 @@ async function checkDuplicates() {
 
   // Group messages by content and role
   const contentMap = new Map<string, typeof messages>();
-  
+
   for (const message of messages) {
     const key = `${message.role}:${message.content}`;
     if (!contentMap.has(key)) {
@@ -48,7 +48,7 @@ async function checkDuplicates() {
 
   // Find duplicates
   const duplicates: Array<{ content: string; role: string; messages: typeof messages }> = [];
-  
+
   for (const [key, msgs] of contentMap.entries()) {
     if (msgs.length > 1) {
       const [role, content] = key.split(':', 2);
@@ -61,7 +61,7 @@ async function checkDuplicates() {
     console.log('The duplicate is likely only in the React Query cache.');
   } else {
     console.log(`⚠️  Found ${duplicates.length} duplicate message(s):\n`);
-    
+
     for (const dup of duplicates) {
       console.log(`Content: "${dup.content.substring(0, 100)}${dup.content.length > 100 ? '...' : ''}"`);
       console.log(`Role: ${dup.role}`);
@@ -97,8 +97,7 @@ async function checkDuplicates() {
   await prisma.$disconnect();
 }
 
-checkDuplicates().catch((error) => {
+checkDuplicates().catch(error => {
   console.error('Error:', error);
   process.exit(1);
 });
-
