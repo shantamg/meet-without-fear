@@ -90,22 +90,11 @@ const RetrievalQuerySchema = z.discriminatedUnion('type', [
 export type RetrievalQuery = z.infer<typeof RetrievalQuerySchema>;
 
 /**
- * Memory suggestion from retrieval planner (optional)
- */
-const MemorySuggestionSchema = z.object({
-  suggestedContent: z.string(),
-  category: z.enum(['AI_NAME', 'LANGUAGE', 'COMMUNICATION', 'PERSONAL_INFO', 'RELATIONSHIP', 'PREFERENCE']),
-  confidence: z.enum(['high', 'medium', 'low']),
-  evidence: z.string(),
-});
-
-/**
  * Schema for the full retrieval plan
  */
 const RetrievalPlanSchema = z.object({
   queries: z.array(RetrievalQuerySchema),
   reasoning: z.string().optional(),
-  memorySuggestion: MemorySuggestionSchema.optional(),
 });
 
 export type RetrievalPlan = z.infer<typeof RetrievalPlanSchema>;
@@ -307,31 +296,12 @@ CRITICAL RULES:
 VALID QUERY TYPES FOR STAGE ${stage}:
 ${getValidQueryTypesForStage(stage)}
 
-MEMORY DETECTION (OPTIONAL):
-If the user is EXPLICITLY requesting something to be remembered long-term, include a memorySuggestion:
-- Direct requests: "Remember that...", "Always...", "From now on...", "I want you to..."
-- Preference changes: "Call me X" (explicit), "Use X pronouns" (explicit)
-- Communication style: "Keep responses brief" (explicit instruction)
-- AI name: "I'll call you X" (explicit naming)
-
-DO NOT include memorySuggestion for:
-- Emotional expressions: "I miss him", "I'm sad", "I feel..."
-- Casual mentions without explicit "remember" language
-- Temporary requests: "Can you...", "Could you..." (one-time only)
-
 OUTPUT SCHEMA:
 {
   "queries": [
     // Array of query objects matching the allowed types
   ],
-  "reasoning": "Brief explanation of why these queries are needed",
-  "memorySuggestion": {
-    // OPTIONAL: Only include if user explicitly wants something remembered long-term
-    "suggestedContent": "Remember that...",
-    "category": "AI_NAME|LANGUAGE|COMMUNICATION|PERSONAL_INFO|RELATIONSHIP|PREFERENCE",
-    "confidence": "high|medium|low",
-    "evidence": "What in the message suggests this"
-  }
+  "reasoning": "Brief explanation of why these queries are needed"
 }
 
 Example output:

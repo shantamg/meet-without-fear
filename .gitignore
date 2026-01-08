@@ -34,9 +34,6 @@ yarn-error.log*
 # Application logs
 logs/
 
-# Cache directories
-backend/cache/
-
 # Vercel
 .vercel
 

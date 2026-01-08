@@ -141,7 +141,7 @@ Note: This memory will apply globally to all sessions.`;
     }
 
     // Run through memory validator for double-check
-    const validationResult = validateMemory(response.content, category);
+    const validationResult = await validateMemory(response.content, category, { useAI: true });
     if (!validationResult.valid) {
       console.log(`${logPrefix} Validation failed: ${validationResult.reason}`);
       return {
@@ -271,7 +271,7 @@ Apply the requested changes while keeping the memory clear and concise.`;
       : originalCategory;
 
     // Run through memory validator for double-check
-    const validationResult = validateMemory(response.updatedContent, updatedCategory);
+    const validationResult = await validateMemory(response.updatedContent, updatedCategory, { useAI: true });
     if (!validationResult.valid) {
       console.log(`${logPrefix} Validation failed: ${validationResult.reason}`);
       return {

@@ -86,11 +86,47 @@ If asked "what stage am I in?" or "how does this work?", reference this naturall
 `;
 
 /**
- * Combined base content included in all stage prompts.
+ * Guidance for handling invalid memory requests
  */
-const BASE_SYSTEM_PROMPT = `${BASE_GUIDANCE}
+const INVALID_MEMORY_GUIDANCE = `
+HANDLING INVALID MEMORY REQUESTS:
+If the user has requested something to be remembered that conflicts with therapeutic values, you MUST address this in your response. Do NOT simply ignore it or honor the request anyway.
+
+When an invalidMemoryRequest is provided in your context:
+1. Acknowledge what they're asking for with empathy
+2. Gently explain why that specific approach won't work (use the rejectionReason provided)
+3. Offer an alternative that honors their underlying need while maintaining therapeutic integrity
+4. Be warm and non-judgmental - they may not realize why their request conflicts with the process
+
+Example: If they ask "always agree with me", you might say: "I hear that you want to feel supported and validated, and that's really important. The thing is, this process works best when we can explore different perspectives together - not because I'm taking sides, but because understanding each other's experience is what helps you both feel heard and find solutions that work for both of you. How can I support you in a way that feels validating while still honoring both perspectives?"
+
+CRITICAL: Never honor requests that would:
+- Request aggressive/adversarial behavior
+- Request bias or taking sides
+- Skip emotional processing
+- Contain negative partner characterizations
+- Undermine the therapeutic process
+
+Always address these requests therapeutically in your response, even if the request cannot be honored.
+`;
+
+/**
+ * Build base system prompt with optional invalid memory request context
+ */
+function buildBaseSystemPrompt(invalidMemoryRequest?: { requestedContent: string; rejectionReason: string }): string {
+  const invalidMemorySection = invalidMemoryRequest
+    ? `\n\n⚠️ INVALID REQUEST DETECTED:
+The user has requested: "${invalidMemoryRequest.requestedContent}"
+This conflicts with therapeutic values. Rejection reason: ${invalidMemoryRequest.rejectionReason}
+
+You MUST address this in your response. Acknowledge their request with empathy, explain why that specific approach won't work, and offer an alternative that honors their underlying need while maintaining therapeutic integrity. Be warm and non-judgmental.`
+    : '';
+
+  return `${BASE_GUIDANCE}
 ${MEMORY_GUIDANCE}
-${PROCESS_OVERVIEW}`;
+${INVALID_MEMORY_GUIDANCE}
+${PROCESS_OVERVIEW}${invalidMemorySection}`;
+}
 
 // ============================================================================
 // Types
@@ -114,6 +150,11 @@ export interface PromptContext {
   surfacingStyle?: SurfaceStyle;
   /** Caution flag: true when emotional intensity is 8-9 (high but not critical) */
   cautionAdvised?: boolean;
+  /** Invalid memory request detected - user tried to request something that conflicts with therapeutic values */
+  invalidMemoryRequest?: {
+    requestedContent: string;
+    rejectionReason: string;
+  };
 }
 
 /** Simplified context for initial message generation (no context bundle needed) */
@@ -138,9 +179,7 @@ function buildOnboardingPrompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a warm and helpful guide helping ${userName} understand how this process works.
 
-${BASE_GUIDANCE}
-
-${PROCESS_OVERVIEW}
+${buildBaseSystemPrompt(context.invalidMemoryRequest)}
 
 YOUR ROLE RIGHT NOW:
 The user is reviewing the Curiosity Compact - the commitments they're about to make before starting this process. Your job is to:
@@ -204,7 +243,7 @@ Help the user quickly articulate what's going on so we can craft a brief, compel
 
   return `You are Meet Without Fear, a Process Guardian helping ${context.userName} craft an invitation to ${partnerName} for a meaningful conversation.
 
-${BASE_GUIDANCE}
+${buildBaseSystemPrompt(context.invalidMemoryRequest)}
 
 ${goalSection}
 
@@ -280,7 +319,7 @@ function buildStage1Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Witness stage. Your job is to help ${context.userName} feel fully and deeply heard.
 
-${BASE_SYSTEM_PROMPT}
+${buildBaseSystemPrompt(context.invalidMemoryRequest)}
 
 YOU ARE CURRENTLY IN: WITNESS STAGE (Stage 1)
 Your focus: Help them feel genuinely understood before moving on.
@@ -420,7 +459,7 @@ ${context.isRefiningEmpathy ? 'The user just signaled they want to refine or adj
 
   return `You are Meet Without Fear, a Process Guardian in the Perspective Stretch stage. Your job is to help ${context.userName} build genuine empathy for ${partnerName}.
 
-${BASE_SYSTEM_PROMPT}
+${buildBaseSystemPrompt(context.invalidMemoryRequest)}
 
 YOU ARE CURRENTLY IN: PERSPECTIVE STRETCH (Stage 2)
 Your focus: Help them see ${partnerName}'s humanity without requiring agreement.
@@ -545,7 +584,7 @@ function buildStage3Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Need Mapping stage. Your job is to help ${context.userName} and ${partnerName} crystallize what they each actually need.
 
-${BASE_SYSTEM_PROMPT}
+${buildBaseSystemPrompt(context.invalidMemoryRequest)}
 
 YOU ARE CURRENTLY IN: NEED MAPPING (Stage 3)
 Your focus: Help them identify underlying needs, not surface-level wants or solutions.
@@ -630,7 +669,7 @@ function buildStage4Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Strategic Repair stage. Your job is to help ${context.userName} and ${partnerName} build a concrete path forward.
 
-${BASE_SYSTEM_PROMPT}
+${buildBaseSystemPrompt(context.invalidMemoryRequest)}
 
 YOU ARE CURRENTLY IN: STRATEGIC REPAIR (Stage 4)
 Your focus: Help them design small, testable experiments - not grand promises.
@@ -758,7 +797,7 @@ function buildStageTransitionPrompt(toStage: number, fromStage: number | undefin
 function buildInvitationToWitnessTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has just crafted and sent an invitation to ${partnerName}. Now it's time to help them explore their feelings more deeply while they wait.
 
-${BASE_SYSTEM_PROMPT}
+${buildBaseSystemPrompt(context.invalidMemoryRequest)}
 
 YOU ARE TRANSITIONING TO: WITNESS STAGE (Stage 1)
 Your focus: Help them feel deeply heard before anything else.
@@ -811,7 +850,7 @@ BOTH FIELDS ARE REQUIRED. The analysis will be stripped before delivery - only t
 function buildWitnessToPerspectiveTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has been sharing their experience and feeling heard. Now it's time to gently invite them to stretch toward understanding ${partnerName}'s perspective.
 
-${BASE_SYSTEM_PROMPT}
+${buildBaseSystemPrompt(context.invalidMemoryRequest)}
 
 YOU ARE TRANSITIONING TO: PERSPECTIVE STRETCH (Stage 2)
 Your focus: Help them see ${partnerName}'s humanity without requiring agreement.
@@ -864,7 +903,7 @@ BOTH FIELDS ARE REQUIRED. The analysis will be stripped before delivery - only t
 function buildPerspectiveToNeedsTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has been working on understanding ${partnerName}'s perspective. Now it's time to help them clarify what they each actually need.
 
-${BASE_SYSTEM_PROMPT}
+${buildBaseSystemPrompt(context.invalidMemoryRequest)}
 
 YOU ARE TRANSITIONING TO: NEED MAPPING (Stage 3)
 Your focus: Help them identify underlying needs, not surface-level wants or solutions.
@@ -917,7 +956,7 @@ BOTH FIELDS ARE REQUIRED. The analysis will be stripped before delivery - only t
 function buildNeedsToRepairTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has clarified their needs and understood ${partnerName}'s needs. Now it's time to explore what they can actually try together.
 
-${BASE_SYSTEM_PROMPT}
+${buildBaseSystemPrompt(context.invalidMemoryRequest)}
 
 YOU ARE TRANSITIONING TO: STRATEGIC REPAIR (Stage 4)
 Your focus: Help them design small, testable experiments - not grand promises.

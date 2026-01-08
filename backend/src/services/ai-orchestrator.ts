@@ -184,10 +184,115 @@ export async function orchestrateResponse(
     console.warn(`[AI Orchestrator] Decision layer took ${decisionTime}ms (>1s) - consider optimization`);
   }
 
-  // Memory detection is now handled by the retrieval planner (when depth === 'full')
-  // Only run background detection if we didn't get a memory suggestion from the planner
-  // This ensures we don't miss memory intents when depth is not 'full'
-  // Note: We'll handle this after retrieval planning completes
+  // Step 1.5: Memory Detection (synchronous, before response generation)
+  // Detect memory intents and validate them. If invalid, we'll pass the rejection reason
+  // to Sonnet so it can address the request therapeutically in the response.
+  const recentMessagesForMemory = context.conversationHistory.slice(-5);
+  let memoryDetectionResult: { suggestion?: MemorySuggestion; validation?: { valid: boolean; reason?: string } } | null = null;
+  
+  try {
+    const detectionResult = await detectMemoryIntent(
+      context.userMessage,
+      context.sessionId,
+      turnId,
+      'partner-session',
+      recentMessagesForMemory
+    );
+
+    if (detectionResult.hasMemoryIntent && detectionResult.suggestions.length > 0) {
+      // Validate the first suggestion (we'll handle multiple later if needed)
+      const suggestion = detectionResult.suggestions[0];
+      
+      // Run AI validation in background (non-blocking)
+      // Don't create/broadcast memory until AI validation completes
+      // This ensures we don't create invalid memories, but doesn't block the response
+      validateMemory(
+        suggestion.suggestedContent,
+        suggestion.category,
+        { sessionId: context.sessionId, turnId, useAI: true }
+      ).then(async (validation) => {
+        console.log('[AI Orchestrator] Memory validation result:', {
+          content: suggestion.suggestedContent,
+          category: suggestion.category,
+          valid: validation.valid,
+          reason: validation.reason,
+        });
+
+        if (validation.valid) {
+          auditLog('MEMORY_DETECTION', 'Memory suggestion detected', {
+            turnId,
+            sessionId: context.sessionId,
+            content: suggestion.suggestedContent,
+            category: suggestion.category,
+            confidence: suggestion.confidence,
+            evidence: suggestion.evidence,
+            validation: 'valid',
+          });
+
+          // Persist as PENDING (always global, no sessionId)
+          const memory = await memoryService.createPendingMemory({
+            userId: context.userId,
+            // sessionId omitted - memories are always global
+            content: suggestion.suggestedContent,
+            category: suggestion.category,
+            suggestedBy: `AI Confidence: ${suggestion.confidence} | Evidence: ${suggestion.evidence}`,
+          });
+
+          // BROADCAST TO APP with DB ID
+          await publishSessionEvent(
+            context.sessionId,
+            'memory.suggested',
+            {
+              suggestion: {
+                id: memory.id,
+                suggestedContent: suggestion.suggestedContent,
+                category: suggestion.category,
+                confidence: suggestion.confidence,
+                evidence: suggestion.evidence,
+                validation: 'valid',
+              },
+            }
+          );
+        } else {
+          // Invalid memory request - log it
+          auditLog('MEMORY_DETECTION', 'Memory suggestion rejected', {
+            turnId,
+            sessionId: context.sessionId,
+            content: suggestion.suggestedContent,
+            category: suggestion.category,
+            confidence: suggestion.confidence,
+            evidence: suggestion.evidence,
+            validation: 'invalid',
+            rejectionReason: validation.reason,
+          });
+          // Note: Response already sent, but no memory was created
+        }
+      }).catch((error) => {
+        console.warn('[AI Orchestrator] Memory validation failed:', error);
+        // If validation fails, don't create memory (safer to skip than create invalid)
+        auditLog('MEMORY_DETECTION', 'Memory suggestion skipped (validation error)', {
+          turnId,
+          sessionId: context.sessionId,
+          content: suggestion.suggestedContent,
+          category: suggestion.category,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      });
+
+      // Store suggestion for potential Sonnet response (if validation fails, we'll pass it)
+      // But don't create memory until validation completes
+      memoryDetectionResult = {
+        suggestion,
+        validation: {
+          valid: undefined as any, // Will be determined by background validation
+          reason: undefined,
+        },
+      };
+    }
+  } catch (error) {
+    console.warn('[AI Orchestrator] Memory detection failed:', error);
+    // Continue without memory detection - don't block the response
+  }
 
   // Step 2: Assemble context bundle
   const contextBundle = await assembleContextBundle(
@@ -274,9 +379,7 @@ export async function orchestrateResponse(
   );
 
   // Step 3: Plan retrieval (for full depth, use Haiku)
-  // This also includes optional memory detection
   let retrievalPlan: RetrievalPlan | undefined;
-  let memorySuggestionFromPlanner: MemorySuggestion | undefined;
   if (memoryIntent.depth === 'full') {
     try {
       retrievalPlan = await planRetrieval(
@@ -299,42 +402,6 @@ export async function orchestrateResponse(
           source: q.source,
         })),
       });
-
-      // Check for memory suggestion from retrieval planner
-      if (retrievalPlan.memorySuggestion) {
-        const validation = validateMemory(
-          retrievalPlan.memorySuggestion.suggestedContent,
-          retrievalPlan.memorySuggestion.category
-        );
-
-        if (validation.valid) {
-          memorySuggestionFromPlanner = {
-            suggestedContent: retrievalPlan.memorySuggestion.suggestedContent,
-            category: retrievalPlan.memorySuggestion.category,
-            confidence: retrievalPlan.memorySuggestion.confidence,
-            evidence: retrievalPlan.memorySuggestion.evidence,
-          };
-
-          auditLog('MEMORY_DETECTION', 'Memory suggestion detected (from retrieval planner)', {
-            turnId,
-            sessionId: context.sessionId,
-            content: memorySuggestionFromPlanner.suggestedContent,
-            category: memorySuggestionFromPlanner.category,
-            confidence: memorySuggestionFromPlanner.confidence,
-            evidence: memorySuggestionFromPlanner.evidence,
-            validation: 'valid',
-          });
-        } else {
-          auditLog('MEMORY_DETECTION', 'Memory suggestion rejected (from retrieval planner)', {
-            turnId,
-            sessionId: context.sessionId,
-            content: retrievalPlan.memorySuggestion.suggestedContent,
-            category: retrievalPlan.memorySuggestion.category,
-            validation: 'invalid',
-            rejectionReason: validation.reason,
-          });
-        }
-      }
     } catch (error) {
       console.warn('[AI Orchestrator] Retrieval planning failed, using mock plan:', error);
       retrievalPlan = getMockRetrievalPlan(context.stage, context.userId);
@@ -345,104 +412,6 @@ export async function orchestrateResponse(
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
-
-  // If we found a memory suggestion from the planner, handle it before generating response
-  if (memorySuggestionFromPlanner) {
-    try {
-      // Persist as PENDING immediately (always global, no sessionId)
-      const memory = await memoryService.createPendingMemory({
-        userId: context.userId,
-        // sessionId omitted - memories are always global
-        content: memorySuggestionFromPlanner.suggestedContent,
-        category: memorySuggestionFromPlanner.category,
-        suggestedBy: `AI Confidence: ${memorySuggestionFromPlanner.confidence} | Evidence: ${memorySuggestionFromPlanner.evidence}`
-      });
-
-      // BROADCAST TO APP with DB ID
-      await publishSessionEvent(
-        context.sessionId,
-        'memory.suggested',
-        {
-          suggestion: {
-            id: memory.id,
-            suggestedContent: memorySuggestionFromPlanner.suggestedContent,
-            category: memorySuggestionFromPlanner.category,
-            confidence: memorySuggestionFromPlanner.confidence,
-            evidence: memorySuggestionFromPlanner.evidence,
-            validation: 'valid' // UI needs to know it's valid
-          }
-        }
-      );
-    } catch (err) {
-      console.warn('[AI Orchestrator] Failed to handle memory suggestion:', err);
-    }
-  } else if (memoryIntent.depth !== 'full') {
-    // If we didn't get a memory suggestion from the planner and depth is not 'full',
-    // run background memory detection as fallback (non-blocking)
-    const recentMessagesForMemory = context.conversationHistory.slice(-5);
-    detectMemoryIntent(context.userMessage, context.sessionId, turnId, 'partner-session', recentMessagesForMemory)
-      .then(async (result) => {
-        if (result.hasMemoryIntent && result.suggestions.length > 0) {
-          // Validate each suggestion
-          result.suggestions.forEach(async suggestion => {
-            const validation = validateMemory(suggestion.suggestedContent, suggestion.category);
-
-            if (validation.valid) {
-              auditLog('MEMORY_DETECTION', 'Memory suggestion detected (background fallback)', {
-                turnId,
-                sessionId: context.sessionId,
-                content: suggestion.suggestedContent,
-                category: suggestion.category,
-                confidence: suggestion.confidence,
-                evidence: suggestion.evidence,
-                validation: 'valid'
-              });
-
-              // Persist as PENDING immediately (always global, no sessionId)
-              const memory = await memoryService.createPendingMemory({
-                userId: context.userId,
-                // sessionId omitted - memories are always global
-                content: suggestion.suggestedContent,
-                category: suggestion.category,
-                suggestedBy: `AI Confidence: ${suggestion.confidence} | Evidence: ${suggestion.evidence}`
-              });
-
-              // BROADCAST TO APP with DB ID
-              publishSessionEvent(
-                context.sessionId,
-                'memory.suggested',
-                {
-                  suggestion: {
-                    id: memory.id,
-                    suggestedContent: suggestion.suggestedContent,
-                    category: suggestion.category,
-                    confidence: suggestion.confidence,
-                    evidence: suggestion.evidence,
-                    validation: 'valid' // UI needs to know it's valid
-                  }
-                }
-              ).catch(err => console.warn('[AI Orchestrator] Failed to broadcast memory event:', err));
-
-            } else {
-              // Log rejected suggestions so the UI can inform the user why
-              auditLog('MEMORY_DETECTION', 'Memory suggestion rejected (background fallback)', {
-                turnId,
-                sessionId: context.sessionId,
-                content: suggestion.suggestedContent,
-                category: suggestion.category,
-                confidence: suggestion.confidence,
-                evidence: suggestion.evidence,
-                validation: 'invalid',
-                rejectionReason: validation.reason
-              });
-            }
-          });
-        }
-      })
-      .catch(err => {
-        console.warn('[AI Orchestrator] Background memory detection failed:', err);
-      });
   }
 
   // Step 4: Build the stage-specific prompt
@@ -464,6 +433,12 @@ export async function orchestrateResponse(
       isRefiningEmpathy: context.isRefiningEmpathy,
       surfacingStyle: surfacingDecision.style,
       cautionAdvised,
+      invalidMemoryRequest: memoryDetectionResult?.validation && !memoryDetectionResult.validation.valid && memoryDetectionResult.suggestion
+        ? {
+            requestedContent: memoryDetectionResult.suggestion.suggestedContent,
+            rejectionReason: memoryDetectionResult.validation.reason || 'This request conflicts with our therapeutic approach.',
+          }
+        : undefined,
     },
     {
       isInvitationPhase: context.isInvitationPhase,
