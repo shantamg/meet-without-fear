@@ -9,7 +9,7 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stage, MessageRole, StrategyPhase, SessionStatus } from '@meet-without-fear/shared';
+import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
@@ -202,8 +202,11 @@ export function UnifiedSessionScreen({
     onSessionEvent: (event, data) => {
       if (event === 'memory.suggested' && data) {
         // Handle incoming memory suggestion from Ably
-        console.log('[UnifiedSessionScreen] Received memory suggestion:', data);
-        setMemorySuggestion(data as any);
+        const eventData = data as { suggestion?: MemorySuggestion };
+        if (eventData.suggestion) {
+          console.log('[UnifiedSessionScreen] Received memory suggestion:', eventData.suggestion);
+          setMemorySuggestion(eventData.suggestion);
+        }
       }
     },
   });
@@ -1316,7 +1319,6 @@ export function UnifiedSessionScreen({
         {memorySuggestion && (
           <MemorySuggestionCard
             suggestion={memorySuggestion}
-            sessionId={sessionId}
             onDismiss={clearMemorySuggestion}
             onApproved={() => {
               // Optional: could show a toast here for feedback

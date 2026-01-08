@@ -21,7 +21,6 @@ interface HaikuDetectionResponse {
   suggestions: Array<{
     suggestedContent: string;
     category: string;
-    scope: string;
     confidence: string;
     evidence: string;
   }>;
@@ -35,20 +34,46 @@ interface HaikuDetectionResponse {
 /**
  * Build the detection prompt for Haiku
  */
-function buildDetectionPrompt(message: string): string {
-  return `Analyze this message for implicit memory requests - things the user wants remembered.
+function buildDetectionPrompt(
+  message: string,
+  recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>,
+): string {
+  let contextSection = '';
 
-DETECT PATTERNS:
+  if (recentMessages && recentMessages.length > 0) {
+    // Include last 3-5 messages for context (enough to resolve pronouns and references)
+    const contextMessages = recentMessages.slice(-5);
+    contextSection = '\n\nRECENT CONVERSATION CONTEXT:\n';
+    contextMessages.forEach(msg => {
+      const roleLabel = msg.role === 'user' ? 'User' : 'AI';
+      contextSection += `${roleLabel}: ${escapeForPrompt(msg.content)}\n`;
+    });
+    contextSection += '\nUse this context to resolve pronouns and references.';
+  }
+
+  return `Analyze this message for explicit memory requests - things the user wants remembered LONG-TERM.
+
+ONLY DETECT if the user is EXPLICITLY requesting something to be remembered or changed long-term:
+- Direct requests: "Remember that...", "Always...", "From now on...", "I want you to..."
+- Preference changes: "Call me X" (not just mentioning a name), "Use X pronouns" (explicit request)
+- Communication style: "Keep responses brief" (explicit instruction, not just expressing a feeling)
+- AI name: "I'll call you X" (explicit naming)
+
+DO NOT DETECT:
+- Emotional expressions: "I miss him", "I'm sad", "I feel..."
+- Casual mentions: Just mentioning a name or fact without requesting it be remembered
+- Temporary requests: "Can you...", "Could you..." (one-time requests, not long-term)
+- Relationship facts mentioned in passing without explicit "remember" language
+
+CATEGORIES (only when explicit memory intent detected):
 - AI_NAME: "I'll call you X", "Can I call you Y"
-- LANGUAGE: Message in different language than conversation
-- COMMUNICATION: "Shorter responses", "more casual", "be direct"
-- PERSONAL_INFO: "Call me X", "I use X pronouns"
-- RELATIONSHIP: "My partner's name is X", relationship facts
-- PREFERENCE: "Don't use analogies", "Give examples"
+- LANGUAGE: Explicit language preference requests
+- COMMUNICATION: Explicit style instructions ("Keep responses brief", "Be more casual")
+- PERSONAL_INFO: Explicit personal info requests ("Call me X", "I use X pronouns")
+- RELATIONSHIP: Explicit relationship fact requests ("Remember that my partner's name is X")
+- PREFERENCE: Explicit preference requests ("Don't use analogies", "Give examples")
 
-SCOPE:
-- global: Style, name, language, personal info, communication
-- session: Relationship facts, partner details
+IMPORTANT: Use conversation context to resolve pronouns and references. Create specific, concrete memories rather than vague placeholders. Only detect if there's clear intent to remember something long-term.${contextSection}
 
 User message: "${escapeForPrompt(message)}"
 
@@ -59,7 +84,6 @@ OUTPUT JSON only (no markdown):
     {
       "suggestedContent": "Remember to...",
       "category": "AI_NAME|LANGUAGE|COMMUNICATION|PERSONAL_INFO|RELATIONSHIP|PREFERENCE",
-      "scope": "global|session",
       "confidence": "high|medium|low",
       "evidence": "What in the message suggests this"
     }
@@ -88,7 +112,6 @@ const VALID_CATEGORIES: MemoryCategory[] = [
   'PREFERENCE',
 ];
 
-const VALID_SCOPES = ['global', 'session'] as const;
 const VALID_CONFIDENCES = ['high', 'medium', 'low'] as const;
 
 /**
@@ -103,23 +126,11 @@ function normalizeCategory(category: string): MemoryCategory | null {
 }
 
 /**
- * Validate and normalize scope
- */
-function normalizeScope(scope: string): 'global' | 'session' {
-  const lower = scope.toLowerCase();
-  if (VALID_SCOPES.includes(lower as typeof VALID_SCOPES[number])) {
-    return lower as 'global' | 'session';
-  }
-  // Default to global for unknown scopes
-  return 'global';
-}
-
-/**
  * Validate and normalize confidence
  */
 function normalizeConfidence(confidence: string): 'high' | 'medium' | 'low' {
   const lower = confidence.toLowerCase();
-  if (VALID_CONFIDENCES.includes(lower as typeof VALID_CONFIDENCES[number])) {
+  if (VALID_CONFIDENCES.includes(lower as (typeof VALID_CONFIDENCES)[number])) {
     return lower as 'high' | 'medium' | 'low';
   }
   // Default to medium for unknown confidence
@@ -135,14 +146,17 @@ function normalizeConfidence(confidence: string): 'high' | 'medium' | 'low' {
  *
  * @param message - The user's message to analyze
  * @param sessionId - Optional session ID for context (not used in current implementation)
+ * @param turnId - Optional turn ID for logging
  * @param context - Optional context label for logging (e.g., 'partner-session', 'inner-thoughts')
+ * @param recentMessages - Optional recent conversation history to provide context for resolving pronouns and references
  * @returns Detection result with any memory suggestions found
  */
 export async function detectMemoryIntent(
   message: string,
   sessionId?: string,
   turnId?: string,
-  context: string = 'unknown'
+  context: string = 'unknown',
+  recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>,
 ): Promise<MemoryDetectionResult> {
   const logPrefix = `[Memory Detector][${context}]`;
 
@@ -156,12 +170,15 @@ export async function detectMemoryIntent(
     };
   }
 
-  console.log(`${logPrefix} Starting detection for message (${message.length} chars): "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`);
+  const contextInfo = recentMessages ? ` with ${recentMessages.length} recent messages for context` : '';
+  console.log(
+    `${logPrefix} Starting detection for message (${message.length} chars)${contextInfo}: "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`,
+  );
 
   const systemPrompt = `You are a memory detection assistant. Analyze messages for implicit memory requests.
-Output only valid JSON with no markdown formatting or extra text.`;
+Use conversation context to resolve pronouns and references. Output only valid JSON with no markdown formatting or extra text.`;
 
-  const userPrompt = buildDetectionPrompt(message);
+  const userPrompt = buildDetectionPrompt(message, recentMessages);
 
   console.log(`${logPrefix} Sending to Haiku...`);
 
@@ -196,7 +213,6 @@ Output only valid JSON with no markdown formatting or extra text.`;
         category: s.category,
         content: s.suggestedContent,
         confidence: s.confidence,
-        scope: s.scope,
       })),
       topicContext: result.topicContext,
     });
@@ -217,7 +233,7 @@ Output only valid JSON with no markdown formatting or extra text.`;
  */
 function normalizeDetectionResult(raw: HaikuDetectionResponse): MemoryDetectionResult {
   const validSuggestions = (raw.suggestions || [])
-    .map((suggestion) => {
+    .map(suggestion => {
       const category = normalizeCategory(suggestion.category);
       if (!category) {
         console.warn('[Memory Detector] Invalid category:', suggestion.category);
@@ -227,7 +243,6 @@ function normalizeDetectionResult(raw: HaikuDetectionResponse): MemoryDetectionR
       return {
         suggestedContent: suggestion.suggestedContent || '',
         category,
-        scope: normalizeScope(suggestion.scope),
         confidence: normalizeConfidence(suggestion.confidence),
         evidence: suggestion.evidence || '',
       };
@@ -259,7 +274,6 @@ export function detectMemoryIntentMock(message: string): MemoryDetectionResult {
     suggestions.push({
       suggestedContent: `The user wants to call the AI "${callMeMatch[1]}"`,
       category: 'AI_NAME',
-      scope: 'global',
       confidence: 'high',
       evidence: callMeMatch[0],
     });
@@ -277,7 +291,6 @@ export function detectMemoryIntentMock(message: string): MemoryDetectionResult {
     suggestions.push({
       suggestedContent: `The user's name is ${nameMatch[1]}`,
       category: 'PERSONAL_INFO',
-      scope: 'global',
       confidence: 'high',
       evidence: nameMatch[0],
     });
@@ -289,7 +302,6 @@ export function detectMemoryIntentMock(message: string): MemoryDetectionResult {
     suggestions.push({
       suggestedContent: `The user uses ${pronounMatch[1]} pronouns`,
       category: 'PERSONAL_INFO',
-      scope: 'global',
       confidence: 'high',
       evidence: pronounMatch[0],
     });
@@ -309,7 +321,6 @@ export function detectMemoryIntentMock(message: string): MemoryDetectionResult {
       suggestions.push({
         suggestedContent: 'Keep responses brief and direct',
         category: 'COMMUNICATION',
-        scope: 'global',
         confidence: 'medium',
         evidence: match[0],
       });
@@ -319,14 +330,13 @@ export function detectMemoryIntentMock(message: string): MemoryDetectionResult {
 
   // RELATIONSHIP patterns - require explicit name introduction
   const partnerNameMatch = message.match(
-    /(?:my partner(?:'s name)?|my (?:husband|wife|spouse|boyfriend|girlfriend)(?:'s name)?)\s+(?:is\s+)?(?:named\s+)?["']?([A-Z][a-zA-Z]+)["']?/i
+    /(?:my partner(?:'s name)?|my (?:husband|wife|spouse|boyfriend|girlfriend)(?:'s name)?)\s+(?:is\s+)?(?:named\s+)?["']?([A-Z][a-zA-Z]+)["']?/i,
   );
   // Only match if we found a capitalized name (not just any word after "my partner")
   if (partnerNameMatch && partnerNameMatch[1]) {
     suggestions.push({
       suggestedContent: `The user's partner is named ${partnerNameMatch[1]}`,
       category: 'RELATIONSHIP',
-      scope: 'session',
       confidence: 'high',
       evidence: partnerNameMatch[0],
     });
@@ -345,7 +355,6 @@ export function detectMemoryIntentMock(message: string): MemoryDetectionResult {
       suggestions.push({
         suggestedContent: content,
         category: 'PREFERENCE',
-        scope: 'global',
         confidence: 'medium',
         evidence: match[0],
       });

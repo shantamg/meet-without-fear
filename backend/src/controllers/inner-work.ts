@@ -660,7 +660,9 @@ export const sendInnerWorkMessage = asyncHandler(
     if (totalTurnCount >= 2) {
       console.log(`[Inner Thoughts] Running memory detection (turn ${totalTurnCount})`);
       try {
-        const memoryResult = await detectMemoryIntent(content, sessionId, 'inner-thoughts');
+        // Include recent conversation history for context (last 5 messages to resolve pronouns/references)
+        const recentMessagesForMemory = history.slice(-5);
+        const memoryResult = await detectMemoryIntent(content, sessionId, undefined, 'inner-thoughts', recentMessagesForMemory);
         if (memoryResult.hasMemoryIntent && memoryResult.suggestions.length > 0) {
           memorySuggestion = memoryResult.suggestions[0];
           console.log(`[Inner Thoughts] Memory suggestion detected:`, {

@@ -33,10 +33,6 @@ export interface UserMemoryDTO {
   category: MemoryCategory;
   status: MemoryStatus;
   source: MemorySource;
-  scope: 'global' | 'session';
-  sessionId?: string;
-  /** Partner name for display in session-scoped memories */
-  sessionPartnerName?: string;
   /** AI's original suggestion if user edited before approving */
   suggestedBy?: string;
   createdAt: string; // ISO 8601
@@ -53,8 +49,6 @@ export interface UserMemoryDTO {
 export interface CreateMemoryRequest {
   content: string;
   category: MemoryCategory;
-  /** Session ID for session-scoped memory; null/undefined = global */
-  sessionId?: string;
 }
 
 /**
@@ -73,9 +67,10 @@ export interface UpdateMemoryRequest {
  * AI-detected memory suggestion (in chat response metadata)
  */
 export interface MemorySuggestion {
+  /** ID of the pending memory in the database (if already created) */
+  id?: string;
   suggestedContent: string;
   category: MemoryCategory;
-  scope: 'global' | 'session';
   confidence: 'high' | 'medium' | 'low';
   /** What triggered this detection */
   evidence: string;
@@ -99,9 +94,10 @@ export interface MemoryDetectionResult {
  * Request to approve a memory suggestion
  */
 export interface ApproveMemoryRequest {
+  /** ID of the pending memory to approve (if available) */
+  id?: string;
   suggestedContent: string;
   category: MemoryCategory;
-  sessionId?: string;
   /** If user edited the suggestion before approving */
   editedContent?: string;
 }
@@ -110,6 +106,8 @@ export interface ApproveMemoryRequest {
  * Request to reject a memory suggestion
  */
 export interface RejectMemoryRequest {
+  /** ID of the pending memory to reject (if available) */
+  id?: string;
   suggestedContent: string;
   category: MemoryCategory;
 }
@@ -119,12 +117,10 @@ export interface RejectMemoryRequest {
 // ============================================================================
 
 /**
- * Response containing all user memories organized by scope
+ * Response containing all user memories
  */
 export interface ListMemoriesResponse {
-  global: UserMemoryDTO[];
-  /** Session-scoped memories keyed by sessionId */
-  session: Record<string, UserMemoryDTO[]>;
+  memories: UserMemoryDTO[];
 }
 
 // ============================================================================
@@ -138,8 +134,6 @@ export interface ListMemoriesResponse {
 export interface FormatMemoryRequest {
   /** Natural language input from user */
   userInput: string;
-  /** Optional session ID for session-scoped memories */
-  sessionId?: string;
 }
 
 /**
@@ -150,8 +144,6 @@ export interface FormattedMemorySuggestion {
   content: string;
   /** AI-determined category */
   category: MemoryCategory;
-  /** Scope based on content */
-  scope: 'global' | 'session';
   /** Why this category/format was chosen */
   reasoning: string;
 }
@@ -206,8 +198,6 @@ export interface ConfirmMemoryRequest {
   content: string;
   /** Category (from AI suggestion) */
   category: MemoryCategory;
-  /** Optional session ID */
-  sessionId?: string;
 }
 
 /**

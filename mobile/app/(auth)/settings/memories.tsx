@@ -20,6 +20,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Plus, Trash2, Edit3, X, Star, User, Check, MessageSquare } from 'lucide-react-native';
@@ -473,29 +474,15 @@ function EditMemoryModal({ visible, memory, onClose }: EditModalProps) {
 
 export default function MemoriesScreen() {
   const router = useRouter();
-  const { data: memories, isLoading } = useMemories();
+  const { data: memories, isLoading, refetch, isRefetching } = useMemories();
   const deleteMemory = useDeleteMemory();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingMemory, setEditingMemory] = useState<UserMemoryDTO | null>(null);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
-  // Group session memories by partner name
-  const sessionMemoriesByPartner = memories?.session
-    ? Object.entries(memories.session).reduce(
-        (acc, [sessionId, sessionMemories]) => {
-          sessionMemories.forEach((memory) => {
-            const partnerName = memory.sessionPartnerName || 'Unknown Partner';
-            if (!acc[partnerName]) {
-              acc[partnerName] = [];
-            }
-            acc[partnerName].push(memory);
-          });
-          return acc;
-        },
-        {} as Record<string, UserMemoryDTO[]>
-      )
-    : {};
+  // All memories are global now
+  const allMemories = memories?.memories ?? [];
 
   const handleRequestEdit = useCallback((memory: UserMemoryDTO) => {
     setEditingMemory(memory);
@@ -529,9 +516,7 @@ export default function MemoriesScreen() {
     [deleteMemory]
   );
 
-  const globalMemories = memories?.global ?? [];
-  const hasAnyMemories =
-    globalMemories.length > 0 || Object.keys(sessionMemoriesByPartner).length > 0;
+  const hasAnyMemories = allMemories.length > 0;
 
   // Render loading state
   if (isLoading) {
@@ -579,7 +564,17 @@ export default function MemoriesScreen() {
       />
 
       <View style={styles.container}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => refetch()}
+              tintColor={colors.accent}
+            />
+          }
+        >
           {!hasAnyMemories ? (
             // Empty state
             <View style={styles.emptyState}>
@@ -591,67 +586,23 @@ export default function MemoriesScreen() {
               </Text>
             </View>
           ) : (
-            <>
-              {/* Global Memories Section */}
-              {globalMemories.length > 0 && (
-                <View style={styles.section}>
-                  <View style={styles.sectionHeader}>
-                    <Star color={colors.accent} size={18} />
-                    <Text style={styles.sectionTitle}>Global Memories</Text>
-                  </View>
-                  <Text style={styles.sectionSubtitle}>
-                    These apply to all your sessions
-                  </Text>
-                  <View style={styles.memoryList}>
-                    {globalMemories.map((memory) => (
-                      <MemoryItem
-                        key={memory.id}
-                        memory={memory}
-                        onRequestEdit={handleRequestEdit}
-                        onDelete={handleDelete}
-                        swipeableRef={(ref) => {
-                          if (ref) {
-                            swipeableRefs.current.set(memory.id, ref);
-                          } else {
-                            swipeableRefs.current.delete(memory.id);
-                          }
-                        }}
-                      />
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              {/* Session Memories Sections */}
-              {Object.entries(sessionMemoriesByPartner).map(([partnerName, partnerMemories]) => (
-                <View key={partnerName} style={styles.section}>
-                  <View style={styles.sectionHeader}>
-                    <User color={colors.brandBlue} size={18} />
-                    <Text style={styles.sectionTitle}>{partnerName}</Text>
-                  </View>
-                  <Text style={styles.sectionSubtitle}>
-                    Specific to sessions with this partner
-                  </Text>
-                  <View style={styles.memoryList}>
-                    {partnerMemories.map((memory) => (
-                      <MemoryItem
-                        key={memory.id}
-                        memory={memory}
-                        onRequestEdit={handleRequestEdit}
-                        onDelete={handleDelete}
-                        swipeableRef={(ref) => {
-                          if (ref) {
-                            swipeableRefs.current.set(memory.id, ref);
-                          } else {
-                            swipeableRefs.current.delete(memory.id);
-                          }
-                        }}
-                      />
-                    ))}
-                  </View>
-                </View>
+            <View style={styles.memoryList}>
+              {allMemories.map((memory) => (
+                <MemoryItem
+                  key={memory.id}
+                  memory={memory}
+                  onRequestEdit={handleRequestEdit}
+                  onDelete={handleDelete}
+                  swipeableRef={(ref) => {
+                    if (ref) {
+                      swipeableRefs.current.set(memory.id, ref);
+                    } else {
+                      swipeableRefs.current.delete(memory.id);
+                    }
+                  }}
+                />
               ))}
-            </>
+            </View>
           )}
         </ScrollView>
 

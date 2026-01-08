@@ -5,19 +5,22 @@
  * Allows users to approve, edit, or dismiss memory suggestions.
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
-  TextInput,
   Animated,
   ActivityIndicator,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Star, Check, Edit3, X } from 'lucide-react-native';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
-import { useApproveMemory, useRejectMemory } from '../hooks/useMemories';
+import {
+  useApproveMemory,
+  useRejectMemory,
+} from '../hooks/useMemories';
 import type { MemorySuggestion } from '@meet-without-fear/shared';
 
 // ============================================================================
@@ -27,8 +30,6 @@ import type { MemorySuggestion } from '@meet-without-fear/shared';
 interface MemorySuggestionCardProps {
   /** The memory suggestion from AI analysis */
   suggestion: MemorySuggestion;
-  /** Session ID for session-scoped memories */
-  sessionId?: string;
   /** Callback when the card is dismissed */
   onDismiss: () => void;
   /** Callback when a memory is approved */
@@ -43,14 +44,12 @@ interface MemorySuggestionCardProps {
 
 export function MemorySuggestionCard({
   suggestion,
-  sessionId,
   onDismiss,
   onApproved,
   testID = 'memory-suggestion-card',
 }: MemorySuggestionCardProps) {
   const styles = useStyles();
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedContent, setEditedContent] = useState(suggestion.suggestedContent);
+  const router = useRouter();
 
   // Animation for smooth appearance
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -96,11 +95,9 @@ export function MemorySuggestionCard({
   const handleApprove = async () => {
     try {
       await approveMemory.mutateAsync({
+        id: suggestion.id, // Pass the pending memory ID if available
         suggestedContent: suggestion.suggestedContent,
         category: suggestion.category,
-        sessionId: suggestion.scope === 'session' ? sessionId : undefined,
-        editedContent:
-          editedContent !== suggestion.suggestedContent ? editedContent : undefined,
       });
       animateOut(() => {
         onApproved?.();
@@ -114,6 +111,7 @@ export function MemorySuggestionCard({
   const handleReject = async () => {
     try {
       await rejectMemory.mutateAsync({
+        id: suggestion.id, // Pass the pending memory ID if available
         suggestedContent: suggestion.suggestedContent,
         category: suggestion.category,
       });
@@ -124,12 +122,15 @@ export function MemorySuggestionCard({
   };
 
   const handleEdit = () => {
-    setIsEditing(true);
-  };
-
-  const handleCancelEdit = () => {
-    setEditedContent(suggestion.suggestedContent);
-    setIsEditing(false);
+    // Navigate to settings memories screen
+    // If the memory has an ID, we can pass it as a query param to auto-open edit
+    const params = suggestion.id ? { editId: suggestion.id } : undefined;
+    router.push({
+      pathname: '/settings/memories',
+      params,
+    });
+    // Dismiss the card since we're navigating away
+    onDismiss();
   };
 
   const getConfidenceLabel = (confidence: 'high' | 'medium' | 'low'): string => {
@@ -177,52 +178,10 @@ export function MemorySuggestionCard({
       </View>
 
       {/* Content */}
-      {isEditing ? (
-        <View style={styles.editContainer}>
-          <TextInput
-            style={styles.editInput}
-            value={editedContent}
-            onChangeText={setEditedContent}
-            multiline
-            autoFocus
-            placeholder="Edit memory..."
-            placeholderTextColor={colors.textMuted}
-            testID={`${testID}-edit-input`}
-          />
-          <View style={styles.editActions}>
-            <TouchableOpacity
-              style={styles.editCancelButton}
-              onPress={handleCancelEdit}
-              disabled={isLoading}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel editing"
-              testID={`${testID}-cancel-edit`}
-            >
-              <Text style={styles.editCancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.editSaveButton, isLoading && styles.buttonDisabled]}
-              onPress={handleApprove}
-              disabled={isLoading || !editedContent.trim()}
-              accessibilityRole="button"
-              accessibilityLabel="Save memory"
-              testID={`${testID}-save-edit`}
-            >
-              {approveMemory.isPending ? (
-                <ActivityIndicator size="small" color={colors.textOnAccent} />
-              ) : (
-                <Text style={styles.editSaveText}>Save</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      ) : (
-        <Text style={styles.contentText}>"{suggestion.suggestedContent}"</Text>
-      )}
+      <Text style={styles.contentText}>"{suggestion.suggestedContent}"</Text>
 
-      {/* Actions - only show when not editing */}
-      {!isEditing && (
-        <View style={styles.actions}>
+      {/* Actions */}
+      <View style={styles.actions}>
           <TouchableOpacity
             style={[styles.actionButton, styles.approveButton, isLoading && styles.buttonDisabled]}
             onPress={handleApprove}
@@ -271,7 +230,6 @@ export function MemorySuggestionCard({
             )}
           </TouchableOpacity>
         </View>
-      )}
     </Animated.View>
   );
 }
@@ -373,47 +331,6 @@ const useStyles = () =>
     },
     buttonDisabled: {
       opacity: 0.6,
-    },
-    // Edit mode styles
-    editContainer: {
-      marginBottom: t.spacing.md,
-    },
-    editInput: {
-      backgroundColor: t.colors.bgTertiary,
-      borderRadius: t.radius.sm,
-      padding: t.spacing.md,
-      fontSize: t.typography.fontSize.md,
-      color: t.colors.textPrimary,
-      minHeight: 60,
-      textAlignVertical: 'top',
-      marginBottom: t.spacing.md,
-    },
-    editActions: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      gap: t.spacing.sm,
-    },
-    editCancelButton: {
-      paddingVertical: t.spacing.sm,
-      paddingHorizontal: t.spacing.lg,
-    },
-    editCancelText: {
-      fontSize: t.typography.fontSize.sm,
-      color: t.colors.textSecondary,
-    },
-    editSaveButton: {
-      backgroundColor: colors.accent,
-      paddingVertical: t.spacing.sm,
-      paddingHorizontal: t.spacing.lg,
-      borderRadius: t.radius.sm,
-      minWidth: 70,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    editSaveText: {
-      fontSize: t.typography.fontSize.sm,
-      fontWeight: '600',
-      color: colors.textOnAccent,
     },
   }));
 

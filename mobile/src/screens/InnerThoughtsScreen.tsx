@@ -176,7 +176,6 @@ export function InnerThoughtsScreen({
         <View style={styles.memorySuggestionContainer}>
           <MemorySuggestionCard
             suggestion={memorySuggestion}
-            sessionId={undefined}  // Inner thoughts memories are global
             onDismiss={handleDismissMemorySuggestion}
             onApproved={handleDismissMemorySuggestion}
           />

@@ -48,12 +48,10 @@ function mapMemoryToDTO(
     category: string;
     status: string;
     source: string;
-    sessionId: string | null;
     suggestedBy: string | null;
     createdAt: Date;
     updatedAt: Date;
-  },
-  sessionPartnerName?: string
+  }
 ): UserMemoryDTO {
   return {
     id: memory.id,
@@ -61,9 +59,6 @@ function mapMemoryToDTO(
     category: memory.category as MemoryCategory,
     status: memory.status as 'ACTIVE' | 'REJECTED',
     source: memory.source as MemorySource,
-    scope: memory.sessionId ? 'session' : 'global',
-    sessionId: memory.sessionId || undefined,
-    sessionPartnerName,
     suggestedBy: memory.suggestedBy || undefined,
     createdAt: memory.createdAt.toISOString(),
     updatedAt: memory.updatedAt.toISOString(),
@@ -71,7 +66,7 @@ function mapMemoryToDTO(
 }
 
 /**
- * Get partner name for a session-scoped memory
+ * @deprecated No longer needed - memories are always global
  */
 async function getSessionPartnerName(
   sessionId: string,
@@ -108,50 +103,21 @@ export const listMemories = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const user = getUser(req);
 
-    // Fetch all active memories for the user
+    // Fetch all active memories for the user (only global memories)
     const memories = await prisma.userMemory.findMany({
       where: {
         userId: user.id,
         status: 'ACTIVE',
+        sessionId: null, // Only return global memories
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    // Separate global and session memories
-    const global: UserMemoryDTO[] = [];
-    const session: Record<string, UserMemoryDTO[]> = {};
-
-    // Get partner names for session-scoped memories
-    const sessionIds = new Set(
-      memories
-        .filter((m) => m.sessionId)
-        .map((m) => m.sessionId as string)
-    );
-
-    const partnerNames: Record<string, string | undefined> = {};
-    for (const sessionId of sessionIds) {
-      partnerNames[sessionId] = await getSessionPartnerName(sessionId, user.id);
-    }
-
-    for (const memory of memories) {
-      const dto = mapMemoryToDTO(
-        memory,
-        memory.sessionId ? partnerNames[memory.sessionId] : undefined
-      );
-
-      if (memory.sessionId) {
-        if (!session[memory.sessionId]) {
-          session[memory.sessionId] = [];
-        }
-        session[memory.sessionId].push(dto);
-      } else {
-        global.push(dto);
-      }
-    }
+    const memoryDTOs = memories.map(memory => mapMemoryToDTO(memory));
 
     const response: ApiResponse<ListMemoriesResponse> = {
       success: true,
-      data: { global, session },
+      data: { memories: memoryDTOs },
     };
 
     res.json(response);
@@ -181,43 +147,21 @@ export const createMemory = asyncHandler(
       throw new ValidationError(validationResult.reason || 'Memory validation failed');
     }
 
-    // If session-scoped, verify user has access to the session
-    if (body.sessionId) {
-      const session = await prisma.session.findFirst({
-        where: {
-          id: body.sessionId,
-          relationship: {
-            members: {
-              some: { userId: user.id },
-            },
-          },
-        },
-      });
-
-      if (!session) {
-        throw new ValidationError('Session not found or access denied');
-      }
-    }
-
-    // Create the memory
+    // Create the memory (always global)
     const memory = await prisma.userMemory.create({
       data: {
         userId: user.id,
         content: body.content.trim(),
         category: body.category,
-        sessionId: body.sessionId || null,
+        sessionId: null, // Memories are always global
         source: 'USER_CREATED',
         status: 'ACTIVE',
       },
     });
 
-    const partnerName = body.sessionId
-      ? await getSessionPartnerName(body.sessionId, user.id)
-      : undefined;
-
     const response: ApiResponse<{ memory: UserMemoryDTO }> = {
       success: true,
-      data: { memory: mapMemoryToDTO(memory, partnerName) },
+      data: { memory: mapMemoryToDTO(memory) },
     };
 
     res.status(201).json(response);
@@ -343,30 +287,12 @@ export const approveMemory = asyncHandler(
       throw new ValidationError(validationResult.reason || 'Memory validation failed');
     }
 
-    // If session-scoped, verify user has access
-    if (body.sessionId) {
-      const session = await prisma.session.findFirst({
-        where: {
-          id: body.sessionId,
-          relationship: {
-            members: {
-              some: { userId: user.id },
-            },
-          },
-        },
-      });
-
-      if (!session) {
-        throw new ValidationError('Session not found or access denied');
-      }
-    }
-
     // Check for duplicate content (prevent approving same suggestion twice)
     const existingDuplicate = await prisma.userMemory.findFirst({
       where: {
         userId: user.id,
         content: finalContent,
-        sessionId: body.sessionId || null,
+        sessionId: null, // Only check global memories
         status: 'ACTIVE',
       },
     });
@@ -375,26 +301,54 @@ export const approveMemory = asyncHandler(
       throw new ValidationError('A memory with this content already exists');
     }
 
-    // Create the approved memory
-    const memory = await prisma.userMemory.create({
-      data: {
-        userId: user.id,
-        content: finalContent,
-        category: body.category,
-        sessionId: body.sessionId || null,
-        source: wasEdited ? 'USER_EDITED' : 'USER_APPROVED',
-        suggestedBy: wasEdited ? body.suggestedContent : null,
-        status: 'ACTIVE',
-      },
-    });
+    let memory;
 
-    const partnerName = body.sessionId
-      ? await getSessionPartnerName(body.sessionId, user.id)
-      : undefined;
+    // If we have an ID, update the existing PENDING memory
+    if (body.id) {
+      // Verify the pending memory exists and belongs to the user
+      const pendingMemory = await prisma.userMemory.findFirst({
+        where: {
+          id: body.id,
+          userId: user.id,
+          status: 'PENDING',
+        },
+      });
+
+      if (!pendingMemory) {
+        throw new NotFoundError('Pending memory not found');
+      }
+
+      // Update the pending memory to ACTIVE (always global)
+      memory = await prisma.userMemory.update({
+        where: { id: body.id },
+        data: {
+          content: finalContent,
+          category: body.category,
+          status: 'ACTIVE',
+          source: wasEdited ? 'USER_EDITED' : 'USER_APPROVED',
+          suggestedBy: wasEdited ? body.suggestedContent : pendingMemory.suggestedBy,
+          sessionId: null, // Ensure it's global
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      // No ID provided - create a new memory (backward compatibility)
+      memory = await prisma.userMemory.create({
+        data: {
+          userId: user.id,
+          content: finalContent,
+          category: body.category,
+          sessionId: null, // Memories are always global
+          source: wasEdited ? 'USER_EDITED' : 'USER_APPROVED',
+          suggestedBy: wasEdited ? body.suggestedContent : null,
+          status: 'ACTIVE',
+        },
+      });
+    }
 
     const response: ApiResponse<{ memory: UserMemoryDTO }> = {
       success: true,
-      data: { memory: mapMemoryToDTO(memory, partnerName) },
+      data: { memory: mapMemoryToDTO(memory) },
     };
 
     res.status(201).json(response);
@@ -418,17 +372,39 @@ export const rejectMemory = asyncHandler(
       throw new ValidationError('Category is required');
     }
 
-    // Store rejection for analytics (helps improve AI suggestions)
-    // We create a rejected memory entry to track what users don't want
-    await prisma.userMemory.create({
-      data: {
-        userId: user.id,
-        content: body.suggestedContent.trim(),
-        category: body.category,
-        source: 'USER_APPROVED', // Will be marked as rejected
-        status: 'REJECTED',
-      },
-    });
+    // If we have an ID, update the existing PENDING memory to REJECTED
+    if (body.id) {
+      // Verify the pending memory exists and belongs to the user
+      const pendingMemory = await prisma.userMemory.findFirst({
+        where: {
+          id: body.id,
+          userId: user.id,
+          status: 'PENDING',
+        },
+      });
+
+      if (pendingMemory) {
+        // Update the pending memory to REJECTED
+        await prisma.userMemory.update({
+          where: { id: body.id },
+          data: {
+            status: 'REJECTED',
+            updatedAt: new Date(),
+          },
+        });
+      }
+    } else {
+      // No ID provided - create a rejected memory entry for analytics (backward compatibility)
+      await prisma.userMemory.create({
+        data: {
+          userId: user.id,
+          content: body.suggestedContent.trim(),
+          category: body.category,
+          source: 'USER_APPROVED',
+          status: 'REJECTED',
+        },
+      });
+    }
 
     const response: ApiResponse<{ rejected: boolean }> = {
       success: true,
@@ -453,26 +429,8 @@ export const formatMemory = asyncHandler(
       throw new ValidationError('User input is required');
     }
 
-    // If session-scoped, verify user has access
-    if (body.sessionId) {
-      const session = await prisma.session.findFirst({
-        where: {
-          id: body.sessionId,
-          relationship: {
-            members: {
-              some: { userId: user.id },
-            },
-          },
-        },
-      });
-
-      if (!session) {
-        throw new ValidationError('Session not found or access denied');
-      }
-    }
-
-    // Process through AI formatter
-    const result = await formatMemoryRequest(body.userInput, body.sessionId);
+    // Process through AI formatter (memories are always global)
+    const result = await formatMemoryRequest(body.userInput);
 
     const response: ApiResponse<FormatMemoryResponse> = {
       success: true,
@@ -506,30 +464,12 @@ export const confirmMemory = asyncHandler(
       throw new ValidationError(validationResult.reason || 'Memory validation failed');
     }
 
-    // If session-scoped, verify user has access
-    if (body.sessionId) {
-      const session = await prisma.session.findFirst({
-        where: {
-          id: body.sessionId,
-          relationship: {
-            members: {
-              some: { userId: user.id },
-            },
-          },
-        },
-      });
-
-      if (!session) {
-        throw new ValidationError('Session not found or access denied');
-      }
-    }
-
-    // Check for duplicate
+    // Check for duplicate (memories are always global)
     const existingDuplicate = await prisma.userMemory.findFirst({
       where: {
         userId: user.id,
         content: body.content.trim(),
-        sessionId: body.sessionId || null,
+        sessionId: null,
         status: 'ACTIVE',
       },
     });
@@ -538,25 +478,21 @@ export const confirmMemory = asyncHandler(
       throw new ValidationError('A memory with this content already exists');
     }
 
-    // Create the memory
+    // Create the memory (always global)
     const memory = await prisma.userMemory.create({
       data: {
         userId: user.id,
         content: body.content.trim(),
         category: body.category,
-        sessionId: body.sessionId || null,
+        sessionId: null,
         source: 'USER_CREATED',
         status: 'ACTIVE',
       },
     });
 
-    const partnerName = body.sessionId
-      ? await getSessionPartnerName(body.sessionId, user.id)
-      : undefined;
-
     const response: ApiResponse<{ memory: UserMemoryDTO }> = {
       success: true,
-      data: { memory: mapMemoryToDTO(memory, partnerName) },
+      data: { memory: mapMemoryToDTO(memory) },
     };
 
     res.status(201).json(response);

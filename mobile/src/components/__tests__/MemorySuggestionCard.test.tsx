@@ -21,9 +21,17 @@ const mockRejectMemory = {
   isPending: false,
 };
 
+const mockRouter = {
+  push: jest.fn(),
+};
+
 jest.mock('../../hooks/useMemories', () => ({
   useApproveMemory: () => mockApproveMemory,
   useRejectMemory: () => mockRejectMemory,
+}));
+
+jest.mock('expo-router', () => ({
+  useRouter: () => mockRouter,
 }));
 
 describe('MemorySuggestionCard', () => {
@@ -49,6 +57,7 @@ describe('MemorySuggestionCard', () => {
     mockRejectMemory.mutateAsync.mockResolvedValue({});
     mockApproveMemory.isPending = false;
     mockRejectMemory.isPending = false;
+    mockRouter.push.mockClear();
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -122,10 +131,10 @@ describe('MemorySuggestionCard', () => {
 
     await waitFor(() => {
       expect(mockApproveMemory.mutateAsync).toHaveBeenCalledWith({
+        id: undefined,
         suggestedContent: 'Keep responses brief and concise',
         category: 'COMMUNICATION',
         sessionId: undefined,
-        editedContent: undefined,
       });
     });
   });
@@ -137,84 +146,51 @@ describe('MemorySuggestionCard', () => {
 
     await waitFor(() => {
       expect(mockRejectMemory.mutateAsync).toHaveBeenCalledWith({
+        id: undefined,
         suggestedContent: 'Keep responses brief and concise',
         category: 'COMMUNICATION',
       });
     });
   });
 
-  it('shows edit input when edit button is pressed', () => {
-    renderWithProviders(<MemorySuggestionCard {...defaultProps} />);
+  it('navigates to settings when edit button is pressed', () => {
+    const mockOnDismiss = jest.fn();
+    renderWithProviders(
+      <MemorySuggestionCard {...defaultProps} onDismiss={mockOnDismiss} />
+    );
 
     fireEvent.press(screen.getByText('Edit'));
 
-    expect(screen.getByTestId('memory-suggestion-card-edit-input')).toBeTruthy();
-    expect(screen.getByText('Cancel')).toBeTruthy();
-    expect(screen.getByText('Save')).toBeTruthy();
-  });
-
-  it('hides action buttons when in edit mode', () => {
-    renderWithProviders(<MemorySuggestionCard {...defaultProps} />);
-
-    fireEvent.press(screen.getByText('Edit'));
-
-    expect(screen.queryByText('Approve')).toBeNull();
-    expect(screen.queryByText('Not now')).toBeNull();
-  });
-
-  it('cancels edit and returns to normal view', () => {
-    renderWithProviders(<MemorySuggestionCard {...defaultProps} />);
-
-    fireEvent.press(screen.getByText('Edit'));
-    fireEvent.press(screen.getByText('Cancel'));
-
-    expect(screen.getByText('Approve')).toBeTruthy();
-    expect(screen.queryByTestId('memory-suggestion-card-edit-input')).toBeNull();
-  });
-
-  it('saves edited content when save is pressed', async () => {
-    renderWithProviders(<MemorySuggestionCard {...defaultProps} />);
-
-    fireEvent.press(screen.getByText('Edit'));
-
-    const input = screen.getByTestId('memory-suggestion-card-edit-input');
-    fireEvent.changeText(input, 'Modified content');
-    fireEvent.press(screen.getByText('Save'));
-
-    await waitFor(() => {
-      expect(mockApproveMemory.mutateAsync).toHaveBeenCalledWith({
-        suggestedContent: 'Keep responses brief and concise',
-        category: 'COMMUNICATION',
-        sessionId: undefined,
-        editedContent: 'Modified content',
-      });
+    expect(mockRouter.push).toHaveBeenCalledWith({
+      pathname: '/settings/memories',
+      params: undefined,
     });
+    expect(mockOnDismiss).toHaveBeenCalled();
   });
 
-  it('passes sessionId for session-scoped memories', async () => {
-    const sessionScopedSuggestion: MemorySuggestion = {
+  it('navigates to settings with memory ID when edit button is pressed and suggestion has ID', () => {
+    const mockOnDismiss = jest.fn();
+    const suggestionWithId: MemorySuggestion = {
       ...mockSuggestion,
-      scope: 'session',
+      id: 'memory-123',
     };
     renderWithProviders(
       <MemorySuggestionCard
         {...defaultProps}
-        suggestion={sessionScopedSuggestion}
-        sessionId="session-123"
+        suggestion={suggestionWithId}
+        onDismiss={mockOnDismiss}
       />
     );
 
-    fireEvent.press(screen.getByText('Approve'));
+    fireEvent.press(screen.getByText('Edit'));
 
-    await waitFor(() => {
-      expect(mockApproveMemory.mutateAsync).toHaveBeenCalledWith({
-        suggestedContent: 'Keep responses brief and concise',
-        category: 'COMMUNICATION',
-        sessionId: 'session-123',
-        editedContent: undefined,
-      });
+    expect(mockRouter.push).toHaveBeenCalledWith({
+      pathname: '/settings/memories',
+      params: { editId: 'memory-123' },
     });
+    expect(mockOnDismiss).toHaveBeenCalled();
   });
+
 
   it('has accessible touch targets', () => {
     renderWithProviders(<MemorySuggestionCard {...defaultProps} />);

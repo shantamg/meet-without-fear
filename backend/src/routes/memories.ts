@@ -1,46 +1,47 @@
 import { Router } from 'express';
-import { memoryService } from '../services/memory-service';
+import {
+  listMemories,
+  createMemory,
+  updateMemory,
+  deleteMemory,
+  approveMemory,
+  rejectMemory,
+  formatMemory,
+  confirmMemory,
+  updateMemoryAI,
+  confirmMemoryUpdate,
+} from '../controllers/memories';
 
 const router = Router();
 
-// Get all pending memories for the user
-router.get('/pending', async (req, res): Promise<any> => {
-  try {
-    const userId = req.headers['x-user-id'] as string;
-    if (!userId) {
-      return res.status(401).json({ error: 'User ID required' });
-    }
+// GET /memories - List all user memories
+router.get('/', listMemories);
 
-    const memories = await memoryService.getPendingMemories(userId);
-    res.json(memories);
-  } catch (error) {
-    console.error('Failed to fetch pending memories:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// POST /memories - Create new memory
+router.post('/', createMemory);
 
-// Approve a pending memory
-router.post('/:id/approve', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const memory = await memoryService.approveMemory(id);
-    res.json(memory);
-  } catch (error) {
-    console.error('Failed to approve memory:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// PUT /memories/:id - Update memory
+router.put('/:id', updateMemory);
 
-// Reject a pending memory
-router.post('/:id/reject', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const memory = await memoryService.rejectMemory(id);
-    res.json(memory);
-  } catch (error) {
-    console.error('Failed to reject memory:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+// DELETE /memories/:id - Delete memory
+router.delete('/:id', deleteMemory);
+
+// POST /memories/approve - Approve AI suggestion
+router.post('/approve', approveMemory);
+
+// POST /memories/reject - Reject AI suggestion
+router.post('/reject', rejectMemory);
+
+// POST /memories/format - AI-assisted memory creation (preview)
+router.post('/format', formatMemory);
+
+// POST /memories/confirm - Save AI-formatted memory
+router.post('/confirm', confirmMemory);
+
+// POST /memories/:id/update - AI-assisted memory update (preview)
+router.post('/:id/update', updateMemoryAI);
+
+// POST /memories/:id/confirm-update - Save AI-updated memory
+router.post('/:id/confirm-update', confirmMemoryUpdate);
 
 export default router;

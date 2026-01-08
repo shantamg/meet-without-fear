@@ -55,10 +55,10 @@ const VALID_CATEGORIES: MemoryCategory[] = [
 /**
  * Format a natural language memory request into a proper memory.
  * Validates against therapeutic values.
+ * All memories are global (no session-scoped memories).
  */
 export async function formatMemoryRequest(
-  userInput: string,
-  sessionId?: string
+  userInput: string
 ): Promise<FormatMemoryResponse> {
   const logPrefix = '[Memory Formatter]';
 
@@ -82,9 +82,7 @@ VALID CATEGORIES:
 - RELATIONSHIP: Facts about user's relationship ("Partner's name is Jordan")
 - PREFERENCE: Other preferences ("Use examples", "Don't use analogies")
 
-SCOPE:
-- global: Applies to all sessions (style, name, language, personal info)
-- session: Only for specific partner sessions (relationship facts)
+NOTE: All memories are global and apply to all sessions.
 
 REJECTION CRITERIA - MUST REJECT if request:
 - Asks AI to be aggressive, hostile, or harsh
@@ -99,14 +97,13 @@ OUTPUT FORMAT (JSON only, no markdown):
   "valid": true/false,
   "content": "Formatted memory statement (if valid)",
   "category": "CATEGORY_NAME",
-  "scope": "global" or "session",
   "reasoning": "Why this format/category was chosen",
   "rejectionReason": "Why rejected (if invalid)"
 }`;
 
   const userPrompt = `Format this memory request: "${userInput}"
 
-${sessionId ? 'Context: This is for a specific partner session.' : 'Context: This is for global settings.'}`;
+Note: This memory will apply globally to all sessions.`;
 
   try {
     const response = await getHaikuJson<HaikuFormatResponse>({
@@ -157,7 +154,6 @@ ${sessionId ? 'Context: This is for a specific partner session.' : 'Context: Thi
     const suggestion: FormattedMemorySuggestion = {
       content: response.content,
       category,
-      scope: response.scope === 'session' ? 'session' : 'global',
       reasoning: response.reasoning || '',
     };
 

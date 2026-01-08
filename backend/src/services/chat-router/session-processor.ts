@@ -278,7 +278,14 @@ export async function processSessionMessage(
   if (shouldRunMemoryDetection) {
     console.log(`[SessionProcessor] Running memory detection (turn ${userTurnCount}, intensity ${emotionalIntensity})`);
     try {
-      const memoryDetection = await detectMemoryIntent(content, sessionId, 'partner-session');
+      // Include recent conversation history for context (last 5 messages to resolve pronouns/references)
+      const recentMessagesForMemory = history
+        .map((m) => ({
+          role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
+          content: m.content,
+        }))
+        .slice(-5);
+      const memoryDetection = await detectMemoryIntent(content, sessionId, undefined, 'partner-session', recentMessagesForMemory);
 
       if (memoryDetection.hasMemoryIntent && memoryDetection.suggestions.length > 0) {
         // Take top suggestion

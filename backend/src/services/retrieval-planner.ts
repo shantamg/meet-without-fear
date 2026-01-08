@@ -17,15 +17,9 @@ import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 // ============================================================================
 
 /**
- * Valid vessel scopes
- */
-const VesselScopeSchema = z.enum(['user', 'shared', 'global']);
-
-/**
  * Valid query sources
  */
 const QuerySourceSchema = z.enum(['structured', 'vector', 'metadata']);
-
 /**
  * All valid retrieval query shapes
  * These are the ONLY queries that can be executed
@@ -96,11 +90,22 @@ const RetrievalQuerySchema = z.discriminatedUnion('type', [
 export type RetrievalQuery = z.infer<typeof RetrievalQuerySchema>;
 
 /**
+ * Memory suggestion from retrieval planner (optional)
+ */
+const MemorySuggestionSchema = z.object({
+  suggestedContent: z.string(),
+  category: z.enum(['AI_NAME', 'LANGUAGE', 'COMMUNICATION', 'PERSONAL_INFO', 'RELATIONSHIP', 'PREFERENCE']),
+  confidence: z.enum(['high', 'medium', 'low']),
+  evidence: z.string(),
+});
+
+/**
  * Schema for the full retrieval plan
  */
 const RetrievalPlanSchema = z.object({
   queries: z.array(RetrievalQuerySchema),
   reasoning: z.string().optional(),
+  memorySuggestion: MemorySuggestionSchema.optional(),
 });
 
 export type RetrievalPlan = z.infer<typeof RetrievalPlanSchema>;
@@ -116,9 +121,7 @@ export function validateStageContract(query: RetrievalQuery, stage: number, curr
   // Stage 0: Only metadata and outcomes
   if (stage === 0) {
     return (
-      query.type === 'session_metadata' ||
-      query.type === 'relationship_metadata' ||
-      query.type === 'session_outcomes'
+      query.type === 'session_metadata' || query.type === 'relationship_metadata' || query.type === 'session_outcomes'
     );
   }
 
@@ -206,7 +209,7 @@ export async function planRetrieval(
   userId: string,
   sessionId: string,
   userMessage: string,
-  memoryIntent: string
+  memoryIntent: string,
 ): Promise<RetrievalPlan> {
   // Build the planning prompt
   const systemPrompt = buildPlanningPrompt(stage, userId);
@@ -226,17 +229,24 @@ export async function planRetrieval(
       });
     },
     fallbackPlan,
-    'planRetrieval'
+    'planRetrieval',
   );
 
   // If Haiku fails, return empty plan (fallback)
-  if (!rawPlan || rawPlan.queries.length === 0) {
+  if (!rawPlan) {
     console.warn('[Retrieval Planner] Haiku unavailable, using empty plan');
     return fallbackPlan;
   }
 
-  // Validate the plan
-  const validated = validateRetrievalPlan(rawPlan, stage, userId);
+  // Validate schema first
+  const schemaResult = RetrievalPlanSchema.safeParse(rawPlan);
+  if (!schemaResult.success) {
+    console.warn('[Retrieval Planner] Schema validation failed, using empty plan:', schemaResult.error);
+    return fallbackPlan;
+  }
+
+  // Validate the plan against stage contract
+  const validated = validateRetrievalPlan(schemaResult.data, stage, userId);
 
   return validated;
 }
@@ -244,11 +254,7 @@ export async function planRetrieval(
 /**
  * Validate and filter a retrieval plan
  */
-export function validateRetrievalPlan(
-  plan: RetrievalPlan,
-  stage: number,
-  userId: string
-): RetrievalPlan {
+export function validateRetrievalPlan(plan: RetrievalPlan, stage: number, userId: string): RetrievalPlan {
   const validQueries: RetrievalQuery[] = [];
   const invalidCount = { schema: 0, contract: 0 };
 
@@ -274,7 +280,7 @@ export function validateRetrievalPlan(
   // Log violations for monitoring
   if (invalidCount.schema > 0 || invalidCount.contract > 0) {
     console.log(
-      `[Retrieval Planner] Filtered ${invalidCount.schema} schema + ${invalidCount.contract} contract violations from ${plan.queries.length} queries`
+      `[Retrieval Planner] Filtered ${invalidCount.schema} schema + ${invalidCount.contract} contract violations from ${plan.queries.length} queries`,
     );
   }
 
@@ -301,12 +307,31 @@ CRITICAL RULES:
 VALID QUERY TYPES FOR STAGE ${stage}:
 ${getValidQueryTypesForStage(stage)}
 
+MEMORY DETECTION (OPTIONAL):
+If the user is EXPLICITLY requesting something to be remembered long-term, include a memorySuggestion:
+- Direct requests: "Remember that...", "Always...", "From now on...", "I want you to..."
+- Preference changes: "Call me X" (explicit), "Use X pronouns" (explicit)
+- Communication style: "Keep responses brief" (explicit instruction)
+- AI name: "I'll call you X" (explicit naming)
+
+DO NOT include memorySuggestion for:
+- Emotional expressions: "I miss him", "I'm sad", "I feel..."
+- Casual mentions without explicit "remember" language
+- Temporary requests: "Can you...", "Could you..." (one-time only)
+
 OUTPUT SCHEMA:
 {
   "queries": [
     // Array of query objects matching the allowed types
   ],
-  "reasoning": "Brief explanation of why these queries are needed"
+  "reasoning": "Brief explanation of why these queries are needed",
+  "memorySuggestion": {
+    // OPTIONAL: Only include if user explicitly wants something remembered long-term
+    "suggestedContent": "Remember that...",
+    "category": "AI_NAME|LANGUAGE|COMMUNICATION|PERSONAL_INFO|RELATIONSHIP|PREFERENCE",
+    "confidence": "high|medium|low",
+    "evidence": "What in the message suggests this"
+  }
 }
 
 Example output:
@@ -386,9 +411,7 @@ export function getMockRetrievalPlan(stage: number, userId: string): RetrievalPl
 
   if (stage === 1) {
     return {
-      queries: [
-        { type: 'emotional_reading', vessel: 'user', source: 'structured', userId },
-      ],
+      queries: [{ type: 'emotional_reading', vessel: 'user', source: 'structured', userId }],
       reasoning: 'Mock: Stage 1 emotional context',
     };
   }

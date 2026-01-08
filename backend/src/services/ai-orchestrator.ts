@@ -22,6 +22,7 @@ import {
 } from './memory-intent';
 import { detectMemoryIntent } from './memory-detector';
 import { validateMemory } from './memory-validator';
+import type { MemorySuggestion } from '@meet-without-fear/shared';
 import {
   assembleContextBundle,
   formatContextForPrompt,
@@ -183,72 +184,10 @@ export async function orchestrateResponse(
     console.warn(`[AI Orchestrator] Decision layer took ${decisionTime}ms (>1s) - consider optimization`);
   }
 
-  // Non-blocking Memory Detection (Universal)
-  // We fire this off without awaiting it so it doesn't slow down the main response
-  detectMemoryIntent(context.userMessage, context.sessionId, turnId, 'partner-session')
-    .then(async (result) => {
-      if (result.hasMemoryIntent && result.suggestions.length > 0) {
-        // Validate each suggestion
-        result.suggestions.forEach(async suggestion => {
-          const validation = validateMemory(suggestion.suggestedContent, suggestion.category);
-
-          if (validation.valid) {
-            auditLog('MEMORY_DETECTION', 'Memory suggestion detected', {
-              turnId,
-              sessionId: context.sessionId,
-              content: suggestion.suggestedContent,
-              category: suggestion.category,
-              scope: suggestion.scope,
-              confidence: suggestion.confidence,
-              evidence: suggestion.evidence,
-              validation: 'valid'
-            });
-
-            // Persist as PENDING immediately
-            const memory = await memoryService.createPendingMemory({
-              userId: context.userId,
-              sessionId: context.sessionId,
-              content: suggestion.suggestedContent,
-              category: suggestion.category,
-              suggestedBy: `AI Confidence: ${suggestion.confidence} | Evidence: ${suggestion.evidence} | Scope: ${suggestion.scope}`
-            });
-
-            // BROADCAST TO APP with DB ID
-            publishSessionEvent(
-              context.sessionId,
-              'memory.suggested',
-              {
-                suggestion: {
-                  id: memory.id,
-                  content: suggestion.suggestedContent,
-                  category: suggestion.category,
-                  scope: suggestion.scope,
-                  confidence: suggestion.confidence,
-                  validation: 'valid' // UI needs to know it's valid
-                }
-              }
-            ).catch(err => console.warn('[AI Orchestrator] Failed to broadcast memory event:', err));
-
-          } else {
-            // Log rejected suggestions so the UI can inform the user why
-            auditLog('MEMORY_DETECTION', 'Memory suggestion rejected', {
-              turnId,
-              sessionId: context.sessionId,
-              content: suggestion.suggestedContent,
-              category: suggestion.category,
-              scope: suggestion.scope,
-              confidence: suggestion.confidence,
-              evidence: suggestion.evidence,
-              validation: 'invalid',
-              rejectionReason: validation.reason
-            });
-          }
-        });
-      }
-    })
-    .catch(err => {
-      console.warn('[AI Orchestrator] Background memory detection failed:', err);
-    });
+  // Memory detection is now handled by the retrieval planner (when depth === 'full')
+  // Only run background detection if we didn't get a memory suggestion from the planner
+  // This ensures we don't miss memory intents when depth is not 'full'
+  // Note: We'll handle this after retrieval planning completes
 
   // Step 2: Assemble context bundle
   const contextBundle = await assembleContextBundle(
@@ -335,7 +274,9 @@ export async function orchestrateResponse(
   );
 
   // Step 3: Plan retrieval (for full depth, use Haiku)
+  // This also includes optional memory detection
   let retrievalPlan: RetrievalPlan | undefined;
+  let memorySuggestionFromPlanner: MemorySuggestion | undefined;
   if (memoryIntent.depth === 'full') {
     try {
       retrievalPlan = await planRetrieval(
@@ -358,6 +299,42 @@ export async function orchestrateResponse(
           source: q.source,
         })),
       });
+
+      // Check for memory suggestion from retrieval planner
+      if (retrievalPlan.memorySuggestion) {
+        const validation = validateMemory(
+          retrievalPlan.memorySuggestion.suggestedContent,
+          retrievalPlan.memorySuggestion.category
+        );
+
+        if (validation.valid) {
+          memorySuggestionFromPlanner = {
+            suggestedContent: retrievalPlan.memorySuggestion.suggestedContent,
+            category: retrievalPlan.memorySuggestion.category,
+            confidence: retrievalPlan.memorySuggestion.confidence,
+            evidence: retrievalPlan.memorySuggestion.evidence,
+          };
+
+          auditLog('MEMORY_DETECTION', 'Memory suggestion detected (from retrieval planner)', {
+            turnId,
+            sessionId: context.sessionId,
+            content: memorySuggestionFromPlanner.suggestedContent,
+            category: memorySuggestionFromPlanner.category,
+            confidence: memorySuggestionFromPlanner.confidence,
+            evidence: memorySuggestionFromPlanner.evidence,
+            validation: 'valid',
+          });
+        } else {
+          auditLog('MEMORY_DETECTION', 'Memory suggestion rejected (from retrieval planner)', {
+            turnId,
+            sessionId: context.sessionId,
+            content: retrievalPlan.memorySuggestion.suggestedContent,
+            category: retrievalPlan.memorySuggestion.category,
+            validation: 'invalid',
+            rejectionReason: validation.reason,
+          });
+        }
+      }
     } catch (error) {
       console.warn('[AI Orchestrator] Retrieval planning failed, using mock plan:', error);
       retrievalPlan = getMockRetrievalPlan(context.stage, context.userId);
@@ -368,6 +345,104 @@ export async function orchestrateResponse(
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
+  }
+
+  // If we found a memory suggestion from the planner, handle it before generating response
+  if (memorySuggestionFromPlanner) {
+    try {
+      // Persist as PENDING immediately (always global, no sessionId)
+      const memory = await memoryService.createPendingMemory({
+        userId: context.userId,
+        // sessionId omitted - memories are always global
+        content: memorySuggestionFromPlanner.suggestedContent,
+        category: memorySuggestionFromPlanner.category,
+        suggestedBy: `AI Confidence: ${memorySuggestionFromPlanner.confidence} | Evidence: ${memorySuggestionFromPlanner.evidence}`
+      });
+
+      // BROADCAST TO APP with DB ID
+      await publishSessionEvent(
+        context.sessionId,
+        'memory.suggested',
+        {
+          suggestion: {
+            id: memory.id,
+            suggestedContent: memorySuggestionFromPlanner.suggestedContent,
+            category: memorySuggestionFromPlanner.category,
+            confidence: memorySuggestionFromPlanner.confidence,
+            evidence: memorySuggestionFromPlanner.evidence,
+            validation: 'valid' // UI needs to know it's valid
+          }
+        }
+      );
+    } catch (err) {
+      console.warn('[AI Orchestrator] Failed to handle memory suggestion:', err);
+    }
+  } else if (memoryIntent.depth !== 'full') {
+    // If we didn't get a memory suggestion from the planner and depth is not 'full',
+    // run background memory detection as fallback (non-blocking)
+    const recentMessagesForMemory = context.conversationHistory.slice(-5);
+    detectMemoryIntent(context.userMessage, context.sessionId, turnId, 'partner-session', recentMessagesForMemory)
+      .then(async (result) => {
+        if (result.hasMemoryIntent && result.suggestions.length > 0) {
+          // Validate each suggestion
+          result.suggestions.forEach(async suggestion => {
+            const validation = validateMemory(suggestion.suggestedContent, suggestion.category);
+
+            if (validation.valid) {
+              auditLog('MEMORY_DETECTION', 'Memory suggestion detected (background fallback)', {
+                turnId,
+                sessionId: context.sessionId,
+                content: suggestion.suggestedContent,
+                category: suggestion.category,
+                confidence: suggestion.confidence,
+                evidence: suggestion.evidence,
+                validation: 'valid'
+              });
+
+              // Persist as PENDING immediately (always global, no sessionId)
+              const memory = await memoryService.createPendingMemory({
+                userId: context.userId,
+                // sessionId omitted - memories are always global
+                content: suggestion.suggestedContent,
+                category: suggestion.category,
+                suggestedBy: `AI Confidence: ${suggestion.confidence} | Evidence: ${suggestion.evidence}`
+              });
+
+              // BROADCAST TO APP with DB ID
+              publishSessionEvent(
+                context.sessionId,
+                'memory.suggested',
+                {
+                  suggestion: {
+                    id: memory.id,
+                    suggestedContent: suggestion.suggestedContent,
+                    category: suggestion.category,
+                    confidence: suggestion.confidence,
+                    evidence: suggestion.evidence,
+                    validation: 'valid' // UI needs to know it's valid
+                  }
+                }
+              ).catch(err => console.warn('[AI Orchestrator] Failed to broadcast memory event:', err));
+
+            } else {
+              // Log rejected suggestions so the UI can inform the user why
+              auditLog('MEMORY_DETECTION', 'Memory suggestion rejected (background fallback)', {
+                turnId,
+                sessionId: context.sessionId,
+                content: suggestion.suggestedContent,
+                category: suggestion.category,
+                confidence: suggestion.confidence,
+                evidence: suggestion.evidence,
+                validation: 'invalid',
+                rejectionReason: validation.reason
+              });
+            }
+          });
+        }
+      })
+      .catch(err => {
+        console.warn('[AI Orchestrator] Background memory detection failed:', err);
+      });
   }
 
   // Step 4: Build the stage-specific prompt
