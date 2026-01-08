@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import { Home, FolderOpen, User, Bell } from 'lucide-react-native';
+import { Home, FolderOpen, Settings, Bell } from 'lucide-react-native';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { colors } from '@/src/theme';
 import { NotificationBadge } from '@/src/components/NotificationBadge';
@@ -34,10 +34,11 @@ function NotificationButton() {
 
 /**
  * Tab bar configuration
- * Three main tabs: Home (main), Sessions (list), Profile
+ * Three main tabs: Home (main), Sessions (list), Settings
  *
  * Home is the main landing page with greeting and quick actions.
  * Sessions provides a list view of all sessions for quick access.
+ * Settings provides access to user settings and account management.
  */
 export default function TabLayout() {
   return (
@@ -74,13 +75,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="settings"
         options={{
-          title: 'Profile',
+          title: 'Settings',
           tabBarIcon: ({ color, size }: { color: string; size: number }) => (
-            <User color={color} size={size} />
+            <Settings color={color} size={size} />
           ),
-          headerTitle: 'Profile',
+          headerTitle: 'Settings',
         }}
       />
     </Tabs>

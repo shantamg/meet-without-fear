@@ -1,7 +1,7 @@
 /**
- * Account Settings Screen
+ * Profile Settings Screen
  *
- * Allows users to manage their account: edit profile, export data, delete account.
+ * Allows users to manage their profile: edit profile, export data, delete account.
  */
 
 import { useState, useEffect } from 'react';
@@ -113,7 +113,7 @@ export default function AccountSettingsScreen() {
     <>
       <Stack.Screen
         options={{
-          title: 'Account Settings',
+          title: 'Profile',
           headerShown: true,
           headerBackTitle: 'Back',
           headerStyle: {

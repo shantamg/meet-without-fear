@@ -32,7 +32,7 @@ export interface InvitationRouteParams {
 }
 
 // Tab names for type-safe navigation
-export type TabName = 'index' | 'sessions' | 'profile';
+export type TabName = 'index' | 'sessions' | 'settings';
 
 // Helper type for building typed navigation paths
 export type AppRoutes = {
@@ -44,7 +44,7 @@ export type AppRoutes = {
   // Auth-required routes
   '/': undefined; // Home tab
   '/sessions': undefined;
-  '/profile': undefined;
+  '/settings': undefined;
 
   // Session routes
   '/session/new': undefined;

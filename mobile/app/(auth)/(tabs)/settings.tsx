@@ -25,10 +25,10 @@ import { useAuth } from '@/src/hooks/useAuth';
 import { colors } from '@/src/theme';
 
 /**
- * Profile tab screen
+ * Settings tab screen
  * User settings and account management
  */
-export default function ProfileScreen() {
+export default function SettingsScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { signOut: clerkSignOut } = useClerk();
@@ -60,8 +60,8 @@ export default function ProfileScreen() {
 
   const mainMenuItems = [
     {
-      icon: Settings,
-      label: 'Account Settings',
+      icon: User,
+      label: 'Profile',
       onPress: () => {
         router.push('/settings/account');
       },
@@ -73,6 +73,9 @@ export default function ProfileScreen() {
         router.push('/settings/voice');
       },
     },
+  ];
+
+  const notificationMenuItems = [
     {
       icon: Bell,
       label: 'Notifications',
@@ -129,6 +132,27 @@ export default function ProfileScreen() {
                 styles.menuItem,
                 index === 0 && styles.menuItemFirst,
                 index === mainMenuItems.length - 1 && styles.menuItemLast,
+              ]}
+              onPress={item.onPress}
+            >
+              <View style={styles.menuItemLeft}>
+                <item.icon color={colors.accent} size={22} />
+                <Text style={styles.menuItemLabel}>{item.label}</Text>
+              </View>
+              <ChevronRight color={colors.textSecondary} size={20} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Notification & Memory Menu items */}
+        <View style={styles.menuSection}>
+          {notificationMenuItems.map((item, index) => (
+            <TouchableOpacity
+              key={item.label}
+              style={[
+                styles.menuItem,
+                index === 0 && styles.menuItemFirst,
+                index === notificationMenuItems.length - 1 && styles.menuItemLast,
               ]}
               onPress={item.onPress}
             >

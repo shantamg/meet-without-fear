@@ -53,6 +53,17 @@ export function setTokenProvider(provider: TokenProvider): void {
 }
 
 /**
+ * Get the current auth token from the token provider.
+ * Used by modules that need to make authenticated requests outside of axios.
+ */
+export async function getAuthToken(): Promise<string | null> {
+  if (!tokenProvider) {
+    return null;
+  }
+  return tokenProvider.getToken();
+}
+
+/**
  * Sign out the user when auth is invalid.
  * Called when we get an unrecoverable 401.
  */

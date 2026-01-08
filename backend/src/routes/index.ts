@@ -19,12 +19,16 @@ import stage1Routes from './stage1';
 import stage2Routes from './stage2';
 import stage3Routes from './stage3';
 import stage4Routes from './stage4';
+import ttsRoutes from './tts';
 
 const router = Router();
+
+console.log('[Routes] Loading main router...');
 
 // Mount all route modules
 router.use('/audit', auditRoutes);
 router.use('/auth', authRoutes);
+router.use('/tts', ttsRoutes);
 router.use(chatRoutes); // Unified chat router
 router.use(invitationsRoutes); // Must be before innerWorkRoutes (has public endpoints)
 router.use(innerThoughtsRoutes); // Inner Thoughts (solo self-reflection, optionally linked to partner sessions)

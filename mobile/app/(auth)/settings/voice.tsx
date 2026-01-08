@@ -11,11 +11,10 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Switch,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { Volume2, Play, ChevronDown, Check } from 'lucide-react-native';
+import { Volume2, ChevronDown, Check } from 'lucide-react-native';
 import { colors } from '@/src/theme';
 import {
   useAutoSpeech,
@@ -28,21 +27,13 @@ export default function VoiceSettingsScreen() {
   // Speech settings
   const { isAutoSpeechEnabled, setAutoSpeechEnabled } = useAutoSpeech();
   const { voiceSettings, setVoiceId, previewVoice } = useVoiceSettings();
-  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+
   const [showVoicePicker, setShowVoicePicker] = useState(false);
 
-  // Get current voice - always use FLASH_V2_5 (fast, cheap model)
+  // Get current voice
   const currentVoice = VOICE_OPTIONS.find(v => v.id === voiceSettings.voiceId) || VOICE_OPTIONS[0];
 
-  const handlePreviewVoice = async () => {
-    setIsPreviewPlaying(true);
-    try {
-      // Always use FLASH_V2_5 (fast, cheap model)
-      await previewVoice(voiceSettings.voiceId, VoiceModel.FLASH_V2_5);
-    } finally {
-      setIsPreviewPlaying(false);
-    }
-  };
+
 
   return (
     <>
@@ -112,6 +103,8 @@ export default function VoiceSettingsScreen() {
                   onPress={() => {
                     setVoiceId(voice.id);
                     setShowVoicePicker(false);
+                    // Auto-play preview
+                    previewVoice(voice.id, VoiceModel.TTS_1).catch(console.error);
                   }}
                 >
                   <View style={styles.pickerOptionLeft}>
@@ -126,21 +119,7 @@ export default function VoiceSettingsScreen() {
             </View>
           )}
 
-          {/* Preview Button */}
-          <TouchableOpacity
-            style={styles.previewButton}
-            onPress={handlePreviewVoice}
-            disabled={isPreviewPlaying}
-          >
-            {isPreviewPlaying ? (
-              <ActivityIndicator color={colors.textPrimary} size="small" />
-            ) : (
-              <>
-                <Play color={colors.textPrimary} size={18} fill={colors.textPrimary} />
-                <Text style={styles.previewButtonText}>Preview Voice</Text>
-              </>
-            )}
-          </TouchableOpacity>
+
         </View>
       </ScrollView>
     </>

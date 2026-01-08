@@ -1,9 +1,9 @@
 /**
  * useSpeech Hook
  *
- * Provides text-to-speech functionality using ElevenLabs API.
+ * Provides text-to-speech functionality using OpenAI API.
  * Features:
- * - High-quality AI voices via ElevenLabs
+ * - High-quality AI voices via OpenAI (Alloy, Echo, Fable, Onyx, Nova, Shimmer)
  * - Speak text with configurable options
  * - Stop speech mid-playback
  * - Track speaking state
@@ -13,7 +13,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Audio } from 'expo-av';
-import { File, Directory, Paths } from 'expo-file-system';
+// Use legacy API for downloadAsync (new API deprecated it but native download is more efficient)
+import * as FileSystem from 'expo-file-system/legacy';
+import { getAuthToken } from '../lib/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -24,21 +26,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 const AUTO_SPEECH_STORAGE_KEY = '@meet-without-fear/auto-speech-enabled';
 const VOICE_SETTINGS_STORAGE_KEY = '@meet-without-fear/voice-settings';
 
-/** ElevenLabs API configuration */
-const ELEVENLABS_API_KEY = process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY || 'YOUR_API_KEY_HERE';
-
 // ============================================================================
 // Voice Configuration
 // ============================================================================
 
-/** Available ElevenLabs models */
+/** Available OpenAI models */
 export enum VoiceModel {
-  /** High quality, low latency */
-  TURBO = 'eleven_turbo_v2_5',
-  /** High quality multilingual */
-  MULTILINGUAL_V2 = 'eleven_multilingual_v2',
-  /** Lowest latency, most cost-effective */
-  FLASH_V2_5 = 'eleven_flash_v2_5',
+  /** Standard text-to-speech model */
+  TTS_1 = 'tts-1',
+  /** High definition text-to-speech model */
+  TTS_1_HD = 'tts-1-hd',
 }
 
 /** Voice option with metadata */
@@ -50,22 +47,20 @@ export interface VoiceOption {
   style: 'warm' | 'professional' | 'friendly' | 'calm' | 'energetic';
 }
 
-/** Available voices */
+/** Available OpenAI voices */
 export const VOICE_OPTIONS: VoiceOption[] = [
-  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', description: 'Warm, conversational British', style: 'warm' },
-  { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', description: 'Calm, clear American', style: 'calm' },
-  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', description: 'Soft, gentle American', style: 'friendly' },
-  { id: 'ErXwobaYiN019PkySvjV', name: 'Antoni', description: 'Well-rounded, expressive', style: 'professional' },
-  { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh', description: 'Deep, warm American', style: 'warm' },
-  { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', description: 'Deep, clear narrator', style: 'professional' },
-  { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam', description: 'Raspy, authentic American', style: 'energetic' },
+  { id: 'alloy', name: 'Alloy', description: 'Versatile and balanced', style: 'professional' },
+  { id: 'echo', name: 'Echo', description: 'Warm and rounded', style: 'warm' },
+  { id: 'fable', name: 'Fable', description: 'British accent, storytelling', style: 'friendly' },
+  { id: 'onyx', name: 'Onyx', description: 'Deep and resonant', style: 'calm' },
+  { id: 'nova', name: 'Nova', description: 'Energetic and feminine', style: 'energetic' },
+  { id: 'shimmer', name: 'Shimmer', description: 'Clear and bright', style: 'friendly' },
 ];
 
-/** Model tiers with pricing info */
+/** Model tiers with pricing info - updated for OpenAI */
 export const MODEL_OPTIONS: { model: VoiceModel; name: string; description: string }[] = [
-  { model: VoiceModel.TURBO, name: 'Standard', description: 'High fidelity, balanced speed' },
-  { model: VoiceModel.MULTILINGUAL_V2, name: 'Premium', description: 'Legacy multilingual support' },
-  { model: VoiceModel.FLASH_V2_5, name: 'Lightning', description: 'Fastest response, lowest cost' },
+  { model: VoiceModel.TTS_1, name: 'Standard', description: 'Fast, lower latency' },
+  { model: VoiceModel.TTS_1_HD, name: 'High Def', description: 'Higher quality, slightly slower' },
 ];
 
 /** Voice settings stored in AsyncStorage */
@@ -76,8 +71,8 @@ export interface VoiceSettings {
 
 /** Default voice settings */
 const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
-  voiceId: 'JBFqnCBsd6RMkjVDRZzb', // George
-  model: VoiceModel.FLASH_V2_5,
+  voiceId: 'alloy',
+  model: VoiceModel.TTS_1,
 };
 
 // ============================================================================
@@ -104,7 +99,7 @@ export interface SpeechActions {
   playMeditationScript: (script: string, id?: string) => Promise<void>;
 }
 
-export interface UseSpeechReturn extends SpeechState, SpeechActions {}
+export interface UseSpeechReturn extends SpeechState, SpeechActions { }
 
 export interface UseAutoSpeechReturn {
   /** Whether auto-speech is enabled */
@@ -127,7 +122,7 @@ export const speechKeys = {
 };
 
 // ============================================================================
-// ElevenLabs TTS Utility
+// OpenAI TTS Utility
 // ============================================================================
 
 /** Cache directory for TTS audio files */
@@ -149,97 +144,77 @@ function hashText(text: string, voiceId: string, model: string): string {
 }
 
 /**
- * Gets the cached audio file for the given text, or fetches from ElevenLabs.
+ * Gets the cached audio file for the given text, or fetches from OpenAI.
+ * Uses native FileSystem.downloadAsync for maximum efficiency - bypasses JS thread entirely.
  * Returns the local file URI for playback.
- * @param slowSpeech - If true, uses slower speech rate for meditation
+ * @param slowSpeech - If true, uses slower speech rate (OpenAI speed param)
  */
 async function getOrFetchTTSAudio(
   text: string,
   voiceSettings: VoiceSettings = DEFAULT_VOICE_SETTINGS,
   slowSpeech: boolean = false
 ): Promise<string> {
+  // 1. Generate Cache Key
   const { voiceId } = voiceSettings;
-  // Always use FLASH_V2_5 (fast, cheap model)
-  const model = VoiceModel.FLASH_V2_5;
-  // Include slowSpeech in cache key so slow and normal versions are cached separately
+  const model = voiceSettings.model || VoiceModel.TTS_1;
   const cacheKey = hashText(text, voiceId, `${model}_${slowSpeech ? 'slow' : 'normal'}`);
-  const cacheDir = new Directory(Paths.cache, TTS_CACHE_DIR);
-  const cachedFile = new File(cacheDir, `${cacheKey}.mp3`);
 
-  // Check if cached file exists
+  // 2. Setup Directory and File Paths
+  const cacheDir = `${FileSystem.cacheDirectory}${TTS_CACHE_DIR}/`;
+  const fileUri = `${cacheDir}${cacheKey}.ogg`;
+
+  // 3. Ensure Directory Exists
+  const dirInfo = await FileSystem.getInfoAsync(cacheDir);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(cacheDir, { intermediates: true });
+  }
+
+  // 4. Check Cache (Instant Return)
+  const fileInfo = await FileSystem.getInfoAsync(fileUri);
+  if (fileInfo.exists) {
+    return fileUri;
+  }
+
+  // 5. NATIVE DOWNLOAD - bypasses JS thread entirely (Network -> Disk)
+  // Uses GET with query params since downloadAsync doesn't reliably support POST body
   try {
-    if (cachedFile.exists) {
-      console.log('[TTS] Using cached audio:', cacheKey);
-      return cachedFile.uri;
+    const token = await getAuthToken();
+    const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+    const baseUrl = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
+
+    // OpenAI Speed: 0.25 to 4.0. Default 1.0.
+    const speed = slowSpeech ? 0.85 : 1.0;
+
+    // Build URL with query params (GET request)
+    const params = new URLSearchParams({
+      text: text,
+      voice: voiceId,
+      model: model,
+      speed: speed.toString(),
+    });
+    const ttsUrl = `${baseUrl}/tts?${params.toString()}`;
+
+    const downloadResult = await FileSystem.downloadAsync(ttsUrl, fileUri, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (downloadResult.status !== 200) {
+      // Clean up partial file if failed
+      await FileSystem.deleteAsync(fileUri, { idempotent: true });
+      throw new Error(`TTS Download failed with status ${downloadResult.status}`);
     }
-  } catch {
-    // File doesn't exist, continue to fetch
+
+    return fileUri;
+  } catch (error) {
+    console.error('[TTS] Download Error:', error);
+    throw error;
   }
-
-  console.log('[TTS] Fetching from ElevenLabs:', cacheKey, 'voice:', voiceId, 'model:', model, 'slow:', slowSpeech);
-
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
-
-  // For slow speech (meditation), use the slowest speed (0.7)
-  // Speed range: 0.7 to 1.2 (default: 1.0)
-  const voiceSettingsConfig = slowSpeech
-    ? {
-        stability: 0.5,
-        similarity_boost: 0.75,
-        style: 0.0,
-        use_speaker_boost: true,
-        speed: 0.7, // Slowest speed for meditation
-      }
-    : {
-        stability: 0.5,
-        similarity_boost: 0.75,
-        style: 0.0,
-        use_speaker_boost: true,
-        speed: 1.0, // Normal speed for regular speech
-      };
-
-  const textToSpeak = text;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Accept': 'audio/mpeg',
-      'Content-Type': 'application/json',
-      'xi-api-key': ELEVENLABS_API_KEY,
-    },
-    body: JSON.stringify({
-      text: textToSpeak,
-      model_id: model,
-      voice_settings: voiceSettingsConfig,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`);
-  }
-
-  // Get the audio data as ArrayBuffer
-  const arrayBuffer = await response.arrayBuffer();
-  const uint8Array = new Uint8Array(arrayBuffer);
-
-  // Ensure cache directory exists
-  try {
-    if (!cacheDir.exists) {
-      cacheDir.create();
-    }
-  } catch {
-    // Directory might already exist
-  }
-
-  // Write the audio data to cached file
-  await cachedFile.write(uint8Array);
-
-  return cachedFile.uri;
 }
 
 /**
- * Play text using ElevenLabs TTS.
+ * Play text using OpenAI TTS.
  * Handles fetching audio, playing, and cleanup.
  * @param slowSpeech - If true, uses slower speech rate for meditation
  */
@@ -258,9 +233,10 @@ async function playTTS(
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
       shouldDuckAndroid: true,
+      // Fix for Android volume ducking/mixing
     });
 
-    // Get audio from cache or fetch from ElevenLabs
+    // Get audio from cache or fetch from Backend
     const audioPath = await getOrFetchTTSAudio(text, voiceSettings, slowSpeech);
 
     // Create and play sound
@@ -296,7 +272,7 @@ async function playTTS(
 // ============================================================================
 
 /**
- * Hook for text-to-speech functionality using ElevenLabs.
+ * Hook for text-to-speech functionality using OpenAI.
  * Provides speak, stop, and toggle actions with speaking state tracking.
  *
  * @example
@@ -321,7 +297,6 @@ export function useSpeech(): UseSpeechReturn {
   });
 
   // Load voice settings from storage
-  // Always use FLASH_V2_5 (fast, cheap model) regardless of stored value
   const { data: voiceSettings } = useQuery({
     queryKey: speechKeys.voiceSettings,
     queryFn: async () => {
@@ -329,8 +304,11 @@ export function useSpeech(): UseSpeechReturn {
       if (stored) {
         try {
           const parsed = JSON.parse(stored) as VoiceSettings;
-          // Always force FLASH_V2_5 model
-          return { ...parsed, model: VoiceModel.FLASH_V2_5 };
+          // Validate that the stored model is valid for OpenAI, otherwise default
+          if (parsed.model !== VoiceModel.TTS_1 && parsed.model !== VoiceModel.TTS_1_HD) {
+            return DEFAULT_VOICE_SETTINGS;
+          }
+          return parsed;
         } catch {
           return DEFAULT_VOICE_SETTINGS;
         }
@@ -465,15 +443,15 @@ export function useSpeech(): UseSpeechReturn {
     // Pattern: [PAUSE 30s], [PAUSE 60s], [BELL], etc.
     const pausePattern = /\[PAUSE\s+(\d+)s?\]/gi;
     const bellPattern = /\[BELL\]/gi;
-    
+
     // Replace markers with a special delimiter we can split on
     let processedScript = script
       .replace(pausePattern, (match, seconds) => `|||PAUSE:${seconds}|||`)
       .replace(bellPattern, '|||BELL|||');
-    
+
     // Split by our delimiter
     const segments = processedScript.split('|||').filter(seg => seg.trim().length > 0);
-    
+
     const speechId = id ?? 'meditation-script';
     currentIdRef.current = speechId;
 
@@ -491,7 +469,7 @@ export function useSpeech(): UseSpeechReturn {
       }
 
       const segment = segments[i].trim();
-      
+
       if (segment.startsWith('PAUSE:')) {
         // Extract pause duration
         const pauseSeconds = parseInt(segment.replace('PAUSE:', ''), 10);
@@ -506,7 +484,7 @@ export function useSpeech(): UseSpeechReturn {
       } else if (segment.length > 0) {
         // This is a text segment - play it with slow speech
         console.log(`[Meditation] Playing segment ${i + 1}/${segments.length}: "${segment.substring(0, 50)}..."`);
-        
+
         try {
           // Wrap playTTS in a Promise that resolves when audio finishes
           await new Promise<void>((resolve, reject) => {
@@ -646,6 +624,16 @@ export function useAutoSpeech(): UseAutoSpeechReturn {
 // Voice Settings Hook
 // ============================================================================
 
+// Map voice IDs to local assets
+const VOICE_PREVIEWS: Record<string, any> = {
+  alloy: require('../../assets/sounds/voices/alloy.mp3'),
+  echo: require('../../assets/sounds/voices/echo.mp3'),
+  fable: require('../../assets/sounds/voices/fable.mp3'),
+  onyx: require('../../assets/sounds/voices/onyx.mp3'),
+  nova: require('../../assets/sounds/voices/nova.mp3'),
+  shimmer: require('../../assets/sounds/voices/shimmer.mp3'),
+};
+
 export interface UseVoiceSettingsReturn {
   /** Current voice settings */
   voiceSettings: VoiceSettings;
@@ -670,20 +658,19 @@ export interface UseVoiceSettingsReturn {
  * const { voiceSettings, setVoiceId, setModel, previewVoice } = useVoiceSettings();
  *
  * // Change voice
- * setVoiceId('21m00Tcm4TlvDq8ikWAM');
+ * setVoiceId('alloy');
  *
  * // Change model
- * setModel(VoiceModel.MULTILINGUAL_V2);
+ * setModel(VoiceModel.TTS_1);
  *
  * // Preview a voice
- * await previewVoice('21m00Tcm4TlvDq8ikWAM', VoiceModel.TURBO);
+ * await previewVoice('alloy', VoiceModel.TTS_1);
  * ```
  */
 export function useVoiceSettings(): UseVoiceSettingsReturn {
   const queryClient = useQueryClient();
 
   // Query for current voice settings
-  // Always use FLASH_V2_5 (fast, cheap model) regardless of stored value
   const { data: voiceSettings = DEFAULT_VOICE_SETTINGS, isLoading } = useQuery({
     queryKey: speechKeys.voiceSettings,
     queryFn: async () => {
@@ -691,8 +678,11 @@ export function useVoiceSettings(): UseVoiceSettingsReturn {
       if (stored) {
         try {
           const parsed = JSON.parse(stored) as VoiceSettings;
-          // Always force FLASH_V2_5 model
-          return { ...parsed, model: VoiceModel.FLASH_V2_5 };
+          // Validate that the stored model is valid for OpenAI, otherwise default
+          if (parsed.model !== VoiceModel.TTS_1 && parsed.model !== VoiceModel.TTS_1_HD) {
+            return DEFAULT_VOICE_SETTINGS;
+          }
+          return parsed;
         } catch {
           return DEFAULT_VOICE_SETTINGS;
         }
@@ -703,13 +693,10 @@ export function useVoiceSettings(): UseVoiceSettingsReturn {
   });
 
   // Mutation to update settings
-  // Always save with FLASH_V2_5 (fast, cheap model)
   const { mutate: updateSettings } = useMutation({
     mutationFn: async (settings: VoiceSettings) => {
-      // Always force FLASH_V2_5 model
-      const settingsWithModel = { ...settings, model: VoiceModel.FLASH_V2_5 };
-      await AsyncStorage.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify(settingsWithModel));
-      return settingsWithModel;
+      await AsyncStorage.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      return settings;
     },
     onMutate: async (settings) => {
       await queryClient.cancelQueries({ queryKey: speechKeys.voiceSettings });
@@ -728,8 +715,7 @@ export function useVoiceSettings(): UseVoiceSettingsReturn {
   });
 
   const setVoiceId = useCallback((voiceId: string) => {
-    // Always use FLASH_V2_5 model
-    updateSettings({ ...voiceSettings, voiceId, model: VoiceModel.FLASH_V2_5 });
+    updateSettings({ ...voiceSettings, voiceId });
   }, [voiceSettings, updateSettings]);
 
   const setModel = useCallback((model: VoiceModel) => {
@@ -753,6 +739,9 @@ export function useVoiceSettings(): UseVoiceSettingsReturn {
     };
   }, []);
 
+  // Map voice IDs to local assets
+
+
   const previewVoice = useCallback(async (voiceId: string, model: VoiceModel) => {
     // Stop any existing preview
     if (previewSoundRef.current) {
@@ -765,18 +754,46 @@ export function useVoiceSettings(): UseVoiceSettingsReturn {
       previewSoundRef.current = null;
     }
 
-    const previewText = "Hello! I'm here to support you on your journey.";
-    // Always use FLASH_V2_5 (fast, cheap model) regardless of passed model
-    await playTTS(
-      previewText,
-      { voiceId, model: VoiceModel.FLASH_V2_5 },
-      undefined,
-      () => {
-        previewSoundRef.current = null;
-      },
-      undefined,
-      previewSoundRef
-    );
+    try {
+      const asset = VOICE_PREVIEWS[voiceId];
+      if (asset) {
+        console.log(`[Preview] Playing local asset for ${voiceId}`);
+        // Configure audio session for playback (plays even in silent mode)
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+
+        const { sound } = await Audio.Sound.createAsync(
+          asset,
+          { shouldPlay: true },
+          (status) => {
+            if (status.isLoaded && status.didJustFinish) {
+              previewSoundRef.current = null;
+              sound.unloadAsync().catch(console.warn);
+            }
+          }
+        );
+        previewSoundRef.current = sound;
+      } else {
+        // Fallback to generating if local asset missing (unlikely)
+        console.warn(`[Preview] Local asset not found for ${voiceId}, falling back to API`);
+        const previewText = "Hello! I'm here to support you on your journey.";
+        await playTTS(
+          previewText,
+          { voiceId, model },
+          undefined,
+          () => {
+            previewSoundRef.current = null;
+          },
+          undefined,
+          previewSoundRef
+        );
+      }
+    } catch (error) {
+      console.error('[Preview] Error playing preview:', error);
+    }
   }, []);
 
   return {
@@ -794,8 +811,9 @@ export function useVoiceSettings(): UseVoiceSettingsReturn {
 // ============================================================================
 
 /**
- * Check if text-to-speech is available (ElevenLabs API key is configured).
+ * Check if text-to-speech is available.
+ * Since we moved to backend, it's always available if backend is up.
  */
 export async function isSpeechAvailable(): Promise<boolean> {
-  return ELEVENLABS_API_KEY !== 'YOUR_API_KEY_HERE' && ELEVENLABS_API_KEY.length > 0;
+  return true;
 }

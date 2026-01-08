@@ -4,7 +4,7 @@ import { memoryService } from '../services/memory-service';
 const router = Router();
 
 // Get all pending memories for the user
-router.get('/pending', async (req, res) => {
+router.get('/pending', async (req, res): Promise<any> => {
   try {
     const userId = req.headers['x-user-id'] as string;
     if (!userId) {
