@@ -58,6 +58,11 @@ import { memoryService } from './memory-service';
 export interface OrchestratorContext {
   sessionId: string;
   userId: string;
+  /**
+   * Unique identifier for this user action/turn.
+   * All AI operations triggered by this turn should use the same turnId for cost attribution.
+   */
+  turnId: string;
   userName: string;
   partnerName?: string;
   stage: number;
@@ -137,8 +142,8 @@ export async function orchestrateResponse(
   const startTime = Date.now();
   const decisionStartTime = Date.now();
 
-  // Generate unique turn ID for grouping all logs from this message processing cycle
-  const turnId = `${context.sessionId}-${context.turnCount}`;
+  // Use turnId from context for grouping all logs/costs from this message processing cycle
+  const { turnId } = context;
 
   // Broadcast user message as the first event in this turn
   auditLog('USER', 'User message received', {
@@ -200,17 +205,17 @@ export async function orchestrateResponse(
     );
 
     if (detectionResult.hasMemoryIntent && detectionResult.suggestions.length > 0) {
-      // Validate the first suggestion (we'll handle multiple later if needed)
+      // Validate the first suggestion synchronously before showing to user
       const suggestion = detectionResult.suggestions[0];
-      
-      // Run AI validation in background (non-blocking)
-      // Don't create/broadcast memory until AI validation completes
-      // This ensures we don't create invalid memories, but doesn't block the response
-      validateMemory(
-        suggestion.suggestedContent,
-        suggestion.category,
-        { sessionId: context.sessionId, turnId, useAI: true }
-      ).then(async (validation) => {
+
+      try {
+        // Validate BEFORE generating response - only show valid suggestions to user
+        const validation = await validateMemory(
+          suggestion.suggestedContent,
+          suggestion.category,
+          { sessionId: context.sessionId, turnId, useAI: true }
+        );
+
         console.log('[AI Orchestrator] Memory validation result:', {
           content: suggestion.suggestedContent,
           category: suggestion.category,
@@ -232,13 +237,12 @@ export async function orchestrateResponse(
           // Persist as PENDING (always global, no sessionId)
           const memory = await memoryService.createPendingMemory({
             userId: context.userId,
-            // sessionId omitted - memories are always global
             content: suggestion.suggestedContent,
             category: suggestion.category,
             suggestedBy: `AI Confidence: ${suggestion.confidence} | Evidence: ${suggestion.evidence}`,
           });
 
-          // BROADCAST TO APP with DB ID
+          // BROADCAST TO APP with DB ID - user will see the suggestion card
           await publishSessionEvent(
             context.sessionId,
             'memory.suggested',
@@ -253,8 +257,13 @@ export async function orchestrateResponse(
               },
             }
           );
+
+          memoryDetectionResult = {
+            suggestion,
+            validation: { valid: true },
+          };
         } else {
-          // Invalid memory request - log it
+          // Invalid memory request - log it but don't show to user
           auditLog('MEMORY_DETECTION', 'Memory suggestion rejected', {
             turnId,
             sessionId: context.sessionId,
@@ -265,11 +274,15 @@ export async function orchestrateResponse(
             validation: 'invalid',
             rejectionReason: validation.reason,
           });
-          // Note: Response already sent, but no memory was created
+
+          memoryDetectionResult = {
+            suggestion,
+            validation: { valid: false, reason: validation.reason },
+          };
         }
-      }).catch((error) => {
+      } catch (error) {
         console.warn('[AI Orchestrator] Memory validation failed:', error);
-        // If validation fails, don't create memory (safer to skip than create invalid)
+        // If validation fails, don't show to user (safer to skip than show invalid)
         auditLog('MEMORY_DETECTION', 'Memory suggestion skipped (validation error)', {
           turnId,
           sessionId: context.sessionId,
@@ -277,17 +290,7 @@ export async function orchestrateResponse(
           category: suggestion.category,
           error: error instanceof Error ? error.message : 'Unknown error',
         });
-      });
-
-      // Store suggestion for potential Sonnet response (if validation fails, we'll pass it)
-      // But don't create memory until validation completes
-      memoryDetectionResult = {
-        suggestion,
-        validation: {
-          valid: undefined as any, // Will be determined by background validation
-          reason: undefined,
-        },
-      };
+      }
     }
   } catch (error) {
     console.warn('[AI Orchestrator] Memory detection failed:', error);
@@ -386,6 +389,7 @@ export async function orchestrateResponse(
         context.stage,
         context.userId,
         context.sessionId,
+        turnId,
         context.userMessage,
         memoryIntent.intent
       );

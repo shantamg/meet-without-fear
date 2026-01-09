@@ -193,6 +193,9 @@ export async function extractNeedsFromConversation(
 
   let extractedNeeds: ExtractedNeed[];
 
+  // Generate turnId for needs extraction
+  const turnId = `${sessionId}-extract-needs-${Date.now()}`;
+
   try {
     const response = await getCompletion({
       systemPrompt: buildNeedExtractionPrompt(),
@@ -205,6 +208,7 @@ export async function extractNeedsFromConversation(
       maxTokens: MAX_TOKENS,
       sessionId,
       operation: 'extract-needs',
+      turnId,
     });
 
     if (!response) {
@@ -299,6 +303,9 @@ export async function findCommonGround(
 
   let commonGroundItems: Array<{ category: NeedCategory; need: string; insight: string }>;
 
+  // Generate turnId for common ground extraction
+  const turnId = `${sessionId}-common-ground-${Date.now()}`;
+
   try {
     const response = await getCompletion({
       systemPrompt: buildCommonGroundPrompt(),
@@ -311,6 +318,7 @@ export async function findCommonGround(
       maxTokens: MAX_TOKENS,
       sessionId,
       operation: 'common-ground',
+      turnId,
     });
 
     if (!response) {

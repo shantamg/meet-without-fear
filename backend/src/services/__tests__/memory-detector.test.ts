@@ -9,7 +9,6 @@ describe('Memory Detector Service', () => {
         expect(result.hasMemoryIntent).toBe(true);
         expect(result.suggestions).toHaveLength(1);
         expect(result.suggestions[0].category).toBe('AI_NAME');
-        expect(result.suggestions[0].scope).toBe('global');
         expect(result.suggestions[0].confidence).toBe('high');
       });
 
@@ -28,7 +27,6 @@ describe('Memory Detector Service', () => {
         expect(result.hasMemoryIntent).toBe(true);
         expect(result.suggestions).toHaveLength(1);
         expect(result.suggestions[0].category).toBe('PERSONAL_INFO');
-        expect(result.suggestions[0].scope).toBe('global');
       });
 
       it('detects "my name is" pattern', () => {
@@ -60,7 +58,6 @@ describe('Memory Detector Service', () => {
 
         expect(result.hasMemoryIntent).toBe(true);
         expect(result.suggestions[0].category).toBe('COMMUNICATION');
-        expect(result.suggestions[0].scope).toBe('global');
       });
 
       it('detects "be more direct" pattern', () => {
@@ -91,7 +88,6 @@ describe('Memory Detector Service', () => {
 
         expect(result.hasMemoryIntent).toBe(true);
         expect(result.suggestions[0].category).toBe('RELATIONSHIP');
-        expect(result.suggestions[0].scope).toBe('session');
         expect(result.suggestions[0].suggestedContent).toContain('Jamie');
       });
 
@@ -116,7 +112,6 @@ describe('Memory Detector Service', () => {
 
         expect(result.hasMemoryIntent).toBe(true);
         expect(result.suggestions[0].category).toBe('PREFERENCE');
-        expect(result.suggestions[0].scope).toBe('global');
       });
 
       it('detects "give examples" pattern', () => {

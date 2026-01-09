@@ -133,7 +133,7 @@ export async function embedSessionVessel(
   const embeddingText = buildSessionEmbeddingText(summary);
 
   // Generate embedding
-  const embedding = await getEmbedding(embeddingText);
+  const embedding = await getEmbedding(embeddingText, { sessionId });
   if (!embedding) {
     console.warn(`[Embedding] Failed to generate embedding for session ${sessionId}`);
     return false;
@@ -156,11 +156,13 @@ export async function embedSessionVessel(
 
 /**
  * Generate and store embedding for a message.
+ * @param messageId - The message to embed
+ * @param turnId - The turn ID for cost attribution (from the user action that triggered this)
  */
-export async function embedMessage(messageId: string): Promise<boolean> {
+export async function embedMessage(messageId: string, turnId: string): Promise<boolean> {
   const message = await prisma.message.findUnique({
     where: { id: messageId },
-    select: { id: true, content: true },
+    select: { id: true, content: true, sessionId: true },
   });
 
   if (!message) {
@@ -168,7 +170,7 @@ export async function embedMessage(messageId: string): Promise<boolean> {
     return false;
   }
 
-  const embedding = await getEmbedding(message.content);
+  const embedding = await getEmbedding(message.content, { sessionId: message.sessionId, turnId });
   if (!embedding) {
     console.warn(`[Embedding] Failed to generate embedding for message ${messageId}`);
     return false;
@@ -185,15 +187,17 @@ export async function embedMessage(messageId: string): Promise<boolean> {
 
 /**
  * Embed multiple messages in batch.
+ * @param messageIds - The messages to embed
+ * @param turnId - The turn ID for cost attribution (from the user action that triggered this)
  */
-export async function embedMessages(messageIds: string[]): Promise<number> {
+export async function embedMessages(messageIds: string[], turnId: string): Promise<number> {
   let successCount = 0;
 
   // Process in parallel with concurrency limit
   const batchSize = 5;
   for (let i = 0; i < messageIds.length; i += batchSize) {
     const batch = messageIds.slice(i, i + batchSize);
-    const results = await Promise.all(batch.map((id) => embedMessage(id)));
+    const results = await Promise.all(batch.map((id) => embedMessage(id, turnId)));
     successCount += results.filter(Boolean).length;
   }
 
@@ -267,7 +271,7 @@ export async function findSimilarMessages(
   limit: number = 5,
   threshold: number = 0.6
 ): Promise<SimilarMessage[]> {
-  const queryEmbedding = await getEmbedding(queryText);
+  const queryEmbedding = await getEmbedding(queryText, { sessionId });
   if (!queryEmbedding) {
     return [];
   }
@@ -349,11 +353,13 @@ export async function isEmbeddingEnabled(): Promise<boolean> {
 
 /**
  * Generate and store embedding for an inner work message.
+ * @param messageId - The message to embed
+ * @param turnId - The turn ID for cost attribution (from the user action that triggered this)
  */
-export async function embedInnerWorkMessage(messageId: string): Promise<boolean> {
+export async function embedInnerWorkMessage(messageId: string, turnId: string): Promise<boolean> {
   const message = await prisma.innerWorkMessage.findUnique({
     where: { id: messageId },
-    select: { id: true, content: true },
+    select: { id: true, content: true, sessionId: true },
   });
 
   if (!message) {
@@ -361,7 +367,7 @@ export async function embedInnerWorkMessage(messageId: string): Promise<boolean>
     return false;
   }
 
-  const embedding = await getEmbedding(message.content);
+  const embedding = await getEmbedding(message.content, { sessionId: message.sessionId, turnId });
   if (!embedding) {
     console.warn(`[Embedding] Failed to generate embedding for inner work message ${messageId}`);
     return false;

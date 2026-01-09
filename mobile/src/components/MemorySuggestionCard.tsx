@@ -5,7 +5,7 @@
  * Allows users to approve, edit, or dismiss memory suggestions.
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,8 @@ import {
   Animated,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Star, Check, Edit3, X } from 'lucide-react-native';
+import { EditSuggestionModal } from './EditSuggestionModal';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 import {
@@ -49,7 +49,7 @@ export function MemorySuggestionCard({
   testID = 'memory-suggestion-card',
 }: MemorySuggestionCardProps) {
   const styles = useStyles();
-  const router = useRouter();
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Animation for smooth appearance
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -122,15 +122,32 @@ export function MemorySuggestionCard({
   };
 
   const handleEdit = () => {
-    // Navigate to settings memories screen
-    // If the memory has an ID, we can pass it as a query param to auto-open edit
-    const params = suggestion.id ? { editId: suggestion.id } : undefined;
-    router.push({
-      pathname: '/settings/memories',
-      params,
+    // Animate out the card immediately, then show the modal
+    animateOut(() => {
+      setShowEditModal(true);
     });
-    // Dismiss the card since we're navigating away
+  };
+
+  const handleEditClose = () => {
+    // User cancelled editing - dismiss the card
+    setShowEditModal(false);
     onDismiss();
+  };
+
+  const handleEditSave = async (editedContent: string, category: typeof suggestion.category) => {
+    try {
+      // Create the memory with the edited content
+      await approveMemory.mutateAsync({
+        id: suggestion.id,
+        suggestedContent: editedContent,
+        category,
+      });
+      setShowEditModal(false);
+      onApproved?.();
+      onDismiss();
+    } catch {
+      // Error handling is done by the mutation
+    }
   };
 
   const getConfidenceLabel = (confidence: 'high' | 'medium' | 'low'): string => {
@@ -230,6 +247,15 @@ export function MemorySuggestionCard({
             )}
           </TouchableOpacity>
         </View>
+
+      {/* Edit Memory Modal */}
+      <EditSuggestionModal
+        visible={showEditModal}
+        suggestion={suggestion}
+        onClose={handleEditClose}
+        onSave={handleEditSave}
+        testID={`${testID}-edit-modal`}
+      />
     </Animated.View>
   );
 }

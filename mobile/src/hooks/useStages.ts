@@ -322,7 +322,12 @@ export function useConsentToShareEmpathy(
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useMutation<
+    ConsentToShareEmpathyResponse,
+    ApiClientError,
+    { sessionId: string; consent: boolean; draftContent?: string },
+    { previousList: GetMessagesResponse | undefined; previousInfinite: InfiniteData<GetMessagesResponse> | undefined }
+  >({
     mutationFn: async ({ sessionId, consent }) => {
       console.log('[useConsentToShareEmpathy] mutationFn called', { sessionId, consent });
       try {

@@ -13,55 +13,19 @@ import { prisma } from '../../lib/prisma';
 import { notifyPartner, publishSessionEvent } from '../../services/realtime';
 
 // Mock prisma
-jest.mock('../../lib/prisma', () => ({
-  prisma: {
-    session: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-    },
-    stageProgress: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-    },
-    empathyDraft: {
-      findUnique: jest.fn(),
-      upsert: jest.fn(),
-    },
-    empathyAttempt: {
-      findFirst: jest.fn(),
-      create: jest.fn(),
-    },
-    empathyValidation: {
-      create: jest.fn(),
-    },
-    consentRecord: {
-      create: jest.fn(),
-      findFirst: jest.fn(),
-    },
-    user: {
-      findUnique: jest.fn(),
-    },
-    message: {
-      create: jest.fn().mockResolvedValue({
-        id: 'msg-1',
-        content: 'test',
-        timestamp: new Date(),
-        stage: 2,
-      }),
-    },
-  },
-}));
+jest.mock('../../lib/prisma');
+
 
 // Mock realtime
-jest.mock('../../services/realtime', () => ({
-  notifyPartner: jest.fn().mockResolvedValue(undefined),
-  publishSessionEvent: jest.fn().mockResolvedValue(undefined),
-}));
+jest.mock('../../services/realtime');
+
 
 // Mock notification service
 jest.mock('../../services/notification', () => ({
   notifyEmpathyShared: jest.fn().mockResolvedValue(undefined),
+  notifyEmpathyRevealed: jest.fn().mockResolvedValue(undefined),
+  notifyEmpathyNeedsWork: jest.fn().mockResolvedValue(undefined),
+  notifyEmpathyValidated: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock bedrock
@@ -338,6 +302,10 @@ describe('Stage 2 API', () => {
         id: 'attempt-1',
         sharedAt: new Date(),
       });
+      (prisma.message.create as jest.Mock).mockResolvedValue({
+        id: 'msg-1',
+        timestamp: new Date(),
+      });
       // Mock partner consent check
       (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue(null);
 
@@ -390,7 +358,11 @@ describe('Stage 2 API', () => {
         sharedAt,
         sourceUserId: 'partner-1',
         consentRecordId: 'consent-1',
+        status: 'REVEALED', // Must be REVEALED or VALIDATED to be visible
+        revealedAt: sharedAt,
+        revisionCount: 0,
       });
+      // Mock empathyValidation.findUnique for the validation lookup
       (prisma.empathyValidation.findUnique as jest.Mock).mockResolvedValue(null);
 
       await getPartnerEmpathy(req, res);
@@ -426,24 +398,35 @@ describe('Stage 2 API', () => {
       (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
         id: 'attempt-1',
         sourceUserId: 'partner-1',
+        status: 'REVEALED',
       });
+      // Mock empathyAttempt.update for setting status to VALIDATED
+      (prisma.empathyAttempt.update as jest.Mock).mockResolvedValue({ id: 'attempt-1', status: 'VALIDATED' });
+      // Mock empathyValidation.upsert
       (prisma.empathyValidation.upsert as jest.Mock).mockResolvedValue({
         id: 'validation-1',
         validated: true,
         validatedAt: new Date(),
         feedbackShared: false,
       });
+      (prisma.empathyValidation.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
         gatesSatisfied: { empathyValidated: true },
       });
+      // Mock user lookup for notifications
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        firstName: 'Partner',
+        name: 'Partner User',
+      });
+      // Re-mock findFirst for the second call to get my attempt
       (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValueOnce({
         id: 'attempt-1',
         sourceUserId: 'partner-1',
+        status: 'REVEALED',
       }).mockResolvedValueOnce({
         id: 'my-attempt-1',
         sourceUserId: 'user-1',
       });
-      (prisma.empathyValidation.findUnique as jest.Mock).mockResolvedValue(null);
 
       await validateEmpathy(req, res);
 

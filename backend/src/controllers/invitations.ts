@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { notifyPartner, notifyPartnerWithFallback } from '../services/realtime';
+import { notifyPartner, notifyPartnerWithFallback, publishSessionCreated } from '../services/realtime';
 import { notifyInvitationAccepted, notifyInvitationReceived, notifySessionJoined } from '../services/notification';
 import { z } from 'zod';
 import { ApiResponse, ErrorCode, SessionStatus, StageStatus, Stage } from '@meet-without-fear/shared';
@@ -344,6 +344,14 @@ export async function createSession(req: Request, res: Response): Promise<void> 
 
     // Note: Initial AI message is now generated via POST /messages/initial
     // when the user first enters the session (fetched by mobile app)
+
+    // Publish to audit stream for monitoring dashboard (non-blocking)
+    publishSessionCreated(session.id, {
+      type: 'CONFLICT_RESOLUTION',
+      status: session.status,
+      createdAt: session.createdAt.toISOString(),
+      members: [{ userId: user.id, name: user.firstName || user.name || undefined }],
+    }).catch(() => {}); // Ignore failures
 
     successResponse(
       res,

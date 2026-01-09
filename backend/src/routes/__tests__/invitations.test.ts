@@ -8,41 +8,8 @@ import {
 import { prisma } from '../../lib/prisma';
 
 // Mock Prisma
-jest.mock('../../lib/prisma', () => ({
-  prisma: {
-    relationship: {
-      create: jest.fn(),
-    },
-    relationshipMember: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-      create: jest.fn(),
-    },
-    session: {
-      create: jest.fn(),
-      update: jest.fn(),
-      findUnique: jest.fn(),
-      findFirst: jest.fn(),
-    },
-    invitation: {
-      create: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-    },
-    stageProgress: {
-      create: jest.fn(),
-    },
-    userVessel: {
-      create: jest.fn(),
-    },
-    sharedVessel: {
-      create: jest.fn(),
-    },
-    message: {
-      create: jest.fn(),
-    },
-  },
-}));
+jest.mock('../../lib/prisma');
+
 
 // Mock email service
 jest.mock('../../services/email', () => ({
@@ -57,7 +24,16 @@ jest.mock('../../services/email', () => ({
 jest.mock('../../services/realtime', () => ({
   notifyPartner: jest.fn().mockResolvedValue(undefined),
   notifyPartnerWithFallback: jest.fn().mockResolvedValue(undefined),
+  publishSessionCreated: jest.fn().mockResolvedValue(undefined),
+  getAbly: jest.fn().mockReturnValue({
+    channels: {
+      get: jest.fn().mockReturnValue({
+        publish: jest.fn().mockResolvedValue(undefined),
+      }),
+    },
+  }),
 }));
+
 
 // Mock notification service
 jest.mock('../../services/notification', () => ({

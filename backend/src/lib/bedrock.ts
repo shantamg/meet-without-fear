@@ -18,6 +18,7 @@ import {
 } from '@aws-sdk/client-bedrock-runtime';
 import { usageTracker } from '../services/usage-tracker';
 import { extractJsonFromResponse } from '../utils/json-extractor';
+import { auditLog } from '../services/audit-logger';
 
 // ============================================================================
 // Configuration - Two Model Stratification
@@ -81,31 +82,47 @@ export interface SimpleMessage {
   content: string;
 }
 
+/**
+ * Base options for LLM completion requests.
+ * sessionId and turnId are REQUIRED to ensure proper cost tracking and attribution.
+ */
 export interface CompletionOptions {
   systemPrompt: string;
   messages: SimpleMessage[];
   maxTokens?: number;
   thinkingBudget?: number;
-  sessionId?: string;
-  operation?: string;
-  turnId?: string;
+  /** Session ID for cost attribution - REQUIRED */
+  sessionId: string;
+  /** Operation name for cost breakdown (e.g., 'intent-detection', 'orchestrator-response') */
+  operation: string;
+  /** Turn ID to group all costs from a single user action - REQUIRED */
+  turnId: string;
 }
 
+/**
+ * Options for Haiku (fast model) completion requests.
+ * sessionId and turnId are REQUIRED to ensure proper cost tracking.
+ */
 export interface HaikuCompletionOptions {
   systemPrompt: string;
   messages: SimpleMessage[];
   maxTokens?: number;
-  sessionId?: string;
-  operation?: string;
-  turnId?: string;
+  /** Session ID for cost attribution - REQUIRED */
+  sessionId: string;
+  /** Operation name for cost breakdown */
+  operation: string;
+  /** Turn ID to group all costs from a single user action - REQUIRED */
+  turnId: string;
 }
 
+/**
+ * Options for Sonnet (empathetic model) completion requests.
+ * Extends CompletionOptions so sessionId and turnId are REQUIRED.
+ */
 export interface SonnetCompletionOptions extends CompletionOptions {
   // Sonnet-specific options can be added here
   maxTokens?: number;
   thinkingBudget?: number;
-  sessionId?: string;
-  operation?: string;
 }
 
 export type ModelType = 'haiku' | 'sonnet';
@@ -133,6 +150,7 @@ function recordUsage(params: {
   operation: string;
   usage?: { inputTokens?: number; outputTokens?: number };
   turnId?: string;
+  durationMs?: number;
 }): void {
   const inputTokens = params.usage?.inputTokens ?? 0;
   const outputTokens = params.usage?.outputTokens ?? 0;
@@ -145,7 +163,8 @@ function recordUsage(params: {
     params.operation,
     inputTokens,
     outputTokens,
-    params.turnId
+    params.turnId,
+    params.durationMs
   );
 }
 
@@ -219,6 +238,18 @@ export async function getModelCompletion(
 
   const { systemPrompt, messages, maxTokens = 2048, thinkingBudget } = options;
   const modelId = model === 'haiku' ? BEDROCK_HAIKU_MODEL_ID : BEDROCK_SONNET_MODEL_ID;
+  const operation = options.operation ?? `converse-${model}`;
+  const startTime = Date.now();
+
+  // Send LLM_START event for live monitoring
+  if (process.env.ENABLE_AUDIT_STREAM === 'true') {
+    auditLog('LLM_START', `Starting ${model} call`, {
+      turnId: options.turnId,
+      sessionId: options.sessionId,
+      model: model.toUpperCase(),
+      operation,
+    });
+  }
 
   const system: SystemContentBlock[] = [{ text: systemPrompt }];
   const inferenceConfig: InferenceConfiguration = { maxTokens };
@@ -242,12 +273,15 @@ export async function getModelCompletion(
 
   const command = new ConverseCommand(commandInput);
   const response = await client.send(command);
+  const durationMs = Date.now() - startTime;
+
   recordUsage({
     sessionId: options.sessionId,
     modelId,
-    operation: options.operation ?? `converse-${model}`,
+    operation,
     usage: response.usage ?? undefined,
     turnId: options.turnId,
+    durationMs,
   });
 
   const outputMessage = response.output?.message;
@@ -347,29 +381,23 @@ export async function getEmbedding(text: string, options?: { sessionId?: string;
     });
 
     const response = await client.send(command);
+
+    if (!response.body) {
+      return null;
+    }
+
+    // Extract actual token count from response headers (Bedrock returns this for InvokeModel)
+    // Fallback to estimation if not available
+    const headerTokenCount = (response as any).$metadata?.httpHeaders?.['x-amzn-bedrock-input-token-count'];
+    const inputTokens = headerTokenCount ? parseInt(headerTokenCount, 10) : Math.ceil(truncatedText.length / 4);
+
     recordUsage({
       modelId: BEDROCK_TITAN_EMBED_MODEL_ID,
       operation: 'embedding',
       sessionId: options?.sessionId,
       turnId: options?.turnId,
-      usage: { inputTokens: Math.ceil(truncatedText.length / 4) } // Titan doesn't return usage? Fallback estimation if needed, though recordUsage usually relies on response.usage
+      usage: { inputTokens },
     });
-    // actually command output for invokeModel might not have usage in older SDK versions or for embedding models?
-    // checking documentation: InvokeModelResponse body is Blob. header 'x-amzn-bedrock-input-token-count' etc. 
-    // The AWS SDK response object might map headers to properties?
-    // Let's rely on recordUsage which checks response.usage. 
-    // But for Embeddings, Bedrock often puts token counts in headers, not body. 
-    // The SDK `InvokeModelCommandOutput` has `body` and metadata.
-    // If usage is missing, recordUsage might skip it. 
-    // However, usageTracker requires tokens > 0.
-    // Titan V2 DOES return inputTokenCount in response headers: `x-amzn-bedrock-input-token-count`.
-    // The SDK might NOT populate `response.usage` for InvokeModel (it does for Converse).
-    // Let's assume for now we might miss token counts if SDK doesn't map it.
-    // But sticking to the goal: Pass sessionId.
-
-    if (!response.body) {
-      return null;
-    }
 
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
     return responseBody.embedding as number[];

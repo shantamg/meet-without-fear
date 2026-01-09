@@ -61,7 +61,7 @@ export const conversationHandler: IntentHandler = {
         userMessage: result.userMessage,
         aiResponse: result.aiResponse,
       },
-      memorySuggestion: result.memorySuggestion,
+      // NOTE: Memory suggestions are broadcast via publishSessionEvent from ai-orchestrator
     };
   },
 };

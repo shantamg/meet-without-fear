@@ -11,8 +11,6 @@ import { getOrchestratedResponse, type FullAIContext } from '../ai';
 import { getPartnerUserId } from '../../utils/session';
 import { embedMessage } from '../embedding';
 import { updateSessionSummary } from '../conversation-summarizer';
-import { detectMemoryIntent } from '../memory-detector';
-import type { MemorySuggestion } from '@meet-without-fear/shared';
 
 export interface SessionMessageInput {
   sessionId: string;
@@ -48,8 +46,7 @@ export interface SessionMessageResult {
   offerReadyToShare?: boolean;
   /** Stage 2: AI's proposed empathy statement summarizing user's understanding of partner */
   proposedEmpathyStatement?: string | null;
-  /** Memory suggestion if AI detected a memory request in user's message */
-  memorySuggestion?: MemorySuggestion;
+  // NOTE: Memory suggestions are handled by ai-orchestrator and broadcast via publishSessionEvent
 }
 
 /**
@@ -125,10 +122,7 @@ export async function processSessionMessage(
     },
   });
 
-  // Embed user message for cross-session retrieval (non-blocking)
-  embedMessage(userMessage.id).catch((err) =>
-    console.warn('[SessionProcessor] Failed to embed user message:', err)
-  );
+  // NOTE: User message embedding moved below after turnId is generated
 
   // Get conversation history (only this user's messages and AI responses to them - data isolation)
   const history = await prisma.message.findMany({
@@ -199,10 +193,14 @@ export async function processSessionMessage(
     session.status === 'CREATED' &&
     (!invitation?.messageConfirmed);
 
+  // Generate turnId for this user action - used to group all costs from this message
+  const turnId = `${sessionId}-${userTurnCount}`;
+
   // Build AI context
   const aiContext: FullAIContext = {
     sessionId,
     userId,
+    turnId,
     userName,
     partnerName,
     stage: currentStage,
@@ -246,65 +244,23 @@ export async function processSessionMessage(
     },
   });
 
-  // Embed AI message for cross-session retrieval (non-blocking)
-  embedMessage(aiMessage.id).catch((err) =>
+  // Embed messages for cross-session retrieval (non-blocking)
+  // Pass turnId so embedding cost is attributed to this user message
+  embedMessage(userMessage.id, turnId).catch((err) =>
+    console.warn('[SessionProcessor] Failed to embed user message:', err)
+  );
+  embedMessage(aiMessage.id, turnId).catch((err) =>
     console.warn('[SessionProcessor] Failed to embed AI message:', err)
   );
 
   // Summarize older parts of the conversation (non-blocking)
-  updateSessionSummary(sessionId, userId).catch((err) =>
+  // Pass turnId so summarization cost is attributed to this user message
+  updateSessionSummary(sessionId, userId, turnId).catch((err) =>
     console.warn('[SessionProcessor] Failed to update session summary:', err)
   );
 
-  // ============================================================================
-  // Memory Detection
-  // ============================================================================
-  // Run memory detection on user message to detect implicit memory requests
-  // (e.g., "call me Alex", "keep responses brief", "my partner's name is Jordan")
-  //
-  // Gating conditions to skip detection:
-  // 1. First few turns - let user settle in first (min 3 turns)
-  // 2. High emotional intensity - sensitive moments (intensity > 7)
-  // 3. Stage transitions - user is moving between stages
-
-  let memorySuggestion: MemorySuggestion | undefined;
-
-  const emotionalIntensity = aiContext.emotionalIntensity ?? 5; // Default to neutral if undefined
-  const shouldRunMemoryDetection =
-    userTurnCount >= 3 && // Let user settle in first
-    emotionalIntensity <= 7 && // Skip during high emotional moments
-    !isStageTransition; // Skip during stage transitions
-
-  if (shouldRunMemoryDetection) {
-    console.log(`[SessionProcessor] Running memory detection (turn ${userTurnCount}, intensity ${emotionalIntensity})`);
-    try {
-      // Include recent conversation history for context (last 5 messages to resolve pronouns/references)
-      const recentMessagesForMemory = history
-        .map((m) => ({
-          role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
-          content: m.content,
-        }))
-        .slice(-5);
-      const memoryDetection = await detectMemoryIntent(content, sessionId, undefined, 'partner-session', recentMessagesForMemory);
-
-      if (memoryDetection.hasMemoryIntent && memoryDetection.suggestions.length > 0) {
-        // Take top suggestion
-        memorySuggestion = memoryDetection.suggestions[0];
-        console.log(`[SessionProcessor] Memory suggestion detected:`, {
-          category: memorySuggestion.category,
-          content: memorySuggestion.suggestedContent,
-          confidence: memorySuggestion.confidence,
-        });
-      } else {
-        console.log(`[SessionProcessor] No memory intent detected`);
-      }
-    } catch (err) {
-      console.warn('[SessionProcessor] Memory detection failed:', err);
-      // Continue without memory suggestion - non-blocking
-    }
-  } else {
-    console.log(`[SessionProcessor] Skipping memory detection (turn ${userTurnCount}, intensity ${emotionalIntensity}, stageTransition: ${isStageTransition})`);
-  }
+  // NOTE: Memory detection is handled by ai-orchestrator.ts, not here.
+  // The orchestrator runs detection + validation synchronously before generating the response.
 
   // Stage 2: If AI is offering ready-to-share, auto-save the empathy draft
   // Save with readyToShare: false so user sees low-profile confirmation prompt first
@@ -360,6 +316,5 @@ export async function processSessionMessage(
     invitationMessage: orchestratorResult.invitationMessage,
     offerReadyToShare: orchestratorResult.offerReadyToShare,
     proposedEmpathyStatement: orchestratorResult.proposedEmpathyStatement,
-    memorySuggestion,
   };
 }

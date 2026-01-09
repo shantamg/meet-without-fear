@@ -80,7 +80,8 @@ async function generateConversationSummary(
   userName: string,
   partnerName: string,
   stage: number,
-  sessionId: string
+  sessionId: string,
+  turnId: string
 ): Promise<SummarizationResult | null> {
   if (messages.length === 0) {
     return null;
@@ -121,7 +122,8 @@ ${conversationText}`;
     messages: [{ role: 'user', content: userPrompt }],
     maxTokens: 800,
     sessionId,
-    operation: 'conversation-summary'
+    operation: 'conversation-summary',
+    turnId,
   });
 
   return result;
@@ -170,11 +172,14 @@ export function needsSummarization(messageCount: number, existingSummary?: strin
 
 /**
  * Summarize older messages in a session and update the vessel.
- * Call this as fire-and-forget: updateSessionSummary(sessionId, userId).catch(console.warn)
+ * Call this as fire-and-forget: updateSessionSummary(sessionId, userId, turnId).catch(console.warn)
+ *
+ * @param turnId - The turn that triggered this summarization (for cost attribution)
  */
 export async function updateSessionSummary(
   sessionId: string,
-  userId: string
+  userId: string,
+  turnId: string
 ): Promise<ConversationSummary | null> {
   try {
     // Get session with messages and vessel (only this user's messages - data isolation)
@@ -251,7 +256,8 @@ export async function updateSessionSummary(
       userName,
       partnerName,
       stage,
-      sessionId
+      sessionId,
+      turnId
     );
 
     if (!summaryResult) {
@@ -400,7 +406,8 @@ async function generateInnerThoughtsSummary(
   messages: Array<{ role: 'user' | 'assistant'; content: string; timestamp: Date }>,
   userName: string,
   existingTheme: string | null | undefined,
-  sessionId: string
+  sessionId: string,
+  turnId: string
 ): Promise<SummarizationResult | null> {
   if (messages.length === 0) {
     return null;
@@ -445,7 +452,8 @@ ${conversationText}`;
     messages: [{ role: 'user', content: userPrompt }],
     maxTokens: 800,
     sessionId,
-    operation: 'inner-thoughts-summary'
+    operation: 'inner-thoughts-summary',
+    turnId,
   });
   return result;
 }
@@ -473,10 +481,13 @@ export function innerThoughtsNeedsSummarization(
 
 /**
  * Summarize older messages in an Inner Thoughts session and store in the session.
- * Call this as fire-and-forget: updateInnerThoughtsSummary(sessionId).catch(console.warn)
+ * Call this as fire-and-forget: updateInnerThoughtsSummary(sessionId, turnId).catch(console.warn)
+ *
+ * @param turnId - The turn that triggered this summarization (for cost attribution)
  */
 export async function updateInnerThoughtsSummary(
-  sessionId: string
+  sessionId: string,
+  turnId: string
 ): Promise<ConversationSummary | null> {
   try {
     // Get session with messages
@@ -527,7 +538,8 @@ export async function updateInnerThoughtsSummary(
       })),
       userName,
       session.theme,
-      sessionId
+      sessionId,
+      turnId
     );
 
     if (!summaryResult) {

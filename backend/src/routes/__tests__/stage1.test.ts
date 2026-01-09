@@ -8,40 +8,8 @@ import { prisma } from '../../lib/prisma';
 import * as aiService from '../../services/ai';
 
 // Mock Prisma
-jest.mock('../../lib/prisma', () => ({
-  prisma: {
-    stageProgress: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-      upsert: jest.fn(),
-      create: jest.fn(),
-    },
-    message: {
-      create: jest.fn(),
-      findMany: jest.fn(),
-    },
-    session: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-    },
-    relationshipMember: {
-      findMany: jest.fn(),
-    },
-    user: {
-      findUnique: jest.fn(),
-    },
-    userVessel: {
-      findUnique: jest.fn(),
-    },
-    emotionalReading: {
-      findMany: jest.fn(),
-    },
-    invitation: {
-      findFirst: jest.fn(),
-    },
-  },
-}));
+jest.mock('../../lib/prisma');
+
 
 // Mock AI service
 jest.mock('../../services/ai', () => ({
@@ -49,12 +17,8 @@ jest.mock('../../services/ai', () => ({
 }));
 
 // Mock realtime service
-jest.mock('../../services/realtime', () => ({
-  publishSessionEvent: jest.fn().mockResolvedValue(undefined),
-  publishStageProgress: jest.fn().mockResolvedValue(undefined),
-  notifyPartner: jest.fn().mockResolvedValue(undefined),
-  notifyPartnerWithFallback: jest.fn().mockResolvedValue(undefined),
-}));
+jest.mock('../../services/realtime');
+
 
 // Helper to create mock request
 function createMockRequest(options: {

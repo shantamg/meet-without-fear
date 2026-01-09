@@ -402,10 +402,47 @@ jest.mock('@clerk/clerk-expo/token-cache', () => ({
   tokenCache: {},
 }));
 
-// Mock expo-modules-core
-jest.mock('expo-modules-core', () => ({
-  EventSubscription: class {},
+// Mock expo-av
+jest.mock('expo-av', () => ({
+  Audio: {
+    Sound: {
+      createAsync: jest.fn().mockResolvedValue({
+        sound: {
+          playAsync: jest.fn().mockResolvedValue(undefined),
+          stopAsync: jest.fn().mockResolvedValue(undefined),
+          unloadAsync: jest.fn().mockResolvedValue(undefined),
+          setOnPlaybackStatusUpdate: jest.fn(),
+        },
+        status: { isLoaded: true },
+      }),
+    },
+    setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
+    InterruptionModeIOS: {
+      DoNotMix: 1,
+      DuckOthers: 2,
+      MixWithOthers: 3,
+    },
+    InterruptionModeAndroid: {
+      DoNotMix: 1,
+      DuckOthers: 2,
+      MixWithOthers: 3,
+    },
+  },
 }));
+
+// Mock expo-modules-core correctly
+jest.mock('expo-modules-core', () => {
+  const actual = jest.requireActual('expo-modules-core');
+  return {
+    ...actual,
+    requireNativeModule: jest.fn(() => ({
+      addListener: jest.fn(),
+      removeListeners: jest.fn(),
+    })),
+    EventSubscription: class {},
+  };
+});
+
 
 // Mock expo-device
 jest.mock('expo-device', () => ({
@@ -559,6 +596,25 @@ try {
 } catch {
   // If react-native isn't available for some reason, ignore
 }
+
+// Mock mixpanel-react-native
+jest.mock('mixpanel-react-native', () => {
+  class MockMixpanel {
+    init = jest.fn().mockResolvedValue(undefined);
+    track = jest.fn().mockResolvedValue(undefined);
+    identify = jest.fn().mockResolvedValue(undefined);
+    alias = jest.fn().mockResolvedValue(undefined);
+    getPeople = jest.fn().mockReturnValue({
+      set: jest.fn().mockResolvedValue(undefined),
+      increment: jest.fn().mockResolvedValue(undefined),
+    });
+    reset = jest.fn().mockResolvedValue(undefined);
+    flush = jest.fn().mockResolvedValue(undefined);
+  }
+  return {
+    Mixpanel: MockMixpanel,
+  };
+});
 
 // Suppress expected console output during tests
 const originalConsoleLog = console.log;

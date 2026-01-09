@@ -26,6 +26,8 @@ import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { embedMessage } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
+import { auditLog } from '../services/audit-logger';
+import { runReconcilerForDirection } from '../services/reconciler';
 
 // ============================================================================
 // Helpers
@@ -90,11 +92,11 @@ function getFallbackInitialMessage(
 export async function sendMessage(req: Request, res: Response): Promise<void> {
   const requestStartTime = Date.now();
   const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  
+
   try {
     console.log(`[sendMessage:${requestId}] ========== REQUEST START ==========`);
     console.log(`[sendMessage:${requestId}] Timestamp: ${new Date().toISOString()}`);
-    
+
     const user = req.user;
     if (!user) {
       console.log(`[sendMessage:${requestId}] ERROR: No user in request`);
@@ -105,6 +107,7 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     const { id: sessionId } = req.params;
     console.log(`[sendMessage:${requestId}] Session ID: ${sessionId}`);
     console.log(`[sendMessage:${requestId}] User ID: ${user.id}`);
+
 
     // Validate request body
     const parseResult = sendMessageRequestSchema.safeParse(req.body);
@@ -266,10 +269,7 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       });
     }
 
-    // Embed message for cross-session retrieval (non-blocking)
-    embedMessage(userMessage.id).catch((err) =>
-      console.warn(`[sendMessage:${requestId}] Failed to embed user message:`, err)
-    );
+    // NOTE: User message embedding moved below after turnId is generated
 
     // Get conversation history for context (only this user's messages and AI responses to them)
     console.log(`[sendMessage:${requestId}] Fetching conversation history...`);
@@ -294,7 +294,7 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     const history = historyDesc.slice().reverse();
     console.log(`[sendMessage:${requestId}] ✅ History fetched: ${history.length} messages (took ${Date.now() - historyStartTime}ms)`);
     console.log(`[sendMessage:${requestId}] History breakdown: ${history.filter(m => m.role === 'USER').length} user, ${history.filter(m => m.role === 'AI').length} AI`);
-    
+
     // Log recent message IDs to detect duplicates
     const recentMessages = history.slice(-5);
     console.log(`[sendMessage:${requestId}] Recent 5 message IDs:`, recentMessages.map(m => `${m.role}:${m.id.substring(0, 8)}...`).join(', '));
@@ -302,6 +302,9 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     // Count user turns for AI context
     const userTurnCount = history.filter((m) => m.role === 'USER').length;
     console.log(`[sendMessage:${requestId}] User turn count: ${userTurnCount}`);
+
+    // Generate turnId for this user action - used to group all costs from this message
+    const turnId = `${sessionId}-${userTurnCount}`;
 
     // Detect stage transition: check if this is the first message in Stage 1
     // A stage transition happens when:
@@ -414,6 +417,7 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     const aiContext: FullAIContext = {
       sessionId,
       userId: user.id,
+      turnId,
       userName: user.name || 'there',
       partnerName,
       stage: currentStage,
@@ -490,9 +494,9 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       // CRITICAL FIX: Mark as unconfirmed so it is treated as a draft
       await prisma.invitation.updateMany({
         where: { sessionId, invitedById: user.id },
-        data: { 
+        data: {
           invitationMessage: extractedInvitationMessage,
-          messageConfirmed: false 
+          messageConfirmed: false
         },
       });
     }
@@ -568,14 +572,19 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       });
     }
 
-    // Embed AI message for cross-session retrieval (non-blocking)
-    embedMessage(aiMessage.id).catch((err) =>
+    // Embed messages for cross-session retrieval (non-blocking)
+    // Pass turnId so embedding cost is attributed to this user message
+    embedMessage(userMessage.id, turnId).catch((err) =>
+      console.warn(`[sendMessage:${requestId}] Failed to embed user message:`, err)
+    );
+    embedMessage(aiMessage.id, turnId).catch((err) =>
       console.warn(`[sendMessage:${requestId}] Failed to embed AI message:`, err)
     );
 
     // Summarize older parts of the conversation (non-blocking)
     // This creates/updates a rolling summary in UserVessel.conversationSummary once message count crosses thresholds.
-    updateSessionSummary(sessionId, user.id).catch((err) =>
+    // Pass turnId so summarization cost is attributed to this user message
+    updateSessionSummary(sessionId, user.id, turnId).catch((err) =>
       console.warn(`[sendMessage:${requestId}] Failed to update session summary:`, err)
     );
 
@@ -583,7 +592,7 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     console.log(`[sendMessage:${requestId}] ========== REQUEST SUCCESS ==========`);
     console.log(`[sendMessage:${requestId}] Total request time: ${totalTime}ms`);
     console.log(`[sendMessage:${requestId}] Returning response with userMessage.id=${userMessage.id}, aiMessage.id=${aiMessage.id}`);
-    
+
     successResponse(res, {
       userMessage: {
         id: userMessage.id,
@@ -693,12 +702,12 @@ export async function confirmFeelHeard(
       if (session.status === 'INVITED') {
         const isCreator = await isSessionCreator(sessionId, user.id);
         const hasJoined = !!progress; // User has stage progress, meaning they've joined
-        
+
         if (!isCreator && !hasJoined) {
           errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
           return;
         }
-        
+
         // If user has joined but session status is still INVITED, update it to ACTIVE
         // This handles edge cases where status wasn't updated on invitation acceptance
         if (hasJoined && !isCreator) {
@@ -870,6 +879,7 @@ Respond in JSON format:
           messages: [{ role: 'user', content: 'Generate the transition message based on the conversation above.' }],
           maxTokens: 512,
           sessionId,
+          turnId: `${sessionId}-feel-heard`,
           operation: 'stage1-transition',
         });
 
@@ -901,7 +911,8 @@ Respond in JSON format:
         });
 
         // Embed for cross-session retrieval (non-blocking)
-        embedMessage(aiMessage.id).catch((err) =>
+        // Use same turnId as the transition response for cost attribution
+        embedMessage(aiMessage.id, `${sessionId}-feel-heard`).catch((err) =>
           console.warn('[confirmFeelHeard] Failed to embed transition message:', err)
         );
 
@@ -913,6 +924,16 @@ Respond in JSON format:
         };
 
         console.log(`[confirmFeelHeard] Generated transition message for session ${sessionId}`);
+
+        // Audit log the transition message
+        auditLog('RESPONSE', 'Stage transition message generated', {
+          turnId: `${sessionId}-feel-heard`,
+          sessionId,
+          stage: 2,
+          operation: 'stage1-transition',
+          responseText: transitionContent,
+          messageId: aiMessage.id,
+        });
       } catch (error) {
         console.error('[confirmFeelHeard] Failed to generate transition message:', error);
         // Continue without transition message - not a critical failure
@@ -942,6 +963,67 @@ Respond in JSON format:
       });
     }
 
+    // NEW: Check if partner has an empathy attempt in HELD status
+    // If so, trigger the asymmetric reconciler for that direction
+    // (Partner = guesser, current user = subject whose Stage 1 is now complete)
+    let reconcilerTriggered = false;
+    let reconcilerResult: {
+      empathyStatus: 'REVEALED' | 'AWAITING_SHARING';
+      shareOffer: { suggestedContent: string; reason: string } | null;
+    } | null = null;
+
+    if (confirmed) {
+      const partnerId = await getPartnerUserId(sessionId, user.id);
+      if (partnerId) {
+        // Check if partner has an empathy attempt in HELD status (waiting for us)
+        const partnerEmpathyAttempt = await prisma.empathyAttempt.findFirst({
+          where: {
+            sessionId,
+            sourceUserId: partnerId,
+            status: 'HELD',
+          },
+        });
+
+        if (partnerEmpathyAttempt) {
+          console.log(`[confirmFeelHeard] Partner ${partnerId} has HELD empathy - triggering reconciler`);
+
+          try {
+            // Run reconciler for partner→user direction
+            // Partner is the guesser (who wrote empathy about us)
+            // Current user is the subject (whose Stage 1 content will be compared)
+            const result = await runReconcilerForDirection(sessionId, partnerId, user.id);
+            reconcilerTriggered = true;
+            reconcilerResult = {
+              empathyStatus: result.empathyStatus,
+              shareOffer: result.shareOffer,
+            };
+
+            console.log(`[confirmFeelHeard] Reconciler result: status=${result.empathyStatus}`);
+
+            // If there's a share suggestion, notify the current user (subject)
+            if (result.empathyStatus === 'AWAITING_SHARING' && result.shareOffer) {
+              await notifyPartner(sessionId, user.id, 'empathy.share_suggestion', {
+                guesserName: session.relationship.members.find(m => m.userId === partnerId)
+                  ? 'your partner'
+                  : 'your partner',
+                suggestedContent: result.shareOffer.suggestedContent,
+              });
+            }
+
+            // If empathy was revealed directly (no gaps), notify the partner (guesser)
+            if (result.empathyStatus === 'REVEALED') {
+              await notifyPartner(sessionId, partnerId, 'empathy.revealed', {
+                direction: 'outgoing',
+              });
+            }
+          } catch (error) {
+            console.error('[confirmFeelHeard] Failed to run reconciler:', error);
+            // Continue without reconciler - not a critical failure for Stage 1 completion
+          }
+        }
+      }
+    }
+
     successResponse(res, {
       confirmed,
       confirmedAt,
@@ -949,6 +1031,9 @@ Respond in JSON format:
       partnerCompleted,
       transitionMessage,
       advancedToStage: advancedToStage2 ? 2 : null,
+      // New: Reconciler info if triggered
+      reconcilerTriggered,
+      reconcilerResult,
     });
   } catch (error) {
     console.error('[confirmFeelHeard] Error:', error);
@@ -1034,7 +1119,7 @@ export async function getConversationHistory(
     });
 
     console.log(`[getConversationHistory:${requestId}] ✅ Fetched ${messages.length} messages from database`);
-    
+
     // Check for duplicate message IDs
     const messageIds = messages.map(m => m.id);
     const duplicateIds = messageIds.filter((id, idx) => messageIds.indexOf(id) !== idx);
@@ -1045,7 +1130,7 @@ export async function getConversationHistory(
         console.warn(`[getConversationHistory:${requestId}]   Duplicate ID ${id}: appears ${duplicates.length} times`);
       });
     }
-    
+
     // Check for duplicate content (same content, same role, within 1 second)
     const contentMap = new Map<string, typeof messages>();
     messages.forEach(m => {
@@ -1065,7 +1150,7 @@ export async function getConversationHistory(
         });
       });
     }
-    
+
     // Log recent message IDs
     const recentMessages = messages.slice(0, 5);
     console.log(`[getConversationHistory:${requestId}] Recent 5 message IDs:`, recentMessages.map(m => `${m.role}:${m.id.substring(0, 8)}...`).join(', '));
@@ -1073,7 +1158,7 @@ export async function getConversationHistory(
     // Check if there are more messages
     const hasMore = messages.length > limit;
     let resultMessages = hasMore ? messages.slice(0, limit) : messages;
-    
+
     console.log(`[getConversationHistory:${requestId}] Returning ${resultMessages.length} messages (hasMore=${hasMore})`);
 
     // If fetched in descending order, reverse to return chronological order for display
@@ -1207,6 +1292,7 @@ export async function getInitialMessage(
         messages: [{ role: 'user', content: 'Please generate an initial greeting.' }],
         maxTokens: 512,
         sessionId,
+        turnId: `${sessionId}-welcome`,
         operation: 'stage1-initial-message',
       });
 
@@ -1238,11 +1324,24 @@ export async function getInitialMessage(
     });
 
     // Embed initial message for cross-session retrieval (non-blocking)
-    embedMessage(aiMessage.id).catch((err) =>
+    // Use same turnId as the welcome response for cost attribution
+    embedMessage(aiMessage.id, `${sessionId}-welcome`).catch((err) =>
       console.warn('[getInitialMessage] Failed to embed message:', err)
     );
 
     console.log(`[getInitialMessage] Generated initial message for session ${sessionId}, stage ${currentStage}`);
+
+    // Audit log the initial message
+    auditLog('RESPONSE', 'Initial welcome message generated', {
+      turnId: `${sessionId}-welcome`,
+      sessionId,
+      stage: currentStage,
+      userName,
+      partnerName,
+      isInvitee,
+      responseText: responseContent,
+      messageId: aiMessage.id,
+    });
 
     successResponse(res, {
       message: {

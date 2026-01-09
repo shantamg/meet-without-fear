@@ -197,6 +197,7 @@ export async function planRetrieval(
   stage: number,
   userId: string,
   sessionId: string,
+  turnId: string,
   userMessage: string,
   memoryIntent: string,
 ): Promise<RetrievalPlan> {
@@ -214,6 +215,7 @@ export async function planRetrieval(
         messages: [{ role: 'user', content: userPrompt }],
         maxTokens: 512,
         sessionId,
+        turnId,
         operation: 'retrieval-planning',
       });
     },

@@ -9,46 +9,8 @@ import { prisma } from '../../lib/prisma';
 import * as needsService from '../../services/needs';
 
 // Mock Prisma
-jest.mock('../../lib/prisma', () => ({
-  prisma: {
-    stageProgress: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-      upsert: jest.fn(),
-    },
-    session: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-    },
-    message: {
-      findMany: jest.fn(),
-    },
-    userVessel: {
-      findUnique: jest.fn(),
-      create: jest.fn(),
-    },
-    identifiedNeed: {
-      findMany: jest.fn(),
-      findUnique: jest.fn(),
-      updateMany: jest.fn(),
-      update: jest.fn(),
-    },
-    consentRecord: {
-      create: jest.fn(),
-      findFirst: jest.fn(),
-      findMany: jest.fn(),
-    },
-    sharedVessel: {
-      findUnique: jest.fn(),
-      create: jest.fn(),
-    },
-    commonGround: {
-      findMany: jest.fn(),
-      create: jest.fn(),
-    },
-  },
-}));
+jest.mock('../../lib/prisma');
+
 
 // Mock needs service
 jest.mock('../../services/needs', () => ({
@@ -57,12 +19,8 @@ jest.mock('../../services/needs', () => ({
 }));
 
 // Mock realtime service
-jest.mock('../../services/realtime', () => ({
-  publishSessionEvent: jest.fn().mockResolvedValue(undefined),
-  publishStageProgress: jest.fn().mockResolvedValue(undefined),
-  notifyPartner: jest.fn().mockResolvedValue(undefined),
-  notifyPartnerWithFallback: jest.fn().mockResolvedValue(undefined),
-}));
+jest.mock('../../services/realtime');
+
 
 // Helper to create mock request
 function createMockRequest(options: {

@@ -9,22 +9,8 @@ import { IntentHandlerContext, IntentHandlerResult, createStateStore } from '../
 import { Request } from 'express';
 
 // Mock prisma
-jest.mock('../../../lib/prisma', () => ({
-  prisma: {
-    relationship: {
-      create: jest.fn(),
-    },
-    session: {
-      create: jest.fn(),
-    },
-    invitation: {
-      create: jest.fn(),
-    },
-    userDocument: {
-      create: jest.fn(),
-    },
-  },
-}));
+jest.mock('../../../lib/prisma');
+
 
 // Mock response generator
 jest.mock('../response-generator', () => ({

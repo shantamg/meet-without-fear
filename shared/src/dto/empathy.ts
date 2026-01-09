@@ -5,6 +5,29 @@
  */
 
 // ============================================================================
+// Empathy Status (Reconciler Flow)
+// ============================================================================
+
+export const EmpathyStatus = {
+  /** Waiting for partner to complete Stage 1 */
+  HELD: 'HELD',
+  /** Reconciler is comparing guess vs actual Stage 1 content */
+  ANALYZING: 'ANALYZING',
+  /** Gaps detected, waiting for subject to respond to share suggestion */
+  AWAITING_SHARING: 'AWAITING_SHARING',
+  /** Guesser is refining after receiving shared context from subject */
+  REFINING: 'REFINING',
+  /** Significant gaps detected, guesser should refine (legacy - use AWAITING_SHARING) */
+  NEEDS_WORK: 'NEEDS_WORK',
+  /** Recipient can now see statement */
+  REVEALED: 'REVEALED',
+  /** Recipient has validated accuracy */
+  VALIDATED: 'VALIDATED',
+} as const;
+
+export type EmpathyStatus = (typeof EmpathyStatus)[keyof typeof EmpathyStatus];
+
+// ============================================================================
 // Drafting
 // ============================================================================
 
@@ -49,6 +72,9 @@ export interface EmpathyAttemptDTO {
   content: string;
   sharedAt: string;
   consentRecordId: string;
+  status: EmpathyStatus;
+  revealedAt: string | null;
+  revisionCount: number;
 }
 
 /** Message included in consent response for immediate display */
@@ -64,6 +90,8 @@ export interface ConsentToShareEmpathyResponse {
   consentedAt: string | null;
   partnerConsented: boolean;
   canReveal: boolean;
+  /** Current status of the empathy attempt */
+  status: EmpathyStatus;
   /** The empathy statement message that was saved */
   empathyMessage: ConsentMessageDTO;
   /** AI transition message (optional, may fail to generate) */
@@ -77,6 +105,8 @@ export interface ConsentToShareEmpathyResponse {
 export interface GetPartnerEmpathyResponse {
   attempt: EmpathyAttemptDTO | null;
   waitingForPartner: boolean;
+  /** Partner's attempt status (or null if no attempt) */
+  partnerStatus: EmpathyStatus | null;
   validated: boolean;
   validatedAt: string | null;
   awaitingRevision: boolean;
@@ -96,4 +126,124 @@ export interface ValidateEmpathyResponse {
   awaitingRevision: boolean;
   canAdvance: boolean;
   partnerValidated: boolean;
+}
+
+// ============================================================================
+// Refinement Flow (Phase 4)
+// ============================================================================
+
+export interface RefineEmpathyRequest {
+  /** User's response to refinement prompt */
+  message: string;
+}
+
+export interface RefineEmpathyResponse {
+  /** AI's next question/guidance */
+  response: string;
+  /** Updated statement if user agreed to revise (null if still exploring) */
+  proposedRevision: string | null;
+  /** Whether user can now resubmit their revised statement */
+  canResubmit: boolean;
+}
+
+export interface ResubmitEmpathyRequest {
+  /** Revised empathy statement content */
+  content: string;
+}
+
+export interface ResubmitEmpathyResponse {
+  /** Status after resubmit (will be ANALYZING while reconciler runs) */
+  status: EmpathyStatus;
+  /** Informational message for the user */
+  message: string;
+}
+
+// ============================================================================
+// Empathy Exchange Status (for UI state management)
+// ============================================================================
+
+export interface EmpathyExchangeStatusResponse {
+  /** Current user's empathy attempt toward partner */
+  myAttempt: EmpathyAttemptDTO | null;
+  /** Partner's empathy attempt toward me */
+  partnerAttempt: EmpathyAttemptDTO | null;
+  /** Whether partner has completed Stage 1 (confirmed feelHeard) */
+  partnerCompletedStage1: boolean;
+  /** Whether reconciler is currently analyzing */
+  analyzing: boolean;
+  /** Whether awaiting subject to respond to share suggestion */
+  awaitingSharing: boolean;
+  /** Whether there is new shared context to view (guesser only) */
+  hasNewSharedContext: boolean;
+  /** Shared context from subject (guesser only, if any) */
+  sharedContext: {
+    content: string;
+    sharedAt: string;
+  } | null;
+  /** Abstract guidance hint if my attempt needs work */
+  refinementHint: {
+    areaHint: string | null;
+    guidanceType: string | null;
+    promptSeed: string | null;
+  } | null;
+  /** Whether ready to proceed to Stage 3 */
+  readyForStage3: boolean;
+}
+
+// ============================================================================
+// Share Suggestion Flow (Reconciler)
+// ============================================================================
+
+/** Status of a share suggestion offer */
+export const ReconcilerShareStatus = {
+  /** Suggestion generated, not yet shown to user */
+  PENDING: 'PENDING',
+  /** Shown to user, awaiting response */
+  OFFERED: 'OFFERED',
+  /** User accepted (with or without refinement) */
+  ACCEPTED: 'ACCEPTED',
+  /** User declined to share */
+  DECLINED: 'DECLINED',
+  /** Offer expired (timeout) */
+  EXPIRED: 'EXPIRED',
+} as const;
+
+export type ReconcilerShareStatus = (typeof ReconcilerShareStatus)[keyof typeof ReconcilerShareStatus];
+
+/** Share suggestion shown to the subject */
+export interface ShareSuggestionDTO {
+  /** Name of the person trying to understand (the guesser) */
+  guesserName: string;
+  /** AI-suggested content the subject could share */
+  suggestedContent: string;
+  /** Why sharing this would help the guesser understand */
+  reason: string;
+  /** Whether the user can refine the suggestion */
+  canRefine: boolean;
+}
+
+/** Response when getting share suggestion */
+export interface GetShareSuggestionResponse {
+  /** Whether there is a pending share suggestion */
+  hasSuggestion: boolean;
+  /** The suggestion details (if any) */
+  suggestion: ShareSuggestionDTO | null;
+}
+
+/** Request to respond to a share suggestion */
+export interface RespondToShareSuggestionRequest {
+  /** Action to take */
+  action: 'accept' | 'decline' | 'refine';
+  /** Refined content (if action is 'refine' or 'accept' with changes) */
+  refinedContent?: string;
+}
+
+/** Response after responding to a share suggestion */
+export interface RespondToShareSuggestionResponse {
+  /** Whether the operation succeeded */
+  success: boolean;
+  /** Resulting status */
+  status: 'shared' | 'declined';
+  /** The content that was shared (if accepted/refined) */
+  sharedContent: string | null;
 }

@@ -4,8 +4,10 @@ export type AuditSection =
   | 'RETRIEVAL'   // Memory access
   | 'PROMPT'      // Context assembly
   | 'RESPONSE'    // AI Output
-  | 'COST'        // Financial impact
+  | 'COST'        // Financial impact (LLM call complete)
+  | 'LLM_START'   // LLM call started (for live monitoring)
   | 'MEMORY_DETECTION' // Memory suggestions from user input
+  | 'MEMORY_ACTION'    // User actions on memories (approve, reject, create, update, delete)
   | 'ERROR';      // Failures
 
 export interface AuditLogEntry {

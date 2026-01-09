@@ -218,11 +218,16 @@ export async function detectIntent(input: DetectionInput): Promise<IntentDetecti
     ? `Context:${contextInfo}\n\nUser message: "${message}"`
     : `User message: "${message}"`;
 
+  // Generate turnId - use sessionId if available, otherwise synthetic
+  const effectiveSessionId = sessionId || 'intent-detection';
+  const turnId = sessionId ? `${sessionId}-${Date.now()}` : `intent-detection-${Date.now()}`;
+
   const result = await getHaikuJson<HaikuIntentResponse>({
     systemPrompt: buildDetectionPrompt(userSessions, semanticMatches),
     messages: [{ role: 'user', content: userMessage }],
     maxTokens: 512,
-    sessionId,
+    sessionId: effectiveSessionId,
+    turnId,
     operation: 'intent-detection',
   });
 

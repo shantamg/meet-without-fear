@@ -156,12 +156,17 @@ OUTPUT (JSON):
   }
 }`;
 
+  // Generate turnId - use sessionId if available, otherwise synthetic
+  const effectiveSessionId = sessionId || 'people-extraction';
+  const turnId = sessionId ? `${sessionId}-people-extract-${Date.now()}` : `people-extraction-${Date.now()}`;
+
   try {
     const result = await getHaikuJson<ExtractedPeople>({
       systemPrompt: prompt,
       messages: [{ role: 'user', content: 'Extract people from the text above.' }],
       operation: 'people-extraction',
-      sessionId,
+      sessionId: effectiveSessionId,
+      turnId,
     });
 
     return result;

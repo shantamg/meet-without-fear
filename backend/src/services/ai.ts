@@ -40,6 +40,12 @@ export interface ConversationMessage {
 export interface FullAIContext extends WitnessContext {
   sessionId: string;
   userId: string;
+  /**
+   * Unique identifier for this user action/turn.
+   * Format: `${sessionId}-${turnCount}` for chat messages.
+   * All AI operations triggered by this turn should use the same turnId for cost attribution.
+   */
+  turnId: string;
   partnerName?: string;
   stage: number;
   sessionDurationMinutes?: number;
@@ -104,6 +110,7 @@ export async function getOrchestratedResponse(
   const orchestratorContext: OrchestratorContext = {
     sessionId: context.sessionId,
     userId: context.userId,
+    turnId: context.turnId,
     userName: context.userName,
     partnerName: context.partnerName,
     stage: context.stage,
@@ -150,10 +157,14 @@ export async function checkAIServiceHealth(): Promise<{
 
   try {
     // Make a minimal API call to verify connectivity
+    // Use dummy values for health check
     const response = await getCompletion({
       systemPrompt: 'You are a helpful assistant.',
       messages: [{ role: 'user', content: 'Hello' }],
       maxTokens: 10,
+      sessionId: 'health-check',
+      operation: 'health-check',
+      turnId: 'health-check-0',
     });
 
     return {

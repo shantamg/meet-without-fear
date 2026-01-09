@@ -269,6 +269,7 @@ async function updateStats(userId: string, session: {
 async function generateMeditationScript(
   focusArea: string,
   durationMinutes: number,
+  userId: string,
   context?: GenerateScriptRequest['context']
 ): Promise<string> {
   const totalWords = durationMinutes * 100; // ~100 wpm with pauses
@@ -343,11 +344,17 @@ OUTPUT FORMAT:
   
   [PAUSE 60s]`;
 
+  // Generate synthetic IDs for standalone feature
+  const syntheticSessionId = `meditation-${userId}`;
+  const syntheticTurnId = `${syntheticSessionId}-${Date.now()}`;
+
   const script = await getCompletion({
     systemPrompt: prompt,
     messages: [{ role: 'user', content: `Generate a ${durationMinutes}-minute meditation on ${focusArea}` }],
     maxTokens: 4000,
     operation: 'meditation-script',
+    sessionId: syntheticSessionId,
+    turnId: syntheticTurnId,
   });
 
   return script || generateFallbackScript(focusArea, durationMinutes);
@@ -428,7 +435,7 @@ export const createSession = asyncHandler(
         LIMIT 3
       `;
 
-      script = await generateMeditationScript(focusArea, durationMinutes, {
+      script = await generateMeditationScript(focusArea, durationMinutes, user.id, {
         lowNeeds: lowNeeds.map(n => n.name),
       });
     }
@@ -631,7 +638,7 @@ export const getSuggestion = asyncHandler(
  */
 export const generateScript = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    getUser(req); // Auth required
+    const user = getUser(req);
 
     const parseResult = generateScriptSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -642,7 +649,7 @@ export const generateScript = asyncHandler(
 
     const { focusArea, durationMinutes, context } = parseResult.data;
 
-    const script = await generateMeditationScript(focusArea, durationMinutes, context);
+    const script = await generateMeditationScript(focusArea, durationMinutes, user.id, context);
 
     const response: ApiResponse<GenerateScriptResponse> = {
       success: true,

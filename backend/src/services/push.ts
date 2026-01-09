@@ -99,6 +99,23 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'Invitation declined',
     body: 'Your partner has declined the session invitation.',
   },
+  // Empathy reconciler events
+  'partner.empathy_revealed': {
+    title: 'Empathy revealed',
+    body: "Your partner's empathy statement is now visible.",
+  },
+  'empathy.share_suggestion': {
+    title: 'Share suggestion available',
+    body: 'You can share additional context to help your partner understand you better.',
+  },
+  'empathy.revealed': {
+    title: 'Your empathy is revealed',
+    body: 'Your empathy statement has been shared with your partner.',
+  },
+  'empathy.refining': {
+    title: 'New context to consider',
+    body: 'Your partner shared something to help you understand them better. Time to refine your empathy.',
+  },
 };
 
 /**

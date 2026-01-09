@@ -10,17 +10,8 @@ import { prisma } from '../../lib/prisma';
 import { UnauthorizedError, ValidationError } from '../../middleware/errors';
 
 // Mock Prisma
-jest.mock('../../lib/prisma', () => ({
-  prisma: {
-    session: {
-      count: jest.fn(),
-      findMany: jest.fn(),
-    },
-    user: {
-      update: jest.fn(),
-    },
-  },
-}));
+jest.mock('../../lib/prisma');
+
 
 // Helper to create mock request
 function createMockRequest(options: {

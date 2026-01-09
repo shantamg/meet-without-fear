@@ -2,42 +2,97 @@
 
 ## Overview
 
-This design fixes the Stage 2→3 transition flow where empathy statements are currently shown to partners prematurely and incorrectly. The key change: empathy statements are **held** until the reconciler validates them, with an optional refinement step when gaps are detected.
+This design documents the Stage 2→3 transition flow where empathy statements are validated through the reconciler. The key principle: **asymmetric triggering** - the reconciler runs for one user's empathy as soon as their partner completes Stage 1, not when both complete Stage 2.
 
-## Current Problems
+## Core Flow Changes (Updated 2026-01-08)
 
-1. **Wrong data displayed**: The `accuracy-feedback` card shows partner's empathy statement, but due to a bug when `partnerId` is null, it can return the user's own statement instead.
+### Asymmetric Reconciler Trigger
 
-2. **Premature reveal**: Empathy statements are shown to partners immediately after consent, without waiting for both parties or reconciler analysis.
+The reconciler no longer waits for both users to submit empathy statements. Instead:
 
-3. **Clunky UI**: The empathy reveal is a floating card at the end of chat rather than being integrated into the conversation flow.
+1. **User A** completes Stage 1 → advances to Stage 2 → writes empathy about User B → consents to share → status = `HELD`
+2. **User B** completes Stage 1 (confirms feelHeard) → this triggers the reconciler for User A's direction ONLY
+3. Reconciler analyzes User A's empathy statement vs User B's actual Stage 1 content
+4. Based on gaps, reconciler may suggest something User B could share to help User A understand better
+5. User B can consent to share (or refine) the suggested content
+6. User A receives the shared context and can refine their empathy statement
+7. Once User A's empathy is approved → status = `REVEALED` → User B can see it
 
-4. **Missing reconciler integration**: The reconciler service exists but isn't used to gate the reveal or offer refinement opportunities.
+### Suggestion-to-Share Flow
 
-## Design Principles
+When the reconciler detects significant gaps, it can identify specific content from the subject's (User B's) witnessing that would help the guesser (User A) understand better. This creates a consent-based sharing flow:
 
-### Information Boundaries
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        ASYMMETRIC RECONCILER FLOW                            │
+└──────────────────────────────────────────────────────────────────────────────┘
 
-The reconciler has access to both users' content to make its assessment. The refinement conversation uses **standard full retrieval** (same as any stage prompt) but does not receive the reconciler's detailed gap analysis.
-
-| Agent | Context |
-|-------|---------|
-| **Reconciler** | Both users' Stage 1 content, both empathy statements, performs detailed comparison |
-| **Refinement Conversation** | Standard full retrieval (recent messages, summaries, memories, relationship context) + abstract area hint from reconciler. Does NOT get reconciler's detailed analysis that references partner's content. |
-
-Since messages are per-user (`forUserId`), partner's Stage 1 content isn't in this user's conversation history anyway. The boundary is simply: don't pass the reconciler's detailed "you missed X that partner said" analysis to the refinement prompt.
-
-### What the Reconciler Passes to Refinement
-
-| Reconciler Produces (Internal) | Passed to Refinement (Abstract Only) |
-|-------------------------------|-------------------------------------|
-| "Jason said he feels unappreciated at work and his efforts go unnoticed. Tara missed this entirely." | `areaHint: "work and effort"` |
-| Detailed gap comparison | `guidanceType: "explore_deeper_feelings"` |
-| Specific missed feelings list | `promptSeed: "what might be underneath"` |
+User A (Guesser)                              User B (Subject)
+──────────────────                            ──────────────────
+Stage 1: Shares feelings                      Stage 1: Shares feelings
+         ↓                                             ↓
+         │                                    Confirms "I feel heard"
+         │                                             │
+         ↓                                             │
+Stage 2: Writes empathy                                │
+         about User B                                  │
+         ↓                                             │
+Consents to share                                      │
+(status = HELD)                                        │
+         │                                             │
+         │←─────────── User B completes Stage 1 ──────┘
+         │
+         ↓
+┌─────────────────────────────────────────┐
+│     RECONCILER RUNS (A→B direction)     │
+│                                         │
+│  Compares A's empathy guess             │
+│  vs B's actual Stage 1 content          │
+└─────────────────────────────────────────┘
+         │
+         ├── Minor/No gaps ─────────────→ A's empathy → REVEALED
+         │                                 B can see it
+         │
+         └── Significant gaps ────────────┐
+                                          │
+                                          ↓
+                              ┌─────────────────────────────────┐
+                              │   SUGGESTION-TO-SHARE FLOW      │
+                              │                                 │
+                              │   Reconciler identifies:        │
+                              │   "B mentioned feeling unseen   │
+                              │    at work. A missed this."     │
+                              │                                 │
+                              │   Suggests B could share:       │
+                              │   "I've been feeling invisible  │
+                              │    at work lately..."           │
+                              └─────────────────────────────────┘
+                                          │
+                                          ↓
+                              User B receives suggestion
+                              (can consent, refine, or decline)
+                                          │
+                                          ├── Declines ──────→ A's empathy → REVEALED
+                                          │                    (as-is, gaps noted)
+                                          │
+                                          └── Consents to share ─┐
+                                                                 │
+                                          ↓←────────────────────┘
+                              User A receives B's shared context
+                              Gets notification to refine empathy
+                                          │
+                                          ↓
+                              User A refines empathy statement
+                              Resubmits → Reconciler re-checks
+                                          │
+                                          ├── Still gaps → Loop (with limit)
+                                          │
+                                          └── Approved ────────→ REVEALED
+```
 
 ## State Model
 
-Each empathy direction (Jason→Tara, Tara→Jason) progresses independently through these states:
+Each empathy direction (A→B, B→A) progresses independently:
 
 ```
 ┌──────────────┐
@@ -46,27 +101,29 @@ Each empathy direction (Jason→Tara, Tara→Jason) progresses independently thr
        │ User consents to share
        ▼
 ┌──────────────┐
-│    HELD      │  Waiting for partner to also consent
+│    HELD      │  Waiting for PARTNER to complete Stage 1
 └──────┬───────┘
-       │ Both consented → Reconciler runs
+       │ Partner completes Stage 1 → Reconciler runs
        ▼
 ┌──────────────┐
 │  ANALYZING   │  Reconciler comparing guess vs actual Stage 1 content
 └──────┬───────┘
        │
-  ┌────┴────┐
-  ▼         ▼
-┌────────┐ ┌──────────┐
-│REVEALED│ │NEEDS_WORK│  Significant gaps detected
-└───┬────┘ └────┬─────┘
-    │           │ Guesser refines via AI conversation
-    │           │ Re-submits → Reconciler re-checks
-    │           │
-    │      ┌────┴────┐
-    │      ▼         ▼
-    │  [REVEALED] [Still NEEDS_WORK - loop]
-    │      │
-    ▼      ▼
+  ┌────┴────────────────┐
+  ▼                     ▼
+┌────────┐     ┌────────────────┐
+│REVEALED│     │AWAITING_SHARING│  Gaps detected, subject may share
+└───┬────┘     └───────┬────────┘
+    │                  │ Subject responds (share/decline)
+    │                  ▼
+    │          ┌──────────────┐
+    │          │REFINING      │  Guesser refining with new context
+    │          └──────┬───────┘
+    │                 │ Resubmit → Re-analyze
+    │                 ▼
+    │          [REVEALED or loop back]
+    │
+    ▼
 ┌──────────────┐
 │   REVEALED   │  Recipient can now see statement
 └──────┬───────┘
@@ -79,94 +136,41 @@ Each empathy direction (Jason→Tara, Tara→Jason) progresses independently thr
 
 ## UI States Per User
 
-| State | User A Sees | User B Sees |
-|-------|-------------|-------------|
-| Neither consented | Building empathy chat | Building empathy chat |
-| A consented, B hasn't | "Waiting for B to share their understanding" | Normal chat (no indication A shared) |
-| Both consented, analyzing | "Analyzing your empathy exchange..." | "Analyzing your empathy exchange..." |
-| A→B: REVEALED, B→A: REVEALED | B's statement in chat + validation UI | A's statement in chat + validation UI |
-| A→B: REVEALED, B→A: NEEDS_WORK | B's statement + validation UI | Refinement conversation with AI |
-| Both VALIDATED | Ready for Stage 3 | Ready for Stage 3 |
+| State | Guesser (User A) Sees | Subject (User B) Sees |
+|-------|----------------------|----------------------|
+| A submitted, B in Stage 1 | "Waiting for [B] to finish sharing their experience" | Normal Stage 1 chat |
+| A submitted, B finished Stage 1 | "Analyzing your understanding..." | Stage 2 (can write their own empathy) |
+| A→B: AWAITING_SHARING | "Waiting for [B] to respond..." | "Would you like to share something to help [A] understand?" |
+| A→B: REFINING | "New context from [B]! Would you like to refine your understanding?" | Stage 2 continues |
+| A→B: REVEALED | "Your understanding has been shared with [B]" | A's statement in chat + validation UI |
+| A→B: VALIDATED | "[B] confirmed your understanding feels right" | Ready to continue |
 
-## Chat-Integrated Empathy Reveal
+## Information Boundaries
 
-Instead of a floating card, the empathy reveal becomes part of the conversation:
+| Agent | Context |
+|-------|---------|
+| **Reconciler** | Both users' Stage 1 content, empathy statement, performs detailed comparison |
+| **Suggestion Generator** | Subject's Stage 1 content, gap analysis, generates suggestions |
+| **Refinement Conversation** | Standard full retrieval + abstract hint + newly shared context |
 
-```
-[Normal chat messages...]
-
-┌─────────────────────────────────────────────────────────────────┐
-│ AI: Tara has shared how she understands what you're going       │
-│ through. Here's what she wrote:                                 │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│ 💬 TARA'S UNDERSTANDING                                         │
-│ ───────────────────────────────────────────────────────────────│
-│ "I think you might be feeling overwhelmed with work and..."     │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│ AI: Take a moment with this. How does Tara's understanding      │
-│ feel to you?                                                    │
-│                                                                 │
-│ ○ This feels accurate                                           │
-│ ○ Partially accurate                                            │
-│ ○ This misses the mark                                          │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## Refinement Flow (When Gaps Detected)
-
-When the reconciler finds significant gaps, the guesser enters a refinement conversation. The AI has **standard full retrieval** (same context as any stage) plus an abstract area hint. It guides through curious questions without revealing partner's specific content:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ AI: Before sharing your understanding with Jason, I'd like to   │
-│ explore a bit more with you.                                    │
-│                                                                 │
-│ You captured something important about work stress. Sometimes   │
-│ there are deeper feelings underneath stress.                    │
-│                                                                 │
-│ What do you imagine might be going on for Jason beneath the     │
-│ surface?                                                        │
-└─────────────────────────────────────────────────────────────────┘
-
-[User responds with their own thinking]
-
-┌─────────────────────────────────────────────────────────────────┐
-│ AI: That's a meaningful insight. Would you like to include      │
-│ this in what you share with Jason?                              │
-│                                                                 │
-│ ○ Yes, let's update my understanding                            │
-│ ○ I'd rather keep it as is                                      │
-└─────────────────────────────────────────────────────────────────┘
-
-[If yes, AI helps revise statement, then re-submits to reconciler]
-```
-
-**Key constraint**: The AI doesn't receive the reconciler's detailed analysis, so it can't say:
-- ✗ "Jason feels unappreciated" (would require knowing reconciler found this gap)
-- ✗ "You missed that he feels unseen" (would require detailed gap analysis)
-
-It CAN use everything it normally would - the user's full conversation history, memories, relationship context - to ask good questions.
-
-## Notifications
-
-| Trigger | Recipient | Notification |
-|---------|-----------|--------------|
-| Both consent | Both | "Both empathy statements submitted - analyzing now" |
-| Your statement approved | You | "Your understanding has been shared with [partner]" |
-| Partner's statement revealed to you | You | "[Partner] shared their understanding of you" |
-| Gaps detected in your statement | You | (Handled in-chat, no push notification) |
-| Partner validates yours as accurate | You | "[Partner] confirmed your understanding feels right" |
-| Both validated | Both | "You're both ready to move forward together" |
+**Key constraint**: The guesser never sees the detailed reconciler analysis. They only receive:
+- Abstract hints ("there might be more to explore around work")
+- Shared context that the subject explicitly consented to share
 
 ## Data Model Changes
 
-### EmpathyAttempt - Add fields
+### EmpathyAttempt - Updated Status Enum
 
 ```prisma
+enum EmpathyStatus {
+  HELD              // Waiting for partner to complete Stage 1
+  ANALYZING         // Reconciler is comparing guess vs actual Stage 1 content
+  AWAITING_SHARING  // Gaps detected, waiting for subject to respond to share suggestion
+  REFINING          // Guesser is refining after receiving shared context
+  REVEALED          // Recipient can now see statement
+  VALIDATED         // Recipient has validated accuracy
+}
+
 model EmpathyAttempt {
   // ... existing fields ...
 
@@ -174,17 +178,9 @@ model EmpathyAttempt {
   revealedAt    DateTime?
   revisionCount Int           @default(0)
 }
-
-enum EmpathyStatus {
-  HELD
-  ANALYZING
-  NEEDS_WORK
-  REVEALED
-  VALIDATED
-}
 ```
 
-### ReconcilerResult - Add abstract guidance fields
+### ReconcilerResult - Add suggestion fields
 
 ```prisma
 model ReconcilerResult {
@@ -194,6 +190,43 @@ model ReconcilerResult {
   areaHint      String?   // e.g., "work and effort"
   guidanceType  String?   // e.g., "explore_deeper_feelings"
   promptSeed    String?   // e.g., "what might be underneath"
+
+  // Suggestion for subject to share
+  suggestedShareContent String?  @db.Text  // AI-generated suggestion
+  suggestedShareReason  String?  @db.Text  // Why this would help
+}
+```
+
+### ReconcilerShareOffer - Enhanced for new flow
+
+```prisma
+model ReconcilerShareOffer {
+  // ... existing fields ...
+
+  /// Status of the share offer
+  status    ReconcilerShareStatus @default(PENDING)
+
+  /// AI-generated suggestion for what to share
+  suggestedContent   String?  @db.Text
+  suggestedReason    String?  @db.Text
+
+  /// User's refined version (if they edited)
+  refinedContent     String?  @db.Text
+
+  /// Final content that was shared
+  sharedContent      String?  @db.Text
+  sharedAt           DateTime?
+
+  /// If they declined
+  declinedAt         DateTime?
+}
+
+enum ReconcilerShareStatus {
+  PENDING     // Suggestion generated, not yet shown
+  OFFERED     // Shown to user
+  ACCEPTED    // User accepted (with or without refinement)
+  DECLINED    // User declined to share
+  EXPIRED     // Offer expired (timeout)
 }
 ```
 
@@ -201,116 +234,141 @@ model ReconcilerResult {
 
 ### Modified: POST /sessions/:id/empathy/consent
 
-**Before**: Creates EmpathyAttempt, partner can immediately see via `/empathy/partner`
+**Before**: Creates EmpathyAttempt with `status: HELD`. Waits for both parties.
 
-**After**: Creates EmpathyAttempt with `status: HELD`. If both parties are now HELD, triggers reconciler automatically.
+**After**: Creates EmpathyAttempt with `status: HELD`. If partner has already completed Stage 1 (confirmed feelHeard), immediately triggers reconciler.
 
-### Modified: GET /sessions/:id/empathy/partner
+### Modified: POST /sessions/:id/feel-heard
 
-**Before**: Returns partner's attempt if it exists
+**Before**: Just updates stage progress and notifies partner.
 
-**After**: Returns partner's attempt only if `status` is `REVEALED` or `VALIDATED`. Returns `null` otherwise (even if attempt exists but is HELD/ANALYZING/NEEDS_WORK).
+**After**: After confirming feelHeard, checks if partner has an empathy attempt in HELD status. If so, triggers reconciler for that direction.
 
-### New: POST /sessions/:id/empathy/refine
+### New: GET /sessions/:id/empathy/share-suggestion
 
-For refinement conversation when status is NEEDS_WORK. Uses standard full retrieval.
+Get the share suggestion for the current user (if any).
+
+**Response**:
+```json
+{
+  "hasSuggestion": true,
+  "suggestion": {
+    "guesserName": "Alex",
+    "suggestedContent": "I've been feeling like my efforts go unnoticed...",
+    "reason": "Alex mentioned work stress but may not realize how deeply this affects you",
+    "canRefine": true
+  }
+}
+```
+
+### New: POST /sessions/:id/empathy/share-suggestion/respond
+
+Respond to a share suggestion (accept, refine, or decline).
 
 **Request**:
 ```json
 {
-  "message": "User's response to refinement prompt"
+  "action": "accept" | "decline" | "refine",
+  "refinedContent": "Optional refined content if action is refine"
 }
 ```
 
 **Response**:
 ```json
 {
-  "response": "AI's next question/guidance",
-  "proposedRevision": "Updated statement if user agreed to revise",
-  "canResubmit": true
+  "success": true,
+  "status": "shared" | "declined",
+  "sharedContent": "The content that was shared (if accepted/refined)"
 }
 ```
 
-### New: POST /sessions/:id/empathy/resubmit
+### Modified: GET /sessions/:id/empathy/status
 
-Submit revised statement for re-analysis.
+Add fields for the new flow:
 
-**Request**:
+**Response** (updated):
 ```json
 {
-  "content": "Revised empathy statement"
+  "myAttempt": { ... },
+  "partnerAttempt": { ... },
+  "partnerCompletedStage1": true,
+  "analyzing": false,
+  "awaitingSharing": false,
+  "hasNewSharedContext": true,
+  "sharedContext": {
+    "content": "I've been feeling like my efforts go unnoticed...",
+    "sharedAt": "2024-01-08T12:00:00Z"
+  },
+  "readyForStage3": false
 }
 ```
 
-**Response**:
-```json
-{
-  "status": "ANALYZING",
-  "message": "Re-analyzing your updated understanding..."
-}
-```
+## Notifications
 
-Reconciler runs again. If approved, status → REVEALED. If still gaps, status → NEEDS_WORK.
+| Trigger | Recipient | Notification |
+|---------|-----------|--------------|
+| Partner completes Stage 1 + you have HELD empathy | You | "Analyzing your understanding of [partner]..." |
+| Share suggestion generated | Subject | "[Guesser] shared their understanding. Would you like to help them see more?" |
+| Subject shares context | Guesser | "[Subject] shared something to help you understand" |
+| Subject declines | Guesser | "Your understanding has been shared with [subject]" |
+| Empathy approved | Guesser | "Your understanding has been shared with [subject]" |
+| Empathy revealed | Subject | "[Guesser] shared their understanding of you" |
+| Subject validates | Guesser | "[Subject] confirmed your understanding feels right" |
+| Both validated | Both | "You're both ready to move forward together" |
 
 ## Implementation Phases
 
-### Phase 1: Fix Immediate Bug + Foundation
+### Phase 1: Foundation + Asymmetric Trigger
 
-- [ ] Add `status` field to EmpathyAttempt model
-- [ ] Add migration for new fields
-- [ ] Modify `consentToShare` to set `status = HELD`
-- [ ] Modify `getPartnerEmpathy` to only return if `status` in [REVEALED, VALIDATED]
-- [ ] Remove/disable `accuracy-feedback` inline card temporarily
-- [ ] Fix the `partnerId ?? undefined` bug in getPartnerEmpathy query
+- [ ] Add `AWAITING_SHARING` and `REFINING` to EmpathyStatus enum
+- [ ] Add migration for schema changes
+- [ ] Modify `confirmFeelHeard` to check for partner's HELD empathy and trigger reconciler
+- [ ] Modify `consentToShare` to check if partner already completed Stage 1 and trigger reconciler
+- [ ] Update reconciler to only run for ONE direction (the one being analyzed)
 
-### Phase 2: Reconciler Trigger + Status Flow
+### Phase 2: Suggestion Generation
 
-- [ ] Add trigger: when both attempts are HELD → run reconciler for both directions
-- [ ] Update reconciler to output abstract guidance fields (areaHint, guidanceType, promptSeed)
-- [ ] Reconciler sets status to REVEALED (minor/no gaps) or NEEDS_WORK (significant gaps)
-- [ ] Add `revealedAt` timestamp when status transitions to REVEALED
+- [ ] Add `suggestedShareContent` and `suggestedShareReason` to ReconcilerResult
+- [ ] Update reconciler to generate share suggestions when gaps are significant
+- [ ] Create endpoint `GET /sessions/:id/empathy/share-suggestion`
+- [ ] Create endpoint `POST /sessions/:id/empathy/share-suggestion/respond`
 
-### Phase 3: Chat-Integrated Reveal
+### Phase 3: Shared Context Flow
 
-- [ ] Create new message roles/types: `EMPATHY_REVEAL_INTRO`, `EMPATHY_STATEMENT`, `EMPATHY_VALIDATION_PROMPT`
-- [ ] When status → REVEALED, generate intro + statement + prompt messages for recipient
-- [ ] Update UnifiedSessionScreen to render these message types appropriately
-- [ ] Handle validation response selection in chat flow
-- [ ] Update status to VALIDATED when user confirms accuracy
+- [ ] When subject shares, notify guesser and update their attempt status to REFINING
+- [ ] Store shared context in ReconcilerShareOffer
+- [ ] Update empathy status endpoint to include shared context
+- [ ] Update refinement flow to incorporate shared context
 
-### Phase 4: Refinement Flow
-
-- [ ] Create refinement prompt that uses standard full retrieval + abstract area hint
-- [ ] Add `/empathy/refine` endpoint (uses same retrieval as other stages)
-- [ ] Add `/empathy/resubmit` endpoint
-- [ ] Frontend: detect NEEDS_WORK status, show refinement conversation
-- [ ] Track revision count
-- [ ] Re-run reconciler after resubmit, update status accordingly
-
-### Phase 5: Notifications + Polish
+### Phase 4: Notifications + Polish
 
 - [ ] Add notification triggers at key state transitions
 - [ ] Implement waiting state UI with appropriate messaging
 - [ ] Handle edge cases:
-  - Timeout if reconciler takes too long
+  - Timeout if no response to share suggestion
   - Maximum revision attempts
-  - One direction stuck while other progresses
-- [ ] Add analytics/logging for reconciler outcomes
+  - Both users submitting empathy before either completes Stage 1
+
+### Phase 5: Chat Integration
+
+- [ ] When context is shared, create messages in guesser's chat
+- [ ] When empathy is revealed, create messages in subject's chat
+- [ ] Handle validation flow in chat
 
 ## Testing Scenarios
 
-1. **Happy path**: Both share → reconciler approves both → both see statements → both validate → Stage 3
-2. **One needs work**: A shares (approved), B shares (needs work) → A sees B's statement, B refines → B resubmits → approved → B sees A's statement
-3. **Both need work**: Both refine independently → both resubmit → both approved → both see statements
-4. **Decline to refine**: User chooses "keep as is" → statement shared anyway (user's choice)
-5. **Multiple revisions**: First revision still has gaps → user refines again → approved on second try
-6. **Partial validation**: User says "partially accurate" → feedback captured → can still proceed
+1. **Happy path (no gaps)**: A shares empathy → B completes Stage 1 → reconciler approves → A's empathy revealed to B
+2. **Gaps with sharing**: A shares empathy → B completes Stage 1 → gaps detected → B shares context → A refines → approved → revealed
+3. **Gaps but declines**: A shares empathy → B completes Stage 1 → gaps detected → B declines to share → A's empathy revealed as-is
+4. **Multiple refinements**: A refines twice before approval
+5. **Concurrent empathy**: Both A and B submit empathy before either completes Stage 1 → each gets analyzed when the other finishes Stage 1
+6. **Race condition**: A submits empathy right as B confirms feelHeard
 
 ## Success Criteria
 
-1. Empathy statements are never shown to partner until reconciler approves or user explicitly declines to refine
-2. Refinement conversations use standard full retrieval but don't get reconciler's detailed gap analysis
-3. UI feels like a natural conversation, not a card-based form
+1. Empathy statements are analyzed as soon as the subject completes Stage 1 (not waiting for both)
+2. Subjects have agency over what context to share (consent-based)
+3. Guessers receive helpful context without seeing the raw reconciler analysis
 4. Each direction progresses independently
 5. Clear waiting states so users know what's happening
 6. Notifications keep users informed of progress

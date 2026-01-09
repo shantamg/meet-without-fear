@@ -12,6 +12,7 @@
 
 import { getSonnetResponse, getHaikuJson, getEmbedding } from '../lib/bedrock';
 import { prisma } from '../lib/prisma';
+import { MessageRole } from '@prisma/client';
 import { createStateStore } from './chat-router/types';
 import {
   retrieveContext,
@@ -271,6 +272,9 @@ export async function getWitnessingResponse(
 
   // Use Universal Context Retriever for full awareness
   // This searches embeddings, loads history, and detects references
+  // Generate synthetic IDs for pre-session witnessing
+  const syntheticSessionId = `witnessing-${userId}`;
+  const syntheticTurnId = `${syntheticSessionId}-${state.turnCount}`;
   const retrievedContext = await retrieveContext({
     userId,
     currentMessage: message,
@@ -278,11 +282,12 @@ export async function getWitnessingResponse(
     includePreSession: true,
     maxCrossSessionMessages: 10,
     similarityThreshold: 0.5,
+    turnId: syntheticTurnId,
   });
 
   // Run witnessing and person detection in parallel
   const [witnessingResponse, detectionResult] = await Promise.all([
-    generateWitnessingResponseWithContext(userName, message, state, retrievedContext),
+    generateWitnessingResponseWithContext(userId, userName, message, state, retrievedContext),
     detectPersonAndContext(message),
   ]);
 
@@ -325,6 +330,7 @@ export async function getWitnessingResponse(
  * Generate the actual witnessing response using Sonnet with full context.
  */
 async function generateWitnessingResponseWithContext(
+  userId: string,
   userName: string,
   message: string,
   state: PreSessionState,
@@ -371,11 +377,16 @@ async function generateWitnessingResponseWithContext(
     messages.push({ role: 'user', content: message });
   }
 
+  // Use synthetic IDs for pre-session witnessing
+  const syntheticSessionId = `witnessing-${userId}`;
+  const syntheticTurnId = `${syntheticSessionId}-${state.turnCount}`;
   const response = await getSonnetResponse({
     systemPrompt,
     messages,
     maxTokens: 1024, // Increased for fuller responses
     operation: 'pre-session-witnessing',
+    sessionId: syntheticSessionId,
+    turnId: syntheticTurnId,
   });
 
   if (!response) {
@@ -397,10 +408,16 @@ interface DetectionResult {
 }
 
 async function detectPersonAndContext(message: string): Promise<DetectionResult | null> {
+  // Generate synthetic IDs for person detection (standalone feature)
+  const syntheticSessionId = 'person-detection';
+  const syntheticTurnId = `person-detection-${Date.now()}`;
   const result = await getHaikuJson<DetectionResult>({
     systemPrompt: buildPersonDetectionPrompt(),
     messages: [{ role: 'user', content: message }],
     maxTokens: 256,
+    sessionId: syntheticSessionId,
+    operation: 'person-detection',
+    turnId: syntheticTurnId,
   });
 
   return result;
@@ -495,7 +512,7 @@ async function embedPreSessionMessage(messageId: string, content: string): Promi
 export async function getUnassociatedPreSessionMessages(userId: string): Promise<
   Array<{
     id: string;
-    role: 'USER' | 'AI' | 'SYSTEM' | 'EMPATHY_STATEMENT';
+    role: MessageRole;
     content: string;
     timestamp: Date;
     emotionalTone: string | null;

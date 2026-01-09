@@ -18,11 +18,6 @@ describe('FeelHeardConfirmation', () => {
     jest.clearAllMocks();
   });
 
-  it('renders the question', () => {
-    render(<FeelHeardConfirmation {...defaultProps} />);
-    expect(screen.getByText('Feeling heard?')).toBeTruthy();
-  });
-
   it('renders continue button', () => {
     render(<FeelHeardConfirmation {...defaultProps} />);
     expect(screen.getByText('Not yet')).toBeTruthy();
@@ -30,7 +25,7 @@ describe('FeelHeardConfirmation', () => {
 
   it('renders confirm button', () => {
     render(<FeelHeardConfirmation {...defaultProps} />);
-    expect(screen.getByText('Yes')).toBeTruthy();
+    expect(screen.getByText('I feel heard')).toBeTruthy();
   });
 
   it('calls onContinue when continue is pressed', () => {
@@ -43,7 +38,7 @@ describe('FeelHeardConfirmation', () => {
   it('calls onConfirm when confirm is pressed', () => {
     const onConfirm = jest.fn();
     render(<FeelHeardConfirmation onConfirm={onConfirm} onContinue={jest.fn()} />);
-    fireEvent.press(screen.getByText('Yes'));
+    fireEvent.press(screen.getByText('I feel heard'));
     expect(onConfirm).toHaveBeenCalled();
   });
 });

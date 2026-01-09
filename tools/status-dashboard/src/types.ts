@@ -37,7 +37,7 @@ export interface AuditLogData {
 export interface AuditLogEntry {
   id?: string;
   timestamp: string;
-  section: 'USER' | 'INTENT' | 'RETRIEVAL' | 'RESPONSE' | 'COST' | 'PROMPT' | 'MEMORY_DETECTION' | 'ERROR';
+  section: 'USER' | 'INTENT' | 'RETRIEVAL' | 'RESPONSE' | 'COST' | 'LLM_START' | 'PROMPT' | 'MEMORY_DETECTION' | 'ERROR';
   message: string;
   turnId?: string;
   sessionId?: string;

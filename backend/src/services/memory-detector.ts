@@ -182,13 +182,17 @@ Use conversation context to resolve pronouns and references. Output only valid J
 
   console.log(`${logPrefix} Sending to Haiku...`);
 
+  // Ensure turnId is always a string - generate synthetic if not provided
+  const effectiveSessionId = sessionId || 'memory-detection';
+  const effectiveTurnId = turnId || (sessionId ? `${sessionId}-${Date.now()}` : `memory-detection-${Date.now()}`);
+
   try {
     const response = await getHaikuJson<HaikuDetectionResponse>({
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens: 512,
-      sessionId,
-      turnId,
+      sessionId: effectiveSessionId,
+      turnId: effectiveTurnId,
       operation: 'memory-detection',
     });
 

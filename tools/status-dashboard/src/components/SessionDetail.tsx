@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import Ably from 'ably';
 import { AuditLogEntry } from '../types';
@@ -18,6 +18,7 @@ function SessionDetail() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [totalCost, setTotalCost] = useState(0);
   const [sessionData, setSessionData] = useState<any>(null);
   const [ablyStatus, setAblyStatus] = useState<'connecting' | 'connected' | 'error' | 'disconnected'>('disconnected');
@@ -95,14 +96,22 @@ function SessionDetail() {
   const fetchLogs = async () => {
     try {
       const res = await fetch(`/api/audit/sessions/${sessionId}/logs`);
+      if (!res.ok) {
+        setError(`HTTP ${res.status}: ${res.statusText}`);
+        return;
+      }
       const json = await res.json();
       if (json.success) {
-        setLogs(json.data.logs);
-        setTotalCost(json.data.summary.totalCost);
+        setLogs(json.data.logs || []);
+        setTotalCost(json.data.summary?.totalCost || 0);
         setSessionData(json.data.session);
+        setError(null);
+      } else {
+        setError('API returned success: false');
       }
     } catch (err) {
       console.error('Failed to fetch logs', err);
+      setError(`Failed to connect: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
     }
@@ -119,7 +128,8 @@ function SessionDetail() {
 
   const userName = getUserName();
 
-  if (loading) return <div>Loading logs...</div>;
+  if (loading) return <div className="loading">Loading logs...</div>;
+  if (error) return <div className="error">Error: {error}</div>;
 
   return (
     <div className="session-detail">
@@ -139,7 +149,13 @@ function SessionDetail() {
         {turns.map(turn => (
           <TurnView key={turn.id} turn={turn} userName={userName} />
         ))}
-        {turns.length === 0 && <div className="empty-state">No activity recorded for this session.</div>}
+        {turns.length === 0 && logs.length > 0 && (
+          <div className="empty-state">
+            <p>{logs.length} log(s) found but no displayable turns.</p>
+            <p>Sections: {[...new Set(logs.map(l => l.section))].join(', ')}</p>
+          </div>
+        )}
+        {turns.length === 0 && logs.length === 0 && <div className="empty-state">No activity recorded for this session.</div>}
       </div>
     </div>
   );
@@ -149,21 +165,34 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
   const userLog = turn.logs.find(l => l.section === 'USER');
   let otherLogs = turn.logs.filter(l => l !== userLog);
 
-  // Find COST logs and merge them into the preceding RESPONSE or INTENT/RETRIEVAL if associated
-  // Actually, usually COST comes right after RESPONSE.
-  // Let's create a map of costs by operation or just attach to the previous log?
-
-  // Better approach: Propagate cost data to the logs that incurred them.
-  // But logs are immutable state from backend. We can create a derived list.
-
+  // Separate out LLM_START and COST logs to pair them
   const derivedLogs: AuditLogEntry[] = [];
   const costLogs: AuditLogEntry[] = [];
+  const llmStartLogs: AuditLogEntry[] = [];
 
   otherLogs.forEach(log => {
     if (log.section === 'COST') {
       costLogs.push(log);
+    } else if (log.section === 'LLM_START') {
+      llmStartLogs.push(log);
     } else {
       derivedLogs.push({ ...log, data: { ...log.data } }); // Shallow copy data to avoid mutating state across renders
+    }
+  });
+
+  // Match LLM_START with COST by operation - show pending ones as in-progress
+  const completedOps = new Set(costLogs.map(c => c.data?.operation));
+  const pendingLlmCalls = llmStartLogs.filter(start => !completedOps.has(start.data?.operation));
+
+  // For completed LLM calls, merge the LLM_START info into the COST log
+  // This ensures we show duration and timing when available
+  costLogs.forEach(costLog => {
+    const matchingStart = llmStartLogs.find(start => start.data?.operation === costLog.data?.operation);
+    if (matchingStart && !costLog.data?.startTimestamp) {
+      costLog.data = {
+        ...costLog.data,
+        startTimestamp: matchingStart.timestamp,
+      };
     }
   });
 
@@ -259,6 +288,22 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
     });
   }
 
+  // If we have cost logs but nothing to attach them to, show them as standalone events
+  if (derivedLogs.length === 0 && costLogs.length > 0) {
+    costLogs.forEach(costLog => {
+      derivedLogs.push({ ...costLog, data: { ...costLog.data } });
+    });
+  }
+
+  // Add pending LLM calls as in-progress items (will auto-update when COST arrives via Ably)
+  pendingLlmCalls.forEach(startLog => {
+    derivedLogs.push({
+      ...startLog,
+      section: 'LLM_START', // Keep as LLM_START so we can style it differently
+      data: { ...startLog.data, pending: true },
+    });
+  });
+
   // Sort by timestamp
   derivedLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
@@ -268,7 +313,7 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
   const userMessage = turn.userMessage ||
     userLog?.message ||
     intentLog?.data?.userInput ||
-    (derivedLogs.length > 0 ? <span className="placeholder">System Turn</span> : null);
+    (derivedLogs.length > 0 ? <span className="placeholder">System Event</span> : null);
 
   if (!userMessage && derivedLogs.length === 0) return null; // Hide completely empty turns
 
@@ -279,9 +324,9 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
         <span className="turn-id">Turn {turn.id}</span>
       </div>
 
-      {/* User Message - Big and Prominent */}
+      {/* User Message - Big and Prominent (or System Event label) */}
       <div className="turn-user-message">
-        <div className="icon">👤</div>
+        <div className="icon">{userLog ? '👤' : '⚙️'}</div>
         <div className="message-content">
           {userMessage}
         </div>
@@ -312,6 +357,8 @@ function LogStep({ log }: { log: AuditLogEntry }) {
         return <PromptDetail data={log.data} />;
       case 'COST':
         return <CostDetail data={log.data} cost={log.cost} />;
+      case 'LLM_START':
+        return <LlmStartDetail data={log.data} />;
       case 'MEMORY_DETECTION':
         return <MemoryDetail data={log.data} />;
       default:
@@ -699,25 +746,134 @@ function PromptDetail({ data }: { data: any }) {
   );
 }
 
+function LlmStartDetail({ data }: { data: any }) {
+  // Map operation names to human-readable descriptions
+  const getOperationLabel = (op?: string) => {
+    if (!op) return 'AI Operation';
+    const labels: Record<string, string> = {
+      'stage1-initial-message': 'Welcome Message',
+      'stage1-transition': 'Stage 1→2 Transition',
+      'stage2-transition': 'Stage 2→3 Transition',
+      'chat-router-response': 'Chat Response',
+      'chat-router-welcome': 'Welcome Message',
+      'intent-detection': 'Intent Detection',
+      'orchestrator-response': 'AI Response',
+      'sonnet-response': 'AI Response',
+      'retrieval-planning': 'Memory Planning',
+      'memory-detection': 'Memory Detection',
+      'memory-validation': 'Memory Validation',
+      'haiku-json': 'Quick Analysis',
+    };
+    return labels[op] || op.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  };
+
+  return (
+    <DetailWrapper data={data}>
+      <div className="llm-start-detail">
+        <div className="in-progress-indicator">
+          <span className="spinner">⏳</span>
+          <span className="status-text">In Progress...</span>
+        </div>
+        <div className="key-value-grid">
+          {data?.operation && (
+            <div className="kv-item">
+              <span className="kv-label">Operation</span>
+              <span className="kv-value highlight">{getOperationLabel(data.operation)}</span>
+            </div>
+          )}
+          {data?.model && (
+            <div className="kv-item">
+              <span className="kv-label">Model</span>
+              <span className="kv-value">{formatModelName(data.model)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </DetailWrapper>
+  );
+}
+
 function CostDetail({ data, cost }: { data: any, cost?: number }) {
+  // Map operation names to human-readable descriptions
+  const getOperationLabel = (op?: string) => {
+    if (!op) return 'AI Operation';
+    const labels: Record<string, string> = {
+      // Stage messages
+      'stage1-initial-message': 'Welcome Message',
+      'stage1-transition': 'Stage 1→2 Transition',
+      'stage2-transition': 'Stage 2→3 Transition',
+      // Chat router
+      'chat-router-response': 'Chat Response',
+      'chat-router-welcome': 'Welcome Message',
+      'intent-detection': 'Intent Detection',
+      'people-extraction': 'People Extraction',
+      // Orchestrator
+      'orchestrator-response': 'AI Response',
+      'sonnet-response': 'AI Response',
+      // Memory & retrieval
+      'retrieval-planning': 'Memory Planning',
+      'memory-detection': 'Memory Detection',
+      'memory-validation': 'Memory Validation',
+      // Inner work
+      'inner-work-initial': 'Inner Work Welcome',
+      'inner-work-response': 'Inner Work Response',
+      'inner-work-metadata': 'Inner Work Setup',
+      'inner-thoughts-summary': 'Thoughts Summary',
+      // Other features
+      'meditation-script': 'Meditation Script',
+      'gratitude-response': 'Gratitude Response',
+      'pre-session-witnessing': 'Pre-Session Witnessing',
+      'conversation-summary': 'Conversation Summary',
+      'extract-needs': 'Needs Extraction',
+      'common-ground': 'Common Ground Analysis',
+      // Utilities
+      'haiku-json': 'Quick Analysis',
+      'embedding': 'Text Embedding',
+    };
+    return labels[op] || op.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  };
+
   return (
     <DetailWrapper data={data}>
       <div className="cost-detail">
+        {data?.operation && (
+          <div className="cost-metric full-width">
+            <span className="label">Operation</span>
+            <span className="value highlight">{getOperationLabel(data.operation)}</span>
+          </div>
+        )}
+        {data?.model && (
+          <div className="cost-metric">
+            <span className="label">Model</span>
+            <span className="value">{formatModelName(data.model)}</span>
+          </div>
+        )}
         <div className="cost-metric">
-          <span className="label">Input</span>
+          <span className="label">Input Tokens</span>
           <span className="value">{data?.inputTokens || 0}</span>
         </div>
         <div className="cost-metric">
-          <span className="label">Output</span>
+          <span className="label">Output Tokens</span>
           <span className="value">{data?.outputTokens || 0}</span>
         </div>
         <div className="cost-metric">
           <span className="label">Total Cost</span>
           <span className="value cost-highlight">${cost?.toFixed(5) || data?.totalCost?.toFixed(5) || '0.00000'}</span>
         </div>
+        {data?.durationMs && (
+          <div className="cost-metric">
+            <span className="label">Duration</span>
+            <span className="value">{formatDuration(data.durationMs)}</span>
+          </div>
+        )}
       </div>
     </DetailWrapper>
   );
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
 }
 
 function GenericDetail({ data }: { data: any }) {
@@ -745,6 +901,7 @@ function getIcon(section: string) {
     case 'RETRIEVAL': return '🔍';
     case 'RESPONSE': return '🤖';
     case 'COST': return '💰';
+    case 'LLM_START': return '⏳';
     case 'MEMORY_DETECTION': return '📝';
     default: return '📝';
   }
@@ -752,7 +909,48 @@ function getIcon(section: string) {
 
 function getPreview(log: AuditLogEntry) {
   if (log.section === 'INTENT') return log.data?.reason || log.message;
-  if (log.section === 'COST') return `$${log.cost?.toFixed(4) || log.data?.totalCost?.toFixed(4) || '0.00'}`;
+  if (log.section === 'LLM_START') {
+    const op = log.data?.operation;
+    const opLabels: Record<string, string> = {
+      'stage1-initial-message': 'Welcome',
+      'stage1-transition': 'Stage 1→2',
+      'stage2-transition': 'Stage 2→3',
+      'chat-router-response': 'Chat',
+      'orchestrator-response': 'Response',
+      'sonnet-response': 'Response',
+      'retrieval-planning': 'Memory Plan',
+      'memory-detection': 'Memory',
+      'haiku-json': 'Analysis',
+    };
+    const label = op ? (opLabels[op] || op) : 'AI Call';
+    const model = formatModelName(log.data?.model);
+    return `${model ? model + ' · ' : ''}${label} · Running...`;
+  }
+  if (log.section === 'COST') {
+    const op = log.data?.operation;
+    const opLabels: Record<string, string> = {
+      'stage1-initial-message': 'Welcome',
+      'stage1-transition': 'Stage 1→2',
+      'stage2-transition': 'Stage 2→3',
+      'chat-router-response': 'Chat',
+      'chat-router-welcome': 'Welcome',
+      'intent-detection': 'Intent',
+      'orchestrator-response': 'Response',
+      'sonnet-response': 'Response',
+      'retrieval-planning': 'Memory Plan',
+      'memory-detection': 'Memory',
+      'memory-validation': 'Validation',
+      'inner-work-initial': 'Inner Work',
+      'inner-work-response': 'Inner Work',
+      'meditation-script': 'Meditation',
+      'gratitude-response': 'Gratitude',
+      'haiku-json': 'Analysis',
+      'embedding': 'Embed',
+    };
+    const label = op ? (opLabels[op] || op) : 'AI Call';
+    const duration = log.data?.durationMs ? ` · ${formatDuration(log.data.durationMs)}` : '';
+    return `${label} · $${log.cost?.toFixed(4) || log.data?.totalCost?.toFixed(4) || '0.00'}${duration}`;
+  }
   return log.message.substring(0, 50) + (log.message.length > 50 ? '...' : '');
 }
 

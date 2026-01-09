@@ -9,14 +9,8 @@ import { prisma } from '../../lib/prisma';
 import type { SessionEvent } from '../realtime';
 
 // Mock Prisma
-jest.mock('../../lib/prisma', () => ({
-  prisma: {
-    user: {
-      findUnique: jest.fn(),
-      update: jest.fn(),
-    },
-  },
-}));
+jest.mock('../../lib/prisma');
+
 
 // Mock Expo SDK
 const mockSendPushNotificationsAsync = jest.fn();

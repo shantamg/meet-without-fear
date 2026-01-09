@@ -6,7 +6,8 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { render } from '../../utils/test-utils';
 import { ChatInterface } from '../ChatInterface';
 import { MessageDTO, MessageRole, Stage } from '@meet-without-fear/shared';
 
@@ -14,10 +15,13 @@ import { MessageDTO, MessageRole, Stage } from '@meet-without-fear/shared';
 // Mocks
 // ============================================================================
 
-// Mock lucide icons
-jest.mock('lucide-react-native', () => ({
-  Send: 'Send',
-}));
+// Mock SpeakerButton to avoid icon issues
+jest.mock('../SpeakerButton', () => {
+  const React = require('react');
+  return {
+    SpeakerButton: () => null,
+  };
+});
 
 // ============================================================================
 // Helpers

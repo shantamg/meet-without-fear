@@ -380,12 +380,15 @@ Examples of good messages:
 Just output the welcome message, nothing else.`;
 
   try {
+    // Generate synthetic turnId for welcome message (not part of a specific turn)
+    const turnId = `${recentSession.id}-welcome-${Date.now()}`;
     const response = await getModelCompletion('haiku', {
       systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
       maxTokens: 100,
       sessionId: recentSession.id,
       operation: 'chat-router-welcome',
+      turnId,
     });
 
     return response?.trim() || undefined;

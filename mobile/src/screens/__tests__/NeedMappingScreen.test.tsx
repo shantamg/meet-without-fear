@@ -10,7 +10,8 @@
  */
 
 import React from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { screen } from '@testing-library/react-native';
+import { render } from '../../utils/test-utils';
 import { Stage, StageStatus, NeedCategory, MessageRole, CommonGroundDTO } from '@meet-without-fear/shared';
 
 // Import after mocks

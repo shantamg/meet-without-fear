@@ -9,21 +9,8 @@ import { requireAuth, optionalAuth, getUser } from '../auth';
 import { prisma } from '../../lib/prisma';
 
 // Mock Prisma
-jest.mock('../../lib/prisma', () => ({
-  prisma: {
-    user: {
-      findUnique: jest.fn(),
-      create: jest.fn(),
-      upsert: jest.fn(),
-    },
-    relationshipMember: {
-      findFirst: jest.fn(),
-    },
-    session: {
-      findFirst: jest.fn(),
-    },
-  },
-}));
+jest.mock('../../lib/prisma');
+
 
 // Mock Clerk verifyToken and clerkClient
 const mockVerifyToken = jest.fn();

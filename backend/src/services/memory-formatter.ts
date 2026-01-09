@@ -105,11 +105,18 @@ OUTPUT FORMAT (JSON only, no markdown):
 
 Note: This memory will apply globally to all sessions.`;
 
+  // Generate synthetic IDs for standalone memory formatting
+  const syntheticSessionId = 'memory-format';
+  const syntheticTurnId = `memory-format-${Date.now()}`;
+
   try {
     const response = await getHaikuJson<HaikuFormatResponse>({
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens: 512,
+      sessionId: syntheticSessionId,
+      operation: 'memory-format',
+      turnId: syntheticTurnId,
     });
 
     console.log(`${logPrefix} Haiku response:`, JSON.stringify(response, null, 2));
@@ -236,11 +243,18 @@ User's change request: "${changeRequest}"
 
 Apply the requested changes while keeping the memory clear and concise.`;
 
+  // Generate synthetic IDs for standalone memory update
+  const syntheticSessionId = 'memory-update';
+  const syntheticTurnId = `memory-update-${Date.now()}`;
+
   try {
     const response = await getHaikuJson<HaikuUpdateResponse>({
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens: 512,
+      sessionId: syntheticSessionId,
+      operation: 'memory-update',
+      turnId: syntheticTurnId,
     });
 
     console.log(`${logPrefix} Haiku update response:`, JSON.stringify(response, null, 2));

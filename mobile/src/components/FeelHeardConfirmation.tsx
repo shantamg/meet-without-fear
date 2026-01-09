@@ -14,6 +14,7 @@ import { colors } from '@/theme';
 
 interface FeelHeardConfirmationProps {
   onConfirm: () => void;
+  onContinue?: () => void;
   isPending?: boolean;
 }
 
@@ -23,10 +24,21 @@ interface FeelHeardConfirmationProps {
 
 export function FeelHeardConfirmation({
   onConfirm,
+  onContinue,
   isPending = false,
 }: FeelHeardConfirmationProps) {
   return (
     <View style={styles.container}>
+      {onContinue && (
+        <TouchableOpacity
+          style={[styles.button, styles.secondaryButton]}
+          onPress={onContinue}
+          disabled={isPending}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.secondaryButtonText}>Not yet</Text>
+        </TouchableOpacity>
+      )}
       <TouchableOpacity
         style={styles.button}
         onPress={onConfirm}
@@ -63,6 +75,15 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 15,
     fontWeight: '600',
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    marginBottom: 8,
+  },
+  secondaryButtonText: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '500',
   },
 });
 

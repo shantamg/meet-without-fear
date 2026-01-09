@@ -114,7 +114,7 @@ async function getRecentThemes(userId: string, excludeSessionId?: string): Promi
  * Generate and update session metadata (title, summary, theme) after new messages.
  * Uses Haiku for fast, non-blocking updates on every message.
  */
-async function updateSessionMetadata(sessionId: string): Promise<void> {
+async function updateSessionMetadata(sessionId: string, turnId: string): Promise<void> {
   try {
     const session = await prisma.innerWorkSession.findUnique({
       where: { id: sessionId },
@@ -143,6 +143,7 @@ async function updateSessionMetadata(sessionId: string): Promise<void> {
       messages: [{ role: 'user', content: 'Generate the metadata.' }],
       maxTokens: 256,
       sessionId,
+      turnId,
       operation: 'inner-work-metadata',
     });
 
@@ -353,11 +354,15 @@ export const createInnerWorkSession = asyncHandler(
       prompt = buildInnerWorkInitialMessagePrompt(userName);
     }
 
+    // Create turnId for this inner work session creation - used for cost attribution
+    const turnId = `${session.id}-inner-work-create`;
+
     const aiResponse = await getCompletion({
       systemPrompt: prompt,
       messages: [{ role: 'user', content: 'Start the conversation.' }],
       maxTokens: 256,
       sessionId: session.id,
+      turnId,
       operation: 'inner-work-initial',
     });
     const parsed = extractJsonSafe<{ response?: string }>(aiResponse || '', {
@@ -373,7 +378,7 @@ export const createInnerWorkSession = asyncHandler(
     });
 
     // Embed the initial message (non-blocking)
-    embedInnerWorkMessage(aiMessage.id).catch((err) =>
+    embedInnerWorkMessage(aiMessage.id, turnId).catch((err) =>
       console.warn('[Inner Work] Failed to embed initial message:', err)
     );
 
@@ -604,12 +609,16 @@ export const sendInnerWorkMessage = asyncHandler(
       });
     }
 
+    // Generate turnId for this inner work message - used for cost attribution
+    const turnId = `${sessionId}-inner-work-${totalTurnCount}`;
+
     const fallbackResponse = "I'm here with you. Tell me more about what's on your mind.";
     const aiResponse = await getCompletion({
       systemPrompt: prompt,
       messages: history,
       maxTokens: 1024,
       sessionId,
+      turnId,
       operation: 'inner-work-response',
     });
     const parsed = extractJsonSafe<{ response?: string; analysis?: string }>(aiResponse || '', {
@@ -635,22 +644,23 @@ export const sendInnerWorkMessage = asyncHandler(
     });
 
     // Embed messages (non-blocking)
+    // Pass turnId for cost attribution
     Promise.all([
-      embedInnerWorkMessage(userMessage.id),
-      embedInnerWorkMessage(aiMessage.id),
+      embedInnerWorkMessage(userMessage.id, turnId),
+      embedInnerWorkMessage(aiMessage.id, turnId),
     ]).catch((err) =>
       console.warn('[Inner Work] Failed to embed messages:', err)
     );
 
     // Update session metadata with Haiku (non-blocking, runs on every message)
-    updateSessionMetadata(sessionId).catch((err) =>
+    updateSessionMetadata(sessionId, turnId).catch((err) =>
       console.warn('[Inner Work] Failed to update metadata:', err)
     );
 
     // Update conversation summary for long sessions (non-blocking)
     // This balances recent messages with rolling summarization
-    const totalMessageCount = session.messages.length + 2; // +2 for user and AI messages just added
-    updateInnerThoughtsSummary(sessionId).catch((err) =>
+    // Pass turnId for cost attribution
+    updateInnerThoughtsSummary(sessionId, turnId).catch((err) =>
       console.warn('[Inner Work] Failed to update conversation summary:', err)
     );
 

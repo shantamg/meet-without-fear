@@ -21,17 +21,15 @@ const mockRejectMemory = {
   isPending: false,
 };
 
-const mockRouter = {
-  push: jest.fn(),
+const mockFormatMemory = {
+  mutateAsync: jest.fn(),
+  isPending: false,
 };
 
 jest.mock('../../hooks/useMemories', () => ({
   useApproveMemory: () => mockApproveMemory,
   useRejectMemory: () => mockRejectMemory,
-}));
-
-jest.mock('expo-router', () => ({
-  useRouter: () => mockRouter,
+  useFormatMemory: () => mockFormatMemory,
 }));
 
 describe('MemorySuggestionCard', () => {
@@ -55,9 +53,13 @@ describe('MemorySuggestionCard', () => {
     jest.clearAllMocks();
     mockApproveMemory.mutateAsync.mockResolvedValue({});
     mockRejectMemory.mutateAsync.mockResolvedValue({});
+    mockFormatMemory.mutateAsync.mockResolvedValue({
+      valid: true,
+      suggestion: { content: 'Formatted content', category: 'COMMUNICATION' },
+    });
     mockApproveMemory.isPending = false;
     mockRejectMemory.isPending = false;
-    mockRouter.push.mockClear();
+    mockFormatMemory.isPending = false;
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -153,42 +155,25 @@ describe('MemorySuggestionCard', () => {
     });
   });
 
-  it('navigates to settings when edit button is pressed', () => {
-    const mockOnDismiss = jest.fn();
-    renderWithProviders(
-      <MemorySuggestionCard {...defaultProps} onDismiss={mockOnDismiss} />
-    );
+  it('opens edit modal when edit button is pressed', () => {
+    renderWithProviders(<MemorySuggestionCard {...defaultProps} />);
 
     fireEvent.press(screen.getByText('Edit'));
 
-    expect(mockRouter.push).toHaveBeenCalledWith({
-      pathname: '/settings/memories',
-      params: undefined,
-    });
-    expect(mockOnDismiss).toHaveBeenCalled();
+    // The edit modal should be visible
+    expect(screen.getByTestId('memory-suggestion-card-edit-modal')).toBeTruthy();
+    expect(screen.getByText('Edit Memory')).toBeTruthy();
+    expect(screen.getByText('Current memory:')).toBeTruthy();
   });
 
-  it('navigates to settings with memory ID when edit button is pressed and suggestion has ID', () => {
-    const mockOnDismiss = jest.fn();
-    const suggestionWithId: MemorySuggestion = {
-      ...mockSuggestion,
-      id: 'memory-123',
-    };
-    renderWithProviders(
-      <MemorySuggestionCard
-        {...defaultProps}
-        suggestion={suggestionWithId}
-        onDismiss={mockOnDismiss}
-      />
-    );
+  it('shows suggestion content in edit modal', () => {
+    renderWithProviders(<MemorySuggestionCard {...defaultProps} />);
 
     fireEvent.press(screen.getByText('Edit'));
 
-    expect(mockRouter.push).toHaveBeenCalledWith({
-      pathname: '/settings/memories',
-      params: { editId: 'memory-123' },
-    });
-    expect(mockOnDismiss).toHaveBeenCalled();
+    // The modal should show the current suggestion content (appears in both card and modal)
+    const contentElements = screen.getAllByText('"Keep responses brief and concise"');
+    expect(contentElements.length).toBeGreaterThanOrEqual(2); // Card and modal
   });
 
 

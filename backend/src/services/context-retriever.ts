@@ -88,8 +88,8 @@ export interface RetrievalOptions {
   /** Current session ID (if in a session) */
   currentSessionId?: string;
 
-  /** Turn ID for grouping logs (format: `${sessionId}-${turnCount}`) */
-  turnId?: string;
+  /** Turn ID for grouping logs and cost attribution (format: `${sessionId}-${turnCount}`) - REQUIRED */
+  turnId: string;
 
   /** Maximum messages to retrieve from other sessions */
   maxCrossSessionMessages?: number;
@@ -126,8 +126,8 @@ interface ReferenceDetectionResult {
  */
 async function detectReferences(
   message: string,
-  sessionId?: string,
-  turnId?: string
+  sessionId: string,
+  turnId: string
 ): Promise<ReferenceDetectionResult> {
   const prompt = `Analyze this message for references to past events, people, agreements, or time periods.
 
@@ -291,7 +291,7 @@ async function searchWithinSession(
   limit: number = 5,
   threshold: number = 0.5
 ): Promise<RelevantMessage[]> {
-  const queryEmbedding = await getEmbedding(queryText);
+  const queryEmbedding = await getEmbedding(queryText, { sessionId });
   if (!queryEmbedding) {
     return [];
   }
@@ -487,12 +487,16 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
   // Run detection and basic retrieval in parallel using Promise.all()
   // This is critical for performance - sequential execution would kill user experience
   // All three operations are independent and can run simultaneously
+  // detectReferences requires a sessionId for cost attribution - skip if no session context
+  const fallbackReferenceResult: ReferenceDetectionResult = { references: [], needsRetrieval: false, searchQueries: [] };
   const [
     referenceDetection,
     conversationHistory,
     preSessionMessages,
   ] = await Promise.all([
-    detectReferences(currentMessage, currentSessionId, turnId), // Haiku call (with circuit breaker)
+    currentSessionId
+      ? detectReferences(currentMessage, currentSessionId, turnId) // Haiku call (with circuit breaker)
+      : Promise.resolve(fallbackReferenceResult), // No session context - skip detection
     currentSessionId ? getSessionHistory(currentSessionId, userId) : Promise.resolve([]), // DB query
     includePreSession ? getPreSessionMessages(userId) : Promise.resolve([]), // DB query
   ]);

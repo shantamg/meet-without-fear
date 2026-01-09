@@ -7,27 +7,8 @@ import {
 import { prisma } from '../../lib/prisma';
 
 // Mock Prisma
-jest.mock('../../lib/prisma', () => ({
-  prisma: {
-    userVessel: {
-      findUnique: jest.fn(),
-    },
-    stageProgress: {
-      findFirst: jest.fn(),
-    },
-    emotionalReading: {
-      create: jest.fn(),
-      findMany: jest.fn(),
-    },
-    emotionalExerciseCompletion: {
-      create: jest.fn(),
-    },
-    user: {
-      update: jest.fn(),
-    },
-    $transaction: jest.fn(),
-  },
-}));
+jest.mock('../../lib/prisma');
+
 
 // Helper to create mock request
 function createMockRequest(options: {

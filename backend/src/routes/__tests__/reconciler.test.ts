@@ -14,49 +14,12 @@ import { prisma } from '../../lib/prisma';
 import { notifyPartner } from '../../services/realtime';
 
 // Mock prisma
-jest.mock('../../lib/prisma', () => ({
-  prisma: {
-    session: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-    },
-    user: {
-      findUnique: jest.fn(),
-    },
-    empathyAttempt: {
-      findFirst: jest.fn(),
-    },
-    message: {
-      findMany: jest.fn(),
-      create: jest.fn().mockResolvedValue({
-        id: 'msg-1',
-        content: 'test',
-        timestamp: new Date(),
-        stage: 2,
-      }),
-    },
-    reconcilerResult: {
-      findUnique: jest.fn(),
-      findFirst: jest.fn(),
-      findMany: jest.fn(),
-      create: jest.fn(),
-    },
-    reconcilerShareOffer: {
-      findFirst: jest.fn(),
-      upsert: jest.fn(),
-      update: jest.fn(),
-    },
-    relationshipMember: {
-      findMany: jest.fn(),
-    },
-  },
-}));
+jest.mock('../../lib/prisma');
+
 
 // Mock realtime
-jest.mock('../../services/realtime', () => ({
-  notifyPartner: jest.fn().mockResolvedValue(undefined),
-  publishSessionEvent: jest.fn().mockResolvedValue(undefined),
-}));
+jest.mock('../../services/realtime');
+
 
 // Mock bedrock
 jest.mock('../../lib/bedrock', () => ({

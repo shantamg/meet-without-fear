@@ -118,11 +118,16 @@ Output only JSON: { "response": "your response" }`;
     instruction: 'Generate a natural conversational response.',
   });
 
+  // Generate turnId - use sessionId if available, otherwise synthetic
+  const effectiveSessionId = sessionId || 'chat-router-response';
+  const turnId = sessionId ? `${sessionId}-${Date.now()}` : `chat-router-response-${Date.now()}`;
+
   const result = await getHaikuJson<{ response: string }>({
     systemPrompt,
     messages: [{ role: 'user', content: prompt }],
     maxTokens: 256,
-    sessionId,
+    sessionId: effectiveSessionId,
+    turnId,
     operation: 'chat-router-response',
   });
 

@@ -979,10 +979,14 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
     // Get partner name for context
     const partnerName = invitation.name || undefined;
 
+    // Generate turnId for this user action - used for cost attribution
+    const turnId = `${sessionId}-invitation-confirm`;
+
     // Build AI context for transition
     const aiContext: FullAIContext = {
       sessionId,
       userId: user.id,
+      turnId,
       userName: user.name || 'there',
       partnerName,
       stage: 1,
@@ -1029,12 +1033,12 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
       });
 
       // Embed message for cross-session retrieval (non-blocking)
-      embedMessage(aiMessage.id).catch((err) =>
+      embedMessage(aiMessage.id, turnId).catch((err) =>
         console.warn('[confirmInvitationMessage] Failed to embed message:', err)
       );
 
       // Summarize older parts of the conversation (non-blocking)
-      updateSessionSummary(sessionId, user.id).catch((err) =>
+      updateSessionSummary(sessionId, user.id, turnId).catch((err) =>
         console.warn('[confirmInvitationMessage] Failed to update session summary:', err)
       );
 

@@ -37,6 +37,7 @@ export const usageTracker = {
     inputTokens: number,
     outputTokens: number,
     turnId?: string,
+    durationMs?: number,
   ) => {
     // 1. Calculate Cost
     const price = PRICING[modelId as keyof typeof PRICING] || { input: 0, output: 0 };
@@ -45,7 +46,7 @@ export const usageTracker = {
     const timestamp = new Date().toISOString();
 
     // 2. Write to CSV (Permanent Record)
-    const line = `${timestamp},${sessionId},${modelId},${operation},${inputTokens},${outputTokens},${costString}\n`;
+    const line = `${timestamp},${sessionId},${modelId},${operation},${inputTokens},${outputTokens},${costString},${durationMs ?? ''}\n`;
     fs.appendFile(USAGE_FILE, line, err => {
       if (err) console.error('[UsageTracker] Failed to write CSV:', err);
     });
@@ -61,6 +62,7 @@ export const usageTracker = {
         inputTokens,
         outputTokens,
         totalCost: costValue,
+        durationMs,
       });
     }
   },

@@ -197,6 +197,10 @@ RESPOND IN JSON:
   "sentiment": 0.8
 }`;
 
+  // Generate synthetic IDs for standalone feature
+  const syntheticSessionId = `gratitude-${userId}`;
+  const syntheticTurnId = `${syntheticSessionId}-${Date.now()}`;
+
   const aiResponse = await getHaikuJson<{
     response?: string;
     people?: string[];
@@ -210,6 +214,8 @@ RESPOND IN JSON:
     systemPrompt: prompt,
     messages: [{ role: 'user', content: content }],
     operation: 'gratitude-response',
+    sessionId: syntheticSessionId,
+    turnId: syntheticTurnId,
   });
 
   const parsed = aiResponse ?? {

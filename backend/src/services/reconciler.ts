@@ -2,15 +2,19 @@
  * Empathy Reconciler Service
  *
  * Analyzes the gap between what one person guessed about the other's feelings
- * vs what they actually expressed. This runs after both users complete Stage 2
- * to identify opportunities for deeper understanding through targeted sharing.
+ * vs what they actually expressed. This runs ASYMMETRICALLY - when User A
+ * submits their empathy statement about User B, the reconciler runs as soon as
+ * User B completes Stage 1 (not waiting for User B to submit empathy).
  *
  * Flow:
- * 1. Both users complete Stage 2 (share empathy statements)
- * 2. Reconciler runs for each direction (A→B and B→A)
- * 3. For each direction, compare empathy guess vs actual witnessing content
- * 4. If gaps exist, offer the subject a chance to share more
- * 5. Once reconciliation is complete, proceed to Stage 3
+ * 1. User A completes Stage 2 (shares empathy statement about User B) → status = HELD
+ * 2. User B completes Stage 1 (confirms "I feel heard") → triggers reconciler for A→B direction
+ * 3. Reconciler compares A's empathy guess vs B's actual witnessing content
+ * 4. If gaps exist:
+ *    a. Generate a suggestion for B to share with A (status = AWAITING_SHARING)
+ *    b. B can accept, refine, or decline
+ *    c. If B shares, A receives the context and can refine their empathy (status = REFINING)
+ * 5. Once A's empathy is approved (or B declines to share), A's empathy is REVEALED to B
  */
 
 import { prisma } from '../lib/prisma';
@@ -22,7 +26,6 @@ import {
   buildReconcilerSummaryPrompt,
   type ReconcilerContext,
   type ShareOfferContext,
-  type QuoteSelectionContext,
   type ReconcilerSummaryContext,
 } from './stage-prompts';
 import { extractJsonFromResponse } from '../utils/json-extractor';
@@ -46,8 +49,18 @@ async function getSonnetJson<T>(options: {
   maxTokens: number;
   sessionId?: string;
   operation?: string;
+  turnId?: string;
 }): Promise<T | null> {
-  const response = await getSonnetResponse(options);
+  // Ensure sessionId, turnId, and operation are always strings
+  const effectiveSessionId = options.sessionId || 'reconciler';
+  const effectiveTurnId = options.turnId || (options.sessionId ? `${options.sessionId}-${Date.now()}` : `reconciler-${Date.now()}`);
+  const effectiveOperation = options.operation || 'reconciler';
+  const response = await getSonnetResponse({
+    ...options,
+    sessionId: effectiveSessionId,
+    turnId: effectiveTurnId,
+    operation: effectiveOperation,
+  });
   if (!response) return null;
 
   try {
@@ -220,6 +233,426 @@ export async function runReconciler(
 }
 
 /**
+ * Run the reconciler for a SINGLE direction when subject completes Stage 1.
+ * This is the new asymmetric flow - reconciler runs as soon as:
+ * 1. Guesser has submitted empathy (status = HELD)
+ * 2. Subject completes Stage 1 (confirms feelHeard)
+ *
+ * @param sessionId - The session ID
+ * @param guesserId - The user who submitted the empathy statement (guesser)
+ * @param subjectId - The user whose Stage 1 content will be compared (subject)
+ * @returns The reconciler result for this direction
+ */
+export async function runReconcilerForDirection(
+  sessionId: string,
+  guesserId: string,
+  subjectId: string
+): Promise<{
+  result: ReconcilerResult | null;
+  empathyStatus: 'REVEALED' | 'AWAITING_SHARING';
+  shareOffer: {
+    suggestedContent: string;
+    reason: string;
+  } | null;
+}> {
+  console.log(`[Reconciler] Running asymmetric reconciliation: ${guesserId} → ${subjectId}`);
+
+  // Get user names
+  const [guesser, subject] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: guesserId },
+      select: { id: true, name: true, firstName: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: subjectId },
+      select: { id: true, name: true, firstName: true },
+    }),
+  ]);
+
+  if (!guesser || !subject) {
+    throw new Error('Guesser or subject not found');
+  }
+
+  const guesserInfo: UserInfo = {
+    id: guesser.id,
+    name: guesser.firstName || guesser.name || 'User',
+  };
+  const subjectInfo: UserInfo = {
+    id: subject.id,
+    name: subject.firstName || subject.name || 'User',
+  };
+
+  // Get guesser's empathy statement
+  const empathyData = await getEmpathyData(sessionId, guesserId);
+  if (!empathyData) {
+    throw new Error('Guesser has not submitted empathy statement');
+  }
+
+  // Get subject's witnessing content (Stage 1)
+  const witnessingContent = await getWitnessingContent(sessionId, subjectId);
+  if (!witnessingContent.userMessages) {
+    throw new Error('Subject has no Stage 1 content');
+  }
+
+  // Run the analysis
+  const result = await analyzeEmpathyGap({
+    sessionId,
+    guesser: guesserInfo,
+    subject: subjectInfo,
+    empathyStatement: empathyData.statement,
+    witnessingContent,
+  });
+
+  // Determine outcome based on gaps
+  const hasSignificantGaps =
+    result.gaps.severity === 'significant' ||
+    result.recommendation.action === 'OFFER_SHARING';
+
+  if (!hasSignificantGaps) {
+    // No significant gaps - reveal directly
+    await prisma.empathyAttempt.updateMany({
+      where: { sessionId, sourceUserId: guesserId },
+      data: {
+        status: 'REVEALED',
+        revealedAt: new Date(),
+      },
+    });
+
+    return {
+      result,
+      empathyStatus: 'REVEALED',
+      shareOffer: null,
+    };
+  }
+
+  // Significant gaps - generate share suggestion for subject
+  const shareOffer = await generateShareSuggestion(
+    sessionId,
+    guesserInfo,
+    subjectInfo,
+    result,
+    witnessingContent
+  );
+
+  // Update empathy attempt status to AWAITING_SHARING
+  await prisma.empathyAttempt.updateMany({
+    where: { sessionId, sourceUserId: guesserId },
+    data: { status: 'AWAITING_SHARING' },
+  });
+
+  return {
+    result,
+    empathyStatus: 'AWAITING_SHARING',
+    shareOffer,
+  };
+}
+
+/**
+ * Generate a share suggestion for the subject based on reconciler gaps.
+ * This creates a human-readable suggestion that the subject can accept, refine, or decline.
+ */
+async function generateShareSuggestion(
+  sessionId: string,
+  guesser: UserInfo,
+  subject: UserInfo,
+  reconcilerResult: ReconcilerResult,
+  witnessingContent: WitnessingContent
+): Promise<{
+  suggestedContent: string;
+  reason: string;
+} | null> {
+  // Build prompt to generate a share suggestion
+  const prompt = `You are helping ${subject.name} understand what context they could share to help ${guesser.name} understand them better.
+
+${guesser.name} tried to express empathy for ${subject.name}'s experience, but missed some important aspects:
+
+Gap Analysis:
+- Severity: ${reconcilerResult.gaps.severity}
+- Summary: ${reconcilerResult.gaps.summary}
+- Missed feelings: ${reconcilerResult.gaps.missedFeelings.join(', ')}
+${reconcilerResult.gaps.mostImportantGap ? `- Most important gap: ${reconcilerResult.gaps.mostImportantGap}` : ''}
+
+${subject.name}'s actual witnessing content (what they shared in Stage 1):
+---
+${witnessingContent.userMessages}
+---
+
+Generate a brief, specific suggestion for what ${subject.name} could share to help ${guesser.name} understand better. The suggestion should:
+1. Be 1-3 sentences that ${subject.name} might actually say
+2. Draw from what they actually shared (don't invent new content)
+3. Address the most important gap in understanding
+4. Feel natural and not forced
+
+Also explain briefly WHY sharing this would help (1 sentence).
+
+Respond in JSON:
+\`\`\`json
+{
+  "suggestedContent": "The suggestion text",
+  "reason": "Why this would help"
+}
+\`\`\``;
+
+  const response = await getSonnetJson<{ suggestedContent: string; reason: string }>({
+    systemPrompt: prompt,
+    messages: [{ role: 'user', content: 'Generate the share suggestion.' }],
+    maxTokens: 512,
+    sessionId,
+    operation: 'reconciler-share-suggestion',
+  });
+
+  if (!response) {
+    // Fallback suggestion
+    return {
+      suggestedContent: `There's something about my experience that might help you understand better.`,
+      reason: `${guesser.name} may have missed some important aspects of what you're going through.`,
+    };
+  }
+
+  // Save to reconciler result
+  const dbResult = await prisma.reconcilerResult.findUnique({
+    where: {
+      sessionId_guesserId_subjectId: {
+        sessionId,
+        guesserId: guesser.id,
+        subjectId: subject.id,
+      },
+    },
+  });
+
+  if (dbResult) {
+    await prisma.reconcilerResult.update({
+      where: { id: dbResult.id },
+      data: {
+        suggestedShareContent: response.suggestedContent,
+        suggestedShareReason: response.reason,
+      },
+    });
+
+    // Create share offer record
+    await prisma.reconcilerShareOffer.upsert({
+      where: { resultId: dbResult.id },
+      create: {
+        resultId: dbResult.id,
+        userId: subject.id,
+        status: 'PENDING',
+        suggestedContent: response.suggestedContent,
+        suggestedReason: response.reason,
+      },
+      update: {
+        status: 'PENDING',
+        suggestedContent: response.suggestedContent,
+        suggestedReason: response.reason,
+      },
+    });
+  }
+
+  return response;
+}
+
+/**
+ * Get share suggestion for a user (called when they need to respond).
+ */
+export async function getShareSuggestionForUser(
+  sessionId: string,
+  userId: string
+): Promise<{
+  hasSuggestion: boolean;
+  suggestion: {
+    guesserName: string;
+    suggestedContent: string;
+    reason: string;
+    canRefine: boolean;
+  } | null;
+}> {
+  // Find share offer for this user in PENDING status
+  const shareOffer = await prisma.reconcilerShareOffer.findFirst({
+    where: {
+      userId,
+      status: 'PENDING',
+      result: { sessionId },
+    },
+    include: {
+      result: true,
+    },
+  });
+
+  if (!shareOffer || !shareOffer.suggestedContent) {
+    return { hasSuggestion: false, suggestion: null };
+  }
+
+  // Mark as OFFERED now that it's being viewed
+  await prisma.reconcilerShareOffer.update({
+    where: { id: shareOffer.id },
+    data: { status: 'OFFERED' },
+  });
+
+  return {
+    hasSuggestion: true,
+    suggestion: {
+      guesserName: shareOffer.result.guesserName,
+      suggestedContent: shareOffer.suggestedContent,
+      reason: shareOffer.suggestedReason || 'This would help them understand you better.',
+      canRefine: true,
+    },
+  };
+}
+
+/**
+ * Respond to a share suggestion (new flow with accept/refine/decline).
+ */
+export async function respondToShareSuggestion(
+  sessionId: string,
+  userId: string,
+  response: {
+    action: 'accept' | 'decline' | 'refine';
+    refinedContent?: string;
+  }
+): Promise<{
+  status: 'shared' | 'declined';
+  sharedContent: string | null;
+  guesserUpdated: boolean;
+}> {
+  // Get the share offer
+  const shareOffer = await prisma.reconcilerShareOffer.findFirst({
+    where: {
+      userId,
+      status: 'OFFERED',
+      result: { sessionId },
+    },
+    include: {
+      result: true,
+    },
+  });
+
+  if (!shareOffer) {
+    throw new Error('No pending share offer found');
+  }
+
+  if (response.action === 'decline') {
+    // User declined - mark offer as declined and reveal empathy as-is
+    await prisma.reconcilerShareOffer.update({
+      where: { id: shareOffer.id },
+      data: {
+        status: 'DECLINED',
+        declinedAt: new Date(),
+      },
+    });
+
+    // Reveal guesser's empathy statement
+    await prisma.empathyAttempt.updateMany({
+      where: { sessionId, sourceUserId: shareOffer.result.guesserId },
+      data: {
+        status: 'REVEALED',
+        revealedAt: new Date(),
+      },
+    });
+
+    return {
+      status: 'declined',
+      sharedContent: null,
+      guesserUpdated: true,
+    };
+  }
+
+  // User accepted or refined
+  const sharedContent =
+    response.action === 'refine' && response.refinedContent
+      ? response.refinedContent
+      : shareOffer.suggestedContent || '';
+
+  // Update share offer
+  await prisma.reconcilerShareOffer.update({
+    where: { id: shareOffer.id },
+    data: {
+      status: 'ACCEPTED',
+      refinedContent: response.action === 'refine' ? response.refinedContent : null,
+      sharedContent,
+      sharedAt: new Date(),
+    },
+  });
+
+  // Update guesser's empathy attempt to REFINING
+  await prisma.empathyAttempt.updateMany({
+    where: { sessionId, sourceUserId: shareOffer.result.guesserId },
+    data: { status: 'REFINING' },
+  });
+
+  // Create message for guesser to see the shared context
+  await prisma.message.create({
+    data: {
+      sessionId,
+      senderId: userId,
+      forUserId: shareOffer.result.guesserId,
+      role: 'SHARED_CONTEXT',
+      content: sharedContent,
+      stage: 2,
+    },
+  });
+
+  return {
+    status: 'shared',
+    sharedContent,
+    guesserUpdated: true,
+  };
+}
+
+/**
+ * Check if partner has completed Stage 1 (used to determine if reconciler should run).
+ */
+export async function hasPartnerCompletedStage1(
+  sessionId: string,
+  partnerId: string
+): Promise<boolean> {
+  const progress = await prisma.stageProgress.findUnique({
+    where: {
+      sessionId_userId_stage: {
+        sessionId,
+        userId: partnerId,
+        stage: 1,
+      },
+    },
+  });
+
+  if (!progress) return false;
+
+  const gates = progress.gatesSatisfied as Record<string, unknown> | null;
+  return gates?.feelHeard === true || gates?.feelHeardConfirmed === true;
+}
+
+/**
+ * Get shared context for a guesser (if subject shared something).
+ */
+export async function getSharedContextForGuesser(
+  sessionId: string,
+  guesserId: string
+): Promise<{
+  hasSharedContext: boolean;
+  content: string | null;
+  sharedAt: string | null;
+}> {
+  const shareOffer = await prisma.reconcilerShareOffer.findFirst({
+    where: {
+      result: {
+        sessionId,
+        guesserId,
+      },
+      status: 'ACCEPTED',
+    },
+  });
+
+  if (!shareOffer || !shareOffer.sharedContent) {
+    return { hasSharedContext: false, content: null, sharedAt: null };
+  }
+
+  return {
+    hasSharedContext: true,
+    content: shareOffer.sharedContent,
+    sharedAt: shareOffer.sharedAt?.toISOString() || null,
+  };
+}
+
+/**
  * Analyze the empathy gap for one direction (guesser → subject).
  */
 async function analyzeEmpathyGap(
@@ -271,7 +704,10 @@ async function analyzeEmpathyGap(
     return getDefaultReconcilerResult();
   }
 
-  // Save result to database
+  // Generate abstract guidance for refinement (doesn't expose partner's specific content)
+  const abstractGuidance = generateAbstractGuidance(result);
+
+  // Save result to database with abstract guidance fields
   await prisma.reconcilerResult.create({
     data: {
       sessionId: input.sessionId,
@@ -291,8 +727,15 @@ async function analyzeEmpathyGap(
       rationale: result.recommendation.rationale,
       sharingWouldHelp: result.recommendation.sharingWouldHelp,
       suggestedShareFocus: result.recommendation.suggestedShareFocus,
+      // Abstract guidance for refinement conversation
+      areaHint: abstractGuidance.areaHint,
+      guidanceType: abstractGuidance.guidanceType,
+      promptSeed: abstractGuidance.promptSeed,
     },
   });
+
+  // Add abstract guidance to the result for returning
+  result.abstractGuidance = abstractGuidance;
 
   console.log(
     `[Reconciler] Analysis complete: ${result.alignment.score}% alignment, ` +
@@ -688,15 +1131,100 @@ async function getWitnessingContent(
  * Extract key themes from witnessing content using AI.
  */
 async function extractThemes(content: string, sessionId: string): Promise<string[]> {
+  const turnId = `${sessionId}-extract-themes-${Date.now()}`;
   const result = await getHaikuJson<{ themes: string[] }>({
     systemPrompt: `Extract 3-5 key emotional themes or feelings from this witnessing content. Return as JSON: {"themes": ["theme1", "theme2", ...]}`,
     messages: [{ role: 'user', content }],
     maxTokens: 256,
     sessionId,
+    turnId,
     operation: 'reconciler-extract-themes',
   });
 
   return result?.themes || [];
+}
+
+/**
+ * Abstract guidance type for refinement conversations.
+ */
+interface AbstractGuidance {
+  areaHint: string | null;
+  guidanceType: string | null;
+  promptSeed: string | null;
+}
+
+/**
+ * Generate abstract guidance for refinement conversation.
+ * This extracts general themes without revealing partner's specific content.
+ *
+ * Key constraint: The guidance should help the refinement AI ask good questions
+ * without revealing what the partner actually said.
+ */
+function generateAbstractGuidance(result: ReconcilerResult): AbstractGuidance {
+  // If no significant gaps, no guidance needed
+  if (result.gaps.severity === 'none' || result.gaps.severity === 'minor') {
+    return {
+      areaHint: null,
+      guidanceType: null,
+      promptSeed: null,
+    };
+  }
+
+  // Extract abstract area hint from missed feelings
+  // e.g., ["unappreciated", "unseen at work"] → "work and effort"
+  let areaHint: string | null = null;
+  if (result.gaps.missedFeelings.length > 0) {
+    // Look for common themes in missed feelings
+    const feelingText = result.gaps.missedFeelings.join(' ').toLowerCase();
+    if (feelingText.includes('work') || feelingText.includes('effort') || feelingText.includes('appreciate')) {
+      areaHint = 'work and effort';
+    } else if (feelingText.includes('connect') || feelingText.includes('close') || feelingText.includes('together')) {
+      areaHint = 'connection and closeness';
+    } else if (feelingText.includes('safe') || feelingText.includes('secure') || feelingText.includes('trust')) {
+      areaHint = 'safety and security';
+    } else if (feelingText.includes('hear') || feelingText.includes('listen') || feelingText.includes('understand')) {
+      areaHint = 'being heard and understood';
+    } else if (feelingText.includes('respect') || feelingText.includes('value')) {
+      areaHint = 'respect and value';
+    } else {
+      // Generic fallback based on first missed feeling category
+      areaHint = 'deeper emotional experiences';
+    }
+  }
+
+  // Determine guidance type based on gap characteristics
+  let guidanceType: string | null = null;
+  if (result.gaps.misattributions.length > 0) {
+    // User made incorrect assumptions
+    guidanceType = 'challenge_assumptions';
+  } else if (result.gaps.missedFeelings.length > 2) {
+    // Multiple missed feelings - need broader exploration
+    guidanceType = 'explore_breadth';
+  } else {
+    // Default: help user explore deeper
+    guidanceType = 'explore_deeper_feelings';
+  }
+
+  // Generate prompt seed (abstract starting point for questions)
+  let promptSeed: string | null = null;
+  switch (guidanceType) {
+    case 'challenge_assumptions':
+      promptSeed = 'what might be different from your initial understanding';
+      break;
+    case 'explore_breadth':
+      promptSeed = 'other aspects of their experience';
+      break;
+    case 'explore_deeper_feelings':
+    default:
+      promptSeed = 'what might be underneath the surface';
+      break;
+  }
+
+  return {
+    areaHint,
+    guidanceType,
+    promptSeed,
+  };
 }
 
 /**
@@ -716,6 +1244,9 @@ function dbResultToReconcilerResult(
     rationale: string;
     sharingWouldHelp: boolean;
     suggestedShareFocus: string | null;
+    areaHint?: string | null;
+    guidanceType?: string | null;
+    promptSeed?: string | null;
   }
 ): ReconcilerResult {
   return {
@@ -736,6 +1267,11 @@ function dbResultToReconcilerResult(
       rationale: db.rationale,
       sharingWouldHelp: db.sharingWouldHelp,
       suggestedShareFocus: db.suggestedShareFocus,
+    },
+    abstractGuidance: {
+      areaHint: db.areaHint ?? null,
+      guidanceType: db.guidanceType ?? null,
+      promptSeed: db.promptSeed ?? null,
     },
   };
 }

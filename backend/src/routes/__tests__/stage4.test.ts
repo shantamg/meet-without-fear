@@ -15,43 +15,12 @@ import { prisma } from '../../lib/prisma';
 import { notifyPartner, publishSessionEvent } from '../../services/realtime';
 
 // Mock prisma
-jest.mock('../../lib/prisma', () => ({
-  prisma: {
-    session: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-    },
-    stageProgress: {
-      findFirst: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-    },
-    strategyProposal: {
-      findMany: jest.fn(),
-      create: jest.fn(),
-      findUnique: jest.fn(),
-    },
-    strategyRanking: {
-      findMany: jest.fn(),
-      upsert: jest.fn(),
-      findUnique: jest.fn(),
-    },
-    sharedVessel: {
-      findUnique: jest.fn(),
-    },
-    agreement: {
-      create: jest.fn(),
-      findUnique: jest.fn(),
-      update: jest.fn(),
-    },
-  },
-}));
+jest.mock('../../lib/prisma');
+
 
 // Mock realtime
-jest.mock('../../services/realtime', () => ({
-  notifyPartner: jest.fn().mockResolvedValue(undefined),
-  publishSessionEvent: jest.fn().mockResolvedValue(undefined),
-}));
+jest.mock('../../services/realtime');
+
 
 // Import controllers after mocks
 import {

@@ -6,7 +6,8 @@
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { render } from '../../utils/test-utils';
 import { Stage, StageStatus } from '@meet-without-fear/shared';
 
 // Import after mocks

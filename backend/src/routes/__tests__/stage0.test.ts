@@ -3,31 +3,12 @@ import { signCompact, getCompactStatus } from '../../controllers/stage0';
 import { prisma } from '../../lib/prisma';
 
 // Mock Prisma
-jest.mock('../../lib/prisma', () => ({
-  prisma: {
-    stageProgress: {
-      findUnique: jest.fn(),
-      findFirst: jest.fn(),
-      upsert: jest.fn(),
-      update: jest.fn(),
-    },
-    session: {
-      findUnique: jest.fn(),
-      update: jest.fn(),
-    },
-    relationshipMember: {
-      findMany: jest.fn(),
-    },
-    invitation: {
-      findFirst: jest.fn(),
-    },
-  },
-}));
+jest.mock('../../lib/prisma');
+
 
 // Mock realtime service
-jest.mock('../../services/realtime', () => ({
-  notifyPartner: jest.fn().mockResolvedValue(undefined),
-}));
+jest.mock('../../services/realtime');
+
 
 // Helper to create mock request
 function createMockRequest(options: {

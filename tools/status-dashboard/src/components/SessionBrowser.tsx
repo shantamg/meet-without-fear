@@ -1,26 +1,48 @@
 
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import Ably from 'ably';
 import { Session } from '../types';
+
+const ablyKey = import.meta.env.VITE_ABLY_KEY;
 
 function SessionBrowser() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [ablyStatus, setAblyStatus] = useState<'connecting' | 'connected' | 'error' | 'disconnected'>('disconnected');
 
   useEffect(() => {
     fetchSessions();
+
+    // Subscribe to Ably for real-time session updates
+    if (!ablyKey) {
+      console.warn('VITE_ABLY_KEY not set - live updates disabled');
+      return;
+    }
+
+    const client = new Ably.Realtime(ablyKey);
+    const channel = client.channels.get('ai-audit-stream');
+
+    client.connection.on('connected', () => setAblyStatus('connected'));
+    client.connection.on('disconnected', () => setAblyStatus('disconnected'));
+    client.connection.on('failed', () => setAblyStatus('error'));
+
+    // Listen for new session events
+    channel.subscribe('session-created', () => {
+      // Refetch sessions when a new one is created
+      fetchSessions();
+    });
+
+    return () => {
+      channel.unsubscribe();
+      client.close();
+    };
   }, []);
 
   const fetchSessions = async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/audit/sessions'); // Assuming standard port
-      // Actually, we need to know the backend URL. VITE_BACKEND_URL?
-      // For now, hardcode or use relative if proxied. 
-      // Vite config shows proxy? No proxyconfig in vite.config.ts yet.
-      // I should configure proxy in vite.config.ts or use full URL.
-      // Let's assume localhost:3000 for now.
-
+      const res = await fetch('/api/audit/sessions');
       const json = await res.json();
       if (json.success) {
         setSessions(json.data);
@@ -41,7 +63,12 @@ function SessionBrowser() {
   return (
     <div className="session-browser">
       <header className="browser-header">
-        <h2>Recent Sessions</h2>
+        <div className="header-left">
+          <h2>Recent Sessions</h2>
+          <span className={`connection-status ${ablyStatus}`}>
+            {ablyStatus === 'connected' ? '● Live' : '○ Offline'}
+          </span>
+        </div>
         <button onClick={fetchSessions} className="refresh-btn">Refresh</button>
       </header>
 
@@ -54,9 +81,12 @@ function SessionBrowser() {
               <span className="session-time">{new Date(session.updatedAt).toLocaleString()}</span>
             </div>
             <div className="session-members">
-              {session.relationship.members.map(m => (
-                <span key={m.id} className="member-name">{m.user.firstName || m.user.email}</span>
-              )).join(' & ')}
+              {session.relationship.members.map((m, i) => (
+                <span key={m.id}>
+                  {i > 0 && ' & '}
+                  <span className="member-name">{m.user.firstName || m.user.email}</span>
+                </span>
+              ))}
             </div>
           </Link>
         ))}

@@ -772,3 +772,49 @@ body {
   padding: 0.5rem;
   border-radius: 4px;
 }
+
+/* LLM In-Progress Styles */
+.type-LLM_START {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.type-LLM_START .step-header {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.type-LLM_START .step-preview {
+  color: #60a5fa;
+}
+
+.llm-start-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.in-progress-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.in-progress-indicator .spinner {
+  font-size: 1.2rem;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.in-progress-indicator .status-text {
+  color: #60a5fa;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

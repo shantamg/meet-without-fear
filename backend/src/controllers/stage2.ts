@@ -15,8 +15,6 @@ import {
   saveEmpathyDraftRequestSchema,
   consentToShareRequestSchema,
   validateEmpathyRequestSchema,
-  ApiResponse,
-  ErrorCode,
 } from '@meet-without-fear/shared';
 import { notifyPartner } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
@@ -24,9 +22,22 @@ import { getSonnetResponse } from '../lib/bedrock';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import { embedMessage } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
-import { notifyEmpathyShared } from '../services/notification';
-import { runReconciler } from '../services/reconciler';
+import {
+  notifyEmpathyShared,
+  notifyEmpathyRevealed,
+  notifyEmpathyNeedsWork,
+  notifyEmpathyValidated,
+} from '../services/notification';
+import {
+  runReconciler,
+  getShareSuggestionForUser,
+  respondToShareSuggestion as reconcilerRespondToShareSuggestion,
+  hasPartnerCompletedStage1,
+  getSharedContextForGuesser,
+} from '../services/reconciler';
 import { isSessionCreator } from '../utils/session';
+import { publishSessionEvent } from '../services/realtime';
+import { auditLog } from '../services/audit-logger';
 
 // ============================================================================
 // Types
@@ -38,6 +49,134 @@ interface SessionWithRelationship {
   relationship: {
     members: Array<{ userId: string }>;
   };
+}
+
+// ============================================================================
+// Helper: Trigger Reconciler and Update Statuses
+// ============================================================================
+
+/**
+ * Runs the reconciler for both directions and updates empathy attempt statuses
+ * based on the results. Called when both users have consented to share.
+ */
+async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<void> {
+
+  try {
+    // Run reconciler for both directions
+    const result = await runReconciler(sessionId);
+
+    if (!result.bothCompleted) {
+      console.warn(`[triggerReconcilerAndUpdateStatuses] Reconciler incomplete: ${result.blockingReason}`);
+      return;
+    }
+
+    // Get session participants to map results to attempts
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        relationship: {
+          include: {
+            members: {
+              include: { user: { select: { id: true } } },
+            },
+          },
+        },
+      },
+    });
+
+    if (!session || session.relationship.members.length !== 2) {
+      console.warn('[triggerReconcilerAndUpdateStatuses] Session not found or invalid members');
+      return;
+    }
+
+    const userAId = session.relationship.members[0].user.id;
+    const userBId = session.relationship.members[1].user.id;
+
+    // Get user names for notifications
+    const userA = await prisma.user.findUnique({
+      where: { id: userAId },
+      select: { name: true, firstName: true },
+    });
+    const userB = await prisma.user.findUnique({
+      where: { id: userBId },
+      select: { name: true, firstName: true },
+    });
+    const userAName = userA?.firstName || userA?.name || 'Your partner';
+    const userBName = userB?.firstName || userB?.name || 'Your partner';
+
+    // Update empathy attempt for User A (A's guess about B)
+    if (result.aUnderstandingB) {
+      const hasSignificantGaps =
+        result.aUnderstandingB.gaps.severity === 'significant' ||
+        result.aUnderstandingB.recommendation.action === 'OFFER_SHARING';
+
+      const newStatus = hasSignificantGaps ? 'NEEDS_WORK' : 'REVEALED';
+
+      await prisma.empathyAttempt.updateMany({
+        where: { sessionId, sourceUserId: userAId },
+        data: {
+          status: newStatus,
+          revealedAt: newStatus === 'REVEALED' ? new Date() : null,
+        },
+      });
+
+      // Send notifications based on status
+      if (newStatus === 'REVEALED') {
+        // Notify User B that User A's empathy statement is now visible
+        notifyEmpathyRevealed(userBId, userAName, sessionId).catch((err) =>
+          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to send REVEALED notification:', err)
+        );
+      } else {
+        // Notify User A that they need to refine their statement
+        notifyEmpathyNeedsWork(userAId, sessionId).catch((err) =>
+          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to send NEEDS_WORK notification:', err)
+        );
+      }
+
+      console.log(
+        `[triggerReconcilerAndUpdateStatuses] Updated User A's attempt to ${newStatus} ` +
+        `(alignment: ${result.aUnderstandingB.alignment.score}%, gaps: ${result.aUnderstandingB.gaps.severity})`
+      );
+    }
+
+    // Update empathy attempt for User B (B's guess about A)
+    if (result.bUnderstandingA) {
+      const hasSignificantGaps =
+        result.bUnderstandingA.gaps.severity === 'significant' ||
+        result.bUnderstandingA.recommendation.action === 'OFFER_SHARING';
+
+      const newStatus = hasSignificantGaps ? 'NEEDS_WORK' : 'REVEALED';
+
+      await prisma.empathyAttempt.updateMany({
+        where: { sessionId, sourceUserId: userBId },
+        data: {
+          status: newStatus,
+          revealedAt: newStatus === 'REVEALED' ? new Date() : null,
+        },
+      });
+
+      // Send notifications based on status
+      if (newStatus === 'REVEALED') {
+        // Notify User A that User B's empathy statement is now visible
+        notifyEmpathyRevealed(userAId, userBName, sessionId).catch((err) =>
+          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to send REVEALED notification:', err)
+        );
+      } else {
+        // Notify User B that they need to refine their statement
+        notifyEmpathyNeedsWork(userBId, sessionId).catch((err) =>
+          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to send NEEDS_WORK notification:', err)
+        );
+      }
+
+      console.log(
+        `[triggerReconcilerAndUpdateStatuses] Updated User B's attempt to ${newStatus} ` +
+        `(alignment: ${result.bUnderstandingA.alignment.score}%, gaps: ${result.bUnderstandingA.gaps.severity})`
+      );
+    }
+  } catch (error) {
+    console.error('[triggerReconcilerAndUpdateStatuses] Error:', error);
+    throw error;
+  }
 }
 
 // ============================================================================
@@ -385,7 +524,8 @@ export async function consentToShare(
       },
     });
 
-    // Create empathy attempt (shared copy)
+    // Create empathy attempt (shared copy) with HELD status
+    // The status will transition to ANALYZING when partner also consents
     const empathyAttempt = await prisma.empathyAttempt.create({
       data: {
         draftId: draft.id,
@@ -393,6 +533,7 @@ export async function consentToShare(
         sourceUserId: user.id,
         content: draft.content,
         sharedAt: new Date(),
+        status: 'HELD', // Wait for partner to also consent
       },
     });
 
@@ -422,19 +563,23 @@ export async function consentToShare(
       },
     });
 
+    // Create turnId for this user action - all operations use the same turnId for cost attribution
+    const turnId = `${sessionId}-consent-share`;
+
     // Embed for cross-session retrieval (non-blocking)
-    embedMessage(empathyMessage.id).catch((err) =>
+    embedMessage(empathyMessage.id, turnId).catch((err) =>
       console.warn('[consentToShare] Failed to embed empathy statement:', err)
     );
 
     // Summarize older parts of the conversation (non-blocking)
     // Empathy statements are persisted as chat messages, so they should be included in the rolling summary.
-    updateSessionSummary(sessionId, user.id).catch((err) =>
+    updateSessionSummary(sessionId, user.id, turnId).catch((err) =>
       console.warn('[consentToShare] Failed to update session summary:', err)
     );
 
     // Check if partner has also consented (only if we have a partner)
     let partnerAttempt = null;
+    let bothConsented = false;
     if (partnerId) {
       partnerAttempt = await prisma.empathyAttempt.findFirst({
         where: {
@@ -443,9 +588,27 @@ export async function consentToShare(
         },
       });
 
-      // If both have shared, kick off reconciler in the background
+      // If both have shared, transition both to ANALYZING and run reconciler
       if (partnerAttempt) {
-        runReconciler(sessionId, user.id).catch((err) =>
+        bothConsented = true;
+
+        // Update both attempts to ANALYZING status
+        await prisma.empathyAttempt.updateMany({
+          where: {
+            sessionId,
+            sourceUserId: { in: [user.id, partnerId] },
+            status: 'HELD',
+          },
+          data: {
+            status: 'ANALYZING',
+          },
+        });
+
+        // Update the local empathyAttempt object to reflect new status
+        empathyAttempt.status = 'ANALYZING';
+
+        // Kick off reconciler in background - it will update statuses to REVEALED or NEEDS_WORK
+        triggerReconcilerAndUpdateStatuses(sessionId).catch((err) =>
           console.warn('[consentToShare] Failed to run reconciler after both shared:', err)
         );
       }
@@ -521,6 +684,7 @@ Respond in JSON format:
         messages: [{ role: 'user', content: 'Generate the acknowledgment message.' }],
         maxTokens: 512,
         sessionId,
+        turnId,  // Use same turnId for all operations in this request
         operation: 'stage2-transition',
       });
 
@@ -557,12 +721,14 @@ Respond in JSON format:
       });
 
       // Embed for cross-session retrieval (non-blocking)
-      embedMessage(aiMessage.id).catch((err) =>
+      // Use same turnId as the consent action for cost attribution
+      embedMessage(aiMessage.id, turnId).catch((err) =>
         console.warn('[consentToShare] Failed to embed transition message:', err)
       );
 
       // Summarize older parts of the conversation (non-blocking)
-      updateSessionSummary(sessionId, user.id).catch((err) =>
+      // Use same turnId for all operations in this request
+      updateSessionSummary(sessionId, user.id, turnId).catch((err) =>
         console.warn('[consentToShare] Failed to update session summary after transition:', err)
       );
 
@@ -573,7 +739,16 @@ Respond in JSON format:
         stage: aiMessage.stage,
       };
 
-      console.log(`[consentToShare] Generated transition message for session ${sessionId}`);
+
+      // Audit log the transition message
+      auditLog('RESPONSE', 'Stage 2 transition message generated', {
+        turnId: `${sessionId}-empathy-shared`,
+        sessionId,
+        stage: 2,
+        operation: 'stage2-transition',
+        responseText: transitionContent,
+        messageId: aiMessage.id,
+      });
     } catch (error) {
       console.error('[consentToShare] Failed to generate transition message:', error);
       // Continue without transition message - not a critical failure
@@ -584,6 +759,7 @@ Respond in JSON format:
       consentedAt: empathyAttempt.sharedAt?.toISOString() ?? null,
       partnerConsented: !!partnerAttempt,
       canReveal: !!partnerAttempt && consent,
+      status: empathyAttempt.status, // HELD if partner hasn't shared, ANALYZING if both shared
       empathyMessage: {
         id: empathyMessage.id,
         content: empathyMessage.content,
@@ -650,8 +826,13 @@ export async function getPartnerEmpathy(
       },
     });
 
+    // Only reveal partner's attempt if status is REVEALED or VALIDATED
+    // This is the key change from the reconciler flow design
+    const canRevealPartnerAttempt = partnerAttempt &&
+      (partnerAttempt.status === 'REVEALED' || partnerAttempt.status === 'VALIDATED');
+
     // Determine whether current user has validated partner attempt
-    const validation = partnerAttempt
+    const validation = canRevealPartnerAttempt
       ? await prisma.empathyValidation.findUnique({
         where: {
           attemptId_userId: {
@@ -663,16 +844,23 @@ export async function getPartnerEmpathy(
       : null;
 
     successResponse(res, {
-      attempt: partnerAttempt
+      // Only return the attempt content if it's REVEALED or VALIDATED
+      attempt: canRevealPartnerAttempt
         ? {
           id: partnerAttempt.id,
           sourceUserId: partnerAttempt.sourceUserId ?? '',
           content: partnerAttempt.content,
           sharedAt: partnerAttempt.sharedAt.toISOString(),
           consentRecordId: partnerAttempt.consentRecordId ?? '',
+          status: partnerAttempt.status,
+          revealedAt: partnerAttempt.revealedAt?.toISOString() ?? null,
+          revisionCount: partnerAttempt.revisionCount,
         }
         : null,
-      waitingForPartner: !partnerAttempt,
+      // Waiting if no attempt exists, or if it exists but isn't revealed yet
+      waitingForPartner: !partnerAttempt || !canRevealPartnerAttempt,
+      // Partner's current status (even if not revealed, so UI can show appropriate message)
+      partnerStatus: partnerAttempt?.status ?? null,
       validated: validation ? validation.validated : false,
       validatedAt: validation?.validatedAt?.toISOString() ?? null,
       awaitingRevision: validation ? validation.validated === false : false,
@@ -818,6 +1006,14 @@ export async function validateEmpathy(
       },
     });
 
+    // If validated, update partner's empathy attempt status to VALIDATED
+    if (validated) {
+      await prisma.empathyAttempt.update({
+        where: { id: partnerAttempt.id },
+        data: { status: 'VALIDATED' },
+      });
+    }
+
     // Update stage progress gates
     await prisma.stageProgress.update({
       where: {
@@ -835,13 +1031,34 @@ export async function validateEmpathy(
       },
     });
 
-    // Notify partner
+    // Get partner's display name for notifications
+    let partnerName = 'Your partner';
+    if (partnerId) {
+      const partnerUser = await prisma.user.findUnique({
+        where: { id: partnerId },
+        select: { firstName: true, name: true },
+      });
+      partnerName = partnerUser?.firstName || partnerUser?.name || 'Your partner';
+    }
+
+    // Notify partner via realtime
     if (partnerId) {
       await notifyPartner(sessionId, partnerId, 'partner.stage_completed', {
         stage: 2,
         validated,
         completedBy: user.id,
       });
+
+      // If validated, send notification to partner that their empathy was validated
+      if (validated) {
+        notifyEmpathyValidated(
+          partnerId,
+          user.firstName || user.name || 'Your partner',
+          sessionId
+        ).catch((err) =>
+          console.warn('[validateEmpathy] Failed to send VALIDATED notification:', err)
+        );
+      }
     }
 
     // Determine whether partner has validated my empathy attempt
@@ -873,5 +1090,636 @@ export async function validateEmpathy(
   } catch (error) {
     console.error('[validateEmpathy] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to validate empathy', 500);
+  }
+}
+
+// ============================================================================
+// Refinement Flow (Phase 4)
+// ============================================================================
+
+/**
+ * Get empathy exchange status for UI state management
+ * GET /sessions/:id/empathy/status
+ */
+export async function getEmpathyExchangeStatus(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+
+    // Check session exists and user has access
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        relationship: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+      },
+      include: {
+        relationship: {
+          include: {
+            members: true,
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+
+    // Get partner ID
+    const partnerId = getPartnerUserIdFromSession(session, user.id);
+
+    // Get both empathy attempts
+    const [myAttempt, partnerAttempt] = await Promise.all([
+      prisma.empathyAttempt.findFirst({
+        where: { sessionId, sourceUserId: user.id },
+      }),
+      prisma.empathyAttempt.findFirst({
+        where: { sessionId, sourceUserId: partnerId ?? undefined },
+      }),
+    ]);
+
+    // Check if both have consented
+    const bothConsented = !!(myAttempt && partnerAttempt);
+
+    // Check if analyzing
+    const analyzing =
+      myAttempt?.status === 'ANALYZING' || partnerAttempt?.status === 'ANALYZING';
+
+    // Get refinement hint if my attempt needs work
+    let refinementHint = null;
+    if (myAttempt?.status === 'NEEDS_WORK') {
+      // Get the reconciler result for my direction
+      const reconcilerResult = await prisma.reconcilerResult.findFirst({
+        where: {
+          sessionId,
+          guesserId: user.id,
+        },
+        select: {
+          areaHint: true,
+          guidanceType: true,
+          promptSeed: true,
+        },
+      });
+
+      if (reconcilerResult) {
+        refinementHint = {
+          areaHint: reconcilerResult.areaHint,
+          guidanceType: reconcilerResult.guidanceType,
+          promptSeed: reconcilerResult.promptSeed,
+        };
+      }
+    }
+
+    // Check if ready for Stage 3
+    const readyForStage3 =
+      myAttempt?.status === 'VALIDATED' && partnerAttempt?.status === 'VALIDATED';
+
+    // New asymmetric flow fields
+    // Check if partner has completed Stage 1 (for triggering reconciler)
+    let partnerStage1Completed = false;
+    if (partnerId) {
+      partnerStage1Completed = await hasPartnerCompletedStage1(sessionId, partnerId);
+    }
+
+    // Check if user is awaiting sharing (subject waiting to respond to share suggestion)
+    const awaitingSharing = myAttempt?.status === 'AWAITING_SHARING';
+
+    // Check if user has new shared context (guesser should refine)
+    const hasNewSharedContext = myAttempt?.status === 'REFINING';
+
+    // Get shared context if status is REFINING
+    let sharedContext: { content: string; sharedAt: string } | null = null;
+    if (hasNewSharedContext) {
+      const contextResult = await getSharedContextForGuesser(sessionId, user.id);
+      if (contextResult.hasSharedContext && contextResult.content && contextResult.sharedAt) {
+        sharedContext = {
+          content: contextResult.content,
+          sharedAt: contextResult.sharedAt,
+        };
+      }
+    }
+
+    successResponse(res, {
+      myAttempt: myAttempt
+        ? {
+          id: myAttempt.id,
+          sourceUserId: myAttempt.sourceUserId ?? '',
+          content: myAttempt.content,
+          sharedAt: myAttempt.sharedAt.toISOString(),
+          consentRecordId: myAttempt.consentRecordId ?? '',
+          status: myAttempt.status,
+          revealedAt: myAttempt.revealedAt?.toISOString() ?? null,
+          revisionCount: myAttempt.revisionCount,
+        }
+        : null,
+      partnerAttempt: partnerAttempt &&
+        (partnerAttempt.status === 'REVEALED' || partnerAttempt.status === 'VALIDATED')
+        ? {
+          id: partnerAttempt.id,
+          sourceUserId: partnerAttempt.sourceUserId ?? '',
+          content: partnerAttempt.content,
+          sharedAt: partnerAttempt.sharedAt.toISOString(),
+          consentRecordId: partnerAttempt.consentRecordId ?? '',
+          status: partnerAttempt.status,
+          revealedAt: partnerAttempt.revealedAt?.toISOString() ?? null,
+          revisionCount: partnerAttempt.revisionCount,
+        }
+        : null,
+      bothConsented,
+      analyzing,
+      refinementHint,
+      readyForStage3,
+      // New asymmetric flow fields
+      partnerCompletedStage1: partnerStage1Completed,
+      awaitingSharing,
+      hasNewSharedContext,
+      sharedContext,
+    });
+  } catch (error) {
+    console.error('[getEmpathyExchangeStatus] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to get empathy exchange status', 500);
+  }
+}
+
+/**
+ * Refine empathy statement through conversation with AI
+ * POST /sessions/:id/empathy/refine
+ *
+ * When status is NEEDS_WORK, user can engage in refinement conversation.
+ * Uses standard full retrieval + abstract area hint from reconciler.
+ */
+export async function refineEmpathy(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const { message } = req.body;
+
+    if (!message || typeof message !== 'string') {
+      errorResponse(res, 'VALIDATION_ERROR', 'Message is required', 400);
+      return;
+    }
+
+    // Get user's empathy attempt
+    const attempt = await prisma.empathyAttempt.findFirst({
+      where: {
+        sessionId,
+        sourceUserId: user.id,
+      },
+    });
+
+    if (!attempt) {
+      errorResponse(res, 'NOT_FOUND', 'Empathy attempt not found', 404);
+      return;
+    }
+
+    // Allow refinement when status is NEEDS_WORK or REFINING
+    if (attempt.status !== 'NEEDS_WORK' && attempt.status !== 'REFINING') {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Empathy refinement is only available when status is NEEDS_WORK or REFINING',
+        400
+      );
+      return;
+    }
+
+    // Get the reconciler result for abstract guidance
+    const reconcilerResult = await prisma.reconcilerResult.findFirst({
+      where: {
+        sessionId,
+        guesserId: user.id,
+      },
+      select: {
+        areaHint: true,
+        guidanceType: true,
+        promptSeed: true,
+        subjectName: true,
+      },
+    });
+
+    // Build refinement prompt
+    // Key: Uses standard full retrieval context but only abstract hints from reconciler
+    const partnerName = reconcilerResult?.subjectName ?? 'your partner';
+    const areaHint = reconcilerResult?.areaHint ?? 'deeper emotional experiences';
+    const promptSeed = reconcilerResult?.promptSeed ?? 'what might be underneath the surface';
+
+    // If status is REFINING, include the shared context from the subject
+    let sharedContextSection = '';
+    if (attempt.status === 'REFINING') {
+      const contextResult = await getSharedContextForGuesser(sessionId, user.id);
+      if (contextResult.hasSharedContext && contextResult.content) {
+        sharedContextSection = `
+
+IMPORTANT: ${partnerName} has shared something additional to help you understand:
+"${contextResult.content}"
+
+Use this shared context to help the user incorporate this new understanding into their empathy statement.`;
+      }
+    }
+
+    const systemPrompt = `You are Meet Without Fear, a compassionate Process Guardian helping someone deepen their empathy for ${partnerName}.
+
+The user has shared their understanding of ${partnerName}'s perspective, but there may be more to explore. Your role is to gently help them think more deeply.
+
+Area to explore: ${areaHint}
+Guiding question theme: ${promptSeed}${sharedContextSection}
+
+Guidelines:
+- Ask curious, open-ended questions
+- Help them imagine ${partnerName}'s experience${attempt.status === 'REFINING' ? `
+- You CAN reference the shared context above to help them refine their understanding` : `
+- DO NOT reveal specific things ${partnerName} said
+- DO NOT tell them what they "missed"`}
+- Validate their insights while encouraging deeper exploration
+- If they express new understanding, offer to help incorporate it
+
+When they seem ready to revise their statement, propose a revision in JSON format:
+\`\`\`json
+{
+  "response": "Your conversational response",
+  "proposedRevision": "The revised empathy statement (or null if not proposing)",
+  "canResubmit": true/false
+}
+\`\`\``;
+
+    // Create turnId for this refinement conversation message
+    const turnId = `${sessionId}-empathy-refinement-${Date.now()}`;
+
+    const aiResponse = await getSonnetResponse({
+      systemPrompt,
+      messages: [{ role: 'user', content: message }],
+      maxTokens: 1024,
+      sessionId,
+      operation: 'empathy-refinement',
+      turnId,
+    });
+
+    let response = "I'd love to help you explore this further. What do you think might be going on for them beneath the surface?";
+    let proposedRevision: string | null = null;
+    let canResubmit = false;
+
+    if (aiResponse) {
+      try {
+        const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
+        response = typeof parsed.response === 'string' ? parsed.response : aiResponse;
+        proposedRevision = typeof parsed.proposedRevision === 'string' ? parsed.proposedRevision : null;
+        canResubmit = typeof parsed.canResubmit === 'boolean' ? parsed.canResubmit : !!proposedRevision;
+      } catch {
+        // If JSON parsing fails, use raw response
+        response = aiResponse;
+      }
+    }
+
+    successResponse(res, {
+      response,
+      proposedRevision,
+      canResubmit,
+    });
+  } catch (error) {
+    console.error('[refineEmpathy] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to refine empathy', 500);
+  }
+}
+
+/**
+ * Resubmit revised empathy statement for re-analysis
+ * POST /sessions/:id/empathy/resubmit
+ */
+export async function resubmitEmpathy(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const { content } = req.body;
+
+    if (!content || typeof content !== 'string') {
+      errorResponse(res, 'VALIDATION_ERROR', 'Content is required', 400);
+      return;
+    }
+
+    // Get user's empathy attempt
+    const attempt = await prisma.empathyAttempt.findFirst({
+      where: {
+        sessionId,
+        sourceUserId: user.id,
+      },
+    });
+
+    if (!attempt) {
+      errorResponse(res, 'NOT_FOUND', 'Empathy attempt not found', 404);
+      return;
+    }
+
+    if (attempt.status !== 'NEEDS_WORK') {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Can only resubmit when status is NEEDS_WORK',
+        400
+      );
+      return;
+    }
+
+    // Update the attempt with new content and set status to ANALYZING
+    await prisma.empathyAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        content,
+        status: 'ANALYZING',
+        revisionCount: attempt.revisionCount + 1,
+      },
+    });
+
+    // Delete the old reconciler result so it re-runs
+    await prisma.reconcilerResult.deleteMany({
+      where: {
+        sessionId,
+        guesserId: user.id,
+      },
+    });
+
+    // Get session to find partner ID
+    const session = await prisma.session.findFirst({
+      where: { id: sessionId },
+      include: {
+        relationship: {
+          include: {
+            members: true,
+          },
+        },
+      },
+    });
+
+    const partnerId = session
+      ? getPartnerUserIdFromSession(session, user.id)
+      : null;
+
+    // Run reconciler for just this direction
+    if (partnerId) {
+      triggerReconcilerForUser(sessionId, user.id, partnerId).catch((err) =>
+        console.warn('[resubmitEmpathy] Failed to run reconciler:', err)
+      );
+    }
+
+    successResponse(res, {
+      status: 'ANALYZING',
+      message: 'Re-analyzing your updated understanding...',
+    });
+  } catch (error) {
+    console.error('[resubmitEmpathy] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to resubmit empathy', 500);
+  }
+}
+
+/**
+ * Helper: Run reconciler for a single user's direction after resubmit
+ */
+async function triggerReconcilerForUser(
+  sessionId: string,
+  guesserId: string,
+  subjectId: string
+): Promise<void> {
+
+  try {
+    // Run reconciler for just this direction
+    const result = await runReconciler(sessionId, guesserId);
+
+    if (!result.aUnderstandingB && !result.bUnderstandingA) {
+      console.warn('[triggerReconcilerForUser] No result returned');
+      return;
+    }
+
+    // Get the result for this direction
+    const reconcilerResult = result.aUnderstandingB ?? result.bUnderstandingA;
+    if (!reconcilerResult) return;
+
+    // Determine new status based on recommendation
+    const hasSignificantGaps =
+      reconcilerResult.gaps.severity === 'significant' ||
+      reconcilerResult.recommendation.action === 'OFFER_SHARING';
+
+    const newStatus = hasSignificantGaps ? 'NEEDS_WORK' : 'REVEALED';
+
+    await prisma.empathyAttempt.updateMany({
+      where: { sessionId, sourceUserId: guesserId },
+      data: {
+        status: newStatus,
+        revealedAt: newStatus === 'REVEALED' ? new Date() : null,
+      },
+    });
+
+    console.log(
+      `[triggerReconcilerForUser] Updated status to ${newStatus} ` +
+      `(alignment: ${reconcilerResult.alignment.score}%, gaps: ${reconcilerResult.gaps.severity})`
+    );
+  } catch (error) {
+    console.error('[triggerReconcilerForUser] Error:', error);
+    throw error;
+  }
+}
+
+// ============================================================================
+// Share Suggestion Flow (Asymmetric Reconciler)
+// ============================================================================
+
+/**
+ * Get share suggestion for current user
+ * GET /sessions/:id/empathy/share-suggestion
+ *
+ * Called by the subject when partner (guesser) has gaps in their empathy statement.
+ * Returns a suggested piece of context the subject can share to help the guesser.
+ */
+export async function getShareSuggestion(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+
+    // Check session exists and user has access
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        relationship: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+
+    // Get share suggestion from reconciler service
+    const result = await getShareSuggestionForUser(sessionId, user.id);
+
+    if (!result.hasSuggestion || !result.suggestion) {
+      successResponse(res, {
+        hasSuggestion: false,
+        suggestion: null,
+      });
+      return;
+    }
+
+    successResponse(res, {
+      hasSuggestion: true,
+      suggestion: {
+        guesserName: result.suggestion.guesserName,
+        suggestedContent: result.suggestion.suggestedContent,
+        reason: result.suggestion.reason,
+        canRefine: result.suggestion.canRefine,
+      },
+    });
+  } catch (error) {
+    console.error('[getShareSuggestion] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to get share suggestion', 500);
+  }
+}
+
+/**
+ * Respond to share suggestion
+ * POST /sessions/:id/empathy/share-suggestion/respond
+ *
+ * Called by the subject to accept, decline, or refine the share suggestion.
+ * Body: { action: 'accept' | 'decline' | 'refine', refinedContent?: string }
+ */
+export async function respondToShareSuggestion(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const { action, refinedContent } = req.body;
+
+    // Validate action
+    if (!action || !['accept', 'decline', 'refine'].includes(action)) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Action must be one of: accept, decline, refine',
+        400
+      );
+      return;
+    }
+
+    // Validate refinedContent for 'refine' action
+    if (action === 'refine' && (!refinedContent || typeof refinedContent !== 'string')) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'refinedContent is required when action is refine',
+        400
+      );
+      return;
+    }
+
+    // Check session exists and user has access
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        relationship: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+      },
+      include: {
+        relationship: {
+          include: {
+            members: true,
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+
+    // Get partner ID
+    const partnerId = getPartnerUserIdFromSession(session, user.id);
+
+    // Call reconciler service to process the response
+    // The service throws if no pending offer is found
+    let result;
+    try {
+      result = await reconcilerRespondToShareSuggestion(sessionId, user.id, {
+        action: action as 'accept' | 'decline' | 'refine',
+        refinedContent: action === 'refine' ? refinedContent : undefined,
+      });
+    } catch (err) {
+      // Service throws when no pending share offer exists
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'No pending share suggestion found or already responded',
+        400
+      );
+      return;
+    }
+
+    // If accepted or refined, notify partner (guesser) that they have new context
+    if ((action === 'accept' || action === 'refine') && partnerId) {
+      // Publish realtime event to notify guesser
+      await publishSessionEvent(sessionId, 'empathy.refining', {
+        guesserId: partnerId,
+        hasNewContext: true,
+      });
+
+      console.log(`[respondToShareSuggestion] Notified guesser ${partnerId} of new shared context`);
+    }
+
+    successResponse(res, {
+      success: true,
+      status: result.status,
+      sharedContent: result.sharedContent,
+    });
+  } catch (error) {
+    console.error('[respondToShareSuggestion] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to respond to share suggestion', 500);
   }
 }

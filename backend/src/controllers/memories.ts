@@ -142,7 +142,7 @@ export const createMemory = asyncHandler(
     }
 
     // Validate memory content
-    const validationResult = validateMemory(body.content, body.category);
+    const validationResult = await validateMemory(body.content, body.category);
     if (!validationResult.valid) {
       throw new ValidationError(validationResult.reason || 'Memory validation failed');
     }
@@ -196,7 +196,7 @@ export const updateMemory = asyncHandler(
         throw new ValidationError('Memory content cannot be empty');
       }
 
-      const validationResult = validateMemory(body.content, existing.category);
+      const validationResult = await validateMemory(body.content, existing.category);
       if (!validationResult.valid) {
         throw new ValidationError(validationResult.reason || 'Memory validation failed');
       }
@@ -212,13 +212,9 @@ export const updateMemory = asyncHandler(
       },
     });
 
-    const partnerName = memory.sessionId
-      ? await getSessionPartnerName(memory.sessionId, user.id)
-      : undefined;
-
     const response: ApiResponse<{ memory: UserMemoryDTO }> = {
       success: true,
-      data: { memory: mapMemoryToDTO(memory, partnerName) },
+      data: { memory: mapMemoryToDTO(memory) },
     };
 
     res.json(response);
@@ -282,7 +278,7 @@ export const approveMemory = asyncHandler(
     const wasEdited = body.editedContent !== undefined && body.editedContent !== body.suggestedContent;
 
     // Validate the final content
-    const validationResult = validateMemory(finalContent, body.category);
+    const validationResult = await validateMemory(finalContent, body.category);
     if (!validationResult.valid) {
       throw new ValidationError(validationResult.reason || 'Memory validation failed');
     }
@@ -459,7 +455,7 @@ export const confirmMemory = asyncHandler(
     }
 
     // Final validation (in case user manipulated the request)
-    const validationResult = validateMemory(body.content, body.category);
+    const validationResult = await validateMemory(body.content, body.category);
     if (!validationResult.valid) {
       throw new ValidationError(validationResult.reason || 'Memory validation failed');
     }
@@ -573,7 +569,7 @@ export const confirmMemoryUpdate = asyncHandler(
     }
 
     // Final validation
-    const validationResult = validateMemory(body.content, body.category);
+    const validationResult = await validateMemory(body.content, body.category);
     if (!validationResult.valid) {
       throw new ValidationError(validationResult.reason || 'Memory validation failed');
     }
@@ -590,13 +586,9 @@ export const confirmMemoryUpdate = asyncHandler(
       },
     });
 
-    const partnerName = memory.sessionId
-      ? await getSessionPartnerName(memory.sessionId, user.id)
-      : undefined;
-
     const response: ApiResponse<{ memory: UserMemoryDTO }> = {
       success: true,
-      data: { memory: mapMemoryToDTO(memory, partnerName) },
+      data: { memory: mapMemoryToDTO(memory) },
     };
 
     res.json(response);

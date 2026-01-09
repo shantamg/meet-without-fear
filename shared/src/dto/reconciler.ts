@@ -100,12 +100,28 @@ export const recommendationSchema = z.object({
 export type Recommendation = z.infer<typeof recommendationSchema>;
 
 /**
+ * Abstract guidance for refinement (no specific partner content)
+ */
+export const abstractGuidanceSchema = z.object({
+  /** Abstract area hint, e.g., "work and effort" */
+  areaHint: z.string().nullable(),
+  /** Type of guidance, e.g., "explore_deeper_feelings" */
+  guidanceType: z.string().nullable(),
+  /** Seed for prompt generation, e.g., "what might be underneath" */
+  promptSeed: z.string().nullable(),
+});
+
+export type AbstractGuidance = z.infer<typeof abstractGuidanceSchema>;
+
+/**
  * Full reconciler analysis result
  */
 export const reconcilerResultSchema = z.object({
   alignment: alignmentSchema,
   gaps: gapsSchema,
   recommendation: recommendationSchema,
+  /** Abstract guidance for refinement (does not expose partner's specific content) */
+  abstractGuidance: abstractGuidanceSchema.optional(),
 });
 
 export type ReconcilerResult = z.infer<typeof reconcilerResultSchema>;

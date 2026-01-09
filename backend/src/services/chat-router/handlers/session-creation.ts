@@ -19,6 +19,7 @@ import { embedSessionVessel, embedMessages } from '../../embedding';
 import { updateSessionSummary } from '../../conversation-summarizer';
 import { convertPreSessionToSessionMessages } from '../../witnessing';
 import { createInvitationUrl } from '../../../utils/urls';
+import { publishSessionCreated } from '../../realtime';
 
 // State store for multi-turn session creation
 const creationState = createStateStore<SessionCreationState>();
@@ -283,6 +284,9 @@ async function createSession(
       // Non-fatal - continue with session creation
     }
 
+    // Create turnId for this session creation action - used for cost attribution
+    const turnId = `${session.id}-session-creation`;
+
     // Generate embeddings for the session and messages (non-blocking)
     const vesselToEmbed = session.userVessels.find((v) => v.userId === userId);
     if (vesselToEmbed) {
@@ -291,7 +295,7 @@ async function createSession(
         console.warn('[SessionCreation] Failed to embed session vessel:', err)
       );
       if (messageIds.length > 0) {
-        embedMessages(messageIds).catch((err) =>
+        embedMessages(messageIds, turnId).catch((err) =>
           console.warn('[SessionCreation] Failed to embed messages:', err)
         );
       }
@@ -300,7 +304,7 @@ async function createSession(
     // If a lot of history was imported, summarize it (non-blocking).
     // Most sessions won't hit the summarization threshold here, but if they do,
     // this ensures the vessel summary exists immediately.
-    updateSessionSummary(session.id, userId).catch((err) =>
+    updateSessionSummary(session.id, userId, turnId).catch((err) =>
       console.warn('[SessionCreation] Failed to update session summary:', err)
     );
 
@@ -309,6 +313,17 @@ async function createSession(
 
     const summary = mapSessionToSummary(session, userId);
     const invitationUrl = createInvitationUrl(invitation.id);
+
+    // Publish to audit stream for monitoring dashboard (non-blocking)
+    publishSessionCreated(session.id, {
+      type: session.type || 'CONFLICT_RESOLUTION',
+      status: session.status,
+      createdAt: session.createdAt.toISOString(),
+      members: session.relationship.members.map((m) => ({
+        userId: m.userId,
+        name: m.user.firstName || m.user.name || undefined,
+      })),
+    }).catch(() => {}); // Ignore failures
 
     const message = await generateConversationalResponse({
       action: 'session_created',

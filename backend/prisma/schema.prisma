@@ -508,7 +508,10 @@ enum MessageRole {
   USER
   AI
   SYSTEM
-  EMPATHY_STATEMENT // User's shared empathy statement (shown in chat history)
+  EMPATHY_STATEMENT     // User's shared empathy statement (shown in chat history)
+  EMPATHY_REVEAL_INTRO  // AI intro message when revealing partner's empathy to user
+  SHARED_CONTEXT        // Context shared by subject to help guesser refine empathy
+  EMPATHY_VALIDATION_PROMPT // AI prompt asking user to validate partner's understanding
 }
 
 // ============================================================================
@@ -580,9 +583,24 @@ model EmpathyAttempt {
   consentRecord   ConsentRecord? @relation(fields: [consentRecordId], references: [id], onDelete: SetNull)
   consentRecordId String?
 
+  // Reconciler flow fields
+  status        EmpathyStatus @default(HELD)
+  revealedAt    DateTime?
+  revisionCount Int           @default(0)
+
   validations EmpathyValidation[]
 
   @@index([sessionId, sourceUserId])
+}
+
+enum EmpathyStatus {
+  HELD              // Waiting for partner to complete Stage 1
+  ANALYZING         // Reconciler is comparing guess vs actual Stage 1 content
+  AWAITING_SHARING  // Gaps detected, waiting for subject to respond to share suggestion
+  REFINING          // Guesser is refining after receiving shared context
+  NEEDS_WORK        // Significant gaps detected, guesser should refine (legacy - use AWAITING_SHARING)
+  REVEALED          // Recipient can now see statement
+  VALIDATED         // Recipient has validated accuracy
 }
 
 model EmpathyValidation {
@@ -636,6 +654,15 @@ model ReconcilerResult {
   sharingWouldHelp    Boolean
   suggestedShareFocus String? @db.Text
 
+  // Abstract guidance for refinement (no specific partner content)
+  areaHint      String?   // e.g., "work and effort"
+  guidanceType  String?   // e.g., "explore_deeper_feelings"
+  promptSeed    String?   // e.g., "what might be underneath"
+
+  // Suggestion for subject to share (generated when gaps are significant)
+  suggestedShareContent String?  @db.Text  // AI-generated suggestion for what subject could share
+  suggestedShareReason  String?  @db.Text  // Why this would help the guesser understand
+
   createdAt DateTime @default(now())
 
   // Relationship to share offer
@@ -645,7 +672,8 @@ model ReconcilerResult {
   @@index([sessionId])
 }
 
-/// Tracks the share offer made to a user and their response.
+/// Tracks the share suggestion made to a user (the subject) and their response.
+/// This allows the subject to optionally share context to help the guesser understand better.
 model ReconcilerShareOffer {
   id        String   @id @default(cuid())
   result    ReconcilerResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
@@ -657,18 +685,28 @@ model ReconcilerShareOffer {
   /// Status of the share offer
   status    ReconcilerShareStatus @default(NOT_OFFERED)
 
-  /// The AI-generated message offering to share
+  /// AI-generated suggestion for what to share
+  suggestedContent   String?  @db.Text  // What the AI suggests the subject could share
+  suggestedReason    String?  @db.Text  // Why this would help the guesser
+
+  /// The AI-generated message offering to share (shown to user)
   offerMessage      String?  @db.Text
-  /// Quote options extracted from their witnessing
+
+  /// Quote options extracted from their witnessing (legacy, may be removed)
   quoteOptions      Json?    // Array of QuoteOption objects
   recommendedQuote  Int?     // Index of recommended quote
 
-  /// If they accepted, what was shared
+  /// User's refined version (if they edited the suggestion)
+  refinedContent     String?  @db.Text
+
+  /// Final content that was shared (could be suggested, refined, or custom)
   sharedContent     String?  @db.Text
   sharedAt          DateTime?
 
-  /// If they declined or skipped
+  /// If they declined
   declinedAt        DateTime?
+
+  /// Legacy: skipped without responding
   skippedAt         DateTime?
 
   createdAt DateTime @default(now())
@@ -678,11 +716,13 @@ model ReconcilerShareOffer {
 }
 
 enum ReconcilerShareStatus {
-  NOT_OFFERED
-  OFFERED
-  ACCEPTED
-  DECLINED
-  SKIPPED
+  PENDING     // Suggestion generated, not yet shown to user
+  OFFERED     // Shown to user, awaiting response
+  ACCEPTED    // User accepted (with or without refinement)
+  DECLINED    // User declined to share
+  EXPIRED     // Offer expired (timeout)
+  NOT_OFFERED // Legacy: no offer was made
+  SKIPPED     // Legacy: user skipped without responding
 }
 
 // ============================================================================
@@ -846,6 +886,9 @@ enum NotificationType {
   SESSION_JOINED
   PARTNER_MESSAGE
   EMPATHY_SHARED
+  EMPATHY_REVEALED      // Partner's empathy statement is now visible to you
+  EMPATHY_NEEDS_WORK    // Your empathy statement needs refinement
+  EMPATHY_VALIDATED     // Partner validated your empathy statement as accurate
   NEEDS_SHARED
   AGREEMENT_PROPOSED
   AGREEMENT_CONFIRMED

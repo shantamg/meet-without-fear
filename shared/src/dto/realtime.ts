@@ -77,6 +77,11 @@ export type SessionEventType =
   | 'partner.advanced'
   | 'partner.empathy_shared'
   | 'partner.additional_context_shared' // Reconciler: partner shared additional context
+  | 'partner.empathy_revealed' // Reconciler: empathy statement was revealed to recipient
+  // Empathy reconciler events
+  | 'empathy.share_suggestion' // Subject receives suggestion to share context with guesser
+  | 'empathy.revealed' // Guesser's empathy was revealed (direction: 'outgoing' | 'incoming')
+  | 'empathy.refining' // Guesser should refine their empathy (new context available)
   | 'partner.needs_shared'
   | 'partner.common_ground_confirmed'
   | 'partner.ranking_submitted'

@@ -105,13 +105,17 @@ Category: ${category}
 
 Does this memory request conflict with therapeutic values?`;
 
+  // Ensure turnId is always a string - generate synthetic if not provided
+  const effectiveSessionId = sessionId || 'memory-validation';
+  const effectiveTurnId = turnId || (sessionId ? `${sessionId}-${Date.now()}` : `memory-validation-${Date.now()}`);
+
   try {
     const response = await getHaikuJson<AIValidationResponse>({
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens: 256,
-      sessionId,
-      turnId,
+      sessionId: effectiveSessionId,
+      turnId: effectiveTurnId,
       operation: 'memory-validation',
     });
 
