@@ -183,7 +183,7 @@ export function SessionChatHeader({
             accessibilityLabel="Open Inner Thoughts"
             testID={`${testID}-inner-thoughts-button`}
           >
-            <Layers color={colors.textSecondary} size={20} />
+            <Layers color={colors.brandBlue} size={20} />
           </TouchableOpacity>
         )}
         {briefStatus && (

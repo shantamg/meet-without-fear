@@ -135,7 +135,7 @@ export function WaitingRoom({
             onPress={onContinueInInnerThoughts}
             activeOpacity={0.8}
           >
-            <Layers size={20} color={colors.accent} />
+            <Layers size={20} color={colors.brandBlue} />
             <Text style={styles.innerThoughtsButtonText}>
               Open Inner Thoughts
             </Text>
