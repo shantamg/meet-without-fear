@@ -1,9 +1,12 @@
 /**
- * ViewEmpathyStatementDrawer Component
+ * ShareSuggestionDrawer Component
  *
- * A scrollable drawer that displays the full empathy statement.
- * Users can tap to open this drawer and see the complete text.
- * Two actions: Share (sends to partner) or Refine Further (open inline composer).
+ * A full-screen drawer for viewing and editing the share suggestion from the reconciler.
+ * Allows the user to:
+ * - View the suggested content to share
+ * - Refine it by typing a message to the AI
+ * - Share it directly
+ * - Decline to share
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -22,41 +25,48 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Send, MessageCircle } from 'lucide-react-native';
 import { colors } from '@/theme';
 
-export interface ViewEmpathyStatementDrawerProps {
+export interface ShareSuggestionDrawerProps {
   /** Whether the drawer is visible */
   visible: boolean;
-  /** The empathy statement content */
-  statement: string;
-  /** Partner's name */
-  partnerName?: string;
-  /** Whether user is revising after receiving shared context from partner */
-  isRevising?: boolean;
-  /** Callback when "Share" is tapped */
+  /** The suggested content to share */
+  suggestedContent: string;
+  /** Partner's name (the one who made the empathy guess) */
+  partnerName: string;
+  /** Callback when "Share this" is tapped */
   onShare: () => void;
+  /** Callback when "No thanks" is tapped */
+  onDecline: () => void;
   /** Callback when drawer is closed */
   onClose: () => void;
   /** Callback when user sends a refinement request from the drawer */
   onSendRefinement?: (message: string) => void;
 }
 
-export function ViewEmpathyStatementDrawer({
+export function ShareSuggestionDrawer({
   visible,
-  statement,
-  partnerName = 'your partner',
-  isRevising = false,
+  suggestedContent,
+  partnerName,
   onShare,
+  onDecline,
   onClose,
   onSendRefinement,
-}: ViewEmpathyStatementDrawerProps) {
+}: ShareSuggestionDrawerProps) {
   const [isRefining, setIsRefining] = useState(false);
   const [refinementText, setRefinementText] = useState('');
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // When the refinement composer opens (and keyboard comes up), ensure we scroll the input into view.
+  // Reset state when drawer closes
+  useEffect(() => {
+    if (!visible) {
+      setIsRefining(false);
+      setRefinementText('');
+    }
+  }, [visible]);
+
+  // When the refinement composer opens, scroll to show it
   useEffect(() => {
     if (!isRefining) return;
 
-    // Run a couple times to handle layout + keyboard timing differences across iOS/Android.
     const raf = requestAnimationFrame(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     });
@@ -74,9 +84,16 @@ export function ViewEmpathyStatementDrawer({
     const trimmed = refinementText.trim();
     if (!trimmed) return;
 
-    onSendRefinement?.(trimmed);
+    // Prepend context to the message
+    const refinementMessage = `Regarding what I'll share with ${partnerName}: ${trimmed}`;
+    onSendRefinement?.(refinementMessage);
     setRefinementText('');
     setIsRefining(false);
+    onClose();
+  };
+
+  const handleDecline = () => {
+    onDecline();
     onClose();
   };
 
@@ -85,7 +102,7 @@ export function ViewEmpathyStatementDrawer({
       visible={visible}
       animationType="slide"
       presentationStyle="fullScreen"
-      testID="view-empathy-statement-drawer"
+      testID="share-suggestion-drawer"
       onRequestClose={onClose}
     >
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -99,7 +116,7 @@ export function ViewEmpathyStatementDrawer({
             <TouchableOpacity
               style={styles.closeButton}
               onPress={onClose}
-              testID="view-empathy-close"
+              testID="share-suggestion-close"
               accessibilityLabel="Close"
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
             >
@@ -107,7 +124,7 @@ export function ViewEmpathyStatementDrawer({
             </TouchableOpacity>
           </View>
 
-          {/* Scrollable content - entire drawer scrolls */}
+          {/* Scrollable content */}
           <ScrollView
             ref={scrollViewRef}
             style={styles.scrollView}
@@ -115,24 +132,26 @@ export function ViewEmpathyStatementDrawer({
             showsVerticalScrollIndicator={true}
             keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.title}>
-              {isRevising ? 'Revisit your understanding' : 'What you\'ll share'}
-            </Text>
-            <Text style={styles.subtitle}>
-              {isRevising
-                ? `${partnerName} shared some additional context to help you understand their experience better. Take a moment to consider if you'd like to update what you'll share with them.`
-                : `This is what you'll share with ${partnerName} to show you understand their perspective.`}
+            <Text style={styles.title}>Before you see {partnerName}'s attempt...</Text>
+
+            <Text style={styles.contextText}>
+              {partnerName} shared what they think you might be feeling. Before showing it to you, our internal reconciler noticed some gaps that additional context could help fill.
             </Text>
 
-            {/* Empathy statement - styled subtly */}
+            <Text style={styles.askText}>
+              Would you be willing to share something like this with {partnerName}? I can also help you refine it first.
+            </Text>
+
+            {/* Suggested content - styled with left border */}
             <View style={styles.messageContainer}>
-              <Text style={styles.messageText}>{statement}</Text>
+              <Text style={styles.messageLabel}>SUGGESTED TO SHARE</Text>
+              <Text style={styles.messageText}>"{suggestedContent}"</Text>
             </View>
 
             {isRefining ? (
               <View style={styles.refineComposer}>
                 <View style={styles.refineComposerHeader}>
-                  <Text style={styles.refineComposerTitle}>How would you like to tweak this?</Text>
+                  <Text style={styles.refineComposerTitle}>How would you like to change this?</Text>
                   <TouchableOpacity
                     onPress={() => {
                       setIsRefining(false);
@@ -140,7 +159,7 @@ export function ViewEmpathyStatementDrawer({
                     }}
                     accessibilityLabel="Close refinement"
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    testID="close-refine-composer"
+                    testID="close-refine-share-composer"
                   >
                     <X color={colors.textSecondary} size={20} />
                   </TouchableOpacity>
@@ -154,7 +173,7 @@ export function ViewEmpathyStatementDrawer({
                   onChangeText={setRefinementText}
                   autoFocus
                   onFocus={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-                  testID="refine-empathy-input"
+                  testID="refine-share-input"
                 />
                 <TouchableOpacity
                   style={[
@@ -164,7 +183,7 @@ export function ViewEmpathyStatementDrawer({
                   onPress={handleSendRefinement}
                   disabled={!refinementText.trim()}
                   activeOpacity={0.8}
-                  testID="send-refine-empathy-button"
+                  testID="send-refine-share-button"
                 >
                   <Send color={refinementText.trim() ? 'white' : colors.textMuted} size={20} />
                   <Text
@@ -180,22 +199,30 @@ export function ViewEmpathyStatementDrawer({
             ) : (
               <View style={styles.footer}>
                 <TouchableOpacity
+                  style={styles.declineButton}
+                  onPress={handleDecline}
+                  testID="decline-share-button"
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.declineButtonText}>No thanks</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
                   style={styles.refineButton}
                   onPress={() => setIsRefining(true)}
-                  testID="refine-empathy-button"
+                  testID="refine-share-button"
                   activeOpacity={0.8}
                 >
                   <MessageCircle color={colors.textSecondary} size={20} />
-                  <Text style={styles.refineButtonText}>Refine further</Text>
+                  <Text style={styles.refineButtonText}>Edit</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.shareButton}
                   onPress={onShare}
-                  testID="share-empathy-button"
+                  testID="share-suggestion-button"
                   activeOpacity={0.8}
                 >
                   <Send color="white" size={20} />
-                  <Text style={styles.shareButtonText}>Share</Text>
+                  <Text style={styles.shareButtonText}>Share this</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -235,14 +262,21 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 36,
+    marginBottom: 20,
+    lineHeight: 32,
   },
-  subtitle: {
+  contextText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 16,
+  },
+  askText: {
     fontSize: 16,
     color: colors.textSecondary,
     textAlign: 'center',
@@ -253,9 +287,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgSecondary,
     borderRadius: 12,
     borderLeftWidth: 3,
-    borderLeftColor: colors.brandBlue,
+    borderLeftColor: '#005AC1',
     padding: 20,
     marginBottom: 32,
+  },
+  messageLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
   },
   messageText: {
     fontSize: 17,
@@ -317,6 +359,17 @@ const styles = StyleSheet.create({
   sendRefineButtonTextDisabled: {
     color: colors.textMuted,
   },
+  declineButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  declineButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
   refineButton: {
     flex: 1,
     flexDirection: 'row',
@@ -351,4 +404,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ViewEmpathyStatementDrawer;
+export default ShareSuggestionDrawer;

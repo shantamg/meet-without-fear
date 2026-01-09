@@ -108,6 +108,10 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'Share suggestion available',
     body: 'You can share additional context to help your partner understand you better.',
   },
+  'empathy.context_shared': {
+    title: 'Additional context shared',
+    body: 'Your partner shared additional context to help you understand them better.',
+  },
   'empathy.revealed': {
     title: 'Your empathy is revealed',
     body: 'Your empathy statement has been shared with your partner.',

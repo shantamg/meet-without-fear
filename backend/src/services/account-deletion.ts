@@ -15,7 +15,6 @@
  */
 
 import { prisma } from '../lib/prisma';
-import { createNotification } from './notification';
 
 export interface AccountDeletionSummary {
   sessionsAbandoned: number;
@@ -64,22 +63,8 @@ export async function deleteAccountWithNotifications(
     },
   });
 
-  // Step 2: Mark active sessions as ABANDONED and notify partners
+  // Step 2: Mark active sessions as ABANDONED
   for (const session of activeSessions) {
-    // Find the partner (the other member)
-    const partner = session.relationship.members.find((m) => m.userId !== userId);
-
-    if (partner) {
-      // Create notification for the partner
-      await createNotification({
-        userId: partner.userId,
-        type: 'SESSION_ABANDONED',
-        sessionId: session.id,
-        actorName: displayName,
-      });
-      partnersNotified++;
-    }
-
     // Mark session as abandoned
     await prisma.session.update({
       where: { id: session.id },
@@ -116,7 +101,6 @@ export async function deleteAccountWithNotifications(
   // (These will be automatically deleted by Prisma cascades when we delete the user)
   const [
     innerWorkSessions,
-    notifications,
     stageProgress,
     userVessels,
     empathyDrafts,
@@ -127,7 +111,6 @@ export async function deleteAccountWithNotifications(
     relationshipMembers,
   ] = await Promise.all([
     prisma.innerWorkSession.count({ where: { userId } }),
-    prisma.notification.count({ where: { userId } }),
     prisma.stageProgress.count({ where: { userId } }),
     prisma.userVessel.count({ where: { userId } }),
     prisma.empathyDraft.count({ where: { userId } }),
@@ -140,7 +123,6 @@ export async function deleteAccountWithNotifications(
 
   dataRecordsDeleted +=
     innerWorkSessions +
-    notifications +
     stageProgress +
     userVessels +
     empathyDrafts +

@@ -11,7 +11,6 @@ import meditationRoutes from './meditation';
 import memoriesRoutes from './memories';
 import needsAssessmentRoutes from './needs-assessment';
 import peopleRoutes from './people';
-import notificationsRoutes from './notifications';
 import reconcilerRoutes from './reconciler';
 import sessionsRoutes from './sessions';
 import stage0Routes from './stage0';
@@ -37,7 +36,6 @@ router.use('/needs', needsAssessmentRoutes); // Inner Work: Needs Assessment
 router.use('/gratitude', gratitudeRoutes); // Inner Work: Gratitude Practice
 router.use('/meditation', meditationRoutes); // Inner Work: Meditation
 router.use('/people', peopleRoutes); // Inner Work: People Tracking
-router.use(notificationsRoutes); // In-app notifications
 router.use(sessionsRoutes);
 router.use(consentRoutes);
 router.use(emotionsRoutes);

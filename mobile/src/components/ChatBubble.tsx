@@ -40,6 +40,8 @@ interface ChatBubbleProps {
   onSpeakerPress?: () => void;
   /** Hide speaker button (default: false for AI messages) */
   hideSpeaker?: boolean;
+  /** Partner's name for personalized messages (e.g., SHARED_CONTEXT) */
+  partnerName?: string;
 }
 
 // ============================================================================
@@ -66,12 +68,15 @@ export function ChatBubble({
   isSpeaking = false,
   onSpeakerPress,
   hideSpeaker = false,
+  partnerName,
 }: ChatBubbleProps) {
   const styles = useStyles();
   const isUser = message.role === MessageRole.USER;
   const isSystem = message.role === MessageRole.SYSTEM;
   const isEmpathyStatement = message.role === MessageRole.EMPATHY_STATEMENT;
-  const isAI = !isUser && !isSystem && !isEmpathyStatement;
+  const isSharedContext = (message.role as string) === 'SHARED_CONTEXT';
+  const isShareSuggestion = (message.role as string) === 'SHARE_SUGGESTION';
+  const isAI = !isUser && !isSystem && !isEmpathyStatement && !isSharedContext && !isShareSuggestion;
   const isIntervention = message.isIntervention ?? false;
 
   // Track if this specific message instance has completed animation
@@ -136,6 +141,8 @@ export function ChatBubble({
     if (isUser) return styles.userContainer;
     if (isSystem) return styles.systemContainer;
     if (isEmpathyStatement) return styles.empathyStatementContainer;
+    if (isSharedContext) return styles.sharedContextContainer;
+    if (isShareSuggestion) return styles.shareSuggestionContainer;
     return styles.aiContainer;
   };
 
@@ -145,6 +152,8 @@ export function ChatBubble({
     if (isUser) return styles.userBubble;
     if (isSystem) return styles.systemBubble;
     if (isEmpathyStatement) return styles.empathyStatementBubble;
+    if (isSharedContext) return styles.sharedContextBubble;
+    if (isShareSuggestion) return styles.shareSuggestionBubble;
     return styles.aiBubble;
   };
 
@@ -162,6 +171,29 @@ export function ChatBubble({
         <View>
           <Text style={styles.empathyStatementHeader}>What you shared</Text>
           <Text style={styles.empathyStatementText}>{message.content}</Text>
+        </View>
+      );
+    }
+
+    // Shared context (from reconciler)
+    if (isSharedContext) {
+      const contextLabel = partnerName
+        ? `New context from ${partnerName}`
+        : 'New context from your partner';
+      return (
+        <View>
+          <Text style={styles.sharedContextLabel}>{contextLabel}</Text>
+          <Text style={styles.sharedContextText}>{message.content}</Text>
+        </View>
+      );
+    }
+
+    // Share suggestion (what user will share)
+    if (isShareSuggestion) {
+      return (
+        <View>
+          <Text style={styles.shareSuggestionLabel}>SUGGESTED TO SHARE</Text>
+          <Text style={styles.shareSuggestionText}>"{message.content}"</Text>
         </View>
       );
     }
@@ -300,6 +332,59 @@ const useStyles = () =>
     },
     // Empathy statement text: italic, matches drawer
     empathyStatementText: {
+      fontSize: 17,
+      fontStyle: 'italic',
+      lineHeight: 26,
+      color: colors.textPrimary,
+      fontFamily: t.typography.fontFamily.regular,
+    },
+    // Shared context: subtle container
+    sharedContextContainer: {
+      alignItems: 'flex-start',
+      marginVertical: t.spacing.md,
+    },
+    sharedContextBubble: {
+      backgroundColor: '#F0F4F8',
+      borderRadius: 12,
+      padding: 16,
+      borderLeftWidth: 4,
+      borderLeftColor: '#005AC1',
+    },
+    sharedContextLabel: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: '#005AC1',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 6,
+    },
+    sharedContextText: {
+      fontSize: t.typography.fontSize.md,
+      lineHeight: 22,
+      color: '#1e293b', // Dark text for light background
+      fontFamily: t.typography.fontFamily.regular,
+    },
+    // Share suggestion: what user will share (from reconciler)
+    shareSuggestionContainer: {
+      alignItems: 'center',
+      marginVertical: t.spacing.md,
+    },
+    shareSuggestionBubble: {
+      backgroundColor: colors.bgSecondary,
+      borderRadius: 12,
+      borderLeftWidth: 3,
+      borderLeftColor: '#005AC1',
+      padding: 20,
+    },
+    shareSuggestionLabel: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: '#005AC1',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 8,
+    },
+    shareSuggestionText: {
       fontSize: 17,
       fontStyle: 'italic',
       lineHeight: 26,

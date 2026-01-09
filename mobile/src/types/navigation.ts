@@ -65,7 +65,6 @@ export type AppRoutes = {
   '/person/[id]': PersonRouteParams;
 
   // Settings routes
-  '/settings/notifications': undefined;
   '/settings/account': undefined;
   '/settings/privacy': undefined;
   '/settings/help': undefined;

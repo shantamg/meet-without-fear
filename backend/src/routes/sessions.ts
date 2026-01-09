@@ -25,11 +25,21 @@ import {
   getInvitation,
   updateInvitationMessage,
   confirmInvitationMessage,
+  markSessionViewed,
+  getUnreadSessionCount,
 } from '../controllers/sessions';
 import { getSessionState } from '../controllers/session-state';
 import { getLinkedInnerThoughts } from '../controllers/inner-work';
 
 const router = Router();
+
+/**
+ * @route GET /api/v1/sessions/unread-count
+ * @description Get count of sessions with unread content (for tab badge)
+ * @access Private - requires authentication
+ * NOTE: This must be defined BEFORE /sessions/:id to avoid matching "unread-count" as an id
+ */
+router.get('/sessions/unread-count', requireAuth, asyncHandler(getUnreadSessionCount));
 
 /**
  * @route GET /api/v1/sessions/:id
@@ -107,5 +117,12 @@ router.post('/sessions/:id/invitation/confirm', requireAuth, requireSessionAcces
  * @access Private - requires authentication
  */
 router.get('/sessions/:id/inner-thoughts', requireAuth, getLinkedInnerThoughts);
+
+/**
+ * @route POST /api/v1/sessions/:id/viewed
+ * @description Mark session as viewed (updates lastViewedAt and lastSeenChatItemId)
+ * @access Private - requires authentication and session access
+ */
+router.post('/sessions/:id/viewed', requireAuth, requireSessionAccess, asyncHandler(markSessionViewed));
 
 export default router;

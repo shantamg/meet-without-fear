@@ -53,7 +53,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
     const sessionId = req.params.id;
 
     // Fetch core session data in parallel
-    const [sessionWithRelations, messages] = await Promise.all([
+    const [sessionWithRelations, messages, userVessel] = await Promise.all([
       // 1. Session with all core relations
       prisma.session.findFirst({
         where: {
@@ -91,17 +91,34 @@ export async function getSessionState(req: Request, res: Response): Promise<void
       }),
 
       // 2. Messages (initial page - 25 most recent for this user)
+      // Uses data isolation: messages with forUserId only show to that specific user
       prisma.message.findMany({
         where: {
           sessionId,
           OR: [
-            { senderId: user.id },
-            { role: 'AI', forUserId: user.id },
+            // Messages user sent without a specific recipient
+            { senderId: user.id, forUserId: null },
+            // Messages specifically for this user (AI, SHARED_CONTEXT, etc.)
+            { forUserId: user.id },
+            // EMPATHY_STATEMENT messages are visible to both users for mutual understanding
             { role: 'EMPATHY_STATEMENT' },
           ],
         },
         orderBy: { timestamp: 'desc' },
         take: 26, // Take 26 to check if there are more
+      }),
+
+      // 3. User's vessel for this session (for lastSeenChatItemId)
+      prisma.userVessel.findUnique({
+        where: {
+          userId_sessionId: {
+            userId: user.id,
+            sessionId,
+          },
+        },
+        select: {
+          lastSeenChatItemId: true,
+        },
       }),
     ]);
 
@@ -261,6 +278,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
         },
         createdAt: session.createdAt.toISOString(),
         resolvedAt: session.resolvedAt?.toISOString() ?? null,
+        lastSeenChatItemId: userVessel?.lastSeenChatItemId ?? null,
       },
 
       // Stage progress

@@ -13,13 +13,7 @@ import { AuthContext, useAuthProvider } from '@/src/hooks/useAuth';
 import { QueryProvider } from '@/src/providers/QueryProvider';
 import { setTokenProvider } from '@/src/lib/api';
 import { ToastProvider } from '@/src/contexts/ToastContext';
-import { useNotifications } from '@/src/hooks/useNotifications';
-import { useNotificationChannel } from '@/src/hooks/useNotificationChannel';
-import { configureNotificationHandler } from '@/src/services/notifications';
 import { MixpanelInitializer } from '@/src/components/MixpanelInitializer';
-
-// Configure notification handler at module load
-configureNotificationHandler();
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -42,16 +36,6 @@ function HideSplashOnReady() {
   useEffect(() => {
     SplashScreen.hideAsync();
   }, []);
-  return null;
-}
-
-/**
- * Notification initializer component
- * Subscribes to user notification channel for real-time updates
- */
-function NotificationInitializer() {
-  useNotifications();
-  useNotificationChannel();
   return null;
 }
 
@@ -109,7 +93,6 @@ function AuthProviderWrapper() {
         <AuthContext.Provider value={auth}>
           <ToastProvider>
             <MixpanelInitializer />
-            <NotificationInitializer />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(public)" />
               <Stack.Screen name="(auth)" />

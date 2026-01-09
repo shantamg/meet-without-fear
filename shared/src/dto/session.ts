@@ -45,6 +45,13 @@ export interface SessionSummaryDTO {
   // Computed helpers for UI (kept for backwards compatibility)
   selfActionNeeded: string[]; // Gate keys the user still needs
   partnerActionNeeded: string[]; // Gate keys partner must satisfy to unlock next stage
+
+  // Unread tracking - indicates if there's new content since user last viewed
+  hasUnread: boolean;
+  // When user last viewed this session (null = never viewed)
+  lastViewedAt: string | null;
+  // ID of last chat item seen (for "new messages" line placement in chat)
+  lastSeenChatItemId: string | null;
 }
 
 export interface StageProgressDTO {
@@ -154,6 +161,34 @@ export interface ResendInvitationResponse {
   sent: boolean;
   sentAt: string;
   expiresAt: string;
+}
+
+// ============================================================================
+// Session Read State
+// ============================================================================
+
+/**
+ * Request to mark a session as viewed (updates lastViewedAt and lastSeenChatItemId)
+ */
+export interface MarkSessionViewedRequest {
+  /** Optional: ID of the last chat item visible to user (for "new messages" line) */
+  lastSeenChatItemId?: string;
+}
+
+/**
+ * Response after marking session as viewed
+ */
+export interface MarkSessionViewedResponse {
+  success: boolean;
+  lastViewedAt: string;
+  lastSeenChatItemId: string | null;
+}
+
+/**
+ * Response for getting unread session count (for tab badge)
+ */
+export interface UnreadSessionCountResponse {
+  count: number;
 }
 
 // ============================================================================

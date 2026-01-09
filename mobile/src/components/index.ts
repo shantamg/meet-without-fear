@@ -77,13 +77,9 @@ export { PastSessionCard } from './PastSessionCard';
 export { PartnerStatus, PartnerStatusBadge, InlineTypingIndicator } from './PartnerStatus';
 export type { PartnerStatusProps } from './PartnerStatus';
 
-// Notification components
+// Toast component
 export { Toast } from './Toast';
 export type { ToastProps, ToastAction } from './Toast';
-export { NotificationBanner, PermissionBanner } from './NotificationBanner';
-export type { NotificationBannerProps, PermissionBannerProps } from './NotificationBanner';
-export { NotificationInbox } from './NotificationInbox';
-export type { NotificationInboxProps, NotificationItem } from './NotificationInbox';
 
 // Biometric authentication components
 export { BiometricPrompt } from './BiometricPrompt';

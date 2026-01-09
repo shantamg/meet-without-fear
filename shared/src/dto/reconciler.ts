@@ -238,10 +238,14 @@ export type RunReconcilerResponse = z.infer<typeof runReconcilerResponseSchema>;
  */
 export const respondToShareOfferRequestSchema = z.object({
   /** Whether they accept to share */
-  accept: z.boolean(),
+  accept: z.boolean().optional(),
   /** If accepting, selected quote option index or custom content */
   selectedQuoteIndex: z.number().optional(),
   customContent: z.string().optional(),
+  /** New asymmetric flow action */
+  action: z.enum(['accept', 'decline', 'refine']).optional(),
+  /** New asymmetric flow refined content */
+  refinedContent: z.string().optional(),
 });
 
 export type RespondToShareOfferRequest = z.infer<typeof respondToShareOfferRequestSchema>;
@@ -251,11 +255,13 @@ export type RespondToShareOfferRequest = z.infer<typeof respondToShareOfferReque
  */
 export const respondToShareOfferResponseSchema = z.object({
   /** Status after response */
-  status: z.enum(['ACCEPTED', 'DECLINED']),
+  status: z.enum(['ACCEPTED', 'DECLINED', 'shared', 'declined']),
   /** If accepted, what was shared */
   sharedContent: z.string().nullable(),
   /** Message confirming the action */
-  confirmationMessage: z.string(),
+  confirmationMessage: z.string().optional(),
+  /** Whether guesser was updated */
+  guesserUpdated: z.boolean().optional(),
 });
 
 export type RespondToShareOfferResponse = z.infer<typeof respondToShareOfferResponseSchema>;

@@ -18,6 +18,7 @@
  */
 
 import { prisma } from '../lib/prisma';
+import { MessageRole } from '@meet-without-fear/shared';
 import { getSonnetResponse, getHaikuJson } from '../lib/bedrock';
 import {
   buildReconcilerPrompt,
@@ -55,18 +56,28 @@ async function getSonnetJson<T>(options: {
   const effectiveSessionId = options.sessionId || 'reconciler';
   const effectiveTurnId = options.turnId || (options.sessionId ? `${options.sessionId}-${Date.now()}` : `reconciler-${Date.now()}`);
   const effectiveOperation = options.operation || 'reconciler';
+
+  console.log(`[Reconciler:getSonnetJson] Starting AI request for operation: ${effectiveOperation}`);
+
   const response = await getSonnetResponse({
     ...options,
     sessionId: effectiveSessionId,
     turnId: effectiveTurnId,
     operation: effectiveOperation,
   });
-  if (!response) return null;
+
+  if (!response) {
+    console.warn(`[Reconciler:getSonnetJson] No response received for operation: ${effectiveOperation}`);
+    return null;
+  }
 
   try {
-    return extractJsonFromResponse(response) as T;
+    const json = extractJsonFromResponse(response) as T;
+    console.log(`[Reconciler:getSonnetJson] Successfully parsed JSON for operation: ${effectiveOperation}`);
+    return json;
   } catch (error) {
-    console.warn('[Reconciler] Failed to parse JSON response:', error);
+    console.warn(`[Reconciler:getSonnetJson] Failed to parse JSON response for operation: ${effectiveOperation}`, error);
+    console.log(`[Reconciler:getSonnetJson] Raw response: ${response}`);
     return null;
   }
 }
@@ -255,7 +266,7 @@ export async function runReconcilerForDirection(
     reason: string;
   } | null;
 }> {
-  console.log(`[Reconciler] Running asymmetric reconciliation: ${guesserId} → ${subjectId}`);
+  console.log(`[Reconciler] Running asymmetric reconciliation: ${guesserId} (guesser) → ${subjectId} (subject)`);
 
   // Get user names
   const [guesser, subject] = await Promise.all([
@@ -270,6 +281,7 @@ export async function runReconcilerForDirection(
   ]);
 
   if (!guesser || !subject) {
+    console.error(`[Reconciler] Guesser (${guesserId}) or subject (${subjectId}) not found in DB`);
     throw new Error('Guesser or subject not found');
   }
 
@@ -282,19 +294,26 @@ export async function runReconcilerForDirection(
     name: subject.firstName || subject.name || 'User',
   };
 
+  console.log(`[Reconciler] Participants: Guesser=${guesserInfo.name}, Subject=${subjectInfo.name}`);
+
   // Get guesser's empathy statement
   const empathyData = await getEmpathyData(sessionId, guesserId);
   if (!empathyData) {
+    console.error(`[Reconciler] Guesser ${guesserInfo.name} has not submitted empathy statement for session ${sessionId}`);
     throw new Error('Guesser has not submitted empathy statement');
   }
+  console.log(`[Reconciler] Found guesser empathy statement (length: ${empathyData.statement.length})`);
 
   // Get subject's witnessing content (Stage 1)
   const witnessingContent = await getWitnessingContent(sessionId, subjectId);
   if (!witnessingContent.userMessages) {
+    console.error(`[Reconciler] Subject ${subjectInfo.name} has no Stage 1 content for session ${sessionId}`);
     throw new Error('Subject has no Stage 1 content');
   }
+  console.log(`[Reconciler] Found subject witnessing content (${witnessingContent.themes.length} themes, ${witnessingContent.userMessages.length} chars)`);
 
   // Run the analysis
+  console.log(`[Reconciler] Calling analyzeEmpathyGap...`);
   const result = await analyzeEmpathyGap({
     sessionId,
     guesser: guesserInfo,
@@ -308,8 +327,11 @@ export async function runReconcilerForDirection(
     result.gaps.severity === 'significant' ||
     result.recommendation.action === 'OFFER_SHARING';
 
+  console.log(`[Reconciler] Outcome analysis: severity=${result.gaps.severity}, action=${result.recommendation.action}, significant=${hasSignificantGaps}`);
+
   if (!hasSignificantGaps) {
     // No significant gaps - reveal directly
+    console.log(`[Reconciler] NO significant gaps. Revealing empathy directly for ${guesserInfo.name} → ${subjectInfo.name}`);
     await prisma.empathyAttempt.updateMany({
       where: { sessionId, sourceUserId: guesserId },
       data: {
@@ -326,6 +348,7 @@ export async function runReconcilerForDirection(
   }
 
   // Significant gaps - generate share suggestion for subject
+  console.log(`[Reconciler] SIGNIFICANT gaps found. Generating share suggestion for ${subjectInfo.name}...`);
   const shareOffer = await generateShareSuggestion(
     sessionId,
     guesserInfo,
@@ -335,6 +358,7 @@ export async function runReconcilerForDirection(
   );
 
   // Update empathy attempt status to AWAITING_SHARING
+  console.log(`[Reconciler] Updating empathy attempt status to AWAITING_SHARING for ${guesserInfo.name}`);
   await prisma.empathyAttempt.updateMany({
     where: { sessionId, sourceUserId: guesserId },
     data: { status: 'AWAITING_SHARING' },
@@ -361,8 +385,15 @@ async function generateShareSuggestion(
   suggestedContent: string;
   reason: string;
 } | null> {
+  console.log(`[Reconciler] Generating share suggestion for ${subject.name} (to help ${guesser.name})`);
+
   // Build prompt to generate a share suggestion
   const prompt = `You are helping ${subject.name} understand what context they could share to help ${guesser.name} understand them better.
+... (rest of prompt template)`;
+
+  // I'll keep the actual prompt logic but add logs around it
+  const response = await getSonnetJson<{ suggestedContent: string; reason: string }>({
+    systemPrompt: `You are helping ${subject.name} understand what context they could share to help ${guesser.name} understand them better.
 
 ${guesser.name} tried to express empathy for ${subject.name}'s experience, but missed some important aspects:
 
@@ -391,10 +422,7 @@ Respond in JSON:
   "suggestedContent": "The suggestion text",
   "reason": "Why this would help"
 }
-\`\`\``;
-
-  const response = await getSonnetJson<{ suggestedContent: string; reason: string }>({
-    systemPrompt: prompt,
+\`\`\``,
     messages: [{ role: 'user', content: 'Generate the share suggestion.' }],
     maxTokens: 512,
     sessionId,
@@ -402,12 +430,16 @@ Respond in JSON:
   });
 
   if (!response) {
+    console.warn(`[Reconciler] AI failed to generate share suggestion, using fallback`);
     // Fallback suggestion
     return {
       suggestedContent: `There's something about my experience that might help you understand better.`,
       reason: `${guesser.name} may have missed some important aspects of what you're going through.`,
     };
   }
+
+  console.log(`[Reconciler] Share suggestion generated: "${response.suggestedContent.substring(0, 50)}..."`);
+  console.log(`[Reconciler] Share reason: "${response.reason}"`);
 
   // Save to reconciler result
   const dbResult = await prisma.reconcilerResult.findUnique({
@@ -421,6 +453,7 @@ Respond in JSON:
   });
 
   if (dbResult) {
+    console.log(`[Reconciler] Updating DB result ${dbResult.id} and creating/updating share offer`);
     await prisma.reconcilerResult.update({
       where: { id: dbResult.id },
       data: {
@@ -445,6 +478,22 @@ Respond in JSON:
         suggestedReason: response.reason,
       },
     });
+
+    // Create SHARE_SUGGESTION message for the subject to see in chat
+    // This appears instantly as a styled element they can tap to open the drawer
+    await prisma.message.create({
+      data: {
+        sessionId,
+        senderId: null, // System-generated
+        forUserId: subject.id,
+        role: MessageRole.SHARE_SUGGESTION,
+        content: response.suggestedContent,
+        stage: 2,
+      },
+    });
+    console.log(`[Reconciler] Created SHARE_SUGGESTION message for subject ${subject.id}`);
+  } else {
+    console.warn(`[Reconciler] Could not find reconcilerResult to update with suggestion!`);
   }
 
   return response;
@@ -465,6 +514,8 @@ export async function getShareSuggestionForUser(
     canRefine: boolean;
   } | null;
 }> {
+  console.log(`[Reconciler] getShareSuggestionForUser called for user=${userId} in session=${sessionId}`);
+
   // Find share offer for this user in PENDING status
   const shareOffer = await prisma.reconcilerShareOffer.findFirst({
     where: {
@@ -478,8 +529,11 @@ export async function getShareSuggestionForUser(
   });
 
   if (!shareOffer || !shareOffer.suggestedContent) {
+    console.log(`[Reconciler] No PENDING share offer found for user ${userId}`);
     return { hasSuggestion: false, suggestion: null };
   }
+
+  console.log(`[Reconciler] Found PENDING share offer ${shareOffer.id}. Marking as OFFERED.`);
 
   // Mark as OFFERED now that it's being viewed
   await prisma.reconcilerShareOffer.update({
@@ -513,6 +567,8 @@ export async function respondToShareSuggestion(
   sharedContent: string | null;
   guesserUpdated: boolean;
 }> {
+  console.log(`[Reconciler] respondToShareSuggestion called: user=${userId}, action=${response.action}`);
+
   // Get the share offer
   const shareOffer = await prisma.reconcilerShareOffer.findFirst({
     where: {
@@ -526,10 +582,12 @@ export async function respondToShareSuggestion(
   });
 
   if (!shareOffer) {
+    console.warn(`[Reconciler] No OFFERED share offer found for user ${userId} in session ${sessionId}`);
     throw new Error('No pending share offer found');
   }
 
   if (response.action === 'decline') {
+    console.log(`[Reconciler] User ${userId} declined share offer. Revealing guesser's empathy directly.`);
     // User declined - mark offer as declined and reveal empathy as-is
     await prisma.reconcilerShareOffer.update({
       where: { id: shareOffer.id },
@@ -556,10 +614,18 @@ export async function respondToShareSuggestion(
   }
 
   // User accepted or refined
-  const sharedContent =
+  let sharedContent =
     response.action === 'refine' && response.refinedContent
       ? response.refinedContent
       : shareOffer.suggestedContent || '';
+
+  // Fallback if suggestedContent was somehow empty
+  if (!sharedContent.trim()) {
+    console.warn(`[Reconciler] suggestedContent was empty for share offer ${shareOffer.id}, using fallback`);
+    sharedContent = `There's something about my experience that might help you understand better.`;
+  }
+
+  console.log(`[Reconciler] User ${userId} ${response.action}ed share offer. Shared content: "${sharedContent.substring(0, 50)}..."`);
 
   // Update share offer
   await prisma.reconcilerShareOffer.update({
@@ -573,22 +639,86 @@ export async function respondToShareSuggestion(
   });
 
   // Update guesser's empathy attempt to REFINING
+  console.log(`[Reconciler] Updating guesser ${shareOffer.result.guesserId} empathy attempt to REFINING`);
   await prisma.empathyAttempt.updateMany({
     where: { sessionId, sourceUserId: shareOffer.result.guesserId },
     data: { status: 'REFINING' },
   });
 
-  // Create message for guesser to see the shared context
+  const subjectName = shareOffer.result.subjectName;
+  const guesserName = shareOffer.result.guesserName;
+
+  // Create AI message BEFORE the shared context (introduces what's coming)
+  const introMessage = `Your empathy statement hasn't been shown to ${subjectName} yet because our internal reconciler found some gaps and got ${subjectName}'s consent to share the following:`;
+
+  await prisma.message.create({
+    data: {
+      sessionId,
+      senderId: null, // AI message
+      forUserId: shareOffer.result.guesserId,
+      role: 'AI',
+      content: introMessage,
+      stage: 2,
+    },
+  });
+
+  // Create SHARED_CONTEXT message (the actual content shared by subject)
   await prisma.message.create({
     data: {
       sessionId,
       senderId: userId,
       forUserId: shareOffer.result.guesserId,
-      role: 'SHARED_CONTEXT',
+      role: MessageRole.SHARED_CONTEXT,
       content: sharedContent,
       stage: 2,
     },
   });
+
+  // Create AI message AFTER the shared context (asks for reflection)
+  const reflectionPromptMessage = `How does this land for you? Take a moment to reflect on what ${subjectName} shared. Does this give you any new insight into what they might be experiencing?`;
+
+  await prisma.message.create({
+    data: {
+      sessionId,
+      senderId: null, // AI message
+      forUserId: shareOffer.result.guesserId,
+      role: 'AI',
+      content: reflectionPromptMessage,
+      stage: 2,
+    },
+  });
+
+  console.log(`[Reconciler] Created intro, shared context, and reflection messages for guesser ${shareOffer.result.guesserId}`);
+
+  // Create message for subject showing what they shared (appears in their own chat)
+  await prisma.message.create({
+    data: {
+      sessionId,
+      senderId: userId,
+      forUserId: userId, // For the subject's own chat
+      role: MessageRole.EMPATHY_STATEMENT, // Reuse empathy statement styling for "what you shared"
+      content: sharedContent,
+      stage: 2,
+    },
+  });
+
+  // Create AI acknowledgment message for subject
+  const subjectAckMessage = `Thank you for sharing that with ${guesserName}. They'll see this context and have the opportunity to refine their understanding of what you're going through.
+
+While ${guesserName} considers what you've shared, let's continue exploring your experience. Is there anything else about how this situation has affected you that feels important to express?`;
+
+  await prisma.message.create({
+    data: {
+      sessionId,
+      senderId: null, // AI message
+      forUserId: userId, // For the subject
+      role: 'AI',
+      content: subjectAckMessage,
+      stage: 2,
+    },
+  });
+
+  console.log(`[Reconciler] Created acknowledgment messages for subject ${userId}`);
 
   return {
     status: 'shared',
@@ -661,6 +791,8 @@ async function analyzeEmpathyGap(
   console.log(
     `[Reconciler] Analyzing ${input.guesser.name}'s understanding of ${input.subject.name}`
   );
+  console.log(`[Reconciler] Input empathy statement: "${input.empathyStatement.substring(0, 100)}..."`);
+  console.log(`[Reconciler] Subject themes: ${input.witnessingContent.themes.join(', ')}`);
 
   // Check if we already have a result for this direction
   const existingResult = await prisma.reconcilerResult.findUnique({
@@ -688,6 +820,7 @@ async function analyzeEmpathyGap(
   };
 
   const prompt = buildReconcilerPrompt(context);
+  console.log(`[Reconciler] Built analysis prompt (length: ${prompt.length})`);
 
   // Call AI to analyze the gap
   const result = await getSonnetJson<ReconcilerResult>({
@@ -704,10 +837,15 @@ async function analyzeEmpathyGap(
     return getDefaultReconcilerResult();
   }
 
+  console.log(`[Reconciler] AI returned alignment score: ${result.alignment.score}%`);
+  console.log(`[Reconciler] AI identified gaps: ${result.gaps.severity} (${result.gaps.missedFeelings.length} missed feelings)`);
+  console.log(`[Reconciler] AI recommendation: ${result.recommendation.action}`);
+
   // Generate abstract guidance for refinement (doesn't expose partner's specific content)
   const abstractGuidance = generateAbstractGuidance(result);
 
   // Save result to database with abstract guidance fields
+  console.log(`[Reconciler] Saving result to database for ${input.guesser.name} → ${input.subject.name}`);
   await prisma.reconcilerResult.create({
     data: {
       sessionId: input.sessionId,

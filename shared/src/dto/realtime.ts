@@ -82,6 +82,7 @@ export type SessionEventType =
   | 'empathy.share_suggestion' // Subject receives suggestion to share context with guesser
   | 'empathy.revealed' // Guesser's empathy was revealed (direction: 'outgoing' | 'incoming')
   | 'empathy.refining' // Guesser should refine their empathy (new context available)
+  | 'empathy.context_shared' // Subject shared context with guesser
   | 'partner.needs_shared'
   | 'partner.common_ground_confirmed'
   | 'partner.ranking_submitted'

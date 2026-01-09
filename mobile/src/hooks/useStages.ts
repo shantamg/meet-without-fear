@@ -55,6 +55,10 @@ import {
   StageStatus,
   GetMessagesResponse,
   MessageRole,
+  EmpathyExchangeStatusResponse,
+  GetShareSuggestionResponse,
+  RespondToShareSuggestionRequest,
+  RespondToShareSuggestionResponse,
 } from '@meet-without-fear/shared';
 import { sessionKeys } from './useSessions';
 
@@ -78,6 +82,10 @@ export const stageKeys = {
     [...stageKeys.all, 'empathy', 'draft', sessionId] as const,
   partnerEmpathy: (sessionId: string) =>
     [...stageKeys.all, 'empathy', 'partner', sessionId] as const,
+  empathyStatus: (sessionId: string) =>
+    [...stageKeys.all, 'empathy', 'status', sessionId] as const,
+  shareOffer: (sessionId: string) =>
+    [...stageKeys.all, 'empathy', 'share-offer', sessionId] as const,
 
   // Stage 3: Needs
   needs: (sessionId: string) => [...stageKeys.all, 'needs', sessionId] as const,
@@ -122,6 +130,82 @@ export function useProgress(
 // ============================================================================
 // Stage 0: Curiosity Compact
 // ============================================================================
+
+/**
+ * Get empathy exchange status (for Stage 2 progress and reconciler status)
+ */
+export function useEmpathyStatus(
+  sessionId: string | undefined,
+  options?: Omit<
+    UseQueryOptions<EmpathyExchangeStatusResponse, ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: stageKeys.empathyStatus(sessionId || ''),
+    queryFn: async () => {
+      if (!sessionId) throw new Error('Session ID is required');
+      return get<EmpathyExchangeStatusResponse>(`/sessions/${sessionId}/empathy/status`);
+    },
+    enabled: !!sessionId,
+    staleTime: 5_000,
+    ...options,
+  });
+}
+
+/**
+ * Get pending share offer (from reconciler)
+ */
+export function useShareOffer(
+  sessionId: string | undefined,
+  options?: Omit<
+    UseQueryOptions<GetShareSuggestionResponse, ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: stageKeys.shareOffer(sessionId || ''),
+    queryFn: async () => {
+      if (!sessionId) throw new Error('Session ID is required');
+      return get<GetShareSuggestionResponse>(`/sessions/${sessionId}/reconciler/share-offer`);
+    },
+    enabled: !!sessionId,
+    staleTime: 0, // Always check for fresh offer
+    ...options,
+  });
+}
+
+/**
+ * Respond to a share offer
+ */
+export function useRespondToShareOffer(
+  options?: Omit<
+    UseMutationOptions<
+      RespondToShareSuggestionResponse,
+      ApiClientError,
+      { sessionId: string } & RespondToShareSuggestionRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, ...request }) => {
+      return post<RespondToShareSuggestionResponse>(
+        `/sessions/${sessionId}/reconciler/share-offer/respond`,
+        request
+      );
+    },
+    onSuccess: (_, { sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: [...stageKeys.all, 'empathy', 'status', sessionId] });
+      queryClient.invalidateQueries({ queryKey: [...stageKeys.all, 'empathy', 'share-offer', sessionId] });
+      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      queryClient.invalidateQueries({ queryKey: messageKeys.list(sessionId) });
+    },
+    ...options,
+  });
+}
 
 /**
  * Get compact status for both users.
@@ -344,7 +428,7 @@ export function useConsentToShareEmpathy(
     },
     onMutate: async ({ sessionId, draftContent }): Promise<{ previousList: GetMessagesResponse | undefined; previousInfinite: InfiniteData<GetMessagesResponse> | undefined }> => {
       console.log('[useConsentToShareEmpathy] onMutate started');
-      
+
       // Safety Check: Verify messageKeys exists (circular dependency protection)
       if (!messageKeys || !messageKeys.list || !messageKeys.infinite) {
         console.error('[useConsentToShareEmpathy] CRITICAL: messageKeys is undefined due to circular dependency');
@@ -386,11 +470,11 @@ export function useConsentToShareEmpathy(
               // Deep clone to ensure immutability
               const newPages = [...old.pages];
               const firstPage = { ...newPages[0] };
-              
+
               // Add to the START of the messages array (newest first in inverted list)
               // This ensures it appears at the bottom visually (since list is inverted)
               firstPage.messages = [optimisticMessage, ...firstPage.messages];
-              
+
               newPages[0] = firstPage;
               return { ...old, pages: newPages };
             }
@@ -493,17 +577,17 @@ export function useConsentToShareEmpathy(
           // Deep clone to ensure immutability
           const newPages = [...old.pages];
           const firstPage = { ...newPages[0] };
-          
+
           // Remove optimistic message, add real messages
           // For inverted lists (newest first), add to the START of the array
           const filteredMessages = firstPage.messages.filter((m) => !m.id.startsWith('optimistic-empathy-'));
           const existingIds = new Set(filteredMessages.map((m) => m.id));
           const newMessages = messagesToAdd.filter((m) => !existingIds.has(m.id));
-          
+
           // Add new messages to the start (newest first)
           firstPage.messages = [...newMessages, ...filteredMessages];
           newPages[0] = firstPage;
-          
+
           return { ...old, pages: newPages };
         };
 

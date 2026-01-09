@@ -23,12 +23,6 @@ import { extractJsonFromResponse } from '../utils/json-extractor';
 import { embedMessage } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
 import {
-  notifyEmpathyShared,
-  notifyEmpathyRevealed,
-  notifyEmpathyNeedsWork,
-  notifyEmpathyValidated,
-} from '../services/notification';
-import {
   runReconciler,
   getShareSuggestionForUser,
   respondToShareSuggestion as reconcilerRespondToShareSuggestion,
@@ -92,18 +86,6 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
     const userAId = session.relationship.members[0].user.id;
     const userBId = session.relationship.members[1].user.id;
 
-    // Get user names for notifications
-    const userA = await prisma.user.findUnique({
-      where: { id: userAId },
-      select: { name: true, firstName: true },
-    });
-    const userB = await prisma.user.findUnique({
-      where: { id: userBId },
-      select: { name: true, firstName: true },
-    });
-    const userAName = userA?.firstName || userA?.name || 'Your partner';
-    const userBName = userB?.firstName || userB?.name || 'Your partner';
-
     // Update empathy attempt for User A (A's guess about B)
     if (result.aUnderstandingB) {
       const hasSignificantGaps =
@@ -119,19 +101,6 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
           revealedAt: newStatus === 'REVEALED' ? new Date() : null,
         },
       });
-
-      // Send notifications based on status
-      if (newStatus === 'REVEALED') {
-        // Notify User B that User A's empathy statement is now visible
-        notifyEmpathyRevealed(userBId, userAName, sessionId).catch((err) =>
-          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to send REVEALED notification:', err)
-        );
-      } else {
-        // Notify User A that they need to refine their statement
-        notifyEmpathyNeedsWork(userAId, sessionId).catch((err) =>
-          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to send NEEDS_WORK notification:', err)
-        );
-      }
 
       console.log(
         `[triggerReconcilerAndUpdateStatuses] Updated User A's attempt to ${newStatus} ` +
@@ -154,19 +123,6 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
           revealedAt: newStatus === 'REVEALED' ? new Date() : null,
         },
       });
-
-      // Send notifications based on status
-      if (newStatus === 'REVEALED') {
-        // Notify User A that User B's empathy statement is now visible
-        notifyEmpathyRevealed(userAId, userBName, sessionId).catch((err) =>
-          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to send REVEALED notification:', err)
-        );
-      } else {
-        // Notify User B that they need to refine their statement
-        notifyEmpathyNeedsWork(userBId, sessionId).catch((err) =>
-          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to send NEEDS_WORK notification:', err)
-        );
-      }
 
       console.log(
         `[triggerReconcilerAndUpdateStatuses] Updated User B's attempt to ${newStatus} ` +
@@ -614,17 +570,8 @@ export async function consentToShare(
       }
     }
 
-    // Create notification for partner
+    // Notify partner via real-time
     if (partnerId) {
-      await notifyEmpathyShared(
-        partnerId,
-        user.name || 'Your partner',
-        sessionId
-      ).catch((err) =>
-        console.warn('[consentToShare] Failed to create notification:', err)
-      );
-
-      // Also notify via real-time
       await notifyPartner(sessionId, partnerId, 'partner.empathy_shared', {
         stage: 2,
         sharedBy: user.id,
@@ -1031,16 +978,6 @@ export async function validateEmpathy(
       },
     });
 
-    // Get partner's display name for notifications
-    let partnerName = 'Your partner';
-    if (partnerId) {
-      const partnerUser = await prisma.user.findUnique({
-        where: { id: partnerId },
-        select: { firstName: true, name: true },
-      });
-      partnerName = partnerUser?.firstName || partnerUser?.name || 'Your partner';
-    }
-
     // Notify partner via realtime
     if (partnerId) {
       await notifyPartner(sessionId, partnerId, 'partner.stage_completed', {
@@ -1048,17 +985,6 @@ export async function validateEmpathy(
         validated,
         completedBy: user.id,
       });
-
-      // If validated, send notification to partner that their empathy was validated
-      if (validated) {
-        notifyEmpathyValidated(
-          partnerId,
-          user.firstName || user.name || 'Your partner',
-          sessionId
-        ).catch((err) =>
-          console.warn('[validateEmpathy] Failed to send VALIDATED notification:', err)
-        );
-      }
     }
 
     // Determine whether partner has validated my empathy attempt

@@ -360,6 +360,9 @@ describe('Session Creation Handler', () => {
             statusSummary: { userStatus: 'Invitation sent', partnerStatus: 'Waiting for John to join' },
             selfActionNeeded: [],
             partnerActionNeeded: [],
+            hasUnread: false,
+            lastViewedAt: null,
+            lastSeenChatItemId: null,
           },
         },
         data: {

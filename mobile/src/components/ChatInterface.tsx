@@ -42,7 +42,12 @@ export interface CustomEmptyStateItem {
   id: string;
 }
 
-export type ChatListItem = ChatMessage | ChatIndicatorItem | CustomEmptyStateItem;
+export interface NewMessagesSeparatorItem {
+  type: 'new-messages-separator';
+  id: string;
+}
+
+export type ChatListItem = ChatMessage | ChatIndicatorItem | CustomEmptyStateItem | NewMessagesSeparatorItem;
 
 function isIndicator(item: ChatListItem): item is ChatIndicatorItem {
   return 'type' in item && item.type === 'indicator';
@@ -50,6 +55,10 @@ function isIndicator(item: ChatListItem): item is ChatIndicatorItem {
 
 function isCustomEmptyState(item: ChatListItem): item is CustomEmptyStateItem {
   return 'type' in item && item.type === 'custom-empty-state';
+}
+
+function isNewMessagesSeparator(item: ChatListItem): item is NewMessagesSeparatorItem {
+  return 'type' in item && item.type === 'new-messages-separator';
 }
 
 interface ChatInterfaceProps {
@@ -81,6 +90,10 @@ interface ChatInterfaceProps {
   keyboardVerticalOffset?: number;
   /** Skip marking initial messages as history - animate them instead (e.g., after compact signing + mood check) */
   skipInitialHistory?: boolean;
+  /** Partner's name for personalized messages */
+  partnerName?: string;
+  /** ID of the last chat item the user has seen - used to show "New messages" separator */
+  lastSeenChatItemId?: string | null;
 }
 
 // ============================================================================
@@ -114,6 +127,8 @@ export function ChatInterface({
   customEmptyState,
   keyboardVerticalOffset = 100,
   skipInitialHistory = false,
+  partnerName,
+  lastSeenChatItemId,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -134,7 +149,7 @@ export function ChatInterface({
   const listItems = useMemo((): ChatListItem[] => {
     // 1. Combine messages and indicators
     const items: ChatListItem[] = [...messages, ...indicators];
-    
+
     // 2. Sort Newest First (standard chat sort)
     items.sort((a, b) => {
       const aTime = 'timestamp' in a && a.timestamp ? new Date(a.timestamp).getTime() : 0;
@@ -145,13 +160,33 @@ export function ChatInterface({
       return b.id.localeCompare(a.id);
     });
 
-    // 3. Inject Compact Item (Custom Empty State)
+    // 3. Inject "New messages" separator after the last seen item
+    // In an inverted list sorted newest-first:
+    // - Index 0 = newest message (visual bottom, closest to input)
+    // - Higher index = older messages (visual top)
+    // We insert the separator AFTER the last seen item (at higher index = visually above it)
+    if (lastSeenChatItemId && messages.length > 0) {
+      const lastSeenIndex = items.findIndex(item => item.id === lastSeenChatItemId);
+      // Only show separator if:
+      // 1. We found the last seen item
+      // 2. There are newer items above it (lastSeenIndex > 0)
+      if (lastSeenIndex > 0) {
+        // Insert after the last seen item (at its index, pushing it down)
+        // This places the separator visually BELOW the new messages
+        items.splice(lastSeenIndex, 0, {
+          type: 'new-messages-separator',
+          id: 'new-messages-separator',
+        });
+      }
+    }
+
+    // 4. Inject Compact Item (Custom Empty State)
     // Condition: We have a custom state and NO messages
     // This handles both:
     // - New sessions (no indicators): Compact appears as first item
     // - Accepted invitations (with indicators): Compact appears below indicators
     if (customEmptyState && messages.length === 0) {
-      // Unshift adds to Index 0. 
+      // Unshift adds to Index 0.
       // In an INVERTED list, Index 0 is the Visual BOTTOM (closest to input).
       // For new sessions: Compact is the only item (appears at bottom)
       // For accepted invitations: Compact appears below the "ACCEPTED INVITATION" indicator
@@ -162,7 +197,7 @@ export function ChatInterface({
     }
 
     return items;
-  }, [messages, indicators, customEmptyState]);
+  }, [messages, indicators, customEmptyState, lastSeenChatItemId]);
 
   const scrollMetricsRef = useRef({
     offset: 0,
@@ -329,12 +364,23 @@ export function ChatInterface({
       );
     }
 
-    // 2. Render Indicators
+    // 2. Render New Messages Separator
+    if (isNewMessagesSeparator(item)) {
+      return (
+        <View style={styles.newMessagesSeparator} testID="new-messages-separator">
+          <View style={styles.newMessagesSeparatorLine} />
+          <Text style={styles.newMessagesSeparatorText}>New</Text>
+          <View style={styles.newMessagesSeparatorLine} />
+        </View>
+      );
+    }
+
+    // 3. Render Indicators
     if (isIndicator(item)) {
       return <ChatIndicator type={item.indicatorType} timestamp={item.timestamp} />;
     }
 
-    // 3. Render Messages
+    // 4. Render Messages
     // At this point, item must be a ChatMessage (we've already handled indicators and custom empty state)
     const message = item as ChatMessage;
     
@@ -381,9 +427,10 @@ export function ChatInterface({
         } : undefined}
         isSpeaking={isSpeaking && currentId === message.id}
         onSpeakerPress={isAIMessage ? () => handleSpeakerPress(message.content, message.id) : undefined}
+        partnerName={partnerName}
       />
     );
-  }, [newestAnimatableAIMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles]);
+  }, [newestAnimatableAIMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 
@@ -619,5 +666,24 @@ const useStyles = () =>
       // Container for emotion slider, panels above input, and input
       // This ensures KeyboardAvoidingView adjusts relative to this container's bottom
       // rather than just the input field itself
+    },
+    newMessagesSeparator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: t.spacing.lg,
+      paddingVertical: t.spacing.md,
+      gap: t.spacing.sm,
+    },
+    newMessagesSeparatorLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: t.colors.error,
+    },
+    newMessagesSeparatorText: {
+      fontSize: t.typography.fontSize.xs,
+      fontWeight: '600',
+      color: t.colors.error,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
     },
   }));

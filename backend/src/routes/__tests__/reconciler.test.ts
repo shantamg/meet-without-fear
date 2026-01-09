@@ -347,7 +347,7 @@ describe('Reconciler API', () => {
   });
 
   describe('GET /sessions/:id/reconciler/share-offer (getShareOfferHandler)', () => {
-    it('returns hasPendingOffer=false if no offer exists', async () => {
+    it('returns hasSuggestion=false if no offer exists', async () => {
       const req = mockRequest();
       const res = mockResponse();
 
@@ -361,15 +361,14 @@ describe('Reconciler API', () => {
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
-            hasPendingOffer: false,
-            offerMessage: null,
-            quoteOptions: null,
+            hasSuggestion: false,
+            suggestion: null,
           }),
         })
       );
     });
 
-    it('returns pending share offer with quote options', async () => {
+    it('returns pending share suggestion with details', async () => {
       const req = mockRequest({ user: { id: 'partner-1', name: 'Bob' } });
       const res = mockResponse();
 
@@ -382,12 +381,12 @@ describe('Reconciler API', () => {
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
-            hasPendingOffer: true,
-            offerMessage: expect.stringContaining('Bob understood'),
-            quoteOptions: expect.objectContaining({
-              quoteOptions: expect.arrayContaining([
-                expect.objectContaining({ content: expect.any(String) }),
-              ]),
+            hasSuggestion: true,
+            suggestion: expect.objectContaining({
+              guesserName: 'Alice',
+              suggestedContent: expect.stringContaining('Bob understood'),
+              reason: 'Fear of disconnection was not captured.',
+              canRefine: true,
             }),
           }),
         })

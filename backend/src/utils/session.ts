@@ -45,6 +45,12 @@ type SessionWithIncludes = {
   empathyAttempts?: Array<{
     sourceUserId: string | null;
   }>;
+  // Optional: user vessel for read state tracking
+  userVessels?: Array<{
+    userId: string;
+    lastViewedAt: Date | null;
+    lastSeenChatItemId: string | null;
+  }>;
 };
 
 /**
@@ -431,6 +437,18 @@ export function mapSessionToSummary(
     { userHasSentEmpathy, partnerHasSentEmpathy }
   );
 
+  // Get user's read state from UserVessel (if included)
+  const userVessel = session.userVessels?.find((v) => v.userId === currentUserId);
+  const lastViewedAt = userVessel?.lastViewedAt ?? null;
+  const lastSeenChatItemId = userVessel?.lastSeenChatItemId ?? null;
+
+  // Determine if there's unread content:
+  // - If never viewed (lastViewedAt is null), consider unread if session has any activity
+  // - If viewed, compare session's updatedAt with lastViewedAt
+  const hasUnread = lastViewedAt === null
+    ? session.status !== SessionStatus.CREATED // Unread if not a fresh draft
+    : session.updatedAt > lastViewedAt;
+
   return {
     id: session.id,
     relationshipId: session.relationshipId,
@@ -447,5 +465,8 @@ export function mapSessionToSummary(
     statusSummary,
     selfActionNeeded,
     partnerActionNeeded,
+    hasUnread,
+    lastViewedAt: lastViewedAt?.toISOString() ?? null,
+    lastSeenChatItemId,
   };
 }

@@ -41,6 +41,8 @@ export interface SessionStateResponse {
     };
     createdAt: string;
     resolvedAt: string | null;
+    // ID of last chat item seen (for "new messages" line placement)
+    lastSeenChatItemId: string | null;
   };
 
   // Stage progress

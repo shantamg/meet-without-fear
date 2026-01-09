@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { notifyPartner, notifyPartnerWithFallback, publishSessionCreated } from '../services/realtime';
-import { notifyInvitationAccepted, notifyInvitationReceived, notifySessionJoined } from '../services/notification';
 import { z } from 'zod';
 import { ApiResponse, ErrorCode, SessionStatus, StageStatus, Stage } from '@meet-without-fear/shared';
 import { successResponse, errorResponse } from '../utils/response';
@@ -574,15 +573,6 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
       userName: user.name,
     });
 
-    // Create in-app notification for inviter
-    const accepterDisplayName = user.firstName || user.name || 'Someone';
-    await notifyInvitationAccepted(
-      invitation.invitedById,
-      accepterDisplayName,
-      invitation.sessionId,
-      invitation.id
-    );
-
     successResponse(res, {
       session: {
         id: session?.id,
@@ -944,27 +934,6 @@ export async function acknowledgeInvitation(req: Request, res: Response): Promis
         },
       });
       return;
-    }
-
-    // Check if notification already exists for this user + invitation
-    const existingNotification = await prisma.notification.findFirst({
-      where: {
-        userId: user.id,
-        invitationId: invitation.id,
-        type: 'INVITATION_RECEIVED',
-      },
-    });
-
-    // Create notification if it doesn't exist
-    if (!existingNotification) {
-      const inviterDisplayName =
-        invitation.invitedBy.firstName || invitation.invitedBy.name || 'Someone';
-      await notifyInvitationReceived(
-        user.id,
-        inviterDisplayName,
-        invitation.session.id,
-        invitation.id
-      );
     }
 
     successResponse(res, {

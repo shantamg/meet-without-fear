@@ -9,6 +9,7 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem } from '../components/ChatInterface';
@@ -34,12 +35,15 @@ import { CompactAgreementBar } from '../components/CompactAgreementBar';
 import { InvitationShareButton } from '../components/InvitationShareButton';
 import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
+import { ShareSuggestionDrawer } from '../components/ShareSuggestionDrawer';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
 import { useRealtime } from '../hooks/useRealtime';
+import { stageKeys } from '../hooks/useStages';
+import { messageKeys } from '../hooks/useMessages';
 import { createStyles } from '../theme/styled';
 import {
   trackInvitationSent,
@@ -99,6 +103,7 @@ export function UnifiedSessionScreen({
   const styles = useStyles();
   const { user, updateUser } = useAuth();
   const { mutate: updateMood } = useUpdateMood();
+  const queryClient = useQueryClient();
 
   // Real-time presence tracking
 
@@ -188,6 +193,11 @@ export function UnifiedSessionScreen({
     handleSubmitRankings,
     handleConfirmAgreement,
     handleResolveSession,
+    handleRespondToShareOffer,
+
+    // Reconciler
+    empathyStatusData,
+    shareOfferData,
 
     // Utility actions
     clearMirrorIntervention,
@@ -200,6 +210,8 @@ export function UnifiedSessionScreen({
     sessionId,
     enablePresence: true,
     onSessionEvent: (event, data) => {
+      console.log('[UnifiedSessionScreen] Received realtime event:', event);
+
       if (event === 'memory.suggested' && data) {
         // Handle incoming memory suggestion from Ably
         const eventData = data as { suggestion?: MemorySuggestion };
@@ -207,6 +219,30 @@ export function UnifiedSessionScreen({
           console.log('[UnifiedSessionScreen] Received memory suggestion:', eventData.suggestion);
           setMemorySuggestion(eventData.suggestion);
         }
+      }
+
+      // Handle reconciler events - invalidate caches to trigger refetch
+      if (event === 'empathy.share_suggestion') {
+        // Subject received a share suggestion - refetch share offer data
+        console.log('[UnifiedSessionScreen] Share suggestion received, invalidating shareOffer cache');
+        queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+      }
+
+      if (event === 'empathy.context_shared') {
+        // Guesser received shared context - refetch empathy status and messages
+        console.log('[UnifiedSessionScreen] Context shared, invalidating empathy and message caches');
+        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
+        // Invalidate infinite messages query so new SHARED_CONTEXT message appears
+        queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
+      }
+
+      if (event === 'partner.stage_completed') {
+        // Partner completed a stage - refetch status
+        console.log('[UnifiedSessionScreen] Partner completed stage, invalidating status caches');
+        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       }
     },
   });
@@ -270,6 +306,7 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   const [showEmpathyDrawer, setShowEmpathyDrawer] = useState(false);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
+  const [showShareSuggestionDrawer, setShowShareSuggestionDrawer] = useState(false);
 
   // Local latch to prevent panel flashing during server refetches
   // Once user clicks Share, this stays true even if server data temporarily reverts
@@ -376,19 +413,23 @@ export function UnifiedSessionScreen({
   // Note: We don't check isSharingEmpathy here - we animate it closed instead of unmounting
   // to prevent layout jumps
   const shouldShowEmpathyPanel = useMemo(() => {
+    const isRefining = !!empathyStatusData?.hasNewSharedContext;
+
     // Local latch: Once user clicks Share, never show panel again (prevents flash during refetch)
-    if (hasSharedEmpathyLocal) return false;
+    // EXCEPT when we're in refining mode, then we need to show it again
+    if (hasSharedEmpathyLocal && !isRefining) return false;
 
     return !!(
       currentStage === Stage.PERSPECTIVE_STRETCH &&
-      !empathyDraftData?.alreadyConsented &&
+      (!empathyDraftData?.alreadyConsented || isRefining) &&
       ((aiRecommendsReadyToShare && !empathyDraftData?.draft?.readyToShare) ||
-        (empathyDraftData?.canConsent && empathyDraftData?.draft?.readyToShare)) &&
-      (liveProposedEmpathyStatement || empathyDraftData?.draft?.content) &&
+        (empathyDraftData?.canConsent && empathyDraftData?.draft?.readyToShare) ||
+        isRefining) &&
+      (liveProposedEmpathyStatement || empathyDraftData?.draft?.content || (isRefining && empathyStatusData?.myAttempt?.content)) &&
       !isTypewriterAnimating // Wait for text to finish
     );
   }, [
-    hasSharedEmpathyLocal, // Add dependency - prevents panel from flashing back
+    hasSharedEmpathyLocal,
     currentStage,
     empathyDraftData?.alreadyConsented,
     empathyDraftData?.canConsent,
@@ -397,7 +438,12 @@ export function UnifiedSessionScreen({
     liveProposedEmpathyStatement,
     empathyDraftData?.draft?.content,
     isTypewriterAnimating,
+    empathyStatusData?.hasNewSharedContext,
+    empathyStatusData?.myAttempt?.content,
   ]);
+
+  // Whether user is in "refining" mode (received shared context from partner)
+  const isRefiningEmpathy = !!empathyStatusData?.hasNewSharedContext;
 
   // Animate empathy panel - close when sharing, otherwise follow shouldShowEmpathyPanel
   // This prevents layout jumps by animating closed instead of unmounting
@@ -731,6 +777,9 @@ export function UnifiedSessionScreen({
             </View>
           );
 
+        // Note: empathy-share-suggestion is now handled via the low-profile panel + drawer pattern
+        // instead of an inline card. See shareSuggestionContainer and ShareSuggestionDrawer.
+
         default:
           return null;
       }
@@ -750,6 +799,7 @@ export function UnifiedSessionScreen({
       handleValidatePartnerEmpathy,
       handleConfirmAllNeeds,
       handleMarkReadyToRank,
+      handleRespondToShareOffer,
       clearMirrorIntervention,
       sendMessage,
       onStageComplete,
@@ -798,9 +848,6 @@ export function UnifiedSessionScreen({
     return inOnboarding;
   }, [currentStage, isLoading, myProgress, compactData?.mySigned]);
 
-  // Legacy: Keep shouldShowCompactOverlay for backwards compatibility during transition
-  // This should always be false now since we use inline approach
-  const shouldShowCompactOverlay = false;
 
   // -------------------------------------------------------------------------
   // Session Entry Mood Check - shown on session entry
@@ -1118,6 +1165,7 @@ export function UnifiedSessionScreen({
           onSendMessage={sendMessageWithTracking}
           isLoading={isSending || isFetchingInitialMessage || isConfirmingInvitation || isConfirmingFeelHeard || isSharingEmpathy}
           showEmotionSlider={!isInOnboardingUnsigned}
+          partnerName={partnerName}
           emotionValue={barometerValue}
           onEmotionChange={handleBarometerChange}
           onHighEmotion={(value) => {
@@ -1139,6 +1187,8 @@ export function UnifiedSessionScreen({
           // Skip initial history detection if compact was just signed and mood check completed
           // This ensures the first AI message after compact signing gets typewriter animation
           skipInitialHistory={justSignedCompact && hasCompletedMoodCheck}
+          // ID of last seen chat item for "new messages" separator
+          lastSeenChatItemId={session?.lastSeenChatItemId}
           // Show compact as custom empty state during onboarding when not signed
           customEmptyState={
             isInOnboardingUnsigned ? compactEmptyStateElement : undefined
@@ -1204,12 +1254,28 @@ export function UnifiedSessionScreen({
                           testID="empathy-review-button"
                         >
                           <Text style={styles.empathyReviewButtonText}>
-                            Review what you'll share
+                            {isRefiningEmpathy ? 'Revisit what you\'ll share' : 'Review what you\'ll share'}
                           </Text>
                         </TouchableOpacity>
                       </View>
                     </Animated.View>
                   )
+                  // Show share suggestion panel when reconciler generated a suggestion
+                  : (shareOfferData?.hasSuggestion && shareOfferData.suggestion)
+                    ? () => (
+                      <View style={styles.shareSuggestionContainer}>
+                        <TouchableOpacity
+                          style={styles.shareSuggestionButton}
+                          onPress={() => setShowShareSuggestionDrawer(true)}
+                          activeOpacity={0.7}
+                          testID="share-suggestion-button"
+                        >
+                          <Text style={styles.shareSuggestionButtonText}>
+                            Help {shareOfferData.suggestion?.guesserName} understand
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )
                   // Only render if inviter has a draft message (not confirmed yet)
                   // Never render for invitees - they already accepted the invitation
                   : (isInviter && invitationMessage && invitationUrl && !invitationConfirmed && !localInvitationConfirmed)
@@ -1301,9 +1367,44 @@ export function UnifiedSessionScreen({
                           )}
                         </View>
                       )
-                      : undefined
+                      : waitingStatus === 'reconciler-analyzing'
+                        ? () => (
+                          <View style={styles.waitingBanner}>
+                            <ActivityIndicator size="small" color="#6750A4" style={{ marginBottom: 8 }} />
+                            <Text style={styles.waitingBannerText}>
+                              AI is analyzing your empathy match...
+                            </Text>
+                          </View>
+                        )
+                        : waitingStatus === 'awaiting-context-share'
+                          ? () => (
+                            <View style={styles.waitingBanner}>
+                              <Text style={styles.waitingBannerText}>
+                                {partnerName || 'Your partner'}'s understanding has some gaps.
+                              </Text>
+                              <Text style={styles.waitingBannerSubtext}>
+                                Review the suggestion below to help them understand you better.
+                              </Text>
+                            </View>
+                          )
+                          : waitingStatus === 'refining-empathy'
+                            ? () => (
+                              <View style={styles.waitingBanner}>
+                                <Text style={styles.waitingBannerText}>
+                                  {partnerName || 'Your partner'} shared more info!
+                                </Text>
+                                <Text style={styles.waitingBannerSubtext}>
+                                  Update your empathy statement to include this new context.
+                                </Text>
+                              </View>
+                            )
+                            : undefined
           }
-          hideInput={waitingStatus === 'empathy-pending'}
+          hideInput={
+            waitingStatus === 'empathy-pending' ||
+            waitingStatus === 'reconciler-analyzing' ||
+            waitingStatus === 'awaiting-context-share'
+          }
         />
 
         {/* Waiting banner removed - now handled in renderAboveInput */}
@@ -1409,19 +1510,23 @@ export function UnifiedSessionScreen({
       )}
 
       {/* View Empathy Statement Drawer - for viewing full statement */}
-      {liveProposedEmpathyStatement && (
+      {(liveProposedEmpathyStatement || empathyDraftData?.draft?.content || empathyStatusData?.myAttempt?.content) && (
         <ViewEmpathyStatementDrawer
           visible={showEmpathyDrawer}
-          statement={liveProposedEmpathyStatement}
+          statement={liveProposedEmpathyStatement || empathyDraftData?.draft?.content || empathyStatusData?.myAttempt?.content || ''}
           partnerName={partnerName}
+          isRevising={isRefiningEmpathy}
           onShare={() => {
             // Capture statement at click time to avoid stale closure
-            const statementToShare = liveProposedEmpathyStatement || empathyDraftData?.draft?.content;
+            // In refining mode, use myAttempt content as fallback
+            const statementToShare = liveProposedEmpathyStatement || empathyDraftData?.draft?.content || empathyStatusData?.myAttempt?.content;
             console.log('[ViewEmpathyStatementDrawer] Share clicked', {
               hasStatement: !!statementToShare,
               statementLength: statementToShare?.length,
               hasLiveProposed: !!liveProposedEmpathyStatement,
-              hasDraft: !!empathyDraftData?.draft?.content
+              hasDraft: !!empathyDraftData?.draft?.content,
+              hasMyAttempt: !!empathyStatusData?.myAttempt?.content,
+              isRefining: isRefiningEmpathy
             });
             if (!statementToShare) {
               console.error('[ViewEmpathyStatementDrawer] No statement to share!');
@@ -1450,6 +1555,29 @@ export function UnifiedSessionScreen({
             setShowEmpathyDrawer(false);
           }}
           onClose={() => setShowEmpathyDrawer(false)}
+        />
+      )}
+
+      {/* Share Suggestion Drawer - for viewing/editing share suggestion */}
+      {shareOfferData?.hasSuggestion && shareOfferData.suggestion && (
+        <ShareSuggestionDrawer
+          visible={showShareSuggestionDrawer}
+          suggestedContent={shareOfferData.suggestion.suggestedContent}
+          partnerName={shareOfferData.suggestion.guesserName}
+          onShare={() => {
+            handleRespondToShareOffer('accept');
+            setShowShareSuggestionDrawer(false);
+          }}
+          onDecline={() => {
+            handleRespondToShareOffer('decline');
+            setShowShareSuggestionDrawer(false);
+          }}
+          onSendRefinement={(message) => {
+            // Send as a chat message to refine the suggestion
+            sendMessage(message);
+            setShowShareSuggestionDrawer(false);
+          }}
+          onClose={() => setShowShareSuggestionDrawer(false)}
         />
       )}
 
@@ -1547,6 +1675,28 @@ const useStyles = () =>
       color: t.colors.brandBlue,
     },
 
+    // Share Suggestion Panel
+    shareSuggestionContainer: {
+      paddingHorizontal: t.spacing.lg,
+      paddingVertical: t.spacing.md,
+      backgroundColor: t.colors.bgSecondary,
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
+    },
+    shareSuggestionButton: {
+      paddingVertical: t.spacing.sm,
+      paddingHorizontal: t.spacing.md,
+      backgroundColor: '#005AC1',
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    shareSuggestionButtonText: {
+      fontSize: t.typography.fontSize.md,
+      fontWeight: '500',
+      color: 'white',
+    },
+
     // Inline Cards
     inlineCard: {
       margin: 16,
@@ -1638,6 +1788,13 @@ const useStyles = () =>
       fontSize: t.typography.fontSize.sm,
       lineHeight: 20,
       textAlign: 'center',
+    },
+    waitingBannerSubtext: {
+      color: t.colors.textMuted,
+      fontSize: 12,
+      lineHeight: 18,
+      textAlign: 'center',
+      marginTop: 2,
     },
     innerThoughtsLink: {
       marginTop: t.spacing.sm,

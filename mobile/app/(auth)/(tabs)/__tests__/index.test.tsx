@@ -78,7 +78,7 @@ jest.mock('@/src/hooks/useInvitation', () => ({
   useInvitationDetails: () => mockUseInvitationDetails(),
 }));
 
-// Mock the components barrel to avoid loading NotificationInbox which imports @meet-without-fear/shared
+// Mock components that may have dependencies
 jest.mock('../../../../src/components', () => ({
   BiometricPrompt: ({ visible, testID }: { visible: boolean; testID?: string }) => {
     const { View, Text } = require('react-native');
@@ -128,6 +128,9 @@ function createMockSession(overrides: Partial<SessionSummaryDTO> = {}): SessionS
     },
     selfActionNeeded: [],
     partnerActionNeeded: [],
+    hasUnread: false,
+    lastViewedAt: '2024-01-02T00:00:00Z',
+    lastSeenChatItemId: null,
     ...overrides,
   };
 }

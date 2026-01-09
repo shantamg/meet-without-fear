@@ -967,8 +967,10 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
       where: {
         sessionId,
         OR: [
-          { senderId: user.id },
-          { role: 'AI', forUserId: user.id },
+          // Messages user sent without a specific recipient
+          { senderId: user.id, forUserId: null },
+          // Messages specifically for this user
+          { forUserId: user.id },
         ],
       },
       orderBy: { timestamp: 'desc' },
@@ -1068,5 +1070,124 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
   } catch (error) {
     console.error('[confirmInvitationMessage] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to confirm invitation message', 500);
+  }
+}
+
+// ============================================================================
+// Session Read State
+// ============================================================================
+
+/**
+ * Mark session as viewed
+ * POST /sessions/:id/viewed
+ *
+ * Updates lastViewedAt and optionally lastSeenChatItemId on the user's UserVessel.
+ * This is called when the user opens/views a session to mark it as "read".
+ */
+export async function markSessionViewed(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, ErrorCode.UNAUTHORIZED, 'Authentication required', 401);
+      return;
+    }
+
+    const sessionId = req.params.id;
+    const { lastSeenChatItemId } = req.body;
+
+    const now = new Date();
+
+    // Update or create UserVessel with read state
+    const userVessel = await prisma.userVessel.upsert({
+      where: {
+        userId_sessionId: {
+          userId: user.id,
+          sessionId,
+        },
+      },
+      update: {
+        lastViewedAt: now,
+        lastSeenChatItemId: lastSeenChatItemId ?? null,
+      },
+      create: {
+        userId: user.id,
+        sessionId,
+        lastViewedAt: now,
+        lastSeenChatItemId: lastSeenChatItemId ?? null,
+      },
+    });
+
+    successResponse(res, {
+      success: true,
+      lastViewedAt: userVessel.lastViewedAt?.toISOString() ?? now.toISOString(),
+      lastSeenChatItemId: userVessel.lastSeenChatItemId,
+    });
+  } catch (error) {
+    console.error('[markSessionViewed] Error:', error);
+    errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to mark session as viewed', 500);
+  }
+}
+
+/**
+ * Get count of sessions with unread content
+ * GET /sessions/unread-count
+ *
+ * Returns the number of sessions that have been updated since the user last viewed them.
+ * Used for the tab badge on the Sessions tab.
+ */
+export async function getUnreadSessionCount(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, ErrorCode.UNAUTHORIZED, 'Authentication required', 401);
+      return;
+    }
+
+    // Get all sessions the user is a member of, with their vessels
+    const sessions = await prisma.session.findMany({
+      where: {
+        relationship: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+        // Only count active/waiting sessions, not archived/resolved
+        status: {
+          in: ['ACTIVE', 'INVITED', 'CREATED', 'WAITING', 'PAUSED'],
+        },
+      },
+      select: {
+        id: true,
+        updatedAt: true,
+        status: true,
+        userVessels: {
+          where: { userId: user.id },
+          select: {
+            lastViewedAt: true,
+          },
+        },
+      },
+    });
+
+    // Count sessions with unread content
+    let unreadCount = 0;
+    for (const session of sessions) {
+      const userVessel = session.userVessels[0];
+      const lastViewedAt = userVessel?.lastViewedAt ?? null;
+
+      // Determine if there's unread content
+      const hasUnread = lastViewedAt === null
+        ? session.status !== 'CREATED' // Unread if not a fresh draft
+        : session.updatedAt > lastViewedAt;
+
+      if (hasUnread) {
+        unreadCount++;
+      }
+    }
+
+    successResponse(res, { count: unreadCount });
+  } catch (error) {
+    console.error('[getUnreadSessionCount] Error:', error);
+    errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to get unread count', 500);
   }
 }

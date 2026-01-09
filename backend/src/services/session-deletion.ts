@@ -12,7 +12,6 @@
  */
 
 import { prisma } from '../lib/prisma';
-import { createNotification } from './notification';
 
 export interface SessionDeletionSummary {
   sessionAbandoned: boolean;
@@ -70,17 +69,6 @@ export async function deleteSessionForUser(
   // Step 3: If session is active, mark as ABANDONED and notify partner
   const activeStatuses = ['CREATED', 'INVITED', 'ACTIVE', 'WAITING', 'PAUSED'];
   if (activeStatuses.includes(session.status)) {
-    // Notify partner if they exist
-    if (partner) {
-      await createNotification({
-        userId: partner.userId,
-        type: 'SESSION_ABANDONED',
-        sessionId: session.id,
-        actorName: displayName,
-      });
-      partnerNotified = true;
-    }
-
     // Mark session as abandoned
     await prisma.session.update({
       where: { id: sessionId },
@@ -188,13 +176,7 @@ export async function deleteSessionForUser(
     data: { subjectName: '[Deleted User]' },
   });
 
-  // 4m: Delete notifications for this session that belong to this user
-  const notificationDelete = await prisma.notification.deleteMany({
-    where: { sessionId, userId },
-  });
-  dataRecordsDeleted += notificationDelete.count;
-
-  // 4n: Delete invitations sent by this user for this session
+  // 4m: Delete invitations sent by this user for this session
   const invitationDelete = await prisma.invitation.deleteMany({
     where: { sessionId, invitedById: userId },
   });

@@ -20,14 +20,6 @@ jest.mock('../../lib/prisma');
 jest.mock('../../services/realtime');
 
 
-// Mock notification service
-jest.mock('../../services/notification', () => ({
-  notifyEmpathyShared: jest.fn().mockResolvedValue(undefined),
-  notifyEmpathyRevealed: jest.fn().mockResolvedValue(undefined),
-  notifyEmpathyNeedsWork: jest.fn().mockResolvedValue(undefined),
-  notifyEmpathyValidated: jest.fn().mockResolvedValue(undefined),
-}));
-
 // Mock bedrock
 jest.mock('../../lib/bedrock', () => ({
   getSonnetResponse: jest.fn().mockResolvedValue('{"response": "Test transition"}'),

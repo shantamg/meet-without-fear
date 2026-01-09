@@ -35,14 +35,6 @@ jest.mock('../../services/realtime', () => ({
 }));
 
 
-// Mock notification service
-jest.mock('../../services/notification', () => ({
-  notifyInvitationAccepted: jest.fn().mockResolvedValue(undefined),
-  notifyCompactSigned: jest.fn().mockResolvedValue(undefined),
-  notifySessionJoined: jest.fn().mockResolvedValue(undefined),
-  createNotification: jest.fn().mockResolvedValue({ id: 'notif-1' }),
-}));
-
 // Helper to create mock request
 function createMockRequest(options: {
   user?: { id: string; email: string; name?: string | null };

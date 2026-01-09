@@ -183,48 +183,6 @@ export {
 } from './useRealtime';
 
 // ============================================================================
-// Notifications
-// ============================================================================
-
-export {
-  useNotifications,
-  useNotificationCount,
-  notificationKeys,
-  type UseNotificationsReturn,
-} from './useNotifications';
-
-export { useNotificationChannel } from './useNotificationChannel';
-
-export {
-  usePushNotifications,
-  type UsePushNotificationsReturn,
-} from './usePushNotifications';
-
-// ============================================================================
-// Unread Notification Count
-// ============================================================================
-
-export {
-  useUnreadCount,
-  useUnreadCountContext,
-  UnreadCountProvider,
-  notificationCountKey,
-  type UseUnreadCountReturn,
-} from './useUnreadCount';
-
-// ============================================================================
-// Notification Preferences
-// ============================================================================
-
-export {
-  notificationPreferencesKeys,
-  useNotificationPreferences,
-  useUpdateNotificationPreferences,
-  type NotificationPreferencesDTO,
-  type UpdateNotificationPreferencesRequest,
-} from './useNotificationPreferences';
-
-// ============================================================================
 // Biometric Authentication
 // ============================================================================
 

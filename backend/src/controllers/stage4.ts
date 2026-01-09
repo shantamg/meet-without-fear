@@ -22,7 +22,6 @@ import {
   ErrorCode,
 } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
-import { notifyAgreementProposed, notifyAgreementConfirmed } from '../services/notification';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 import { z } from 'zod';
@@ -618,15 +617,6 @@ export async function createAgreement(req: Request, res: Response): Promise<void
         agreementId: agreement.id,
         proposedBy: user.id,
       });
-
-      // Create in-app notification for notification center
-      await notifyAgreementProposed(
-        partnerId,
-        user.name || user.firstName || 'Your partner',
-        sessionId
-      ).catch((err) =>
-        console.warn('[createAgreement] Failed to create in-app notification:', err)
-      );
     }
 
     successResponse(
@@ -783,15 +773,6 @@ export async function confirmAgreement(req: Request, res: Response): Promise<voi
         confirmed,
         bothConfirmed,
       });
-
-      // Create in-app notification for notification center
-      await notifyAgreementConfirmed(
-        partnerId,
-        user.name || user.firstName || 'Your partner',
-        sessionId
-      ).catch((err) =>
-        console.warn('[confirmAgreement] Failed to create in-app notification:', err)
-      );
     }
 
     // Check if session can be marked complete

@@ -5,7 +5,7 @@
  * Verifies that routes exist and that exports are properly defined.
  */
 
-// Mock the components barrel to avoid loading NotificationInbox which imports @meet-without-fear/shared
+// Mock components that may have dependencies
 jest.mock('../components', () => ({
   BiometricPrompt: () => null,
   Logo: () => null,
@@ -133,16 +133,6 @@ jest.mock('@tanstack/react-query', () => ({
   QueryClientProvider: ({ children }: { children: React.ReactNode }) => children,
   useQuery: () => ({ data: null, isLoading: false }),
   useMutation: () => ({ mutate: jest.fn(), isLoading: false }),
-}));
-
-// Mock notification services
-jest.mock('@/src/services/notifications', () => ({
-  configureNotificationHandler: jest.fn(),
-}));
-
-// Mock useNotifications hook
-jest.mock('@/src/hooks/useNotifications', () => ({
-  useNotifications: () => ({}),
 }));
 
 // Mock api lib

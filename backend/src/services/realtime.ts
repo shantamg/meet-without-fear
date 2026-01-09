@@ -36,6 +36,7 @@ export type SessionEvent = Extract<
   | 'empathy.share_suggestion'
   | 'empathy.revealed'
   | 'empathy.refining'
+  | 'empathy.context_shared'
 >;
 
 // Re-export for backward compatibility

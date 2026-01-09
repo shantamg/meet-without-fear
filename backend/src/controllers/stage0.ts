@@ -8,7 +8,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { notifyPartner } from '../services/realtime';
-import { notifyCompactSigned } from '../services/notification';
 import { ApiResponse, ErrorCode, signCompactRequestSchema } from '@meet-without-fear/shared';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
@@ -208,16 +207,6 @@ export async function signCompact(req: Request, res: Response): Promise<void> {
       await notifyPartner(sessionId, notificationTargetId, 'partner.signed_compact', {
         signedAt,
       });
-
-      // Create in-app notification for notification center
-      const signerDisplayName = user.firstName || user.name || 'Your partner';
-      await notifyCompactSigned(
-        notificationTargetId,
-        signerDisplayName,
-        sessionId
-      ).catch((err) =>
-        console.warn('[signCompact] Failed to create in-app notification:', err)
-      );
     }
 
     successResponse(res, {

@@ -9,8 +9,6 @@ import {
 import { useRouter } from 'expo-router';
 import {
   User,
-  Settings,
-  Bell,
   Shield,
   HelpCircle,
   LogOut,
@@ -75,14 +73,7 @@ export default function SettingsScreen() {
     },
   ];
 
-  const notificationMenuItems = [
-    {
-      icon: Bell,
-      label: 'Notifications',
-      onPress: () => {
-        router.push('/settings/notifications');
-      },
-    },
+  const memoriesMenuItems = [
     {
       icon: Star,
       label: 'Things to Remember',
@@ -144,15 +135,15 @@ export default function SettingsScreen() {
           ))}
         </View>
 
-        {/* Notification & Memory Menu items */}
+        {/* Memory Menu items */}
         <View style={styles.menuSection}>
-          {notificationMenuItems.map((item, index) => (
+          {memoriesMenuItems.map((item, index) => (
             <TouchableOpacity
               key={item.label}
               style={[
                 styles.menuItem,
                 index === 0 && styles.menuItemFirst,
-                index === notificationMenuItems.length - 1 && styles.menuItemLast,
+                index === memoriesMenuItems.length - 1 && styles.menuItemLast,
               ]}
               onPress={item.onPress}
             >

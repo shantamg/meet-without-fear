@@ -45,6 +45,9 @@ import {
   useConfirmAgreement,
   useCreateAgreement,
   useResolveSession,
+  useEmpathyStatus,
+  useShareOffer,
+  useRespondToShareOffer,
 } from './useStages';
 
 // ============================================================================
@@ -115,6 +118,9 @@ type WaitingStatusState =
   | 'partner-completed-witness' // Partner completed witness stage
   | 'partner-shared-empathy' // Partner shared their empathy attempt
   | 'partner-confirmed-needs' // Partner confirmed their needs
+  | 'reconciler-analyzing' // Reconciler is analyzing empathy
+  | 'awaiting-context-share' // Waiting for user to share context
+  | 'refining-empathy' // Guesser is refining empathy
   | null;
 
 interface UnifiedSessionState {
@@ -375,6 +381,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { data: revealData } = useStrategiesReveal(sessionId);
   const { data: agreementsData } = useAgreements(sessionId);
 
+  // Empathy Reconciler Data
+  const { data: empathyStatusData } = useEmpathyStatus(sessionId);
+  const { data: shareOfferData } = useShareOffer(sessionId);
+  const { mutate: respondToShareOffer } = useRespondToShareOffer();
+
   // -------------------------------------------------------------------------
   // Mutation Hooks
   // -------------------------------------------------------------------------
@@ -406,6 +417,14 @@ export function useUnifiedSession(sessionId: string | undefined) {
   useCreateAgreement(); // Available if needed for hybrid strategies
   const { mutate: resolveSession } = useResolveSession();
   const { addOptimisticMessage, removeOptimisticMessage } = useOptimisticMessage();
+
+  const handleRespondToShareOffer = useCallback(
+    (action: 'accept' | 'decline' | 'refine', refinedContent?: string) => {
+      if (!sessionId) return;
+      respondToShareOffer({ sessionId, action, refinedContent });
+    },
+    [sessionId, respondToShareOffer]
+  );
 
   // Initial message - fetch AI-generated first message when session has no messages
   const { mutate: fetchInitialMessage, isPending: isFetchingInitialMessage } = useFetchInitialMessage();
@@ -510,8 +529,20 @@ export function useUnifiedSession(sessionId: string | undefined) {
       newWaitingStatus = 'partner-completed-witness';
     }
     // Stage 2: Waiting for partner to share empathy
-    else if (empathyDraftData?.alreadyConsented && !partnerEmpathy) {
+    else if (empathyDraftData?.alreadyConsented && !partnerEmpathy && !empathyStatusData?.analyzing && !empathyStatusData?.awaitingSharing) {
       newWaitingStatus = 'empathy-pending';
+    }
+    // Stage 2: Reconciler is analyzing
+    else if (empathyStatusData?.analyzing) {
+      newWaitingStatus = 'reconciler-analyzing';
+    }
+    // Stage 2: Waiting for user to respond to share suggestion (Subject)
+    else if (shareOfferData?.hasSuggestion) {
+      newWaitingStatus = 'awaiting-context-share';
+    }
+    // Stage 2: Waiting for partner to refine empathy (Guesser)
+    else if (empathyStatusData?.hasNewSharedContext) {
+      newWaitingStatus = 'refining-empathy';
     }
     // Stage 2: Partner just shared empathy (transition)
     else if (
@@ -554,6 +585,10 @@ export function useUnifiedSession(sessionId: string | undefined) {
     overlappingStrategies.length,
     state.waitingStatus,
     state.previousWaitingStatus,
+    empathyStatusData?.analyzing,
+    empathyStatusData?.awaitingSharing,
+    empathyStatusData?.hasNewSharedContext,
+    shareOfferData?.hasSuggestion,
   ]);
 
   // -------------------------------------------------------------------------
@@ -698,6 +733,9 @@ export function useUnifiedSession(sessionId: string | undefined) {
           },
         });
       }
+
+      // Note: Share suggestion from reconciler is now handled via the low-profile panel
+      // + ShareSuggestionDrawer pattern instead of an inline card.
     }
 
     // Stage 3: Need Mapping cards
@@ -1240,6 +1278,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
     overlappingStrategies,
     agreementsData,
     agreements,
+    empathyStatusData,
+    shareOfferData,
     isGenerating,
     isSharingEmpathy,
     isProposing,
@@ -1270,6 +1310,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     handleSubmitRankings,
     handleConfirmAgreement,
     handleResolveSession,
+    handleRespondToShareOffer,
 
     // Utility actions
     clearMirrorIntervention: () => dispatch({ type: 'CLEAR_MIRROR_INTERVENTION' }),

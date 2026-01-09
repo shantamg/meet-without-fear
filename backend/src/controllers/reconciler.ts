@@ -24,6 +24,7 @@ import {
   runReconciler,
   generateShareOffer,
   respondToShareOffer,
+  respondToShareSuggestion,
   getReconcilerStatus,
   generateReconcilerSummary,
 } from '../services/reconciler';
@@ -117,25 +118,25 @@ export async function runReconcilerHandler(
       sessionId,
       aUnderstandingB: result.aUnderstandingB
         ? {
-            guesserId: '', // Will be filled from DB
-            guesserName: '',
-            subjectId: '',
-            subjectName: '',
-            result: result.aUnderstandingB,
-            shareOfferStatus: 'NOT_OFFERED',
-            analyzedAt: new Date().toISOString(),
-          }
+          guesserId: '', // Will be filled from DB
+          guesserName: '',
+          subjectId: '',
+          subjectName: '',
+          result: result.aUnderstandingB,
+          shareOfferStatus: 'NOT_OFFERED',
+          analyzedAt: new Date().toISOString(),
+        }
         : null,
       bUnderstandingA: result.bUnderstandingA
         ? {
-            guesserId: '',
-            guesserName: '',
-            subjectId: '',
-            subjectName: '',
-            result: result.bUnderstandingA,
-            shareOfferStatus: 'NOT_OFFERED',
-            analyzedAt: new Date().toISOString(),
-          }
+          guesserId: '',
+          guesserName: '',
+          subjectId: '',
+          subjectName: '',
+          result: result.bUnderstandingA,
+          shareOfferStatus: 'NOT_OFFERED',
+          analyzedAt: new Date().toISOString(),
+        }
         : null,
       bothCompleted: result.bothCompleted,
       readyToProceed: result.readyToProceed,
@@ -181,25 +182,25 @@ export async function getReconcilerStatusHandler(
       hasRun: status.hasRun,
       aUnderstandingB: status.aUnderstandingB
         ? {
-            guesserId: '',
-            guesserName: '',
-            subjectId: '',
-            subjectName: '',
-            result: status.aUnderstandingB,
-            shareOfferStatus: 'NOT_OFFERED',
-            analyzedAt: new Date().toISOString(),
-          }
+          guesserId: '',
+          guesserName: '',
+          subjectId: '',
+          subjectName: '',
+          result: status.aUnderstandingB,
+          shareOfferStatus: 'NOT_OFFERED',
+          analyzedAt: new Date().toISOString(),
+        }
         : null,
       bUnderstandingA: status.bUnderstandingA
         ? {
-            guesserId: '',
-            guesserName: '',
-            subjectId: '',
-            subjectName: '',
-            result: status.bUnderstandingA,
-            shareOfferStatus: 'NOT_OFFERED',
-            analyzedAt: new Date().toISOString(),
-          }
+          guesserId: '',
+          guesserName: '',
+          subjectId: '',
+          subjectName: '',
+          result: status.bUnderstandingA,
+          shareOfferStatus: 'NOT_OFFERED',
+          analyzedAt: new Date().toISOString(),
+        }
         : null,
       pendingShareOffers: status.pendingShareOffers,
       readyForStage3: status.readyForStage3,
@@ -241,60 +242,57 @@ export async function getShareOfferHandler(
       where: {
         userId: user.id,
         result: { sessionId },
-        status: 'OFFERED',
+        status: { in: ['OFFERED', 'PENDING'] },
       },
       include: {
         result: true,
       },
-    });
+    }) as any;
 
     if (!shareOffer) {
-      // Try to generate one if there's a result that needs sharing
+      // Try to generate one for legacy reciprocal flow if applicable
       const offer = await generateShareOffer(sessionId, user.id);
 
       if (offer) {
-        const response: GetQuoteOptionsResponse = {
-          gapDescription: offer.gapDescription,
-          quoteOptions: offer.quoteOptions,
-          recommendedIndex: offer.recommendedIndex,
-          hasGoodOptions: offer.quoteOptions.length > 0,
-        };
-
         successResponse(res, {
-          hasPendingOffer: true,
-          offerMessage: offer.offerMessage,
-          quoteOptions: response,
+          hasSuggestion: true,
+          suggestion: {
+            guesserName: 'Your partner',
+            suggestedContent: offer.offerMessage,
+            reason: offer.gapDescription || 'To help them understand better',
+            canRefine: true,
+          }
         });
         return;
       }
 
       successResponse(res, {
-        hasPendingOffer: false,
-        offerMessage: null,
-        quoteOptions: null,
+        hasSuggestion: false,
+        suggestion: null,
       });
       return;
     }
 
-    // Return the existing offer
-    const quoteOptions = shareOffer.quoteOptions as Array<{
-      content: string;
-      addressesGap: string;
-      intensity: 'low' | 'medium' | 'high';
-      requiresContext: boolean;
-    }> | null;
+    // Get partner name (the one who made the guess) from the result
+    const guesserName = shareOffer.result.guesserName || 'Your partner';
+
+    // If it was PENDING, mark as OFFERED now that it's being retrieved
+    if (shareOffer.status === 'PENDING') {
+      await prisma.reconcilerShareOffer.update({
+        where: { id: shareOffer.id },
+        data: { status: 'OFFERED' },
+      });
+      console.log(`[Reconciler] Marked share offer ${shareOffer.id} as OFFERED for user ${user.id}`);
+    }
 
     successResponse(res, {
-      hasPendingOffer: true,
-      offerMessage: shareOffer.offerMessage,
-      quoteOptions: quoteOptions
-        ? {
-            gapDescription: shareOffer.result.mostImportantGap || shareOffer.result.gapSummary,
-            quoteOptions,
-            recommendedIndex: shareOffer.recommendedQuote,
-            hasGoodOptions: quoteOptions.length > 0,
-          }
-        : null,
+      hasSuggestion: true,
+      suggestion: {
+        guesserName,
+        suggestedContent: shareOffer.suggestedContent || shareOffer.offerMessage || '',
+        reason: shareOffer.suggestedReason || shareOffer.result.mostImportantGap || 'This will help them understand your perspective more fully.',
+        canRefine: true,
+      }
     });
   } catch (error) {
     console.error('[getShareOfferHandler] Error:', error);
@@ -346,10 +344,27 @@ export async function respondToShareOfferHandler(
     }
 
     // Respond to the share offer
-    const result = await respondToShareOffer(sessionId, user.id, parseResult.data);
+    let result;
+    if (parseResult.data.action) {
+      // Use new asymmetric reconciler service
+      result = await respondToShareSuggestion(sessionId, user.id, {
+        action: parseResult.data.action as 'accept' | 'decline' | 'refine',
+        refinedContent: parseResult.data.refinedContent,
+      });
+    } else if (parseResult.data.accept !== undefined) {
+      // Use legacy reciprocal reconciler service
+      result = await respondToShareOffer(sessionId, user.id, {
+        accept: parseResult.data.accept,
+        selectedQuoteIndex: parseResult.data.selectedQuoteIndex,
+        customContent: parseResult.data.customContent,
+      });
+    } else {
+      errorResponse(res, 'VALIDATION_ERROR', 'Either "action" or "accept" must be provided', 400);
+      return;
+    }
 
     // Notify partner if content was shared
-    if (result.status === 'ACCEPTED') {
+    if (result.status === 'ACCEPTED' || result.status === 'shared') {
       // Get partner ID
       const members = await prisma.relationshipMember.findMany({
         where: {
@@ -363,17 +378,24 @@ export async function respondToShareOfferHandler(
       const partnerId = members.find((m) => m.userId !== user.id)?.userId;
 
       if (partnerId) {
-        await notifyPartner(sessionId, partnerId, 'partner.additional_context_shared', {
+        // Use more specific event if it's from asymmetric flow
+        const eventName = parseResult.data.action
+          ? 'empathy.context_shared'
+          : 'partner.additional_context_shared';
+
+        await notifyPartner(sessionId, partnerId, eventName, {
           stage: 2,
           sharedBy: user.id,
+          content: result.sharedContent,
         });
       }
     }
 
     const response: RespondToShareOfferResponse = {
-      status: result.status,
+      status: result.status as any,
       sharedContent: result.sharedContent,
-      confirmationMessage: result.confirmationMessage,
+      confirmationMessage: (result as any).confirmationMessage || 'Content shared successfully.',
+      guesserUpdated: (result as any).guesserUpdated,
     };
 
     successResponse(res, response);

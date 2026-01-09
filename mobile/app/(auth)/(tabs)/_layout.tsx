@@ -1,34 +1,24 @@
-import { Tabs, useRouter } from 'expo-router';
-import { Home, FolderOpen, Settings, Bell } from 'lucide-react-native';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Tabs } from 'expo-router';
+import { Home, FolderOpen, Settings } from 'lucide-react-native';
+import { StyleSheet, View, Text } from 'react-native';
 import { colors } from '@/src/theme';
-import { NotificationBadge } from '@/src/components/NotificationBadge';
-import { useNotificationCount } from '@/src/hooks/useNotifications';
+import { useUnreadSessionCount } from '@/src/hooks/useUnreadSessionCount';
 
 /**
- * Header notification bell button with badge
+ * Sessions tab icon with unread badge
  */
-function NotificationButton() {
-  const router = useRouter();
-  const { unreadCount } = useNotificationCount();
-
-  const handlePress = () => {
-    router.push('/notifications');
-  };
+function SessionsTabIcon({ color, size }: { color: string; size: number }) {
+  const { count } = useUnreadSessionCount();
 
   return (
-    <TouchableOpacity
-      style={styles.notificationButton}
-      onPress={handlePress}
-      accessibilityLabel={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
-      accessibilityRole="button"
-      testID="notification-bell-button"
-    >
-      <View>
-        <Bell color={colors.textPrimary} size={22} />
-        <NotificationBadge count={unreadCount} />
-      </View>
-    </TouchableOpacity>
+    <View style={styles.iconContainer}>
+      <FolderOpen color={color} size={size} />
+      {count > 0 && (
+        <View style={styles.badge} testID="sessions-badge">
+          <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -60,7 +50,6 @@ export default function TabLayout() {
             <Home color={color} size={size} />
           ),
           headerTitle: 'Meet Without Fear',
-          headerRight: () => <NotificationButton />,
         }}
       />
       <Tabs.Screen
@@ -68,10 +57,9 @@ export default function TabLayout() {
         options={{
           title: 'Sessions',
           tabBarIcon: ({ color, size }: { color: string; size: number }) => (
-            <FolderOpen color={color} size={size} />
+            <SessionsTabIcon color={color} size={size} />
           ),
           headerTitle: 'My Sessions',
-          headerRight: () => <NotificationButton />,
         }}
       />
       <Tabs.Screen
@@ -111,8 +99,24 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: colors.textPrimary,
   },
-  notificationButton: {
-    padding: 8,
-    marginRight: 8,
+  iconContainer: {
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

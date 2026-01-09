@@ -284,8 +284,10 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       where: {
         sessionId,
         OR: [
-          { senderId: user.id },
-          { role: 'AI', forUserId: user.id },
+          // Messages user sent without a specific recipient
+          { senderId: user.id, forUserId: null },
+          // Messages specifically for this user
+          { forUserId: user.id },
         ],
       },
       orderBy: { timestamp: 'desc' },
@@ -827,7 +829,12 @@ export async function confirmFeelHeard(
           where: {
             sessionId,
             stage: 1,
-            OR: [{ senderId: user.id }, { role: 'AI', forUserId: user.id }],
+            OR: [
+              // Messages user sent without a specific recipient
+              { senderId: user.id, forUserId: null },
+              // Messages specifically for this user
+              { forUserId: user.id },
+            ],
           },
           orderBy: { timestamp: 'asc' },
           take: 15, // Get recent context
@@ -985,41 +992,42 @@ Respond in JSON format:
         });
 
         if (partnerEmpathyAttempt) {
-          console.log(`[confirmFeelHeard] Partner ${partnerId} has HELD empathy - triggering reconciler`);
+          console.log(`[confirmFeelHeard] Partner ${partnerId} has HELD empathy - triggering reconciler (non-blocking)`);
 
-          try {
-            // Run reconciler for partner→user direction
-            // Partner is the guesser (who wrote empathy about us)
-            // Current user is the subject (whose Stage 1 content will be compared)
-            const result = await runReconcilerForDirection(sessionId, partnerId, user.id);
-            reconcilerTriggered = true;
-            reconcilerResult = {
-              empathyStatus: result.empathyStatus,
-              shareOffer: result.shareOffer,
-            };
+          // Trigger reconciler in the background
+          (async () => {
+            try {
+              console.log(`[confirmFeelHeard] Calling runReconcilerForDirection for sessionId=${sessionId}, guesserId=${partnerId}, subjectId=${user.id}`);
+              const result = await runReconcilerForDirection(sessionId, partnerId, user.id);
 
-            console.log(`[confirmFeelHeard] Reconciler result: status=${result.empathyStatus}`);
+              console.log(`[confirmFeelHeard] Reconciler completed: status=${result.empathyStatus}, hasSuggestion=${!!result.shareOffer}`);
 
-            // If there's a share suggestion, notify the current user (subject)
-            if (result.empathyStatus === 'AWAITING_SHARING' && result.shareOffer) {
-              await notifyPartner(sessionId, user.id, 'empathy.share_suggestion', {
-                guesserName: session.relationship.members.find(m => m.userId === partnerId)
-                  ? 'your partner'
-                  : 'your partner',
-                suggestedContent: result.shareOffer.suggestedContent,
-              });
+              // If there's a share suggestion, notify the current user (subject)
+              if (result.empathyStatus === 'AWAITING_SHARING' && result.shareOffer) {
+                console.log(`[confirmFeelHeard] Significant gaps found - notifying subject ${user.id} of share suggestion`);
+                await notifyPartner(sessionId, user.id, 'empathy.share_suggestion', {
+                  guesserName: session.relationship.members.find(m => m.userId === partnerId)
+                    ? 'your partner'
+                    : 'your partner',
+                  suggestedContent: result.shareOffer.suggestedContent,
+                  suggestedReason: (result.shareOffer as any).reason || (result.shareOffer as any).suggestedReason,
+                });
+              }
+
+              // If empathy was revealed directly (no gaps), notify the partner (guesser)
+              if (result.empathyStatus === 'REVEALED') {
+                console.log(`[confirmFeelHeard] No significant gaps - notifying guesser ${partnerId} that empathy was revealed`);
+                await notifyPartner(sessionId, partnerId, 'empathy.revealed', {
+                  direction: 'outgoing',
+                });
+              }
+            } catch (error) {
+              console.error('[confirmFeelHeard] Reconciler background task failed:', error);
             }
-
-            // If empathy was revealed directly (no gaps), notify the partner (guesser)
-            if (result.empathyStatus === 'REVEALED') {
-              await notifyPartner(sessionId, partnerId, 'empathy.revealed', {
-                direction: 'outgoing',
-              });
-            }
-          } catch (error) {
-            console.error('[confirmFeelHeard] Failed to run reconciler:', error);
-            // Continue without reconciler - not a critical failure for Stage 1 completion
-          }
+          })();
+          reconcilerTriggered = true;
+        } else {
+          console.log(`[confirmFeelHeard] Partner ${partnerId} does not have HELD empathy - reconciler NOT triggered`);
         }
       }
     }
@@ -1031,9 +1039,7 @@ Respond in JSON format:
       partnerCompleted,
       transitionMessage,
       advancedToStage: advancedToStage2 ? 2 : null,
-      // New: Reconciler info if triggered
       reconcilerTriggered,
-      reconcilerResult,
     });
   } catch (error) {
     console.error('[confirmFeelHeard] Error:', error);
@@ -1103,14 +1109,17 @@ export async function getConversationHistory(
       cursorCondition.timestamp = { gt: new Date(after) };
     }
 
-    // Get messages - only user's own messages and AI responses to them (data isolation)
+    // Get messages - user's own messages (without specific recipient) + messages specifically for them
+    // This ensures data isolation: messages with forUserId only show to that user
     console.log(`[getConversationHistory:${requestId}] Fetching messages with limit=${limit}, before=${before || 'none'}, after=${after || 'none'}, order=${order}`);
     const messages = await prisma.message.findMany({
       where: {
         sessionId,
         OR: [
-          { senderId: user.id },
-          { role: 'AI', forUserId: user.id },
+          // Messages user sent without a specific recipient (broadcast to all, e.g., USER messages)
+          { senderId: user.id, forUserId: null },
+          // Messages specifically for this user (AI responses, SHARED_CONTEXT, etc.)
+          { forUserId: user.id },
         ],
         ...cursorCondition,
       },
@@ -1224,8 +1233,10 @@ export async function getInitialMessage(
       where: {
         sessionId,
         OR: [
-          { senderId: user.id },
-          { role: 'AI', forUserId: user.id },
+          // Messages user sent without a specific recipient
+          { senderId: user.id, forUserId: null },
+          // Messages specifically for this user
+          { forUserId: user.id },
         ],
       },
     });

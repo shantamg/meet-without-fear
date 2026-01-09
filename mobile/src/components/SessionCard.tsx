@@ -114,12 +114,17 @@ export function SessionCard({ session, isHero = false, noMargin = false }: Sessi
     >
       {/* Header: Partner name and time */}
       <View style={styles.header}>
-        <Text
-          style={[styles.partnerName, isHero && styles.heroPartnerName]}
-          numberOfLines={1}
-        >
-          {partnerName}
-        </Text>
+        <View style={styles.nameContainer}>
+          {session.hasUnread && !isHero && (
+            <View style={styles.unreadDot} testID="unread-dot" />
+          )}
+          <Text
+            style={[styles.partnerName, isHero && styles.heroPartnerName]}
+            numberOfLines={1}
+          >
+            {partnerName}
+          </Text>
+        </View>
         <Text style={[styles.timeAgo, isHero && styles.heroTimeAgo]}>
           {timeAgo}
         </Text>
@@ -212,13 +217,29 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
+  // Name container (for unread dot + name alignment)
+  nameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+
+  // Blue dot indicator for unread sessions
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+    marginRight: 8,
+  },
+
   // Partner name
   partnerName: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.textPrimary,
     flex: 1,
-    marginRight: 8,
   },
   heroPartnerName: {
     color: '#FFFFFF',

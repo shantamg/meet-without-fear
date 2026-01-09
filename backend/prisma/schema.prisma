@@ -45,7 +45,6 @@ model User {
   exerciseCompletions EmotionalExerciseCompletion[]
   invitationsSent     Invitation[]                  @relation("InvitedBy")
   innerWorkSessions   InnerWorkSession[]
-  notifications       Notification[]
   userMemories        UserMemory[]
 
   // Inner Work: Needs Assessment
@@ -117,7 +116,6 @@ model Session {
   consentRecords      ConsentRecord[]
   exerciseCompletions EmotionalExerciseCompletion[]
   invitations         Invitation[]
-  notifications       Notification[]
   userMemories        UserMemory[]
 
   // Linked Inner Thoughts sessions for private reflection during partner session
@@ -258,6 +256,13 @@ model UserVessel {
 
   // Embedding for semantic search within user's own content
   embedding Unsupported("vector(1024)")?
+
+  // === Session Read State ===
+  // When the user last viewed/opened this session's chat
+  // Used to determine: (1) if session has unread content, (2) where "new messages" line appears
+  lastViewedAt DateTime?
+  // The ID of the last chat item the user saw (for "new messages" line placement)
+  lastSeenChatItemId String?
 
   @@unique([userId, sessionId])
   @@index([userId])
@@ -511,6 +516,7 @@ enum MessageRole {
   EMPATHY_STATEMENT     // User's shared empathy statement (shown in chat history)
   EMPATHY_REVEAL_INTRO  // AI intro message when revealing partner's empathy to user
   SHARED_CONTEXT        // Context shared by subject to help guesser refine empathy
+  SHARE_SUGGESTION      // Suggested content for subject to share (reconciler)
   EMPATHY_VALIDATION_PROMPT // AI prompt asking user to validate partner's understanding
 }
 
@@ -843,7 +849,6 @@ model Invitation {
   acceptedAt        DateTime?
   declinedAt        DateTime?
   declineReason     String?
-  notifications     Notification[]
 
   @@index([sessionId])
   @@index([status])
@@ -856,46 +861,6 @@ enum InvitationStatus {
   EXPIRED
 }
 
-// ============================================================================
-// Notifications
-// ============================================================================
-
-model Notification {
-  id           String           @id @default(cuid())
-  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId       String
-  type         NotificationType
-  title        String
-  body         String           @db.Text
-  read         Boolean          @default(false)
-  session      Session?         @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  sessionId    String?
-  invitation   Invitation?      @relation(fields: [invitationId], references: [id], onDelete: SetNull)
-  invitationId String?
-  actorName    String?          // Name of the person who triggered the notification
-  createdAt    DateTime         @default(now())
-
-  @@index([userId, read, createdAt])
-  @@index([userId, createdAt])
-}
-
-enum NotificationType {
-  INVITATION_RECEIVED
-  INVITATION_ACCEPTED
-  COMPACT_SIGNED
-  SESSION_JOINED
-  PARTNER_MESSAGE
-  EMPATHY_SHARED
-  EMPATHY_REVEALED      // Partner's empathy statement is now visible to you
-  EMPATHY_NEEDS_WORK    // Your empathy statement needs refinement
-  EMPATHY_VALIDATED     // Partner validated your empathy statement as accurate
-  NEEDS_SHARED
-  AGREEMENT_PROPOSED
-  AGREEMENT_CONFIRMED
-  SESSION_RESOLVED
-  FOLLOW_UP_REMINDER
-  SESSION_ABANDONED
-}
 
 // ============================================================================
 // User Memory (Things to Always Remember)

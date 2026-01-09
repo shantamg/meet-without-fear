@@ -63,7 +63,6 @@ const tables = [
   'InnerWorkMessage',
   'InnerWorkSession',
   'UserMemory',
-  'Notification',
   'ReconcilerShareOffer',
   'ReconcilerResult',
   'EmpathyValidation',
