@@ -131,6 +131,9 @@ export function UnifiedSessionScreen({
     hasMoreMessages,
     isFetchingMoreMessages,
 
+    // Unread tracking
+    lastSeenChatItemIdForSeparator,
+
     // Overlay state
     activeOverlay,
 
@@ -1188,7 +1191,9 @@ export function UnifiedSessionScreen({
           // This ensures the first AI message after compact signing gets typewriter animation
           skipInitialHistory={justSignedCompact && hasCompletedMoodCheck}
           // ID of last seen chat item for "new messages" separator
-          lastSeenChatItemId={session?.lastSeenChatItemId}
+          // Uses captured value from before session was marked viewed, so new messages
+          // arriving while viewing don't trigger a separator
+          lastSeenChatItemId={lastSeenChatItemIdForSeparator}
           // Show compact as custom empty state during onboarding when not signed
           customEmptyState={
             isInOnboardingUnsigned ? compactEmptyStateElement : undefined

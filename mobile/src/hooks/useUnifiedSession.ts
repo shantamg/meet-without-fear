@@ -13,6 +13,7 @@ import { ApiClientError } from '../lib/api';
 import {
   useSessionState,
   useConfirmInvitationMessage,
+  useMarkSessionViewed,
 } from './useSessions';
 import {
   useInfiniteMessages,
@@ -446,6 +447,53 @@ export function useUnifiedSession(sessionId: string | undefined) {
     if (!pages || pages.length === 0) return [];
     return [...pages].reverse().flatMap(page => page.messages);
   }, [messagesData]);
+
+  // -------------------------------------------------------------------------
+  // Mark Session as Viewed
+  // -------------------------------------------------------------------------
+  // Mark the session as viewed when user opens it, which clears unread indicators
+  const { mutate: markViewed } = useMarkSessionViewed(sessionId);
+  const hasMarkedViewed = useRef(false);
+
+  // Capture the initial lastSeenChatItemId when session first loads
+  // This is used for the "New messages" separator and should NOT update
+  // while the user is actively viewing the session
+  const initialLastSeenChatItemIdRef = useRef<string | null | undefined>(undefined);
+  const [lastSeenChatItemIdForSeparator, setLastSeenChatItemIdForSeparator] = useState<string | null>(null);
+
+  // Capture initial value when session loads (before marking viewed)
+  useEffect(() => {
+    if (
+      session?.lastSeenChatItemId !== undefined &&
+      initialLastSeenChatItemIdRef.current === undefined &&
+      !hasMarkedViewed.current
+    ) {
+      initialLastSeenChatItemIdRef.current = session.lastSeenChatItemId;
+      setLastSeenChatItemIdForSeparator(session.lastSeenChatItemId);
+    }
+  }, [session?.lastSeenChatItemId]);
+
+  useEffect(() => {
+    // Only mark viewed once per session load, when we have messages
+    if (!sessionId || hasMarkedViewed.current || messages.length === 0) return;
+
+    // Get the newest message ID (last in the chronologically sorted array)
+    const newestMessageId = messages[messages.length - 1]?.id;
+
+    markViewed({ lastSeenChatItemId: newestMessageId });
+    hasMarkedViewed.current = true;
+
+    // Clear the separator after marking viewed - user has now "seen" all messages
+    setLastSeenChatItemIdForSeparator(null);
+  }, [sessionId, messages, markViewed]);
+
+  // Reset the flags when sessionId changes (user navigates to a different session)
+  useEffect(() => {
+    hasMarkedViewed.current = false;
+    initialLastSeenChatItemIdRef.current = undefined;
+    setLastSeenChatItemIdForSeparator(null);
+  }, [sessionId]);
+
   // Only show 'Partner' fallback after data has loaded, otherwise show empty string
   const partnerName = loadingSession
     ? ''
@@ -1226,6 +1274,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
     isSigningCompact,
     isConfirmingFeelHeard,
     showFeelHeardConfirmation,
+
+    // Unread tracking - for "New messages" separator in chat
+    // This is the lastSeenChatItemId from BEFORE the user opened the session
+    // It's cleared after markViewed is called so new messages don't show a separator
+    lastSeenChatItemIdForSeparator,
 
     // Pagination for loading older messages
     fetchMoreMessages: fetchNextPage,

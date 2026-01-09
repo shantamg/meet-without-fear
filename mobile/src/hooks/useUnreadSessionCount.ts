@@ -8,11 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '@/src/lib/api';
 import type { UnreadSessionCountResponse } from '@meet-without-fear/shared';
-
-/**
- * Query key for unread session count
- */
-export const unreadSessionCountKey = ['sessions', 'unread-count'] as const;
+import { sessionKeys } from './useSessions';
 
 /**
  * Fetch unread session count from the API
@@ -29,7 +25,7 @@ async function fetchUnreadSessionCount(): Promise<number> {
  */
 export function useUnreadSessionCount() {
   const { data: count = 0, isLoading, error } = useQuery({
-    queryKey: unreadSessionCountKey,
+    queryKey: sessionKeys.unreadCount(),
     queryFn: fetchUnreadSessionCount,
     // Refetch every 30 seconds to keep badge up to date
     refetchInterval: 30000,
