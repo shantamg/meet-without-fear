@@ -246,4 +246,11 @@ export interface RespondToShareSuggestionResponse {
   status: 'shared' | 'declined';
   /** The content that was shared (if accepted/refined) */
   sharedContent: string | null;
+  /** The "what you shared" message (for optimistic UI replacement) */
+  sharedMessage?: {
+    id: string;
+    content: string;
+    stage: number;
+    timestamp: string;
+  };
 }

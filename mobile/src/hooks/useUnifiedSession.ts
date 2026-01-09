@@ -422,9 +422,13 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const handleRespondToShareOffer = useCallback(
     (action: 'accept' | 'decline' | 'refine', refinedContent?: string) => {
       if (!sessionId) return;
-      respondToShareOffer({ sessionId, action, refinedContent });
+      // Pass sharedContent for optimistic UI when accepting
+      const sharedContent = action === 'accept'
+        ? (refinedContent || shareOfferData?.suggestion?.suggestedContent)
+        : undefined;
+      respondToShareOffer({ sessionId, action, refinedContent, sharedContent });
     },
-    [sessionId, respondToShareOffer]
+    [sessionId, respondToShareOffer, shareOfferData?.suggestion?.suggestedContent]
   );
 
   // Initial message - fetch AI-generated first message when session has no messages

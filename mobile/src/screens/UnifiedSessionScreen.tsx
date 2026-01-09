@@ -315,6 +315,10 @@ export function UnifiedSessionScreen({
   // Once user clicks Share, this stays true even if server data temporarily reverts
   const [hasSharedEmpathyLocal, setHasSharedEmpathyLocal] = useState(false);
 
+  // Local latch for share suggestion - once user responds, hide panel immediately
+  // This prevents the "Help X understand" button from flashing during API call
+  const [hasRespondedToShareOfferLocal, setHasRespondedToShareOfferLocal] = useState(false);
+
   // -------------------------------------------------------------------------
   // Local State for Session Entry Mood Check
   // -------------------------------------------------------------------------
@@ -1266,7 +1270,8 @@ export function UnifiedSessionScreen({
                     </Animated.View>
                   )
                   // Show share suggestion panel when reconciler generated a suggestion
-                  : (shareOfferData?.hasSuggestion && shareOfferData.suggestion)
+                  // Hide immediately via local latch when user responds (before API completes)
+                  : (shareOfferData?.hasSuggestion && shareOfferData.suggestion && !hasRespondedToShareOfferLocal)
                     ? () => (
                       <View style={styles.shareSuggestionContainer}>
                         <TouchableOpacity
@@ -1564,16 +1569,20 @@ export function UnifiedSessionScreen({
       )}
 
       {/* Share Suggestion Drawer - for viewing/editing share suggestion */}
-      {shareOfferData?.hasSuggestion && shareOfferData.suggestion && (
+      {shareOfferData?.hasSuggestion && shareOfferData.suggestion && !hasRespondedToShareOfferLocal && (
         <ShareSuggestionDrawer
           visible={showShareSuggestionDrawer}
           suggestedContent={shareOfferData.suggestion.suggestedContent}
           partnerName={shareOfferData.suggestion.guesserName}
           onShare={() => {
+            // Set local latch immediately to hide panel during API call
+            setHasRespondedToShareOfferLocal(true);
             handleRespondToShareOffer('accept');
             setShowShareSuggestionDrawer(false);
           }}
           onDecline={() => {
+            // Set local latch immediately to hide panel during API call
+            setHasRespondedToShareOfferLocal(true);
             handleRespondToShareOffer('decline');
             setShowShareSuggestionDrawer(false);
           }}

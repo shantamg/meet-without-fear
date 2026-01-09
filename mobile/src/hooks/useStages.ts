@@ -183,25 +183,138 @@ export function useRespondToShareOffer(
     UseMutationOptions<
       RespondToShareSuggestionResponse,
       ApiClientError,
-      { sessionId: string } & RespondToShareSuggestionRequest
+      { sessionId: string; sharedContent?: string } & RespondToShareSuggestionRequest,
+      { previousInfinite: InfiniteData<GetMessagesResponse> | undefined }
     >,
     'mutationFn'
   >
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async ({ sessionId, ...request }) => {
+  return useMutation<
+    RespondToShareSuggestionResponse,
+    ApiClientError,
+    { sessionId: string; sharedContent?: string } & RespondToShareSuggestionRequest,
+    { previousInfinite: InfiniteData<GetMessagesResponse> | undefined }
+  >({
+    mutationFn: async ({ sessionId, sharedContent: _, ...request }) => {
       return post<RespondToShareSuggestionResponse>(
         `/sessions/${sessionId}/reconciler/share-offer/respond`,
         request
       );
     },
-    onSuccess: (_, { sessionId }) => {
+    onMutate: async ({ sessionId, action, sharedContent }) => {
+      // Only add optimistic message for 'accept' action with content
+      if (action !== 'accept' || !sharedContent) {
+        return { previousInfinite: undefined };
+      }
+
+      // Cancel outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: messageKeys.infinite(sessionId) });
+
+      // Snapshot previous state for rollback
+      const previousInfinite = queryClient.getQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId)
+      );
+
+      // Create optimistic "What you shared" message
+      const optimisticMessage = {
+        id: `optimistic-shared-${Date.now()}`,
+        sessionId,
+        senderId: null,
+        role: MessageRole.EMPATHY_STATEMENT,
+        content: sharedContent,
+        stage: 2,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Update infinite query cache - add to START (newest first in inverted list)
+      queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId),
+        (old) => {
+          if (!old || !old.pages || old.pages.length === 0) {
+            return {
+              pages: [{ messages: [optimisticMessage], hasMore: false }],
+              pageParams: [undefined],
+            };
+          }
+
+          const newPages = [...old.pages];
+          const firstPage = { ...newPages[0] };
+          firstPage.messages = [optimisticMessage, ...firstPage.messages];
+          newPages[0] = firstPage;
+          return { ...old, pages: newPages };
+        }
+      );
+
+      // Immediately hide the share offer panel by clearing the cache
+      queryClient.setQueryData<GetShareSuggestionResponse>(
+        stageKeys.shareOffer(sessionId),
+        { hasSuggestion: false, suggestion: null }
+      );
+
+      console.log('[useRespondToShareOffer] Optimistic update applied');
+      return { previousInfinite };
+    },
+    onError: (err, { sessionId }, context) => {
+      // Rollback on error
+      if (context?.previousInfinite) {
+        queryClient.setQueryData(messageKeys.infinite(sessionId), context.previousInfinite);
+      }
+      // Restore share offer data by invalidating
+      queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
+      console.error('[useRespondToShareOffer] Error, rolling back:', err);
+    },
+    onSuccess: (data, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: [...stageKeys.all, 'empathy', 'status', sessionId] });
-      queryClient.invalidateQueries({ queryKey: [...stageKeys.all, 'empathy', 'share-offer', sessionId] });
+      queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-      queryClient.invalidateQueries({ queryKey: messageKeys.list(sessionId) });
+
+      // Replace optimistic message with real one (if provided) to avoid flash
+      if (data.sharedMessage) {
+        const realMessage = {
+          id: data.sharedMessage.id,
+          sessionId,
+          senderId: null,
+          role: MessageRole.EMPATHY_STATEMENT,
+          content: data.sharedMessage.content,
+          stage: data.sharedMessage.stage,
+          timestamp: data.sharedMessage.timestamp,
+        };
+
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId),
+          (old) => {
+            if (!old || !old.pages || old.pages.length === 0) {
+              return {
+                pages: [{ messages: [realMessage], hasMore: false }],
+                pageParams: [undefined],
+              };
+            }
+
+            // Replace optimistic message with real one
+            const newPages = old.pages.map((page, pageIndex) => {
+              if (pageIndex === 0) {
+                const filteredMessages = page.messages.filter(
+                  (m) => !m.id.startsWith('optimistic-shared-')
+                );
+                // Check if real message already exists
+                const exists = filteredMessages.some((m) => m.id === realMessage.id);
+                if (!exists) {
+                  return { ...page, messages: [realMessage, ...filteredMessages] };
+                }
+                return { ...page, messages: filteredMessages };
+              }
+              return page;
+            });
+            return { ...old, pages: newPages };
+          }
+        );
+        console.log('[useRespondToShareOffer] Replaced optimistic message with real one');
+      } else {
+        // Fallback: invalidate if no message returned
+        queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
+      }
     },
     ...options,
   });

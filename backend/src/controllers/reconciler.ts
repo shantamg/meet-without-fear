@@ -396,6 +396,7 @@ export async function respondToShareOfferHandler(
       sharedContent: result.sharedContent,
       confirmationMessage: (result as any).confirmationMessage || 'Content shared successfully.',
       guesserUpdated: (result as any).guesserUpdated,
+      sharedMessage: (result as any).sharedMessage,
     };
 
     successResponse(res, response);

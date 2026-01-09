@@ -262,6 +262,13 @@ export const respondToShareOfferResponseSchema = z.object({
   confirmationMessage: z.string().optional(),
   /** Whether guesser was updated */
   guesserUpdated: z.boolean().optional(),
+  /** The "what you shared" message (for optimistic UI replacement) */
+  sharedMessage: z.object({
+    id: z.string(),
+    content: z.string(),
+    stage: z.number(),
+    timestamp: z.string(),
+  }).optional(),
 });
 
 export type RespondToShareOfferResponse = z.infer<typeof respondToShareOfferResponseSchema>;

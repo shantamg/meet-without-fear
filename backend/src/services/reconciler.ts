@@ -479,19 +479,9 @@ Respond in JSON:
       },
     });
 
-    // Create SHARE_SUGGESTION message for the subject to see in chat
-    // This appears instantly as a styled element they can tap to open the drawer
-    await prisma.message.create({
-      data: {
-        sessionId,
-        senderId: null, // System-generated
-        forUserId: subject.id,
-        role: MessageRole.SHARE_SUGGESTION,
-        content: response.suggestedContent,
-        stage: 2,
-      },
-    });
-    console.log(`[Reconciler] Created SHARE_SUGGESTION message for subject ${subject.id}`);
+    // Note: We don't create a SHARE_SUGGESTION message in chat.
+    // The suggestion is stored in reconcilerShareOffer and displayed via the drawer only.
+    console.log(`[Reconciler] Share suggestion stored for subject ${subject.id} (drawer only, not in chat)`);
   } else {
     console.warn(`[Reconciler] Could not find reconcilerResult to update with suggestion!`);
   }
@@ -566,6 +556,12 @@ export async function respondToShareSuggestion(
   status: 'shared' | 'declined';
   sharedContent: string | null;
   guesserUpdated: boolean;
+  sharedMessage?: {
+    id: string;
+    content: string;
+    stage: number;
+    timestamp: string;
+  };
 }> {
   console.log(`[Reconciler] respondToShareSuggestion called: user=${userId}, action=${response.action}`);
 
@@ -606,6 +602,16 @@ export async function respondToShareSuggestion(
       },
     });
 
+    // Delete the SHARE_SUGGESTION message now that user has responded
+    await prisma.message.deleteMany({
+      where: {
+        sessionId,
+        forUserId: userId,
+        role: MessageRole.SHARE_SUGGESTION,
+      },
+    });
+    console.log(`[Reconciler] Deleted SHARE_SUGGESTION message for user ${userId} (declined)`);
+
     return {
       status: 'declined',
       sharedContent: null,
@@ -637,6 +643,17 @@ export async function respondToShareSuggestion(
       sharedAt: new Date(),
     },
   });
+
+  // Delete the SHARE_SUGGESTION message now that user has responded
+  // This prevents it from appearing alongside the new EMPATHY_STATEMENT
+  await prisma.message.deleteMany({
+    where: {
+      sessionId,
+      forUserId: userId,
+      role: MessageRole.SHARE_SUGGESTION,
+    },
+  });
+  console.log(`[Reconciler] Deleted SHARE_SUGGESTION message for user ${userId}`);
 
   // Update guesser's empathy attempt to REFINING
   console.log(`[Reconciler] Updating guesser ${shareOffer.result.guesserId} empathy attempt to REFINING`);
@@ -691,7 +708,7 @@ export async function respondToShareSuggestion(
   console.log(`[Reconciler] Created intro, shared context, and reflection messages for guesser ${shareOffer.result.guesserId}`);
 
   // Create message for subject showing what they shared (appears in their own chat)
-  await prisma.message.create({
+  const sharedMessage = await prisma.message.create({
     data: {
       sessionId,
       senderId: userId,
@@ -724,6 +741,12 @@ While ${guesserName} considers what you've shared, let's continue exploring your
     status: 'shared',
     sharedContent,
     guesserUpdated: true,
+    sharedMessage: {
+      id: sharedMessage.id,
+      content: sharedMessage.content,
+      stage: sharedMessage.stage,
+      timestamp: sharedMessage.timestamp.toISOString(),
+    },
   };
 }
 
