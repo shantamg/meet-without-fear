@@ -113,6 +113,7 @@ type WaitingStatusState =
   | 'compact-pending' // Stage 0: Waiting for partner to sign compact
   | 'witness-pending' // Stage 1: Waiting for partner to complete witness
   | 'empathy-pending' // Stage 2: Waiting for partner to share empathy
+  | 'partner-considering-perspective' // Stage 2: Partner felt heard, now building empathy for you (good alignment)
   | 'needs-pending' // Stage 3: Waiting for partner to confirm needs
   | 'ranking-pending' // Stage 4: Waiting for partner to submit ranking
   | 'partner-signed' // Partner has signed compact
@@ -580,7 +581,17 @@ export function useUnifiedSession(sessionId: string | undefined) {
     ) {
       newWaitingStatus = 'partner-completed-witness';
     }
-    // Stage 2: Waiting for partner to share empathy
+    // Stage 2: Partner is now considering your perspective (good alignment found)
+    // This happens when: reconciler ran, found good alignment, so my empathy was REVEALED,
+    // and partner (the subject who felt heard) is now working on their empathy for me
+    else if (
+      empathyStatusData?.myAttempt?.status === 'REVEALED' &&
+      !partnerEmpathy &&
+      !empathyStatusData?.analyzing
+    ) {
+      newWaitingStatus = 'partner-considering-perspective';
+    }
+    // Stage 2: Waiting for partner to share empathy (still waiting for partner to feel heard)
     else if (empathyDraftData?.alreadyConsented && !partnerEmpathy && !empathyStatusData?.analyzing && !empathyStatusData?.awaitingSharing) {
       newWaitingStatus = 'empathy-pending';
     }
@@ -640,6 +651,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     empathyStatusData?.analyzing,
     empathyStatusData?.awaitingSharing,
     empathyStatusData?.hasNewSharedContext,
+    empathyStatusData?.myAttempt?.status,
     shareOfferData?.hasSuggestion,
   ]);
 

@@ -524,6 +524,7 @@ export function UnifiedSessionScreen({
   const shouldShowWaitingBanner = useMemo(() => {
     return !!(
       waitingStatus === 'empathy-pending' ||
+      waitingStatus === 'partner-considering-perspective' ||
       waitingStatus === 'reconciler-analyzing' ||
       waitingStatus === 'awaiting-context-share' ||
       waitingStatus === 'refining-empathy'
@@ -707,7 +708,11 @@ export function UnifiedSessionScreen({
     if (currentStage > Stage.PERSPECTIVE_STRETCH) return true;
 
     // Show if in stage 2 and waiting for partner to share their empathy
-    if (currentStage === Stage.PERSPECTIVE_STRETCH && waitingStatus === 'empathy-pending') return true;
+    // or when partner is considering your perspective (good alignment path)
+    if (currentStage === Stage.PERSPECTIVE_STRETCH && (
+      waitingStatus === 'empathy-pending' ||
+      waitingStatus === 'partner-considering-perspective'
+    )) return true;
 
     return false;
   }, [onNavigateToInnerThoughts, currentStage, waitingStatus]);
@@ -1544,6 +1549,27 @@ export function UnifiedSessionScreen({
                                   </View>
                                 )}
                               </>
+                            ) : waitingStatus === 'partner-considering-perspective' ? (
+                              <>
+                                <Text style={styles.waitingBannerTextNormal}>
+                                  {partnerName || 'Your partner'} is now considering how you might feel.
+                                </Text>
+                                <Text style={styles.waitingBannerSubtext}>
+                                  Once they share, you'll both be able to reflect on what each other shared.
+                                </Text>
+                                {onNavigateToInnerThoughts && (
+                                  <View style={styles.waitingBannerActions}>
+                                    <TouchableOpacity
+                                      style={styles.keepChattingButton}
+                                      onPress={() => onNavigateToInnerThoughts(sessionId)}
+                                      activeOpacity={0.7}
+                                    >
+                                      <Layers size={18} color="#FFFFFF" />
+                                      <Text style={styles.keepChattingButtonText}>Keep Chatting →</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                )}
+                              </>
                             ) : (
                               <>
                                 <Text style={styles.waitingBannerText}>
@@ -1583,6 +1609,7 @@ export function UnifiedSessionScreen({
             // Never hide when empathy review panel is showing (user still needs to interact)
             !shouldShowEmpathyPanel && (
               waitingStatus === 'empathy-pending' ||
+              waitingStatus === 'partner-considering-perspective' ||
               waitingStatus === 'reconciler-analyzing'
             )
           }

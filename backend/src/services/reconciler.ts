@@ -20,6 +20,7 @@
 import { prisma } from '../lib/prisma';
 import { MessageRole } from '@meet-without-fear/shared';
 import { getSonnetResponse, getHaikuJson } from '../lib/bedrock';
+import { publishMessageAIResponse } from './realtime';
 import {
   buildReconcilerPrompt,
   buildShareOfferPrompt,
@@ -339,6 +340,39 @@ export async function runReconcilerForDirection(
         revealedAt: new Date(),
       },
     });
+
+    // Create a message for the guesser explaining that the subject has shared their side
+    // and is now considering the guesser's perspective
+    const alignmentMessage = `${subjectInfo.name} has shared their side and is now considering how you might be feeling. Once they do, both of you will be able to reflect on what each other shared.`;
+
+    const savedMessage = await prisma.message.create({
+      data: {
+        sessionId,
+        senderId: null, // AI message
+        forUserId: guesserId,
+        role: 'AI',
+        content: alignmentMessage,
+        stage: 2,
+      },
+    });
+
+    console.log(`[Reconciler] Created alignment message for guesser ${guesserId}: "${alignmentMessage}"`);
+
+    // Publish the message via Ably so guesser sees it immediately
+    await publishMessageAIResponse(
+      sessionId,
+      guesserId,
+      {
+        id: savedMessage.id,
+        sessionId,
+        senderId: null,
+        content: savedMessage.content,
+        timestamp: savedMessage.timestamp.toISOString(),
+        role: MessageRole.AI,
+        stage: savedMessage.stage,
+      },
+      {} // No metadata needed
+    );
 
     return {
       result,
