@@ -139,7 +139,7 @@ export function InnerThoughtsScreen({
 
         <View style={styles.headerContent}>
           <View style={styles.headerTitleRow}>
-            <Layers color={colors.accent} size={16} />
+            <Layers color={colors.brandBlue} size={16} />
             <Text style={styles.headerTitle} numberOfLines={1}>
               {title}
             </Text>
