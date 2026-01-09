@@ -35,6 +35,10 @@ npm run test    # Tests across all workspaces
 - Use `npx prisma migrate dev --name <description>` to create migrations
 - Migration files are tracked in git and applied consistently across environments
 
+### Database Queries
+
+To run ad-hoc Prisma queries, create a temp file in `backend/src/` that imports from `./lib/prisma` and run with `npx ts-node`.
+
 ## Project Structure
 
 - `shared/` - Types, DTOs, contracts shared between backend and mobile

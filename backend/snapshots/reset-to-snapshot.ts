@@ -130,4 +130,18 @@ try {
   console.log('  Loaded snapshot (with warnings):', path.basename(snapshotFile));
 }
 
+// Step 3: Run migrations to ensure schema is up to date
+console.log('Step 3: Running migrations...');
+try {
+  execSync('npx prisma migrate deploy', {
+    stdio: 'inherit',
+    env,
+    cwd: path.join(__dirname, '..'),
+  });
+  console.log('  Migrations applied');
+} catch (e: any) {
+  console.error('  Error running migrations:', e.message);
+  process.exit(1);
+}
+
 console.log('\n=== Reset complete ===\n');
