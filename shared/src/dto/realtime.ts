@@ -135,6 +135,20 @@ export const REALTIME_CHANNELS = {
 } as const;
 
 // ============================================================================
+// User-Level Events (for home/sessions list updates)
+// ============================================================================
+
+export type UserEventType =
+  | 'session.new_message' // New message in a session
+  | 'session.updated'; // Session state changed (status, stage, etc.)
+
+export interface UserEventData {
+  sessionId: string;
+  timestamp: number;
+  [key: string]: unknown;
+}
+
+// ============================================================================
 // Realtime Event Payloads
 // ============================================================================
 

@@ -5,6 +5,8 @@ import {
   SessionEventData,
   PresenceStatus,
   REALTIME_CHANNELS,
+  UserEventType,
+  UserEventData,
 } from '@meet-without-fear/shared';
 
 /**
@@ -108,6 +110,15 @@ const TYPING_TIMEOUT = 5000;
  * @param excludeUserId - Optional user ID to exclude from receiving the event
  * @returns Promise<void>
  */
+// Events that should NOT trigger session list updates (transient/typing events)
+const TRANSIENT_EVENTS = new Set([
+  'typing.start',
+  'typing.stop',
+  'presence.online',
+  'presence.offline',
+  'presence.away',
+]);
+
 export async function publishSessionEvent(
   sessionId: string,
   event: SessionEvent | SessionEventType,
@@ -127,9 +138,113 @@ export async function publishSessionEvent(
     const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
     await channel.publish(event, eventData);
     console.log(`[Realtime] Published ${event} to session ${sessionId}`);
+
+    // Automatically notify session members for non-transient events
+    // This updates their session list without requiring each caller to remember
+    if (!TRANSIENT_EVENTS.has(event)) {
+      // Fire and forget - don't block on user channel updates
+      notifySessionMembers(sessionId, excludeUserId).catch((err) =>
+        console.warn(`[Realtime] Failed to notify session members:`, err)
+      );
+    }
   } catch (error) {
     console.error(`[Realtime] Failed to publish ${event} to session ${sessionId}:`, error);
     throw error;
+  }
+}
+
+/**
+ * Publishes a user-level event to notify about session updates.
+ * Used for home/sessions list updates when user is not in the session.
+ *
+ * @param userId - The user ID to publish to
+ * @param event - The event type to publish
+ * @param data - The event data payload (must include sessionId)
+ * @returns Promise<void>
+ */
+export async function publishUserEvent(
+  userId: string,
+  event: UserEventType,
+  data: { sessionId: string; [key: string]: unknown }
+): Promise<void> {
+  const ably = getAbly();
+
+  const eventData: UserEventData = {
+    ...data,
+    timestamp: Date.now(),
+  };
+
+  try {
+    const channel = ably.channels.get(REALTIME_CHANNELS.user(userId));
+    await channel.publish(event, eventData);
+    console.log(`[Realtime] Published ${event} to user ${userId} for session ${data.sessionId}`);
+  } catch (error) {
+    console.error(`[Realtime] Failed to publish ${event} to user ${userId}:`, error);
+    // Don't throw - user channel failures shouldn't break operations
+  }
+}
+
+/**
+ * Notifies all members of a session that there's an update.
+ * Publishes to each member's user channel so their session list updates.
+ * Also touches session.updatedAt so the unread count calculation picks up the change.
+ *
+ * @param sessionId - The session ID
+ * @param excludeUserId - Optional user ID to exclude (e.g., the user who caused the update)
+ */
+export async function notifySessionMembers(
+  sessionId: string,
+  excludeUserId?: string
+): Promise<void> {
+  console.log(`[notifySessionMembers] Called for session ${sessionId}, excludeUserId=${excludeUserId}`);
+  try {
+    // Import prisma here to avoid circular dependency
+    const { prisma } = await import('../lib/prisma');
+
+    // Touch session.updatedAt so unread count calculation picks up the change
+    // Also fetch session members in the same query
+    const now = new Date();
+    console.log(`[notifySessionMembers] Updating session.updatedAt to ${now.toISOString()}`);
+
+    const session = await prisma.session.update({
+      where: { id: sessionId },
+      data: { updatedAt: now },
+      select: {
+        updatedAt: true,
+        relationship: {
+          select: {
+            members: {
+              select: { userId: true },
+            },
+          },
+        },
+      },
+    });
+
+    console.log(`[notifySessionMembers] Session updated, new updatedAt: ${session.updatedAt.toISOString()}`);
+
+    if (!session?.relationship?.members) {
+      console.warn(`[notifySessionMembers] Session ${sessionId} not found or has no members`);
+      return;
+    }
+
+    // Publish to each member's user channel (except the excluded user)
+    const memberIds = session.relationship.members
+      .map((m) => m.userId)
+      .filter((id) => id !== excludeUserId);
+
+    console.log(`[notifySessionMembers] Publishing to ${memberIds.length} members: ${memberIds.join(', ')}`);
+
+    await Promise.all(
+      memberIds.map((userId) =>
+        publishUserEvent(userId, 'session.updated', { sessionId })
+      )
+    );
+
+    console.log(`[notifySessionMembers] Notified ${memberIds.length} members of session ${sessionId}`);
+  } catch (error) {
+    console.error('[notifySessionMembers] Error:', error);
+    // Don't throw - notification failures shouldn't break the main operation
   }
 }
 
@@ -396,6 +511,7 @@ export async function publishSessionResolved(
  * Notifies a partner of a session event.
  * If the partner is online (present in the Ably channel), the event is published.
  * If the partner is offline, a push notification is sent instead.
+ * Also publishes to the partner's user channel for session list updates.
  *
  * @param sessionId - The session ID
  * @param partnerId - The partner's user ID
@@ -408,13 +524,14 @@ export async function notifyPartner(
   event: SessionEvent,
   data: Record<string, unknown>
 ): Promise<void> {
-  const partnerPresent = await isUserPresent(sessionId, partnerId);
+  // Always publish to session channel (for clients viewing the session)
+  // This also calls notifySessionMembers which updates session.updatedAt
+  // and publishes to all members' user channels
+  await publishSessionEvent(sessionId, event, data);
 
-  if (partnerPresent) {
-    // Partner is online - publish to Ably channel
-    await publishSessionEvent(sessionId, event, data);
-  } else {
-    // Partner is offline - send push notification
+  // If partner is not in the session, also send push notification
+  const partnerPresent = await isUserPresent(sessionId, partnerId);
+  if (!partnerPresent) {
     await sendPushNotification(partnerId, event, data, sessionId);
   }
 }
@@ -422,6 +539,7 @@ export async function notifyPartner(
 /**
  * Notifies a partner and always publishes to Ably channel.
  * If partner is offline, also sends a push notification.
+ * Also publishes to the partner's user channel for session list updates.
  *
  * @param sessionId - The session ID
  * @param partnerId - The partner's user ID
@@ -435,6 +553,7 @@ export async function notifyPartnerWithFallback(
   data: Record<string, unknown>
 ): Promise<void> {
   // Always publish to Ably for clients that might reconnect
+  // Note: publishSessionEvent automatically notifies all session members
   await publishSessionEvent(sessionId, event, data);
 
   // Also send push if partner is offline

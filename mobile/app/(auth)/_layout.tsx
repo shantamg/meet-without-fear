@@ -1,6 +1,7 @@
 import { Stack, Redirect } from 'expo-router';
 import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 import { colors } from '@/theme';
+import { useUserSessionUpdates } from '@/src/hooks/useRealtime';
 
 /**
  * Auth group layout
@@ -10,6 +11,10 @@ import { colors } from '@/theme';
  */
 export default function AuthLayout() {
   const { isSignedIn, isLoaded } = useClerkAuth();
+
+  // Subscribe to user-level session updates for real-time list refreshes
+  // This is placed here (not in individual screens) to ensure only ONE Ably connection
+  useUserSessionUpdates();
 
   // Wait for Clerk to initialize
   if (!isLoaded) {

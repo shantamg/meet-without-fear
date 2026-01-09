@@ -15,7 +15,11 @@ import {
   SessionEventData,
   PresenceStatus,
   REALTIME_CHANNELS,
+  UserEventType,
+  UserEventData,
 } from '@meet-without-fear/shared';
+import { useQueryClient } from '@tanstack/react-query';
+import { sessionKeys } from './useSessions';
 import { useAblyToken } from './useProfile';
 import { useAuth } from './useAuth';
 
@@ -545,5 +549,173 @@ export function useSessionEvents(
     enablePresence: false,
     onSessionEvent: onEvent,
   });
+  return { connectionStatus };
+}
+
+// ============================================================================
+// User-Level Session Updates Hook
+// ============================================================================
+
+/**
+ * Hook for subscribing to user-level session updates.
+ * Automatically invalidates session queries when events are received.
+ * Use this on the home screen or sessions list to get real-time updates.
+ */
+export function useUserSessionUpdates(): { connectionStatus: ConnectionStatus } {
+  const { user } = useAuth();
+  const { data: tokenData, refetch: refetchToken } = useAblyToken();
+  const queryClient = useQueryClient();
+
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(
+    ConnectionStatus.DISCONNECTED
+  );
+
+  const ablyRef = useRef<Ably.Realtime | null>(null);
+  const channelRef = useRef<Ably.RealtimeChannel | null>(null);
+  const isMountedRef = useRef(true);
+  const isConnectingRef = useRef(false);
+
+  const handleEvent = useCallback(
+    (eventName: UserEventType, _data: UserEventData) => {
+      console.log('[UserSessionUpdates] Received event:', eventName, _data);
+      console.log('[UserSessionUpdates] Refetching queries...');
+
+      // Use refetchQueries to force immediate refetch (not just mark stale)
+      queryClient.refetchQueries({ queryKey: sessionKeys.lists() })
+        .then(() => console.log('[UserSessionUpdates] Lists refetch complete'))
+        .catch((err) => console.warn('[UserSessionUpdates] Lists refetch failed:', err));
+
+      queryClient.refetchQueries({ queryKey: sessionKeys.unreadCount() })
+        .then(() => console.log('[UserSessionUpdates] Unread count refetch complete'))
+        .catch((err) => console.warn('[UserSessionUpdates] Unread count refetch failed:', err));
+
+      // If event includes a sessionId, also refetch that specific session's state
+      if (_data.sessionId) {
+        queryClient.refetchQueries({ queryKey: sessionKeys.state(_data.sessionId) })
+          .then(() => console.log('[UserSessionUpdates] Session state refetch complete'))
+          .catch((err) => console.warn('[UserSessionUpdates] Session state refetch failed:', err));
+      }
+    },
+    [queryClient]
+  );
+
+  const connect = useCallback(async () => {
+    if (!user?.id) return;
+    if (isConnectingRef.current) return;
+    if (ablyRef.current?.connection?.state === 'connected') return;
+
+    isConnectingRef.current = true;
+    console.log('[UserSessionUpdates] Connecting to user channel:', user.id);
+
+    try {
+      const ably = new Ably.Realtime({
+        authCallback: async (_, callback) => {
+          try {
+            const { data } = await refetchToken();
+            if (data?.tokenRequest) {
+              callback(null, data.tokenRequest);
+            } else {
+              callback('Failed to get token', null);
+            }
+          } catch (err) {
+            callback(err instanceof Error ? err.message : 'Token fetch failed', null);
+          }
+        },
+        autoConnect: true,
+      });
+
+      ablyRef.current = ably;
+
+      ably.connection.on((stateChange) => {
+        const status = mapAblyState(stateChange.current);
+        if (isMountedRef.current) {
+          setConnectionStatus(status);
+        }
+      });
+
+      const channelName = REALTIME_CHANNELS.user(user.id);
+      const channel = ably.channels.get(channelName);
+      channelRef.current = channel;
+
+      channel.subscribe((message: Ably.Message) => {
+        const eventName = message.name as UserEventType;
+        const eventData = message.data as UserEventData;
+        handleEvent(eventName, eventData);
+      });
+
+      isConnectingRef.current = false;
+    } catch (err) {
+      console.error('[UserSessionUpdates] Connection error:', err);
+      isConnectingRef.current = false;
+      if (isMountedRef.current) {
+        setConnectionStatus(ConnectionStatus.FAILED);
+      }
+    }
+  }, [user, refetchToken, handleEvent]);
+
+  const disconnect = useCallback(() => {
+    isConnectingRef.current = false;
+
+    if (channelRef.current) {
+      try {
+        channelRef.current.unsubscribe();
+      } catch (err) {
+        console.warn('[UserSessionUpdates] Error during channel cleanup:', err);
+      }
+      channelRef.current = null;
+    }
+
+    if (ablyRef.current) {
+      try {
+        ablyRef.current.connection.off();
+        ablyRef.current.close();
+      } catch (err) {
+        console.warn('[UserSessionUpdates] Error during ably cleanup:', err);
+      }
+      ablyRef.current = null;
+    }
+
+    if (isMountedRef.current) {
+      setConnectionStatus(ConnectionStatus.DISCONNECTED);
+    }
+  }, []);
+
+  // Track mounted state
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Connect/disconnect based on user
+  const connectRef = useRef(connect);
+  const disconnectRef = useRef(disconnect);
+  connectRef.current = connect;
+  disconnectRef.current = disconnect;
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    connectRef.current();
+    return () => {
+      disconnectRef.current();
+    };
+  }, [user?.id]);
+
+  // Handle app state changes
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        if (connectionStatus !== ConnectionStatus.CONNECTED) {
+          connect();
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [connectionStatus, connect]);
+
   return { connectionStatus };
 }

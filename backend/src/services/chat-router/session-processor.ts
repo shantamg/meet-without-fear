@@ -11,6 +11,7 @@ import { getOrchestratedResponse, type FullAIContext } from '../ai';
 import { getPartnerUserId } from '../../utils/session';
 import { embedMessage } from '../embedding';
 import { updateSessionSummary } from '../conversation-summarizer';
+import { publishUserEvent } from '../realtime';
 
 export interface SessionMessageInput {
   sessionId: string;
@@ -291,6 +292,17 @@ export async function processSessionMessage(
     } catch (err) {
       console.error('[SessionProcessor] Failed to auto-save empathy draft:', err);
     }
+  }
+
+  // Notify partner of new message via user channel (non-blocking)
+  // This allows the sessions list to update in real-time
+  if (partnerId) {
+    publishUserEvent(partnerId, 'session.new_message', {
+      sessionId,
+      stage: currentStage,
+    }).catch((err) =>
+      console.warn('[SessionProcessor] Failed to publish user event:', err)
+    );
   }
 
   return {

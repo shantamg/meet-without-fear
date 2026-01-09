@@ -17,7 +17,11 @@ jest.mock('../../services/ai', () => ({
 }));
 
 // Mock realtime service
-jest.mock('../../services/realtime');
+jest.mock('../../services/realtime', () => ({
+  notifyPartner: jest.fn().mockResolvedValue(undefined),
+  publishSessionEvent: jest.fn().mockResolvedValue(undefined),
+  notifySessionMembers: jest.fn().mockResolvedValue(undefined),
+}));
 
 
 // Helper to create mock request

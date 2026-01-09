@@ -21,7 +21,7 @@ import {
   ApiResponse,
   ErrorCode,
 } from '@meet-without-fear/shared';
-import { notifyPartner, publishSessionEvent } from '../services/realtime';
+import { notifyPartner, publishSessionEvent, notifySessionMembers } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { embedMessage } from '../services/embedding';
@@ -588,6 +588,13 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     // Pass turnId so summarization cost is attributed to this user message
     updateSessionSummary(sessionId, user.id, turnId).catch((err) =>
       console.warn(`[sendMessage:${requestId}] Failed to update session summary:`, err)
+    );
+
+    // Update session.updatedAt and notify users on other screens (home/sessions list)
+    // This ensures hasUnread is true if the user leaves before seeing the AI response
+    // Exclude current user since they're receiving the response directly
+    notifySessionMembers(sessionId, user.id).catch((err) =>
+      console.warn(`[sendMessage:${requestId}] Failed to notify session members:`, err)
     );
 
     const totalTime = Date.now() - requestStartTime;
