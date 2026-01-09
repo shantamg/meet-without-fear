@@ -7,6 +7,9 @@ import {
   REALTIME_CHANNELS,
   UserEventType,
   UserEventData,
+  MessageAIResponsePayload,
+  MessageErrorPayload,
+  MessageDTO,
 } from '@meet-without-fear/shared';
 
 /**
@@ -623,5 +626,93 @@ export async function publishSessionCreated(
   } catch (error) {
     // Don't throw - audit stream failures shouldn't break session creation
     console.warn(`[Realtime] Failed to publish session-created to audit stream:`, error);
+  }
+}
+
+// ============================================================================
+// Fire-and-Forget Message Events
+// ============================================================================
+
+/**
+ * Publish an AI response message via Ably for fire-and-forget message flow.
+ * Called after background AI processing completes.
+ *
+ * @param sessionId - The session ID
+ * @param forUserId - The user ID this response is for
+ * @param message - The AI response message DTO
+ * @param metadata - Optional metadata for UI updates (feel heard check, invitation, etc.)
+ */
+export async function publishMessageAIResponse(
+  sessionId: string,
+  forUserId: string,
+  message: MessageDTO,
+  metadata?: {
+    offerFeelHeardCheck?: boolean;
+    invitationMessage?: string | null;
+    offerReadyToShare?: boolean;
+    proposedEmpathyStatement?: string | null;
+  }
+): Promise<void> {
+  const ably = getAbly();
+
+  const payload: MessageAIResponsePayload = {
+    sessionId,
+    timestamp: Date.now(),
+    forUserId,
+    message,
+    ...metadata,
+  };
+
+  try {
+    const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
+    await channel.publish('message.ai_response', payload);
+    console.log(`[Realtime] Published message.ai_response to session ${sessionId} for user ${forUserId}`);
+
+    // Also notify session members for list updates (but exclude the user who sent the message
+    // since they're already subscribed to the session channel)
+    notifySessionMembers(sessionId).catch((err) =>
+      console.warn(`[Realtime] Failed to notify session members after AI response:`, err)
+    );
+  } catch (error) {
+    console.error(`[Realtime] Failed to publish message.ai_response to session ${sessionId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Publish a message processing error via Ably for fire-and-forget message flow.
+ * Called when background AI processing fails.
+ *
+ * @param sessionId - The session ID
+ * @param forUserId - The user ID this error is for
+ * @param userMessageId - The ID of the user message that failed
+ * @param errorMessage - User-friendly error message
+ * @param canRetry - Whether the user can retry sending the message
+ */
+export async function publishMessageError(
+  sessionId: string,
+  forUserId: string,
+  userMessageId: string,
+  errorMessage: string,
+  canRetry: boolean = true
+): Promise<void> {
+  const ably = getAbly();
+
+  const payload: MessageErrorPayload = {
+    sessionId,
+    timestamp: Date.now(),
+    forUserId,
+    userMessageId,
+    error: errorMessage,
+    canRetry,
+  };
+
+  try {
+    const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
+    await channel.publish('message.error', payload);
+    console.log(`[Realtime] Published message.error to session ${sessionId} for user ${forUserId}`);
+  } catch (error) {
+    console.error(`[Realtime] Failed to publish message.error to session ${sessionId}:`, error);
+    // Don't throw - we don't want to lose error notifications due to Ably issues
   }
 }

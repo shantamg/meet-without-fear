@@ -17,6 +17,8 @@ import {
   REALTIME_CHANNELS,
   UserEventType,
   UserEventData,
+  MessageAIResponsePayload,
+  MessageErrorPayload,
 } from '@meet-without-fear/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { sessionKeys } from './useSessions';
@@ -42,6 +44,10 @@ export interface RealtimeConfig {
   onSessionEvent?: (event: SessionEventType, data: SessionEventData) => void;
   /** Callback for stage progress updates */
   onStageProgress?: (userId: string, stage: number, status: string) => void;
+  /** Callback when AI response arrives (fire-and-forget pattern) */
+  onAIResponse?: (payload: MessageAIResponsePayload) => void;
+  /** Callback when AI processing fails (fire-and-forget pattern) */
+  onAIError?: (payload: MessageErrorPayload) => void;
 }
 
 export interface RealtimeState {
@@ -116,6 +122,8 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
     onTypingChange,
     onSessionEvent,
     onStageProgress,
+    onAIResponse,
+    onAIError,
   } = config;
 
   const { user } = useAuth();
@@ -278,6 +286,31 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
             }
             break;
 
+          // Fire-and-forget message events
+          case 'message.ai_response':
+            // AI response arrived for this user
+            if (onAIResponse) {
+              const aiPayload = eventData as unknown as MessageAIResponsePayload;
+              // Only handle if this message is for the current user
+              if (aiPayload.forUserId === user?.id) {
+                console.log('[Realtime] AI response received:', aiPayload.message?.id);
+                onAIResponse(aiPayload);
+              }
+            }
+            break;
+
+          case 'message.error':
+            // AI processing failed
+            if (onAIError) {
+              const errorPayload = eventData as unknown as MessageErrorPayload;
+              // Only handle if this error is for the current user
+              if (errorPayload.forUserId === user?.id) {
+                console.log('[Realtime] AI error received:', errorPayload.error);
+                onAIError(errorPayload);
+              }
+            }
+            break;
+
           default:
             // Generic session event
             onSessionEvent?.(eventName, eventData);
@@ -339,6 +372,8 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
     onTypingChange,
     onSessionEvent,
     onStageProgress,
+    onAIResponse,
+    onAIError,
   ]);
 
   const disconnect = useCallback(() => {
@@ -563,7 +598,7 @@ export function useSessionEvents(
  */
 export function useUserSessionUpdates(): { connectionStatus: ConnectionStatus } {
   const { user } = useAuth();
-  const { data: tokenData, refetch: refetchToken } = useAblyToken();
+  const { refetch: refetchToken } = useAblyToken();
   const queryClient = useQueryClient();
 
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(

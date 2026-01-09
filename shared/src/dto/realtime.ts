@@ -110,7 +110,10 @@ export type SessionEventType =
   | 'stage.progress'
   | 'stage.waiting'
   // Memory (new)
-  | 'memory.suggested';
+  | 'memory.suggested'
+  // Fire-and-forget message events (new)
+  | 'message.ai_response'
+  | 'message.error';
 
 export interface SessionEventData {
   sessionId: string;
@@ -214,4 +217,44 @@ export interface ConnectionState {
   error?: string;
   lastConnected?: number;
   reconnectAttempts: number;
+}
+
+// ============================================================================
+// Fire-and-Forget Message Events
+// ============================================================================
+
+import type { MessageDTO } from './message';
+
+/**
+ * Payload for message.ai_response event.
+ * Sent when AI response is ready after fire-and-forget message processing.
+ */
+export interface MessageAIResponsePayload extends RealtimeEventBase {
+  /** The user ID this response is for (fire-and-forget is per-user) */
+  forUserId: string;
+  /** The AI response message */
+  message: MessageDTO;
+  /** Stage 1: AI recommends showing feel-heard confirmation */
+  offerFeelHeardCheck?: boolean;
+  /** Stage 0: Proposed invitation message from AI */
+  invitationMessage?: string | null;
+  /** Stage 2: AI recommends showing ready-to-share confirmation */
+  offerReadyToShare?: boolean;
+  /** Stage 2: Proposed empathy statement */
+  proposedEmpathyStatement?: string | null;
+}
+
+/**
+ * Payload for message.error event.
+ * Sent when AI processing fails for a user's message.
+ */
+export interface MessageErrorPayload extends RealtimeEventBase {
+  /** The user ID this error is for */
+  forUserId: string;
+  /** The user message ID that failed */
+  userMessageId: string;
+  /** User-friendly error message */
+  error: string;
+  /** Whether the user can retry sending the message */
+  canRetry: boolean;
 }

@@ -61,6 +61,7 @@ function mapSessionToSummary(
     status: string;
     createdAt: Date;
     updatedAt: Date;
+    linkedPartnerSessionId?: string | null;
     _count?: { messages: number };
   }
 ): InnerWorkSessionSummaryDTO {
@@ -73,6 +74,7 @@ function mapSessionToSummary(
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
     messageCount: session._count?.messages ?? 0,
+    linkedPartnerSessionId: session.linkedPartnerSessionId ?? null,
   };
 }
 

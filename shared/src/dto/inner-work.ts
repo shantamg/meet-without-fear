@@ -29,6 +29,8 @@ export interface InnerWorkSessionSummaryDTO {
   createdAt: string; // ISO 8601
   updatedAt: string;
   messageCount: number;
+  /** If linked to a partner session, the session ID */
+  linkedPartnerSessionId: string | null;
 }
 
 // ============================================================================

@@ -179,7 +179,11 @@ export interface SendMessageParams {
 
 /**
  * Send a message in a session.
- * Returns both the user message and AI response.
+ *
+ * Fire-and-forget pattern:
+ * - Returns immediately with user message only
+ * - AI response arrives asynchronously via Ably (message.ai_response event)
+ * - Use useAIMessageHandler to add AI responses to the cache
  */
 export function useSendMessage(
   options?: Omit<
@@ -212,10 +216,16 @@ export function useSendMessage(
       // Get the stage from the response to update the correct cache
       const stage = data.userMessage.stage;
 
+      // Fire-and-forget: Only add user message to cache immediately
+      // AI response will arrive via Ably and be added by useAIMessageHandler
+      const messagesToAdd = data.aiResponse
+        ? [data.userMessage, data.aiResponse]
+        : [data.userMessage];
+
       const updateCache = (old: GetMessagesResponse | undefined) => {
         if (!old) {
           return {
-            messages: [data.userMessage, data.aiResponse],
+            messages: messagesToAdd,
             hasMore: false,
           };
         }
@@ -225,7 +235,7 @@ export function useSendMessage(
           (m) => !m.id.startsWith('optimistic-')
         );
         const existingIds = new Set(existingMessages.map((m) => m.id));
-        const newMessages = [data.userMessage, data.aiResponse].filter(
+        const newMessages = messagesToAdd.filter(
           (m) => !existingIds.has(m.id)
         );
         return {
@@ -246,7 +256,7 @@ export function useSendMessage(
           (m) => !m.id.startsWith('optimistic-')
         );
         const existingIds = new Set(existingMessages.map((m) => m.id));
-        const newMessages = [data.userMessage, data.aiResponse].filter(
+        const newMessages = messagesToAdd.filter(
           (m) => !existingIds.has(m.id)
         );
         updatedPages[0] = {
@@ -302,6 +312,106 @@ export function useSendMessage(
     },
     ...options,
   });
+}
+
+// ============================================================================
+// AI Message Handler Hook (for Fire-and-Forget Ably messages)
+// ============================================================================
+
+/**
+ * Hook to add AI messages from Ably events to the React Query cache.
+ * Used for fire-and-forget message pattern where AI response arrives via Ably.
+ */
+export function useAIMessageHandler() {
+  const queryClient = useQueryClient();
+
+  return {
+    /**
+     * Add an AI message from Ably to the cache.
+     * Called when message.ai_response event is received.
+     */
+    addAIMessage: (sessionId: string, message: MessageDTO) => {
+      const stage = message.stage;
+
+      const updateCache = (old: GetMessagesResponse | undefined) => {
+        if (!old) {
+          return { messages: [message], hasMore: false };
+        }
+        // Check for duplicates
+        const existingIds = new Set((old.messages || []).map((m) => m.id));
+        if (existingIds.has(message.id)) {
+          return old; // Already have this message
+        }
+        return {
+          ...old,
+          messages: [...(old.messages || []), message],
+        };
+      };
+
+      const updateInfiniteCache = (
+        old: InfiniteData<GetMessagesResponse> | undefined
+      ): InfiniteData<GetMessagesResponse> | undefined => {
+        if (!old || old.pages.length === 0) {
+          return {
+            pages: [{ messages: [message], hasMore: false }],
+            pageParams: [undefined],
+          };
+        }
+        // Update the first page (newest messages)
+        const updatedPages = [...old.pages];
+        const firstPage = updatedPages[0];
+        const existingIds = new Set((firstPage.messages || []).map((m) => m.id));
+        if (existingIds.has(message.id)) {
+          return old; // Already have this message
+        }
+        updatedPages[0] = {
+          ...firstPage,
+          messages: [...(firstPage.messages || []), message],
+        };
+        return { ...old, pages: updatedPages };
+      };
+
+      // Update stage-specific cache
+      if (stage !== undefined) {
+        queryClient.setQueryData<GetMessagesResponse>(
+          messageKeys.list(sessionId, stage),
+          updateCache
+        );
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId, stage),
+          updateInfiniteCache
+        );
+      }
+
+      // Also update non-stage-filtered cache
+      queryClient.setQueryData<GetMessagesResponse>(
+        messageKeys.list(sessionId),
+        updateCache
+      );
+      queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId),
+        updateInfiniteCache
+      );
+
+      console.log(`[useAIMessageHandler] Added AI message ${message.id} to cache for session ${sessionId}`);
+    },
+
+    /**
+     * Handle AI message error from Ably.
+     * Called when message.error event is received.
+     * Returns error info for the UI to handle.
+     */
+    handleAIMessageError: (sessionId: string, userMessageId: string, errorMessage: string, canRetry: boolean) => {
+      console.error(`[useAIMessageHandler] AI message error for session ${sessionId}:`, errorMessage);
+      // Return error info so the component can display appropriate UI
+      return {
+        sessionId,
+        userMessageId,
+        errorMessage,
+        canRetry,
+      };
+    },
+  };
 }
 
 // ============================================================================

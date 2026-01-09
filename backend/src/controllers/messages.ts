@@ -18,10 +18,9 @@ import {
   sendMessageRequestSchema,
   feelHeardRequestSchema,
   getMessagesQuerySchema,
-  ApiResponse,
-  ErrorCode,
+  MessageRole,
 } from '@meet-without-fear/shared';
-import { notifyPartner, publishSessionEvent, notifySessionMembers } from '../services/realtime';
+import { notifyPartner, publishSessionEvent, notifySessionMembers, publishMessageAIResponse, publishMessageError } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { embedMessage } from '../services/embedding';
@@ -88,13 +87,19 @@ function getFallbackInitialMessage(
 /**
  * Send a message in Stage 1 and get AI witness response
  * POST /sessions/:id/messages
+ *
+ * Fire-and-forget pattern:
+ * 1. Synchronously validate, check permissions, and save user message
+ * 2. Return immediately with user message (fast response)
+ * 3. Process AI response in background
+ * 4. Deliver AI response via Ably when complete
  */
 export async function sendMessage(req: Request, res: Response): Promise<void> {
   const requestStartTime = Date.now();
   const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
   try {
-    console.log(`[sendMessage:${requestId}] ========== REQUEST START ==========`);
+    console.log(`[sendMessage:${requestId}] ========== FIRE-AND-FORGET REQUEST START ==========`);
     console.log(`[sendMessage:${requestId}] Timestamp: ${new Date().toISOString()}`);
 
     const user = req.user;
@@ -127,7 +132,6 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     const { content } = parseResult.data;
     console.log(`[sendMessage:${requestId}] Message content length: ${content.length}`);
     console.log(`[sendMessage:${requestId}] Message content preview: "${content.substring(0, 100)}${content.length > 100 ? '...' : ''}"`);
-    const lowerContent = content.toLowerCase();
 
     // Check session exists and user has access
     const session = await prisma.session.findFirst({
@@ -234,7 +238,9 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Save user message
+    // =========================================================================
+    // SYNCHRONOUS: Save user message (this is fast)
+    // =========================================================================
     console.log(`[sendMessage:${requestId}] Creating user message in database...`);
     const userMessageStartTime = Date.now();
     const userMessage = await prisma.message.create({
@@ -269,57 +275,135 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       });
     }
 
-    // NOTE: User message embedding moved below after turnId is generated
+    // =========================================================================
+    // FIRE-AND-FORGET: Return immediately with user message
+    // =========================================================================
+    const syncTime = Date.now() - requestStartTime;
+    console.log(`[sendMessage:${requestId}] ========== RETURNING IMMEDIATELY ==========`);
+    console.log(`[sendMessage:${requestId}] Sync response time: ${syncTime}ms`);
+    console.log(`[sendMessage:${requestId}] Returning user message, AI will be delivered via Ably`);
 
+    // Return user message immediately - AI response will come via Ably
+    successResponse(res, {
+      userMessage: {
+        id: userMessage.id,
+        sessionId: userMessage.sessionId,
+        senderId: userMessage.senderId,
+        role: userMessage.role,
+        content: userMessage.content,
+        stage: userMessage.stage,
+        timestamp: userMessage.timestamp.toISOString(),
+      },
+      // No AI response in sync response - it will arrive via Ably
+      aiResponse: null,
+      // These will be delivered via Ably with the AI response
+      offerFeelHeardCheck: undefined,
+      offerReadyToShare: undefined,
+      invitationMessage: undefined,
+      proposedEmpathyStatement: undefined,
+    });
+
+    // =========================================================================
+    // ASYNC: Process AI response in background
+    // =========================================================================
+    // Capture variables needed for background processing
+    const backgroundContext = {
+      requestId,
+      sessionId,
+      userId: user.id,
+      userName: user.name || 'there',
+      content,
+      lowerContent: content.toLowerCase(),
+      currentStage,
+      sessionStatus: session.status,
+      sessionCreatedAt: session.createdAt,
+      progressId: progress?.id,
+      progressGatesSatisfied: progress?.gatesSatisfied as Record<string, unknown> | null,
+      userMessageId: userMessage.id,
+    };
+
+    // Process AI response in background (non-blocking)
+    processAIResponseInBackground(backgroundContext).catch((error) => {
+      console.error(`[sendMessage:${requestId}] Background AI processing failed:`, error);
+      // Publish error to user via Ably
+      publishMessageError(
+        sessionId,
+        user.id,
+        userMessage.id,
+        'Sorry, I had trouble processing your message. Please try again.',
+        true
+      ).catch((ablyError) => {
+        console.error(`[sendMessage:${requestId}] Failed to publish error via Ably:`, ablyError);
+      });
+    });
+
+  } catch (error) {
+    const totalTime = Date.now() - requestStartTime;
+    console.error(`[sendMessage:${requestId}] ========== REQUEST ERROR ==========`);
+    console.error(`[sendMessage:${requestId}] Error after ${totalTime}ms:`, error);
+    if (error instanceof Error) {
+      console.error(`[sendMessage:${requestId}] Error stack:`, error.stack);
+    }
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to send message', 500);
+  }
+}
+
+/**
+ * Background processor for AI response generation.
+ * This runs after the HTTP response has been sent to the client.
+ */
+async function processAIResponseInBackground(ctx: {
+  requestId: string;
+  sessionId: string;
+  userId: string;
+  userName: string;
+  content: string;
+  lowerContent: string;
+  currentStage: number;
+  sessionStatus: string;
+  sessionCreatedAt: Date;
+  progressId?: string;
+  progressGatesSatisfied: Record<string, unknown> | null;
+  userMessageId: string;
+}): Promise<void> {
+  const { requestId, sessionId, userId, userName, content, lowerContent, currentStage, sessionStatus, sessionCreatedAt, progressId, progressGatesSatisfied, userMessageId } = ctx;
+
+  console.log(`[sendMessage:${requestId}] ========== BACKGROUND AI PROCESSING START ==========`);
+  const backgroundStartTime = Date.now();
+
+  try {
     // Get conversation history for context (only this user's messages and AI responses to them)
-    console.log(`[sendMessage:${requestId}] Fetching conversation history...`);
+    console.log(`[sendMessage:${requestId}] [BG] Fetching conversation history...`);
     const historyStartTime = Date.now();
-    // IMPORTANT: We need the MOST RECENT messages for context.
-    // If we order ASC and take N, Prisma returns the OLDEST N messages, which means once a session
-    // has more than N messages, the "lastMessage" passed to the orchestrator will be stale and the
-    // AI can appear to repeat the same response forever.
-    //
-    // So we fetch newest-first and then reverse to preserve chronological order for the model.
     const historyDesc = await prisma.message.findMany({
       where: {
         sessionId,
         OR: [
-          // Messages user sent without a specific recipient
-          { senderId: user.id, forUserId: null },
-          // Messages specifically for this user
-          { forUserId: user.id },
+          { senderId: userId, forUserId: null },
+          { forUserId: userId },
         ],
       },
       orderBy: { timestamp: 'desc' },
-      take: 20, // Limit context window (newest 20)
+      take: 20,
     });
     const history = historyDesc.slice().reverse();
-    console.log(`[sendMessage:${requestId}] ✅ History fetched: ${history.length} messages (took ${Date.now() - historyStartTime}ms)`);
-    console.log(`[sendMessage:${requestId}] History breakdown: ${history.filter(m => m.role === 'USER').length} user, ${history.filter(m => m.role === 'AI').length} AI`);
-
-    // Log recent message IDs to detect duplicates
-    const recentMessages = history.slice(-5);
-    console.log(`[sendMessage:${requestId}] Recent 5 message IDs:`, recentMessages.map(m => `${m.role}:${m.id.substring(0, 8)}...`).join(', '));
+    console.log(`[sendMessage:${requestId}] [BG] ✅ History fetched: ${history.length} messages (took ${Date.now() - historyStartTime}ms)`);
 
     // Count user turns for AI context
     const userTurnCount = history.filter((m) => m.role === 'USER').length;
-    console.log(`[sendMessage:${requestId}] User turn count: ${userTurnCount}`);
+    console.log(`[sendMessage:${requestId}] [BG] User turn count: ${userTurnCount}`);
 
-    // Generate turnId for this user action - used to group all costs from this message
+    // Generate turnId for this user action
     const turnId = `${sessionId}-${userTurnCount}`;
 
-    // Detect stage transition: check if this is the first message in Stage 1
-    // A stage transition happens when:
-    // 1. There are previous messages in the session (from Stage 0 invitation phase)
-    // 2. This is the first Stage 1 message from this user (excluding the just-saved message)
+    // Detect stage transition
+    const userMessage = history.find((m) => m.id === userMessageId);
     const previousStage1Messages = history.filter(
-      (m) => m.stage === 1 && m.senderId === user.id && m.id !== userMessage.id
+      (m) => m.stage === 1 && m.senderId === userId && m.id !== userMessageId
     );
-    // history includes the just-saved message, so we check if there are OTHER Stage 1 messages
     const hasStage0Messages = history.some((m) => m.stage === 0);
     const isStageTransition = hasStage0Messages && previousStage1Messages.length === 0;
 
-    // If it's a stage transition, determine the previous stage
     let previousStage: number | undefined;
     if (isStageTransition) {
       const previousStages = history
@@ -328,13 +412,10 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       if (previousStages.length > 0) {
         previousStage = Math.max(...previousStages);
       }
-      console.log(
-        `[sendMessage] Stage transition detected: ${previousStage ?? 'unknown'} → ${currentStage}`
-      );
     }
 
     // Get partner name for context
-    const partnerId = await getPartnerUserId(sessionId, user.id);
+    const partnerId = await getPartnerUserId(sessionId, userId);
     let partnerName: string | undefined;
     if (partnerId) {
       const partner = await prisma.user.findUnique({
@@ -342,38 +423,23 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
         select: { name: true },
       });
       partnerName = partner?.name || undefined;
-    } else if (session.status === 'CREATED') {
-      // During invitation phase, get partner name from the invitation
+    } else if (sessionStatus === 'CREATED') {
       const invitation = await prisma.invitation.findFirst({
-        where: { sessionId, invitedById: user.id },
+        where: { sessionId, invitedById: userId },
         select: { name: true },
       });
       partnerName = invitation?.name || undefined;
     }
 
-    // Get session for duration calculation
-    const sessionForDuration = await prisma.session.findUnique({
-      where: { id: sessionId },
-      select: { createdAt: true },
-    });
-    const sessionDurationMinutes = sessionForDuration
-      ? Math.floor((Date.now() - sessionForDuration.createdAt.getTime()) / 60000)
-      : 0;
+    // Calculate session duration
+    const sessionDurationMinutes = Math.floor((Date.now() - sessionCreatedAt.getTime()) / 60000);
 
-    // Determine if this is the first turn in the session
+    // Determine context flags
     const isFirstTurnInSession = userTurnCount === 1;
-
-    // Check if we're in the invitation crafting phase (session status is CREATED)
-    const isInvitationPhase = session.status === 'CREATED';
-
-    // Check if we're in onboarding mode (Stage 0 with compact not signed)
-    // This happens when the user is viewing the Curiosity Compact and may have questions
-    const myGates = progress?.gatesSatisfied as Record<string, unknown> | null;
-    const isOnboarding = currentStage === 0 && !isInvitationPhase && !myGates?.compactSigned;
-
-    // Check if user is trying to refine their invitation (session is INVITED and they ask to refine)
+    const isInvitationPhase = sessionStatus === 'CREATED';
+    const isOnboarding = currentStage === 0 && !isInvitationPhase && !progressGatesSatisfied?.compactSigned;
     const isRefiningInvitation =
-      session.status === 'INVITED' &&
+      sessionStatus === 'INVITED' &&
       lowerContent.includes('refine') &&
       lowerContent.includes('invitation');
 
@@ -381,11 +447,10 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     let currentInvitationMessage: string | null = null;
     if (isRefiningInvitation || isInvitationPhase) {
       const invitation = await prisma.invitation.findFirst({
-        where: { sessionId, invitedById: user.id },
+        where: { sessionId, invitedById: userId },
         select: { invitationMessage: true, name: true },
       });
       currentInvitationMessage = invitation?.invitationMessage || null;
-      // Also get partner name from invitation if not already set
       if (!partnerName && invitation?.name) {
         partnerName = invitation.name;
       }
@@ -399,7 +464,7 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
         where: {
           sessionId_userId: {
             sessionId,
-            userId: user.id,
+            userId,
           },
         },
         select: { content: true },
@@ -418,13 +483,13 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     // Build full context for orchestrated response
     const aiContext: FullAIContext = {
       sessionId,
-      userId: user.id,
+      userId,
       turnId,
-      userName: user.name || 'there',
+      userName,
       partnerName,
       stage: currentStage,
       turnCount: userTurnCount,
-      emotionalIntensity: 5, // TODO: Get from emotional barometer when implemented
+      emotionalIntensity: 5,
       sessionDurationMinutes,
       isFirstTurnInSession,
       isInvitationPhase: isInvitationPhase || isRefiningInvitation,
@@ -434,11 +499,11 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       currentInvitationMessage,
       currentEmpathyDraft,
       isRefiningEmpathy,
-      isOnboarding, // Stage 0 with compact not signed - use onboarding prompt
+      isOnboarding,
     };
 
     // Get AI response using full orchestration pipeline
-    console.log(`[sendMessage:${requestId}] Calling orchestrator with ${history.length} messages...`);
+    console.log(`[sendMessage:${requestId}] [BG] Calling orchestrator with ${history.length} messages...`);
     const orchestratorStartTime = Date.now();
     const orchestratorResult = await getOrchestratedResponse(
       history.map((m) => ({
@@ -448,27 +513,15 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
       aiContext
     );
     const orchestratorTime = Date.now() - orchestratorStartTime;
-    console.log(`[sendMessage:${requestId}] ✅ Orchestrator completed in ${orchestratorTime}ms`);
-    console.log(
-      `[sendMessage:${requestId}] Orchestrator result: intent=${orchestratorResult.memoryIntent.intent}, depth=${orchestratorResult.memoryIntent.depth}, mock=${orchestratorResult.usedMock}`
-    );
-    console.log(`[sendMessage:${requestId}] AI response length: ${orchestratorResult.response.length}`);
-    console.log(`[sendMessage:${requestId}] AI response preview: "${orchestratorResult.response.substring(0, 150)}${orchestratorResult.response.length > 150 ? '...' : ''}"`);
-
-    // Debug: Log feel-heard check recommendation from AI (Stage 1)
-    if (currentStage === 1) {
-      console.log(
-        `[sendMessage] Stage 1 feel-heard check: offerFeelHeardCheck=${orchestratorResult.offerFeelHeardCheck}, turnCount=${userTurnCount}`
-      );
-    }
+    console.log(`[sendMessage:${requestId}] [BG] ✅ Orchestrator completed in ${orchestratorTime}ms`);
+    console.log(`[sendMessage:${requestId}] [BG] Orchestrator result: intent=${orchestratorResult.memoryIntent.intent}, mock=${orchestratorResult.usedMock}`);
 
     // Stage 1: If AI recommends feel-heard check, persist to stage progress
-    // This allows mobile to restore the state on remount
-    if (currentStage === 1 && orchestratorResult.offerFeelHeardCheck && progress) {
+    if (currentStage === 1 && orchestratorResult.offerFeelHeardCheck && progressId) {
       try {
-        const currentGates = (progress.gatesSatisfied as Record<string, unknown>) ?? {};
+        const currentGates = progressGatesSatisfied ?? {};
         await prisma.stageProgress.update({
-          where: { id: progress.id },
+          where: { id: progressId },
           data: {
             gatesSatisfied: {
               ...currentGates,
@@ -476,26 +529,20 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
             },
           },
         });
-        console.log(`[sendMessage] Stage 1: Persisted feelHeardCheckOffered=true for user ${user.id}`);
+        console.log(`[sendMessage:${requestId}] [BG] Stage 1: Persisted feelHeardCheckOffered=true`);
       } catch (err) {
-        console.warn('[sendMessage] Failed to persist feelHeardCheckOffered:', err);
+        console.warn(`[sendMessage:${requestId}] [BG] Failed to persist feelHeardCheckOffered:`, err);
       }
     }
 
-    // The orchestrator already parses structured JSON responses and extracts:
-    // - response: the text to show in chat
-    // - invitationMessage: the proposed invitation (if any)
     const aiResponseContent = orchestratorResult.response;
     const extractedInvitationMessage = orchestratorResult.invitationMessage ?? null;
 
     // Only save invitation message during invitation phase
     if ((isInvitationPhase || isRefiningInvitation) && extractedInvitationMessage) {
-      console.log(`[sendMessage] Extracted invitation draft: "${extractedInvitationMessage}"`);
-
-      // Save draft to invitation record
-      // CRITICAL FIX: Mark as unconfirmed so it is treated as a draft
+      console.log(`[sendMessage:${requestId}] [BG] Extracted invitation draft: "${extractedInvitationMessage}"`);
       await prisma.invitation.updateMany({
-        where: { sessionId, invitedById: user.id },
+        where: { sessionId, invitedById: userId },
         data: {
           invitationMessage: extractedInvitationMessage,
           messageConfirmed: false
@@ -504,8 +551,6 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     }
 
     // Stage 2: If AI is offering ready-to-share, auto-save the empathy draft
-    // Save with readyToShare: false so user sees low-profile confirmation prompt first
-    // User must explicitly confirm to see the full preview card
     if (
       currentStage === 2 &&
       orchestratorResult.offerReadyToShare &&
@@ -516,125 +561,85 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
           where: {
             sessionId_userId: {
               sessionId,
-              userId: user.id,
+              userId,
             },
           },
           create: {
             sessionId,
-            userId: user.id,
+            userId,
             content: orchestratorResult.proposedEmpathyStatement,
-            readyToShare: false, // User must confirm before seeing full preview
+            readyToShare: false,
             version: 1,
           },
           update: {
             content: orchestratorResult.proposedEmpathyStatement,
-            // Don't change readyToShare if draft already exists - user may have confirmed
             version: { increment: 1 },
           },
         });
-        console.log(`[sendMessage] Stage 2: Auto-saved empathy draft for user ${user.id}`);
+        console.log(`[sendMessage:${requestId}] [BG] Stage 2: Auto-saved empathy draft`);
       } catch (err) {
-        console.error('[sendMessage] Failed to auto-save empathy draft:', err);
+        console.error(`[sendMessage:${requestId}] [BG] Failed to auto-save empathy draft:`, err);
       }
     }
 
-    // Save AI response (just the conversational part)
-    console.log(`[sendMessage:${requestId}] Creating AI message in database...`);
-    const aiMessageStartTime = Date.now();
+    // Save AI response
+    console.log(`[sendMessage:${requestId}] [BG] Creating AI message in database...`);
     const aiMessage = await prisma.message.create({
       data: {
         sessionId,
         senderId: null,
-        forUserId: user.id, // Track which user this AI response is for (data isolation)
+        forUserId: userId,
         role: 'AI',
         content: aiResponseContent,
         stage: currentStage,
       },
     });
-    console.log(`[sendMessage:${requestId}] ✅ AI message created: ID=${aiMessage.id}, timestamp=${aiMessage.timestamp.toISOString()}, stage=${aiMessage.stage}`);
-    console.log(`[sendMessage:${requestId}] AI message creation took ${Date.now() - aiMessageStartTime}ms`);
-
-    // Check for duplicate AI messages (same content, same user, within last 5 seconds)
-    const recentAIDuplicates = await prisma.message.findMany({
-      where: {
-        sessionId,
-        role: 'AI',
-        forUserId: user.id,
-        content: aiResponseContent,
-        id: { not: aiMessage.id },
-        timestamp: {
-          gte: new Date(Date.now() - 5000), // Last 5 seconds
-        },
-      },
-    });
-    if (recentAIDuplicates.length > 0) {
-      console.warn(`[sendMessage:${requestId}] ⚠️  WARNING: Found ${recentAIDuplicates.length} duplicate AI message(s) in last 5 seconds!`);
-      recentAIDuplicates.forEach((dup, idx) => {
-        console.warn(`[sendMessage:${requestId}]   Duplicate ${idx + 1}: ID=${dup.id}, timestamp=${dup.timestamp.toISOString()}`);
-      });
-    }
+    console.log(`[sendMessage:${requestId}] [BG] ✅ AI message created: ID=${aiMessage.id}`);
 
     // Embed messages for cross-session retrieval (non-blocking)
-    // Pass turnId so embedding cost is attributed to this user message
-    embedMessage(userMessage.id, turnId).catch((err) =>
-      console.warn(`[sendMessage:${requestId}] Failed to embed user message:`, err)
+    embedMessage(userMessageId, turnId).catch((err) =>
+      console.warn(`[sendMessage:${requestId}] [BG] Failed to embed user message:`, err)
     );
     embedMessage(aiMessage.id, turnId).catch((err) =>
-      console.warn(`[sendMessage:${requestId}] Failed to embed AI message:`, err)
+      console.warn(`[sendMessage:${requestId}] [BG] Failed to embed AI message:`, err)
     );
 
     // Summarize older parts of the conversation (non-blocking)
-    // This creates/updates a rolling summary in UserVessel.conversationSummary once message count crosses thresholds.
-    // Pass turnId so summarization cost is attributed to this user message
-    updateSessionSummary(sessionId, user.id, turnId).catch((err) =>
-      console.warn(`[sendMessage:${requestId}] Failed to update session summary:`, err)
+    updateSessionSummary(sessionId, userId, turnId).catch((err) =>
+      console.warn(`[sendMessage:${requestId}] [BG] Failed to update session summary:`, err)
     );
 
-    // Update session.updatedAt and notify users on other screens (home/sessions list)
-    // This ensures hasUnread is true if the user leaves before seeing the AI response
-    // Exclude current user since they're receiving the response directly
-    notifySessionMembers(sessionId, user.id).catch((err) =>
-      console.warn(`[sendMessage:${requestId}] Failed to notify session members:`, err)
-    );
-
-    const totalTime = Date.now() - requestStartTime;
-    console.log(`[sendMessage:${requestId}] ========== REQUEST SUCCESS ==========`);
-    console.log(`[sendMessage:${requestId}] Total request time: ${totalTime}ms`);
-    console.log(`[sendMessage:${requestId}] Returning response with userMessage.id=${userMessage.id}, aiMessage.id=${aiMessage.id}`);
-
-    successResponse(res, {
-      userMessage: {
-        id: userMessage.id,
-        sessionId: userMessage.sessionId,
-        senderId: userMessage.senderId,
-        role: userMessage.role,
-        content: userMessage.content,
-        stage: userMessage.stage,
-        timestamp: userMessage.timestamp.toISOString(),
-      },
-      aiResponse: {
+    // =========================================================================
+    // PUBLISH AI RESPONSE VIA ABLY
+    // =========================================================================
+    console.log(`[sendMessage:${requestId}] [BG] Publishing AI response via Ably...`);
+    await publishMessageAIResponse(
+      sessionId,
+      userId,
+      {
         id: aiMessage.id,
         sessionId: aiMessage.sessionId,
         senderId: aiMessage.senderId,
-        role: aiMessage.role,
+        role: MessageRole.AI,
         content: aiMessage.content,
         stage: aiMessage.stage,
         timestamp: aiMessage.timestamp.toISOString(),
       },
-      // Include structured response fields from AI
-      offerFeelHeardCheck: orchestratorResult.offerFeelHeardCheck,
-      offerReadyToShare: orchestratorResult.offerReadyToShare,
-      invitationMessage: extractedInvitationMessage,
-      proposedEmpathyStatement: orchestratorResult.proposedEmpathyStatement ?? null,
-    });
+      {
+        offerFeelHeardCheck: orchestratorResult.offerFeelHeardCheck,
+        invitationMessage: extractedInvitationMessage,
+        offerReadyToShare: orchestratorResult.offerReadyToShare,
+        proposedEmpathyStatement: orchestratorResult.proposedEmpathyStatement ?? null,
+      }
+    );
+
+    const totalBackgroundTime = Date.now() - backgroundStartTime;
+    console.log(`[sendMessage:${requestId}] ========== BACKGROUND AI PROCESSING COMPLETE ==========`);
+    console.log(`[sendMessage:${requestId}] [BG] Total background processing time: ${totalBackgroundTime}ms`);
+
   } catch (error) {
-    const totalTime = Date.now() - requestStartTime;
-    console.error(`[sendMessage:${requestId}] ========== REQUEST ERROR ==========`);
-    console.error(`[sendMessage:${requestId}] Error after ${totalTime}ms:`, error);
-    if (error instanceof Error) {
-      console.error(`[sendMessage:${requestId}] Error stack:`, error.stack);
-    }
-    errorResponse(res, 'INTERNAL_ERROR', 'Failed to send message', 500);
+    console.error(`[sendMessage:${requestId}] [BG] Error in background processing:`, error);
+    throw error; // Re-throw so the caller can handle it
   }
 }
 

@@ -35,7 +35,12 @@ export interface SendMessageRequest {
 
 export interface SendMessageResponse {
   userMessage: MessageDTO;
-  aiResponse: MessageDTO;
+  /**
+   * AI response message.
+   * - For sync responses: Contains the AI message
+   * - For fire-and-forget: null (AI response arrives via Ably)
+   */
+  aiResponse: MessageDTO | null;
 
   // If emotional intensity was high, AI might suggest a pause
   suggestPause?: boolean;

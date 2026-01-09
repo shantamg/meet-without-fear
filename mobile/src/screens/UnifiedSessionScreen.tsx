@@ -8,6 +8,7 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal } from 'react-native';
+import { Layers } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion } from '@meet-without-fear/shared';
@@ -43,7 +44,7 @@ import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
 import { useRealtime } from '../hooks/useRealtime';
 import { stageKeys } from '../hooks/useStages';
-import { messageKeys } from '../hooks/useMessages';
+import { messageKeys, useAIMessageHandler } from '../hooks/useMessages';
 import { createStyles } from '../theme/styled';
 import {
   trackInvitationSent,
@@ -208,6 +209,9 @@ export function UnifiedSessionScreen({
     setPendingConfirmation,
   } = useUnifiedSession(sessionId);
 
+  // AI message handler for fire-and-forget pattern
+  const { addAIMessage, handleAIMessageError } = useAIMessageHandler();
+
   // Real-time presence and event tracking
   const { partnerOnline, connectionStatus } = useRealtime({
     sessionId,
@@ -248,6 +252,26 @@ export function UnifiedSessionScreen({
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       }
     },
+    // Fire-and-forget pattern: AI responses arrive via Ably
+    onAIResponse: (payload) => {
+      console.log('[UnifiedSessionScreen] AI response received via Ably:', payload.message?.id);
+      // Clear waiting state - AI response has arrived, hide ghost dots
+      setWaitingForAIResponse(false);
+      // Add AI message to the cache
+      addAIMessage(sessionId, payload.message);
+      // TODO: Handle additional metadata from payload if needed
+      // - payload.offerFeelHeardCheck
+      // - payload.invitationMessage
+      // - payload.offerReadyToShare
+      // - payload.proposedEmpathyStatement
+    },
+    onAIError: (payload) => {
+      console.error('[UnifiedSessionScreen] AI error received via Ably:', payload.error);
+      // Clear waiting state - even on error, stop showing ghost dots
+      setWaitingForAIResponse(false);
+      handleAIMessageError(sessionId, payload.userMessageId, payload.error, payload.canRetry);
+      // TODO: Show error toast or UI indicator
+    },
   });
 
   // -------------------------------------------------------------------------
@@ -282,8 +306,16 @@ export function UnifiedSessionScreen({
   // Wrapped sendMessage with tracking
   const sendMessageWithTracking = useCallback((message: string) => {
     trackMessageSent(sessionId, message.length);
+    // Fire-and-forget: Set waiting state for ghost dots until AI response arrives via Ably
+    setWaitingForAIResponse(true);
     sendMessage(message);
   }, [sessionId, sendMessage]);
+
+  // -------------------------------------------------------------------------
+  // Fire-and-Forget: Track waiting for AI response via Ably
+  // -------------------------------------------------------------------------
+  // This keeps the ghost dots showing until AI response arrives
+  const [waitingForAIResponse, setWaitingForAIResponse] = useState(false);
 
   // -------------------------------------------------------------------------
   // Local State for Refine Invitation Drawer
@@ -389,6 +421,15 @@ export function UnifiedSessionScreen({
   // Animation for the empathy statement review panel slide-up
   const empathyPanelAnim = useRef(new Animated.Value(0)).current;
 
+  // Animation for the feel heard confirmation panel slide-up
+  const feelHeardAnim = useRef(new Animated.Value(0)).current;
+
+  // Animation for the share suggestion panel slide-up
+  const shareSuggestionAnim = useRef(new Animated.Value(0)).current;
+
+  // Animation for the waiting banner slide-up
+  const waitingBannerAnim = useRef(new Animated.Value(0)).current;
+
   // Calculate whether panel should show
   // FIX: Only show to inviter (they are the ones who need to share the invitation)
   // Invitees should never see this panel - they already accepted the invitation
@@ -416,7 +457,7 @@ export function UnifiedSessionScreen({
   }, [shouldShowInvitationPanel, invitationPanelAnim]);
 
   // Calculate whether empathy review panel should show
-  // Show when empathy statement is ready to review but not yet sent
+  // Show when there's empathy statement content to review (not yet shared)
   // Note: We don't check isSharingEmpathy here - we animate it closed instead of unmounting
   // to prevent layout jumps
   const shouldShowEmpathyPanel = useMemo(() => {
@@ -426,22 +467,26 @@ export function UnifiedSessionScreen({
     // EXCEPT when we're in refining mode, then we need to show it again
     if (hasSharedEmpathyLocal && !isRefining) return false;
 
-    return !!(
-      currentStage === Stage.PERSPECTIVE_STRETCH &&
-      (!empathyDraftData?.alreadyConsented || isRefining) &&
-      ((aiRecommendsReadyToShare && !empathyDraftData?.draft?.readyToShare) ||
-        (empathyDraftData?.canConsent && empathyDraftData?.draft?.readyToShare) ||
-        isRefining) &&
-      (liveProposedEmpathyStatement || empathyDraftData?.draft?.content || (isRefining && empathyStatusData?.myAttempt?.content)) &&
-      !isTypewriterAnimating // Wait for text to finish
+    // Must be in Stage 2 and not have already shared
+    if (currentStage !== Stage.PERSPECTIVE_STRETCH) return false;
+    if (empathyDraftData?.alreadyConsented && !isRefining) return false;
+
+    // Must have content to show (from AI, draft, or refining)
+    const hasContent = !!(
+      liveProposedEmpathyStatement ||
+      empathyDraftData?.draft?.content ||
+      (isRefining && empathyStatusData?.myAttempt?.content)
     );
+    if (!hasContent) return false;
+
+    // Wait for typewriter to finish
+    if (isTypewriterAnimating) return false;
+
+    return true;
   }, [
     hasSharedEmpathyLocal,
     currentStage,
     empathyDraftData?.alreadyConsented,
-    empathyDraftData?.canConsent,
-    empathyDraftData?.draft?.readyToShare,
-    aiRecommendsReadyToShare,
     liveProposedEmpathyStatement,
     empathyDraftData?.draft?.content,
     isTypewriterAnimating,
@@ -451,6 +496,39 @@ export function UnifiedSessionScreen({
 
   // Whether user is in "refining" mode (received shared context from partner)
   const isRefiningEmpathy = !!empathyStatusData?.hasNewSharedContext;
+
+  // Calculate whether feel heard confirmation should show
+  // Only show in Stage 1 (WITNESS) - not in later stages
+  const shouldShowFeelHeard = useMemo(() => {
+    return !!(
+      currentStage === Stage.WITNESS &&
+      showFeelHeardConfirmation &&
+      !milestones?.feelHeardConfirmedAt &&
+      !isConfirmingFeelHeard &&
+      !isTypewriterAnimating
+    );
+  }, [currentStage, showFeelHeardConfirmation, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, isTypewriterAnimating]);
+
+  // Calculate whether share suggestion panel should show
+  const shouldShowShareSuggestion = useMemo(() => {
+    return !!(
+      shareOfferData?.hasSuggestion &&
+      shareOfferData.suggestion &&
+      !hasRespondedToShareOfferLocal &&
+      !isTypewriterAnimating
+    );
+  }, [shareOfferData?.hasSuggestion, shareOfferData?.suggestion, hasRespondedToShareOfferLocal, isTypewriterAnimating]);
+
+  // Calculate whether waiting banner should show (any waiting status)
+  // Note: Priority against other panels is handled by the ternary in renderAboveInput
+  const shouldShowWaitingBanner = useMemo(() => {
+    return !!(
+      waitingStatus === 'empathy-pending' ||
+      waitingStatus === 'reconciler-analyzing' ||
+      waitingStatus === 'awaiting-context-share' ||
+      waitingStatus === 'refining-empathy'
+    );
+  }, [waitingStatus]);
 
   // Animate empathy panel - close when sharing, otherwise follow shouldShowEmpathyPanel
   // This prevents layout jumps by animating closed instead of unmounting
@@ -465,6 +543,36 @@ export function UnifiedSessionScreen({
       friction: 9,
     }).start();
   }, [shouldShowEmpathyPanel, isSharingEmpathy, empathyPanelAnim]);
+
+  // Animate feel heard panel
+  useEffect(() => {
+    Animated.spring(feelHeardAnim, {
+      toValue: shouldShowFeelHeard ? 1 : 0,
+      useNativeDriver: false,
+      tension: 40,
+      friction: 9,
+    }).start();
+  }, [shouldShowFeelHeard, feelHeardAnim]);
+
+  // Animate share suggestion panel
+  useEffect(() => {
+    Animated.spring(shareSuggestionAnim, {
+      toValue: shouldShowShareSuggestion ? 1 : 0,
+      useNativeDriver: false,
+      tension: 40,
+      friction: 9,
+    }).start();
+  }, [shouldShowShareSuggestion, shareSuggestionAnim]);
+
+  // Animate waiting banner
+  useEffect(() => {
+    Animated.spring(waitingBannerAnim, {
+      toValue: shouldShowWaitingBanner ? 1 : 0,
+      useNativeDriver: false,
+      tension: 40,
+      friction: 9,
+    }).start();
+  }, [shouldShowWaitingBanner, waitingBannerAnim]);
 
   // Clear optimistic state when API confirms
   useEffect(() => {
@@ -1170,7 +1278,7 @@ export function UnifiedSessionScreen({
           messages={displayMessages}
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
-          isLoading={isSending || isFetchingInitialMessage || isConfirmingInvitation || isConfirmingFeelHeard || isSharingEmpathy}
+          isLoading={isSending || waitingForAIResponse || isFetchingInitialMessage || isConfirmingInvitation || isConfirmingFeelHeard || isSharingEmpathy}
           showEmotionSlider={!isInOnboardingUnsigned}
           partnerName={partnerName}
           emotionValue={barometerValue}
@@ -1220,20 +1328,38 @@ export function UnifiedSessionScreen({
                 />
               )
               // Show feel-heard confirmation panel when AI recommends it
-              : showFeelHeardConfirmation && !milestones?.feelHeardConfirmedAt && !isConfirmingFeelHeard && !isTypewriterAnimating
+              : shouldShowFeelHeard
                 ? () => (
-                  <View style={styles.feelHeardContainer}>
-                    <FeelHeardConfirmation
-                      onConfirm={() => {
-                        // Track felt heard response
-                        trackFeltHeardResponse(sessionId, 'yes');
-                        // Set optimistic timestamp immediately for instant indicator display
-                        setOptimisticFeelHeardTimestamp(new Date().toISOString());
-                        handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
-                      }}
-                      isPending={isConfirmingFeelHeard}
-                    />
-                  </View>
+                  <Animated.View
+                    style={{
+                      opacity: feelHeardAnim,
+                      maxHeight: feelHeardAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 100],
+                      }),
+                      transform: [{
+                        translateY: feelHeardAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [20, 0],
+                        }),
+                      }],
+                      overflow: 'hidden',
+                    }}
+                    pointerEvents={shouldShowFeelHeard ? 'auto' : 'none'}
+                  >
+                    <View style={styles.feelHeardContainer}>
+                      <FeelHeardConfirmation
+                        onConfirm={() => {
+                          // Track felt heard response
+                          trackFeltHeardResponse(sessionId, 'yes');
+                          // Set optimistic timestamp immediately for instant indicator display
+                          setOptimisticFeelHeardTimestamp(new Date().toISOString());
+                          handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
+                        }}
+                        isPending={isConfirmingFeelHeard}
+                      />
+                    </View>
+                  </Animated.View>
                 )
                 // Show empathy review panel when empathy statement is ready
                 : shouldShowEmpathyPanel
@@ -1271,20 +1397,38 @@ export function UnifiedSessionScreen({
                   )
                   // Show share suggestion panel when reconciler generated a suggestion
                   // Hide immediately via local latch when user responds (before API completes)
-                  : (shareOfferData?.hasSuggestion && shareOfferData.suggestion && !hasRespondedToShareOfferLocal)
+                  : shouldShowShareSuggestion
                     ? () => (
-                      <View style={styles.shareSuggestionContainer}>
-                        <TouchableOpacity
-                          style={styles.shareSuggestionButton}
-                          onPress={() => setShowShareSuggestionDrawer(true)}
-                          activeOpacity={0.7}
-                          testID="share-suggestion-button"
-                        >
-                          <Text style={styles.shareSuggestionButtonText}>
-                            Help {shareOfferData.suggestion?.guesserName} understand
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
+                      <Animated.View
+                        style={{
+                          opacity: shareSuggestionAnim,
+                          maxHeight: shareSuggestionAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 100],
+                          }),
+                          transform: [{
+                            translateY: shareSuggestionAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [20, 0],
+                            }),
+                          }],
+                          overflow: 'hidden',
+                        }}
+                        pointerEvents={shouldShowShareSuggestion ? 'auto' : 'none'}
+                      >
+                        <View style={styles.shareSuggestionContainer}>
+                          <TouchableOpacity
+                            style={styles.shareSuggestionButton}
+                            onPress={() => setShowShareSuggestionDrawer(true)}
+                            activeOpacity={0.7}
+                            testID="share-suggestion-button"
+                          >
+                            <Text style={styles.shareSuggestionButtonText}>
+                              Help {shareOfferData?.suggestion?.guesserName} understand
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </Animated.View>
                     )
                   // Only render if inviter has a draft message (not confirmed yet)
                   // Never render for invitees - they already accepted the invitation
@@ -1358,62 +1502,89 @@ export function UnifiedSessionScreen({
                         </View>
                       </Animated.View>
                     )
-                    // Show waiting banner when waiting for partner's empathy
-                    : waitingStatus === 'empathy-pending'
+                    // Show waiting banners with animation
+                    : shouldShowWaitingBanner
                       ? () => (
-                        <View style={styles.waitingBanner}>
-                          <Text style={styles.waitingBannerText}>
-                            Waiting for {partnerName || 'your partner'} to share their empathy statement.
-                          </Text>
-                          {onNavigateToInnerThoughts && (
-                            <TouchableOpacity
-                              style={styles.innerThoughtsLink}
-                              onPress={() => onNavigateToInnerThoughts(sessionId)}
-                            >
-                              <Text style={styles.innerThoughtsLinkText}>
-                                Continue with Inner Thoughts while you wait →
-                              </Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      )
-                      : waitingStatus === 'reconciler-analyzing'
-                        ? () => (
+                        <Animated.View
+                          style={{
+                            opacity: waitingBannerAnim,
+                            maxHeight: waitingBannerAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0, 150],
+                            }),
+                            transform: [{
+                              translateY: waitingBannerAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [20, 0],
+                              }),
+                            }],
+                            overflow: 'hidden',
+                          }}
+                          pointerEvents={shouldShowWaitingBanner ? 'auto' : 'none'}
+                        >
                           <View style={styles.waitingBanner}>
-                            <ActivityIndicator size="small" color="#6750A4" style={{ marginBottom: 8 }} />
-                            <Text style={styles.waitingBannerText}>
-                              AI is analyzing your empathy match...
-                            </Text>
-                          </View>
-                        )
-                        : waitingStatus === 'awaiting-context-share'
-                          ? () => (
-                            <View style={styles.waitingBanner}>
-                              <Text style={styles.waitingBannerText}>
-                                {partnerName || 'Your partner'}'s understanding has some gaps.
-                              </Text>
-                              <Text style={styles.waitingBannerSubtext}>
-                                Review the suggestion below to help them understand you better.
-                              </Text>
-                            </View>
-                          )
-                          : waitingStatus === 'refining-empathy'
-                            ? () => (
-                              <View style={styles.waitingBanner}>
+                            {waitingStatus === 'reconciler-analyzing' && (
+                              <ActivityIndicator size="small" color="#6750A4" style={{ marginBottom: 8 }} />
+                            )}
+                            {waitingStatus === 'empathy-pending' ? (
+                              <>
+                                <Text style={styles.waitingBannerTextNormal}>
+                                  Waiting for {partnerName || 'your partner'} to feel heard.
+                                </Text>
+                                {onNavigateToInnerThoughts && (
+                                  <View style={styles.waitingBannerActions}>
+                                    <TouchableOpacity
+                                      style={styles.keepChattingButton}
+                                      onPress={() => onNavigateToInnerThoughts(sessionId)}
+                                      activeOpacity={0.7}
+                                    >
+                                      <Layers size={18} color="#FFFFFF" />
+                                      <Text style={styles.keepChattingButtonText}>Keep Chatting →</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                )}
+                              </>
+                            ) : (
+                              <>
                                 <Text style={styles.waitingBannerText}>
-                                  {partnerName || 'Your partner'} shared more info!
+                                  {waitingStatus === 'reconciler-analyzing'
+                                    ? 'AI is analyzing your empathy match...'
+                                    : waitingStatus === 'awaiting-context-share'
+                                      ? `${partnerName || 'Your partner'}'s understanding has some gaps.`
+                                      : `${partnerName || 'Your partner'} shared more info!`}
                                 </Text>
-                                <Text style={styles.waitingBannerSubtext}>
-                                  Update your empathy statement to include this new context.
-                                </Text>
-                              </View>
-                            )
-                            : undefined
+                                {(waitingStatus === 'awaiting-context-share' || waitingStatus === 'refining-empathy') && (
+                                  <Text style={styles.waitingBannerSubtext}>
+                                    {waitingStatus === 'awaiting-context-share'
+                                      ? 'Review the suggestion below to help them understand you better.'
+                                      : 'Update your empathy statement to include this new context.'}
+                                  </Text>
+                                )}
+                                {/* Show inner thoughts link for reconciler-analyzing */}
+                                {onNavigateToInnerThoughts && waitingStatus === 'reconciler-analyzing' && (
+                                  <TouchableOpacity
+                                    style={styles.innerThoughtsLink}
+                                    onPress={() => onNavigateToInnerThoughts(sessionId)}
+                                  >
+                                    <Text style={styles.innerThoughtsLinkText}>
+                                      Continue with Inner Thoughts while you wait →
+                                    </Text>
+                                  </TouchableOpacity>
+                                )}
+                              </>
+                            )}
+                          </View>
+                        </Animated.View>
+                      )
+                      : undefined
           }
           hideInput={
-            waitingStatus === 'empathy-pending' ||
-            waitingStatus === 'reconciler-analyzing' ||
-            waitingStatus === 'awaiting-context-share'
+            // Only hide input when waiting for partner's empathy (after user has shared theirs)
+            // Never hide when empathy review panel is showing (user still needs to interact)
+            !shouldShowEmpathyPanel && (
+              waitingStatus === 'empathy-pending' ||
+              waitingStatus === 'reconciler-analyzing'
+            )
           }
         />
 
@@ -1809,6 +1980,33 @@ const useStyles = () =>
       lineHeight: 18,
       textAlign: 'center',
       marginTop: 2,
+    },
+    waitingBannerTextNormal: {
+      color: t.colors.textSecondary,
+      fontSize: t.typography.fontSize.md,
+      lineHeight: 22,
+      textAlign: 'center',
+    },
+    waitingBannerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: t.spacing.sm,
+      gap: t.spacing.md,
+    },
+    keepChattingButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.spacing.xs,
+      paddingVertical: t.spacing.sm,
+      paddingHorizontal: t.spacing.md,
+      backgroundColor: t.colors.brandBlue,
+      borderRadius: t.radius.md,
+    },
+    keepChattingButtonText: {
+      color: '#FFFFFF',
+      fontSize: t.typography.fontSize.sm,
+      fontWeight: '600',
     },
     innerThoughtsLink: {
       marginTop: t.spacing.sm,

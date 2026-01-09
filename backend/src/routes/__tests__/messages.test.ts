@@ -3,7 +3,7 @@ import {
   sendMessage,
   confirmFeelHeard,
   getConversationHistory,
-} from '../../controllers/stage1';
+} from '../../controllers/messages';
 import { prisma } from '../../lib/prisma';
 import * as aiService from '../../services/ai';
 
@@ -21,6 +21,8 @@ jest.mock('../../services/realtime', () => ({
   notifyPartner: jest.fn().mockResolvedValue(undefined),
   publishSessionEvent: jest.fn().mockResolvedValue(undefined),
   notifySessionMembers: jest.fn().mockResolvedValue(undefined),
+  publishMessageAIResponse: jest.fn().mockResolvedValue(undefined),
+  publishMessageError: jest.fn().mockResolvedValue(undefined),
 }));
 
 
@@ -58,7 +60,7 @@ function createMockResponse(): {
   };
 }
 
-describe('Stage 1 API', () => {
+describe('Messages API (Fire-and-Forget)', () => {
   const mockUser = { id: 'user-1', email: 'test@example.com', name: 'Test User' };
   const mockPartner = { id: 'user-2', email: 'partner@example.com', name: 'Partner User' };
   const mockSessionId = 'session-123';
@@ -67,8 +69,8 @@ describe('Stage 1 API', () => {
     jest.clearAllMocks();
   });
 
-  describe('POST /sessions/:id/messages (sendMessage)', () => {
-    it('creates message and returns AI response', async () => {
+  describe('POST /sessions/:id/messages (sendMessage - Fire-and-Forget)', () => {
+    it('creates user message and returns immediately (AI response via Ably)', async () => {
       const mockStageProgress = {
         id: 'progress-1',
         sessionId: mockSessionId,
@@ -88,16 +90,6 @@ describe('Stage 1 API', () => {
         timestamp: new Date(),
       };
 
-      const mockAiMessage = {
-        id: 'msg-2',
-        sessionId: mockSessionId,
-        senderId: null,
-        role: 'AI',
-        content: 'I hear that you are feeling frustrated...',
-        stage: 1,
-        timestamp: new Date(),
-      };
-
       const mockSession = {
         id: mockSessionId,
         status: 'ACTIVE',
@@ -113,9 +105,7 @@ describe('Stage 1 API', () => {
       (prisma.session.findUnique as jest.Mock).mockResolvedValue(mockSession);
       (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
       (prisma.message.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.message.create as jest.Mock)
-        .mockResolvedValueOnce(mockUserMessage)
-        .mockResolvedValueOnce(mockAiMessage);
+      (prisma.message.create as jest.Mock).mockResolvedValue(mockUserMessage);
       (prisma.relationshipMember.findMany as jest.Mock).mockResolvedValue([
         { userId: mockUser.id },
       ]);
@@ -123,19 +113,16 @@ describe('Stage 1 API', () => {
       (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
       (prisma.emotionalReading.findMany as jest.Mock).mockResolvedValue([]);
 
-      // Mock the orchestrated response
+      // Mock AI orchestrator for background processing
       (aiService.getOrchestratedResponse as jest.Mock).mockResolvedValue({
-        response: 'I hear that you are feeling frustrated...',
-        memoryIntent: { intent: 'emotional_validation', depth: 'minimal', reason: 'Test' },
-        contextBundle: {
-          conversationContext: { recentTurns: [], turnCount: 0, sessionDurationMinutes: 0 },
-          emotionalThread: { initialIntensity: null, currentIntensity: null, trend: 'unknown', notableShifts: [] },
-          stageContext: { stage: 1, gatesSatisfied: {} },
-          userName: 'Test User',
-          intent: { intent: 'emotional_validation', depth: 'minimal', reason: 'Test' },
-          assembledAt: new Date().toISOString(),
-        },
+        response: 'Thank you for sharing how you feel.',
+        memoryIntent: { intent: 'none' },
         usedMock: false,
+        offerFeelHeardCheck: false,
+        invitationMessage: null,
+        offerReadyToShare: false,
+        proposedEmpathyStatement: null,
+        memorySuggestion: null,
       });
 
       const req = createMockRequest({
@@ -147,6 +134,7 @@ describe('Stage 1 API', () => {
 
       await sendMessage(req as Request, res as Response);
 
+      // Fire-and-forget: Returns immediately with user message only
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -156,15 +144,14 @@ describe('Stage 1 API', () => {
               id: 'msg-1',
               content: 'I feel frustrated when...',
             }),
-            aiResponse: expect.objectContaining({
-              id: 'msg-2',
-              content: 'I hear that you are feeling frustrated...',
-            }),
+            // AI response is null for fire-and-forget - it arrives via Ably
+            aiResponse: null,
           }),
         })
       );
 
-      expect(aiService.getOrchestratedResponse).toHaveBeenCalled();
+      // Note: AI processing happens in background and publishes to Ably
+      // The test doesn't wait for background processing
     });
 
     it('requires authentication', async () => {

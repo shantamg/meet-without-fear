@@ -61,10 +61,13 @@ export default function SelfReflectionListScreen() {
   const createSession = useCreateInnerThoughtsSession();
   const archiveSession = useArchiveInnerThoughtsSession();
 
-  // Flatten pages into single array
+  // Flatten pages into single array, filtering out sessions linked to partner sessions
+  // (those are accessed via the partner session UI, not the self-reflection list)
   const sessions = useMemo(() => {
     if (!data) return [];
-    return data.pages.flatMap((page) => page.sessions);
+    return data.pages
+      .flatMap((page) => page.sessions)
+      .filter((session) => !session.linkedPartnerSessionId);
   }, [data]);
 
   // Handle loading more when reaching end of list
@@ -221,7 +224,7 @@ export default function SelfReflectionListScreen() {
     const timeAgo = formatTimeAgo(item.updatedAt);
     const displayTitle = item.title || item.theme || 'Untitled session';
     const displaySummary = item.summary || 'Tap to continue...';
-    const isLinked = false; // TODO: item.linkedPartnerSessionId
+    const isLinked = !!item.linkedPartnerSessionId;
     const isDeleting = deletingSessions.has(item.id);
     const animationValues = getAnimationValues(item.id);
 

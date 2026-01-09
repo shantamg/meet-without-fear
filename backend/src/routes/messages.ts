@@ -1,10 +1,11 @@
 /**
- * Stage 1 Routes
+ * Messages Routes
  *
- * Routes for the Witness stage of the Meet Without Fear process.
- * - POST /sessions/:id/messages - Send message and get AI response
- * - POST /sessions/:id/feel-heard - Confirm user feels heard
+ * Routes for chat messaging across all stages of the Meet Without Fear process.
+ * - POST /sessions/:id/messages - Send message and get AI response (fire-and-forget)
+ * - POST /sessions/:id/feel-heard - Confirm user feels heard (Stage 1)
  * - GET /sessions/:id/messages - Get conversation history
+ * - POST /sessions/:id/messages/initial - Get AI-generated initial message
  */
 
 import { Router } from 'express';
@@ -15,7 +16,7 @@ import {
   confirmFeelHeard,
   getConversationHistory,
   getInitialMessage,
-} from '../controllers/stage1';
+} from '../controllers/messages';
 
 const router = Router();
 

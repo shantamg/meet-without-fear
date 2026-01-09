@@ -14,7 +14,7 @@ import peopleRoutes from './people';
 import reconcilerRoutes from './reconciler';
 import sessionsRoutes from './sessions';
 import stage0Routes from './stage0';
-import stage1Routes from './stage1';
+import messagesRoutes from './messages';
 import stage2Routes from './stage2';
 import stage3Routes from './stage3';
 import stage4Routes from './stage4';
@@ -40,7 +40,7 @@ router.use(sessionsRoutes);
 router.use(consentRoutes);
 router.use(emotionsRoutes);
 router.use(stage0Routes);
-router.use(stage1Routes);
+router.use(messagesRoutes);
 router.use(stage2Routes);
 router.use(reconcilerRoutes); // Post-Stage 2 empathy gap analysis
 router.use(stage3Routes);
