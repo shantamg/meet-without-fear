@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react';
-import { View, Text } from 'react-native';
+import { useRef, useEffect, useCallback } from 'react';
+import { View, Text, Animated } from 'react-native';
 import { MessageRole } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -19,7 +19,7 @@ export interface ChatBubbleMessage {
   timestamp: string;
   isIntervention?: boolean;
   status?: MessageDeliveryStatus;
-  /** If true, skip typewriter effect (for messages loaded from history) */
+  /** If true, skip animation (for messages loaded from history) */
   skipTypewriter?: boolean;
 }
 
@@ -28,9 +28,9 @@ interface ChatBubbleProps {
   showTimestamp?: boolean;
   /** Enable typewriter effect for AI messages */
   enableTypewriter?: boolean;
-  /** Callback when typewriter effect starts (to track animation state) */
+  /** Callback when animation starts (to track animation state) */
   onTypewriterStart?: () => void;
-  /** Callback when typewriter effect completes */
+  /** Callback when animation completes */
   onTypewriterComplete?: () => void;
   /** Callback during typewriter animation (for scrolling) */
   onTypewriterProgress?: () => void;
@@ -53,6 +53,9 @@ const WORD_DELAY_MS = 70;
 
 /** Duration of the fade-in animation for each word (ms) */
 const FADE_DURATION_MS = 200;
+
+/** Duration of the fade-in animation for non-typewriter messages (ms) */
+const MESSAGE_FADE_DURATION_MS = 400;
 
 // ============================================================================
 // Component
@@ -84,11 +87,20 @@ export function ChatBubble({
   const hasStartedRef = useRef(false);
   const messageIdRef = useRef(message.id);
 
+  // Determine initial opacity: 0 if will animate, 1 otherwise
+  const willAnimate = !isUser && !isAI && enableTypewriter && !message.skipTypewriter;
+
+  // Animated value for fade-in (non-typewriter messages)
+  // Start at 0 if this message will animate, 1 otherwise
+  const fadeAnim = useRef(new Animated.Value(willAnimate && !hasAnimatedRef.current ? 0 : 1)).current;
+
   // Reset animation state if message ID changes
   if (messageIdRef.current !== message.id) {
     messageIdRef.current = message.id;
     hasAnimatedRef.current = false;
     hasStartedRef.current = false;
+    // Start hidden if this message will animate
+    fadeAnim.setValue(willAnimate ? 0 : 1);
   }
 
   // Store callbacks in refs to avoid re-triggering animation
@@ -99,22 +111,53 @@ export function ChatBubble({
   onCompleteRef.current = onTypewriterComplete;
   onProgressRef.current = onTypewriterProgress;
 
-  // Determine if we should use typewriter effect
+  // Determine if we should use typewriter effect (AI messages only)
   const shouldUseTypewriter = isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
 
-  // Call onStart when typewriter begins - use effect to avoid setState during render
+  // Determine if we should use fade-in effect (non-AI, non-USER messages that should animate)
+  const shouldUseFadeIn = !isUser && !isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
+
+  // Track whether this message is next to animate (callback is provided)
+  // This allows the effect to re-run when the message becomes "next"
+  const isNextToAnimate = onTypewriterStart !== undefined;
+
+  // Handle fade-in animation for non-typewriter messages
+  // Only starts when this message is next in the animation queue (onTypewriterStart is provided)
   useEffect(() => {
-    if (shouldUseTypewriter && !hasStartedRef.current && onStartRef.current) {
+    if (shouldUseFadeIn && !hasStartedRef.current && isNextToAnimate) {
+      hasStartedRef.current = true;
+      fadeAnim.setValue(0);
+
+      // Notify animation started
+      onStartRef.current?.();
+
+      // Run fade-in animation
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: MESSAGE_FADE_DURATION_MS,
+        useNativeDriver: true,
+      }).start(() => {
+        // Animation complete
+        hasAnimatedRef.current = true;
+        onCompleteRef.current?.();
+      });
+    }
+  }, [shouldUseFadeIn, isNextToAnimate, fadeAnim]);
+
+  // Call onStart when typewriter begins - use effect to avoid setState during render
+  // Only starts when this message is next in the animation queue (onTypewriterStart is provided)
+  useEffect(() => {
+    if (shouldUseTypewriter && !hasStartedRef.current && isNextToAnimate && onStartRef.current) {
       hasStartedRef.current = true;
       onStartRef.current();
     }
-  }, [shouldUseTypewriter]);
+  }, [shouldUseTypewriter, isNextToAnimate]);
 
-  // Mark as animated when complete
-  const handleComplete = () => {
+  // Mark as animated when complete (for typewriter)
+  const handleComplete = useCallback(() => {
     hasAnimatedRef.current = true;
     onCompleteRef.current?.();
-  };
+  }, []);
 
   const formatTime = (timestamp: string): string => {
     const date = new Date(timestamp);
@@ -164,38 +207,63 @@ export function ChatBubble({
     return styles.text;
   };
 
+  // Check if this specific message should animate (for wrapping in Animated.View)
+  // True if: will fade in AND (animation in progress OR waiting to animate)
+  const isAnimating = willAnimate && !hasAnimatedRef.current;
+
   const renderContent = () => {
-    // Empathy statements don't use typewriter
+    // Empathy statements - use fade-in for new messages
     if (isEmpathyStatement) {
-      return (
+      const content = (
         <View>
           <Text style={styles.empathyStatementHeader}>What you shared</Text>
           <Text style={styles.empathyStatementText}>{message.content}</Text>
         </View>
       );
+      if (isAnimating) {
+        return <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>;
+      }
+      return content;
     }
 
-    // Shared context (from reconciler)
+    // Shared context (from reconciler) - use fade-in for new messages
     if (isSharedContext) {
       const contextLabel = partnerName
         ? `New context from ${partnerName}`
         : 'New context from your partner';
-      return (
+      const content = (
         <View>
           <Text style={styles.sharedContextLabel}>{contextLabel}</Text>
           <Text style={styles.sharedContextText}>{message.content}</Text>
         </View>
       );
+      if (isAnimating) {
+        return <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>;
+      }
+      return content;
     }
 
-    // Share suggestion (what user will share)
+    // Share suggestion (what user will share) - use fade-in for new messages
     if (isShareSuggestion) {
-      return (
+      const content = (
         <View>
           <Text style={styles.shareSuggestionLabel}>SUGGESTED TO SHARE</Text>
           <Text style={styles.shareSuggestionText}>"{message.content}"</Text>
         </View>
       );
+      if (isAnimating) {
+        return <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>;
+      }
+      return content;
+    }
+
+    // System messages - use fade-in for new messages
+    if (isSystem) {
+      const content = <Text style={getTextStyle()}>{message.content}</Text>;
+      if (isAnimating) {
+        return <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>;
+      }
+      return content;
     }
 
     // Use typewriter for new AI messages
@@ -212,7 +280,7 @@ export function ChatBubble({
       );
     }
 
-    // Regular text for all other cases
+    // Regular text for all other cases (user messages, already animated messages)
     return <Text style={getTextStyle()}>{message.content}</Text>;
   };
 

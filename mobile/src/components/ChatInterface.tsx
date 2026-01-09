@@ -264,10 +264,29 @@ export function ChatInterface({
   // Skip this if skipInitialHistory is true AND there's only one message
   // (e.g., after compact signing + mood check with just the first AI message)
   // If there are multiple messages, it's a returning session - treat as history
+  //
+  // IMPORTANT: If lastSeenChatItemId is provided, only mark messages up to that point
+  // as "known". Messages after lastSeenChatItemId are "new" and should animate.
   if (isInitialLoadRef.current && messages.length > 0) {
     const shouldSkip = skipInitialHistory && messages.length === 1;
     if (!shouldSkip) {
-      messages.forEach(m => knownMessageIdsRef.current.add(m.id));
+      // If we have a lastSeenChatItemId, only mark messages up to (and including) it as known
+      // Messages after it are "new" and should get typewriter animation
+      if (lastSeenChatItemId) {
+        const lastSeenIndex = messages.findIndex(m => m.id === lastSeenChatItemId);
+        if (lastSeenIndex >= 0) {
+          // Mark messages from 0 to lastSeenIndex (inclusive) as known
+          for (let i = 0; i <= lastSeenIndex; i++) {
+            knownMessageIdsRef.current.add(messages[i].id);
+          }
+        } else {
+          // lastSeenChatItemId not found in messages - mark all as known (fallback)
+          messages.forEach(m => knownMessageIdsRef.current.add(m.id));
+        }
+      } else {
+        // No lastSeenChatItemId - mark all messages as known (original behavior)
+        messages.forEach(m => knownMessageIdsRef.current.add(m.id));
+      }
     }
     isInitialLoadRef.current = false;
   }
@@ -325,12 +344,17 @@ export function ChatInterface({
     [toggleSpeech]
   );
 
-  // Find the newest AI message that should animate (for typewriter tracking)
-  const newestAnimatableAIMessageId = useMemo(() => {
+  // Find the OLDEST non-user message that should animate
+  // This creates a sequential animation effect from oldest to newest (top to bottom visually)
+  // when user returns to chat with multiple new messages
+  const nextAnimatableMessageId = useMemo(() => {
     // listItems is sorted newest first (descending by timestamp)
-    for (const item of listItems) {
+    // Iterate from the END (oldest) to find the oldest animatable message
+    for (let i = listItems.length - 1; i >= 0; i--) {
+      const item = listItems[i];
       if (isIndicator(item)) continue;
       if (isCustomEmptyState(item)) continue;
+      if (isNewMessagesSeparator(item)) continue;
       // At this point, item must be a ChatMessage
       const message = item as ChatMessage;
       // Skip user messages and optimistic messages
@@ -342,7 +366,7 @@ export function ChatInterface({
       if (animatedMessageIdsRef.current.has(message.id)) continue;
       // Skip the currently animating message (it's already being handled)
       if (message.id === animatingMessageId) continue;
-      // This is the newest AI message that needs animation
+      // This is the oldest non-user message that needs animation
       return message.id;
     }
     return null;
@@ -403,8 +427,8 @@ export function ChatInterface({
       !hasAlreadyAnimated &&
       !isOptimisticMessage;
 
-    // Track typewriter animation for the newest AI message
-    const isNewestAnimatable = message.id === newestAnimatableAIMessageId;
+    // Track animation for the next message in queue (oldest unanimatied)
+    const isNextAnimatable = message.id === nextAnimatableMessageId;
 
     const bubbleMessage: ChatBubbleMessage = {
       id: message.id,
@@ -418,8 +442,8 @@ export function ChatInterface({
     return (
       <ChatBubble
         message={bubbleMessage}
-        onTypewriterStart={isNewestAnimatable ? () => setAnimatingMessageId(message.id) : undefined}
-        onTypewriterComplete={(isNewestAnimatable || isCurrentlyAnimating) ? () => {
+        onTypewriterStart={isNextAnimatable ? () => setAnimatingMessageId(message.id) : undefined}
+        onTypewriterComplete={(isNextAnimatable || isCurrentlyAnimating) ? () => {
           // Mark this message as animated so it won't re-animate on future renders
           animatedMessageIdsRef.current.add(message.id);
           setAnimatingMessageId(null);
@@ -430,15 +454,20 @@ export function ChatInterface({
         partnerName={partnerName}
       />
     );
-  }, [newestAnimatableAIMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName]);
+  }, [nextAnimatableMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 
   // In inverted list: Header is visually at BOTTOM (Typing Indicator)
+  // We always render a container with minHeight to prevent layout shift
+  // when the indicator disappears and the AI message appears
   const renderHeader = useCallback(() => {
-    if (!isLoading) return null;
-    return <TypingIndicator />;
-  }, [isLoading]);
+    return (
+      <View style={styles.typingIndicatorContainer}>
+        {isLoading && <TypingIndicator />}
+      </View>
+    );
+  }, [isLoading, styles]);
 
   // Memoize the empty state element (not a callback!) to prevent remounts
   // NOTE: styles are excluded from deps because useStyles() creates new refs each render
@@ -623,6 +652,12 @@ const useStyles = () =>
       // In inverted list, this appears at visual TOP
       paddingVertical: t.spacing.xl,
       alignItems: 'center',
+    },
+    typingIndicatorContainer: {
+      // Reserve space for typing indicator to prevent layout shift
+      // when it disappears and AI message appears
+      // Height: padding (12*2) + dot (8) + border (2) + margin (4*2) = 42
+      minHeight: 42,
     },
     customEmptyStateItem: {
       // Add padding to separate it from the input or the item above it
