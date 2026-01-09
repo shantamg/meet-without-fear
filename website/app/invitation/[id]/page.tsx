@@ -77,7 +77,9 @@ export default function InvitationPage() {
         console.log("[Invitation] User is signed in, signing out for fresh auth...");
         setState("signing_out");
         try {
-          await signOut();
+          // Pass redirectUrl to stay on the invitation page after sign-out
+          // Without this, Clerk redirects to home page by default
+          await signOut({ redirectUrl: `/invitation/${invitationId}` });
           console.log("[Invitation] Sign out successful");
         } catch (err) {
           console.error("[Invitation] Error signing out:", err);
