@@ -430,3 +430,56 @@ export async function notifySessionResolved(
     actorName: partnerDisplayName,
   });
 }
+
+// ============================================================================
+// Empathy Reconciler Flow Notifications (Phase 5)
+// ============================================================================
+
+/**
+ * Trigger notification when partner's empathy statement is revealed to you.
+ * Called when status transitions to REVEALED.
+ */
+export async function notifyEmpathyRevealed(
+  recipientId: string,
+  guesserDisplayName: string,
+  sessionId: string
+): Promise<void> {
+  await createNotification({
+    userId: recipientId,
+    type: 'EMPATHY_REVEALED',
+    sessionId,
+    actorName: guesserDisplayName,
+  });
+}
+
+/**
+ * Trigger notification when user's empathy statement needs refinement.
+ * Called when reconciler sets status to NEEDS_WORK.
+ */
+export async function notifyEmpathyNeedsWork(
+  guesserId: string,
+  sessionId: string
+): Promise<void> {
+  await createNotification({
+    userId: guesserId,
+    type: 'EMPATHY_NEEDS_WORK',
+    sessionId,
+  });
+}
+
+/**
+ * Trigger notification when partner validates your empathy statement.
+ * Called when status transitions to VALIDATED.
+ */
+export async function notifyEmpathyValidated(
+  guesserId: string,
+  validatorDisplayName: string,
+  sessionId: string
+): Promise<void> {
+  await createNotification({
+    userId: guesserId,
+    type: 'EMPATHY_VALIDATED',
+    sessionId,
+    actorName: validatorDisplayName,
+  });
+}

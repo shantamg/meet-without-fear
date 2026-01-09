@@ -18,6 +18,7 @@ export type SessionEvent = Extract<
   | 'partner.advanced'
   | 'partner.empathy_shared'
   | 'partner.additional_context_shared'
+  | 'partner.empathy_revealed'
   | 'partner.needs_shared'
   | 'partner.ranking_submitted'
   | 'partner.common_ground_confirmed'
@@ -31,6 +32,10 @@ export type SessionEvent = Extract<
   | 'session.resumed'
   | 'session.resolved'
   | 'invitation.declined'
+  // Empathy reconciler events
+  | 'empathy.share_suggestion'
+  | 'empathy.revealed'
+  | 'empathy.refining'
 >;
 
 // Re-export for backward compatibility
@@ -460,4 +465,43 @@ export function getSessionChannelName(sessionId: string): string {
  */
 export function getUserChannelName(userId: string): string {
   return REALTIME_CHANNELS.user(userId);
+}
+
+// ============================================================================
+// Audit Stream (for Neural Monitor dashboard)
+// ============================================================================
+
+/**
+ * Publish a session-created event to the audit stream for monitoring dashboards.
+ * This is separate from session-specific events - it goes to a global audit channel.
+ *
+ * @param sessionId - The session ID
+ * @param sessionData - Basic session information for the dashboard
+ */
+export async function publishSessionCreated(
+  sessionId: string,
+  sessionData: {
+    type: string;
+    status: string;
+    createdAt: string;
+    members?: Array<{ userId: string; name?: string }>;
+  }
+): Promise<void> {
+  if (process.env.ENABLE_AUDIT_STREAM !== 'true') {
+    return; // Audit stream disabled
+  }
+
+  try {
+    const ably = getAbly();
+    const channel = ably.channels.get('ai-audit-stream');
+    await channel.publish('session-created', {
+      sessionId,
+      timestamp: Date.now(),
+      ...sessionData,
+    });
+    console.log(`[Realtime] Published session-created to audit stream for ${sessionId}`);
+  } catch (error) {
+    // Don't throw - audit stream failures shouldn't break session creation
+    console.warn(`[Realtime] Failed to publish session-created to audit stream:`, error);
+  }
 }
