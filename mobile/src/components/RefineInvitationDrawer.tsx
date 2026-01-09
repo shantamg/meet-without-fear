@@ -7,7 +7,7 @@
  */
 
 import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { X, RefreshCw } from 'lucide-react-native';
 import { colors } from '@/theme';
 import { InvitationShareButton } from './InvitationShareButton';
@@ -49,58 +49,60 @@ export function RefineInvitationDrawer({
       testID="refine-invitation-drawer"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        {/* Header with close button */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={onClose}
-            testID="refine-invitation-close"
-            accessibilityLabel="Close"
-            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-          >
-            <X color={colors.textSecondary} size={24} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Main content */}
-        <View style={styles.content}>
-          <Text style={styles.title}>Would you like to resend the invitation?</Text>
-          <Text style={styles.subtitle}>
-            I can help you refine the message now that we've had more time to
-            process what you're feeling.
-          </Text>
-
-          {/* Current invitation message */}
-          <View style={styles.messageContainer}>
-            <Text style={styles.messageLabel}>Current invitation:</Text>
-            <Text style={styles.messageText}>"{invitationMessage}"</Text>
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+          {/* Header with close button */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={onClose}
+              testID="refine-invitation-close"
+              accessibilityLabel="Close"
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+            >
+              <X color={colors.textSecondary} size={24} />
+            </TouchableOpacity>
           </View>
 
-          {/* Refine button */}
-          <TouchableOpacity
-            style={styles.refineButton}
-            onPress={onRefine}
-            testID="refine-invitation-button"
-            activeOpacity={0.8}
-          >
-            <RefreshCw color={colors.accent} size={20} />
-            <Text style={styles.refineButtonText}>Refine invitation</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Main content */}
+          <View style={styles.content}>
+            <Text style={styles.title}>Would you like to resend the invitation?</Text>
+            <Text style={styles.subtitle}>
+              I can help you refine the message now that we've had more time to
+              process what you're feeling.
+            </Text>
 
-        {/* Share button at bottom */}
-        <View style={styles.footer}>
-          <InvitationShareButton
-            invitationMessage={invitationMessage}
-            invitationUrl={invitationUrl}
-            partnerName={partnerName}
-            senderName={senderName}
-            onShareSuccess={onShareSuccess}
-            testID="refine-invitation-share"
-          />
-        </View>
-      </SafeAreaView>
+            {/* Current invitation message */}
+            <View style={styles.messageContainer}>
+              <Text style={styles.messageLabel}>Current invitation:</Text>
+              <Text style={styles.messageText}>"{invitationMessage}"</Text>
+            </View>
+
+            {/* Refine button */}
+            <TouchableOpacity
+              style={styles.refineButton}
+              onPress={onRefine}
+              testID="refine-invitation-button"
+              activeOpacity={0.8}
+            >
+              <RefreshCw color={colors.accent} size={20} />
+              <Text style={styles.refineButtonText}>Refine invitation</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Share button at bottom */}
+          <View style={styles.footer}>
+            <InvitationShareButton
+              invitationMessage={invitationMessage}
+              invitationUrl={invitationUrl}
+              partnerName={partnerName}
+              senderName={senderName}
+              onShareSuccess={onShareSuccess}
+              testID="refine-invitation-share"
+            />
+          </View>
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }
