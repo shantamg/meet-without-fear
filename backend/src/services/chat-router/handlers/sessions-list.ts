@@ -42,6 +42,15 @@ export const sessionsListHandler: IntentHandler = {
         empathyAttempts: {
           select: { sourceUserId: true },
         },
+        // Include user vessels for read state tracking
+        userVessels: {
+          where: { userId: context.userId },
+          select: {
+            userId: true,
+            lastViewedAt: true,
+            lastSeenChatItemId: true,
+          },
+        },
       },
       orderBy: { updatedAt: 'desc' },
       take: 10,

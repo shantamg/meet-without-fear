@@ -86,6 +86,14 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
         empathyAttempts: {
           select: { sourceUserId: true },
         },
+        // Include user vessels for read state tracking
+        userVessels: {
+          where: { userId: user.id },
+          select: {
+            lastViewedAt: true,
+            lastSeenChatItemId: true,
+          },
+        },
       },
       orderBy: { updatedAt: 'desc' },
       take: takeLimit + 1,
@@ -194,6 +202,19 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
         { userHasSentEmpathy, partnerHasSentEmpathy }
       );
 
+      // Get user's read state from UserVessel
+      const userVessels = (session as { userVessels?: Array<{ lastViewedAt: Date | null; lastSeenChatItemId: string | null }> }).userVessels || [];
+      const userVessel = userVessels[0];
+      const lastViewedAt = userVessel?.lastViewedAt ?? null;
+      const lastSeenChatItemId = userVessel?.lastSeenChatItemId ?? null;
+
+      // Determine if there's unread content:
+      // - If never viewed (lastViewedAt is null), consider unread if session has any activity
+      // - If viewed, compare session's updatedAt with lastViewedAt
+      const hasUnread = lastViewedAt === null
+        ? session.status !== 'CREATED' // Unread if not a fresh draft
+        : session.updatedAt > lastViewedAt;
+
       return {
         id: session.id,
         relationshipId: session.relationshipId,
@@ -212,6 +233,9 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
         statusSummary,
         selfActionNeeded,
         partnerActionNeeded,
+        hasUnread,
+        lastViewedAt: lastViewedAt?.toISOString() ?? null,
+        lastSeenChatItemId,
       };
     });
 
