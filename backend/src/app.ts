@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import routes from './routes';
+import { requestContextMiddleware } from './middleware/request-context';
 
 const app = express();
 
@@ -12,6 +13,10 @@ app.use(cors());
 // Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Request context - establishes AsyncLocalStorage context for turnId propagation
+// Must be before routes but after body parsing
+app.use(requestContextMiddleware);
 
 // Request logging
 app.use((req, res, next) => {
