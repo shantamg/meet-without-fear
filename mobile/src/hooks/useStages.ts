@@ -636,6 +636,8 @@ export function useConsentToShareEmpathy(
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      // Invalidate empathy status to update waitingStatus (which depends on empathyStatusData)
+      queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
 
       // Replace optimistic message with real ones and add AI response
       const messagesToAdd: Array<{
