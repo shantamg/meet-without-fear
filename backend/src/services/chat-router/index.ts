@@ -380,8 +380,8 @@ Examples of good messages:
 Just output the welcome message, nothing else.`;
 
   try {
-    // Generate synthetic turnId for welcome message (not part of a specific turn)
-    const turnId = `${recentSession.id}-welcome-${Date.now()}`;
+    // Generate turnId for this user's welcome message - includes userId for proper attribution
+    const turnId = `${recentSession.id}-${userId}-welcome`;
     const response = await getModelCompletion('haiku', {
       systemPrompt,
       messages: [{ role: 'user', content: userMessage }],

@@ -16,6 +16,7 @@ import {
 } from '../services/chat-router';
 import { success, error } from '../utils/response';
 import { SendUnifiedChatRequest } from '@meet-without-fear/shared';
+import { updateContext } from '../lib/request-context';
 
 const router = Router();
 
@@ -40,6 +41,9 @@ router.post(
 
     const userId = req.user!.id;
     const { content, currentSessionId } = req.body as SendUnifiedChatRequest;
+
+    // Set userId in request context early so all downstream services can access it
+    updateContext({ userId, sessionId: currentSessionId });
 
     if (!content || typeof content !== 'string') {
       res.status(400).json(error('VALIDATION_ERROR', 'Message content is required'));
@@ -68,6 +72,9 @@ router.get(
     ensureInitialized();
 
     const userId = req.user!.id;
+    // Set userId in request context for downstream services
+    updateContext({ userId });
+
     const context = await getChatContext(userId);
 
     res.json(success(context));

@@ -12,6 +12,7 @@ import { getPartnerUserId } from '../../utils/session';
 import { embedMessage } from '../embedding';
 import { updateSessionSummary } from '../conversation-summarizer';
 import { publishUserEvent } from '../realtime';
+import { updateContext } from '../../lib/request-context';
 
 export interface SessionMessageInput {
   sessionId: string;
@@ -195,7 +196,10 @@ export async function processSessionMessage(
     (!invitation?.messageConfirmed);
 
   // Generate turnId for this user action - used to group all costs from this message
-  const turnId = `${sessionId}-${userTurnCount}`;
+  // Includes userId to differentiate between users in the same session
+  const turnId = `${sessionId}-${userId}-${userTurnCount}`;
+  // Update request context so all downstream code can access this turnId
+  updateContext({ turnId, sessionId, userId });
 
   // Build AI context
   const aiContext: FullAIContext = {

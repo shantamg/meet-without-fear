@@ -335,11 +335,14 @@ export async function runReconcilerForDirection(
   if (!hasSignificantGaps) {
     // No significant gaps - reveal directly
     console.log(`[Reconciler] NO significant gaps. Revealing empathy directly for ${guesserInfo.name} → ${subjectInfo.name}`);
+    const revealedNow = new Date();
     await prisma.empathyAttempt.updateMany({
       where: { sessionId, sourceUserId: guesserId },
       data: {
         status: 'REVEALED',
-        revealedAt: new Date(),
+        revealedAt: revealedNow,
+        deliveryStatus: 'DELIVERED',
+        deliveredAt: revealedNow,
       },
     });
 
@@ -423,11 +426,9 @@ async function generateShareSuggestion(
 } | null> {
   console.log(`[Reconciler] Generating share suggestion for ${subject.name} (to help ${guesser.name})`);
 
-  // Build prompt to generate a share suggestion
-  const prompt = `You are helping ${subject.name} understand what context they could share to help ${guesser.name} understand them better.
-... (rest of prompt template)`;
+  // Generate turnId upfront so COST and RECONCILER logs group together
+  const turnId = `${sessionId}-${Date.now()}`;
 
-  // I'll keep the actual prompt logic but add logs around it
   const response = await getSonnetJson<{ suggestedContent: string; reason: string }>({
     systemPrompt: `You are helping ${subject.name} understand what context they could share to help ${guesser.name} understand them better.
 
@@ -462,6 +463,7 @@ Respond in JSON:
     messages: [{ role: 'user', content: 'Generate the share suggestion.' }],
     maxTokens: 512,
     sessionId,
+    turnId,
     operation: 'reconciler-share-suggestion',
   });
 
@@ -477,9 +479,10 @@ Respond in JSON:
   console.log(`[Reconciler] Share suggestion generated: "${response.suggestedContent.substring(0, 50)}..."`);
   console.log(`[Reconciler] Share reason: "${response.reason}"`);
 
-  // Log the share suggestion for dashboard visibility
+  // Log the share suggestion for dashboard visibility (same turnId as COST log)
   await auditLog('RECONCILER', `Generated share suggestion for ${subject.name} to help ${guesser.name}`, {
     sessionId,
+    turnId,
     eventType: 'share_suggestion',
     subjectName: subject.name,
     guesserName: guesser.name,
@@ -654,11 +657,14 @@ export async function respondToShareSuggestion(
     });
 
     // Reveal guesser's empathy statement
+    const revealedNow = new Date();
     await prisma.empathyAttempt.updateMany({
       where: { sessionId, sourceUserId: shareOffer.result.guesserId },
       data: {
         status: 'REVEALED',
-        revealedAt: new Date(),
+        revealedAt: revealedNow,
+        deliveryStatus: 'DELIVERED',
+        deliveredAt: revealedNow,
       },
     });
 
@@ -705,14 +711,17 @@ export async function respondToShareSuggestion(
     originalSuggestion: shareOffer.suggestedContent,
   });
 
-  // Update share offer
+  // Update share offer - set to DELIVERED since we're about to create the SHARED_CONTEXT message
+  const now = new Date();
   await prisma.reconcilerShareOffer.update({
     where: { id: shareOffer.id },
     data: {
       status: 'ACCEPTED',
       refinedContent: response.action === 'refine' ? response.refinedContent : null,
       sharedContent,
-      sharedAt: new Date(),
+      sharedAt: now,
+      deliveryStatus: 'DELIVERED',
+      deliveredAt: now,
     },
   });
 
@@ -878,6 +887,44 @@ export async function getSharedContextForGuesser(
 }
 
 /**
+ * Get the delivery status of shared content for the subject (person who shared).
+ * Returns the delivery status: pending (not yet shared), delivered, or seen.
+ */
+export async function getSharedContentDeliveryStatus(
+  sessionId: string,
+  subjectId: string
+): Promise<{
+  hasSharedContent: boolean;
+  deliveryStatus: 'pending' | 'delivered' | 'seen' | null;
+  sharedAt: string | null;
+}> {
+  const shareOffer = await prisma.reconcilerShareOffer.findFirst({
+    where: {
+      userId: subjectId,
+      result: { sessionId },
+      status: 'ACCEPTED',
+    },
+  });
+
+  if (!shareOffer || !shareOffer.sharedContent) {
+    return { hasSharedContent: false, deliveryStatus: null, sharedAt: null };
+  }
+
+  // Map Prisma enum to lowercase string for frontend
+  const statusMap: Record<string, 'pending' | 'delivered' | 'seen'> = {
+    PENDING: 'pending',
+    DELIVERED: 'delivered',
+    SEEN: 'seen',
+  };
+
+  return {
+    hasSharedContent: true,
+    deliveryStatus: statusMap[shareOffer.deliveryStatus] || 'pending',
+    sharedAt: shareOffer.sharedAt?.toISOString() || null,
+  };
+}
+
+/**
  * Analyze the empathy gap for one direction (guesser → subject).
  */
 async function analyzeEmpathyGap(
@@ -905,6 +952,9 @@ async function analyzeEmpathyGap(
     return dbResultToReconcilerResult(existingResult);
   }
 
+  // Generate turnId upfront so COST and RECONCILER logs group together
+  const turnId = `${input.sessionId}-${Date.now()}`;
+
   // Build context for the AI prompt
   const context: ReconcilerContext = {
     guesserName: input.guesser.name,
@@ -923,6 +973,7 @@ async function analyzeEmpathyGap(
     messages: [{ role: 'user', content: 'Analyze the empathy gap and provide your assessment.' }],
     maxTokens: 2048,
     sessionId: input.sessionId,
+    turnId,
     operation: 'reconciler-analysis',
   });
 
@@ -975,9 +1026,10 @@ async function analyzeEmpathyGap(
     `${result.gaps.severity} gaps, action: ${result.recommendation.action}`
   );
 
-  // Log the reconciler analysis for dashboard visibility
+  // Log the reconciler analysis for dashboard visibility (same turnId as COST log)
   await auditLog('RECONCILER', `Analyzed ${input.guesser.name}'s understanding of ${input.subject.name}`, {
     sessionId: input.sessionId,
+    turnId,
     eventType: 'analysis',
     guesserName: input.guesser.name,
     subjectName: input.subject.name,

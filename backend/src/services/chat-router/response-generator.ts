@@ -6,6 +6,7 @@
  */
 
 import { getHaikuJson } from '../../lib/bedrock';
+import { getCurrentUserId } from '../../lib/request-context';
 
 // ============================================================================
 // Response Templates
@@ -118,9 +119,12 @@ Output only JSON: { "response": "your response" }`;
     instruction: 'Generate a natural conversational response.',
   });
 
-  // Generate turnId - use sessionId if available, otherwise synthetic
+  // Generate turnId - use request context for userId attribution
   const effectiveSessionId = sessionId || 'chat-router-response';
-  const turnId = sessionId ? `${sessionId}-${Date.now()}` : `chat-router-response-${Date.now()}`;
+  const effectiveUserId = getCurrentUserId() || 'system';
+  const turnId = sessionId
+    ? `${sessionId}-${effectiveUserId}-response-${Date.now()}`
+    : `chat-router-response-${effectiveUserId}-${Date.now()}`;
 
   const result = await getHaikuJson<{ response: string }>({
     systemPrompt,

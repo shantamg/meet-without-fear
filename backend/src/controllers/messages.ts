@@ -27,6 +27,7 @@ import { embedMessage } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
 import { auditLog } from '../services/audit-logger';
 import { runReconcilerForDirection } from '../services/reconciler';
+import { updateContext } from '../lib/request-context';
 
 // ============================================================================
 // Helpers
@@ -255,6 +256,31 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     console.log(`[sendMessage:${requestId}] ✅ User message created: ID=${userMessage.id}, timestamp=${userMessage.timestamp.toISOString()}, stage=${userMessage.stage}`);
     console.log(`[sendMessage:${requestId}] User message creation took ${Date.now() - userMessageStartTime}ms`);
 
+    // =========================================================================
+    // Mark shared content as SEEN if user is in REFINING status
+    // (guesser sending first message after receiving shared context)
+    // =========================================================================
+    if (currentStage === 2) {
+      const empathyAttempt = await prisma.empathyAttempt.findFirst({
+        where: { sessionId, sourceUserId: user.id },
+      });
+
+      if (empathyAttempt?.status === 'REFINING') {
+        // Update the share offer delivery status to SEEN (if not already)
+        await prisma.reconcilerShareOffer.updateMany({
+          where: {
+            result: { guesserId: user.id, sessionId },
+            deliveryStatus: 'DELIVERED',
+          },
+          data: {
+            deliveryStatus: 'SEEN',
+            seenAt: new Date(),
+          },
+        });
+        console.log(`[sendMessage:${requestId}] Marked shared content as SEEN for guesser ${user.id}`);
+      }
+    }
+
     // Check for duplicate user messages (same content, same user, within last 5 seconds)
     const recentDuplicates = await prisma.message.findMany({
       where: {
@@ -393,8 +419,10 @@ async function processAIResponseInBackground(ctx: {
     const userTurnCount = history.filter((m) => m.role === 'USER').length;
     console.log(`[sendMessage:${requestId}] [BG] User turn count: ${userTurnCount}`);
 
-    // Generate turnId for this user action
-    const turnId = `${sessionId}-${userTurnCount}`;
+    // Generate turnId for this user action (includes userId to differentiate users)
+    const turnId = `${sessionId}-${userId}-${userTurnCount}`;
+    // Update request context so all downstream code can access this turnId
+    updateContext({ turnId, sessionId, userId });
 
     // Detect stage transition
     const userMessage = history.find((m) => m.id === userMessageId);
@@ -750,6 +778,11 @@ export async function confirmFeelHeard(
       return;
     }
 
+    // Generate turnId for this user action
+    const turnId = `${sessionId}-${user.id}-feel-heard`;
+    // Update request context so all downstream code can access this turnId
+    updateContext({ turnId, sessionId, userId: user.id });
+
     // Build gates satisfied data (use names that match Stage1Gates interface)
     const gatesSatisfied = {
       feelHeardConfirmed: confirmed,
@@ -898,7 +931,7 @@ Respond in JSON format:
           messages: [{ role: 'user', content: 'Generate the transition message based on the conversation above.' }],
           maxTokens: 512,
           sessionId,
-          turnId: `${sessionId}-feel-heard`,
+          turnId,
           operation: 'stage1-transition',
         });
 
@@ -931,7 +964,7 @@ Respond in JSON format:
 
         // Embed for cross-session retrieval (non-blocking)
         // Use same turnId as the transition response for cost attribution
-        embedMessage(aiMessage.id, `${sessionId}-feel-heard`).catch((err) =>
+        embedMessage(aiMessage.id, turnId).catch((err) =>
           console.warn('[confirmFeelHeard] Failed to embed transition message:', err)
         );
 
@@ -946,8 +979,9 @@ Respond in JSON format:
 
         // Audit log the transition message
         auditLog('RESPONSE', 'Stage transition message generated', {
-          turnId: `${sessionId}-feel-heard`,
+          turnId,
           sessionId,
+          userId: user.id,
           stage: 2,
           operation: 'stage1-transition',
           responseText: transitionContent,
@@ -1306,6 +1340,11 @@ export async function getInitialMessage(
       isInvitationPhase
     );
 
+    // Generate turnId for this user action - the invitee accessing their session
+    const turnId = `${sessionId}-${user.id}-welcome`;
+    // Update request context so all downstream code can access this turnId
+    updateContext({ turnId, sessionId, userId: user.id });
+
     // Get AI response
     let responseContent: string;
     try {
@@ -1315,7 +1354,7 @@ export async function getInitialMessage(
         messages: [{ role: 'user', content: 'Please generate an initial greeting.' }],
         maxTokens: 512,
         sessionId,
-        turnId: `${sessionId}-welcome`,
+        turnId,
         operation: 'stage1-initial-message',
       });
 
@@ -1348,7 +1387,7 @@ export async function getInitialMessage(
 
     // Embed initial message for cross-session retrieval (non-blocking)
     // Use same turnId as the welcome response for cost attribution
-    embedMessage(aiMessage.id, `${sessionId}-welcome`).catch((err) =>
+    embedMessage(aiMessage.id, turnId).catch((err) =>
       console.warn('[getInitialMessage] Failed to embed message:', err)
     );
 
@@ -1356,8 +1395,9 @@ export async function getInitialMessage(
 
     // Audit log the initial message
     auditLog('RESPONSE', 'Initial welcome message generated', {
-      turnId: `${sessionId}-welcome`,
+      turnId,
       sessionId,
+      userId: user.id,
       stage: currentStage,
       userName,
       partnerName,

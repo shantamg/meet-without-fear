@@ -11,10 +11,9 @@ import {
   IntentDetectionResult,
   MissingInfo,
   IntentConfidence,
-  SessionCreationState,
 } from '@meet-without-fear/shared';
 import { handlerRegistry } from './registry';
-import { IntentDetectionHint } from './types';
+import { getCurrentUserId } from '../../lib/request-context';
 
 // ============================================================================
 // Intent Detection
@@ -218,9 +217,12 @@ export async function detectIntent(input: DetectionInput): Promise<IntentDetecti
     ? `Context:${contextInfo}\n\nUser message: "${message}"`
     : `User message: "${message}"`;
 
-  // Generate turnId - use sessionId if available, otherwise synthetic
+  // Generate turnId - use request context for userId attribution
   const effectiveSessionId = sessionId || 'intent-detection';
-  const turnId = sessionId ? `${sessionId}-${Date.now()}` : `intent-detection-${Date.now()}`;
+  const effectiveUserId = getCurrentUserId() || 'system';
+  const turnId = sessionId
+    ? `${sessionId}-${effectiveUserId}-intent-${Date.now()}`
+    : `intent-detection-${effectiveUserId}-${Date.now()}`;
 
   const result = await getHaikuJson<HaikuIntentResponse>({
     systemPrompt: buildDetectionPrompt(userSessions, semanticMatches),

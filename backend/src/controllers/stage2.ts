@@ -28,10 +28,12 @@ import {
   respondToShareSuggestion as reconcilerRespondToShareSuggestion,
   hasPartnerCompletedStage1,
   getSharedContextForGuesser,
+  getSharedContentDeliveryStatus,
 } from '../services/reconciler';
 import { isSessionCreator } from '../utils/session';
 import { publishSessionEvent } from '../services/realtime';
 import { auditLog } from '../services/audit-logger';
+import { updateContext } from '../lib/request-context';
 
 // ============================================================================
 // Types
@@ -520,7 +522,9 @@ export async function consentToShare(
     });
 
     // Create turnId for this user action - all operations use the same turnId for cost attribution
-    const turnId = `${sessionId}-consent-share`;
+    const turnId = `${sessionId}-${user.id}-consent-share`;
+    // Update request context so all downstream code can access this turnId
+    updateContext({ turnId, sessionId, userId: user.id });
 
     // Embed for cross-session retrieval (non-blocking)
     embedMessage(empathyMessage.id, turnId).catch((err) =>
@@ -689,8 +693,9 @@ Respond in JSON format:
 
       // Audit log the transition message
       auditLog('RESPONSE', 'Stage 2 transition message generated', {
-        turnId: `${sessionId}-empathy-shared`,
+        turnId,
         sessionId,
+        userId: user.id,
         stage: 2,
         operation: 'stage2-transition',
         responseText: transitionContent,
@@ -953,11 +958,15 @@ export async function validateEmpathy(
       },
     });
 
-    // If validated, update partner's empathy attempt status to VALIDATED
+    // If validated, update partner's empathy attempt status to VALIDATED and mark as SEEN
     if (validated) {
       await prisma.empathyAttempt.update({
         where: { id: partnerAttempt.id },
-        data: { status: 'VALIDATED' },
+        data: {
+          status: 'VALIDATED',
+          deliveryStatus: 'SEEN',
+          seenAt: new Date(),
+        },
       });
     }
 
@@ -1128,6 +1137,7 @@ export async function getEmpathyExchangeStatus(
 
     // Get shared context if status is REFINING
     let sharedContext: { content: string; sharedAt: string } | null = null;
+    let messageCountSinceSharedContext = 0;
     if (hasNewSharedContext) {
       const contextResult = await getSharedContextForGuesser(sessionId, user.id);
       if (contextResult.hasSharedContext && contextResult.content && contextResult.sharedAt) {
@@ -1135,8 +1145,33 @@ export async function getEmpathyExchangeStatus(
           content: contextResult.content,
           sharedAt: contextResult.sharedAt,
         };
+
+        // Count user messages sent after the shared context was received
+        const sharedAtDate = new Date(contextResult.sharedAt);
+        const messagesAfterContext = await prisma.message.count({
+          where: {
+            sessionId,
+            senderId: user.id,
+            role: 'USER',
+            timestamp: { gt: sharedAtDate },
+          },
+        });
+        messageCountSinceSharedContext = messagesAfterContext;
       }
     }
+
+    // Get delivery status of any shared content (for subject - the person who shared)
+    const deliveryStatusResult = await getSharedContentDeliveryStatus(sessionId, user.id);
+    const sharedContentDeliveryStatus = deliveryStatusResult.hasSharedContent
+      ? deliveryStatusResult.deliveryStatus
+      : null;
+
+    // Map Prisma enum to lowercase string for empathy attempt delivery status
+    const empathyDeliveryStatusMap: Record<string, 'pending' | 'delivered' | 'seen'> = {
+      PENDING: 'pending',
+      DELIVERED: 'delivered',
+      SEEN: 'seen',
+    };
 
     successResponse(res, {
       myAttempt: myAttempt
@@ -1149,6 +1184,8 @@ export async function getEmpathyExchangeStatus(
           status: myAttempt.status,
           revealedAt: myAttempt.revealedAt?.toISOString() ?? null,
           revisionCount: myAttempt.revisionCount,
+          // Delivery status for "what you'll share" display: pending (not revealed), delivered (revealed), seen (validated)
+          deliveryStatus: empathyDeliveryStatusMap[myAttempt.deliveryStatus] || 'pending',
         }
         : null,
       partnerAttempt: partnerAttempt &&
@@ -1173,6 +1210,10 @@ export async function getEmpathyExchangeStatus(
       awaitingSharing,
       hasNewSharedContext,
       sharedContext,
+      // Number of messages user has sent since receiving shared context (for delaying refinement UI)
+      messageCountSinceSharedContext,
+      // Delivery status of shared content (for subject who shared): pending, delivered, or seen
+      sharedContentDeliveryStatus,
     });
   } catch (error) {
     console.error('[getEmpathyExchangeStatus] Error:', error);
@@ -1290,7 +1331,9 @@ When they seem ready to revise their statement, propose a revision in JSON forma
 \`\`\``;
 
     // Create turnId for this refinement conversation message
-    const turnId = `${sessionId}-empathy-refinement-${Date.now()}`;
+    const turnId = `${sessionId}-${user.id}-empathy-refinement-${Date.now()}`;
+    // Update request context so all downstream code can access this turnId
+    updateContext({ turnId, sessionId, userId: user.id });
 
     const aiResponse = await getSonnetResponse({
       systemPrompt,

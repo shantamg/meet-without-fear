@@ -22,6 +22,7 @@ import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
 import { embedMessage } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
+import { updateContext } from '../lib/request-context';
 
 // ============================================================================
 // Controllers
@@ -982,7 +983,10 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
     const partnerName = invitation.name || undefined;
 
     // Generate turnId for this user action - used for cost attribution
-    const turnId = `${sessionId}-invitation-confirm`;
+    // Includes userId to differentiate between users in the same session
+    const turnId = `${sessionId}-${user.id}-invitation-confirm`;
+    // Update request context so all downstream code can access this turnId
+    updateContext({ turnId, sessionId, userId: user.id });
 
     // Build AI context for transition
     const aiContext: FullAIContext = {

@@ -47,6 +47,7 @@ import {
 } from '../services/conversation-summarizer';
 import { detectMemoryIntent } from '../services/memory-detector';
 import type { MemorySuggestion } from '@meet-without-fear/shared';
+import { updateContext } from '../lib/request-context';
 
 // ============================================================================
 // Helper Functions
@@ -612,7 +613,9 @@ export const sendInnerWorkMessage = asyncHandler(
     }
 
     // Generate turnId for this inner work message - used for cost attribution
-    const turnId = `${sessionId}-inner-work-${totalTurnCount}`;
+    const turnId = `${sessionId}-${user.id}-inner-work-${totalTurnCount}`;
+    // Update request context so all downstream code can access this turnId
+    updateContext({ turnId, sessionId, userId: user.id });
 
     const fallbackResponse = "I'm here with you. Tell me more about what's on your mind.";
     const aiResponse = await getCompletion({

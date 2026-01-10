@@ -8,6 +8,7 @@
 import { MentionSourceType, Person } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { getHaikuJson } from '../lib/bedrock';
+import { getCurrentUserId } from '../lib/request-context';
 
 // ============================================================================
 // Types
@@ -156,9 +157,12 @@ OUTPUT (JSON):
   }
 }`;
 
-  // Generate turnId - use sessionId if available, otherwise synthetic
+  // Generate turnId - use request context for userId attribution
   const effectiveSessionId = sessionId || 'people-extraction';
-  const turnId = sessionId ? `${sessionId}-people-extract-${Date.now()}` : `people-extraction-${Date.now()}`;
+  const effectiveUserId = getCurrentUserId() || 'system';
+  const turnId = sessionId
+    ? `${sessionId}-${effectiveUserId}-people-extract-${Date.now()}`
+    : `people-extraction-${effectiveUserId}-${Date.now()}`;
 
   try {
     const result = await getHaikuJson<ExtractedPeople>({

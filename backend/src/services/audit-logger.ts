@@ -3,6 +3,7 @@ import fs from 'fs';
 import winston from 'winston';
 import Ably from 'ably';
 import { AuditLogEntry, AuditSection } from '@meet-without-fear/shared';
+import { getCurrentTurnId, getCurrentSessionId, getCurrentUserId } from '../lib/request-context';
 
 // Ensure logs directory exists for file transport
 const logsDir = path.join(process.cwd(), 'logs');
@@ -42,24 +43,29 @@ const fileLogger = winston.createLogger({
 import { prisma } from '../lib/prisma';
 
 export const auditLog = async (section: AuditSection, message: string, data?: Record<string, any> & { turnId?: string }) => {
-  const turnId = data?.turnId;
-  const dataWithoutTurnId = data ? { ...data } : undefined;
-  if (dataWithoutTurnId && 'turnId' in dataWithoutTurnId) {
+  // Get turnId from explicit parameter, or fall back to request context
+  const explicitTurnId = data?.turnId;
+  const contextTurnId = getCurrentTurnId(data?.sessionId);
+  const turnId = explicitTurnId || contextTurnId;
+
+  // Get userId from request context if not in data
+  const userId = data?.userId || getCurrentUserId();
+
+  const dataWithoutTurnId: Record<string, any> = data ? { ...data, userId } : { userId };
+  if ('turnId' in dataWithoutTurnId) {
     delete dataWithoutTurnId.turnId;
   }
 
   // Ensure we don't pass undefined/null as data to Prisma (it expects Json or InputJsonValue)
   // And strip undefined values which might cause issues in some environments
-  if (dataWithoutTurnId) {
-    Object.keys(dataWithoutTurnId).forEach(key => {
-      if (dataWithoutTurnId[key] === undefined) {
-        delete dataWithoutTurnId[key];
-      }
-    });
-  }
+  Object.keys(dataWithoutTurnId).forEach(key => {
+    if (dataWithoutTurnId[key] === undefined) {
+      delete dataWithoutTurnId[key];
+    }
+  });
 
-  // Extract sessionId if available in data
-  const sessionId = data?.sessionId || data?.data?.sessionId;
+  // Extract sessionId from data or request context
+  const sessionId = data?.sessionId || data?.data?.sessionId || getCurrentSessionId();
 
   // Extract cost if available in COST section
   let cost: number | undefined;

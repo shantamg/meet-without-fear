@@ -8,6 +8,7 @@
 import { getCompletion, resetBedrockClient } from '../lib/bedrock';
 import { prisma } from '../lib/prisma';
 import { NeedCategory } from '@meet-without-fear/shared';
+import { getCurrentUserId } from '../lib/request-context';
 
 // ============================================================================
 // Types
@@ -193,8 +194,8 @@ export async function extractNeedsFromConversation(
 
   let extractedNeeds: ExtractedNeed[];
 
-  // Generate turnId for needs extraction
-  const turnId = `${sessionId}-extract-needs-${Date.now()}`;
+  // Generate turnId for needs extraction - includes userId for proper attribution
+  const turnId = `${sessionId}-${userId}-extract-needs-${Date.now()}`;
 
   try {
     const response = await getCompletion({
@@ -303,8 +304,9 @@ export async function findCommonGround(
 
   let commonGroundItems: Array<{ category: NeedCategory; need: string; insight: string }>;
 
-  // Generate turnId for common ground extraction
-  const turnId = `${sessionId}-common-ground-${Date.now()}`;
+  // Generate turnId for common ground extraction - use request context for attribution
+  const requestingUserId = getCurrentUserId() || 'system';
+  const turnId = `${sessionId}-${requestingUserId}-common-ground-${Date.now()}`;
 
   try {
     const response = await getCompletion({
