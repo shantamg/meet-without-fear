@@ -52,7 +52,7 @@ export interface SessionEntryMoodCheckProps {
   visible: boolean;
   /** Render as full-screen view instead of modal overlay (prevents content flash) */
   fullScreen?: boolean;
-  /** Initial slider value (defaults to 5) */
+  /** Initial slider value (defaults to 4 - Calm) */
   initialValue?: number;
   /** Callback when user completes the check */
   onComplete: (intensity: number) => void;
@@ -70,7 +70,7 @@ export interface SessionEntryMoodCheckProps {
 export function SessionEntryMoodCheck({
   visible,
   fullScreen = false,
-  initialValue = 5,
+  initialValue = 4,
   onComplete,
 }: SessionEntryMoodCheckProps) {
   const [value, setValue] = useState(initialValue);
@@ -194,9 +194,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing['3xl'],
   },
   emotionLabel: {
-    fontSize: 48,
+    fontSize: 28,
     fontWeight: '600',
-    letterSpacing: -0.5,
+    letterSpacing: -0.25,
   },
   sliderContainer: {
     width: '100%',

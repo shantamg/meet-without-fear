@@ -159,11 +159,11 @@ const useStyles = () =>
       marginRight: t.spacing.md,
     },
     checkboxChecked: {
-      backgroundColor: colors.accent,
-      borderColor: colors.accent,
+      backgroundColor: 'rgb(59, 130, 246)', // Blue to match "Compact Signed" indicator
+      borderColor: 'rgb(59, 130, 246)',
     },
     checkmark: {
-      color: colors.textOnAccent,
+      color: 'white',
       fontSize: 14,
       fontWeight: 'bold',
     },
@@ -173,7 +173,7 @@ const useStyles = () =>
       color: t.colors.textPrimary,
     },
     signButton: {
-      backgroundColor: colors.accent,
+      backgroundColor: 'rgb(59, 130, 246)', // Blue to match "Compact Signed" indicator
       paddingVertical: t.spacing.lg,
       paddingHorizontal: t.spacing.xl,
       borderRadius: t.radius.sm,
@@ -183,7 +183,7 @@ const useStyles = () =>
       backgroundColor: t.colors.bgTertiary,
     },
     signButtonText: {
-      color: colors.textOnAccent,
+      color: 'white',
       fontSize: t.typography.fontSize.md,
       fontWeight: '600',
     },

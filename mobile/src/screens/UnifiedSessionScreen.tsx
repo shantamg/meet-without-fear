@@ -1215,7 +1215,7 @@ export function UnifiedSessionScreen({
       <SessionEntryMoodCheck
         visible={true}
         fullScreen={true}
-        initialValue={user?.lastMoodIntensity ?? 5}
+        initialValue={user?.lastMoodIntensity ?? 4}
         onComplete={(intensity) => {
           // Save to user profile (persists across sessions)
           updateMood({ intensity });

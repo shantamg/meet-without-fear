@@ -225,13 +225,13 @@ const useStyles = () =>
       marginBottom: t.spacing.md,
     },
     viewButton: {
-      backgroundColor: t.colors.accent,
+      backgroundColor: 'rgb(59, 130, 246)', // Blue to match "Compact Signed" indicator
       paddingVertical: t.spacing.sm,
       paddingHorizontal: t.spacing.xl,
       borderRadius: t.radius.lg,
     },
     viewButtonText: {
-      color: t.colors.textOnAccent,
+      color: 'white',
       fontSize: t.typography.fontSize.md,
       fontWeight: '600',
     },

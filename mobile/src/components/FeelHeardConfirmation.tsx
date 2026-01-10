@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
   button: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: colors.brandBlue,
+    backgroundColor: 'rgb(20, 184, 166)', // Teal green to match "Felt Heard" indicator
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
