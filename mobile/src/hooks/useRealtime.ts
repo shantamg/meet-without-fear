@@ -379,19 +379,36 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
       } catch (err) {
         console.error('[Realtime] Subscription setup error:', err);
 
-        // Check if this is a capability/access denied error
+        // Check if this is a capability/access denied error or channel failed state
         // This can happen when connecting to a new session before the token was refreshed
+        // Also check error.cause since Ably wraps the root cause
         const errorMessage = err instanceof Error ? err.message : String(err);
+        const causeMessage = (err as { cause?: Error })?.cause?.message || '';
+        const fullErrorText = `${errorMessage} ${causeMessage}`.toLowerCase();
+        
         const isCapabilityError =
-          errorMessage.includes('denied access') ||
-          errorMessage.includes('capability') ||
-          errorMessage.includes('Channel denied');
+          fullErrorText.includes('denied access') ||
+          fullErrorText.includes('capability') ||
+          fullErrorText.includes('channel denied') ||
+          fullErrorText.includes('channel state is failed');
 
         if (isCapabilityError && !hasTriedTokenRefresh && !isCleanedUp) {
           console.log('[Realtime] Capability error detected, refreshing token and retrying...');
+          console.log('[Realtime] Error message:', errorMessage);
+          console.log('[Realtime] Cause message:', causeMessage);
           hasTriedTokenRefresh = true;
 
           try {
+            const ably = await getAblyClient();
+            const channelName = REALTIME_CHANNELS.session(sessionId);
+
+            // Release the failed channel so we get a fresh one on retry
+            // This is crucial - Ably caches channel objects and a failed channel stays failed
+            console.log('[Realtime] Releasing failed channel:', channelName);
+            ably.channels.release(channelName);
+            channel = null;
+            channelRef.current = null;
+
             // Refresh the token to get updated capabilities including the new session
             await refreshAblyToken();
 

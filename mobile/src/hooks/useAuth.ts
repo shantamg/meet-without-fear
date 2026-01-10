@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext } from 'rea
 import { useAuth as useClerkAuth, useUser as useClerkUser } from '@clerk/clerk-expo';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient, patch, ApiClientError } from '../lib/api';
+import { disconnectAbly } from '../lib/ably';
 import type { ApiResponse, GetMeResponse, UserDTO } from '@meet-without-fear/shared';
 
 /**
@@ -111,6 +112,8 @@ export function useAuthProvider(): AuthContextValue {
     // Clear all React Query cache to prevent stale user data
     // when signing back in with a different account
     queryClient.clear();
+    // Disconnect Ably to ensure fresh connection with new token on next login
+    disconnectAbly();
     await clerkSignOut();
   }, [clerkSignOut, queryClient]);
 
