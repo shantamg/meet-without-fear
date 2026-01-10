@@ -64,6 +64,8 @@ export interface FullAIContext extends WitnessContext {
   currentEmpathyDraft?: string | null;
   /** Whether the user is actively refining their empathy draft */
   isRefiningEmpathy?: boolean;
+  /** Shared context from partner (when guesser is in REFINING status from reconciler flow) */
+  sharedContextFromPartner?: string | null;
   /** Whether the user is in onboarding mode (compact not yet signed) */
   isOnboarding?: boolean;
 }
@@ -127,6 +129,7 @@ export async function getOrchestratedResponse(
     currentInvitationMessage: context.currentInvitationMessage,
     currentEmpathyDraft: context.currentEmpathyDraft,
     isRefiningEmpathy: context.isRefiningEmpathy,
+    sharedContextFromPartner: context.sharedContextFromPartner,
     isOnboarding: context.isOnboarding,
   };
 

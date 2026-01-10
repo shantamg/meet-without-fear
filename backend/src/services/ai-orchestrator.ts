@@ -86,6 +86,8 @@ export interface OrchestratorContext {
   currentEmpathyDraft?: string | null;
   /** Whether the user is actively refining their empathy draft */
   isRefiningEmpathy?: boolean;
+  /** Shared context from partner (when guesser is in REFINING status from reconciler flow) */
+  sharedContextFromPartner?: string | null;
   /** Whether the user is in onboarding mode (compact not yet signed) */
   isOnboarding?: boolean;
 }
@@ -437,6 +439,7 @@ export async function orchestrateResponse(
       invitationMessage: context.currentInvitationMessage,
       empathyDraft: context.currentEmpathyDraft,
       isRefiningEmpathy: context.isRefiningEmpathy,
+      sharedContextFromPartner: context.sharedContextFromPartner,
       surfacingStyle: surfacingDecision.style,
       cautionAdvised,
       invalidMemoryRequest: memoryDetectionResult?.validation && !memoryDetectionResult.validation.valid && memoryDetectionResult.suggestion

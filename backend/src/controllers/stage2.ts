@@ -1166,11 +1166,14 @@ export async function getEmpathyExchangeStatus(
       ? deliveryStatusResult.deliveryStatus
       : null;
 
-    // Map Prisma enum to lowercase string for empathy attempt delivery status
-    const empathyDeliveryStatusMap: Record<string, 'pending' | 'delivered' | 'seen'> = {
-      PENDING: 'pending',
-      DELIVERED: 'delivered',
-      SEEN: 'seen',
+    // Derive delivery status from empathy attempt status
+    // - pending: not yet revealed to partner (HELD, ANALYZING, AWAITING_SHARING, REFINING, NEEDS_WORK)
+    // - delivered: revealed to partner (REVEALED)
+    // - seen: partner has validated (VALIDATED)
+    const getEmpathyDeliveryStatus = (status: string): 'pending' | 'delivered' | 'seen' => {
+      if (status === 'VALIDATED') return 'seen';
+      if (status === 'REVEALED') return 'delivered';
+      return 'pending';
     };
 
     successResponse(res, {
@@ -1184,8 +1187,8 @@ export async function getEmpathyExchangeStatus(
           status: myAttempt.status,
           revealedAt: myAttempt.revealedAt?.toISOString() ?? null,
           revisionCount: myAttempt.revisionCount,
-          // Delivery status for "what you'll share" display: pending (not revealed), delivered (revealed), seen (validated)
-          deliveryStatus: empathyDeliveryStatusMap[myAttempt.deliveryStatus] || 'pending',
+          // Delivery status derived from attempt status: pending (not revealed), delivered (revealed), seen (validated)
+          deliveryStatus: getEmpathyDeliveryStatus(myAttempt.status),
         }
         : null,
       partnerAttempt: partnerAttempt &&

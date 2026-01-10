@@ -26,7 +26,7 @@ import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { embedMessage } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
 import { auditLog } from '../services/audit-logger';
-import { runReconcilerForDirection } from '../services/reconciler';
+import { runReconcilerForDirection, getSharedContextForGuesser } from '../services/reconciler';
 import { updateContext } from '../lib/request-context';
 
 // ============================================================================
@@ -487,6 +487,7 @@ async function processAIResponseInBackground(ctx: {
     // Fetch current empathy draft for refinement context (Stage 2)
     let currentEmpathyDraft: string | null = null;
     let isRefiningEmpathy = false;
+    let sharedContextFromPartner: string | null = null;
     if (currentStage === 2) {
       const draft = await prisma.empathyDraft.findUnique({
         where: {
@@ -500,12 +501,33 @@ async function processAIResponseInBackground(ctx: {
 
       currentEmpathyDraft = draft?.content || null;
 
+      // Check if user is in reconciler refining flow (received shared context from partner)
+      const empathyAttempt = await prisma.empathyAttempt.findFirst({
+        where: { sessionId, sourceUserId: userId },
+        select: { status: true },
+      });
+      const isInReconcilerRefining = empathyAttempt?.status === 'REFINING';
+
+      // User is refining empathy if:
+      // 1. They're in the reconciler refining flow (status = REFINING, received shared context), OR
+      // 2. They explicitly mention refinement keywords
       const refinementKeywords = ['refine empathy draft', 'refine', 'edit', 'change', 'update', 'tweak', 'adjust', 'revise', 'direct', 'tone', 'shorter', 'longer'];
       isRefiningEmpathy =
+        isInReconcilerRefining ||
         refinementKeywords.some((keyword) => lowerContent.includes(keyword)) ||
         lowerContent.includes('add more') ||
         lowerContent.includes('make it shorter') ||
         lowerContent.includes('make it longer');
+
+      // Fetch shared context from partner if user is in reconciler refining flow
+      if (isInReconcilerRefining) {
+        console.log(`[sendMessage:${requestId}] [BG] User ${userId} is in reconciler refining flow - setting isRefiningEmpathy=true`);
+        const contextResult = await getSharedContextForGuesser(sessionId, userId);
+        if (contextResult.hasSharedContext && contextResult.content) {
+          sharedContextFromPartner = contextResult.content;
+          console.log(`[sendMessage:${requestId}] [BG] Fetched shared context from partner: ${sharedContextFromPartner.substring(0, 50)}...`);
+        }
+      }
     }
 
     // Build full context for orchestrated response
@@ -527,6 +549,7 @@ async function processAIResponseInBackground(ctx: {
       currentInvitationMessage,
       currentEmpathyDraft,
       isRefiningEmpathy,
+      sharedContextFromPartner,
       isOnboarding,
     };
 

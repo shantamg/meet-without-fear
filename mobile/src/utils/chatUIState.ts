@@ -213,8 +213,11 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
   }
 
   // When refining (received shared context from partner), require at least 1 message
-  // before showing the "Revisit what you'll share" button
-  if (isRefiningEmpathy && messageCountSinceSharedContext < 1) {
+  // before showing the "Revisit what you'll share" button.
+  // EXCEPTION: If AI just returned a proposedEmpathyStatement (hasEmpathyContent from live state),
+  // show the panel immediately - the AI response proves user already sent a message,
+  // even if empathyStatusData.messageCountSinceSharedContext hasn't refetched yet.
+  if (isRefiningEmpathy && messageCountSinceSharedContext < 1 && !hasEmpathyContent) {
     return false;
   }
 

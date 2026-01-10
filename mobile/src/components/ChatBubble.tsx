@@ -184,14 +184,18 @@ export function ChatBubble({
   const getSharedContentStatusText = (status: SharedContentDeliveryStatus | undefined): string => {
     switch (status) {
       case 'pending':
-        return 'Pending';
+        return 'Pending review (not delivered yet)';
       case 'delivered':
         return 'Delivered';
       case 'seen':
-        return 'Seen';
+        return '✓ Seen';
       default:
-        return 'Pending';
+        return 'Pending review (not delivered yet)';
     }
+  };
+
+  const isSeenStatus = (status: SharedContentDeliveryStatus | undefined): boolean => {
+    return status === 'seen';
   };
 
   // Determine container alignment
@@ -222,9 +226,20 @@ export function ChatBubble({
     return styles.text;
   };
 
-  // Check if this specific message should animate (for wrapping in Animated.View)
-  // True if: will fade in AND (animation in progress OR waiting to animate)
-  const isAnimating = willAnimate && !hasAnimatedRef.current;
+  // Check if this message is waiting to animate (not its turn yet)
+  // For fade-in messages: willAnimate is true, hasn't started, not next in queue
+  // For typewriter messages: shouldUseTypewriter is true, hasn't started, not next in queue
+  const isWaitingToAnimate =
+    ((willAnimate || shouldUseTypewriter) && !hasStartedRef.current && !isNextToAnimate);
+
+  // Hide the entire bubble until it's this message's turn to animate
+  // This prevents showing empty bubbles or bubble containers while waiting
+  if (isWaitingToAnimate) {
+    return null;
+  }
+
+  // Check if fade-in animation is in progress (for messages currently animating)
+  const isFadeInAnimating = willAnimate && !hasAnimatedRef.current;
 
   const renderContent = () => {
     // Empathy statements - use fade-in for new messages
@@ -234,13 +249,18 @@ export function ChatBubble({
         <View>
           <Text style={styles.empathyStatementHeader}>What you shared</Text>
           <Text style={styles.empathyStatementText}>{message.content}</Text>
-          {/* Delivery status indicator */}
-          <Text style={styles.sharedContentDeliveryStatus}>
-            {getSharedContentStatusText(deliveryStatus)}
-          </Text>
+          {/* Delivery status indicator - only show when we have a status */}
+          {deliveryStatus && (
+            <Text style={[
+              styles.sharedContentDeliveryStatus,
+              isSeenStatus(deliveryStatus) && styles.sharedContentDeliveryStatusSeen,
+            ]}>
+              {getSharedContentStatusText(deliveryStatus)}
+            </Text>
+          )}
         </View>
       );
-      if (isAnimating) {
+      if (isFadeInAnimating) {
         return <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>;
       }
       return content;
@@ -258,13 +278,16 @@ export function ChatBubble({
           <Text style={styles.sharedContextText}>{message.content}</Text>
           {/* Delivery status indicator */}
           {deliveryStatus && (
-            <Text style={styles.sharedContentDeliveryStatusLight}>
+            <Text style={[
+              styles.sharedContentDeliveryStatusLight,
+              isSeenStatus(deliveryStatus) && styles.sharedContentDeliveryStatusSeenLight,
+            ]}>
               {getSharedContentStatusText(deliveryStatus)}
             </Text>
           )}
         </View>
       );
-      if (isAnimating) {
+      if (isFadeInAnimating) {
         return <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>;
       }
       return content;
@@ -278,7 +301,7 @@ export function ChatBubble({
           <Text style={styles.shareSuggestionText}>"{message.content}"</Text>
         </View>
       );
-      if (isAnimating) {
+      if (isFadeInAnimating) {
         return <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>;
       }
       return content;
@@ -287,13 +310,14 @@ export function ChatBubble({
     // System messages - use fade-in for new messages
     if (isSystem) {
       const content = <Text style={getTextStyle()}>{message.content}</Text>;
-      if (isAnimating) {
+      if (isFadeInAnimating) {
         return <Animated.View style={{ opacity: fadeAnim }}>{content}</Animated.View>;
       }
       return content;
     }
 
     // Use typewriter for new AI messages
+    // Note: We only reach here if !isWaitingToAnimate (checked at component level)
     if (shouldUseTypewriter) {
       return (
         <TypewriterText
@@ -433,23 +457,31 @@ const useStyles = () =>
       color: colors.textPrimary,
       fontFamily: t.typography.fontFamily.regular,
     },
-    // Shared content delivery status indicator
+    // Shared content delivery status indicator (orange for pending/delivered)
     sharedContentDeliveryStatus: {
       fontSize: 11,
       fontWeight: '500',
-      color: colors.textMuted,
+      color: '#f97316', // Orange-500 for pending/delivered states
       textAlign: 'right',
       marginTop: t.spacing.sm,
       textTransform: 'capitalize',
     },
-    // Shared content delivery status for light backgrounds
+    // Shared content delivery status for light backgrounds (orange for pending/delivered)
     sharedContentDeliveryStatusLight: {
       fontSize: 11,
       fontWeight: '500',
-      color: '#64748b', // Slate-500 for light background
+      color: '#ea580c', // Orange-600 for better contrast on light background
       textAlign: 'right',
       marginTop: t.spacing.sm,
       textTransform: 'capitalize',
+    },
+    // Green "Seen" status (dark background)
+    sharedContentDeliveryStatusSeen: {
+      color: '#22c55e', // Green-500
+    },
+    // Green "Seen" status (light background)
+    sharedContentDeliveryStatusSeenLight: {
+      color: '#16a34a', // Green-600 for better contrast on light
     },
     // Shared context: subtle container
     sharedContextContainer: {

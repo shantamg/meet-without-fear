@@ -269,10 +269,13 @@ export function ChatInterface({
   //
   // IMPORTANT: If lastSeenChatItemId is provided, only mark messages up to that point
   // as "known". Messages after lastSeenChatItemId are "new" and should animate.
-  if (isInitialLoadRef.current && messages.length > 0) {
+  //
+  // TIMING: We must wait for lastSeenChatItemId to be defined (not undefined) before
+  // marking any messages as known. undefined means "not yet loaded", null means "never viewed".
+  if (isInitialLoadRef.current && messages.length > 0 && lastSeenChatItemId !== undefined) {
     const shouldSkip = skipInitialHistory && messages.length === 1;
     if (!shouldSkip) {
-      // If we have a lastSeenChatItemId, only mark messages up to (and including) it as known
+      // If we have a lastSeenChatItemId (string), only mark messages up to (and including) it as known
       // Messages after it are "new" and should get typewriter animation
       if (lastSeenChatItemId) {
         const lastSeenIndex = messages.findIndex(m => m.id === lastSeenChatItemId);
@@ -286,7 +289,7 @@ export function ChatInterface({
           messages.forEach(m => knownMessageIdsRef.current.add(m.id));
         }
       } else {
-        // No lastSeenChatItemId - mark all messages as known (original behavior)
+        // lastSeenChatItemId is null (never viewed) - mark all messages as known
         messages.forEach(m => knownMessageIdsRef.current.add(m.id));
       }
     }
@@ -350,6 +353,14 @@ export function ChatInterface({
   // This creates a sequential animation effect from oldest to newest (top to bottom visually)
   // when user returns to chat with multiple new messages
   const nextAnimatableMessageId = useMemo(() => {
+    // If a message is currently animating, don't start another one
+    // Wait for the current animation to complete before queueing the next
+    if (animatingMessageId !== null) return null;
+
+    // Don't start animations until lastSeenChatItemId is loaded (not undefined)
+    // This prevents animating old messages while waiting for the session state
+    if (lastSeenChatItemId === undefined) return null;
+
     // listItems is sorted newest first (descending by timestamp)
     // Iterate from the END (oldest) to find the oldest animatable message
     for (let i = listItems.length - 1; i >= 0; i--) {
@@ -366,13 +377,11 @@ export function ChatInterface({
       if (knownMessageIdsRef.current.has(message.id)) continue;
       // Skip messages that have already completed animation
       if (animatedMessageIdsRef.current.has(message.id)) continue;
-      // Skip the currently animating message (it's already being handled)
-      if (message.id === animatingMessageId) continue;
       // This is the oldest non-user message that needs animation
       return message.id;
     }
     return null;
-  }, [listItems, animatingMessageId]);
+  }, [listItems, animatingMessageId, lastSeenChatItemId]);
 
   // Notify parent when typewriter state changes
   useEffect(() => {

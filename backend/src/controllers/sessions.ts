@@ -16,7 +16,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
-import { notifyPartner } from '../services/realtime';
+import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
@@ -1119,6 +1119,14 @@ export async function markSessionViewed(req: Request, res: Response): Promise<vo
         lastViewedAt: now,
         lastSeenChatItemId: lastSeenChatItemId ?? null,
       },
+    });
+
+    // Notify partner that this user viewed the session (for delivery status updates)
+    // Fire-and-forget - don't block the response
+    publishSessionEvent(sessionId, 'partner.session_viewed', {
+      viewedAt: now.toISOString(),
+    }, user.id).catch((err) => {
+      console.error('[markSessionViewed] Failed to publish session_viewed event:', err);
     });
 
     successResponse(res, {

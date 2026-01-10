@@ -212,6 +212,9 @@ export function UnifiedSessionScreen({
     clearMirrorIntervention,
     showCooling,
     setPendingConfirmation,
+
+    // Session viewed tracking
+    markSessionViewed,
   } = useUnifiedSession(sessionId);
 
   // AI message handler for fire-and-forget pattern
@@ -250,6 +253,15 @@ export function UnifiedSessionScreen({
         queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
         // Invalidate infinite messages query so new SHARED_CONTEXT message appears
         queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
+        // Mark session as viewed since user is actively viewing - this updates lastViewedAt
+        // so the partner (subject) sees "seen" status in real-time
+        markSessionViewed({});
+      }
+
+      if (event === 'partner.session_viewed') {
+        // Partner viewed the session - update delivery status (pending → seen)
+        console.log('[UnifiedSessionScreen] Partner viewed session, invalidating empathy status cache');
+        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
 
       if (event === 'partner.stage_completed') {
@@ -765,18 +777,30 @@ export function UnifiedSessionScreen({
   const displayMessages = useMemo((): ChatMessage[] => {
     // Enrich messages with delivery status for shared content
     return messages.map((message) => {
-      // For EMPATHY_STATEMENT messages (user's empathy statement to partner),
-      // attach delivery status from empathyStatusData
-      if (
-        message.role === MessageRole.EMPATHY_STATEMENT &&
-        empathyStatusData?.myAttempt?.deliveryStatus
-      ) {
-        return {
-          ...message,
-          sharedContentDeliveryStatus: empathyStatusData.myAttempt.deliveryStatus,
-        };
+      // For EMPATHY_STATEMENT messages, determine which delivery status to use:
+      // - If content matches myAttempt (guesser's empathy statement), use myAttempt.deliveryStatus
+      // - Otherwise, if sharedContentDeliveryStatus exists (subject shared via reconciler), use that
+      if (message.role === MessageRole.EMPATHY_STATEMENT) {
+        // Check if this is the guesser's empathy attempt (content matches myAttempt)
+        if (
+          empathyStatusData?.myAttempt?.content &&
+          empathyStatusData?.myAttempt?.deliveryStatus &&
+          message.content === empathyStatusData.myAttempt.content
+        ) {
+          return {
+            ...message,
+            sharedContentDeliveryStatus: empathyStatusData.myAttempt.deliveryStatus,
+          };
+        }
+        // Otherwise, this is shared context from the subject (via reconciler)
+        if (empathyStatusData?.sharedContentDeliveryStatus) {
+          return {
+            ...message,
+            sharedContentDeliveryStatus: empathyStatusData.sharedContentDeliveryStatus,
+          };
+        }
       }
-      // For SHARED_CONTEXT messages (shared context from subject),
+      // For SHARED_CONTEXT messages (shared context shown to guesser),
       // attach delivery status from empathyStatusData
       if (
         message.role === MessageRole.SHARED_CONTEXT &&
@@ -789,7 +813,7 @@ export function UnifiedSessionScreen({
       }
       return message;
     });
-  }, [messages, empathyStatusData?.myAttempt?.deliveryStatus, empathyStatusData?.sharedContentDeliveryStatus]);
+  }, [messages, empathyStatusData?.myAttempt?.content, empathyStatusData?.myAttempt?.deliveryStatus, empathyStatusData?.sharedContentDeliveryStatus]);
 
   // -------------------------------------------------------------------------
   // Render Inline Card

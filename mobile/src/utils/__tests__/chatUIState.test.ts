@@ -397,6 +397,24 @@ describe('Empathy Panel Visibility', () => {
     const result = computeChatUIState(inputs);
     expect(result.panels.showEmpathyPanel).toBe(false);
   });
+
+  it('shows in refining mode when AI returns proposedEmpathyStatement even with stale messageCount', () => {
+    // When AI returns a proposedEmpathyStatement, the panel should show immediately
+    // even if empathyStatusData.messageCountSinceSharedContext hasn't refetched yet.
+    // The AI response proves the user already sent a message.
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      isRefiningEmpathy: true,
+      messageCountSinceSharedContext: 0, // Stale - hasn't refetched yet
+      hasEmpathyContent: true, // AI just returned proposedEmpathyStatement
+      empathyStatus: { hasNewSharedContext: true },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showEmpathyPanel).toBe(true);
+  });
 });
 
 // ============================================================================

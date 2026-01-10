@@ -152,6 +152,7 @@ export function useInfiniteMessages(
     enabled: options?.enabled ?? !!sessionId,
     staleTime: 60_000, // 1 minute - keep data fresh longer
     gcTime: 300_000, // 5 minutes - keep in cache longer (formerly cacheTime)
+    refetchOnMount: 'always', // Always refetch when session opens to ensure fresh messages
   });
 
   return {

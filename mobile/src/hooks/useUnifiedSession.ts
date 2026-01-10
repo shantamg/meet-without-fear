@@ -451,8 +451,9 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Capture the initial lastSeenChatItemId when session first loads
   // This is used for the "New messages" separator and should NOT update
   // while the user is actively viewing the session
+  // Use undefined as initial state to indicate "not yet loaded" vs null meaning "never viewed"
   const initialLastSeenChatItemIdRef = useRef<string | null | undefined>(undefined);
-  const [lastSeenChatItemIdForSeparator, setLastSeenChatItemIdForSeparator] = useState<string | null>(null);
+  const [lastSeenChatItemIdForSeparator, setLastSeenChatItemIdForSeparator] = useState<string | null | undefined>(undefined);
 
   // Capture initial value when session loads (before marking viewed)
   useEffect(() => {
@@ -476,8 +477,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
     markViewed({ lastSeenChatItemId: newestMessageId });
     hasMarkedViewed.current = true;
 
-    // Clear the separator after marking viewed - user has now "seen" all messages
-    setLastSeenChatItemIdForSeparator(null);
+    // NOTE: We intentionally do NOT clear lastSeenChatItemIdForSeparator here.
+    // The separator should persist while user is viewing the session so they can see
+    // the "New" label and the new messages get typewriter animation.
+    // The separator will naturally be gone when user returns to the session since
+    // they will get a new lastSeenChatItemId from the server (updated by markViewed).
   }, [sessionId, messages, markViewed]);
 
   // Reset the flags when sessionId changes (user navigates to a different session)
@@ -1395,5 +1399,9 @@ export function useUnifiedSession(sessionId: string | undefined) {
       dispatch({ type: 'SET_PENDING_CONFIRMATION', payload: pending }),
     setFollowUpDate: (date: Date | null) =>
       dispatch({ type: 'SET_FOLLOW_UP_DATE', payload: date }),
+
+    // Session viewed tracking - call when user receives new content while viewing
+    // This updates lastViewedAt so partner sees "seen" status in real-time
+    markSessionViewed: markViewed,
   };
 }
