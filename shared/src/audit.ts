@@ -8,6 +8,7 @@ export type AuditSection =
   | 'LLM_START'   // LLM call started (for live monitoring)
   | 'MEMORY_DETECTION' // Memory suggestions from user input
   | 'MEMORY_ACTION'    // User actions on memories (approve, reject, create, update, delete)
+  | 'RECONCILER'  // Empathy reconciler analysis and share events
   | 'ERROR';      // Failures
 
 export interface AuditLogEntry {

@@ -96,55 +96,101 @@ function SessionDetail() {
           turn.userId = log.data.userId;
         }
       }
+
+      // Also try to extract userId from any log's data (for system events like welcome messages)
+      if (!turn.userId && log.data?.userId) {
+        turn.userId = log.data.userId;
+      }
+    });
+
+    // For turns without userId, try to parse it from the turnId
+    // Format: sessionId-userId-suffix (e.g., sessionId-userId-welcome, sessionId-userId-3)
+    groups.forEach(turn => {
+      if (!turn.userId && turn.id) {
+        const parts = turn.id.split('-');
+        // turnId format: sessionId-userId-suffix
+        // sessionId is typically a cuid (26 chars), userId is also a cuid
+        // So we look for the second cuid-like segment
+        if (parts.length >= 3) {
+          // The userId is the second segment (index 1) if it looks like a cuid
+          const potentialUserId = parts[1];
+          if (potentialUserId && potentialUserId.length > 20) {
+            turn.userId = potentialUserId;
+          }
+        }
+      }
     });
 
     return groups.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [logs]);
 
-  // Split turns by user
-  const { initiatorTurns, inviteeTurns, unassignedTurns } = React.useMemo(() => {
+  // Split turns by user - unassigned turns go to initiator column by default
+  const { initiatorTurns, inviteeTurns } = React.useMemo(() => {
     const initiatorTurns: Turn[] = [];
     const inviteeTurns: Turn[] = [];
-    const unassignedTurns: Turn[] = [];
+
+    // Helper for case-insensitive ID comparison
+    const idsMatch = (id1?: string, id2?: string) => {
+      if (!id1 || !id2) return false;
+      return id1.toLowerCase() === id2.toLowerCase();
+    };
 
     turns.forEach(turn => {
-      if (turn.userId === users.initiator?.id) {
+      if (idsMatch(turn.userId, users.initiator?.id)) {
         initiatorTurns.push(turn);
-      } else if (turn.userId === users.invitee?.id) {
+      } else if (idsMatch(turn.userId, users.invitee?.id)) {
         inviteeTurns.push(turn);
       } else {
         // For turns without userId, try to infer from userName in logs
         const userLog = turn.logs.find(l => l.section === 'USER');
-        const userName = userLog?.data?.userName;
-        
-        if (userName && users.initiator?.name && userName === users.initiator.name) {
+        const logUserName = userLog?.data?.userName;
+
+        if (logUserName && users.initiator?.name && logUserName === users.initiator.name) {
           initiatorTurns.push(turn);
-        } else if (userName && users.invitee?.name && userName === users.invitee.name) {
+        } else if (logUserName && users.invitee?.name && logUserName === users.invitee.name) {
           inviteeTurns.push(turn);
         } else {
-          unassignedTurns.push(turn);
+          // Unassigned turns default to initiator column for now
+          // These will be properly linked once turnId is globally set at request start
+          initiatorTurns.push(turn);
         }
       }
     });
 
-    return { initiatorTurns, inviteeTurns, unassignedTurns };
+    return { initiatorTurns, inviteeTurns };
   }, [turns, users]);
 
   // Auto-scroll to top when new turns arrive
   const prevTurnCountRef = useRef({ initiator: 0, invitee: 0 });
-  
+  const isInitialLoadRef = useRef(true);
+
   useEffect(() => {
-    if (initiatorTurns.length > prevTurnCountRef.current.initiator) {
-      leftColumnRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    // Skip auto-scroll on initial load
+    if (isInitialLoadRef.current) {
+      prevTurnCountRef.current = {
+        initiator: initiatorTurns.length,
+        invitee: inviteeTurns.length,
+      };
+      isInitialLoadRef.current = false;
+      return;
     }
-    if (inviteeTurns.length > prevTurnCountRef.current.invitee) {
-      rightColumnRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-    
-    prevTurnCountRef.current = {
-      initiator: initiatorTurns.length,
-      invitee: inviteeTurns.length,
-    };
+
+    // Small delay to ensure DOM has updated before scrolling
+    const timeoutId = setTimeout(() => {
+      if (initiatorTurns.length > prevTurnCountRef.current.initiator) {
+        leftColumnRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      if (inviteeTurns.length > prevTurnCountRef.current.invitee) {
+        rightColumnRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      prevTurnCountRef.current = {
+        initiator: initiatorTurns.length,
+        invitee: inviteeTurns.length,
+      };
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
   }, [initiatorTurns.length, inviteeTurns.length]);
 
   useEffect(() => {
@@ -278,20 +324,12 @@ function SessionDetail() {
         </div>
       )}
 
-      {/* Show unassigned turns at bottom if any */}
-      {unassignedTurns.length > 0 && hasTwoUsers && (
-        <div className="unassigned-turns">
-          <h3>System Events</h3>
-          {unassignedTurns.map(turn => (
-            <TurnView key={turn.id} turn={turn} userName="System" />
-          ))}
-        </div>
-      )}
+      {/* Unassigned turns are now integrated into user columns via turnId linkage */}
     </div>
   );
 }
 
-function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
+function TurnView({ turn, userName: _userName }: { turn: Turn, userName: string }) {
   const userLog = turn.logs.find(l => l.section === 'USER');
   let otherLogs = turn.logs.filter(l => l !== userLog);
 
@@ -463,6 +501,8 @@ function LogStep({ log }: { log: AuditLogEntry }) {
         return <LlmStartDetail data={log.data} />;
       case 'MEMORY_DETECTION':
         return <MemoryDetail data={log.data} />;
+      case 'RECONCILER':
+        return <ReconcilerDetail data={log.data} />;
       default:
         return <GenericDetail data={log.data || { message: log.message }} />;
     }
@@ -698,6 +738,218 @@ function MemoryDetail({ data }: { data: any }) {
             {valid ? '✓ Validated' : '✕ Rejected'}
           </span>
         </div>
+      </div>
+    </DetailWrapper>
+  );
+}
+
+function ReconcilerDetail({ data }: { data: any }) {
+  if (!data) return null;
+
+  const eventType = data.eventType;
+
+  // Analysis event
+  if (eventType === 'analysis') {
+    const severityColors: Record<string, string> = {
+      none: 'severity-none',
+      minor: 'severity-minor',
+      moderate: 'severity-moderate',
+      significant: 'severity-significant',
+    };
+
+    return (
+      <DetailWrapper data={data} title="Empathy Analysis">
+        <div className="reconciler-detail">
+          <div className="reconciler-header">
+            <span className="reconciler-direction">
+              {data.guesserName} → {data.subjectName}
+            </span>
+          </div>
+
+          {/* Alignment Section */}
+          <div className="reconciler-section">
+            <h4>Alignment</h4>
+            <div className="key-value-grid">
+              <div className="kv-item">
+                <span className="kv-label">Score</span>
+                <span className="kv-value highlight">{data.alignment?.score}%</span>
+              </div>
+              <div className="kv-item full-width">
+                <span className="kv-label">Summary</span>
+                <span className="kv-value text-block">{data.alignment?.summary}</span>
+              </div>
+              {data.alignment?.correctlyIdentified?.length > 0 && (
+                <div className="kv-item full-width">
+                  <span className="kv-label">Correctly Identified</span>
+                  <div className="tag-list">
+                    {data.alignment.correctlyIdentified.map((item: string, i: number) => (
+                      <span key={i} className="tag success">{item}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Gaps Section */}
+          <div className="reconciler-section">
+            <h4>Gaps</h4>
+            <div className="key-value-grid">
+              <div className="kv-item">
+                <span className="kv-label">Severity</span>
+                <span className={`kv-value tag ${severityColors[data.gaps?.severity] || ''}`}>
+                  {data.gaps?.severity?.toUpperCase()}
+                </span>
+              </div>
+              <div className="kv-item full-width">
+                <span className="kv-label">Summary</span>
+                <span className="kv-value text-block">{data.gaps?.summary}</span>
+              </div>
+              {data.gaps?.missedFeelings?.length > 0 && (
+                <div className="kv-item full-width">
+                  <span className="kv-label">Missed Feelings</span>
+                  <div className="tag-list">
+                    {data.gaps.missedFeelings.map((feeling: string, i: number) => (
+                      <span key={i} className="tag warning">{feeling}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.gaps?.misattributions?.length > 0 && (
+                <div className="kv-item full-width">
+                  <span className="kv-label">Misattributions</span>
+                  <div className="tag-list">
+                    {data.gaps.misattributions.map((item: string, i: number) => (
+                      <span key={i} className="tag error">{item}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {data.gaps?.mostImportantGap && (
+                <div className="kv-item full-width">
+                  <span className="kv-label">Most Important Gap</span>
+                  <span className="kv-value text-block highlight">{data.gaps.mostImportantGap}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Recommendation Section */}
+          <div className="reconciler-section">
+            <h4>Recommendation</h4>
+            <div className="key-value-grid">
+              <div className="kv-item">
+                <span className="kv-label">Action</span>
+                <span className={`kv-value tag ${data.recommendation?.action === 'PROCEED' ? 'success' : 'warning'}`}>
+                  {data.recommendation?.action}
+                </span>
+              </div>
+              <div className="kv-item full-width">
+                <span className="kv-label">Rationale</span>
+                <span className="kv-value text-block">{data.recommendation?.rationale}</span>
+              </div>
+              {data.recommendation?.sharingWouldHelp && (
+                <div className="kv-item full-width">
+                  <span className="kv-label">Suggested Share Focus</span>
+                  <span className="kv-value text-block dim">{data.recommendation?.suggestedShareFocus}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </DetailWrapper>
+    );
+  }
+
+  // Share suggestion event
+  if (eventType === 'share_suggestion') {
+    return (
+      <DetailWrapper data={data} title="Share Suggestion">
+        <div className="reconciler-detail">
+          <div className="reconciler-header">
+            <span className="reconciler-direction">
+              Suggestion for {data.subjectName} to help {data.guesserName}
+            </span>
+          </div>
+
+          <div className="key-value-grid">
+            <div className="kv-item full-width">
+              <span className="kv-label">Suggested Content</span>
+              <span className="kv-value text-block highlight">"{data.suggestedContent}"</span>
+            </div>
+            <div className="kv-item full-width">
+              <span className="kv-label">Reason</span>
+              <span className="kv-value text-block">{data.reason}</span>
+            </div>
+            {data.gapContext && (
+              <>
+                <div className="kv-item">
+                  <span className="kv-label">Gap Severity</span>
+                  <span className="kv-value tag">{data.gapContext.severity}</span>
+                </div>
+                {data.gapContext.mostImportantGap && (
+                  <div className="kv-item full-width">
+                    <span className="kv-label">Gap Being Addressed</span>
+                    <span className="kv-value text-block dim">{data.gapContext.mostImportantGap}</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </DetailWrapper>
+    );
+  }
+
+  // Share response events (accepted, refined, declined)
+  if (eventType === 'share_accepted' || eventType === 'share_refined' || eventType === 'share_declined') {
+    const isDeclined = eventType === 'share_declined';
+    const wasRefined = eventType === 'share_refined';
+
+    return (
+      <DetailWrapper data={data} title={isDeclined ? 'Share Declined' : 'Context Shared'}>
+        <div className="reconciler-detail">
+          <div className="reconciler-header">
+            <span className={`status-badge ${isDeclined ? 'declined' : 'shared'}`}>
+              {isDeclined ? '✕ Declined' : wasRefined ? '✎ Refined & Shared' : '✓ Accepted & Shared'}
+            </span>
+          </div>
+
+          <div className="key-value-grid">
+            <div className="kv-item">
+              <span className="kv-label">Subject</span>
+              <span className="kv-value">{data.subjectName}</span>
+            </div>
+            <div className="kv-item">
+              <span className="kv-label">Guesser</span>
+              <span className="kv-value">{data.guesserName}</span>
+            </div>
+
+            {!isDeclined && (
+              <>
+                <div className="kv-item full-width">
+                  <span className="kv-label">Shared Content</span>
+                  <span className="kv-value text-block highlight">"{data.sharedContent}"</span>
+                </div>
+                {wasRefined && data.originalSuggestion && (
+                  <div className="kv-item full-width">
+                    <span className="kv-label">Original Suggestion</span>
+                    <span className="kv-value text-block dim">"{data.originalSuggestion}"</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </DetailWrapper>
+    );
+  }
+
+  // Fallback for unknown reconciler events
+  return (
+    <DetailWrapper data={data}>
+      <div className="generic-preview">
+        <p>Reconciler Event: {eventType}</p>
       </div>
     </DetailWrapper>
   );
@@ -977,6 +1229,7 @@ function getIcon(section: string) {
     case 'COST': return '💰';
     case 'LLM_START': return '⏳';
     case 'MEMORY_DETECTION': return '📝';
+    case 'RECONCILER': return '⚖️';
     default: return '📝';
   }
 }
@@ -995,6 +1248,12 @@ function getPreview(log: AuditLogEntry) {
       'retrieval-planning': 'Memory Plan',
       'memory-detection': 'Memory',
       'haiku-json': 'Analysis',
+      'reconciler-analysis': 'Reconciler',
+      'reconciler-share-suggestion': 'Share Suggestion',
+      'reconciler-share-offer': 'Share Offer',
+      'reconciler-quote-selection': 'Quote Selection',
+      'reconciler-summary': 'Reconciler Summary',
+      'reconciler-extract-themes': 'Theme Extraction',
     };
     const label = op ? (opLabels[op] || op) : 'AI Call';
     const model = formatModelName(log.data?.model);
@@ -1020,10 +1279,30 @@ function getPreview(log: AuditLogEntry) {
       'gratitude-response': 'Gratitude',
       'haiku-json': 'Analysis',
       'embedding': 'Embed',
+      'reconciler-analysis': 'Reconciler',
+      'reconciler-share-suggestion': 'Share Suggestion',
+      'reconciler-share-offer': 'Share Offer',
+      'reconciler-quote-selection': 'Quote Selection',
+      'reconciler-summary': 'Reconciler Summary',
+      'reconciler-extract-themes': 'Theme Extraction',
     };
     const label = op ? (opLabels[op] || op) : 'AI Call';
     const duration = log.data?.durationMs ? ` · ${formatDuration(log.data.durationMs)}` : '';
     return `${label} · $${log.cost?.toFixed(4) || log.data?.totalCost?.toFixed(4) || '0.00'}${duration}`;
+  }
+  if (log.section === 'RECONCILER') {
+    const eventType = log.data?.eventType;
+    const eventLabels: Record<string, string> = {
+      'analysis': 'Empathy Analysis',
+      'share_suggestion': 'Share Suggestion',
+      'share_accepted': 'Shared',
+      'share_refined': 'Refined & Shared',
+      'share_declined': 'Declined',
+    };
+    const label = eventType ? (eventLabels[eventType] || eventType) : 'Event';
+    const score = log.data?.alignment?.score ? ` · ${log.data.alignment.score}%` : '';
+    const severity = log.data?.gaps?.severity ? ` · ${log.data.gaps.severity}` : '';
+    return `${label}${score}${severity}`;
   }
   return log.message.substring(0, 50) + (log.message.length > 50 ? '...' : '');
 }

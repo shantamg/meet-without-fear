@@ -21,6 +21,8 @@ import { prisma } from '../lib/prisma';
 import { MessageRole } from '@meet-without-fear/shared';
 import { getSonnetResponse, getHaikuJson } from '../lib/bedrock';
 import { publishMessageAIResponse } from './realtime';
+import { getCurrentUserId } from '../lib/request-context';
+import { auditLog } from './audit-logger';
 import {
   buildReconcilerPrompt,
   buildShareOfferPrompt,
@@ -475,6 +477,20 @@ Respond in JSON:
   console.log(`[Reconciler] Share suggestion generated: "${response.suggestedContent.substring(0, 50)}..."`);
   console.log(`[Reconciler] Share reason: "${response.reason}"`);
 
+  // Log the share suggestion for dashboard visibility
+  await auditLog('RECONCILER', `Generated share suggestion for ${subject.name} to help ${guesser.name}`, {
+    sessionId,
+    eventType: 'share_suggestion',
+    subjectName: subject.name,
+    guesserName: guesser.name,
+    suggestedContent: response.suggestedContent,
+    reason: response.reason,
+    gapContext: {
+      severity: reconcilerResult.gaps.severity,
+      mostImportantGap: reconcilerResult.gaps.mostImportantGap,
+    },
+  });
+
   // Save to reconciler result
   const dbResult = await prisma.reconcilerResult.findUnique({
     where: {
@@ -618,6 +634,16 @@ export async function respondToShareSuggestion(
 
   if (response.action === 'decline') {
     console.log(`[Reconciler] User ${userId} declined share offer. Revealing guesser's empathy directly.`);
+
+    // Log the decline for dashboard visibility
+    await auditLog('RECONCILER', `Share suggestion declined - revealing empathy directly`, {
+      sessionId,
+      eventType: 'share_declined',
+      subjectId: userId,
+      guesserName: shareOffer.result.guesserName,
+      subjectName: shareOffer.result.subjectName,
+    });
+
     // User declined - mark offer as declined and reveal empathy as-is
     await prisma.reconcilerShareOffer.update({
       where: { id: shareOffer.id },
@@ -666,6 +692,18 @@ export async function respondToShareSuggestion(
   }
 
   console.log(`[Reconciler] User ${userId} ${response.action}ed share offer. Shared content: "${sharedContent.substring(0, 50)}..."`);
+
+  // Log the share acceptance for dashboard visibility
+  await auditLog('RECONCILER', `Share suggestion ${response.action}ed - context shared with guesser`, {
+    sessionId,
+    eventType: response.action === 'refine' ? 'share_refined' : 'share_accepted',
+    subjectId: userId,
+    guesserName: shareOffer.result.guesserName,
+    subjectName: shareOffer.result.subjectName,
+    sharedContent,
+    wasRefined: response.action === 'refine',
+    originalSuggestion: shareOffer.suggestedContent,
+  });
 
   // Update share offer
   await prisma.reconcilerShareOffer.update({
@@ -936,6 +974,32 @@ async function analyzeEmpathyGap(
     `[Reconciler] Analysis complete: ${result.alignment.score}% alignment, ` +
     `${result.gaps.severity} gaps, action: ${result.recommendation.action}`
   );
+
+  // Log the reconciler analysis for dashboard visibility
+  await auditLog('RECONCILER', `Analyzed ${input.guesser.name}'s understanding of ${input.subject.name}`, {
+    sessionId: input.sessionId,
+    eventType: 'analysis',
+    guesserName: input.guesser.name,
+    subjectName: input.subject.name,
+    alignment: {
+      score: result.alignment.score,
+      summary: result.alignment.summary,
+      correctlyIdentified: result.alignment.correctlyIdentified,
+    },
+    gaps: {
+      severity: result.gaps.severity,
+      summary: result.gaps.summary,
+      missedFeelings: result.gaps.missedFeelings,
+      misattributions: result.gaps.misattributions,
+      mostImportantGap: result.gaps.mostImportantGap,
+    },
+    recommendation: {
+      action: result.recommendation.action,
+      rationale: result.recommendation.rationale,
+      sharingWouldHelp: result.recommendation.sharingWouldHelp,
+      suggestedShareFocus: result.recommendation.suggestedShareFocus,
+    },
+  });
 
   return result;
 }
@@ -1313,7 +1377,7 @@ async function getWitnessingContent(
   // If no extracted emotions, try to extract key themes using AI (quick analysis)
   let themesList = Array.from(themes);
   if (themesList.length === 0 && userMessages.length > 0) {
-    themesList = await extractThemes(userMessages, sessionId);
+    themesList = await extractThemes(userMessages, sessionId, userId);
   }
 
   return {
@@ -1325,8 +1389,10 @@ async function getWitnessingContent(
 /**
  * Extract key themes from witnessing content using AI.
  */
-async function extractThemes(content: string, sessionId: string): Promise<string[]> {
-  const turnId = `${sessionId}-extract-themes-${Date.now()}`;
+async function extractThemes(content: string, sessionId: string, userId?: string): Promise<string[]> {
+  // Include userId in turnId for proper attribution
+  const effectiveUserId = userId || getCurrentUserId() || 'system';
+  const turnId = `${sessionId}-${effectiveUserId}-extract-themes-${Date.now()}`;
   const result = await getHaikuJson<{ themes: string[] }>({
     systemPrompt: `Extract 3-5 key emotional themes or feelings from this witnessing content. Return as JSON: {"themes": ["theme1", "theme2", ...]}`,
     messages: [{ role: 'user', content }],
