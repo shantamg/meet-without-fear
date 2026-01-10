@@ -143,7 +143,8 @@ export const REALTIME_CHANNELS = {
 
 export type UserEventType =
   | 'session.new_message' // New message in a session
-  | 'session.updated'; // Session state changed (status, stage, etc.)
+  | 'session.updated' // Session state changed (status, stage, etc.)
+  | 'memory.suggested'; // AI suggested a memory for the user to approve
 
 export interface UserEventData {
   sessionId: string;

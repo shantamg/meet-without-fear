@@ -48,7 +48,7 @@ import {
   estimateTokens,
   getRecommendedLimits,
 } from '../utils/token-budget';
-import { publishSessionEvent } from './realtime';
+import { publishUserEvent } from './realtime';
 import { memoryService } from './memory-service';
 
 // ============================================================================
@@ -242,11 +242,13 @@ export async function orchestrateResponse(
             suggestedBy: `AI Confidence: ${suggestion.confidence} | Evidence: ${suggestion.evidence}`,
           });
 
-          // BROADCAST TO APP with DB ID - user will see the suggestion card
-          await publishSessionEvent(
-            context.sessionId,
+          // Send memory suggestion to the SPECIFIC USER who made the statement
+          // (not broadcast to all session members - this is a personal memory offer)
+          await publishUserEvent(
+            context.userId,
             'memory.suggested',
             {
+              sessionId: context.sessionId,
               suggestion: {
                 id: memory.id,
                 suggestedContent: suggestion.suggestedContent,

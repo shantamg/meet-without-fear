@@ -643,13 +643,34 @@ export function useSessionEvents(
 // ============================================================================
 
 /**
+ * Configuration for user session updates hook
+ */
+interface UseUserSessionUpdatesConfig {
+  /** Callback when a memory suggestion is received */
+  onMemorySuggestion?: (suggestion: {
+    id: string;
+    suggestedContent: string;
+    category: string;
+    confidence: string;
+    sessionId: string;
+  }) => void;
+}
+
+/**
  * Hook for subscribing to user-level session updates.
  * Automatically invalidates session queries when events are received.
  * Use this on the home screen or sessions list to get real-time updates.
+ * Also receives memory suggestions targeted to this specific user.
  */
-export function useUserSessionUpdates(): { connectionStatus: ConnectionStatus } {
+export function useUserSessionUpdates(
+  config?: UseUserSessionUpdatesConfig
+): { connectionStatus: ConnectionStatus } {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  // Store callback in ref to avoid stale closures
+  const onMemorySuggestionRef = useRef(config?.onMemorySuggestion);
+  onMemorySuggestionRef.current = config?.onMemorySuggestion;
 
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(() => {
     return mapAblyState(getAblyConnectionState());
@@ -662,6 +683,20 @@ export function useUserSessionUpdates(): { connectionStatus: ConnectionStatus } 
   const handleEvent = useCallback(
     (eventName: UserEventType, _data: UserEventData) => {
       console.log('[UserSessionUpdates] Received event:', eventName, _data);
+
+      // Handle memory suggestions targeted to this specific user
+      if (eventName === 'memory.suggested') {
+        const suggestion = (_data as { suggestion?: { id: string; suggestedContent: string; category: string; confidence: string } }).suggestion;
+        if (suggestion && onMemorySuggestionRef.current) {
+          console.log('[UserSessionUpdates] Memory suggestion received:', suggestion);
+          onMemorySuggestionRef.current({
+            ...suggestion,
+            sessionId: _data.sessionId,
+          });
+        }
+        return; // Don't refetch queries for memory suggestions
+      }
+
       console.log('[UserSessionUpdates] Refetching queries...');
 
       // Use refetchQueries to force immediate refetch (not just mark stale)

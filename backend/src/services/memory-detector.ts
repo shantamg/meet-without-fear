@@ -51,29 +51,38 @@ function buildDetectionPrompt(
     contextSection += '\nUse this context to resolve pronouns and references.';
   }
 
-  return `Analyze this message for explicit memory requests - things the user wants remembered LONG-TERM.
+  return `Analyze this message for explicit memory requests - ONLY when the user DIRECTLY ASKS you to remember something.
 
-ONLY DETECT if the user is EXPLICITLY requesting something to be remembered or changed long-term:
-- Direct requests: "Remember that...", "Always...", "From now on...", "I want you to..."
-- Preference changes: "Call me X" (not just mentioning a name), "Use X pronouns" (explicit request)
-- Communication style: "Keep responses brief" (explicit instruction, not just expressing a feeling)
-- AI name: "I'll call you X" (explicit naming)
+THIS IS A THERAPY/MEDIATION CONTEXT. Users share personal information as part of conversation, NOT as memory requests. Be EXTREMELY conservative.
 
-DO NOT DETECT:
-- Emotional expressions: "I miss him", "I'm sad", "I feel..."
-- Casual mentions: Just mentioning a name or fact without requesting it be remembered
-- Temporary requests: "Can you...", "Could you..." (one-time requests, not long-term)
-- Relationship facts mentioned in passing without explicit "remember" language
+ONLY DETECT if the user uses EXPLICIT memory-request language:
+- "Remember that..." or "Remember this..."
+- "Always remember..." or "Never forget..."
+- "From now on..." or "Going forward..."
+- "I'll call you X" or "Can I call you X" (explicit AI naming)
+- "Call me X" (direct instruction about their name)
+- "My pronouns are..." or "Use X pronouns for me"
 
-CATEGORIES (only when explicit memory intent detected):
-- AI_NAME: "I'll call you X", "Can I call you Y"
-- LANGUAGE: Explicit language preference requests
-- COMMUNICATION: Explicit style instructions ("Keep responses brief", "Be more casual")
-- PERSONAL_INFO: Explicit personal info requests ("Call me X", "I use X pronouns")
-- RELATIONSHIP: Explicit relationship fact requests ("Remember that my partner's name is X")
-- PREFERENCE: Explicit preference requests ("Don't use analogies", "Give examples")
+ABSOLUTELY DO NOT DETECT (even if sharing personal information):
+- Information shared during normal conversation: "My brother Jason doesn't respect my boundaries" = just sharing, NOT a memory request
+- Desires or wishes: "I want him to respect me", "I wish she would listen" = expressing feelings, NOT asking you to remember
+- Facts about relationships: "My partner is Sarah", "I have two kids" = contextual info, NOT memory requests
+- Emotional expressions: "I feel hurt", "I'm frustrated with..." = sharing feelings, NOT memory requests
+- One-time requests: "Can you...", "Could you...", "Would you..." = single conversation requests
+- Statements about preferences: "I prefer X over Y" = just stating preference, NOT asking to remember
 
-IMPORTANT: Use conversation context to resolve pronouns and references. Create specific, concrete memories rather than vague placeholders. Only detect if there's clear intent to remember something long-term.${contextSection}
+THE KEY TEST: Did the user use words like "remember", "always", "from now on", "going forward"? 
+If not, it's almost certainly NOT a memory request. Default to hasMemoryIntent: false.
+
+CATEGORIES (only when EXPLICIT memory-request language is present):
+- AI_NAME: Only "I'll call you X", "Can I call you Y" with explicit naming intent
+- LANGUAGE: Only explicit "Please respond in [language] from now on"
+- COMMUNICATION: Only explicit "Always keep responses brief", "From now on be more casual"
+- PERSONAL_INFO: Only explicit "Call me X", "My pronouns are X, please use them"
+- RELATIONSHIP: Only explicit "Remember that my partner's name is X"
+- PREFERENCE: Only explicit "From now on, don't use analogies"
+
+Be EXTREMELY conservative. When in doubt, hasMemoryIntent = false.${contextSection}
 
 User message: "${escapeForPrompt(message)}"
 
@@ -175,8 +184,11 @@ export async function detectMemoryIntent(
     `${logPrefix} Starting detection for message (${message.length} chars)${contextInfo}: "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`,
   );
 
-  const systemPrompt = `You are a memory detection assistant. Analyze messages for implicit memory requests.
-Use conversation context to resolve pronouns and references. Output only valid JSON with no markdown formatting or extra text.`;
+  const systemPrompt = `You are a memory detection assistant in a therapy/mediation context. 
+ONLY detect EXPLICIT memory requests where the user DIRECTLY asks you to remember something using words like "remember", "always", "from now on", "going forward".
+DO NOT flag normal conversation, emotional sharing, or information given as context.
+Be EXTREMELY conservative - when in doubt, return hasMemoryIntent: false.
+Output only valid JSON with no markdown formatting or extra text.`;
 
   const userPrompt = buildDetectionPrompt(message, recentMessages);
 

@@ -42,7 +42,7 @@ import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
-import { useRealtime } from '../hooks/useRealtime';
+import { useRealtime, useUserSessionUpdates } from '../hooks/useRealtime';
 import { stageKeys } from '../hooks/useStages';
 import { messageKeys, useAIMessageHandler } from '../hooks/useMessages';
 import { createStyles } from '../theme/styled';
@@ -216,21 +216,23 @@ export function UnifiedSessionScreen({
   // AI message handler for fire-and-forget pattern
   const { addAIMessage, handleAIMessageError } = useAIMessageHandler();
 
+  // User-level events (memory suggestions are now sent to specific user, not session)
+  useUserSessionUpdates({
+    onMemorySuggestion: (suggestion) => {
+      // Only show memory suggestions for the current session
+      if (suggestion.sessionId === sessionId) {
+        console.log('[UnifiedSessionScreen] Received memory suggestion:', suggestion);
+        setMemorySuggestion(suggestion as MemorySuggestion);
+      }
+    },
+  });
+
   // Real-time presence and event tracking
   const { partnerOnline, connectionStatus, reconnect: reconnectRealtime } = useRealtime({
     sessionId,
     enablePresence: true,
     onSessionEvent: (event, data) => {
       console.log('[UnifiedSessionScreen] Received realtime event:', event);
-
-      if (event === 'memory.suggested' && data) {
-        // Handle incoming memory suggestion from Ably
-        const eventData = data as { suggestion?: MemorySuggestion };
-        if (eventData.suggestion) {
-          console.log('[UnifiedSessionScreen] Received memory suggestion:', eventData.suggestion);
-          setMemorySuggestion(eventData.suggestion);
-        }
-      }
 
       // Handle reconciler events - invalidate caches to trigger refetch
       if (event === 'empathy.share_suggestion') {
