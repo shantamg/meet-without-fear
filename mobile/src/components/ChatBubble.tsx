@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { View, Text, Animated } from 'react-native';
-import { MessageRole } from '@meet-without-fear/shared';
+import { MessageRole, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 import { TypewriterText } from './TypewriterText';
@@ -21,6 +21,8 @@ export interface ChatBubbleMessage {
   status?: MessageDeliveryStatus;
   /** If true, skip animation (for messages loaded from history) */
   skipTypewriter?: boolean;
+  /** Delivery status for shared content messages (EMPATHY_STATEMENT, SHARED_CONTEXT) */
+  sharedContentDeliveryStatus?: SharedContentDeliveryStatus;
 }
 
 interface ChatBubbleProps {
@@ -179,6 +181,19 @@ export function ChatBubble({
     }
   };
 
+  const getSharedContentStatusText = (status: SharedContentDeliveryStatus | undefined): string => {
+    switch (status) {
+      case 'pending':
+        return 'Pending';
+      case 'delivered':
+        return 'Delivered';
+      case 'seen':
+        return 'Seen';
+      default:
+        return 'Pending';
+    }
+  };
+
   // Determine container alignment
   const getContainerStyle = () => {
     if (isUser) return styles.userContainer;
@@ -214,10 +229,15 @@ export function ChatBubble({
   const renderContent = () => {
     // Empathy statements - use fade-in for new messages
     if (isEmpathyStatement) {
+      const deliveryStatus = message.sharedContentDeliveryStatus;
       const content = (
         <View>
           <Text style={styles.empathyStatementHeader}>What you shared</Text>
           <Text style={styles.empathyStatementText}>{message.content}</Text>
+          {/* Delivery status indicator */}
+          <Text style={styles.sharedContentDeliveryStatus}>
+            {getSharedContentStatusText(deliveryStatus)}
+          </Text>
         </View>
       );
       if (isAnimating) {
@@ -231,10 +251,17 @@ export function ChatBubble({
       const contextLabel = partnerName
         ? `New context from ${partnerName}`
         : 'New context from your partner';
+      const deliveryStatus = message.sharedContentDeliveryStatus;
       const content = (
         <View>
           <Text style={styles.sharedContextLabel}>{contextLabel}</Text>
           <Text style={styles.sharedContextText}>{message.content}</Text>
+          {/* Delivery status indicator */}
+          {deliveryStatus && (
+            <Text style={styles.sharedContentDeliveryStatusLight}>
+              {getSharedContentStatusText(deliveryStatus)}
+            </Text>
+          )}
         </View>
       );
       if (isAnimating) {
@@ -405,6 +432,24 @@ const useStyles = () =>
       lineHeight: 26,
       color: colors.textPrimary,
       fontFamily: t.typography.fontFamily.regular,
+    },
+    // Shared content delivery status indicator
+    sharedContentDeliveryStatus: {
+      fontSize: 11,
+      fontWeight: '500',
+      color: colors.textMuted,
+      textAlign: 'right',
+      marginTop: t.spacing.sm,
+      textTransform: 'capitalize',
+    },
+    // Shared content delivery status for light backgrounds
+    sharedContentDeliveryStatusLight: {
+      fontSize: 11,
+      fontWeight: '500',
+      color: '#64748b', // Slate-500 for light background
+      textAlign: 'right',
+      marginTop: t.spacing.sm,
+      textTransform: 'capitalize',
     },
     // Shared context: subtle container
     sharedContextContainer: {

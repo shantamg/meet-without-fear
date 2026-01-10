@@ -10,7 +10,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
-import type { MessageDTO } from '@meet-without-fear/shared';
+import type { MessageDTO, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 import { MessageRole } from '@meet-without-fear/shared';
 import { ChatBubble, ChatBubbleMessage, MessageDeliveryStatus } from './ChatBubble';
 import { TypingIndicator } from './TypingIndicator';
@@ -26,6 +26,8 @@ import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 
 export interface ChatMessage extends MessageDTO {
   status?: MessageDeliveryStatus;
+  /** Delivery status for shared content (empathy statements, shared context) */
+  sharedContentDeliveryStatus?: SharedContentDeliveryStatus;
 }
 
 export { ChatIndicatorType } from './ChatIndicator';
@@ -437,6 +439,7 @@ export function ChatInterface({
       timestamp: message.timestamp,
       status: message.status,
       skipTypewriter: !shouldAnimateTypewriter,
+      sharedContentDeliveryStatus: message.sharedContentDeliveryStatus,
     };
 
     return (
