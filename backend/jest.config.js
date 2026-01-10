@@ -24,5 +24,7 @@ module.exports = {
   maxWorkers: 1,
   clearMocks: true,
   restoreMocks: true,
-  detectOpenHandles: true
+  detectOpenHandles: true,
+  // Silence console output during tests - use --verbose flag to see console output when debugging
+  silent: true
 };

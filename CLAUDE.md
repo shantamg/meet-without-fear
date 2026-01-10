@@ -7,6 +7,7 @@
 - Write tests first, then implementation
 - Run `npm run test` in the relevant workspace before considering work complete
 - Run `npm run check` to verify types before committing
+- Backend tests run in silent mode by default; use `--verbose` flag to see console output when debugging
 
 ### Code Organization
 

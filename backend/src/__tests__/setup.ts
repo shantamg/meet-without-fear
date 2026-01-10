@@ -10,7 +10,19 @@ const originalConsoleError = console.error;
 const silencedLogPatterns = [
   /^\[Realtime\]/,  // Realtime service logs
   /^\[Push\]/,       // Push notification logs
-  /^\[sendMessage\]/, // Stage1 controller debug logs
+  /^\[sendMessage[:\]]/,  // Stage1 controller debug logs (with or without request ID)
+  /^\[getConversationHistory[:\]]/, // Conversation history logs
+  /^\[confirmFeelHeard\]/, // Feel-heard confirmation logs
+  /^\[ConversationSummarizer\]/, // Summarizer logs
+  /^\[AuditLogger\]/, // Audit logger logs
+  /^\[Orchestrator\]/, // Orchestrator logs
+  /^\[MemoryDetector\]/, // Memory detector logs
+  /^\[RetrievalPlanner\]/, // Retrieval planner logs
+  /^\[notifySessionMembers\]/, // Session notification logs
+  /^\[Embedding\]/, // Embedding service logs
+  /^\[TokenBudget\]/, // Token budget logs
+  /^\[Reconciler[:\]]/, // Reconciler logs
+  /^prisma:/, // Prisma debug/info logs
 ];
 
 const silencedWarnPatterns = [
@@ -18,6 +30,12 @@ const silencedWarnPatterns = [
   /^\[Push\]/,  // Push service warnings
   /^No JSON found in invitation text/, // Expected when testing invitation parsing
   /^\[JSON Extractor\]/, // Expected when testing invitation response extraction
+  /^\[sendMessage[:\]]/,  // Stage1 controller warnings (with or without request ID)
+  /^\[confirmFeelHeard\]/, // Feel-heard confirmation warnings
+  /^\[ConversationSummarizer\]/, // Summarizer warnings
+  /^\[Embedding\]/, // Embedding service warnings (expected with mocked DB)
+  /^\[notifySessionMembers\]/, // Session notification warnings
+  /^prisma:/, // Prisma warnings
 ];
 
 const silencedErrorPatterns = [
@@ -25,6 +43,13 @@ const silencedErrorPatterns = [
   /^Error getting emotions:/,  // Expected in error handling tests
   /^Error completing exercise:/, // Expected in error handling tests
   /^\[AI Service\]/, // Expected in AI service error handling tests
+  /^\[ConversationSummarizer\]/, // Summarizer errors (expected with mocked DB)
+  /^\[AuditLogger\]/, // Audit logger errors (expected with mocked DB)
+  /^\[confirmFeelHeard\]/, // Feel-heard confirmation errors (expected with mocked DB)
+  /^\[sendMessage[:\]]/,  // Stage1 controller errors (with or without request ID)
+  /^\[Embedding\]/, // Embedding service errors (expected with mocked DB)
+  /^\[notifySessionMembers\]/, // Session notification errors (expected with mocked DB)
+  /^prisma:/, // Prisma errors (expected with mocked/disconnected DB)
 ];
 
 beforeAll(() => {
