@@ -377,15 +377,13 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
 
         console.log('[Realtime] Subscription setup complete');
       } catch (err) {
-        console.error('[Realtime] Subscription setup error:', err);
-
         // Check if this is a capability/access denied error or channel failed state
         // This can happen when connecting to a new session before the token was refreshed
         // Also check error.cause since Ably wraps the root cause
         const errorMessage = err instanceof Error ? err.message : String(err);
         const causeMessage = (err as { cause?: Error })?.cause?.message || '';
         const fullErrorText = `${errorMessage} ${causeMessage}`.toLowerCase();
-        
+
         const isCapabilityError =
           fullErrorText.includes('denied access') ||
           fullErrorText.includes('capability') ||
@@ -393,7 +391,8 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
           fullErrorText.includes('channel state is failed');
 
         if (isCapabilityError && !hasTriedTokenRefresh && !isCleanedUp) {
-          console.log('[Realtime] Capability error detected, refreshing token and retrying...');
+          // Use warn instead of error since this is a recoverable situation
+          console.warn('[Realtime] Capability error detected, will refresh token and retry...');
           console.log('[Realtime] Error message:', errorMessage);
           console.log('[Realtime] Cause message:', causeMessage);
           hasTriedTokenRefresh = true;
@@ -421,7 +420,11 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
           } catch (refreshErr) {
             console.error('[Realtime] Token refresh failed:', refreshErr);
           }
+        } else if (!isCapabilityError) {
+          // Not a capability error - this is unexpected, log as error
+          console.error('[Realtime] Subscription setup error:', err);
         }
+        // If isCapabilityError && hasTriedTokenRefresh, we already warned and tried refresh
 
         if (isMountedRef.current && !isCleanedUp) {
           setError(err instanceof Error ? err.message : 'Connection failed');

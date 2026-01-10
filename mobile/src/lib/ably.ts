@@ -121,6 +121,31 @@ async function createAblyClient(): Promise<Ably.Realtime> {
     // Enable auto-recovery
     disconnectedRetryTimeout: 5000,
     suspendedRetryTimeout: 10000,
+    // Custom log handler to filter out capability errors we handle gracefully
+    // Level: 1=error, 2=major, 3=minor, 4=micro (trace)
+    logHandler: (msg: string, level: number) => {
+      const lowerMsg = msg.toLowerCase();
+      // Filter out channel capability/access denied errors - we handle these with token refresh
+      const isCapabilityError =
+        lowerMsg.includes('channel denied access') ||
+        lowerMsg.includes('capability') ||
+        (lowerMsg.includes('channel state') && lowerMsg.includes('failed'));
+
+      if (isCapabilityError) {
+        // Always log as info since we handle this gracefully with token refresh
+        console.log('[Ably]', msg);
+        return;
+      }
+
+      // Use appropriate log level for other messages
+      if (level === 1) {
+        console.error('[Ably]', msg);
+      } else if (level === 2) {
+        console.warn('[Ably]', msg);
+      } else {
+        console.log('[Ably]', msg);
+      }
+    },
   });
 
   // Set up connection state logging
