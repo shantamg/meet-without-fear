@@ -8,7 +8,6 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal } from 'react-native';
-import { Layers } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion } from '@meet-without-fear/shared';
@@ -40,12 +39,14 @@ import { ShareSuggestionDrawer } from '../components/ShareSuggestionDrawer';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
+import { useChatUIState } from '../hooks/useChatUIState';
 import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
 import { useRealtime, useUserSessionUpdates } from '../hooks/useRealtime';
 import { stageKeys } from '../hooks/useStages';
 import { messageKeys, useAIMessageHandler } from '../hooks/useMessages';
 import { createStyles } from '../theme/styled';
+import { WaitingBanner } from '../components/WaitingBanner';
 import {
   trackInvitationSent,
   trackCompactSigned,
@@ -457,6 +458,68 @@ export function UnifiedSessionScreen({
   const [isTypewriterAnimating, setIsTypewriterAnimating] = useState(false);
 
   // -------------------------------------------------------------------------
+  // Derived Chat UI State
+  // -------------------------------------------------------------------------
+  // Pure derivation of all UI visibility flags from session state.
+  // This replaces scattered useMemo computations with a centralized,
+  // testable pure function.
+  const isInviter = invitation?.isInviter ?? true;
+  const {
+    shouldShowWaitingBanner,
+    shouldHideInput: derivedShouldHideInput,
+    shouldShowInnerThoughts: derivedShouldShowInnerThoughts,
+    isInOnboardingUnsigned,
+    panels: {
+      showInvitationPanel: shouldShowInvitationPanel,
+      showEmpathyPanel: shouldShowEmpathyPanel,
+      showFeelHeardPanel: shouldShowFeelHeard,
+      showShareSuggestionPanel: shouldShowShareSuggestion,
+    },
+  } = useChatUIState({
+    partnerName: partnerName || 'Partner',
+    sessionStatus: session?.status,
+    isInviter,
+    isLoading,
+    loadingCompact,
+    isTypewriterAnimating,
+    myProgress,
+    partnerProgress,
+    compactMySigned: compactData?.mySigned,
+    hasInvitationMessage: !!invitationMessage,
+    invitationConfirmed: invitationConfirmed || localInvitationConfirmed,
+    isConfirmingInvitation,
+    localInvitationConfirmed,
+    showFeelHeardConfirmation,
+    feelHeardConfirmedAt: milestones?.feelHeardConfirmedAt,
+    isConfirmingFeelHeard,
+    empathyStatusData: empathyStatusData ? {
+      analyzing: empathyStatusData.analyzing,
+      awaitingSharing: empathyStatusData.awaitingSharing,
+      hasNewSharedContext: empathyStatusData.hasNewSharedContext,
+      myAttempt: empathyStatusData.myAttempt ? {
+        status: empathyStatusData.myAttempt.status,
+        content: empathyStatusData.myAttempt.content,
+      } : undefined,
+      messageCountSinceSharedContext: empathyStatusData.messageCountSinceSharedContext,
+    } : undefined,
+    empathyDraftData: empathyDraftData ? {
+      alreadyConsented: empathyDraftData.alreadyConsented,
+      draft: empathyDraftData.draft ? {
+        content: empathyDraftData.draft.content,
+      } : undefined,
+    } : undefined,
+    hasPartnerEmpathy: !!empathyStatusData?.partnerAttempt,
+    hasLiveProposedEmpathyStatement: !!liveProposedEmpathyStatement,
+    hasSharedEmpathyLocal,
+    shareOfferData: shareOfferData ?? undefined,
+    hasRespondedToShareOfferLocal,
+    allNeedsConfirmed,
+    commonGroundCount: commonGround?.length ?? 0,
+    strategyPhase,
+    overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
+  });
+
+  // -------------------------------------------------------------------------
   // Preserve Feel Heard State Across Re-renders
   // -------------------------------------------------------------------------
   // Once feel-heard is confirmed, keep showing the indicator even during re-renders
@@ -503,127 +566,26 @@ export function UnifiedSessionScreen({
   // Animation for the waiting banner slide-up
   const waitingBannerAnim = useRef(new Animated.Value(0)).current;
 
-  // Calculate whether panel should show
-  // FIX: Only show to inviter (they are the ones who need to share the invitation)
-  // Invitees should never see this panel - they already accepted the invitation
-  // Relying on the data truth: If we have a message and it is NOT confirmed, it is a draft.
-  // Wait for typewriter animation to finish before showing the panel
-  const isInviter = invitation?.isInviter ?? true; // Default to inviter for backwards compatibility
-  const shouldShowInvitationPanel = !!(
-    isInviter && // Only show to the inviter, not the invitee
-    invitationMessage &&
-    !invitationConfirmed && // It is a draft (not sent yet)
-    !isConfirmingInvitation && // Hide panel when confirming
-    !localInvitationConfirmed && // Keep hidden permanently after user confirms (from hook)
-    !isTypewriterAnimating // Wait for text to finish
-  );
-
-  // Animate panel when shouldShowInvitationPanel changes
-  // This will trigger the "Slide Up" the moment isTypewriterAnimating becomes false
-  useEffect(() => {
-    Animated.spring(invitationPanelAnim, {
-      toValue: shouldShowInvitationPanel ? 1 : 0,
-      useNativeDriver: false, // Required for layout animations like maxHeight
-      tension: 40, // Slightly lower tension for a smoother slide
-      friction: 9, // Adjust friction for "weight"
-    }).start();
-  }, [shouldShowInvitationPanel, invitationPanelAnim]);
-
-  // Calculate whether empathy review panel should show
-  // Show when there's empathy statement content to review (not yet shared)
-  // Note: We don't check isSharingEmpathy here - we animate it closed instead of unmounting
-  // to prevent layout jumps
-  const shouldShowEmpathyPanel = useMemo(() => {
-    const isRefining = !!empathyStatusData?.hasNewSharedContext;
-
-    // Local latch: Once user clicks Share, never show panel again (prevents flash during refetch)
-    // EXCEPT when we're in refining mode, then we need to show it again
-    if (hasSharedEmpathyLocal && !isRefining) {
-      console.log('[EmpathyPanel] Hidden: hasSharedEmpathyLocal=true, isRefining=false');
-      return false;
-    }
-
-    // Must be in Stage 2 and not have already shared
-    if (currentStage !== Stage.PERSPECTIVE_STRETCH) {
-      console.log('[EmpathyPanel] Hidden: currentStage=', currentStage, 'expected PERSPECTIVE_STRETCH');
-      return false;
-    }
-    if (empathyDraftData?.alreadyConsented && !isRefining) {
-      console.log('[EmpathyPanel] Hidden: alreadyConsented=true, isRefining=false');
-      return false;
-    }
-
-    // Must have content to show (from AI, draft, or refining)
-    const hasContent = !!(
-      liveProposedEmpathyStatement ||
-      empathyDraftData?.draft?.content ||
-      (isRefining && empathyStatusData?.myAttempt?.content)
-    );
-    if (!hasContent) {
-      console.log('[EmpathyPanel] Hidden: no content', {
-        liveProposedEmpathyStatement: !!liveProposedEmpathyStatement,
-        draftContent: !!empathyDraftData?.draft?.content,
-        isRefining,
-        myAttemptContent: !!empathyStatusData?.myAttempt?.content,
-      });
-      return false;
-    }
-
-    // Wait for typewriter to finish
-    if (isTypewriterAnimating) {
-      console.log('[EmpathyPanel] Hidden: typewriter animating');
-      return false;
-    }
-
-    console.log('[EmpathyPanel] SHOWING - all conditions met');
-    return true;
-  }, [
-    hasSharedEmpathyLocal,
-    currentStage,
-    empathyDraftData?.alreadyConsented,
-    liveProposedEmpathyStatement,
-    empathyDraftData?.draft?.content,
-    isTypewriterAnimating,
-    empathyStatusData?.hasNewSharedContext,
-    empathyStatusData?.myAttempt?.content,
-  ]);
+  // -------------------------------------------------------------------------
+  // Panel Visibility (derived from useChatUIState above)
+  // -------------------------------------------------------------------------
+  // Note: The actual visibility booleans are now computed in useChatUIState.
+  // The variables shouldShowInvitationPanel, shouldShowEmpathyPanel,
+  // shouldShowFeelHeard, shouldShowShareSuggestion, and shouldShowWaitingBanner
+  // are destructured from the hook at the top of this component.
 
   // Whether user is in "refining" mode (received shared context from partner)
   const isRefiningEmpathy = !!empathyStatusData?.hasNewSharedContext;
 
-  // Calculate whether feel heard confirmation should show
-  // Only show in Stage 1 (WITNESS) - not in later stages
-  const shouldShowFeelHeard = useMemo(() => {
-    return !!(
-      currentStage === Stage.WITNESS &&
-      showFeelHeardConfirmation &&
-      !milestones?.feelHeardConfirmedAt &&
-      !isConfirmingFeelHeard &&
-      !isTypewriterAnimating
-    );
-  }, [currentStage, showFeelHeardConfirmation, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, isTypewriterAnimating]);
-
-  // Calculate whether share suggestion panel should show
-  const shouldShowShareSuggestion = useMemo(() => {
-    return !!(
-      shareOfferData?.hasSuggestion &&
-      shareOfferData.suggestion &&
-      !hasRespondedToShareOfferLocal &&
-      !isTypewriterAnimating
-    );
-  }, [shareOfferData?.hasSuggestion, shareOfferData?.suggestion, hasRespondedToShareOfferLocal, isTypewriterAnimating]);
-
-  // Calculate whether waiting banner should show (any waiting status)
-  // Note: Priority against other panels is handled by the ternary in renderAboveInput
-  const shouldShowWaitingBanner = useMemo(() => {
-    return !!(
-      waitingStatus === 'empathy-pending' ||
-      waitingStatus === 'partner-considering-perspective' ||
-      waitingStatus === 'reconciler-analyzing' ||
-      waitingStatus === 'awaiting-context-share' ||
-      waitingStatus === 'refining-empathy'
-    );
-  }, [waitingStatus]);
+  // Animate invitation panel when shouldShowInvitationPanel changes
+  useEffect(() => {
+    Animated.spring(invitationPanelAnim, {
+      toValue: shouldShowInvitationPanel ? 1 : 0,
+      useNativeDriver: false,
+      tension: 40,
+      friction: 9,
+    }).start();
+  }, [shouldShowInvitationPanel, invitationPanelAnim]);
 
   // Animate empathy panel - close when sharing, otherwise follow shouldShowEmpathyPanel
   // This prevents layout jumps by animating closed instead of unmounting
@@ -791,32 +753,43 @@ export function UnifiedSessionScreen({
   }, [currentStage, compactData?.mySigned]);
 
   // -------------------------------------------------------------------------
-  // Inner Thoughts Button Visibility
+  // Inner Thoughts Button Visibility (derived from useChatUIState above)
   // -------------------------------------------------------------------------
-  // Show inner thoughts button only after Stage 2 (PERSPECTIVE_STRETCH) is completed,
-  // or when user is waiting for partner to finish Stage 2.
-  const shouldShowInnerThoughts = useMemo(() => {
-    if (!onNavigateToInnerThoughts) return false;
-
-    // Show if stage 2 is completed (we're in stage 3 or 4)
-    if (currentStage > Stage.PERSPECTIVE_STRETCH) return true;
-
-    // Show if in stage 2 and waiting for partner to share their empathy
-    // or when partner is considering your perspective (good alignment path)
-    if (currentStage === Stage.PERSPECTIVE_STRETCH && (
-      waitingStatus === 'empathy-pending' ||
-      waitingStatus === 'partner-considering-perspective'
-    )) return true;
-
-    return false;
-  }, [onNavigateToInnerThoughts, currentStage, waitingStatus]);
+  // The base visibility is derived from useChatUIState (derivedShouldShowInnerThoughts).
+  // We combine it with whether the navigation callback is available.
+  const shouldShowInnerThoughts = !!onNavigateToInnerThoughts && derivedShouldShowInnerThoughts;
 
   // -------------------------------------------------------------------------
   // Prepare Messages for Display
   // -------------------------------------------------------------------------
   const displayMessages = useMemo((): ChatMessage[] => {
-    return messages;
-  }, [messages]);
+    // Enrich messages with delivery status for shared content
+    return messages.map((message) => {
+      // For EMPATHY_STATEMENT messages (user's empathy statement to partner),
+      // attach delivery status from empathyStatusData
+      if (
+        message.role === MessageRole.EMPATHY_STATEMENT &&
+        empathyStatusData?.myAttempt?.deliveryStatus
+      ) {
+        return {
+          ...message,
+          sharedContentDeliveryStatus: empathyStatusData.myAttempt.deliveryStatus,
+        };
+      }
+      // For SHARED_CONTEXT messages (shared context from subject),
+      // attach delivery status from empathyStatusData
+      if (
+        message.role === MessageRole.SHARED_CONTEXT &&
+        empathyStatusData?.sharedContentDeliveryStatus
+      ) {
+        return {
+          ...message,
+          sharedContentDeliveryStatus: empathyStatusData.sharedContentDeliveryStatus,
+        };
+      }
+      return message;
+    });
+  }, [messages, empathyStatusData?.myAttempt?.deliveryStatus, empathyStatusData?.sharedContentDeliveryStatus]);
 
   // -------------------------------------------------------------------------
   // Render Inline Card
@@ -1032,36 +1005,9 @@ export function UnifiedSessionScreen({
   }, [invitation?.id]);
 
   // -------------------------------------------------------------------------
-  // Onboarding State - determines if we show the inline compact
+  // Onboarding State (derived from useChatUIState above)
   // -------------------------------------------------------------------------
-  // When in onboarding stage and compact is not signed, show the compact inline in chat
-  // with an agreement bar above the input. No overlay needed - it's all integrated.
-  // Show compact if:
-  // - Stage is ONBOARDING (or progress hasn't loaded yet, which defaults to ONBOARDING)
-  // - User hasn't signed the compact yet (or compact data hasn't loaded yet)
-  // Important: For invitees who just accepted, we must show the compact even if data is still loading
-  const isInOnboardingUnsigned = useMemo(() => {
-    // If compact is already signed, never show it
-    if (compactData?.mySigned) {
-      return false;
-    }
-
-    // If we're still loading and don't have progress data yet, default to showing compact
-    // This ensures invitees see the compact immediately after accepting
-    // (progress defaults to ONBOARDING stage when undefined)
-    if (isLoading && !myProgress) {
-      // Show compact optimistically if we're loading and don't have progress yet
-      // This handles the case where invitee just accepted and data is still loading
-      return true;
-    }
-
-    // Once progress has loaded, check if we're in onboarding stage
-    const inOnboarding = currentStage === Stage.ONBOARDING;
-
-    // Show compact if in onboarding and not signed
-    return inOnboarding;
-  }, [currentStage, isLoading, myProgress, compactData?.mySigned]);
-
+  // isInOnboardingUnsigned is now derived from useChatUIState hook.
 
   // -------------------------------------------------------------------------
   // Session Entry Mood Check - shown on session entry
@@ -1604,108 +1550,21 @@ export function UnifiedSessionScreen({
                     // Show waiting banners with animation
                     : shouldShowWaitingBanner
                       ? () => (
-                        <Animated.View
-                          style={{
-                            opacity: waitingBannerAnim,
-                            maxHeight: waitingBannerAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [0, 150],
-                            }),
-                            transform: [{
-                              translateY: waitingBannerAnim.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [20, 0],
-                              }),
-                            }],
-                            overflow: 'hidden',
-                          }}
-                          pointerEvents={shouldShowWaitingBanner ? 'auto' : 'none'}
-                        >
-                          <View style={styles.waitingBanner}>
-                            {waitingStatus === 'reconciler-analyzing' && (
-                              <ActivityIndicator size="small" color="#6750A4" style={{ marginBottom: 8 }} />
-                            )}
-                            {waitingStatus === 'empathy-pending' ? (
-                              <>
-                                <Text style={styles.waitingBannerTextNormal}>
-                                  Waiting for {partnerName || 'your partner'} to feel heard.
-                                </Text>
-                                {onNavigateToInnerThoughts && (
-                                  <View style={styles.waitingBannerActions}>
-                                    <TouchableOpacity
-                                      style={styles.keepChattingButton}
-                                      onPress={() => onNavigateToInnerThoughts(sessionId)}
-                                      activeOpacity={0.7}
-                                    >
-                                      <Layers size={18} color="#FFFFFF" />
-                                      <Text style={styles.keepChattingButtonText}>Keep Chatting →</Text>
-                                    </TouchableOpacity>
-                                  </View>
-                                )}
-                              </>
-                            ) : waitingStatus === 'partner-considering-perspective' ? (
-                              <>
-                                <Text style={styles.waitingBannerTextNormal}>
-                                  {partnerName || 'Your partner'} is now considering how you might feel.
-                                </Text>
-                                <Text style={styles.waitingBannerSubtext}>
-                                  Once they share, you'll both be able to reflect on what each other shared.
-                                </Text>
-                                {onNavigateToInnerThoughts && (
-                                  <View style={styles.waitingBannerActions}>
-                                    <TouchableOpacity
-                                      style={styles.keepChattingButton}
-                                      onPress={() => onNavigateToInnerThoughts(sessionId)}
-                                      activeOpacity={0.7}
-                                    >
-                                      <Layers size={18} color="#FFFFFF" />
-                                      <Text style={styles.keepChattingButtonText}>Keep Chatting →</Text>
-                                    </TouchableOpacity>
-                                  </View>
-                                )}
-                              </>
-                            ) : (
-                              <>
-                                <Text style={styles.waitingBannerText}>
-                                  {waitingStatus === 'reconciler-analyzing'
-                                    ? 'AI is analyzing your empathy match...'
-                                    : waitingStatus === 'awaiting-context-share'
-                                      ? `${partnerName || 'Your partner'}'s understanding has some gaps.`
-                                      : `${partnerName || 'Your partner'} shared more info!`}
-                                </Text>
-                                {(waitingStatus === 'awaiting-context-share' || waitingStatus === 'refining-empathy') && (
-                                  <Text style={styles.waitingBannerSubtext}>
-                                    {waitingStatus === 'awaiting-context-share'
-                                      ? 'Review the suggestion below to help them understand you better.'
-                                      : 'Update your empathy statement to include this new context.'}
-                                  </Text>
-                                )}
-                                {/* Show inner thoughts link for reconciler-analyzing */}
-                                {onNavigateToInnerThoughts && waitingStatus === 'reconciler-analyzing' && (
-                                  <TouchableOpacity
-                                    style={styles.innerThoughtsLink}
-                                    onPress={() => onNavigateToInnerThoughts(sessionId)}
-                                  >
-                                    <Text style={styles.innerThoughtsLinkText}>
-                                      Continue with Inner Thoughts while you wait →
-                                    </Text>
-                                  </TouchableOpacity>
-                                )}
-                              </>
-                            )}
-                          </View>
-                        </Animated.View>
+                        <WaitingBanner
+                          status={waitingStatus}
+                          partnerName={partnerName || 'your partner'}
+                          animationValue={waitingBannerAnim}
+                          onKeepChatting={onNavigateToInnerThoughts ? () => onNavigateToInnerThoughts(sessionId) : undefined}
+                          onInnerThoughts={onNavigateToInnerThoughts ? () => onNavigateToInnerThoughts(sessionId) : undefined}
+                          testID="waiting-banner"
+                        />
                       )
                       : undefined
           }
           hideInput={
-            // Only hide input when waiting for partner's empathy (after user has shared theirs)
+            // Use derived hideInput logic from useChatUIState
             // Never hide when empathy review panel is showing (user still needs to interact)
-            !shouldShowEmpathyPanel && (
-              waitingStatus === 'empathy-pending' ||
-              waitingStatus === 'partner-considering-perspective' ||
-              waitingStatus === 'reconciler-analyzing'
-            )
+            !shouldShowEmpathyPanel && derivedShouldHideInput
           }
         />
 
@@ -2081,63 +1940,6 @@ const useStyles = () =>
       fontSize: 15,
       lineHeight: 22,
       color: t.colors.textPrimary,
-    },
-    waitingBanner: {
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
-      borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-    },
-    waitingBannerText: {
-      color: t.colors.textSecondary,
-      fontSize: t.typography.fontSize.sm,
-      lineHeight: 20,
-      textAlign: 'center',
-    },
-    waitingBannerSubtext: {
-      color: t.colors.textMuted,
-      fontSize: 12,
-      lineHeight: 18,
-      textAlign: 'center',
-      marginTop: 2,
-    },
-    waitingBannerTextNormal: {
-      color: t.colors.textSecondary,
-      fontSize: t.typography.fontSize.md,
-      lineHeight: 22,
-      textAlign: 'center',
-    },
-    waitingBannerActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginTop: t.spacing.sm,
-      gap: t.spacing.md,
-    },
-    keepChattingButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: t.spacing.xs,
-      paddingVertical: t.spacing.sm,
-      paddingHorizontal: t.spacing.md,
-      backgroundColor: t.colors.brandBlue,
-      borderRadius: t.radius.md,
-    },
-    keepChattingButtonText: {
-      color: '#FFFFFF',
-      fontSize: t.typography.fontSize.sm,
-      fontWeight: '600',
-    },
-    innerThoughtsLink: {
-      marginTop: t.spacing.sm,
-      paddingVertical: t.spacing.xs,
-      alignItems: 'center',
-    },
-    innerThoughtsLinkText: {
-      color: t.colors.brandBlue,
-      fontSize: t.typography.fontSize.sm,
-      fontWeight: '600',
     },
     cardTitle: {
       fontSize: 18,

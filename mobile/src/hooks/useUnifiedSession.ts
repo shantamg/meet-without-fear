@@ -108,22 +108,10 @@ interface MirrorIntervention {
 // Re-export WaitingStatusType from the component for external use
 export type { WaitingStatusType } from '../components/WaitingStatusMessage';
 
-// Internal type that includes null for state management
-type WaitingStatusState =
-  | 'compact-pending' // Stage 0: Waiting for partner to sign compact
-  | 'witness-pending' // Stage 1: Waiting for partner to complete witness
-  | 'empathy-pending' // Stage 2: Waiting for partner to share empathy
-  | 'partner-considering-perspective' // Stage 2: Partner felt heard, now building empathy for you (good alignment)
-  | 'needs-pending' // Stage 3: Waiting for partner to confirm needs
-  | 'ranking-pending' // Stage 4: Waiting for partner to submit ranking
-  | 'partner-signed' // Partner has signed compact
-  | 'partner-completed-witness' // Partner completed witness stage
-  | 'partner-shared-empathy' // Partner shared their empathy attempt
-  | 'partner-confirmed-needs' // Partner confirmed their needs
-  | 'reconciler-analyzing' // Reconciler is analyzing empathy
-  | 'awaiting-context-share' // Waiting for user to share context
-  | 'refining-empathy' // Guesser is refining empathy
-  | null;
+// Re-export WaitingStatusState from the new pure derivation module
+// This maintains backward compatibility while centralizing the type definition
+export type { WaitingStatusState } from '../utils/getWaitingStatus';
+import type { WaitingStatusState } from '../utils/getWaitingStatus';
 
 interface UnifiedSessionState {
   activeOverlay: OverlayType;
@@ -581,6 +569,22 @@ export function useUnifiedSession(sessionId: string | undefined) {
     ) {
       newWaitingStatus = 'partner-completed-witness';
     }
+    // Stage 2: Guesser's empathy has gaps, waiting for subject to decide whether to share
+    // This happens when: reconciler found gaps, created a share suggestion for subject,
+    // and we're waiting for subject to respond (share or skip).
+    // Guesser should see waiting banner and not be able to chat until subject responds.
+    else if (empathyStatusData?.awaitingSharing && !empathyStatusData?.hasNewSharedContext) {
+      newWaitingStatus = 'empathy-pending';
+    }
+    // Stage 2: Guesser received new shared context from subject
+    // CHECK THIS FIRST - when user has new shared context, they should be able to chat
+    // immediately (no waiting banner). The "Revisit what you'll share" button will appear
+    // after they've sent at least one message.
+    // Note: We intentionally do NOT set a waiting status here - user can chat freely.
+    else if (empathyStatusData?.hasNewSharedContext) {
+      // No waiting status - user should be able to chat immediately
+      newWaitingStatus = null;
+    }
     // Stage 2: Partner is now considering your perspective (good alignment found)
     // This happens when: reconciler ran, found good alignment, so my empathy was REVEALED,
     // and partner (the subject who felt heard) is now working on their empathy for me
@@ -602,10 +606,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
     // Stage 2: Waiting for user to respond to share suggestion (Subject)
     else if (shareOfferData?.hasSuggestion) {
       newWaitingStatus = 'awaiting-context-share';
-    }
-    // Stage 2: Waiting for partner to refine empathy (Guesser)
-    else if (empathyStatusData?.hasNewSharedContext) {
-      newWaitingStatus = 'refining-empathy';
     }
     // Stage 2: Partner just shared empathy (transition)
     else if (
