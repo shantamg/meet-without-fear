@@ -28,10 +28,13 @@ import {
   buildShareOfferPrompt,
   buildQuoteSelectionPrompt,
   buildReconcilerSummaryPrompt,
+  buildStagePrompt,
   type ReconcilerContext,
   type ShareOfferContext,
   type ReconcilerSummaryContext,
+  type PromptContext,
 } from './stage-prompts';
+import type { ContextBundle } from './context-assembler';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import type {
   ReconcilerResult,
@@ -119,6 +122,151 @@ interface ReconcilerAnalysisInput {
   subject: UserInfo;
   empathyStatement: string;
   witnessingContent: WitnessingContent;
+}
+
+// ============================================================================
+// Helper: Generate Post-Share Continuation
+// ============================================================================
+
+/**
+ * Generate a stage-appropriate continuation message after a user shares context.
+ * Uses the actual stage prompts with justSharedWithPartner context for consistency.
+ * The stage prompt handles acknowledging the share and continuing appropriately.
+ */
+async function generatePostShareContinuation(
+  sessionId: string,
+  subjectId: string,
+  subjectName: string,
+  partnerName: string,
+  sharedContent: string
+): Promise<string> {
+  console.log(`[Reconciler] Generating post-share continuation for ${subjectName} (subject ${subjectId})`);
+
+  // Get subject's current stage
+  const stageProgress = await prisma.stageProgress.findFirst({
+    where: { sessionId, userId: subjectId },
+    orderBy: { stage: 'desc' },
+  });
+  const currentStage = stageProgress?.stage ?? 2; // Default to 2 if not found
+
+  // Get recent conversation history for context
+  const recentMessages = await prisma.message.findMany({
+    where: {
+      sessionId,
+      OR: [
+        { senderId: subjectId },
+        { role: 'AI', forUserId: subjectId },
+      ],
+    },
+    orderBy: { timestamp: 'desc' },
+    take: 10,
+  });
+
+  // Convert to format expected by prompt (reverse to chronological order)
+  const conversationHistory = recentMessages.reverse().map(m => ({
+    role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
+    content: m.content,
+  }));
+
+  const turnId = `${sessionId}-${Date.now()}`;
+
+  // Create a minimal context bundle for the stage prompt
+  // We don't need full memory/pattern context for post-share continuation
+  const minimalContextBundle: ContextBundle = {
+    conversationContext: {
+      recentTurns: conversationHistory.map((m) => ({
+        role: m.role,
+        content: m.content,
+        timestamp: new Date().toISOString(), // Approximate
+      })),
+      turnCount: conversationHistory.filter(m => m.role === 'user').length,
+      sessionDurationMinutes: 0, // Not critical for this use case
+    },
+    emotionalThread: {
+      initialIntensity: 5,
+      currentIntensity: 5, // Default moderate
+      trend: 'stable' as const,
+      notableShifts: [],
+    },
+    stageContext: {
+      stage: currentStage,
+      gatesSatisfied: {},
+    },
+    userName: subjectName,
+    partnerName,
+    intent: {
+      intent: 'emotional_validation' as const,
+      depth: 'minimal' as const,
+      reason: 'Post-share continuation',
+      threshold: 0.5,
+      maxCrossSession: 0,
+      allowCrossSession: false,
+      surfaceStyle: 'silent' as const,
+    },
+    assembledAt: new Date().toISOString(),
+  };
+
+  // Build prompt context with justSharedWithPartner flag
+  // This injects the share acknowledgment into the normal stage prompt
+  const promptContext: PromptContext = {
+    userName: subjectName,
+    partnerName,
+    turnCount: conversationHistory.filter(m => m.role === 'user').length,
+    emotionalIntensity: 5, // Default moderate
+    contextBundle: minimalContextBundle,
+    justSharedWithPartner: {
+      sharedContent,
+    },
+  };
+
+  // Get the stage-appropriate prompt with post-share context injected
+  const systemPrompt = buildStagePrompt(currentStage, promptContext);
+
+  // Call Sonnet with conversation history
+  const response = await getSonnetResponse({
+    systemPrompt,
+    messages: conversationHistory,
+    maxTokens: 512,
+    sessionId,
+    turnId,
+    operation: 'reconciler-post-share-continuation',
+  });
+
+  if (!response) {
+    console.warn(`[Reconciler] Failed to generate continuation, using stage-aware fallback for stage ${currentStage}`);
+    return getFallbackContinuation(currentStage, partnerName);
+  }
+
+  console.log(`[Reconciler] Generated continuation for stage ${currentStage}: "${response.substring(0, 50)}..."`);
+  return response;
+}
+
+/**
+ * Get a stage-appropriate fallback message (acknowledgment + continuation) if AI generation fails
+ */
+function getFallbackContinuation(stage: number, partnerName: string): string {
+  const acknowledgment = `Thank you for sharing that with ${partnerName}. They'll have the chance to refine their understanding of what you're going through.`;
+
+  let continuation: string;
+  switch (stage) {
+    case 1:
+      continuation = `Is there anything else about how this situation has affected you that feels important to express?`;
+      break;
+    case 2:
+      continuation = `Let's continue exploring ${partnerName}'s perspective. What do you imagine might be going on for ${partnerName} in all of this?`;
+      break;
+    case 3:
+      continuation = `Let's continue identifying what you truly need here. What feels most important to you?`;
+      break;
+    case 4:
+      continuation = `Let's continue thinking about what could work for both of you. What small step might help?`;
+      break;
+    default:
+      continuation = `Let's continue our conversation. What's on your mind?`;
+      break;
+  }
+
+  return `${acknowledgment}\n\n${continuation}`;
 }
 
 // ============================================================================
@@ -800,10 +948,23 @@ export async function respondToShareSuggestion(
     },
   });
 
-  // Create AI acknowledgment message for subject
-  const subjectAckMessage = `Thank you for sharing that with ${guesserName}. They'll see this context and have the opportunity to refine their understanding of what you're going through.
+  // Generate AI acknowledgment message for subject using their current stage context
+  // This ensures the continuation picks up where their conversation left off
+  // The AI generates the full message (acknowledgment + stage-appropriate continuation)
+  const subjectAckMessage = await generatePostShareContinuation(
+    sessionId,
+    userId,
+    subjectName,
+    guesserName,
+    sharedContent
+  );
 
-While ${guesserName} considers what you've shared, let's continue exploring your experience. Is there anything else about how this situation has affected you that feels important to express?`;
+  // Get subject's current stage for the message
+  const subjectProgress = await prisma.stageProgress.findFirst({
+    where: { sessionId, userId },
+    orderBy: { stage: 'desc' },
+  });
+  const subjectCurrentStage = subjectProgress?.stage ?? 2;
 
   await prisma.message.create({
     data: {
@@ -812,7 +973,7 @@ While ${guesserName} considers what you've shared, let's continue exploring your
       forUserId: userId, // For the subject
       role: 'AI',
       content: subjectAckMessage,
-      stage: 2,
+      stage: subjectCurrentStage,
     },
   });
 
@@ -888,7 +1049,12 @@ export async function getSharedContextForGuesser(
 
 /**
  * Get the delivery status of shared content for the subject (person who shared).
- * Returns the delivery status: pending (not yet shared), delivered, or seen.
+ * Uses the same mechanism as message read tracking (lastViewedAt on UserVessel).
+ *
+ * Returns the delivery status:
+ * - 'pending': Share not yet accepted (no SHARED_CONTEXT message created)
+ * - 'delivered': Message created but guesser hasn't viewed since then
+ * - 'seen': Guesser has viewed the session after the message was created
  */
 export async function getSharedContentDeliveryStatus(
   sessionId: string,
@@ -898,29 +1064,49 @@ export async function getSharedContentDeliveryStatus(
   deliveryStatus: 'pending' | 'delivered' | 'seen' | null;
   sharedAt: string | null;
 }> {
+  // Find the share offer to get the guesser ID
   const shareOffer = await prisma.reconcilerShareOffer.findFirst({
     where: {
       userId: subjectId,
       result: { sessionId },
       status: 'ACCEPTED',
     },
+    include: {
+      result: true,
+    },
   });
 
-  if (!shareOffer || !shareOffer.sharedContent) {
+  if (!shareOffer || !shareOffer.sharedContent || !shareOffer.sharedAt) {
     return { hasSharedContent: false, deliveryStatus: null, sharedAt: null };
   }
 
-  // Map Prisma enum to lowercase string for frontend
-  const statusMap: Record<string, 'pending' | 'delivered' | 'seen'> = {
-    PENDING: 'pending',
-    DELIVERED: 'delivered',
-    SEEN: 'seen',
-  };
+  const guesserId = shareOffer.result.guesserId;
+  const sharedAt = shareOffer.sharedAt;
+
+  // Check if the guesser has viewed the session after the content was shared
+  const guesserVessel = await prisma.userVessel.findUnique({
+    where: {
+      userId_sessionId: {
+        userId: guesserId,
+        sessionId,
+      },
+    },
+    select: {
+      lastViewedAt: true,
+    },
+  });
+
+  let deliveryStatus: 'pending' | 'delivered' | 'seen' = 'delivered';
+
+  if (guesserVessel?.lastViewedAt && guesserVessel.lastViewedAt >= sharedAt) {
+    // Guesser has viewed the session after the content was shared
+    deliveryStatus = 'seen';
+  }
 
   return {
     hasSharedContent: true,
-    deliveryStatus: statusMap[shareOffer.deliveryStatus] || 'pending',
-    sharedAt: shareOffer.sharedAt?.toISOString() || null,
+    deliveryStatus,
+    sharedAt: sharedAt.toISOString(),
   };
 }
 

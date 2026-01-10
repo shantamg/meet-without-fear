@@ -173,6 +173,8 @@ export interface PromptContext {
   empathyDraft?: string | null;
   /** Whether user is actively refining their empathy draft */
   isRefiningEmpathy?: boolean;
+  /** Shared context from partner (when guesser is in REFINING status from reconciler flow) */
+  sharedContextFromPartner?: string | null;
   /** Whether user is refining their invitation after Stage 1/2 processing */
   isRefiningInvitation?: boolean;
   /** How to surface pattern observations (from surfacing policy) */
@@ -183,6 +185,11 @@ export interface PromptContext {
   invalidMemoryRequest?: {
     requestedContent: string;
     rejectionReason: string;
+  };
+  /** Context when user just shared additional info with their partner via reconciler */
+  justSharedWithPartner?: {
+    /** What they shared */
+    sharedContent: string;
   };
 }
 
@@ -483,7 +490,17 @@ CURRENT EMPATHY DRAFT (user-facing preview):
 "${context.empathyDraft}"
 
 Use this as the working draft. When refining, update this text rather than starting from scratch. Keep the user's tone unless they explicitly ask to change it.
-${context.isRefiningEmpathy ? 'The user just signaled they want to refine or adjust this draft. Prioritize incorporating their requested changes or additions.' : ''}`
+${context.isRefiningEmpathy ? `
+IMPORTANT - USER IS IN REFINING MODE:
+The user is actively refining their empathy statement (they may have received new context from their partner, or they're asking to adjust the draft). You MUST:
+1. Set "offerReadyToShare": true
+2. Generate a "proposedEmpathyStatement" that incorporates their reflections
+3. Even if their message is just reflecting on what they learned, use that to improve the empathy statement${context.sharedContextFromPartner ? `
+
+PARTNER'S SHARED CONTEXT (use this to help them refine):
+"${context.sharedContextFromPartner}"
+
+The partner shared this additional context to help the user understand them better. Use it to guide the empathy statement refinement.` : ''}` : ''}`
     : '';
 
   return `You are Meet Without Fear, a Process Guardian in the Perspective Stretch stage. Your job is to help ${context.userName} build genuine empathy for ${partnerName}.
@@ -1702,15 +1719,43 @@ export interface BuildStagePromptOptions {
 }
 
 /**
+ * Build post-share context section to inject into stage prompts.
+ * This instructs the AI to acknowledge a share and continue appropriately.
+ */
+function buildPostShareContextSection(context: PromptContext): string {
+  if (!context.justSharedWithPartner) {
+    return '';
+  }
+
+  const partnerName = context.partnerName || 'your partner';
+
+  return `
+⚠️ IMPORTANT - CONTEXT JUST SHARED:
+${context.userName} just shared additional context with ${partnerName} to help them understand better:
+"${context.justSharedWithPartner.sharedContent}"
+
+YOUR RESPONSE MUST:
+1. Briefly acknowledge the share (1 sentence max, e.g., "Thank you for sharing that with ${partnerName}. They'll have the chance to refine their understanding.")
+2. Then IMMEDIATELY continue with your normal stage work - pick up where you left off in the conversation
+3. Do NOT revert to earlier stage language (e.g., don't use Stage 1 "exploring your experience" language if you're in Stage 2)
+
+The acknowledgment should feel like a natural transition, not a restart. Look at the recent conversation and continue from there.
+`;
+}
+
+/**
  * Build the appropriate stage prompt based on current stage.
  */
 export function buildStagePrompt(stage: number, context: PromptContext, options?: BuildStagePromptOptions): string {
+  // Build post-share section if user just shared context with partner
+  const postShareSection = buildPostShareContextSection(context);
+
   // Special case: Stage transition intro
   // When isStageTransition is true, use the transition prompt to introduce the new stage
   if (options?.isStageTransition) {
     const transitionPrompt = buildStageTransitionPrompt(stage, options.previousStage, context);
     if (transitionPrompt) {
-      return transitionPrompt;
+      return postShareSection ? `${transitionPrompt}\n${postShareSection}` : transitionPrompt;
     }
     // Fall through to regular prompt if no transition prompt found
   }
@@ -1719,37 +1764,49 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
   if (options?.isRefiningInvitation) {
     // Pass the refinement flag to the prompt context
     const refinementContext = { ...context, isRefiningInvitation: true };
-    return buildInvitationPrompt(refinementContext);
+    const prompt = buildInvitationPrompt(refinementContext);
+    return postShareSection ? `${prompt}\n${postShareSection}` : prompt;
   }
 
   // Special case: Stage 0 invitation phase (before partner joins)
   if (stage === 0 && options?.isInvitationPhase) {
-    return buildInvitationPrompt(context);
+    const prompt = buildInvitationPrompt(context);
+    return postShareSection ? `${prompt}\n${postShareSection}` : prompt;
   }
 
   // Special case: Onboarding mode (compact not yet signed)
   // Use a helpful guide prompt focused on explaining the process
   if (stage === 0 && options?.isOnboarding) {
-    return buildOnboardingPrompt(context);
+    const prompt = buildOnboardingPrompt(context);
+    return postShareSection ? `${prompt}\n${postShareSection}` : prompt;
   }
 
+  let basePrompt: string;
   switch (stage) {
     case 0:
       // Stage 0 post-invitation: Use witness-style prompt for signing compact
       // (though typically UI handles compact without chat)
-      return buildStage1Prompt(context);
+      basePrompt = buildStage1Prompt(context);
+      break;
     case 1:
-      return buildStage1Prompt(context);
+      basePrompt = buildStage1Prompt(context);
+      break;
     case 2:
-      return buildStage2Prompt(context);
+      basePrompt = buildStage2Prompt(context);
+      break;
     case 3:
-      return buildStage3Prompt(context);
+      basePrompt = buildStage3Prompt(context);
+      break;
     case 4:
-      return buildStage4Prompt(context);
+      basePrompt = buildStage4Prompt(context);
+      break;
     default:
       console.warn(`[Stage Prompts] Unknown stage ${stage}, using Stage 1 prompt`);
-      return buildStage1Prompt(context);
+      basePrompt = buildStage1Prompt(context);
+      break;
   }
+
+  return postShareSection ? `${basePrompt}\n${postShareSection}` : basePrompt;
 }
 
 // ============================================================================
@@ -2057,3 +2114,4 @@ Respond in JSON:
 }
 \`\`\``;
 }
+
