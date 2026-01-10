@@ -594,6 +594,13 @@ model EmpathyAttempt {
   revealedAt    DateTime?
   revisionCount Int           @default(0)
 
+  // Delivery status for showing pending/delivered/seen to the author
+  deliveryStatus    SharedContentDeliveryStatus @default(PENDING)
+  /// When the empathy statement was delivered to partner's chat (when revealed)
+  deliveredAt       DateTime?
+  /// When the partner acknowledged/saw the statement
+  seenAt            DateTime?
+
   validations EmpathyValidation[]
 
   @@index([sessionId, sourceUserId])
@@ -709,6 +716,13 @@ model ReconcilerShareOffer {
   sharedContent     String?  @db.Text
   sharedAt          DateTime?
 
+  /// Delivery status of shared content (pending -> delivered -> seen)
+  deliveryStatus    SharedContentDeliveryStatus @default(PENDING)
+  /// When the content was delivered to the guesser
+  deliveredAt       DateTime?
+  /// When the guesser saw/acknowledged the content (sent first message after)
+  seenAt            DateTime?
+
   /// If they declined
   declinedAt        DateTime?
 
@@ -719,6 +733,13 @@ model ReconcilerShareOffer {
   updatedAt DateTime @updatedAt
 
   @@index([userId, status])
+}
+
+/// Delivery status for shared content (empathy statements, shared context)
+enum SharedContentDeliveryStatus {
+  PENDING    // Content saved but not yet delivered
+  DELIVERED  // Content delivered to recipient's chat
+  SEEN       // Recipient has viewed/acknowledged the content
 }
 
 enum ReconcilerShareStatus {

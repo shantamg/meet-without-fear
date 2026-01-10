@@ -75,6 +75,8 @@ export interface EmpathyAttemptDTO {
   status: EmpathyStatus;
   revealedAt: string | null;
   revisionCount: number;
+  /** Delivery status: pending (not revealed to partner), delivered (revealed), seen (partner validated) */
+  deliveryStatus?: SharedContentDeliveryStatus;
 }
 
 /** Message included in consent response for immediate display */
@@ -188,7 +190,32 @@ export interface EmpathyExchangeStatusResponse {
   } | null;
   /** Whether ready to proceed to Stage 3 */
   readyForStage3: boolean;
+  /** Number of messages sent since receiving shared context (for delaying refinement UI) */
+  messageCountSinceSharedContext: number;
+  /** Delivery status of shared content (for subject who shared): pending, delivered, or seen */
+  sharedContentDeliveryStatus: SharedContentDeliveryStatus | null;
 }
+
+// ============================================================================
+// Shared Content Delivery Status
+// ============================================================================
+
+/**
+ * Delivery status for shared content messages (empathy statements, shared context)
+ * - pending: Content saved but not yet delivered to recipient
+ * - delivered: Content has been delivered to recipient's chat
+ * - seen: Recipient has viewed/acknowledged the content
+ */
+export const SharedContentDeliveryStatus = {
+  /** Content saved but not yet delivered */
+  PENDING: 'pending',
+  /** Content delivered to recipient's chat */
+  DELIVERED: 'delivered',
+  /** Recipient has viewed the content */
+  SEEN: 'seen',
+} as const;
+
+export type SharedContentDeliveryStatus = (typeof SharedContentDeliveryStatus)[keyof typeof SharedContentDeliveryStatus];
 
 // ============================================================================
 // Share Suggestion Flow (Reconciler)
@@ -252,5 +279,7 @@ export interface RespondToShareSuggestionResponse {
     content: string;
     stage: number;
     timestamp: string;
+    /** Delivery status: pending until delivered, then delivered, then seen when recipient views */
+    deliveryStatus?: SharedContentDeliveryStatus;
   };
 }
