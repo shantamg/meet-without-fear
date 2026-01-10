@@ -44,12 +44,12 @@
     "concurrently": "^9.2.1"
   },
   "dependencies": {
-    "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
   },
   "overrides": {
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
     "@types/react": "18.3.18"
   }
 }
