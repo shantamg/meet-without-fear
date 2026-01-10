@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import Ably from 'ably';
 import { AuditLogEntry } from '../types';
@@ -12,6 +12,13 @@ interface Turn {
   logs: AuditLogEntry[];
   timestamp: string;
   userMessage?: string;
+  userId?: string;
+}
+
+interface UserInfo {
+  id: string;
+  name: string;
+  isInitiator: boolean;
 }
 
 function SessionDetail() {
@@ -23,20 +30,51 @@ function SessionDetail() {
   const [sessionData, setSessionData] = useState<any>(null);
   const [ablyStatus, setAblyStatus] = useState<'connecting' | 'connected' | 'error' | 'disconnected'>('disconnected');
 
-  // Group logs into turns
+  const leftColumnRef = useRef<HTMLDivElement>(null);
+  const rightColumnRef = useRef<HTMLDivElement>(null);
+
+  // Extract users from session data
+  const users = React.useMemo((): { initiator: UserInfo | null; invitee: UserInfo | null } => {
+    if (!sessionData?.relationship?.members) {
+      return { initiator: null, invitee: null };
+    }
+
+    const members = sessionData.relationship.members;
+    
+    // Sort by createdAt to determine initiator (first to join) vs invitee
+    const sortedMembers = [...members].sort((a: any, b: any) => 
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+
+    const initiatorMember = sortedMembers[0];
+    const inviteeMember = sortedMembers[1];
+
+    const initiator = initiatorMember ? {
+      id: initiatorMember.userId,
+      name: initiatorMember.user?.firstName || initiatorMember.user?.name || 'User 1',
+      isInitiator: true,
+    } : null;
+
+    const invitee = inviteeMember ? {
+      id: inviteeMember.userId,
+      name: inviteeMember.user?.firstName || inviteeMember.user?.name || 'User 2',
+      isInitiator: false,
+    } : null;
+
+    return { initiator, invitee };
+  }, [sessionData]);
+
+  // Group logs into turns and associate with users
   const turns = React.useMemo(() => {
     const groups: Turn[] = [];
     const turnMap = new Map<string, Turn>();
 
     logs.forEach(log => {
-      // Determine turn ID
       let turnId = log.turnId;
       if (!turnId && log.data?.sessionId && log.data?.turnCount) {
         turnId = `${log.data.sessionId}-${log.data.turnCount}`;
       }
       if (!turnId) {
-        // Orphan logs group by timestamp proximity or just separate?
-        // Let's just use a catch-all "Other" or unique ID
         turnId = `orphan-${Math.floor(new Date(log.timestamp).getTime() / 10000)}`;
       }
 
@@ -49,19 +87,69 @@ function SessionDetail() {
       const turn = turnMap.get(turnId)!;
       turn.logs.push(log);
 
-      // Extract user message if present
-      if (log.section === 'USER' && log.data?.userMessage) {
-        turn.userMessage = log.data.userMessage;
+      // Extract user message and userId if present
+      if (log.section === 'USER') {
+        if (log.data?.userMessage) {
+          turn.userMessage = log.data.userMessage;
+        }
+        if (log.data?.userId) {
+          turn.userId = log.data.userId;
+        }
       }
     });
 
-    return groups.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()); // Newest first
+    return groups.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [logs]);
+
+  // Split turns by user
+  const { initiatorTurns, inviteeTurns, unassignedTurns } = React.useMemo(() => {
+    const initiatorTurns: Turn[] = [];
+    const inviteeTurns: Turn[] = [];
+    const unassignedTurns: Turn[] = [];
+
+    turns.forEach(turn => {
+      if (turn.userId === users.initiator?.id) {
+        initiatorTurns.push(turn);
+      } else if (turn.userId === users.invitee?.id) {
+        inviteeTurns.push(turn);
+      } else {
+        // For turns without userId, try to infer from userName in logs
+        const userLog = turn.logs.find(l => l.section === 'USER');
+        const userName = userLog?.data?.userName;
+        
+        if (userName && users.initiator?.name && userName === users.initiator.name) {
+          initiatorTurns.push(turn);
+        } else if (userName && users.invitee?.name && userName === users.invitee.name) {
+          inviteeTurns.push(turn);
+        } else {
+          unassignedTurns.push(turn);
+        }
+      }
+    });
+
+    return { initiatorTurns, inviteeTurns, unassignedTurns };
+  }, [turns, users]);
+
+  // Auto-scroll to top when new turns arrive
+  const prevTurnCountRef = useRef({ initiator: 0, invitee: 0 });
+  
+  useEffect(() => {
+    if (initiatorTurns.length > prevTurnCountRef.current.initiator) {
+      leftColumnRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    if (inviteeTurns.length > prevTurnCountRef.current.invitee) {
+      rightColumnRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    prevTurnCountRef.current = {
+      initiator: initiatorTurns.length,
+      invitee: inviteeTurns.length,
+    };
+  }, [initiatorTurns.length, inviteeTurns.length]);
 
   useEffect(() => {
     fetchLogs();
 
-    // Connect to Ably
     if (!ablyKey) {
       console.error('VITE_ABLY_KEY missing');
       setAblyStatus('error');
@@ -76,7 +164,6 @@ function SessionDetail() {
 
     channel.subscribe('log', (msg) => {
       const data = msg.data as AuditLogEntry;
-
       const logSessionId = data.sessionId || data.data?.sessionId;
 
       if (logSessionId === sessionId) {
@@ -117,19 +204,11 @@ function SessionDetail() {
     }
   };
 
-  // Helper to extract user name
-  const getUserName = () => {
-    if (!sessionData?.relationship?.members) return 'User';
-    // Assuming the AI is not the one we want. But AI is usually not in 'members' or has a specific role?
-    // In this app, members are the humans.
-    const user = sessionData.relationship.members[0]?.user;
-    return user?.firstName || user?.name || 'User';
-  };
-
-  const userName = getUserName();
-
   if (loading) return <div className="loading">Loading logs...</div>;
   if (error) return <div className="error">Error: {error}</div>;
+
+  // Check if we have two users
+  const hasTwoUsers = users.initiator && users.invitee;
 
   return (
     <div className="session-detail">
@@ -145,18 +224,69 @@ function SessionDetail() {
         </div>
       </header>
 
-      <div className="turns-feed">
-        {turns.map(turn => (
-          <TurnView key={turn.id} turn={turn} userName={userName} />
-        ))}
-        {turns.length === 0 && logs.length > 0 && (
-          <div className="empty-state">
-            <p>{logs.length} log(s) found but no displayable turns.</p>
-            <p>Sections: {[...new Set(logs.map(l => l.section))].join(', ')}</p>
+      {hasTwoUsers ? (
+        <div className="split-view-container">
+          {/* Left Column - Initiator */}
+          <div className="user-column initiator-column">
+            <div className="column-header">
+              <span className="user-avatar">👤</span>
+              <span className="user-name">{users.initiator?.name}</span>
+              <span className="user-role">Initiator</span>
+            </div>
+            <div className="column-turns" ref={leftColumnRef}>
+              {initiatorTurns.map(turn => (
+                <TurnView key={turn.id} turn={turn} userName={users.initiator?.name || 'User'} />
+              ))}
+              {initiatorTurns.length === 0 && (
+                <div className="empty-column">No messages yet</div>
+              )}
+            </div>
           </div>
-        )}
-        {turns.length === 0 && logs.length === 0 && <div className="empty-state">No activity recorded for this session.</div>}
-      </div>
+
+          {/* Right Column - Invitee */}
+          <div className="user-column invitee-column">
+            <div className="column-header">
+              <span className="user-avatar">👤</span>
+              <span className="user-name">{users.invitee?.name}</span>
+              <span className="user-role">Invitee</span>
+            </div>
+            <div className="column-turns" ref={rightColumnRef}>
+              {inviteeTurns.map(turn => (
+                <TurnView key={turn.id} turn={turn} userName={users.invitee?.name || 'User'} />
+              ))}
+              {inviteeTurns.length === 0 && (
+                <div className="empty-column">No messages yet</div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        // Fallback to single column view if only one user
+        <div className="turns-feed">
+          {turns.map(turn => (
+            <TurnView key={turn.id} turn={turn} userName={users.initiator?.name || 'User'} />
+          ))}
+          {turns.length === 0 && logs.length > 0 && (
+            <div className="empty-state">
+              <p>{logs.length} log(s) found but no displayable turns.</p>
+              <p>Sections: {[...new Set(logs.map(l => l.section))].join(', ')}</p>
+            </div>
+          )}
+          {turns.length === 0 && logs.length === 0 && (
+            <div className="empty-state">No activity recorded for this session.</div>
+          )}
+        </div>
+      )}
+
+      {/* Show unassigned turns at bottom if any */}
+      {unassignedTurns.length > 0 && hasTwoUsers && (
+        <div className="unassigned-turns">
+          <h3>System Events</h3>
+          {unassignedTurns.map(turn => (
+            <TurnView key={turn.id} turn={turn} userName="System" />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -176,16 +306,15 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
     } else if (log.section === 'LLM_START') {
       llmStartLogs.push(log);
     } else {
-      derivedLogs.push({ ...log, data: { ...log.data } }); // Shallow copy data to avoid mutating state across renders
+      derivedLogs.push({ ...log, data: { ...log.data } });
     }
   });
 
-  // Match LLM_START with COST by operation - show pending ones as in-progress
+  // Match LLM_START with COST by operation
   const completedOps = new Set(costLogs.map(c => c.data?.operation));
   const pendingLlmCalls = llmStartLogs.filter(start => !completedOps.has(start.data?.operation));
 
-  // For completed LLM calls, merge the LLM_START info into the COST log
-  // This ensures we show duration and timing when available
+  // Merge LLM_START info into COST log
   costLogs.forEach(costLog => {
     const matchingStart = llmStartLogs.find(start => start.data?.operation === costLog.data?.operation);
     if (matchingStart && !costLog.data?.startTimestamp) {
@@ -196,12 +325,8 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
     }
   });
 
-  // Attempt to attach costs to their relevant operation
+  // Attach costs to their relevant operation
   costLogs.forEach(costLog => {
-    // Logic: Find a log with matching operation or just the immediately preceding non-cost log?
-    // simple heuristic: Attach to RESPONSE if operation is 'orchestrator-response'
-    // Attach to INTENT/RETRIEVAL if operation matches?
-
     const op = costLog.data?.operation;
     let targetLog: AuditLogEntry | undefined;
 
@@ -209,17 +334,13 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
       targetLog = derivedLogs.find(l => l.section === 'RESPONSE');
     } else if (op === 'retrieval-planning' || op === 'haiku-json' || op === 'embedding') {
       targetLog = derivedLogs.find(l => l.section === 'RETRIEVAL');
-      // If no retrieval log yet (rare), maybe Intent?
       if (!targetLog) targetLog = derivedLogs.find(l => l.section === 'INTENT');
     } else if (op === 'memory-detection') {
-      // Attach memory detection cost to the MEMORY_DETECTION log
       targetLog = derivedLogs.find(l => l.section === 'MEMORY_DETECTION');
     }
 
     if (targetLog) {
       if (!targetLog.data) targetLog.data = {};
-
-      // Accumulate costs if multiple ops map to same log (e.g. haiku + embedding -> retrieval)
       const existing = targetLog.data.costInfo || { totalCost: 0, inputTokens: 0, outputTokens: 0, model: '' };
 
       targetLog.data.costInfo = {
@@ -229,11 +350,6 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
         totalCost: (existing.totalCost || 0) + (costLog.data.totalCost || 0),
       };
     } else {
-      // If we can't attach it, maybe keep it? Or just hide it as requested?
-      // The user specifically asked: "Instead of being its own event, can it be a section of the prompt"
-      // So if we have a standalone cost (like embedding), maybe we can't hide it easily without losing data.
-      // But for the main Chat Cost, we should definitely merge.
-      // Let's just append it to the last log if nothing else matches?
       if (derivedLogs.length > 0) {
         const lastLog = derivedLogs[derivedLogs.length - 1];
         if (!lastLog.data) lastLog.data = {};
@@ -247,12 +363,9 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
     }
   });
 
-  // 3. Merge redundant RESPONSE logs
-  // "AI response completed" usually follows "Sonnet response generated"
-  // We want to keep the one with responseText/responsePreview and merge stats from the other
+  // Merge redundant RESPONSE logs
   const responseLogs = derivedLogs.filter(l => l.section === 'RESPONSE');
   if (responseLogs.length > 1) {
-    // We want to keep the one with the most information (raw analysis, JSON)
     const mainResponse = responseLogs.find(l => {
       const text = l.data?.responseText || l.data?.responsePreview || '';
       return text.includes('<analysis>') || text.includes('"invitationMessage"');
@@ -260,46 +373,38 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
     const otherResponses = responseLogs.filter(l => l !== mainResponse);
 
     otherResponses.forEach(other => {
-      // Merge useful stats
       if (other.data?.durationMs) mainResponse.data.durationMs = other.data.durationMs;
       if (other.data?.totalDuration) mainResponse.data.totalDuration = other.data.totalDuration;
 
-      // Merge cost info if present on the redundant log
       if (other.data?.costInfo) {
         const existing = mainResponse.data.costInfo || { totalCost: 0, inputTokens: 0, outputTokens: 0, model: '' };
         const otherCost = other.data.costInfo;
 
         mainResponse.data.costInfo = {
-          model: existing.model || otherCost.model, // Keep existing or take other
-          inputTokens: (existing.inputTokens || 0) + (otherCost.inputTokens || 0), // Should we add? Usually these are duplicates if attached to both? 
-          // Wait, if cost logic attached it to only ONE of them, then we just need to take it.
-          // If it attached to BOTH (unlikely with .find()), then adding is wrong if they represent the same cost.
-          // But here, 'other' is being deleted. So we should take its cost if main doesn't have it, or add if they are distinct.
-          // Given our cost logic finds the *first* response log, one of them has it and the other doesn't.
-          // So safely adding (treating undefined as 0) works for the case where only one has it.
+          model: existing.model || otherCost.model,
+          inputTokens: (existing.inputTokens || 0) + (otherCost.inputTokens || 0),
           outputTokens: (existing.outputTokens || 0) + (otherCost.outputTokens || 0),
           totalCost: (existing.totalCost || 0) + (otherCost.totalCost || 0),
         };
       }
 
-      // Remove the redundant log
       const idx = derivedLogs.indexOf(other);
       if (idx > -1) derivedLogs.splice(idx, 1);
     });
   }
 
-  // If we have cost logs but nothing to attach them to, show them as standalone events
+  // Show standalone cost logs if nothing to attach them to
   if (derivedLogs.length === 0 && costLogs.length > 0) {
     costLogs.forEach(costLog => {
       derivedLogs.push({ ...costLog, data: { ...costLog.data } });
     });
   }
 
-  // Add pending LLM calls as in-progress items (will auto-update when COST arrives via Ably)
+  // Add pending LLM calls
   pendingLlmCalls.forEach(startLog => {
     derivedLogs.push({
       ...startLog,
-      section: 'LLM_START', // Keep as LLM_START so we can style it differently
+      section: 'LLM_START',
       data: { ...startLog.data, pending: true },
     });
   });
@@ -307,15 +412,14 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
   // Sort by timestamp
   derivedLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-  // Determine Turn Title (User Message)
-  // Fallback to INTENT userInput if USER log is missing
+  // Determine Turn Title
   const intentLog = turn.logs.find(l => l.section === 'INTENT');
   const userMessage = turn.userMessage ||
     userLog?.message ||
     intentLog?.data?.userInput ||
     (derivedLogs.length > 0 ? <span className="placeholder">System Event</span> : null);
 
-  if (!userMessage && derivedLogs.length === 0) return null; // Hide completely empty turns
+  if (!userMessage && derivedLogs.length === 0) return null;
 
   return (
     <div className="turn-container">
@@ -324,15 +428,13 @@ function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
         <span className="turn-id">Turn {turn.id}</span>
       </div>
 
-      {/* User Message - Big and Prominent (or System Event label) */}
       <div className="turn-user-message">
-        <div className="icon">{userLog ? '👤' : '⚙️'}</div>
+        <div className="icon">{userLog ? '💬' : '⚙️'}</div>
         <div className="message-content">
           {userMessage}
         </div>
       </div>
 
-      {/* Steps */}
       <div className="turn-steps">
         {derivedLogs.map((log, i) => (
           <LogStep key={i} log={log} />
@@ -404,7 +506,6 @@ function FormattedPrice({ value }: { value?: number }) {
   if (value === undefined || value === null) return <span className="price-component">$0.00</span>;
 
   const str = value.toFixed(5);
-  // Extract dollars and first two decimal digits (cents)
   const match = str.match(/^(\d+\.\d{2})(\d*)$/);
 
   if (!match) return <span className="price-component">${str}</span>;
@@ -494,7 +595,6 @@ function RetrievalDetail({ data }: { data: any }) {
 
   return (
     <DetailWrapper data={data}>
-      {/* Search Queries View */}
       {data.searchQueries && (
         <div className="retrieval-section">
           <strong>Queries:</strong>
@@ -504,7 +604,6 @@ function RetrievalDetail({ data }: { data: any }) {
         </div>
       )}
 
-      {/* Context Assembly View (Fallback for blank retrieval) */}
       {!data.searchQueries && !data.topMatches && !data.summary && (data.turnCount !== undefined || data.stage !== undefined) && (
         <div className="key-value-grid">
           {data.stage !== undefined && (
@@ -608,30 +707,25 @@ function ResponseDetail({ log }: { log: AuditLogEntry }) {
   const data = log.data || {};
   let responseText = data.responseText || data.responsePreview || log.message;
 
-  // Smart Parsing for Hybrid Response (Analysis + JSON)
   const analysisMatch = responseText.match(/<analysis>([\s\S]*?)<\/analysis>/);
-  let analysis = data.analysis || null; // Check explicit analysis field first
+  let analysis = data.analysis || null;
   let jsonContent = null;
 
   if (analysisMatch && !analysis) {
     analysis = analysisMatch[1].trim();
-    // Remove analysis from text to find the JSON part
     responseText = responseText.replace(analysisMatch[0], '').trim();
   }
 
-  // Try to parse the remaining text as JSON
   const parsed = parseJsonSafely(responseText);
   if (parsed) {
     jsonContent = parsed;
-    // Fallback: If analysis wasn't in tags but is in JSON
     if (!analysis && typeof jsonContent.analysis === 'string') {
       analysis = jsonContent.analysis;
     }
   } else {
-    // If parsing failed (or text wasn't JSON), construct artificial jsonContent from explicit data
     if (data.invitationMessage || data.proposedEmpathyStatement || data.offerReadyToShare !== undefined) {
       jsonContent = {
-        response: null, // responseText is already handled separately
+        response: null,
         invitationMessage: data.invitationMessage,
         proposedEmpathyStatement: data.proposedEmpathyStatement,
         offerReadyToShare: data.offerReadyToShare,
@@ -655,7 +749,6 @@ function ResponseDetail({ log }: { log: AuditLogEntry }) {
 
       {jsonContent ? (
         <div className="response-full">
-          {/* Main Response */}
           {jsonContent.response && (
             <div className="assistant-response">
               {jsonContent.response.split('\n').map((line: string, i: number) => (
@@ -664,7 +757,6 @@ function ResponseDetail({ log }: { log: AuditLogEntry }) {
             </div>
           )}
 
-          {/* Structured Fields Grid */}
           <div className="structured-fields">
             {jsonContent.invitationMessage && (
               <div className="structured-card invitation">
@@ -681,7 +773,6 @@ function ResponseDetail({ log }: { log: AuditLogEntry }) {
             )}
           </div>
 
-          {/* Status Flags */}
           <div className="status-flags">
             {jsonContent.offerReadyToShare !== undefined && (
               <span className={`status-tag ${jsonContent.offerReadyToShare ? 'success' : 'neutral'}`}>
@@ -695,12 +786,7 @@ function ResponseDetail({ log }: { log: AuditLogEntry }) {
             )}
           </div>
 
-          <div className="raw-json-fallback">
-            {/* Only show other keys? Or just keep toggle below? 
-                       User said "I want to see that analysis and also see the json parsed".
-                       The raw JSON toggle is already handled by DetailWrapper. 
-                       So we just render the pretty parts here. */}
-          </div>
+          <div className="raw-json-fallback"></div>
         </div>
       ) : (
         <div className="response-full">
@@ -727,7 +813,6 @@ function PromptDetail({ data }: { data: any }) {
         </div>
       )}
 
-      {/* Context Bundle - Only Full */}
       {data.fullContextBundle && (
         <div className="context-preview">
           <h4>Context Bundle</h4>
@@ -735,7 +820,6 @@ function PromptDetail({ data }: { data: any }) {
         </div>
       )}
 
-      {/* Retrieved Context - Only Full */}
       {data.fullRetrievedContext && (
         <div className="context-preview">
           <h4>Retrieved Context</h4>
@@ -747,7 +831,6 @@ function PromptDetail({ data }: { data: any }) {
 }
 
 function LlmStartDetail({ data }: { data: any }) {
-  // Map operation names to human-readable descriptions
   const getOperationLabel = (op?: string) => {
     if (!op) return 'AI Operation';
     const labels: Record<string, string> = {
@@ -794,39 +877,31 @@ function LlmStartDetail({ data }: { data: any }) {
 }
 
 function CostDetail({ data, cost }: { data: any, cost?: number }) {
-  // Map operation names to human-readable descriptions
   const getOperationLabel = (op?: string) => {
     if (!op) return 'AI Operation';
     const labels: Record<string, string> = {
-      // Stage messages
       'stage1-initial-message': 'Welcome Message',
       'stage1-transition': 'Stage 1→2 Transition',
       'stage2-transition': 'Stage 2→3 Transition',
-      // Chat router
       'chat-router-response': 'Chat Response',
       'chat-router-welcome': 'Welcome Message',
       'intent-detection': 'Intent Detection',
       'people-extraction': 'People Extraction',
-      // Orchestrator
       'orchestrator-response': 'AI Response',
       'sonnet-response': 'AI Response',
-      // Memory & retrieval
       'retrieval-planning': 'Memory Planning',
       'memory-detection': 'Memory Detection',
       'memory-validation': 'Memory Validation',
-      // Inner work
       'inner-work-initial': 'Inner Work Welcome',
       'inner-work-response': 'Inner Work Response',
       'inner-work-metadata': 'Inner Work Setup',
       'inner-thoughts-summary': 'Thoughts Summary',
-      // Other features
       'meditation-script': 'Meditation Script',
       'gratitude-response': 'Gratitude Response',
       'pre-session-witnessing': 'Pre-Session Witnessing',
       'conversation-summary': 'Conversation Summary',
       'extract-needs': 'Needs Extraction',
       'common-ground': 'Common Ground Analysis',
-      // Utilities
       'haiku-json': 'Quick Analysis',
       'embedding': 'Text Embedding',
     };
@@ -880,7 +955,6 @@ function GenericDetail({ data }: { data: any }) {
   return (
     <DetailWrapper data={data}>
       <div className="generic-preview">
-        {/* Try to show something useful if possible, else just empty and let JSON handle it */}
         {data.message && <p>{data.message}</p>}
       </div>
     </DetailWrapper>
