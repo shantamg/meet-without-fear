@@ -1337,7 +1337,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
     setLiveProposedEmpathyStatement,
     aiRecommendsReadyToShare,
     setAiRecommendsReadyToShare,
-    showFeelHeardConfirmation,
     setAiRecommendsFeelHeardCheck,
     needsData,
     needs,

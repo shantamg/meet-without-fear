@@ -655,6 +655,7 @@ interface UseUserSessionUpdatesConfig {
     suggestedContent: string;
     category: string;
     confidence: string;
+    evidence: string;
     sessionId: string;
   }) => void;
 }
@@ -689,7 +690,7 @@ export function useUserSessionUpdates(
 
       // Handle memory suggestions targeted to this specific user
       if (eventName === 'memory.suggested') {
-        const suggestion = (_data as { suggestion?: { id: string; suggestedContent: string; category: string; confidence: string } }).suggestion;
+        const suggestion = (_data as { suggestion?: { id: string; suggestedContent: string; category: string; confidence: string; evidence: string } }).suggestion;
         if (suggestion && onMemorySuggestionRef.current) {
           console.log('[UserSessionUpdates] Memory suggestion received:', suggestion);
           onMemorySuggestionRef.current({
