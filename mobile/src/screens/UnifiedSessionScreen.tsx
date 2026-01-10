@@ -149,13 +149,16 @@ export function UnifiedSessionScreen({
     invitation,
     localInvitationConfirmed,
     setLocalInvitationConfirmed,
+    setLiveInvitationMessage,
 
     // Stage-specific data
     compactData,
     loadingCompact,
     empathyDraftData,
     liveProposedEmpathyStatement,
+    setLiveProposedEmpathyStatement,
     aiRecommendsReadyToShare,
+    setAiRecommendsReadyToShare,
     allNeedsConfirmed,
     commonGround,
     strategyPhase,
@@ -173,6 +176,7 @@ export function UnifiedSessionScreen({
 
     // Feel heard confirmation
     showFeelHeardConfirmation,
+    setAiRecommendsFeelHeardCheck,
 
     // Actions
     sendMessage,
@@ -213,7 +217,7 @@ export function UnifiedSessionScreen({
   const { addAIMessage, handleAIMessageError } = useAIMessageHandler();
 
   // Real-time presence and event tracking
-  const { partnerOnline, connectionStatus } = useRealtime({
+  const { partnerOnline, connectionStatus, reconnect: reconnectRealtime } = useRealtime({
     sessionId,
     enablePresence: true,
     onSessionEvent: (event, data) => {
@@ -259,11 +263,32 @@ export function UnifiedSessionScreen({
       setWaitingForAIResponse(false);
       // Add AI message to the cache
       addAIMessage(sessionId, payload.message);
-      // TODO: Handle additional metadata from payload if needed
-      // - payload.offerFeelHeardCheck
-      // - payload.invitationMessage
-      // - payload.offerReadyToShare
-      // - payload.proposedEmpathyStatement
+      // Handle additional metadata from payload (same as HTTP onSuccess handler)
+      // NOTE: We set state immediately here, but UI elements check !isTypewriterAnimating
+      // before showing, so they will slide up AFTER the message finishes typewriter animating
+      // Update feel-heard check recommendation from AI
+      // Only set to true - once AI recommends feel-heard check, keep it sticky
+      // until user confirms or dismisses (prevents flashing card on/off)
+      if (payload.offerFeelHeardCheck === true) {
+        setAiRecommendsFeelHeardCheck(true);
+      }
+      // Update ready-to-share recommendation from AI (Stage 2)
+      // Only set to true - once AI recommends ready-to-share, keep it sticky
+      if (payload.offerReadyToShare === true) {
+        setAiRecommendsReadyToShare(true);
+      }
+      // Capture live invitation message from AI (for refinement flow)
+      if (payload.invitationMessage !== undefined) {
+        setLiveInvitationMessage(payload.invitationMessage);
+      }
+      // Capture AI-proposed empathy statement (Stage 2)
+      // Save to database immediately so it persists across reloads
+      if (payload.proposedEmpathyStatement !== undefined && payload.proposedEmpathyStatement !== null) {
+        setLiveProposedEmpathyStatement(payload.proposedEmpathyStatement);
+        // Save to database with readyToShare: false (user hasn't confirmed yet)
+        handleSaveEmpathyDraft(payload.proposedEmpathyStatement, false);
+      }
+      // Note: memorySuggestion is handled via onSessionEvent('memory.suggested'), not here
     },
     onAIError: (payload) => {
       console.error('[UnifiedSessionScreen] AI error received via Ably:', payload.error);
@@ -316,6 +341,52 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // This keeps the ghost dots showing until AI response arrives
   const [waitingForAIResponse, setWaitingForAIResponse] = useState(false);
+  const waitingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-clear waiting state after 30 seconds as a fallback
+  // This prevents dots from getting stuck if Ably message never arrives
+  useEffect(() => {
+    if (waitingForAIResponse) {
+      // Clear any existing timeout
+      if (waitingTimeoutRef.current) {
+        clearTimeout(waitingTimeoutRef.current);
+      }
+      // Set timeout to auto-clear waiting state and attempt reconnect
+      waitingTimeoutRef.current = setTimeout(() => {
+        console.warn('[UnifiedSessionScreen] AI response timeout - clearing waiting state after 30s');
+        setWaitingForAIResponse(false);
+        // Trigger reconnect in case Ably connection is broken (common during live reload)
+        console.log('[UnifiedSessionScreen] Attempting realtime reconnect after timeout');
+        reconnectRealtime();
+      }, 30000);
+    } else {
+      // Clear timeout when not waiting
+      if (waitingTimeoutRef.current) {
+        clearTimeout(waitingTimeoutRef.current);
+        waitingTimeoutRef.current = null;
+      }
+    }
+
+    return () => {
+      if (waitingTimeoutRef.current) {
+        clearTimeout(waitingTimeoutRef.current);
+      }
+    };
+  }, [waitingForAIResponse, reconnectRealtime]);
+
+  // Watch messages - if we're waiting and last message is AI, clear waiting state
+  // This handles cases where AI response arrived but Ably callback didn't fire
+  // (e.g., app was in background and data was fetched via React Query)
+  useEffect(() => {
+    if (!waitingForAIResponse || messages.length === 0) return;
+
+    const lastMessage = messages[messages.length - 1];
+    // If the last message is from AI (not USER or SYSTEM), the response has arrived
+    if (lastMessage && lastMessage.role !== MessageRole.USER && lastMessage.role !== MessageRole.SYSTEM) {
+      console.log('[UnifiedSessionScreen] AI response detected in messages - clearing waiting state');
+      setWaitingForAIResponse(false);
+    }
+  }, [waitingForAIResponse, messages]);
 
   // -------------------------------------------------------------------------
   // Local State for Refine Invitation Drawer
@@ -465,11 +536,20 @@ export function UnifiedSessionScreen({
 
     // Local latch: Once user clicks Share, never show panel again (prevents flash during refetch)
     // EXCEPT when we're in refining mode, then we need to show it again
-    if (hasSharedEmpathyLocal && !isRefining) return false;
+    if (hasSharedEmpathyLocal && !isRefining) {
+      console.log('[EmpathyPanel] Hidden: hasSharedEmpathyLocal=true, isRefining=false');
+      return false;
+    }
 
     // Must be in Stage 2 and not have already shared
-    if (currentStage !== Stage.PERSPECTIVE_STRETCH) return false;
-    if (empathyDraftData?.alreadyConsented && !isRefining) return false;
+    if (currentStage !== Stage.PERSPECTIVE_STRETCH) {
+      console.log('[EmpathyPanel] Hidden: currentStage=', currentStage, 'expected PERSPECTIVE_STRETCH');
+      return false;
+    }
+    if (empathyDraftData?.alreadyConsented && !isRefining) {
+      console.log('[EmpathyPanel] Hidden: alreadyConsented=true, isRefining=false');
+      return false;
+    }
 
     // Must have content to show (from AI, draft, or refining)
     const hasContent = !!(
@@ -477,11 +557,23 @@ export function UnifiedSessionScreen({
       empathyDraftData?.draft?.content ||
       (isRefining && empathyStatusData?.myAttempt?.content)
     );
-    if (!hasContent) return false;
+    if (!hasContent) {
+      console.log('[EmpathyPanel] Hidden: no content', {
+        liveProposedEmpathyStatement: !!liveProposedEmpathyStatement,
+        draftContent: !!empathyDraftData?.draft?.content,
+        isRefining,
+        myAttemptContent: !!empathyStatusData?.myAttempt?.content,
+      });
+      return false;
+    }
 
     // Wait for typewriter to finish
-    if (isTypewriterAnimating) return false;
+    if (isTypewriterAnimating) {
+      console.log('[EmpathyPanel] Hidden: typewriter animating');
+      return false;
+    }
 
+    console.log('[EmpathyPanel] SHOWING - all conditions met');
     return true;
   }, [
     hasSharedEmpathyLocal,

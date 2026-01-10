@@ -1326,6 +1326,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     invitation,
     localInvitationConfirmed,
     setLocalInvitationConfirmed,
+    setLiveInvitationMessage,
 
     // Stage-specific data
     compactData,
@@ -1333,7 +1334,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
     empathyDraftData,
     partnerEmpathyData,
     liveProposedEmpathyStatement,
+    setLiveProposedEmpathyStatement,
     aiRecommendsReadyToShare,
+    setAiRecommendsReadyToShare,
+    showFeelHeardConfirmation,
+    setAiRecommendsFeelHeardCheck,
     needsData,
     needs,
     allNeedsConfirmed,
