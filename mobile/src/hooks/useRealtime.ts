@@ -3,6 +3,10 @@
  *
  * Provides WebSocket connection management, event subscriptions,
  * and reconnection logic using Ably for real-time functionality.
+ *
+ * IMPORTANT: This hook uses a singleton Ably client that exists outside
+ * the React component lifecycle. This ensures connections survive Fast
+ * Refresh/Live Reload during development.
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -22,8 +26,14 @@ import {
 } from '@meet-without-fear/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { sessionKeys } from './useSessions';
-import { useAblyToken } from './useProfile';
 import { useAuth } from './useAuth';
+import {
+  getAblyClient,
+  getAblyClientSync,
+  reconnectAbly,
+  getAblyConnectionState,
+  refreshAblyToken,
+} from '../lib/ably';
 
 // ============================================================================
 // Types
@@ -77,7 +87,6 @@ export interface RealtimeActions {
 // ============================================================================
 
 type AblyRealtimeChannel = Ably.RealtimeChannel;
-type AblyRealtimeClient = Ably.Realtime;
 
 // ============================================================================
 // Connection State Mapping
@@ -109,6 +118,7 @@ function mapAblyState(state: string): ConnectionStatus {
 
 /**
  * Hook for managing real-time WebSocket connections and subscriptions.
+ * Uses a singleton Ably client that survives component remounts and live reload.
  *
  * @param config - Configuration options for the realtime connection
  * @returns Current state and actions for real-time functionality
@@ -127,33 +137,53 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
   } = config;
 
   const { user } = useAuth();
-  const { data: tokenData, refetch: refetchToken } = useAblyToken();
 
   // State
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(
-    ConnectionStatus.CONNECTING
-  );
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(() => {
+    // Initialize from singleton state
+    return mapAblyState(getAblyConnectionState());
+  });
   const [partnerOnline, setPartnerOnline] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [partnerStage, setPartnerStage] = useState<number | undefined>();
   const [error, setError] = useState<string | undefined>();
 
-  // Refs
-  const ablyRef = useRef<AblyRealtimeClient | null>(null);
+  // Refs for channel and subscription management
   const channelRef = useRef<AblyRealtimeChannel | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectionListenerRef = useRef<((stateChange: Ably.ConnectionStateChange) => void) | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingRef = useRef<boolean>(false);
-  const isConnectingRef = useRef(false);
   const isMountedRef = useRef(true);
+  const reconnectAttemptsRef = useRef(0);
+
+  // Store callbacks in refs to avoid stale closures
+  const callbacksRef = useRef({
+    onConnectionChange,
+    onPresenceChange,
+    onTypingChange,
+    onSessionEvent,
+    onStageProgress,
+    onAIResponse,
+    onAIError,
+  });
+  callbacksRef.current = {
+    onConnectionChange,
+    onPresenceChange,
+    onTypingChange,
+    onSessionEvent,
+    onStageProgress,
+    onAIResponse,
+    onAIError,
+  };
 
   // ============================================================================
-  // Connection Management
+  // Connection State Handler
   // ============================================================================
 
   const handleConnectionStateChange = useCallback(
     (stateChange: { current: string; reason?: { message: string } }) => {
+      if (!isMountedRef.current) return;
+
       const status = mapAblyState(stateChange.current);
       setConnectionStatus(status);
 
@@ -171,265 +201,307 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
         setError(stateChange.reason?.message || 'Connection failed');
       }
 
-      onConnectionChange?.(state);
+      callbacksRef.current.onConnectionChange?.(state);
     },
-    [onConnectionChange]
+    []
   );
 
-  const connect = useCallback(async () => {
-    if (!user?.id) {
-      console.warn('[Realtime] No user ID available for connection');
-      return;
-    }
+  // ============================================================================
+  // Message Handler
+  // ============================================================================
 
-    // Prevent multiple simultaneous connection attempts
-    if (isConnectingRef.current) {
-      console.log('[Realtime] Already connecting, skipping...');
-      return;
-    }
+  const handleMessage = useCallback(
+    (message: Ably.Message) => {
+      if (!isMountedRef.current) return;
 
-    // If already connected, skip
-    if (ablyRef.current?.connection?.state === 'connected') {
-      console.log('[Realtime] Already connected, skipping...');
-      return;
-    }
+      const eventName = message.name as SessionEventType;
+      const eventData = message.data as SessionEventData;
 
-    isConnectingRef.current = true;
-    console.log('[Realtime] Connecting as user:', user.id, 'to session:', sessionId);
+      // Skip events from ourselves
+      if (eventData.excludeUserId === user?.id) {
+        return;
+      }
 
-    try {
-      // Create real Ably client with token-based authentication
-      // Note: Don't set clientId here - Ably will use the clientId from the token
-      // Setting it explicitly can cause mismatch errors if the token is cached
-      const ably = new Ably.Realtime({
-        authCallback: async (_, callback) => {
-          console.log('[Realtime] Auth callback triggered, fetching token...');
-          try {
-            const { data } = await refetchToken();
-            if (data?.tokenRequest) {
-              console.log('[Realtime] Token received, clientId:', data.tokenRequest.clientId);
-              callback(null, data.tokenRequest);
-            } else {
-              console.error('[Realtime] No token in response');
-              callback('Failed to get token', null);
-            }
-          } catch (err) {
-            console.error('[Realtime] Token fetch error:', err);
-            callback(err instanceof Error ? err.message : 'Token fetch failed', null);
+      // Handle specific events
+      switch (eventName) {
+        case 'typing.start':
+          setPartnerTyping(true);
+          callbacksRef.current.onTypingChange?.(eventData.userId || '', true);
+          break;
+
+        case 'typing.stop':
+          setPartnerTyping(false);
+          callbacksRef.current.onTypingChange?.(eventData.userId || '', false);
+          break;
+
+        case 'presence.online':
+          setPartnerOnline(true);
+          callbacksRef.current.onPresenceChange?.(eventData.userId || '', PresenceStatus.ONLINE);
+          break;
+
+        case 'presence.offline':
+          setPartnerOnline(false);
+          setPartnerTyping(false);
+          callbacksRef.current.onPresenceChange?.(eventData.userId || '', PresenceStatus.OFFLINE);
+          break;
+
+        case 'presence.away':
+          callbacksRef.current.onPresenceChange?.(eventData.userId || '', PresenceStatus.AWAY);
+          break;
+
+        case 'stage.progress':
+        case 'stage.waiting':
+          if (eventData.stage !== undefined) {
+            setPartnerStage(eventData.stage);
+            callbacksRef.current.onStageProgress?.(
+              eventData.userId || '',
+              eventData.stage,
+              (eventData as Record<string, unknown>).status as string || 'unknown'
+            );
           }
-        },
-        autoConnect: true,
-      });
-      ablyRef.current = ably;
+          break;
 
-      // Listen for connection state changes
-      ably.connection.on((stateChange) => {
-        console.log('[Realtime] Connection state:', stateChange.current, stateChange.reason?.message || '');
-        handleConnectionStateChange({
-          current: stateChange.current,
-          reason: stateChange.reason ? { message: stateChange.reason.message || 'Unknown error' } : undefined,
-        });
-      });
+        // Fire-and-forget message events
+        case 'message.ai_response':
+          if (callbacksRef.current.onAIResponse) {
+            const aiPayload = eventData as unknown as MessageAIResponsePayload;
+            // Only handle if this message is for the current user
+            if (aiPayload.forUserId === user?.id) {
+              console.log('[Realtime] AI response received:', aiPayload.message?.id);
+              callbacksRef.current.onAIResponse(aiPayload);
+            }
+          }
+          break;
 
-      // Subscribe to session channel
-      const channelName = REALTIME_CHANNELS.session(sessionId);
-      console.log('[Realtime] Subscribing to channel:', channelName);
-      const channel = ably.channels.get(channelName);
-      channelRef.current = channel;
+        case 'message.error':
+          if (callbacksRef.current.onAIError) {
+            const errorPayload = eventData as unknown as MessageErrorPayload;
+            // Only handle if this error is for the current user
+            if (errorPayload.forUserId === user?.id) {
+              console.log('[Realtime] AI error received:', errorPayload.error);
+              callbacksRef.current.onAIError(errorPayload);
+            }
+          }
+          break;
 
-      // Subscribe to all events
-      channel.subscribe((message: Ably.Message) => {
-        const eventName = message.name as SessionEventType;
-        const eventData = message.data as SessionEventData;
+        default:
+          // Generic session event
+          callbacksRef.current.onSessionEvent?.(eventName, eventData);
+          break;
+      }
+    },
+    [user?.id]
+  );
 
-        // Skip events from ourselves
-        if (eventData.excludeUserId === user.id) {
+  // ============================================================================
+  // Subscription Setup
+  // ============================================================================
+
+  useEffect(() => {
+    if (!sessionId || !user?.id) return;
+
+    let isCleanedUp = false;
+    let channel: AblyRealtimeChannel | null = null;
+    let hasTriedTokenRefresh = false;
+
+    const setupSubscription = async () => {
+      try {
+        console.log('[Realtime] Setting up subscription for session:', sessionId);
+
+        // Get the singleton client
+        const ably = await getAblyClient();
+
+        if (isCleanedUp) {
+          console.log('[Realtime] Cleanup already called, aborting setup');
           return;
         }
 
-        // Handle specific events
-        switch (eventName) {
-          case 'typing.start':
-            setPartnerTyping(true);
-            onTypingChange?.(eventData.userId || '', true);
-            break;
+        // Subscribe to connection state changes
+        const connectionListener = (stateChange: Ably.ConnectionStateChange) => {
+          console.log('[Realtime] Connection state:', stateChange.current, stateChange.reason?.message || '');
+          handleConnectionStateChange({
+            current: stateChange.current,
+            reason: stateChange.reason ? { message: stateChange.reason.message || 'Unknown error' } : undefined,
+          });
+        };
+        ably.connection.on(connectionListener);
+        connectionListenerRef.current = connectionListener;
 
-          case 'typing.stop':
-            setPartnerTyping(false);
-            onTypingChange?.(eventData.userId || '', false);
-            break;
+        // Update initial connection status
+        handleConnectionStateChange({ current: ably.connection.state });
 
-          case 'presence.online':
-            setPartnerOnline(true);
-            onPresenceChange?.(eventData.userId || '', PresenceStatus.ONLINE);
-            break;
+        // Get the session channel
+        const channelName = REALTIME_CHANNELS.session(sessionId);
+        console.log('[Realtime] Subscribing to channel:', channelName);
+        channel = ably.channels.get(channelName);
+        channelRef.current = channel;
 
-          case 'presence.offline':
-            setPartnerOnline(false);
-            setPartnerTyping(false);
-            onPresenceChange?.(eventData.userId || '', PresenceStatus.OFFLINE);
-            break;
+        // Subscribe to all events
+        await channel.subscribe(handleMessage);
 
-          case 'presence.away':
-            onPresenceChange?.(eventData.userId || '', PresenceStatus.AWAY);
-            break;
+        // Set up presence if enabled
+        if (enablePresence) {
+          console.log('[Realtime] Entering presence...');
+          await channel.presence.enter({ name: user.name });
+          console.log('[Realtime] Presence entered successfully');
 
-          case 'stage.progress':
-          case 'stage.waiting':
-            if (eventData.stage !== undefined) {
-              setPartnerStage(eventData.stage);
-              onStageProgress?.(
-                eventData.userId || '',
-                eventData.stage,
-                (eventData as Record<string, unknown>).status as string || 'unknown'
-              );
+          // Subscribe to presence events
+          channel.presence.subscribe('enter', (member: Ably.PresenceMessage) => {
+            if (isCleanedUp || !isMountedRef.current) return;
+            console.log('[Realtime] Presence enter event:', member.clientId);
+            if (member.clientId !== user.id) {
+              setPartnerOnline(true);
+              callbacksRef.current.onPresenceChange?.(member.clientId || '', PresenceStatus.ONLINE);
             }
-            break;
+          });
 
-          // Fire-and-forget message events
-          case 'message.ai_response':
-            // AI response arrived for this user
-            if (onAIResponse) {
-              const aiPayload = eventData as unknown as MessageAIResponsePayload;
-              // Only handle if this message is for the current user
-              if (aiPayload.forUserId === user?.id) {
-                console.log('[Realtime] AI response received:', aiPayload.message?.id);
-                onAIResponse(aiPayload);
-              }
+          channel.presence.subscribe('leave', (member: Ably.PresenceMessage) => {
+            if (isCleanedUp || !isMountedRef.current) return;
+            console.log('[Realtime] Presence leave event:', member.clientId);
+            if (member.clientId !== user.id) {
+              setPartnerOnline(false);
+              setPartnerTyping(false);
+              callbacksRef.current.onPresenceChange?.(member.clientId || '', PresenceStatus.OFFLINE);
             }
-            break;
+          });
 
-          case 'message.error':
-            // AI processing failed
-            if (onAIError) {
-              const errorPayload = eventData as unknown as MessageErrorPayload;
-              // Only handle if this error is for the current user
-              if (errorPayload.forUserId === user?.id) {
-                console.log('[Realtime] AI error received:', errorPayload.error);
-                onAIError(errorPayload);
-              }
-            }
-            break;
-
-          default:
-            // Generic session event
-            onSessionEvent?.(eventName, eventData);
-            break;
-        }
-      });
-
-      // Enter presence if enabled
-      if (enablePresence) {
-        console.log('[Realtime] Entering presence...');
-        await channel.presence.enter({ name: user.name });
-        console.log('[Realtime] Presence entered successfully');
-
-        // Subscribe to presence events
-        channel.presence.subscribe('enter', (member: Ably.PresenceMessage) => {
-          console.log('[Realtime] Presence enter event:', member.clientId);
-          if (member.clientId !== user.id) {
-            setPartnerOnline(true);
-            onPresenceChange?.(member.clientId || '', PresenceStatus.ONLINE);
+          // Check current presence
+          const members = await channel.presence.get();
+          console.log('[Realtime] Current presence members:', members.map(m => m.clientId));
+          const partnerPresent = members.some((m: Ably.PresenceMessage) => m.clientId !== user.id);
+          console.log('[Realtime] Partner present:', partnerPresent);
+          if (isMountedRef.current && !isCleanedUp) {
+            setPartnerOnline(partnerPresent);
           }
-        });
-
-        channel.presence.subscribe('leave', (member: Ably.PresenceMessage) => {
-          console.log('[Realtime] Presence leave event:', member.clientId);
-          if (member.clientId !== user.id) {
-            setPartnerOnline(false);
-            setPartnerTyping(false);
-            onPresenceChange?.(member.clientId || '', PresenceStatus.OFFLINE);
-          }
-        });
-
-        // Get current presence
-        const members = await channel.presence.get();
-        console.log('[Realtime] Current presence members:', members.map(m => m.clientId));
-        const partnerPresent = members.some((m: Ably.PresenceMessage) => m.clientId !== user.id);
-        console.log('[Realtime] Partner present:', partnerPresent);
-        if (isMountedRef.current) {
-          setPartnerOnline(partnerPresent);
         }
-      }
 
-      // Connection setup complete
-      isConnectingRef.current = false;
-    } catch (err) {
-      console.error('[Realtime] Connection error:', err);
-      isConnectingRef.current = false;
-      if (isMountedRef.current) {
-        setError(err instanceof Error ? err.message : 'Connection failed');
-        setConnectionStatus(ConnectionStatus.FAILED);
-      }
-    }
-  }, [
-    user,
-    sessionId,
-    enablePresence,
-    handleConnectionStateChange,
-    refetchToken,
-    onPresenceChange,
-    onTypingChange,
-    onSessionEvent,
-    onStageProgress,
-    onAIResponse,
-    onAIError,
-  ]);
-
-  const disconnect = useCallback(() => {
-    console.log('[Realtime] Disconnecting...');
-    isConnectingRef.current = false;
-
-    if (channelRef.current) {
-      try {
-        channelRef.current.unsubscribe();
-        channelRef.current.presence.unsubscribe();
-        // Leave presence (fire and forget)
-        channelRef.current.presence.leave().catch((err) => {
-          console.warn('[Realtime] Error leaving presence:', err);
-        });
+        console.log('[Realtime] Subscription setup complete');
       } catch (err) {
-        console.warn('[Realtime] Error during channel cleanup:', err);
+        console.error('[Realtime] Subscription setup error:', err);
+
+        // Check if this is a capability/access denied error
+        // This can happen when connecting to a new session before the token was refreshed
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const isCapabilityError =
+          errorMessage.includes('denied access') ||
+          errorMessage.includes('capability') ||
+          errorMessage.includes('Channel denied');
+
+        if (isCapabilityError && !hasTriedTokenRefresh && !isCleanedUp) {
+          console.log('[Realtime] Capability error detected, refreshing token and retrying...');
+          hasTriedTokenRefresh = true;
+
+          try {
+            // Refresh the token to get updated capabilities including the new session
+            await refreshAblyToken();
+
+            // Retry the subscription setup
+            if (!isCleanedUp) {
+              console.log('[Realtime] Token refreshed, retrying subscription...');
+              await setupSubscription();
+              return;
+            }
+          } catch (refreshErr) {
+            console.error('[Realtime] Token refresh failed:', refreshErr);
+          }
+        }
+
+        if (isMountedRef.current && !isCleanedUp) {
+          setError(err instanceof Error ? err.message : 'Connection failed');
+          setConnectionStatus(ConnectionStatus.FAILED);
+        }
       }
+    };
+
+    setupSubscription();
+
+    // Cleanup function - this is crucial for surviving live reload
+    return () => {
+      console.log('[Realtime] Cleaning up subscriptions for session:', sessionId);
+      isCleanedUp = true;
+
+      // Remove connection listener from singleton (don't close the client!)
+      const ably = getAblyClientSync();
+      if (ably && connectionListenerRef.current) {
+        ably.connection.off(connectionListenerRef.current);
+        connectionListenerRef.current = null;
+      }
+
+      // Unsubscribe from channel
+      if (channel) {
+        try {
+          channel.unsubscribe();
+          channel.presence.unsubscribe();
+          // Leave presence (fire and forget)
+          channel.presence.leave().catch((err) => {
+            console.warn('[Realtime] Error leaving presence:', err);
+          });
+        } catch (err) {
+          console.warn('[Realtime] Error during channel cleanup:', err);
+        }
+      }
+
       channelRef.current = null;
-    }
 
-    if (ablyRef.current) {
-      try {
-        ablyRef.current.connection.off();
-        ablyRef.current.close();
-      } catch (err) {
-        console.warn('[Realtime] Error during ably cleanup:', err);
+      // Clear typing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
       }
-      ablyRef.current = null;
-    }
-
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    if (isMountedRef.current) {
-      setConnectionStatus(ConnectionStatus.DISCONNECTED);
-      setPartnerOnline(false);
-      setPartnerTyping(false);
-    }
-  }, []);
-
-  const reconnect = useCallback(() => {
-    disconnect();
-    reconnectAttemptsRef.current += 1;
-
-    // Exponential backoff
-    const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
-
-    reconnectTimeoutRef.current = setTimeout(() => {
-      connect();
-    }, delay);
-  }, [connect, disconnect]);
+    };
+  }, [sessionId, user?.id, user?.name, enablePresence, handleMessage, handleConnectionStateChange]);
 
   // ============================================================================
-  // Typing Indicator
+  // Track Mounted State
+  // ============================================================================
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // ============================================================================
+  // App State Handling
+  // ============================================================================
+
+  useEffect(() => {
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        // App came to foreground - re-enter presence
+        if (channelRef.current && enablePresence && user?.id) {
+          console.log('[Realtime] App active - re-entering presence');
+          try {
+            await channelRef.current.presence.enter({ name: user.name });
+          } catch (err) {
+            console.warn('[Realtime] Failed to re-enter presence:', err);
+          }
+        }
+
+        // Check if we need to reconnect
+        const currentState = getAblyConnectionState();
+        if (currentState !== 'connected' && currentState !== 'connecting') {
+          console.log('[Realtime] App active - triggering reconnect');
+          reconnectAbly();
+        }
+      } else if (nextAppState === 'background') {
+        // App went to background - leave presence so partner sees offline immediately
+        if (channelRef.current && enablePresence) {
+          console.log('[Realtime] App background - leaving presence');
+          channelRef.current.presence.leave().catch((err) => {
+            console.warn('[Realtime] Failed to leave presence:', err);
+          });
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [enablePresence, user]);
+
+  // ============================================================================
+  // Actions
   // ============================================================================
 
   const sendTyping = useCallback(
@@ -464,66 +536,28 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
     [sessionId, user]
   );
 
-  // ============================================================================
-  // App State Handling
-  // ============================================================================
-
-  useEffect(() => {
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'active') {
-        // App came to foreground - re-enter presence
-        if (channelRef.current && enablePresence && user?.id) {
-          console.log('[Realtime] App active - re-entering presence');
-          channelRef.current.presence.enter({ name: user.name }).catch((err) => {
-            console.warn('[Realtime] Failed to re-enter presence:', err);
-          });
-        }
-        // Reconnect if needed
-        if (connectionStatus !== ConnectionStatus.CONNECTED) {
-          reconnect();
-        }
-      } else if (nextAppState === 'background') {
-        // App went to background - leave presence so partner sees offline immediately
-        if (channelRef.current && enablePresence) {
-          console.log('[Realtime] App background - leaving presence');
-          channelRef.current.presence.leave().catch((err) => {
-            console.warn('[Realtime] Failed to leave presence:', err);
-          });
-        }
-      }
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription.remove();
-  }, [connectionStatus, reconnect, enablePresence, user]);
-
-  // ============================================================================
-  // Lifecycle
-  // ============================================================================
-
-  // Track mounted state
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
+  const reconnect = useCallback(() => {
+    console.log('[Realtime] Manual reconnect requested');
+    reconnectAttemptsRef.current += 1;
+    reconnectAbly();
   }, []);
 
-  // Connect/disconnect based on sessionId and user
-  // Using refs for connect/disconnect to avoid dependency issues
-  const connectRef = useRef(connect);
-  const disconnectRef = useRef(disconnect);
-  connectRef.current = connect;
-  disconnectRef.current = disconnect;
+  const disconnect = useCallback(() => {
+    // For the singleton pattern, we don't actually disconnect the client
+    // We just leave presence and clear local state
+    console.log('[Realtime] Disconnect requested (clearing local state)');
 
-  useEffect(() => {
-    if (!sessionId || !user?.id) return;
+    if (channelRef.current && enablePresence) {
+      channelRef.current.presence.leave().catch((err) => {
+        console.warn('[Realtime] Error leaving presence:', err);
+      });
+    }
 
-    connectRef.current();
-    return () => {
-      disconnectRef.current();
-    };
-  }, [sessionId, user?.id]);
+    if (isMountedRef.current) {
+      setPartnerOnline(false);
+      setPartnerTyping(false);
+    }
+  }, [enablePresence]);
 
   // ============================================================================
   // Return Value
@@ -598,17 +632,15 @@ export function useSessionEvents(
  */
 export function useUserSessionUpdates(): { connectionStatus: ConnectionStatus } {
   const { user } = useAuth();
-  const { refetch: refetchToken } = useAblyToken();
   const queryClient = useQueryClient();
 
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(
-    ConnectionStatus.DISCONNECTED
-  );
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(() => {
+    return mapAblyState(getAblyConnectionState());
+  });
 
-  const ablyRef = useRef<Ably.Realtime | null>(null);
   const channelRef = useRef<Ably.RealtimeChannel | null>(null);
+  const connectionListenerRef = useRef<((stateChange: Ably.ConnectionStateChange) => void) | null>(null);
   const isMountedRef = useRef(true);
-  const isConnectingRef = useRef(false);
 
   const handleEvent = useCallback(
     (eventName: UserEventType, _data: UserEventData) => {
@@ -634,86 +666,78 @@ export function useUserSessionUpdates(): { connectionStatus: ConnectionStatus } 
     [queryClient]
   );
 
-  const connect = useCallback(async () => {
+  useEffect(() => {
     if (!user?.id) return;
-    if (isConnectingRef.current) return;
-    if (ablyRef.current?.connection?.state === 'connected') return;
 
-    isConnectingRef.current = true;
-    console.log('[UserSessionUpdates] Connecting to user channel:', user.id);
+    let isCleanedUp = false;
+    let channel: Ably.RealtimeChannel | null = null;
 
-    try {
-      const ably = new Ably.Realtime({
-        authCallback: async (_, callback) => {
-          try {
-            const { data } = await refetchToken();
-            if (data?.tokenRequest) {
-              callback(null, data.tokenRequest);
-            } else {
-              callback('Failed to get token', null);
-            }
-          } catch (err) {
-            callback(err instanceof Error ? err.message : 'Token fetch failed', null);
+    const setupSubscription = async () => {
+      try {
+        console.log('[UserSessionUpdates] Setting up subscription for user:', user.id);
+
+        const ably = await getAblyClient();
+
+        if (isCleanedUp) return;
+
+        // Listen for connection state changes
+        const connectionListener = (stateChange: Ably.ConnectionStateChange) => {
+          if (isMountedRef.current && !isCleanedUp) {
+            setConnectionStatus(mapAblyState(stateChange.current));
           }
-        },
-        autoConnect: true,
-      });
+        };
+        ably.connection.on(connectionListener);
+        connectionListenerRef.current = connectionListener;
 
-      ablyRef.current = ably;
-
-      ably.connection.on((stateChange) => {
-        const status = mapAblyState(stateChange.current);
+        // Update initial status
         if (isMountedRef.current) {
-          setConnectionStatus(status);
+          setConnectionStatus(mapAblyState(ably.connection.state));
         }
-      });
 
-      const channelName = REALTIME_CHANNELS.user(user.id);
-      const channel = ably.channels.get(channelName);
-      channelRef.current = channel;
+        // Subscribe to user channel
+        const channelName = REALTIME_CHANNELS.user(user.id);
+        channel = ably.channels.get(channelName);
+        channelRef.current = channel;
 
-      channel.subscribe((message: Ably.Message) => {
-        const eventName = message.name as UserEventType;
-        const eventData = message.data as UserEventData;
-        handleEvent(eventName, eventData);
-      });
+        await channel.subscribe((message: Ably.Message) => {
+          if (isCleanedUp || !isMountedRef.current) return;
+          const eventName = message.name as UserEventType;
+          const eventData = message.data as UserEventData;
+          handleEvent(eventName, eventData);
+        });
 
-      isConnectingRef.current = false;
-    } catch (err) {
-      console.error('[UserSessionUpdates] Connection error:', err);
-      isConnectingRef.current = false;
-      if (isMountedRef.current) {
-        setConnectionStatus(ConnectionStatus.FAILED);
-      }
-    }
-  }, [user, refetchToken, handleEvent]);
-
-  const disconnect = useCallback(() => {
-    isConnectingRef.current = false;
-
-    if (channelRef.current) {
-      try {
-        channelRef.current.unsubscribe();
+        console.log('[UserSessionUpdates] Subscription setup complete');
       } catch (err) {
-        console.warn('[UserSessionUpdates] Error during channel cleanup:', err);
+        console.error('[UserSessionUpdates] Subscription error:', err);
+        if (isMountedRef.current && !isCleanedUp) {
+          setConnectionStatus(ConnectionStatus.FAILED);
+        }
       }
+    };
+
+    setupSubscription();
+
+    return () => {
+      console.log('[UserSessionUpdates] Cleaning up subscription');
+      isCleanedUp = true;
+
+      const ably = getAblyClientSync();
+      if (ably && connectionListenerRef.current) {
+        ably.connection.off(connectionListenerRef.current);
+        connectionListenerRef.current = null;
+      }
+
+      if (channel) {
+        try {
+          channel.unsubscribe();
+        } catch (err) {
+          console.warn('[UserSessionUpdates] Error during cleanup:', err);
+        }
+      }
+
       channelRef.current = null;
-    }
-
-    if (ablyRef.current) {
-      try {
-        ablyRef.current.connection.off();
-        ablyRef.current.close();
-      } catch (err) {
-        console.warn('[UserSessionUpdates] Error during ably cleanup:', err);
-      }
-      ablyRef.current = null;
-    }
-
-    if (isMountedRef.current) {
-      setConnectionStatus(ConnectionStatus.DISCONNECTED);
-    }
-  }, []);
+    };
+  }, [user?.id, handleEvent]);
 
   // Track mounted state
   useEffect(() => {
@@ -723,34 +747,20 @@ export function useUserSessionUpdates(): { connectionStatus: ConnectionStatus } 
     };
   }, []);
 
-  // Connect/disconnect based on user
-  const connectRef = useRef(connect);
-  const disconnectRef = useRef(disconnect);
-  connectRef.current = connect;
-  disconnectRef.current = disconnect;
-
-  useEffect(() => {
-    if (!user?.id) return;
-
-    connectRef.current();
-    return () => {
-      disconnectRef.current();
-    };
-  }, [user?.id]);
-
   // Handle app state changes
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
-        if (connectionStatus !== ConnectionStatus.CONNECTED) {
-          connect();
+        const currentState = getAblyConnectionState();
+        if (currentState !== 'connected' && currentState !== 'connecting') {
+          reconnectAbly();
         }
       }
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
-  }, [connectionStatus, connect]);
+  }, []);
 
   return { connectionStatus };
 }
