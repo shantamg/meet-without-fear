@@ -57,6 +57,9 @@ coverage
 backend/prisma/*.db
 backend/prisma/*.db-journal
 
+# Database snapshots
+backend/snapshots/snapshot-*.sql
+
 # Secrets - never commit these
 *.pem
 google-services.json
