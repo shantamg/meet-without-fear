@@ -27,7 +27,7 @@ jest.mock('../SpeakerButton', () => {
 // Helpers
 // ============================================================================
 
-function createMockMessage(overrides: Partial<MessageDTO> = {}): MessageDTO {
+function createMockMessage(overrides: Partial<MessageDTO> = {}): MessageDTO & { skipTypewriter?: boolean } {
   return {
     id: `msg-${Date.now()}-${Math.random()}`,
     sessionId: 'session-1',
@@ -36,6 +36,8 @@ function createMockMessage(overrides: Partial<MessageDTO> = {}): MessageDTO {
     content: 'Test message',
     stage: Stage.WITNESS,
     timestamp: new Date().toISOString(),
+    // Skip typewriter animation in tests so messages render immediately
+    skipTypewriter: true,
     ...overrides,
   };
 }
@@ -58,7 +60,8 @@ describe('ChatInterface', () => {
         createMockMessage({ id: '2', role: MessageRole.AI, content: 'Hi there' }),
       ];
 
-      render(<ChatInterface messages={messages} onSendMessage={mockOnSendMessage} />);
+      // Pass lastSeenChatItemId={null} to mark all messages as "history" (no typewriter animation)
+      render(<ChatInterface messages={messages} onSendMessage={mockOnSendMessage} lastSeenChatItemId={null} />);
 
       expect(screen.getByText('Hello')).toBeTruthy();
       expect(screen.getByText('Hi there')).toBeTruthy();
@@ -200,7 +203,8 @@ describe('ChatBubble', () => {
       createMockMessage({ id: '1', role: MessageRole.USER, content: 'User message' }),
     ];
 
-    render(<ChatInterface messages={messages} onSendMessage={jest.fn()} />);
+    // Pass lastSeenChatItemId={null} to mark all messages as "history" (no typewriter animation)
+    render(<ChatInterface messages={messages} onSendMessage={jest.fn()} lastSeenChatItemId={null} />);
 
     const bubble = screen.getByTestId('chat-bubble-1');
     expect(bubble).toBeTruthy();
@@ -211,7 +215,8 @@ describe('ChatBubble', () => {
       createMockMessage({ id: '1', role: MessageRole.AI, content: 'AI message' }),
     ];
 
-    render(<ChatInterface messages={messages} onSendMessage={jest.fn()} />);
+    // Pass lastSeenChatItemId={null} to mark all messages as "history" (no typewriter animation)
+    render(<ChatInterface messages={messages} onSendMessage={jest.fn()} lastSeenChatItemId={null} />);
 
     const bubble = screen.getByTestId('chat-bubble-1');
     expect(bubble).toBeTruthy();

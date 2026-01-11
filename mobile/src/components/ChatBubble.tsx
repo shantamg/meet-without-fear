@@ -183,6 +183,8 @@ export function ChatBubble({
 
   const getSharedContentStatusText = (status: SharedContentDeliveryStatus | undefined): string => {
     switch (status) {
+      case 'sending':
+        return 'Sending...';
       case 'pending':
         return 'Pending review (not delivered yet)';
       case 'delivered':
@@ -194,6 +196,10 @@ export function ChatBubble({
       default:
         return 'Pending review (not delivered yet)';
     }
+  };
+
+  const isSendingStatus = (status: SharedContentDeliveryStatus | undefined): boolean => {
+    return status === 'sending';
   };
 
   const isSeenStatus = (status: SharedContentDeliveryStatus | undefined): boolean => {
@@ -259,6 +265,7 @@ export function ChatBubble({
           {deliveryStatus && (
             <Text style={[
               styles.sharedContentDeliveryStatus,
+              isSendingStatus(deliveryStatus) && styles.sharedContentDeliveryStatusSending,
               isSeenStatus(deliveryStatus) && styles.sharedContentDeliveryStatusSeen,
               isSupersededStatus(deliveryStatus) && styles.sharedContentDeliveryStatusSuperseded,
             ]}>
@@ -481,6 +488,11 @@ const useStyles = () =>
       textAlign: 'right',
       marginTop: t.spacing.sm,
       textTransform: 'capitalize',
+    },
+    // Blue "Sending" status (optimistic UI - message being sent)
+    sharedContentDeliveryStatusSending: {
+      color: '#3b82f6', // Blue-500 - indicates active/in-progress
+      fontStyle: 'italic',
     },
     // Green "Seen" status (dark background)
     sharedContentDeliveryStatusSeen: {

@@ -8,7 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '@/src/lib/api';
 import type { UnreadSessionCountResponse } from '@meet-without-fear/shared';
-import { sessionKeys } from './useSessions';
+import { sessionKeys } from './queryKeys';
 
 /**
  * Fetch unread session count from the API

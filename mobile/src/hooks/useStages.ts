@@ -14,7 +14,6 @@ import {
   InfiniteData,
 } from '@tanstack/react-query';
 import { get, post, ApiClientError } from '../lib/api';
-import { messageKeys } from './useMessages';
 import {
   // Response types
   SignCompactResponse,
@@ -25,6 +24,7 @@ import {
   GetProgressResponse,
   GateSatisfactionDTO,
   StageBlockedReason,
+  SessionStateResponse,
   // DTOs
   GetEmpathyDraftResponse,
   GetPartnerEmpathyResponse,
@@ -61,46 +61,16 @@ import {
   RespondToShareSuggestionResponse,
   ResubmitEmpathyResponse,
 } from '@meet-without-fear/shared';
-import { sessionKeys } from './useSessions';
 
-// ============================================================================
-// Query Keys
-// ============================================================================
+// Import query keys from centralized file to avoid circular dependencies
+import {
+  sessionKeys,
+  stageKeys,
+  messageKeys,
+} from './queryKeys';
 
-export const stageKeys = {
-  all: ['stages'] as const,
-  progress: (sessionId: string) => [...stageKeys.all, 'progress', sessionId] as const,
-
-  // Stage 0: Compact
-  compact: (sessionId: string) => [...stageKeys.all, 'compact', sessionId] as const,
-
-  // Gate status
-  gates: (sessionId: string, stage: number) =>
-    [...stageKeys.all, 'gates', sessionId, stage] as const,
-
-  // Stage 2: Empathy
-  empathyDraft: (sessionId: string) =>
-    [...stageKeys.all, 'empathy', 'draft', sessionId] as const,
-  partnerEmpathy: (sessionId: string) =>
-    [...stageKeys.all, 'empathy', 'partner', sessionId] as const,
-  empathyStatus: (sessionId: string) =>
-    [...stageKeys.all, 'empathy', 'status', sessionId] as const,
-  shareOffer: (sessionId: string) =>
-    [...stageKeys.all, 'empathy', 'share-offer', sessionId] as const,
-
-  // Stage 3: Needs
-  needs: (sessionId: string) => [...stageKeys.all, 'needs', sessionId] as const,
-  commonGround: (sessionId: string) =>
-    [...stageKeys.all, 'commonGround', sessionId] as const,
-
-  // Stage 4: Strategies
-  strategies: (sessionId: string) =>
-    [...stageKeys.all, 'strategies', sessionId] as const,
-  strategiesReveal: (sessionId: string) =>
-    [...stageKeys.all, 'strategies', 'reveal', sessionId] as const,
-  agreements: (sessionId: string) =>
-    [...stageKeys.all, 'agreements', sessionId] as const,
-};
+// Re-export for backwards compatibility
+export { stageKeys };
 
 // ============================================================================
 // Progress Hook
@@ -346,42 +316,83 @@ export function useCompactStatus(
 /**
  * Sign the curiosity compact.
  */
+/**
+ * Context stored by onMutate for rollback on error.
+ */
+interface SignCompactContext {
+  previousSessionState: SessionStateResponse | undefined;
+  optimisticTimestamp: string;
+}
+
+/**
+ * Sign the Curiosity Compact.
+ *
+ * Cache-First Architecture:
+ * - onMutate: Immediately updates compact.mySigned and compact.mySignedAt in cache
+ * - onSuccess: Invalidates queries to sync with server
+ * - onError: Rolls back to previous cache state
+ */
 export function useSignCompact(
   options?: Omit<
     UseMutationOptions<
       SignCompactResponse,
       ApiClientError,
-      { sessionId: string }
+      { sessionId: string },
+      SignCompactContext
     >,
     'mutationFn'
   >
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useMutation<
+    SignCompactResponse,
+    ApiClientError,
+    { sessionId: string },
+    SignCompactContext
+  >({
     mutationFn: async ({ sessionId }) => {
-      // Optimistically update the compact status BEFORE the request
-      // This hides the overlay immediately so users can't double-click
-      queryClient.setQueryData(
-        sessionKeys.state(sessionId),
-        (old: unknown) => {
-          if (!old || typeof old !== 'object') return old;
-          const state = old as Record<string, unknown>;
-          return {
-            ...state,
-            compact: {
-              ...(state.compact as Record<string, unknown>),
-              mySigned: true,
-              mySignedAt: new Date().toISOString(),
-            },
-          };
-        }
-      );
-
       return post<SignCompactResponse>(`/sessions/${sessionId}/compact/sign`, {
         agreed: true,
       });
     },
+
+    // =========================================================================
+    // OPTIMISTIC UPDATE: Update compact status immediately
+    // =========================================================================
+    onMutate: async ({ sessionId }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: sessionKeys.state(sessionId) });
+
+      // Snapshot previous state for rollback
+      const previousSessionState = queryClient.getQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId)
+      );
+
+      const optimisticTimestamp = new Date().toISOString();
+
+      // Optimistically update compact status
+      queryClient.setQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            compact: old.compact ? {
+              ...old.compact,
+              mySigned: true,
+              mySignedAt: optimisticTimestamp,
+            } : old.compact,
+          };
+        }
+      );
+
+      return { previousSessionState, optimisticTimestamp };
+    },
+
+    // =========================================================================
+    // SUCCESS: Invalidate queries to sync with server
+    // =========================================================================
     onSuccess: (_, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.compact(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
@@ -389,10 +400,16 @@ export function useSignCompact(
       // Also invalidate consolidated state so shouldShowCompactOverlay updates
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
     },
-    onError: (_, { sessionId }) => {
-      // On error, invalidate to refetch the true state
-      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+
+    // =========================================================================
+    // ERROR: Rollback to previous cache state
+    // =========================================================================
+    onError: (_error, { sessionId }, context) => {
+      if (context?.previousSessionState !== undefined) {
+        queryClient.setQueryData(sessionKeys.state(sessionId), context.previousSessionState);
+      }
     },
+
     ...options,
   });
 }
@@ -402,27 +419,90 @@ export function useSignCompact(
 // ============================================================================
 
 /**
+ * Context stored by onMutate for rollback on error.
+ */
+interface ConfirmFeelHeardContext {
+  previousSessionState: SessionStateResponse | undefined;
+  optimisticTimestamp: string;
+}
+
+/**
  * Confirm that user feels heard (gate for stage 1 completion).
+ *
+ * Cache-First Architecture:
+ * - onMutate: Immediately updates milestones.feelHeardConfirmedAt in cache
+ * - onSuccess: Invalidates queries to sync with server
+ * - onError: Rolls back to previous cache state
  */
 export function useConfirmFeelHeard(
   options?: Omit<
     UseMutationOptions<
       ConfirmFeelHeardResponse,
       ApiClientError,
-      { sessionId: string; confirmed: boolean; feedback?: string }
+      { sessionId: string; confirmed: boolean; feedback?: string },
+      ConfirmFeelHeardContext
     >,
     'mutationFn'
   >
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useMutation<
+    ConfirmFeelHeardResponse,
+    ApiClientError,
+    { sessionId: string; confirmed: boolean; feedback?: string },
+    ConfirmFeelHeardContext
+  >({
     mutationFn: async ({ sessionId, confirmed, feedback }) => {
       return post<ConfirmFeelHeardResponse>(`/sessions/${sessionId}/feel-heard`, {
         confirmed,
         feedback,
       });
     },
+
+    // =========================================================================
+    // OPTIMISTIC UPDATE: Update milestones immediately
+    // =========================================================================
+    onMutate: async ({ sessionId, confirmed }) => {
+      // Only optimistically update if confirming (not dismissing)
+      if (!confirmed) {
+        return { previousSessionState: undefined, optimisticTimestamp: '' };
+      }
+
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: sessionKeys.state(sessionId) });
+
+      // Snapshot previous state for rollback
+      const previousSessionState = queryClient.getQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId)
+      );
+
+      const optimisticTimestamp = new Date().toISOString();
+
+      // Optimistically update session state with feelHeardConfirmedAt
+      queryClient.setQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            progress: old.progress ? {
+              ...old.progress,
+              milestones: {
+                ...old.progress.milestones,
+                feelHeardConfirmedAt: optimisticTimestamp,
+              },
+            } : old.progress,
+          };
+        }
+      );
+
+      return { previousSessionState, optimisticTimestamp };
+    },
+
+    // =========================================================================
+    // SUCCESS: Invalidate queries to sync with server
+    // =========================================================================
     onSuccess: (data, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
@@ -444,6 +524,16 @@ export function useConfirmFeelHeard(
         });
       }
     },
+
+    // =========================================================================
+    // ERROR: Rollback to previous cache state
+    // =========================================================================
+    onError: (_error, { sessionId }, context) => {
+      if (context?.previousSessionState !== undefined) {
+        queryClient.setQueryData(sessionKeys.state(sessionId), context.previousSessionState);
+      }
+    },
+
     ...options,
   });
 }
@@ -507,13 +597,20 @@ export function useSaveEmpathyDraft(
  * Consent to share empathy attempt.
  * Pass draftContent for optimistic UI update (shows empathy message immediately).
  */
+/** Context for consent mutation rollback */
+interface ConsentToShareContext {
+  previousInfinite: InfiniteData<GetMessagesResponse> | undefined;
+  previousEmpathyStatus: EmpathyExchangeStatusResponse | undefined;
+  previousEmpathyDraft: GetEmpathyDraftResponse | undefined;
+}
+
 export function useConsentToShareEmpathy(
   options?: Omit<
     UseMutationOptions<
       ConsentToShareEmpathyResponse,
       ApiClientError,
       { sessionId: string; consent: boolean; draftContent?: string },
-      { previousList: GetMessagesResponse | undefined; previousInfinite: InfiniteData<GetMessagesResponse> | undefined }
+      ConsentToShareContext
     >,
     'mutationFn'
   >
@@ -524,7 +621,7 @@ export function useConsentToShareEmpathy(
     ConsentToShareEmpathyResponse,
     ApiClientError,
     { sessionId: string; consent: boolean; draftContent?: string },
-    { previousList: GetMessagesResponse | undefined; previousInfinite: InfiniteData<GetMessagesResponse> | undefined }
+    ConsentToShareContext
   >({
     mutationFn: async ({ sessionId, consent }) => {
       console.log('[useConsentToShareEmpathy] mutationFn called', { sessionId, consent });
@@ -540,14 +637,14 @@ export function useConsentToShareEmpathy(
         throw error;
       }
     },
-    onMutate: async ({ sessionId, draftContent }): Promise<{ previousList: GetMessagesResponse | undefined; previousInfinite: InfiniteData<GetMessagesResponse> | undefined }> => {
+    onMutate: async ({ sessionId, draftContent }): Promise<ConsentToShareContext> => {
       console.log('[useConsentToShareEmpathy] onMutate started');
 
       // Safety Check: Verify messageKeys exists (circular dependency protection)
       if (!messageKeys || !messageKeys.list || !messageKeys.infinite) {
         console.error('[useConsentToShareEmpathy] CRITICAL: messageKeys is undefined due to circular dependency');
         // Return empty context so mutation continues despite optimistic error
-        return { previousList: undefined, previousInfinite: undefined };
+        return { previousInfinite: undefined, previousEmpathyStatus: undefined, previousEmpathyDraft: undefined };
       }
 
       try {
@@ -556,6 +653,8 @@ export function useConsentToShareEmpathy(
 
         // Snapshot previous state for rollback
         const previousInfinite = queryClient.getQueryData<InfiniteData<GetMessagesResponse>>(messageKeys.infinite(sessionId));
+        const previousEmpathyStatus = queryClient.getQueryData<EmpathyExchangeStatusResponse>(stageKeys.empathyStatus(sessionId));
+        const previousEmpathyDraft = queryClient.getQueryData<GetEmpathyDraftResponse>(stageKeys.empathyDraft(sessionId));
 
         // Only add optimistic message if we have draft content
         if (draftContent) {
@@ -567,6 +666,8 @@ export function useConsentToShareEmpathy(
             content: draftContent,
             stage: 2,
             timestamp: new Date().toISOString(),
+            // Show "Sending..." while waiting for server confirmation
+            sharedContentDeliveryStatus: 'sending' as const,
           };
 
           // Update infinite query cache with proper immutability
@@ -625,15 +726,39 @@ export function useConsentToShareEmpathy(
           }
         );
 
-        return { previousList: undefined, previousInfinite };
+        // Optimistically set empathy status to show "analyzing" state
+        // This ensures the waiting banner shows immediately ("AI is analyzing...")
+        queryClient.setQueryData<EmpathyExchangeStatusResponse>(
+          stageKeys.empathyStatus(sessionId),
+          (old) => ({
+            myAttempt: old?.myAttempt ? {
+              ...old.myAttempt,
+              status: 'ANALYZING',
+            } : null,
+            partnerAttempt: old?.partnerAttempt ?? null,
+            partnerCompletedStage1: old?.partnerCompletedStage1 ?? false,
+            analyzing: true,  // This triggers 'reconciler-analyzing' waiting status
+            awaitingSharing: false,
+            hasNewSharedContext: false,
+            sharedContext: old?.sharedContext ?? null,
+            refinementHint: old?.refinementHint ?? null,
+            readyForStage3: false,
+            messageCountSinceSharedContext: old?.messageCountSinceSharedContext ?? 0,
+            sharedContentDeliveryStatus: old?.sharedContentDeliveryStatus ?? null,
+          })
+        );
+
+        console.log('[useConsentToShareEmpathy] Optimistic updates applied to empathyDraft and empathyStatus');
+
+        return { previousInfinite, previousEmpathyStatus, previousEmpathyDraft };
       } catch (err) {
         console.error('[useConsentToShareEmpathy] Error in onMutate:', err);
         // Return empty context so mutation continues despite optimistic error
         // This ensures the network request still fires even if optimistic update fails
-        return { previousList: undefined, previousInfinite: undefined };
+        return { previousInfinite: undefined, previousEmpathyStatus: undefined, previousEmpathyDraft: undefined };
       }
     },
-    onSuccess: (data, { sessionId, draftContent }) => {
+    onSuccess: (data, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
@@ -649,6 +774,8 @@ export function useConsentToShareEmpathy(
         content: string;
         stage: number;
         timestamp: string;
+        sharedContentDeliveryStatus?: 'pending';
+        skipTypewriter?: boolean;
       }> = [];
       if (data.empathyMessage) {
         messagesToAdd.push({
@@ -659,6 +786,10 @@ export function useConsentToShareEmpathy(
           content: data.empathyMessage.content,
           stage: data.empathyMessage.stage,
           timestamp: data.empathyMessage.timestamp,
+          // Include pending delivery status until empathyStatusData refetch completes
+          sharedContentDeliveryStatus: 'pending',
+          // Skip animation since this replaces the optimistic message (prevents flicker)
+          skipTypewriter: true,
         });
       }
       if (data.transitionMessage) {
@@ -715,31 +846,28 @@ export function useConsentToShareEmpathy(
 
       // Invalidate consolidated session state for UI updates
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-      // Invalidate ALL messages queries for this session
-      queryClient.invalidateQueries({
-        predicate: (query) => {
-          const key = query.queryKey;
-          return (
-            Array.isArray(key) &&
-            key[0] === 'messages' &&
-            (key[1] === 'list' || key[1] === 'infinite') &&
-            key[2] === sessionId
-          );
-        },
-      });
+      // Note: We don't invalidate message queries here because:
+      // 1. We already added the real messages to the cache above
+      // 2. A refetch would overwrite skipTypewriter flag, causing re-animation flicker
+      // If we need to sync with server, a separate polling mechanism can be used
     },
     onError: (_err, { sessionId }, context) => {
       // Rollback to previous state on error
       if (context?.previousInfinite) {
         queryClient.setQueryData(messageKeys.infinite(sessionId), context.previousInfinite);
       }
-      // Restore draft preview card
+      if (context?.previousEmpathyStatus) {
+        queryClient.setQueryData(stageKeys.empathyStatus(sessionId), context.previousEmpathyStatus);
+      }
+      if (context?.previousEmpathyDraft) {
+        queryClient.setQueryData(stageKeys.empathyDraft(sessionId), context.previousEmpathyDraft);
+      }
+      // Also invalidate to refetch fresh data
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
     },
-    onSettled: (_data, _error, { sessionId }) => {
-      // Refetch to ensure server timestamp/ID are correct
-      queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
-    },
+    // Note: Removed onSettled message refetch to prevent overwriting skipTypewriter flag
+    // The real messages are added in onSuccess with correct IDs from the server response
     ...options,
   });
 }
@@ -846,6 +974,7 @@ export function useResubmitEmpathy(
               content: string;
               stage: number;
               timestamp: string;
+              sharedContentDeliveryStatus: 'sending';
             } = {
               id: `optimistic-resubmit-${Date.now()}`,
               sessionId,
@@ -854,6 +983,8 @@ export function useResubmitEmpathy(
               content,
               stage: 2,
               timestamp: new Date().toISOString(),
+              // Show "Sending..." while waiting for server confirmation
+              sharedContentDeliveryStatus: 'sending',
             };
 
             // Add to the last page
@@ -883,6 +1014,8 @@ export function useResubmitEmpathy(
         content: string;
         stage: number;
         timestamp: string;
+        sharedContentDeliveryStatus: 'pending';
+        skipTypewriter: boolean;
       } = {
         id: data.empathyMessage.id,
         sessionId,
@@ -891,6 +1024,10 @@ export function useResubmitEmpathy(
         content: data.empathyMessage.content,
         stage: data.empathyMessage.stage,
         timestamp: data.empathyMessage.timestamp,
+        // Include pending delivery status until empathyStatusData refetch completes
+        sharedContentDeliveryStatus: 'pending',
+        // Skip animation since this replaces the optimistic message (prevents flicker)
+        skipTypewriter: true,
       };
 
       // Update the message with the server response

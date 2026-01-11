@@ -92,7 +92,6 @@ describe('Above Input Panel Priority', () => {
       hasInvitationMessage: true,
       invitationConfirmed: false,
       isConfirmingInvitation: false,
-      localInvitationConfirmed: false,
     });
 
     const result = computeChatUIState(inputs);

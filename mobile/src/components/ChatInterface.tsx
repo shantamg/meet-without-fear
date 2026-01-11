@@ -67,7 +67,22 @@ interface ChatInterfaceProps {
   messages: ChatMessage[];
   indicators?: ChatIndicatorItem[];
   onSendMessage: (content: string) => void;
+  /**
+   * Legacy loading prop - controls typing indicator AND disables input.
+   * 
+   * For Cache-First Architecture, prefer using the derived "waiting for AI" state:
+   * - The typing indicator is shown when the last message is from USER (derived from messages)
+   * - This prop can still be used for non-message loading states (e.g., fetching initial message)
+   * 
+   * @deprecated Prefer letting the component derive typing indicator from last message role
+   */
   isLoading?: boolean;
+  /**
+   * Whether the input should be disabled (e.g., during API call).
+   * This is separate from isLoading to allow showing typing indicator
+   * while input is still enabled.
+   */
+  isInputDisabled?: boolean;
   disabled?: boolean;
   /** Hide the input area entirely (e.g., when waiting for partner) */
   hideInput?: boolean;
@@ -111,6 +126,7 @@ export function ChatInterface({
   indicators = [],
   onSendMessage,
   isLoading = false,
+  isInputDisabled,
   disabled = false,
   hideInput = false,
   emptyStateTitle = DEFAULT_EMPTY_TITLE,
@@ -134,6 +150,26 @@ export function ChatInterface({
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
+
+  // ---------------------------------------------------------------------------
+  // Cache-First Architecture: Derive "waiting for AI" from last message role
+  // ---------------------------------------------------------------------------
+  // If the last message is from USER, we're waiting for AI response → show typing indicator
+  // If the last message is from AI/SYSTEM, response has arrived → hide typing indicator
+  // This eliminates the need for a separate waitingForAIResponse boolean state
+  const isWaitingForAI = useMemo(() => {
+    if (messages.length === 0) return false;
+    // Messages are sorted oldest-to-newest in the array (but displayed inverted)
+    // So the last element in the array is the newest message
+    const lastMessage = messages[messages.length - 1];
+    return lastMessage?.role === MessageRole.USER;
+  }, [messages]);
+
+  // Combined loading state: explicit isLoading OR derived from last message
+  // This allows both:
+  // 1. Legacy behavior (passing isLoading for initial fetch, confirmation, etc.)
+  // 2. Cache-First behavior (deriving from last message role)
+  const showTypingIndicator = isLoading || isWaitingForAI;
 
   // Track the ID of the message currently being animated via typewriter
   const [animatingMessageId, setAnimatingMessageId] = useState<string | null>(null);
@@ -476,16 +512,16 @@ export function ChatInterface({
   const renderHeader = useCallback(() => {
     return (
       <View style={styles.typingIndicatorContainer}>
-        {isLoading && <TypingIndicator />}
+        {showTypingIndicator && <TypingIndicator />}
       </View>
     );
-  }, [isLoading, styles]);
+  }, [showTypingIndicator, styles]);
 
   // Memoize the empty state element (not a callback!) to prevent remounts
   // NOTE: styles are excluded from deps because useStyles() creates new refs each render
   // but the actual style values are stable (theme-based)
   const emptyStateElement = useMemo(() => {
-    if (isLoading) return null;
+    if (showTypingIndicator) return null;
     // Use custom empty state if provided (e.g., onboarding compact)
     // Custom empty state starts at the top (flex-start) instead of centered
     if (customEmptyState) {
@@ -504,7 +540,7 @@ export function ChatInterface({
       </View>
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, emptyStateTitle, emptyStateMessage, customEmptyState]);
+  }, [showTypingIndicator, emptyStateTitle, emptyStateMessage, customEmptyState]);
 
   // In inverted list: Footer is visually at TOP (Loading Spinner)
   const renderFooter = useCallback(() => {
@@ -626,7 +662,7 @@ export function ChatInterface({
         )}
         {renderAboveInput?.()}
         {!hideInput && (
-          <ChatInput onSend={onSendMessage} disabled={disabled || isLoading} />
+          <ChatInput onSend={onSendMessage} disabled={disabled || isInputDisabled || isLoading} />
         )}
       </View>
     </KeyboardAvoidingView>

@@ -30,27 +30,16 @@ import {
   MessageRole,
   SessionStateResponse,
 } from '@meet-without-fear/shared';
-import { stageKeys } from './useStages';
-import { messageKeys } from './useMessages';
 
-// ============================================================================
-// Query Keys
-// ============================================================================
+// Import query keys from centralized file to avoid circular dependencies
+import {
+  sessionKeys,
+  stageKeys,
+  messageKeys,
+} from './queryKeys';
 
-export const sessionKeys = {
-  all: ['sessions'] as const,
-  lists: () => [...sessionKeys.all, 'list'] as const,
-  list: (filters: { status?: SessionStatus }) =>
-    [...sessionKeys.lists(), filters] as const,
-  details: () => [...sessionKeys.all, 'detail'] as const,
-  detail: (id: string) => [...sessionKeys.details(), id] as const,
-  state: (id: string) => [...sessionKeys.all, id, 'state'] as const,
-  unreadCount: () => [...sessionKeys.all, 'unread-count'] as const,
-  invitations: () => ['invitations'] as const,
-  invitation: (id: string) => [...sessionKeys.invitations(), id] as const,
-  sessionInvitation: (sessionId: string) =>
-    [...sessionKeys.all, sessionId, 'invitation'] as const,
-};
+// Re-export for backwards compatibility
+export { sessionKeys };
 
 // ============================================================================
 // Types
@@ -434,32 +423,119 @@ export function useUpdateInvitationMessage(
 }
 
 /**
+ * Context stored by onMutate for rollback on error.
+ */
+interface ConfirmInvitationContext {
+  previousSessionState: SessionStateResponse | undefined;
+  previousInvitation: { invitation?: InvitationDTO } | undefined;
+  optimisticTimestamp: string;
+}
+
+/**
  * Confirm the invitation message for a session.
+ *
+ * Cache-First Architecture:
+ * - onMutate: Immediately updates invitation.messageConfirmedAt in cache
+ * - onSuccess: Replaces optimistic data with real server response
+ * - onError: Rolls back to previous cache state
+ *
+ * This ensures the "Invitation Sent" indicator appears immediately
+ * without needing local state like isConfirmingInvitation or optimisticConfirmTimestamp.
  */
 export function useConfirmInvitationMessage(
   options?: Omit<
     UseMutationOptions<
       {
         confirmed: boolean;
-        invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean };
+        invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean; messageConfirmedAt?: string };
+        advancedToStage?: number;
+        transitionMessage?: { id: string; content: string; timestamp: string };
       },
       ApiClientError,
-      { sessionId: string; message?: string }
+      { sessionId: string; message?: string },
+      ConfirmInvitationContext
     >,
     'mutationFn'
   >
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useMutation<
+    {
+      confirmed: boolean;
+      invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean; messageConfirmedAt?: string };
+      advancedToStage?: number;
+      transitionMessage?: { id: string; content: string; timestamp: string };
+    },
+    ApiClientError,
+    { sessionId: string; message?: string },
+    ConfirmInvitationContext
+  >({
     mutationFn: async ({ sessionId, message }) => {
       return post<{
         confirmed: boolean;
-        invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean };
+        invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean; messageConfirmedAt?: string };
         advancedToStage?: number;
         transitionMessage?: { id: string; content: string; timestamp: string };
       }>(`/sessions/${sessionId}/invitation/confirm`, { message });
     },
+
+    // =========================================================================
+    // OPTIMISTIC UPDATE: Update invitation cache immediately
+    // =========================================================================
+    onMutate: async ({ sessionId }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: sessionKeys.state(sessionId) });
+      await queryClient.cancelQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
+
+      // Snapshot previous values for rollback
+      const previousSessionState = queryClient.getQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId)
+      );
+      const previousInvitation = queryClient.getQueryData<{ invitation?: InvitationDTO }>(
+        sessionKeys.sessionInvitation(sessionId)
+      );
+
+      const optimisticTimestamp = new Date().toISOString();
+
+      // Optimistically update session state (consolidated state used by useUnifiedSession)
+      queryClient.setQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            invitation: old.invitation ? {
+              ...old.invitation,
+              messageConfirmed: true,
+              messageConfirmedAt: optimisticTimestamp,
+            } : old.invitation,
+          };
+        }
+      );
+
+      // Optimistically update invitation query
+      queryClient.setQueryData<{ invitation?: InvitationDTO }>(
+        sessionKeys.sessionInvitation(sessionId),
+        (old) => {
+          if (!old?.invitation) return old;
+          return {
+            ...old,
+            invitation: {
+              ...old.invitation,
+              messageConfirmed: true,
+              messageConfirmedAt: optimisticTimestamp,
+            },
+          };
+        }
+      );
+
+      return { previousSessionState, previousInvitation, optimisticTimestamp };
+    },
+
+    // =========================================================================
+    // SUCCESS: Replace optimistic data with real response
+    // =========================================================================
     onSuccess: (data, { sessionId }) => {
       queryClient.invalidateQueries({
         queryKey: sessionKeys.sessionInvitation(sessionId),
@@ -540,6 +616,21 @@ export function useConfirmInvitationMessage(
         );
       }
     },
+
+    // =========================================================================
+    // ERROR: Rollback to previous cache state
+    // =========================================================================
+    onError: (_error, { sessionId }, context) => {
+      if (context) {
+        if (context.previousSessionState !== undefined) {
+          queryClient.setQueryData(sessionKeys.state(sessionId), context.previousSessionState);
+        }
+        if (context.previousInvitation !== undefined) {
+          queryClient.setQueryData(sessionKeys.sessionInvitation(sessionId), context.previousInvitation);
+        }
+      }
+    },
+
     ...options,
   });
 }

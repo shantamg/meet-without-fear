@@ -58,10 +58,11 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   myProgress: { stage: Stage } | undefined;
 
   // Invitation phase
+  // Cache-First: invitationConfirmed is derived from cache (invitation.messageConfirmed)
+  // Optimistic update in useConfirmInvitationMessage.onMutate ensures immediate feedback
   hasInvitationMessage: boolean;
   invitationConfirmed: boolean;
   isConfirmingInvitation: boolean;
-  localInvitationConfirmed: boolean;
 
   // Stage 1: Feel heard
   showFeelHeardConfirmation: boolean;
@@ -166,6 +167,7 @@ function computeIsInOnboardingUnsigned(inputs: ChatUIStateInputs): boolean {
 
 /**
  * Determines if invitation panel should show.
+ * Cache-First: invitationConfirmed is derived from cache (set optimistically in onMutate)
  */
 function computeShowInvitationPanel(inputs: ChatUIStateInputs): boolean {
   const {
@@ -173,15 +175,13 @@ function computeShowInvitationPanel(inputs: ChatUIStateInputs): boolean {
     hasInvitationMessage,
     invitationConfirmed,
     isConfirmingInvitation,
-    localInvitationConfirmed,
   } = inputs;
 
   return !!(
     isInviter &&
     hasInvitationMessage &&
     !invitationConfirmed &&
-    !isConfirmingInvitation &&
-    !localInvitationConfirmed
+    !isConfirmingInvitation
   );
 }
 
@@ -500,7 +500,6 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     hasInvitationMessage: false,
     invitationConfirmed: false,
     isConfirmingInvitation: false,
-    localInvitationConfirmed: false,
     showFeelHeardConfirmation: false,
     feelHeardConfirmedAt: undefined,
     isConfirmingFeelHeard: false,

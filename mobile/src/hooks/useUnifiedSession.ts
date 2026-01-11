@@ -18,7 +18,6 @@ import {
 import {
   useInfiniteMessages,
   useSendMessage,
-  useOptimisticMessage,
   useRecordEmotion,
   useFetchInitialMessage,
 } from './useMessages';
@@ -231,9 +230,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Track AI-detected memory suggestion
   const [memorySuggestion, setMemorySuggestion] = useState<MemorySuggestion | null>(null);
 
-  // Track local invitation confirmation (survives component remounts)
-  // This is set when user clicks "I've sent it" and prevents panel from reappearing
-  const [localInvitationConfirmed, setLocalInvitationConfirmed] = useState(false);
+  // NOTE: localInvitationConfirmed state was removed as part of Cache-First Architecture.
+  // The cache now handles optimistic updates via useConfirmInvitationMessage.onMutate.
 
   // -------------------------------------------------------------------------
   // Consolidated Session State (reduces initial requests from ~5 to 1)
@@ -294,7 +292,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { mutate: recordEmotion } = useRecordEmotion();
   const { mutate: confirmHeard, isPending: isConfirmingFeelHeard } = useConfirmFeelHeard();
   const { mutate: signCompact, isPending: isSigningCompact } = useSignCompact();
-  const { mutate: confirmInvitationMessage } = useConfirmInvitationMessage();
+  const { mutate: confirmInvitationMessage, isPending: isConfirmingInvitation } = useConfirmInvitationMessage();
   const { mutate: advanceStage } = useAdvanceStage();
   const { mutate: saveDraft, mutateAsync: saveDraftAsync } = useSaveEmpathyDraft();
   const { mutate: consentToShare, isPending: isSharingEmpathy } = useConsentToShareEmpathy({
@@ -318,7 +316,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { mutate: confirmAgreement } = useConfirmAgreement();
   useCreateAgreement(); // Available if needed for hybrid strategies
   const { mutate: resolveSession } = useResolveSession();
-  const { addOptimisticMessage, removeOptimisticMessage } = useOptimisticMessage();
 
   const handleRespondToShareOffer = useCallback(
     (action: 'accept' | 'decline' | 'refine', refinedContent?: string) => {
@@ -812,15 +809,10 @@ export function useUnifiedSession(sessionId: string | undefined) {
       // Reset activity timer
       lastActivityTime.current = Date.now();
 
-      // Add optimistic message
-      const optimisticId = addOptimisticMessage(sessionId, {
-        content,
-        role: MessageRole.USER,
-        stage: currentStage,
-      });
-
+      // Send message with currentStage for optimistic update placement
+      // The useSendMessage hook handles optimistic updates via onMutate
       sendMessage(
-        { sessionId, content },
+        { sessionId, content, currentStage },
         {
           onSuccess: (data) => {
             // Update feel-heard check recommendation from AI
@@ -852,8 +844,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
             }
           },
           onError: (error) => {
-            removeOptimisticMessage(sessionId, optimisticId);
             // Show error message to user
+            // Note: Rollback is handled by useSendMessage's onError via context
             const message = error instanceof ApiClientError
               ? error.message
               : 'Failed to send message. Please try again.';
@@ -867,9 +859,13 @@ export function useUnifiedSession(sessionId: string | undefined) {
       currentStage,
       sendMessage,
       isSending,
-      addOptimisticMessage,
-      removeOptimisticMessage,
       showError,
+      saveDraft,
+      setAiRecommendsFeelHeardCheck,
+      setAiRecommendsReadyToShare,
+      setLiveInvitationMessage,
+      setLiveProposedEmpathyStatement,
+      setMemorySuggestion,
     ]
   );
 
@@ -1197,6 +1193,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     isSending,
     isSigningCompact,
     isConfirmingFeelHeard,
+    isConfirmingInvitation,
     showFeelHeardConfirmation,
 
     // Unread tracking - for "New messages" separator in chat
@@ -1230,8 +1227,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
     invitationMessage,
     invitationConfirmed,
     invitation,
-    localInvitationConfirmed,
-    setLocalInvitationConfirmed,
     setLiveInvitationMessage,
 
     // Stage-specific data

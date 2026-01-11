@@ -43,8 +43,9 @@ import { useChatUIState } from '../hooks/useChatUIState';
 import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
 import { useRealtime, useUserSessionUpdates } from '../hooks/useRealtime';
-import { stageKeys } from '../hooks/useStages';
-import { messageKeys, useAIMessageHandler } from '../hooks/useMessages';
+import { stageKeys, messageKeys } from '../hooks/queryKeys';
+import { useAIMessageHandler } from '../hooks/useMessages';
+import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { createStyles } from '../theme/styled';
 import { WaitingBanner } from '../components/WaitingBanner';
 import {
@@ -129,6 +130,7 @@ export function UnifiedSessionScreen({
     isSending,
     isSigningCompact,
     isConfirmingFeelHeard,
+    isConfirmingInvitation,
     fetchMoreMessages,
     hasMoreMessages,
     isFetchingMoreMessages,
@@ -148,8 +150,6 @@ export function UnifiedSessionScreen({
     invitationMessage,
     invitationConfirmed,
     invitation,
-    localInvitationConfirmed,
-    setLocalInvitationConfirmed,
     setLiveInvitationMessage,
 
     // Stage-specific data
@@ -282,11 +282,12 @@ export function UnifiedSessionScreen({
       }
     },
     // Fire-and-forget pattern: AI responses arrive via Ably
+    // Cache-First: Ghost dots are now derived from last message role in ChatInterface
+    // When AI message is added to cache, last message becomes AI → dots disappear automatically
     onAIResponse: (payload) => {
       console.log('[UnifiedSessionScreen] AI response received via Ably:', payload.message?.id);
-      // Clear waiting state - AI response has arrived, hide ghost dots
-      setWaitingForAIResponse(false);
-      // Add AI message to the cache
+      // Add AI message to the cache - this automatically hides ghost dots
+      // because ChatInterface derives showTypingIndicator from last message role
       addAIMessage(sessionId, payload.message);
       // Handle additional metadata from payload (same as HTTP onSuccess handler)
       // NOTE: We set state immediately here, but UI elements check !isTypewriterAnimating
@@ -317,8 +318,7 @@ export function UnifiedSessionScreen({
     },
     onAIError: (payload) => {
       console.error('[UnifiedSessionScreen] AI error received via Ably:', payload.error);
-      // Clear waiting state - even on error, stop showing ghost dots
-      setWaitingForAIResponse(false);
+      // Note: Ghost dots hide automatically because optimistic message is rolled back on error
       handleAIMessageError(sessionId, payload.userMessageId, payload.error, payload.canRetry);
       // TODO: Show error toast or UI indicator
     },
@@ -354,64 +354,13 @@ export function UnifiedSessionScreen({
   }, [commonGround?.length, sessionId]);
 
   // Wrapped sendMessage with tracking
+  // Cache-First Architecture: Ghost dots are now derived from last message role
+  // When user sends a message, it's added to cache optimistically → last message is USER → dots show
+  // When AI response arrives (via Ably), it's added to cache → last message is AI → dots hide
   const sendMessageWithTracking = useCallback((message: string) => {
     trackMessageSent(sessionId, message.length);
-    // Fire-and-forget: Set waiting state for ghost dots until AI response arrives via Ably
-    setWaitingForAIResponse(true);
     sendMessage(message);
   }, [sessionId, sendMessage]);
-
-  // -------------------------------------------------------------------------
-  // Fire-and-Forget: Track waiting for AI response via Ably
-  // -------------------------------------------------------------------------
-  // This keeps the ghost dots showing until AI response arrives
-  const [waitingForAIResponse, setWaitingForAIResponse] = useState(false);
-  const waitingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Auto-clear waiting state after 30 seconds as a fallback
-  // This prevents dots from getting stuck if Ably message never arrives
-  useEffect(() => {
-    if (waitingForAIResponse) {
-      // Clear any existing timeout
-      if (waitingTimeoutRef.current) {
-        clearTimeout(waitingTimeoutRef.current);
-      }
-      // Set timeout to auto-clear waiting state and attempt reconnect
-      waitingTimeoutRef.current = setTimeout(() => {
-        console.warn('[UnifiedSessionScreen] AI response timeout - clearing waiting state after 30s');
-        setWaitingForAIResponse(false);
-        // Trigger reconnect in case Ably connection is broken (common during live reload)
-        console.log('[UnifiedSessionScreen] Attempting realtime reconnect after timeout');
-        reconnectRealtime();
-      }, 30000);
-    } else {
-      // Clear timeout when not waiting
-      if (waitingTimeoutRef.current) {
-        clearTimeout(waitingTimeoutRef.current);
-        waitingTimeoutRef.current = null;
-      }
-    }
-
-    return () => {
-      if (waitingTimeoutRef.current) {
-        clearTimeout(waitingTimeoutRef.current);
-      }
-    };
-  }, [waitingForAIResponse, reconnectRealtime]);
-
-  // Watch messages - if we're waiting and last message is AI, clear waiting state
-  // This handles cases where AI response arrived but Ably callback didn't fire
-  // (e.g., app was in background and data was fetched via React Query)
-  useEffect(() => {
-    if (!waitingForAIResponse || messages.length === 0) return;
-
-    const lastMessage = messages[messages.length - 1];
-    // If the last message is from AI (not USER or SYSTEM), the response has arrived
-    if (lastMessage && lastMessage.role !== MessageRole.USER && lastMessage.role !== MessageRole.SYSTEM) {
-      console.log('[UnifiedSessionScreen] AI response detected in messages - clearing waiting state');
-      setWaitingForAIResponse(false);
-    }
-  }, [waitingForAIResponse, messages]);
 
   // -------------------------------------------------------------------------
   // Local State for Refine Invitation Drawer
@@ -426,11 +375,12 @@ export function UnifiedSessionScreen({
   });
 
   // Update local state if data changes (e.g. after fetch completes)
+  // Cache-First: invitationConfirmed is derived from cache (set optimistically in onMutate)
   useEffect(() => {
-    if (session?.status === SessionStatus.INVITED && invitationMessage && !invitationConfirmed) {
+    if (session?.status === SessionStatus.INVITED && invitationMessage && !invitationConfirmed && !isConfirmingInvitation) {
       setIsRefiningInvitation(true);
     }
-  }, [session?.status, invitationMessage, invitationConfirmed]);
+  }, [session?.status, invitationMessage, invitationConfirmed, isConfirmingInvitation]);
 
   // -------------------------------------------------------------------------
   // Local State for View Empathy Statement Drawer (Stage 2)
@@ -448,6 +398,11 @@ export function UnifiedSessionScreen({
   // This prevents the "Help X understand" button from flashing during API call
   const [hasRespondedToShareOfferLocal, setHasRespondedToShareOfferLocal] = useState(false);
 
+  // Local latch for invitation confirmation - once user confirms, hide panel immediately
+  // This prevents the invitation panel from flashing when AI response triggers a cache refetch
+  // that returns stale data (before the confirm mutation completed on server)
+  const [hasConfirmedInvitationLocal, setHasConfirmedInvitationLocal] = useState(false);
+
   // -------------------------------------------------------------------------
   // Local State for Session Entry Mood Check
   // -------------------------------------------------------------------------
@@ -456,19 +411,14 @@ export function UnifiedSessionScreen({
   const [hasCompletedMoodCheck, setHasCompletedMoodCheck] = useState(false);
 
   // -------------------------------------------------------------------------
-  // Track Invitation Confirmation for Indicator
+  // Track Indicator Timestamps
   // -------------------------------------------------------------------------
-
-  // Track when the user taps "I've sent it" - for optimistic UI during API call
-  const [isConfirmingInvitation, setIsConfirmingInvitation] = useState(false);
-  // Store optimistic timestamp for when confirmation is in progress
-  const [optimisticConfirmTimestamp, setOptimisticConfirmTimestamp] = useState<string | null>(null);
-
-  // Store optimistic timestamp for feel-heard confirmation
-  const [optimisticFeelHeardTimestamp, setOptimisticFeelHeardTimestamp] = useState<string | null>(null);
-
-  // Store optimistic timestamp for compact signing (for "Compact Signed" indicator)
-  const [optimisticCompactSignedTimestamp, setOptimisticCompactSignedTimestamp] = useState<string | null>(null);
+  // Cache-First Architecture: All optimistic timestamps are now handled by React Query cache
+  // via onMutate in the mutation hooks (useConfirmInvitationMessage, useSignCompact,
+  // useConfirmFeelHeard). The indicators are derived purely from cache data:
+  // - invitation.messageConfirmedAt (set by useConfirmInvitationMessage.onMutate)
+  // - compact.mySignedAt (set by useSignCompact.onMutate)
+  // - milestones.feelHeardConfirmedAt (set by useConfirmFeelHeard.onMutate)
 
   // Track if compact was just signed in this session (for typewriter animation)
   // This is set when user signs compact and reset after first message animates
@@ -486,6 +436,10 @@ export function UnifiedSessionScreen({
   // Pure derivation of all UI visibility flags from session state.
   // This replaces scattered useMemo computations with a centralized,
   // testable pure function.
+  //
+  // Cache-First Architecture: Panel visibility is derived purely from cache data.
+  // The optimistic updates in mutation hooks (onMutate) ensure panels hide immediately.
+  // No latch refs needed - if API fails, onError rolls back the cache and panel reappears.
   const isInviter = invitation?.isInviter ?? true;
   const {
     shouldShowWaitingBanner,
@@ -510,9 +464,13 @@ export function UnifiedSessionScreen({
     partnerProgress,
     compactMySigned: compactData?.mySigned,
     hasInvitationMessage: !!invitationMessage,
-    invitationConfirmed: invitationConfirmed || localInvitationConfirmed,
+    // Cache-First: invitationConfirmed is derived from cache (invitation.messageConfirmed)
+    // The optimistic update in useConfirmInvitationMessage.onMutate sets this immediately.
+    // Local latch (hasConfirmedInvitationLocal) prevents panel flash when background refetch
+    // returns stale data during race conditions with AI response events.
+    invitationConfirmed: invitationConfirmed || isConfirmingInvitation || hasConfirmedInvitationLocal,
+    // isConfirmingInvitation: mutation is in flight (panel hides during API call)
     isConfirmingInvitation,
-    localInvitationConfirmed,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt: milestones?.feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -549,22 +507,16 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // Once feel-heard is confirmed, keep showing the indicator even during re-renders
   // This prevents the indicator from flashing away when new messages arrive
-  // FIX: Initialize the ref based on optimistic state too, not just milestones.
-  // This ensures that the moment we click the button, this ref becomes true.
+  // Cache-First: milestones.feelHeardConfirmedAt is set optimistically by useConfirmFeelHeard.onMutate
   const hasEverConfirmedFeelHeard = useRef(false);
 
-  // 1. Latch if we have server data
+  // Latch if we have cache data (optimistic or server-confirmed)
   if (milestones?.feelHeardConfirmedAt && !hasEverConfirmedFeelHeard.current) {
     hasEverConfirmedFeelHeard.current = true;
   }
 
-  // 2. Latch if we are currently confirming (optimistic start)
+  // Latch if mutation is in flight (backup for immediate feedback)
   if (isConfirmingFeelHeard && !hasEverConfirmedFeelHeard.current) {
-    hasEverConfirmedFeelHeard.current = true;
-  }
-
-  // 3. Latch if we have an optimistic timestamp set
-  if (optimisticFeelHeardTimestamp && !hasEverConfirmedFeelHeard.current) {
     hasEverConfirmedFeelHeard.current = true;
   }
 
@@ -605,21 +557,42 @@ export function UnifiedSessionScreen({
   // Whether user is in "refining" mode (received shared context from partner)
   const isRefiningEmpathy = !!empathyStatusData?.hasNewSharedContext;
 
-  // Animate invitation panel when shouldShowInvitationPanel changes
+  // -------------------------------------------------------------------------
+  // Animation Target Flags - Used ONLY for animation target values
+  // -------------------------------------------------------------------------
+  // Stable Mounting Pattern:
+  // - Panels are MOUNTED based on data readiness (shouldShow* flags)
+  // - Panels ANIMATE based on data + typewriter guard (readyToShow* flags)
+  // - This decouples mount lifecycle from visibility, preventing flicker
+  //
+  // When typewriter is animating:
+  //   - Panel is mounted (opacity: 0, maxHeight: 0, pointerEvents: none)
+  //   - User can't see or interact with it
+  // When typewriter finishes:
+  //   - Animation target becomes 1, panel smoothly animates in
+  //   - Panel was already mounted, so no mount/unmount cycle = no flicker
+  const readyToShowInvitation = shouldShowInvitationPanel && !isTypewriterAnimating;
+  const readyToShowEmpathy = shouldShowEmpathyPanel && !isTypewriterAnimating;
+  const readyToShowFeelHeard = shouldShowFeelHeard && !isTypewriterAnimating;
+  const readyToShowShareSuggestion = shouldShowShareSuggestion && !isTypewriterAnimating;
+  const readyToShowAccuracyFeedback = shouldShowAccuracyFeedback && !isTypewriterAnimating;
+  const readyToShowWaitingBanner = shouldShowWaitingBanner && !isTypewriterAnimating;
+
+  // Animate invitation panel - synced with mount condition
   useEffect(() => {
     Animated.spring(invitationPanelAnim, {
-      toValue: shouldShowInvitationPanel ? 1 : 0,
+      toValue: readyToShowInvitation ? 1 : 0,
       useNativeDriver: false,
       tension: 40,
       friction: 9,
     }).start();
-  }, [shouldShowInvitationPanel, invitationPanelAnim]);
+  }, [readyToShowInvitation, invitationPanelAnim]);
 
-  // Animate empathy panel - close when sharing, otherwise follow shouldShowEmpathyPanel
+  // Animate empathy panel - close when sharing, otherwise follow readyToShowEmpathy
   // This prevents layout jumps by animating closed instead of unmounting
   useEffect(() => {
     // If we are sharing, force it to close (0). Otherwise follow the logic (1 or 0).
-    const targetValue = isSharingEmpathy ? 0 : (shouldShowEmpathyPanel ? 1 : 0);
+    const targetValue = isSharingEmpathy ? 0 : (readyToShowEmpathy ? 1 : 0);
 
     Animated.spring(empathyPanelAnim, {
       toValue: targetValue,
@@ -627,7 +600,7 @@ export function UnifiedSessionScreen({
       tension: 40,
       friction: 9,
     }).start();
-  }, [shouldShowEmpathyPanel, isSharingEmpathy, empathyPanelAnim]);
+  }, [readyToShowEmpathy, isSharingEmpathy, empathyPanelAnim]);
 
   // Reset empathy latch when entering refining mode (received shared context from partner)
   // This allows the panel to show again so user can share their revised empathy
@@ -637,156 +610,87 @@ export function UnifiedSessionScreen({
     }
   }, [isRefiningEmpathy]);
 
-  // Animate feel heard panel
+  // Animate feel heard panel - synced with mount condition
   useEffect(() => {
     Animated.spring(feelHeardAnim, {
-      toValue: shouldShowFeelHeard ? 1 : 0,
+      toValue: readyToShowFeelHeard ? 1 : 0,
       useNativeDriver: false,
       tension: 40,
       friction: 9,
     }).start();
-  }, [shouldShowFeelHeard, feelHeardAnim]);
+  }, [readyToShowFeelHeard, feelHeardAnim]);
 
-  // Animate share suggestion panel
+  // Animate share suggestion panel - synced with mount condition
   useEffect(() => {
     Animated.spring(shareSuggestionAnim, {
-      toValue: shouldShowShareSuggestion ? 1 : 0,
+      toValue: readyToShowShareSuggestion ? 1 : 0,
       useNativeDriver: false,
       tension: 40,
       friction: 9,
     }).start();
-  }, [shouldShowShareSuggestion, shareSuggestionAnim]);
+  }, [readyToShowShareSuggestion, shareSuggestionAnim]);
 
-  // Animate accuracy feedback panel
+  // Animate accuracy feedback panel - synced with mount condition
   useEffect(() => {
     Animated.spring(accuracyFeedbackAnim, {
-      toValue: shouldShowAccuracyFeedback ? 1 : 0,
+      toValue: readyToShowAccuracyFeedback ? 1 : 0,
       useNativeDriver: false,
       tension: 40,
       friction: 9,
     }).start();
-  }, [shouldShowAccuracyFeedback, accuracyFeedbackAnim]);
+  }, [readyToShowAccuracyFeedback, accuracyFeedbackAnim]);
 
-  // Animate waiting banner
+  // Animate waiting banner - uses readyToShowWaitingBanner (Stable Mounting pattern)
   useEffect(() => {
     Animated.spring(waitingBannerAnim, {
-      toValue: shouldShowWaitingBanner ? 1 : 0,
+      toValue: readyToShowWaitingBanner ? 1 : 0,
       useNativeDriver: false,
       tension: 40,
       friction: 9,
     }).start();
-  }, [shouldShowWaitingBanner, waitingBannerAnim]);
+  }, [readyToShowWaitingBanner, waitingBannerAnim]);
 
-  // Clear optimistic state when API confirms
-  useEffect(() => {
-    if (invitationConfirmed) {
-      if (isConfirmingInvitation) {
-        setIsConfirmingInvitation(false);
-      }
-      if (optimisticConfirmTimestamp) {
-        setOptimisticConfirmTimestamp(null);
-      }
-    }
-  }, [invitationConfirmed, isConfirmingInvitation, optimisticConfirmTimestamp]);
+  // Cache-First: All optimistic states are now handled by mutation hooks' onMutate:
+  // - useConfirmInvitationMessage.onMutate updates invitation.messageConfirmedAt
+  // - useSignCompact.onMutate updates compact.mySignedAt
+  // - useConfirmFeelHeard.onMutate updates milestones.feelHeardConfirmedAt
+  // No local state cleanup needed - the cache is the single source of truth.
 
-  // If we've left the invitation phase (stage advanced) but optimistic loading
-  // is still set, clear it so the typing indicator/input re-enable correctly.
-  useEffect(() => {
-    if (!isInvitationPhase && isConfirmingInvitation) {
-      setIsConfirmingInvitation(false);
-      setOptimisticConfirmTimestamp(null);
-    }
-  }, [isInvitationPhase, isConfirmingInvitation]);
-
-  // Clear feel-heard optimistic state when API confirms
-  // FIX: Do NOT clear the optimistic timestamp if the server data hasn't arrived yet.
-  // Only clear it if milestones.feelHeardConfirmedAt is TRUTHY.
-  useEffect(() => {
-    if (milestones?.feelHeardConfirmedAt && optimisticFeelHeardTimestamp) {
-      setOptimisticFeelHeardTimestamp(null);
-    }
-  }, [milestones?.feelHeardConfirmedAt, optimisticFeelHeardTimestamp]);
-
-  // Clear compact-signed optimistic state when API confirms
-  useEffect(() => {
-    if (compactData?.mySigned && optimisticCompactSignedTimestamp) {
-      setOptimisticCompactSignedTimestamp(null);
-    }
-  }, [compactData?.mySigned, optimisticCompactSignedTimestamp]);
-
-  // Build indicators array
-  // Use messageConfirmedAt from API for reliable positioning across reloads
+  // Build indicators array using centralized deriveIndicators function
+  // This moves indicator logic to the utils layer, making it testable and reusable
   const indicators = useMemo((): ChatIndicatorItem[] => {
-    const items: ChatIndicatorItem[] = [];
+    // Prepare session data for the selector
+    const sessionData: SessionIndicatorData = {
+      isInviter,
+      sessionStatus: session?.status,
+      invitation: invitation ? {
+        messageConfirmedAt: invitation.messageConfirmedAt,
+        acceptedAt: invitation.acceptedAt,
+      } : undefined,
+      compact: compactData ? {
+        // Use refs as backup to prevent flickering during mutation
+        mySigned: hasEverSignedCompact.current || compactData.mySigned || isSigningCompact,
+        mySignedAt: compactData.mySignedAt ?? (hasEverSignedCompact.current || compactData.mySigned || isSigningCompact ? session?.createdAt : null),
+      } : undefined,
+      milestones: {
+        // Use ref as backup to prevent flickering during mutation
+        feelHeardConfirmedAt: milestones?.feelHeardConfirmedAt ??
+          (hasEverConfirmedFeelHeard.current || isConfirmingFeelHeard ? new Date().toISOString() : null),
+      },
+      sessionCreatedAt: session?.createdAt,
+    };
 
-    // For inviters: Show "Invitation Sent" when they confirmed the invitation message
-    // Use the API timestamp for reliable positioning, or optimistic timestamp during confirmation
-    const confirmedAt = invitation?.messageConfirmedAt ?? optimisticConfirmTimestamp;
-    // Note: isInviter is already calculated above at component level
+    // Derive indicators from session data
+    const derivedIndicators = deriveIndicators(sessionData);
 
-    if (isInviter && (invitationConfirmed || isConfirmingInvitation || localInvitationConfirmed) && confirmedAt) {
-      items.push({
-        type: 'indicator',
-        indicatorType: 'invitation-sent',
-        id: 'invitation-sent',
-        timestamp: confirmedAt,
-      });
-    }
-
-    // For invitees: Show "Accepted Invitation" when they joined the session
-    // Use acceptedAt timestamp from the invitation for positioning
-    if (!isInviter && invitation?.acceptedAt) {
-      items.push({
-        type: 'indicator',
-        indicatorType: 'invitation-accepted',
-        id: 'invitation-accepted',
-        timestamp: invitation.acceptedAt,
-      });
-    }
-
-    // Show "Compact Signed" indicator when user signs the compact
-    // Use optimistic timestamp during signing, API signedAt timestamp, or session creation as fallback
-    // Fallback ensures indicator shows even for older sessions without signedAt stored
-    const shouldShowCompactSigned = hasEverSignedCompact.current || compactData?.mySigned || isSigningCompact;
-    const compactSignedAt = compactData?.mySignedAt
-      ?? optimisticCompactSignedTimestamp
-      ?? (shouldShowCompactSigned ? session?.createdAt : null);
-    if (shouldShowCompactSigned && compactSignedAt) {
-      items.push({
-        type: 'indicator',
-        indicatorType: 'compact-signed',
-        id: 'compact-signed',
-        timestamp: compactSignedAt,
-      });
-    }
-
-    // Show "Felt Heard" indicator when user confirms they feel heard
-    // FIX: Simplified logic. If the REF is true, we show it. 
-    // We prioritize the Server Date, fallback to Optimistic Date, fallback to Now.
-
-    // Check if we should show it based on Ref OR Server Data OR Optimistic State
-    const shouldShowFeelHeard =
-      hasEverConfirmedFeelHeard.current ||
-      milestones?.feelHeardConfirmedAt ||
-      optimisticFeelHeardTimestamp ||
-      isConfirmingFeelHeard;
-
-    // Determine the timestamp to display
-    const feelHeardAt =
-      milestones?.feelHeardConfirmedAt ??
-      optimisticFeelHeardTimestamp ??
-      (shouldShowFeelHeard ? new Date().toISOString() : null);
-
-    if (shouldShowFeelHeard && feelHeardAt) {
-      items.push({
-        type: 'indicator',
-        indicatorType: 'feel-heard',
-        id: 'feel-heard',
-        timestamp: feelHeardAt,
-      });
-    }
-    return items;
-  }, [invitationConfirmed, isConfirmingInvitation, localInvitationConfirmed, invitation?.messageConfirmedAt, invitation?.acceptedAt, isInviter, optimisticConfirmTimestamp, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, optimisticCompactSignedTimestamp, session?.createdAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, optimisticFeelHeardTimestamp]);
+    // Convert to ChatIndicatorItem format (add 'type' field)
+    return derivedIndicators.map((indicator) => ({
+      type: 'indicator' as const,
+      indicatorType: indicator.indicatorType,
+      id: indicator.id,
+      timestamp: indicator.timestamp,
+    }));
+  }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard]);
 
   // -------------------------------------------------------------------------
   // Effective Stage (accounts for compact signed but stage not yet updated)
@@ -856,6 +760,19 @@ export function UnifiedSessionScreen({
             sharedContentDeliveryStatus: empathyStatusData.sharedContentDeliveryStatus,
           };
         }
+        // Fallback: If message already has a status (from optimistic update), preserve it
+        // This handles the race condition where empathyStatusData hasn't refetched yet
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const existingStatus = (message as any).sharedContentDeliveryStatus;
+        if (existingStatus) {
+          return { ...message, sharedContentDeliveryStatus: existingStatus };
+        }
+        // Default to 'pending' for empathy statements without a status
+        // (e.g., when empathyStatusData is still loading)
+        return {
+          ...message,
+          sharedContentDeliveryStatus: 'pending' as const,
+        };
       }
       // For SHARED_CONTEXT messages (shared context shown to guesser),
       // attach delivery status from empathyStatusData
@@ -1354,7 +1271,13 @@ export function UnifiedSessionScreen({
           messages={displayMessages}
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
-          isLoading={isSending || waitingForAIResponse || isFetchingInitialMessage || isConfirmingInvitation || isConfirmingFeelHeard || isSharingEmpathy}
+          // Cache-First: Ghost dots are derived from last message role in ChatInterface
+          // isSending is still needed for brief moment during API call before optimistic message appears
+          // isFetchingInitialMessage shows dots while fetching first AI message
+          // isConfirmingFeelHeard, isSharingEmpathy, and isConfirmingInvitation show dots during those API calls
+          isLoading={isFetchingInitialMessage || isConfirmingFeelHeard || isSharingEmpathy || isConfirmingInvitation}
+          // isInputDisabled prevents sending while API call is in progress
+          isInputDisabled={isSending}
           showEmotionSlider={!isInOnboardingUnsigned}
           partnerName={partnerName}
           emotionValue={barometerValue}
@@ -1392,8 +1315,7 @@ export function UnifiedSessionScreen({
               ? () => (
                 <CompactAgreementBar
                   onSign={() => {
-                    // Set optimistic timestamp for immediate indicator display
-                    setOptimisticCompactSignedTimestamp(new Date().toISOString());
+                    // Cache-First: useSignCompact.onMutate sets compact.mySignedAt optimistically
                     // Mark that compact was just signed (for typewriter animation after mood check)
                     setJustSignedCompact(true);
                     trackCompactSigned(sessionId, invitation?.isInviter ?? true);
@@ -1404,6 +1326,7 @@ export function UnifiedSessionScreen({
                 />
               )
               // Show feel-heard confirmation panel when AI recommends it
+              // Stable Mounting: Mount based on data (shouldShowFeelHeard), animate visibility with typewriter guard
               : shouldShowFeelHeard
                 ? () => (
                   <Animated.View
@@ -1421,15 +1344,14 @@ export function UnifiedSessionScreen({
                       }],
                       overflow: 'hidden',
                     }}
-                    pointerEvents={shouldShowFeelHeard ? 'auto' : 'none'}
+                    pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
                   >
                     <View style={styles.feelHeardContainer}>
                       <FeelHeardConfirmation
                         onConfirm={() => {
                           // Track felt heard response
                           trackFeltHeardResponse(sessionId, 'yes');
-                          // Set optimistic timestamp immediately for instant indicator display
-                          setOptimisticFeelHeardTimestamp(new Date().toISOString());
+                          // Cache-First: useConfirmFeelHeard.onMutate sets milestones.feelHeardConfirmedAt optimistically
                           handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
                         }}
                         isPending={isConfirmingFeelHeard}
@@ -1438,6 +1360,7 @@ export function UnifiedSessionScreen({
                   </Animated.View>
                 )
                 // Show empathy review panel when empathy statement is ready
+                // Stable Mounting: Mount based on data (shouldShowEmpathyPanel), animate visibility with typewriter guard
                 : shouldShowEmpathyPanel
                   ? () => (
                     <Animated.View
@@ -1455,7 +1378,7 @@ export function UnifiedSessionScreen({
                         }],
                         overflow: 'hidden',
                       }}
-                      pointerEvents={shouldShowEmpathyPanel ? 'auto' : 'none'}
+                      pointerEvents={!isTypewriterAnimating && !isSharingEmpathy ? 'auto' : 'none'}
                     >
                       <View style={styles.empathyReviewContainer}>
                         <TouchableOpacity
@@ -1472,7 +1395,7 @@ export function UnifiedSessionScreen({
                     </Animated.View>
                   )
                   // Show share suggestion panel when reconciler generated a suggestion
-                  // Hide immediately via local latch when user responds (before API completes)
+                  // Stable Mounting: Mount based on data (shouldShowShareSuggestion), animate visibility with typewriter guard
                   : shouldShowShareSuggestion
                     ? () => (
                       <Animated.View
@@ -1490,7 +1413,7 @@ export function UnifiedSessionScreen({
                           }],
                           overflow: 'hidden',
                         }}
-                        pointerEvents={shouldShowShareSuggestion ? 'auto' : 'none'}
+                        pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
                       >
                         <View style={styles.shareSuggestionContainer}>
                           <TouchableOpacity
@@ -1507,6 +1430,7 @@ export function UnifiedSessionScreen({
                       </Animated.View>
                     )
                   // Show accuracy feedback trigger when partner's empathy is ready for validation
+                  // Stable Mounting: Mount based on data (shouldShowAccuracyFeedback), animate visibility with typewriter guard
                   : shouldShowAccuracyFeedback
                     ? () => (
                       <Animated.View
@@ -1524,7 +1448,7 @@ export function UnifiedSessionScreen({
                           }],
                           overflow: 'hidden',
                         }}
-                        pointerEvents={shouldShowAccuracyFeedback ? 'auto' : 'none'}
+                        pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
                       >
                         <View style={styles.accuracyFeedbackContainer}>
                           <TouchableOpacity
@@ -1541,8 +1465,9 @@ export function UnifiedSessionScreen({
                       </Animated.View>
                     )
                   // Only render if inviter has a draft message (not confirmed yet)
-                  // Never render for invitees - they already accepted the invitation
-                  : (isInviter && invitationMessage && invitationUrl && !invitationConfirmed && !localInvitationConfirmed)
+                  // Stable Mounting: Mount based on data (shouldShowInvitationPanel), animate visibility with typewriter guard
+                  // This prevents flickering by keeping panel mounted during AI response typewriter animation
+                  : shouldShowInvitationPanel
                     ? () => (
                       <Animated.View
                         style={{
@@ -1567,8 +1492,8 @@ export function UnifiedSessionScreen({
                           // 4. Clip content while closed so padding doesn't leak space
                           overflow: 'hidden',
                         }}
-                        // Disable touches when hidden
-                        pointerEvents={shouldShowInvitationPanel ? 'auto' : 'none'}
+                        // Disable touches while invisible (during typewriter animation)
+                        pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
                       >
                         {/* 5. INNER CONTAINER 
                        Move the styles that contain padding/bg/borders HERE. 
@@ -1580,7 +1505,7 @@ export function UnifiedSessionScreen({
                           </Text>
 
                           <InvitationShareButton
-                            invitationMessage={invitationMessage}
+                            invitationMessage={invitationMessage!}
                             invitationUrl={invitationUrl}
                             partnerName={partnerName}
                             senderName={user?.name || user?.firstName || undefined}
@@ -1592,16 +1517,12 @@ export function UnifiedSessionScreen({
                             onPress={() => {
                               // Track invitation sent
                               trackInvitationSent(sessionId, 'share_sheet');
-                              // Mark as confirmed permanently in hook state (survives remounts)
-                              setLocalInvitationConfirmed(true);
-                              // Optimistic UI: immediately show loading state and indicator
-                              setIsConfirmingInvitation(true);
-                              setOptimisticConfirmTimestamp(new Date().toISOString());
                               setIsRefiningInvitation(false); // Exit refinement mode
-                              handleConfirmInvitationMessage(invitationMessage, () => {
-                                // Clear loading state when mutation completes
-                                setIsConfirmingInvitation(false);
-                              });
+                              // Local latch: Immediately hide panel, survives cache race conditions
+                              setHasConfirmedInvitationLocal(true);
+                              // Cache-First: useConfirmInvitationMessage.onMutate sets invitation.messageConfirmed optimistically
+                              // The indicator will appear immediately because the cache is updated
+                              handleConfirmInvitationMessage(invitationMessage!);
                             }}
                             testID="invitation-continue-button"
                           >
@@ -1719,17 +1640,11 @@ export function UnifiedSessionScreen({
             sendMessage("I'd like to refine the invitation message.");
           }}
           onShareSuccess={() => {
-            // Mark as confirmed permanently in hook state (survives remounts)
-            setLocalInvitationConfirmed(true);
-            // Optimistic UI: immediately show loading state and indicator
-            setIsConfirmingInvitation(true);
-            setOptimisticConfirmTimestamp(new Date().toISOString());
             setShowRefineDrawer(false);
-            // Confirm the invitation after sharing
-            handleConfirmInvitationMessage(invitationMessage, () => {
-              // Clear loading state when mutation completes
-              setIsConfirmingInvitation(false);
-            });
+            // Local latch: Immediately hide panel, survives cache race conditions
+            setHasConfirmedInvitationLocal(true);
+            // Cache-First: useConfirmInvitationMessage.onMutate sets invitation.messageConfirmed optimistically
+            handleConfirmInvitationMessage(invitationMessage);
           }}
           onClose={() => setShowRefineDrawer(false)}
         />

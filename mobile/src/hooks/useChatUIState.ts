@@ -59,10 +59,11 @@ export interface UseChatUIStateProps {
   compactMySigned: boolean | undefined;
 
   // Invitation phase
+  // Cache-First: invitationConfirmed is derived from cache (invitation.messageConfirmed)
+  // Optimistic update in useConfirmInvitationMessage.onMutate ensures immediate feedback
   hasInvitationMessage: boolean;
   invitationConfirmed: boolean;
   isConfirmingInvitation: boolean;
-  localInvitationConfirmed: boolean;
 
   // Stage 1: Feel heard
   showFeelHeardConfirmation: boolean;
@@ -162,7 +163,6 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasInvitationMessage,
     invitationConfirmed,
     isConfirmingInvitation,
-    localInvitationConfirmed,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -218,7 +218,6 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasInvitationMessage,
     invitationConfirmed,
     isConfirmingInvitation,
-    localInvitationConfirmed,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -253,7 +252,6 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasInvitationMessage,
     invitationConfirmed,
     isConfirmingInvitation,
-    localInvitationConfirmed,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,

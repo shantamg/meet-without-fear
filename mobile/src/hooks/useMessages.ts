@@ -27,25 +27,16 @@ import {
   CompleteExerciseResponse,
   Stage,
 } from '@meet-without-fear/shared';
-import { sessionKeys } from './useSessions';
-import { stageKeys } from './useStages';
 
-// ============================================================================
-// Query Keys
-// ============================================================================
+// Import query keys from centralized file to avoid circular dependencies
+import {
+  sessionKeys,
+  stageKeys,
+  messageKeys,
+} from './queryKeys';
 
-export const messageKeys = {
-  all: ['messages'] as const,
-  lists: () => [...messageKeys.all, 'list'] as const,
-  list: (sessionId: string, stage?: Stage) =>
-    [...messageKeys.lists(), sessionId, stage] as const,
-  // Separate key for infinite queries to avoid cache structure conflicts
-  infinite: (sessionId: string, stage?: Stage) =>
-    [...messageKeys.all, 'infinite', sessionId, stage] as const,
-  emotions: () => [...messageKeys.all, 'emotions'] as const,
-  emotionHistory: (sessionId: string, stage?: Stage) =>
-    [...messageKeys.emotions(), sessionId, stage] as const,
-};
+// Re-export for backwards compatibility
+export { messageKeys };
 
 // ============================================================================
 // Types
@@ -176,25 +167,44 @@ export interface SendMessageParams {
   content: string;
   emotionalIntensity?: number;
   emotionalContext?: string;
+  /** Optional current stage (for optimistic message placement) */
+  currentStage?: Stage;
+}
+
+/**
+ * Context stored by onMutate for rollback on error.
+ */
+interface SendMessageContext {
+  optimisticId: string;
+  previousInfinite: InfiniteData<GetMessagesResponse> | undefined;
+  previousList: GetMessagesResponse | undefined;
 }
 
 /**
  * Send a message in a session.
  *
+ * Cache-First Architecture:
+ * - onMutate: Immediately adds user message to cache with temp ID and status: 'sending'
+ * - onSuccess: Replaces optimistic message with real one from server
+ * - onError: Rolls back to previous cache state
+ *
  * Fire-and-forget pattern:
  * - Returns immediately with user message only
  * - AI response arrives asynchronously via Ably (message.ai_response event)
  * - Use useAIMessageHandler to add AI responses to the cache
+ *
+ * UI derives "waiting for AI" state from the last message being from USER role,
+ * eliminating the need for a separate waitingForAIResponse boolean.
  */
 export function useSendMessage(
   options?: Omit<
-    UseMutationOptions<SendMessageResponse, ApiClientError, SendMessageParams>,
+    UseMutationOptions<SendMessageResponse, ApiClientError, SendMessageParams, SendMessageContext>,
     'mutationFn'
   >
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useMutation<SendMessageResponse, ApiClientError, SendMessageParams, SendMessageContext>({
     mutationFn: async ({
       sessionId,
       content,
@@ -213,8 +223,96 @@ export function useSendMessage(
       );
     },
     retry: false, // Disable automatic retries to prevent duplicate messages
-    onSuccess: (data, { sessionId }) => {
-      // Get the stage from the response to update the correct cache
+
+    // =========================================================================
+    // OPTIMISTIC UPDATE: Add user message to cache immediately
+    // =========================================================================
+    onMutate: async ({ sessionId, content, currentStage }) => {
+      // Cancel any outgoing refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: messageKeys.infinite(sessionId) });
+      await queryClient.cancelQueries({ queryKey: messageKeys.list(sessionId) });
+
+      // Snapshot the previous values for rollback
+      const previousInfinite = queryClient.getQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId)
+      );
+      const previousList = queryClient.getQueryData<GetMessagesResponse>(
+        messageKeys.list(sessionId)
+      );
+
+      // Create optimistic message with temp ID
+      const optimisticId = `optimistic-${Date.now()}`;
+      const optimisticMessage: MessageDTO = {
+        id: optimisticId,
+        sessionId,
+        senderId: null, // Will be set by server
+        role: MessageRole.USER,
+        content,
+        stage: currentStage ?? Stage.ONBOARDING,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Helper to add optimistic message to regular cache
+      const addToCache = (old: GetMessagesResponse | undefined): GetMessagesResponse => {
+        if (!old) {
+          return { messages: [optimisticMessage], hasMore: false };
+        }
+        return {
+          ...old,
+          messages: [...(old.messages || []), optimisticMessage],
+        };
+      };
+
+      // Helper to add optimistic message to infinite cache
+      const addToInfiniteCache = (
+        old: InfiniteData<GetMessagesResponse> | undefined
+      ): InfiniteData<GetMessagesResponse> => {
+        if (!old || old.pages.length === 0) {
+          return {
+            pages: [{ messages: [optimisticMessage], hasMore: false }],
+            pageParams: [undefined],
+          };
+        }
+        // Add to the first page (newest messages)
+        const updatedPages = [...old.pages];
+        const firstPage = updatedPages[0];
+        updatedPages[0] = {
+          ...firstPage,
+          messages: [...(firstPage.messages || []), optimisticMessage],
+        };
+        return { ...old, pages: updatedPages };
+      };
+
+      // Update caches optimistically
+      queryClient.setQueryData<GetMessagesResponse>(
+        messageKeys.list(sessionId),
+        addToCache
+      );
+      queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId),
+        addToInfiniteCache
+      );
+
+      // Also update stage-specific caches if we know the stage
+      if (currentStage !== undefined) {
+        queryClient.setQueryData<GetMessagesResponse>(
+          messageKeys.list(sessionId, currentStage),
+          addToCache
+        );
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId, currentStage),
+          addToInfiniteCache
+        );
+      }
+
+      // Return context for potential rollback
+      return { optimisticId, previousInfinite, previousList };
+    },
+
+    // =========================================================================
+    // SUCCESS: Replace optimistic message with real one
+    // =========================================================================
+    onSuccess: (data, { sessionId }, context) => {
       const stage = data.userMessage.stage;
 
       // Fire-and-forget: Only add user message to cache immediately
@@ -311,6 +409,22 @@ export function useSendMessage(
       // This ensures the share button appears immediately when AI proposes a message
       queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
     },
+
+    // =========================================================================
+    // ERROR: Rollback to previous cache state
+    // =========================================================================
+    onError: (_error, { sessionId }, context) => {
+      // If we have context, rollback to previous state
+      if (context) {
+        if (context.previousList !== undefined) {
+          queryClient.setQueryData(messageKeys.list(sessionId), context.previousList);
+        }
+        if (context.previousInfinite !== undefined) {
+          queryClient.setQueryData(messageKeys.infinite(sessionId), context.previousInfinite);
+        }
+      }
+    },
+
     ...options,
   });
 }

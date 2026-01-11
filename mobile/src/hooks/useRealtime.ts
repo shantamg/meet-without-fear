@@ -25,7 +25,7 @@ import {
   MessageErrorPayload,
 } from '@meet-without-fear/shared';
 import { useQueryClient } from '@tanstack/react-query';
-import { sessionKeys } from './useSessions';
+import { sessionKeys } from './queryKeys';
 import { useAuth } from './useAuth';
 import {
   getAblyClient,

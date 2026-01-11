@@ -18,7 +18,7 @@ import {
   ConsentDecision,
   ConsentContentType,
 } from '@meet-without-fear/shared';
-import { stageKeys } from './useStages';
+import { stageKeys } from './queryKeys';
 
 // ============================================================================
 // Query Keys

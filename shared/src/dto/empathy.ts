@@ -211,12 +211,15 @@ export interface EmpathyExchangeStatusResponse {
 
 /**
  * Delivery status for shared content messages (empathy statements, shared context)
+ * - sending: Content is being sent to server (optimistic UI)
  * - pending: Content saved but not yet delivered to recipient
  * - delivered: Content has been delivered to recipient's chat
  * - seen: Recipient has viewed/acknowledged the content
  * - superseded: Content was replaced by an updated version (never delivered)
  */
 export const SharedContentDeliveryStatus = {
+  /** Content is being sent to server (optimistic UI) */
+  SENDING: 'sending',
   /** Content saved but not yet delivered */
   PENDING: 'pending',
   /** Content delivered to recipient's chat */

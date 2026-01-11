@@ -32,6 +32,40 @@ jest.mock('expo-router', () => ({
   },
 }));
 
+// Mock ChatInterface to render messages without animation logic
+jest.mock('../../components/ChatInterface', () => {
+  const { View, Text, TextInput, TouchableOpacity } = require('react-native');
+  return {
+    ChatInterface: ({ messages, onSendMessage, emptyStateTitle, emptyStateMessage }: {
+      messages: { id: string; content: string }[];
+      onSendMessage?: (text: string) => void;
+      emptyStateTitle?: string;
+      emptyStateMessage?: string;
+    }) => (
+      <View testID="chat-interface">
+        {messages.length === 0 ? (
+          <View testID="chat-empty-state">
+            <Text>{emptyStateTitle}</Text>
+            <Text>{emptyStateMessage}</Text>
+          </View>
+        ) : (
+          messages.map((msg) => (
+            <View key={msg.id} testID={`chat-bubble-${msg.id}`}>
+              <Text>{msg.content}</Text>
+            </View>
+          ))
+        )}
+        <View>
+          <TextInput testID="chat-input" />
+          <TouchableOpacity testID="send-button" onPress={() => onSendMessage?.('test')}>
+            <Text>Send</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    ),
+  };
+});
+
 // Mock react-native-safe-area-context
 jest.mock('react-native-safe-area-context', () => {
   const { View } = require('react-native');
@@ -104,6 +138,8 @@ const mockMessages = [
     content: 'Let me help you understand what you need.',
     stage: Stage.NEED_MAPPING,
     timestamp: new Date().toISOString(),
+    // Skip typewriter in tests so message renders immediately
+    skipTypewriter: true,
   },
 ];
 
