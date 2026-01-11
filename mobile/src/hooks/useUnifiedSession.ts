@@ -791,18 +791,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
       // Note: empathy-draft-preview card removed - users access empathy statement via the overlay drawer
       // The ready-to-share-confirmation card opens the overlay, and after sending it appears as a message in chat
 
-      // Partner's empathy for validation
-      if (partnerEmpathy) {
-        cards.push({
-          id: 'accuracy-feedback',
-          type: 'accuracy-feedback',
-          position: 'end',
-          props: {
-            partnerName,
-            content: partnerEmpathy.content,
-          },
-        });
-      }
+      // Note: accuracy-feedback card removed - now shown as panel above chat input
+      // See showAccuracyFeedbackPanel in useChatUIState
 
       // Note: Share suggestion from reconciler is now handled via the low-profile panel
       // + ShareSuggestionDrawer pattern instead of an inline card.

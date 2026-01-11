@@ -32,6 +32,7 @@ export type AboveInputPanel =
   | 'empathy-statement' // Empathy statement review panel
   | 'feel-heard' // Feel heard confirmation panel
   | 'share-suggestion' // Share suggestion from reconciler (Subject side)
+  | 'accuracy-feedback' // Accuracy feedback for partner's empathy (Subject side)
   | 'waiting-banner' // General waiting banner
   | 'compact-agreement-bar' // Compact agreement bar during onboarding
   | null;
@@ -80,6 +81,9 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   // Share suggestion (Subject side)
   hasShareSuggestion: boolean;
   hasRespondedToShareOfferLocal: boolean;
+
+  // Accuracy feedback for partner's empathy (Subject side)
+  hasPartnerEmpathyForValidation: boolean; // Partner empathy exists and current user hasn't validated
 }
 
 /**
@@ -108,6 +112,7 @@ export interface ChatUIState {
     showEmpathyPanel: boolean;
     showFeelHeardPanel: boolean;
     showShareSuggestionPanel: boolean;
+    showAccuracyFeedbackPanel: boolean;
     showWaitingBanner: boolean;
     showCompactAgreementBar: boolean;
   };
@@ -257,6 +262,22 @@ function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
 }
 
 /**
+ * Determines if accuracy feedback panel should show.
+ * Shows when partner's empathy is available and current user hasn't validated it yet.
+ */
+function computeShowAccuracyFeedbackPanel(inputs: ChatUIStateInputs): boolean {
+  const { myStage, hasPartnerEmpathyForValidation } = inputs;
+  const currentStage = myStage ?? Stage.ONBOARDING;
+
+  // Must be in Stage 2 (Perspective Stretch)
+  if (currentStage !== Stage.PERSPECTIVE_STRETCH) {
+    return false;
+  }
+
+  return hasPartnerEmpathyForValidation;
+}
+
+/**
  * Determines which waiting statuses should show a banner.
  */
 function computeShouldShowWaitingBanner(status: WaitingStatusState): boolean {
@@ -297,12 +318,17 @@ function computeAboveInputPanel(
     return 'share-suggestion';
   }
 
-  // Priority 5: Empathy statement panel (Stage 2)
+  // Priority 5: Accuracy feedback panel (Subject validating partner's empathy)
+  if (panels.showAccuracyFeedbackPanel) {
+    return 'accuracy-feedback';
+  }
+
+  // Priority 6: Empathy statement panel (Stage 2)
   if (panels.showEmpathyPanel) {
     return 'empathy-statement';
   }
 
-  // Priority 6: Waiting banner
+  // Priority 7: Waiting banner
   if (panels.showWaitingBanner) {
     return 'waiting-banner';
   }
@@ -400,6 +426,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const showEmpathyPanel = computeShowEmpathyPanel(inputs);
   const showFeelHeardPanel = computeShowFeelHeardPanel(inputs);
   const showShareSuggestionPanel = computeShowShareSuggestionPanel(inputs);
+  const showAccuracyFeedbackPanel = computeShowAccuracyFeedbackPanel(inputs);
   const showWaitingBanner = computeShouldShowWaitingBanner(waitingStatus);
   const showCompactAgreementBar = isInOnboardingUnsigned;
 
@@ -408,6 +435,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
     showEmpathyPanel,
     showFeelHeardPanel,
     showShareSuggestionPanel,
+    showAccuracyFeedbackPanel,
     showWaitingBanner,
     showCompactAgreementBar,
   };
@@ -484,5 +512,6 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     myAttemptContent: false,
     hasShareSuggestion: false,
     hasRespondedToShareOfferLocal: false,
+    hasPartnerEmpathyForValidation: false,
   };
 }

@@ -208,6 +208,7 @@ export function UnifiedSessionScreen({
     // Reconciler
     empathyStatusData,
     shareOfferData,
+    partnerEmpathyData,
 
     // Utility actions
     clearMirrorIntervention,
@@ -270,6 +271,15 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Partner completed stage, invalidating status caches');
         queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+
+      if (event === 'empathy.revealed') {
+        // Empathy was revealed directly (OFFER_OPTIONAL with good alignment)
+        // The guesser needs to refetch status to get the updated REVEALED status
+        // which triggers 'partner-considering-perspective' waiting status
+        console.log('[UnifiedSessionScreen] Empathy revealed, invalidating empathy status cache');
+        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
       }
     },
     // Fire-and-forget pattern: AI responses arrive via Ably
@@ -487,6 +497,7 @@ export function UnifiedSessionScreen({
       showEmpathyPanel: shouldShowEmpathyPanel,
       showFeelHeardPanel: shouldShowFeelHeard,
       showShareSuggestionPanel: shouldShowShareSuggestion,
+      showAccuracyFeedbackPanel: shouldShowAccuracyFeedback,
     },
   } = useChatUIState({
     partnerName: partnerName || 'Partner',
@@ -526,6 +537,7 @@ export function UnifiedSessionScreen({
     hasSharedEmpathyLocal,
     shareOfferData: shareOfferData ?? undefined,
     hasRespondedToShareOfferLocal,
+    partnerEmpathyValidated: partnerEmpathyData?.validated ?? false,
     allNeedsConfirmed,
     commonGroundCount: commonGround?.length ?? 0,
     strategyPhase,
@@ -575,6 +587,9 @@ export function UnifiedSessionScreen({
 
   // Animation for the share suggestion panel slide-up
   const shareSuggestionAnim = useRef(new Animated.Value(0)).current;
+
+  // Animation for the accuracy feedback panel slide-up
+  const accuracyFeedbackAnim = useRef(new Animated.Value(0)).current;
 
   // Animation for the waiting banner slide-up
   const waitingBannerAnim = useRef(new Animated.Value(0)).current;
@@ -641,6 +656,16 @@ export function UnifiedSessionScreen({
       friction: 9,
     }).start();
   }, [shouldShowShareSuggestion, shareSuggestionAnim]);
+
+  // Animate accuracy feedback panel
+  useEffect(() => {
+    Animated.spring(accuracyFeedbackAnim, {
+      toValue: shouldShowAccuracyFeedback ? 1 : 0,
+      useNativeDriver: false,
+      tension: 40,
+      friction: 9,
+    }).start();
+  }, [shouldShowAccuracyFeedback, accuracyFeedbackAnim]);
 
   // Animate waiting banner
   useEffect(() => {
@@ -894,29 +919,8 @@ export function UnifiedSessionScreen({
         // Note: ready-to-share-confirmation case removed - now shown as panel above chat input
         // Note: empathy-draft-preview case removed - users access empathy statement via the overlay drawer
 
-        case 'accuracy-feedback':
-          return (
-            <View style={styles.inlineCard} key={card.id}>
-              <Text style={styles.cardTitle}>
-                {partnerName}'s Understanding of You
-              </Text>
-              <EmpathyAttemptCard
-                attempt={card.props.content as string}
-                isPartner
-                testID="partner-empathy-attempt"
-              />
-              <AccuracyFeedback
-                onAccurate={() => handleValidatePartnerEmpathy(true)}
-                onPartiallyAccurate={() =>
-                  handleValidatePartnerEmpathy(false, 'Some parts are accurate')
-                }
-                onInaccurate={() =>
-                  handleValidatePartnerEmpathy(false, 'This does not capture my perspective')
-                }
-                testID="accuracy-feedback"
-              />
-            </View>
-          );
+        // Note: accuracy-feedback case removed - now rendered as panel above chat input
+        // See shouldShowAccuracyFeedback and accuracyFeedbackContainer
 
         case 'needs-summary':
           return (
@@ -1531,6 +1535,48 @@ export function UnifiedSessionScreen({
                         </View>
                       </Animated.View>
                     )
+                  // Show accuracy feedback panel when partner's empathy is ready for validation
+                  : shouldShowAccuracyFeedback
+                    ? () => (
+                      <Animated.View
+                        style={{
+                          opacity: accuracyFeedbackAnim,
+                          maxHeight: accuracyFeedbackAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 300],
+                          }),
+                          transform: [{
+                            translateY: accuracyFeedbackAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [20, 0],
+                            }),
+                          }],
+                          overflow: 'hidden',
+                        }}
+                        pointerEvents={shouldShowAccuracyFeedback ? 'auto' : 'none'}
+                      >
+                        <View style={styles.accuracyFeedbackContainer}>
+                          <Text style={styles.accuracyFeedbackTitle}>
+                            {partnerName}'s understanding of you:
+                          </Text>
+                          <EmpathyAttemptCard
+                            attempt={partnerEmpathyData?.attempt?.content || ''}
+                            isPartner
+                            testID="partner-empathy-attempt-panel"
+                          />
+                          <AccuracyFeedback
+                            onAccurate={() => handleValidatePartnerEmpathy(true)}
+                            onPartiallyAccurate={() =>
+                              handleValidatePartnerEmpathy(false, 'Some parts are accurate')
+                            }
+                            onInaccurate={() =>
+                              handleValidatePartnerEmpathy(false, 'This does not capture my perspective')
+                            }
+                            testID="accuracy-feedback-panel"
+                          />
+                        </View>
+                      </Animated.View>
+                    )
                   // Only render if inviter has a draft message (not confirmed yet)
                   // Never render for invitees - they already accepted the invitation
                   : (isInviter && invitationMessage && invitationUrl && !invitationConfirmed && !localInvitationConfirmed)
@@ -1923,6 +1969,21 @@ const useStyles = () =>
       fontSize: t.typography.fontSize.md,
       fontWeight: '500',
       color: 'white',
+    },
+
+    // Accuracy Feedback Panel
+    accuracyFeedbackContainer: {
+      paddingHorizontal: t.spacing.lg,
+      paddingVertical: t.spacing.md,
+      backgroundColor: t.colors.bgSecondary,
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
+    },
+    accuracyFeedbackTitle: {
+      fontSize: t.typography.fontSize.md,
+      fontWeight: '600',
+      color: t.colors.textPrimary,
+      marginBottom: t.spacing.sm,
     },
 
     // Inline Cards

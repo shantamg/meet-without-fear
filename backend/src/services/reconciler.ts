@@ -642,16 +642,28 @@ Respond in JSON:
     },
   });
 
-  // Save to reconciler result
-  const dbResult = await prisma.reconcilerResult.findUnique({
-    where: {
-      sessionId_guesserId_subjectId: {
-        sessionId,
-        guesserId: guesser.id,
-        subjectId: subject.id,
+  // Save to reconciler result - retry up to 3 times to handle potential race condition
+  // where the record might not be immediately visible after creation
+  let dbResult = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    console.log(`[Reconciler] Looking up ReconcilerResult (attempt ${attempt}/3) for guesser=${guesser.id}, subject=${subject.id}`);
+    dbResult = await prisma.reconcilerResult.findUnique({
+      where: {
+        sessionId_guesserId_subjectId: {
+          sessionId,
+          guesserId: guesser.id,
+          subjectId: subject.id,
+        },
       },
-    },
-  });
+    });
+    if (dbResult) {
+      break;
+    }
+    if (attempt < 3) {
+      console.warn(`[Reconciler] ReconcilerResult not found on attempt ${attempt}, waiting 100ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
 
   if (dbResult) {
     console.log(`[Reconciler] Updating DB result ${dbResult.id} and creating/updating share offer`);
@@ -684,7 +696,8 @@ Respond in JSON:
     // The suggestion is stored in reconcilerShareOffer and displayed via the drawer only.
     console.log(`[Reconciler] Share suggestion stored for subject ${subject.id} (drawer only, not in chat)`);
   } else {
-    console.warn(`[Reconciler] Could not find reconcilerResult to update with suggestion!`);
+    console.error(`[Reconciler] CRITICAL: Could not find reconcilerResult after 3 attempts! guesser=${guesser.id}, subject=${subject.id}, sessionId=${sessionId}`);
+    console.error(`[Reconciler] This will cause the share suggestion to not be displayed to the user.`);
   }
 
   return response;
@@ -766,11 +779,12 @@ export async function respondToShareSuggestion(
 }> {
   console.log(`[Reconciler] respondToShareSuggestion called: user=${userId}, action=${response.action}`);
 
-  // Get the share offer
+  // Get the share offer - allow both OFFERED and PENDING status to handle race conditions
+  // where the user responds before the GET endpoint marked it as OFFERED
   const shareOffer = await prisma.reconcilerShareOffer.findFirst({
     where: {
       userId,
-      status: 'OFFERED',
+      status: { in: ['OFFERED', 'PENDING'] },
       result: { sessionId },
     },
     include: {
@@ -779,8 +793,17 @@ export async function respondToShareSuggestion(
   });
 
   if (!shareOffer) {
-    console.warn(`[Reconciler] No OFFERED share offer found for user ${userId} in session ${sessionId}`);
+    console.warn(`[Reconciler] No OFFERED/PENDING share offer found for user ${userId} in session ${sessionId}`);
     throw new Error('No pending share offer found');
+  }
+
+  // If status was PENDING (user responded before fetching), mark as OFFERED first for proper tracking
+  if (shareOffer.status === 'PENDING') {
+    console.log(`[Reconciler] Share offer was PENDING, marking as OFFERED before processing response`);
+    await prisma.reconcilerShareOffer.update({
+      where: { id: shareOffer.id },
+      data: { status: 'OFFERED' },
+    });
   }
 
   if (response.action === 'decline') {
