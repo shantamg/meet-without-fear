@@ -65,7 +65,7 @@ The reconciler runs when one user confirms "feel heard" (completing Stage 1) and
 ```mermaid
 flowchart TB
     subgraph Trigger["Trigger: Subject confirms 'feel heard'"]
-        A[Subject clicks "I feel heard"]
+        A["Subject clicks 'I feel heard'"]
     end
 
     A --> B{Partner has HELD<br/>empathy attempt?}
@@ -80,7 +80,7 @@ flowchart TB
     F -->|Moderate + OFFER_OPTIONAL| G
     F -->|Significant + OFFER_SHARING| H[Create Share Suggestion]
 
-    G --> I[Guesser sees:<br/>"Partner is considering<br/>your perspective"]
+    G --> I["Guesser sees:<br/>'Partner is considering<br/>your perspective'"]
     G --> J[Update status to REVEALED]
 
     H --> K[Subject sees:<br/>Share Suggestion Panel]
