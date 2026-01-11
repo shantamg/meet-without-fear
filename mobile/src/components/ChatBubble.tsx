@@ -189,6 +189,8 @@ export function ChatBubble({
         return 'Delivered';
       case 'seen':
         return '✓ Seen';
+      case 'superseded':
+        return 'Not Delivered (Updated Below)';
       default:
         return 'Pending review (not delivered yet)';
     }
@@ -196,6 +198,10 @@ export function ChatBubble({
 
   const isSeenStatus = (status: SharedContentDeliveryStatus | undefined): boolean => {
     return status === 'seen';
+  };
+
+  const isSupersededStatus = (status: SharedContentDeliveryStatus | undefined): boolean => {
+    return status === 'superseded';
   };
 
   // Determine container alignment
@@ -254,6 +260,7 @@ export function ChatBubble({
             <Text style={[
               styles.sharedContentDeliveryStatus,
               isSeenStatus(deliveryStatus) && styles.sharedContentDeliveryStatusSeen,
+              isSupersededStatus(deliveryStatus) && styles.sharedContentDeliveryStatusSuperseded,
             ]}>
               {getSharedContentStatusText(deliveryStatus)}
             </Text>
@@ -482,6 +489,11 @@ const useStyles = () =>
     // Green "Seen" status (light background)
     sharedContentDeliveryStatusSeenLight: {
       color: '#16a34a', // Green-600 for better contrast on light
+    },
+    // Gray "Superseded" status (content was replaced by updated version)
+    sharedContentDeliveryStatusSuperseded: {
+      color: '#6b7280', // Gray-500 - muted to indicate outdated
+      fontStyle: 'italic',
     },
     // Shared context: subtle container
     sharedContextContainer: {

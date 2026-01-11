@@ -197,8 +197,8 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
   const currentStage = myStage ?? Stage.ONBOARDING;
 
   // Local latch: Once user clicks Share, never show panel again (prevents flash during refetch)
-  // EXCEPT when we're in refining mode, then we need to show it again
-  if (hasSharedEmpathyLocal && !isRefiningEmpathy) {
+  // When entering refining mode, the latch is reset externally so panel can show again
+  if (hasSharedEmpathyLocal) {
     return false;
   }
 

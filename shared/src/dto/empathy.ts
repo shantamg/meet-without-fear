@@ -158,6 +158,15 @@ export interface ResubmitEmpathyResponse {
   status: EmpathyStatus;
   /** Informational message for the user */
   message: string;
+  /** The new empathy statement message that was created */
+  empathyMessage: {
+    id: string;
+    content: string;
+    timestamp: string;
+    stage: number;
+    /** Delivery status: pending until delivered */
+    deliveryStatus: SharedContentDeliveryStatus;
+  };
 }
 
 // ============================================================================
@@ -205,6 +214,7 @@ export interface EmpathyExchangeStatusResponse {
  * - pending: Content saved but not yet delivered to recipient
  * - delivered: Content has been delivered to recipient's chat
  * - seen: Recipient has viewed/acknowledged the content
+ * - superseded: Content was replaced by an updated version (never delivered)
  */
 export const SharedContentDeliveryStatus = {
   /** Content saved but not yet delivered */
@@ -213,6 +223,8 @@ export const SharedContentDeliveryStatus = {
   DELIVERED: 'delivered',
   /** Recipient has viewed the content */
   SEEN: 'seen',
+  /** Content was replaced by an updated version (not delivered) */
+  SUPERSEDED: 'superseded',
 } as const;
 
 export type SharedContentDeliveryStatus = (typeof SharedContentDeliveryStatus)[keyof typeof SharedContentDeliveryStatus];

@@ -195,6 +195,7 @@ export function UnifiedSessionScreen({
     handleConfirmInvitationMessage,
     handleSaveEmpathyDraft,
     handleShareEmpathy,
+    handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
     handleConfirmAllNeeds,
     handleRequestMoreStrategies,
@@ -613,6 +614,14 @@ export function UnifiedSessionScreen({
     }).start();
   }, [shouldShowEmpathyPanel, isSharingEmpathy, empathyPanelAnim]);
 
+  // Reset empathy latch when entering refining mode (received shared context from partner)
+  // This allows the panel to show again so user can share their revised empathy
+  useEffect(() => {
+    if (isRefiningEmpathy) {
+      setHasSharedEmpathyLocal(false);
+    }
+  }, [isRefiningEmpathy]);
+
   // Animate feel heard panel
   useEffect(() => {
     Animated.spring(feelHeardAnim, {
@@ -775,12 +784,35 @@ export function UnifiedSessionScreen({
   // Prepare Messages for Display
   // -------------------------------------------------------------------------
   const displayMessages = useMemo((): ChatMessage[] => {
+    // Find all EMPATHY_STATEMENT messages to detect superseded ones
+    // User may have multiple empathy statements if they revised their understanding
+    const empathyStatements = messages.filter(
+      (m) => m.role === MessageRole.EMPATHY_STATEMENT
+    );
+
+    // Sort by timestamp to find the latest one
+    const sortedStatements = [...empathyStatements].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    // The latest empathy statement ID (if any)
+    const latestEmpathyId = sortedStatements[0]?.id;
+
     // Enrich messages with delivery status for shared content
     return messages.map((message) => {
       // For EMPATHY_STATEMENT messages, determine which delivery status to use:
+      // - If this is NOT the latest empathy statement, mark as superseded
       // - If content matches myAttempt (guesser's empathy statement), use myAttempt.deliveryStatus
       // - Otherwise, if sharedContentDeliveryStatus exists (subject shared via reconciler), use that
       if (message.role === MessageRole.EMPATHY_STATEMENT) {
+        // Check if this is a superseded (older) empathy statement
+        if (empathyStatements.length > 1 && message.id !== latestEmpathyId) {
+          return {
+            ...message,
+            sharedContentDeliveryStatus: 'superseded' as const,
+          };
+        }
+
         // Check if this is the guesser's empathy attempt (content matches myAttempt)
         if (
           empathyStatusData?.myAttempt?.content &&
@@ -1721,14 +1753,21 @@ export function UnifiedSessionScreen({
             setHasSharedEmpathyLocal(true);
             // Close drawer immediately
             setShowEmpathyDrawer(false);
-            // Mark draft as ready to share (if not already)
-            handleConfirmReadyToShare();
-            // Share empathy - pass statement directly to ensure it's used
-            // This will:
-            // 1. Add optimistic empathy message to chat (ghost dots will show)
-            // 2. Hide the review panel (via animation + local latch)
-            // 3. When API responds, replace optimistic with real message + AI response
-            handleShareEmpathy(statementToShare);
+
+            if (isRefiningEmpathy) {
+              // Resubmit - user has already shared once and is revising their understanding
+              console.log('[ViewEmpathyStatementDrawer] Calling handleResubmitEmpathy (refining mode)');
+              handleResubmitEmpathy(statementToShare);
+            } else {
+              // First time sharing - mark draft as ready and consent
+              handleConfirmReadyToShare();
+              // Share empathy - pass statement directly to ensure it's used
+              // This will:
+              // 1. Add optimistic empathy message to chat (ghost dots will show)
+              // 2. Hide the review panel (via animation + local latch)
+              // 3. When API responds, replace optimistic with real message + AI response
+              handleShareEmpathy(statementToShare);
+            }
           }}
           onSendRefinement={(message) => {
             const refined =

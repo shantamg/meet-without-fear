@@ -49,6 +49,7 @@ import {
   useEmpathyStatus,
   useShareOffer,
   useRespondToShareOffer,
+  useResubmitEmpathy,
 } from './useStages';
 
 // ============================================================================
@@ -395,6 +396,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     },
   });
   const { mutate: validateEmpathy } = useValidateEmpathy();
+  const { mutate: resubmitEmpathy } = useResubmitEmpathy();
   const { mutate: confirmNeeds } = useConfirmNeeds();
   const { mutate: consentShareNeeds } = useConsentShareNeeds();
   const { mutate: confirmCommonGroundMutation } = useConfirmCommonGround();
@@ -1163,6 +1165,33 @@ export function useUnifiedSession(sessionId: string | undefined) {
     })();
   }, [sessionId, consentToShare, empathyDraftData?.draft?.content, liveProposedEmpathyStatement, saveDraftAsync]);
 
+  /**
+   * Resubmit empathy statement after refining (received shared context from partner).
+   * This is used when the user has already shared their empathy statement once,
+   * but received additional context from their partner and wants to revise it.
+   */
+  const handleResubmitEmpathy = useCallback((content: string) => {
+    if (!sessionId) {
+      console.warn('[handleResubmitEmpathy] No sessionId, aborting');
+      return;
+    }
+    console.log('[handleResubmitEmpathy] Calling resubmitEmpathy', {
+      sessionId,
+      contentLength: content.length,
+    });
+    resubmitEmpathy(
+      { sessionId, content },
+      {
+        onError: (error) => {
+          console.error('[handleResubmitEmpathy] Mutation onError callback', error);
+        },
+        onSuccess: (data) => {
+          console.log('[handleResubmitEmpathy] Mutation onSuccess callback', data);
+        },
+      }
+    );
+  }, [sessionId, resubmitEmpathy]);
+
   const handleValidatePartnerEmpathy = useCallback(
     (validated: boolean, feedback?: string) => {
       if (!sessionId) return;
@@ -1378,6 +1407,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     handleConfirmInvitationMessage,
     handleSaveEmpathyDraft,
     handleShareEmpathy,
+    handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
     handleConfirmAllNeeds,
     handleConfirmCommonGround,

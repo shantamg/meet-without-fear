@@ -59,6 +59,7 @@ import {
   GetShareSuggestionResponse,
   RespondToShareSuggestionRequest,
   RespondToShareSuggestionResponse,
+  ResubmitEmpathyResponse,
 } from '@meet-without-fear/shared';
 import { sessionKeys } from './useSessions';
 
@@ -787,6 +788,139 @@ export function useValidateEmpathy(
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Resubmit empathy statement after refining.
+ * Used when user has received shared context from partner and is revising their understanding.
+ */
+export function useResubmitEmpathy(
+  options?: Omit<
+    UseMutationOptions<
+      ResubmitEmpathyResponse,
+      ApiClientError,
+      { sessionId: string; content: string },
+      { previousInfinite: InfiniteData<GetMessagesResponse> | undefined }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    ResubmitEmpathyResponse,
+    ApiClientError,
+    { sessionId: string; content: string },
+    { previousInfinite: InfiniteData<GetMessagesResponse> | undefined }
+  >({
+    mutationFn: async ({ sessionId, content }) => {
+      return post<ResubmitEmpathyResponse>(
+        `/sessions/${sessionId}/empathy/resubmit`,
+        { content }
+      );
+    },
+    onMutate: async ({ sessionId, content }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: messageKeys.infinite(sessionId) });
+
+      // Snapshot the previous value
+      const previousInfinite = queryClient.getQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId)
+      );
+
+      // Optimistically add the new message
+      if (previousInfinite) {
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId),
+          (old) => {
+            if (!old) return old;
+
+            const optimisticMessage: {
+              id: string;
+              sessionId: string;
+              senderId: string | null;
+              role: MessageRole;
+              content: string;
+              stage: number;
+              timestamp: string;
+            } = {
+              id: `optimistic-resubmit-${Date.now()}`,
+              sessionId,
+              senderId: null,
+              role: MessageRole.EMPATHY_STATEMENT,
+              content,
+              stage: 2,
+              timestamp: new Date().toISOString(),
+            };
+
+            // Add to the last page
+            const newPages = [...old.pages];
+            const lastPageIndex = newPages.length - 1;
+            if (lastPageIndex >= 0) {
+              newPages[lastPageIndex] = {
+                ...newPages[lastPageIndex],
+                messages: [...newPages[lastPageIndex].messages, optimisticMessage],
+              };
+            }
+
+            return { ...old, pages: newPages };
+          }
+        );
+      }
+
+      return { previousInfinite };
+    },
+    onSuccess: (data, { sessionId }) => {
+      // Build the server message with proper typing
+      const serverMessage: {
+        id: string;
+        sessionId: string;
+        senderId: string | null;
+        role: MessageRole;
+        content: string;
+        stage: number;
+        timestamp: string;
+      } = {
+        id: data.empathyMessage.id,
+        sessionId,
+        senderId: null,
+        role: MessageRole.EMPATHY_STATEMENT,
+        content: data.empathyMessage.content,
+        stage: data.empathyMessage.stage,
+        timestamp: data.empathyMessage.timestamp,
+      };
+
+      // Update the message with the server response
+      queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId),
+        (old) => {
+          if (!old) return old;
+
+          // Replace optimistic message with server message
+          const newPages = old.pages.map((page) => ({
+            ...page,
+            messages: page.messages.map((msg) =>
+              msg.id.startsWith('optimistic-resubmit-') ? serverMessage : msg
+            ),
+          }));
+
+          return { ...old, pages: newPages };
+        }
+      );
+
+      // Invalidate related queries
+      queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+    },
+    onError: (_err, { sessionId }, context) => {
+      // Rollback to previous state on error
+      if (context?.previousInfinite) {
+        queryClient.setQueryData(messageKeys.infinite(sessionId), context.previousInfinite);
+      }
     },
     ...options,
   });

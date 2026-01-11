@@ -368,6 +368,24 @@ describe('Empathy Panel Visibility', () => {
     expect(result.panels.showEmpathyPanel).toBe(false);
   });
 
+  it('does not show when hasSharedEmpathyLocal is true even in refining mode', () => {
+    // After user shares revised empathy from refining mode, panel should hide
+    // The latch is reset when entering refining mode, but once user shares, it stays hidden
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      hasEmpathyContent: true,
+      hasSharedEmpathyLocal: true,
+      isRefiningEmpathy: true,
+      messageCountSinceSharedContext: 1,
+      empathyStatus: { hasNewSharedContext: true },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showEmpathyPanel).toBe(false);
+  });
+
   it('shows in refining mode with at least 1 message sent', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,

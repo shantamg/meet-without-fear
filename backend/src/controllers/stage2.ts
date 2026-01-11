@@ -1410,15 +1410,18 @@ export async function resubmitEmpathy(
       return;
     }
 
-    if (attempt.status !== 'NEEDS_WORK') {
+    // Allow resubmit from NEEDS_WORK (reconciler found gaps) or REFINING (received shared context)
+    if (attempt.status !== 'NEEDS_WORK' && attempt.status !== 'REFINING') {
       errorResponse(
         res,
         'VALIDATION_ERROR',
-        'Can only resubmit when status is NEEDS_WORK',
+        'Can only resubmit when status is NEEDS_WORK or REFINING',
         400
       );
       return;
     }
+
+    const previousRevision = attempt.revisionCount;
 
     // Update the attempt with new content and set status to ANALYZING
     await prisma.empathyAttempt.update({
@@ -1454,6 +1457,22 @@ export async function resubmitEmpathy(
       ? getPartnerUserIdFromSession(session, user.id)
       : null;
 
+    // Create a new EMPATHY_STATEMENT message with the updated content
+    // This allows the old message to show as "superseded" in the UI
+    // while the new message shows the current delivery status
+    const newMessage = await prisma.message.create({
+      data: {
+        sessionId,
+        senderId: user.id,
+        forUserId: user.id, // For the user's own chat (shows "What you shared")
+        role: 'EMPATHY_STATEMENT',
+        content,
+        stage: 2,
+      },
+    });
+
+    console.log(`[resubmitEmpathy] Created new EMPATHY_STATEMENT message ${newMessage.id} (revision ${previousRevision + 1})`);
+
     // Run reconciler for just this direction
     if (partnerId) {
       triggerReconcilerForUser(sessionId, user.id, partnerId).catch((err) =>
@@ -1464,6 +1483,13 @@ export async function resubmitEmpathy(
     successResponse(res, {
       status: 'ANALYZING',
       message: 'Re-analyzing your updated understanding...',
+      empathyMessage: {
+        id: newMessage.id,
+        content: newMessage.content,
+        timestamp: newMessage.timestamp.toISOString(),
+        stage: newMessage.stage,
+        deliveryStatus: 'pending',
+      },
     });
   } catch (error) {
     console.error('[resubmitEmpathy] Error:', error);
