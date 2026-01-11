@@ -303,31 +303,16 @@ export function ChatInterface({
   // (e.g., after compact signing + mood check with just the first AI message)
   // If there are multiple messages, it's a returning session - treat as history
   //
-  // IMPORTANT: If lastSeenChatItemId is provided, only mark messages up to that point
-  // as "known". Messages after lastSeenChatItemId are "new" and should animate.
-  //
-  // TIMING: We must wait for lastSeenChatItemId to be defined (not undefined) before
-  // marking any messages as known. undefined means "not yet loaded", null means "never viewed".
-  if (isInitialLoadRef.current && messages.length > 0 && lastSeenChatItemId !== undefined) {
+  // NOTE: We mark messages as known IMMEDIATELY on first render, without waiting for
+  // lastSeenChatItemId. This prevents hot reload issues where all messages would animate.
+  // The lastSeenChatItemId is only used for the "New messages" separator, not for
+  // determining which messages to animate.
+  if (isInitialLoadRef.current && messages.length > 0) {
     const shouldSkip = skipInitialHistory && messages.length === 1;
     if (!shouldSkip) {
-      // If we have a lastSeenChatItemId (string), only mark messages up to (and including) it as known
-      // Messages after it are "new" and should get typewriter animation
-      if (lastSeenChatItemId) {
-        const lastSeenIndex = messages.findIndex(m => m.id === lastSeenChatItemId);
-        if (lastSeenIndex >= 0) {
-          // Mark messages from 0 to lastSeenIndex (inclusive) as known
-          for (let i = 0; i <= lastSeenIndex; i++) {
-            knownMessageIdsRef.current.add(messages[i].id);
-          }
-        } else {
-          // lastSeenChatItemId not found in messages - mark all as known (fallback)
-          messages.forEach(m => knownMessageIdsRef.current.add(m.id));
-        }
-      } else {
-        // lastSeenChatItemId is null (never viewed) - mark all messages as known
-        messages.forEach(m => knownMessageIdsRef.current.add(m.id));
-      }
+      // Mark ALL current messages as known on initial load
+      // New messages arriving AFTER this point will animate (not in this set)
+      messages.forEach(m => knownMessageIdsRef.current.add(m.id));
     }
     isInitialLoadRef.current = false;
   }
@@ -393,10 +378,6 @@ export function ChatInterface({
     // Wait for the current animation to complete before queueing the next
     if (animatingMessageId !== null) return null;
 
-    // Don't start animations until lastSeenChatItemId is loaded (not undefined)
-    // This prevents animating old messages while waiting for the session state
-    if (lastSeenChatItemId === undefined) return null;
-
     // listItems is sorted newest first (descending by timestamp)
     // Iterate from the END (oldest) to find the oldest animatable message
     for (let i = listItems.length - 1; i >= 0; i--) {
@@ -417,7 +398,7 @@ export function ChatInterface({
       return message.id;
     }
     return null;
-  }, [listItems, animatingMessageId, lastSeenChatItemId]);
+  }, [listItems, animatingMessageId]);
 
   // Notify parent when typewriter state changes
   useEffect(() => {

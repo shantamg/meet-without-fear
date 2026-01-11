@@ -619,6 +619,14 @@ export function useConsentToShareEmpathy(
 ) {
   const queryClient = useQueryClient();
 
+  // Extract callbacks from options to merge with internal handlers
+  // This prevents ...options from overwriting our onSuccess/onError
+  const {
+    onSuccess: externalOnSuccess,
+    onError: externalOnError,
+    ...restOptions
+  } = options ?? {};
+
   return useMutation<
     ConsentToShareEmpathyResponse,
     ApiClientError,
@@ -765,11 +773,31 @@ export function useConsentToShareEmpathy(
         return { previousInfinite: undefined, previousEmpathyStatus: undefined, previousEmpathyDraft: undefined };
       }
     },
-    onSuccess: (data, { sessionId }) => {
+    onSuccess: (data, variables, context) => {
+      const { sessionId } = variables;
+
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-      // Invalidate empathy status to update waitingStatus (which depends on empathyStatusData)
+
+      // Directly update empathy status cache with correct delivery status
+      // This immediately clears 'sending' status instead of waiting for refetch
+      queryClient.setQueryData<EmpathyExchangeStatusResponse>(
+        stageKeys.empathyStatus(sessionId),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            sharedContentDeliveryStatus: 'pending', // Clear 'sending' status
+            myAttempt: old.myAttempt ? {
+              ...old.myAttempt,
+              deliveryStatus: 'pending', // Update delivery status
+              status: data.status === 'HELD' ? 'HELD' : old.myAttempt.status,
+            } : old.myAttempt,
+          };
+        }
+      );
+      // Also invalidate to eventually sync with server
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
 
       // Replace optimistic message with real ones and add AI response
@@ -814,7 +842,10 @@ export function useConsentToShareEmpathy(
       if (messagesToAdd.length > 0) {
         // Update caches, removing optimistic message and adding real ones
         const updateCache = (old: GetMessagesResponse | undefined): GetMessagesResponse => {
-          if (!old) return { messages: messagesToAdd, hasMore: false };
+          // Handle missing or malformed cache
+          if (!old || !old.messages) {
+            return { messages: messagesToAdd, hasMore: false };
+          }
           // Remove optimistic message, add real messages
           const filteredMessages = old.messages.filter((m) => !m.id.startsWith('optimistic-empathy-'));
           const existingIds = new Set(filteredMessages.map((m) => m.id));
@@ -824,7 +855,7 @@ export function useConsentToShareEmpathy(
 
         const updateInfiniteCache = (
           old: InfiniteData<GetMessagesResponse> | undefined
-        ): InfiniteData<GetMessagesResponse> | undefined => {
+        ): InfiniteData<GetMessagesResponse> => {
           if (!old || !old.pages || old.pages.length === 0) {
             return { pages: [{ messages: messagesToAdd, hasMore: false }], pageParams: [undefined] };
           }
@@ -832,10 +863,13 @@ export function useConsentToShareEmpathy(
           const newPages = [...old.pages];
           const firstPage = { ...newPages[0] };
 
+          // Handle case where firstPage.messages might be undefined
+          const existingMessages = firstPage.messages ?? [];
+
           // Remove optimistic message, add real messages
           // Add to END for chronological order within page (oldest to newest)
           // useUnifiedSession flattens with [...pages].reverse().flatMap()
-          const filteredMessages = firstPage.messages.filter((m) => !m.id.startsWith('optimistic-empathy-'));
+          const filteredMessages = existingMessages.filter((m) => !m.id.startsWith('optimistic-empathy-'));
           const existingIds = new Set(filteredMessages.map((m) => m.id));
           const newMessages = messagesToAdd.filter((m) => !existingIds.has(m.id));
 
@@ -858,8 +892,13 @@ export function useConsentToShareEmpathy(
       // 1. We already added the real messages to the cache above
       // 2. A refetch would overwrite skipTypewriter flag, causing re-animation flicker
       // If we need to sync with server, a separate polling mechanism can be used
+
+      // Call consumer's onSuccess callback if provided (type cast to work around React Query types)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (externalOnSuccess as any)?.(data, variables, context);
     },
-    onError: (_err, { sessionId }, context) => {
+    onError: (err, variables, context) => {
+      const { sessionId } = variables;
       // Rollback to previous state on error
       if (context?.previousInfinite) {
         queryClient.setQueryData(messageKeys.infinite(sessionId), context.previousInfinite);
@@ -873,10 +912,15 @@ export function useConsentToShareEmpathy(
       // Also invalidate to refetch fresh data
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+
+      // Call consumer's onError callback if provided (type cast to work around React Query types)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (externalOnError as any)?.(err, variables, context);
     },
     // Note: Removed onSettled message refetch to prevent overwriting skipTypewriter flag
     // The real messages are added in onSuccess with correct IDs from the server response
-    ...options,
+    // Use restOptions (without onSuccess/onError) to prevent overwriting our handlers
+    ...restOptions,
   });
 }
 
