@@ -199,7 +199,8 @@ export function useRespondToShareOffer(
         timestamp: new Date().toISOString(),
       };
 
-      // Update infinite query cache - add to START (newest first in inverted list)
+      // Update infinite query cache - add to END (chronological order within page)
+      // useUnifiedSession flattens with [...pages].reverse().flatMap()
       queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
         messageKeys.infinite(sessionId),
         (old) => {
@@ -212,7 +213,8 @@ export function useRespondToShareOffer(
 
           const newPages = [...old.pages];
           const firstPage = { ...newPages[0] };
-          firstPage.messages = [optimisticMessage, ...firstPage.messages];
+          // Add to END for chronological order
+          firstPage.messages = [...firstPage.messages, optimisticMessage];
           newPages[0] = firstPage;
           return { ...old, pages: newPages };
         }
@@ -686,9 +688,10 @@ export function useConsentToShareEmpathy(
               const newPages = [...old.pages];
               const firstPage = { ...newPages[0] };
 
-              // Add to the START of the messages array (newest first in inverted list)
-              // This ensures it appears at the bottom visually (since list is inverted)
-              firstPage.messages = [optimisticMessage, ...firstPage.messages];
+              // Add to the END of the messages array (chronological order within page)
+              // useUnifiedSession flattens with [...pages].reverse().flatMap() which expects
+              // each page's messages in chronological order (oldest to newest)
+              firstPage.messages = [...firstPage.messages, optimisticMessage];
 
               newPages[0] = firstPage;
               return { ...old, pages: newPages };
@@ -708,7 +711,8 @@ export function useConsentToShareEmpathy(
 
               const newPages = [...old.pages];
               const firstPage = { ...newPages[0] };
-              firstPage.messages = [optimisticMessage, ...firstPage.messages];
+              // Add to END for chronological order within page
+              firstPage.messages = [...firstPage.messages, optimisticMessage];
               newPages[0] = firstPage;
               return { ...old, pages: newPages };
             }
@@ -726,25 +730,28 @@ export function useConsentToShareEmpathy(
           }
         );
 
-        // Optimistically set empathy status to show "analyzing" state
-        // This ensures the waiting banner shows immediately ("AI is analyzing...")
+        // Optimistically set empathy status to mark that user has shared
+        // Only set analyzing: true if partner has already shared their attempt
+        // The actual status will be determined by the backend response and refetch
         queryClient.setQueryData<EmpathyExchangeStatusResponse>(
           stageKeys.empathyStatus(sessionId),
           (old) => ({
+            // Preserve existing myAttempt or set to null (will be updated by refetch)
             myAttempt: old?.myAttempt ? {
               ...old.myAttempt,
-              status: 'ANALYZING',
+              status: old?.partnerAttempt ? 'ANALYZING' : 'HELD',
             } : null,
             partnerAttempt: old?.partnerAttempt ?? null,
             partnerCompletedStage1: old?.partnerCompletedStage1 ?? false,
-            analyzing: true,  // This triggers 'reconciler-analyzing' waiting status
+            // Only set analyzing: true if partner has already shared their attempt
+            analyzing: !!old?.partnerAttempt,
             awaitingSharing: false,
             hasNewSharedContext: false,
             sharedContext: old?.sharedContext ?? null,
             refinementHint: old?.refinementHint ?? null,
             readyForStage3: false,
             messageCountSinceSharedContext: old?.messageCountSinceSharedContext ?? 0,
-            sharedContentDeliveryStatus: old?.sharedContentDeliveryStatus ?? null,
+            sharedContentDeliveryStatus: 'sending', // Show sending status on message
           })
         );
 
@@ -826,13 +833,14 @@ export function useConsentToShareEmpathy(
           const firstPage = { ...newPages[0] };
 
           // Remove optimistic message, add real messages
-          // For inverted lists (newest first), add to the START of the array
+          // Add to END for chronological order within page (oldest to newest)
+          // useUnifiedSession flattens with [...pages].reverse().flatMap()
           const filteredMessages = firstPage.messages.filter((m) => !m.id.startsWith('optimistic-empathy-'));
           const existingIds = new Set(filteredMessages.map((m) => m.id));
           const newMessages = messagesToAdd.filter((m) => !existingIds.has(m.id));
 
-          // Add new messages to the start (newest first)
-          firstPage.messages = [...newMessages, ...filteredMessages];
+          // Add new messages to the END (chronological order within page)
+          firstPage.messages = [...filteredMessages, ...newMessages];
           newPages[0] = firstPage;
 
           return { ...old, pages: newPages };
