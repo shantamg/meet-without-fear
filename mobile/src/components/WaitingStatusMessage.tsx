@@ -85,7 +85,7 @@ const getStatusConfig = (
       };
     case 'partner-shared-empathy':
       return {
-        message: `${partnerName} has shared their understanding of your perspective. I'll show you their attempt.`,
+        message: `${partnerName} has shared their attempt to imagine what you might be feeling. You can review it and let them know if it feels accurate.`,
         isWaiting: false,
         icon: 'checkmark',
       };

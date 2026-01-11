@@ -237,8 +237,8 @@ function getPushMessage(event: string, data: any) {
       body: 'They completed their work. Check in when ready.'
     },
     'partner.empathy_shared': {
-      title: 'Partner shared their understanding',
-      body: 'See how they understand your perspective.'
+      title: 'Partner shared their empathy attempt',
+      body: 'See how they imagine you might be feeling.'
     },
     'agreement.proposed': {
       title: 'New experiment proposed',

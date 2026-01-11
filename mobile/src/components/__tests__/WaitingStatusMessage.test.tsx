@@ -66,7 +66,7 @@ describe('WaitingStatusMessage', () => {
     it('displays partner shared empathy message', () => {
       render(<WaitingStatusMessage {...defaultProps} type="partner-shared-empathy" />);
 
-      expect(screen.getByText(/Alex has shared their understanding/)).toBeTruthy();
+      expect(screen.getByText(/Alex has shared their attempt to imagine/)).toBeTruthy();
     });
 
     it('displays partner confirmed needs message', () => {

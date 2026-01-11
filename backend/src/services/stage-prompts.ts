@@ -1983,9 +1983,9 @@ FORMAT:
 EXAMPLE PATTERNS:
 - "Your empathy statement has been shared! There's one thing ${context.partnerName} might not fully see yet - how [gap area]. You mentioned [reference]. Would you be open to sharing a bit about that? Totally optional."
 
-- "You've done the hard work of understanding ${context.partnerName}. If you're up for it, sharing [specific aspect] could help them see you more clearly. Only if it feels right - no pressure at all."
+- "You've done the hard work of trying to see through ${context.partnerName}'s eyes. If you're up for it, sharing [specific aspect] could help them see you more clearly. Only if it feels right - no pressure at all."
 
-- "${context.partnerName} understood a lot, but might have missed [gap]. You spoke about [reference] earlier. Would you want to help them see that part? It's completely your choice."
+- "${context.partnerName} got a lot right in their attempt, but might have missed [gap]. You spoke about [reference] earlier. Would you want to help them see that part? It's completely your choice."
 
 Respond in JSON:
 \`\`\`json

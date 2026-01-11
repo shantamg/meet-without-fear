@@ -4,13 +4,13 @@ This document describes how users validate their partner's empathy attempt, incl
 
 ## Overview
 
-After a user's empathy attempt is **REVEALED** to their partner (the subject), the subject can provide feedback on how accurately the guesser understood their feelings. This feedback determines whether the guesser needs to revise their understanding.
+After a user's empathy attempt is **REVEALED** to their partner (the subject), the subject can provide feedback on how accurately the guesser's attempt resonates with their actual feelings. This feedback determines whether the guesser needs to revise their empathy attempt.
 
 ## When Accuracy Feedback Appears
 
 The accuracy feedback panel should appear when:
 1. Partner's empathy status is `REVEALED` (not yet validated)
-2. Current user is the "subject" (the one being understood)
+2. Current user is the "subject" (the one whose perspective the partner attempted to imagine)
 3. No share suggestion panel is pending
 4. User hasn't already submitted validation
 
@@ -43,7 +43,8 @@ The accuracy feedback panel should appear **above the chat input**, not at the b
 │  ┌─────────────────────────────┐   │
 │  │  Accuracy Feedback Panel    │   │  ← Panel area (above input)
 │  │  [Partner name]'s           │   │
-│  │  understanding of you:      │   │
+│  │  attempt to imagine         │   │
+│  │  how you feel:              │   │
 │  │  "Empathy statement..."     │   │
 │  │                             │   │
 │  │  How accurate is this?      │   │
@@ -60,7 +61,7 @@ The accuracy feedback panel should appear **above the chat input**, not at the b
 ```mermaid
 flowchart TB
     subgraph Panel["Accuracy Feedback Panel"]
-        Title["[Partner]'s understanding of you:"]
+        Title["[Partner]'s attempt to imagine how you feel:"]
         Statement["Empathy statement text"]
         Question["How accurate is this?"]
 

@@ -208,8 +208,8 @@ const NOTIFICATION_MESSAGES: Record<string, (data: any) => { title: string; body
   }),
 
   'partner.empathy_shared': () => ({
-    title: 'Partner shared their understanding',
-    body: 'See how they understand your perspective.',
+    title: 'Partner shared their empathy attempt',
+    body: 'See how they imagine you might be feeling.',
   }),
 
   'partner.needs_shared': () => ({

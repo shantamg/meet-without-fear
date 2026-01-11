@@ -4,13 +4,13 @@ This document describes the empathy exchange flow in Stage 2, including the reco
 
 ## Overview
 
-In Stage 2, both users work to understand each other's perspective. Each user:
-1. Chats with AI to develop their understanding of their partner's experience
-2. Creates an empathy statement expressing that understanding
+In Stage 2, both users work to imagine each other's perspective. Each user:
+1. Chats with AI to develop their attempt to imagine their partner's experience
+2. Creates an empathy statement expressing that attempt
 3. Shares the statement with their partner
-4. Receives validation feedback on their empathy
+4. Receives validation feedback on their empathy attempt
 
-The **Reconciler** analyzes how well each person understood the other and may suggest sharing additional context to help bridge gaps in understanding.
+The **Reconciler** analyzes how well each person's attempt resonated with the other and may suggest sharing additional context to help bridge gaps.
 
 ## Empathy Attempt States
 
@@ -72,7 +72,7 @@ flowchart TB
     B -->|No| C[No action needed]
     B -->|Yes| D[Run Reconciler Analysis]
 
-    D --> E{Analyze gaps in<br/>partner's understanding}
+    D --> E{Analyze gaps in<br/>partner's empathy attempt}
 
     E --> F{Gap Severity?}
 
@@ -278,7 +278,7 @@ stateDiagram-v2
 
     state Active {
         [*] --> Chatting
-        Chatting --> ViewingEmpathy: Tap "View your understanding"
+        Chatting --> ViewingEmpathy: Tap "View your empathy attempt"
         ViewingEmpathy --> Chatting: Close drawer
         ViewingEmpathy --> Sharing: Tap "Share"
         Sharing --> Chatting: Confirmed

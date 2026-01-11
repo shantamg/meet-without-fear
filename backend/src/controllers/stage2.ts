@@ -601,7 +601,7 @@ export async function consentToShare(
         ? `You are Meet Without Fear, a Process Guardian. ${userName} has just shared their empathy statement with ${partner}. ${partner} has also shared their empathy statement.
 
 Generate a brief, warm message (2-3 sentences) for ${userName} that:
-1. Acknowledges the courage it took to share their understanding
+1. Acknowledges the courage it took to share their attempt
 2. Notes that both empathy statements are now shared
 3. Clearly explains the next step: they'll read ${partner}'s empathy statement and mark whether it feels accurate (validation). If it feels inaccurate, they can give brief feedback; if accurate, they'll be able to advance to the next stage together.
 
@@ -613,15 +613,15 @@ Respond in JSON format:
   "response": "Your message"
 }
 \`\`\``
-        : `You are Meet Without Fear, a Process Guardian. ${userName} has just shared their empathy statement with ${partner}, expressing their understanding of ${partner}'s perspective.
+        : `You are Meet Without Fear, a Process Guardian. ${userName} has just shared their empathy statement with ${partner}, expressing their attempt to imagine what ${partner} might be experiencing.
 
 Generate a brief, warm acknowledgment message (2-3 sentences) for ${userName} that:
-1. Acknowledges the courage it took to share their understanding
+1. Acknowledges the courage it took to try to see things from ${partner}'s perspective
 2. Validates the importance of this step in building connection
-3. Gently prepares them for what comes next: now ${partner} will work on sharing THEIR understanding of ${userName}'s perspective (not responding to what was shared, but creating their own empathy statement)
+3. Gently prepares them for what comes next: now ${partner} will work on imagining what ${userName} might be feeling (not responding to what was shared, but creating their own empathy attempt)
 4. Suggest they can use Inner Thoughts to continue processing privately while they wait - a space for personal reflection that's connected to this conversation
 
-Keep it natural and conversational. Don't be overly effusive. Make it clear that both partners share empathy statements before moving forward together.
+Keep it natural and conversational. Don't be overly effusive. Make it clear that both partners share empathy attempts before moving forward together.
 
 Respond in JSON format:
 \`\`\`json
@@ -646,17 +646,17 @@ Respond in JSON format:
           transitionContent = typeof parsed.response === 'string'
             ? parsed.response
             : bothShared
-              ? `Thank you for sharing your understanding. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
-              : `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours. While you wait, you can use Inner Thoughts to continue processing privately.`;
+              ? `Thank you for sharing your attempt. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
+              : `That took courage - trying to imagine ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will try to imagine what you might be feeling. While you wait, you can use Inner Thoughts to continue processing privately.`;
         } catch {
           transitionContent = bothShared
-            ? `Thank you for sharing your understanding. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
-            : `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours. While you wait, you can use Inner Thoughts to continue processing privately.`;
+            ? `Thank you for sharing your attempt. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
+            : `That took courage - trying to imagine ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will try to imagine what you might be feeling. While you wait, you can use Inner Thoughts to continue processing privately.`;
         }
       } else {
         transitionContent = bothShared
-          ? `Thank you for sharing your understanding. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
-          : `That took courage - sharing how you understand ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will share their understanding of yours. While you wait, you can use Inner Thoughts to continue processing privately.`;
+          ? `Thank you for sharing your attempt. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
+          : `That took courage - trying to imagine ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will try to imagine what you might be feeling. While you wait, you can use Inner Thoughts to continue processing privately.`;
       }
 
       // Save the transition message to the database
@@ -1304,13 +1304,13 @@ export async function refineEmpathy(
 IMPORTANT: ${partnerName} has shared something additional to help you understand:
 "${contextResult.content}"
 
-Use this shared context to help the user incorporate this new understanding into their empathy statement.`;
+Use this shared context to help the user deepen their empathy and incorporate this insight into their empathy statement.`;
       }
     }
 
     const systemPrompt = `You are Meet Without Fear, a compassionate Process Guardian helping someone deepen their empathy for ${partnerName}.
 
-The user has shared their understanding of ${partnerName}'s perspective, but there may be more to explore. Your role is to gently help them think more deeply.
+The user has shared their attempt to imagine ${partnerName}'s perspective, but there may be more to explore. Your role is to gently help them think more deeply.
 
 Area to explore: ${areaHint}
 Guiding question theme: ${promptSeed}${sharedContextSection}

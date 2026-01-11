@@ -139,11 +139,11 @@ Each empathy direction (A→B, B→A) progresses independently:
 | State | Guesser (User A) Sees | Subject (User B) Sees |
 |-------|----------------------|----------------------|
 | A submitted, B in Stage 1 | "Waiting for [B] to finish sharing their experience" | Normal Stage 1 chat |
-| A submitted, B finished Stage 1 | "Analyzing your understanding..." | Stage 2 (can write their own empathy) |
-| A→B: AWAITING_SHARING | "Waiting for [B] to respond..." | "Would you like to share something to help [A] understand?" |
-| A→B: REFINING | "New context from [B]! Would you like to refine your understanding?" | Stage 2 continues |
-| A→B: REVEALED | "Your understanding has been shared with [B]" | A's statement in chat + validation UI |
-| A→B: VALIDATED | "[B] confirmed your understanding feels right" | Ready to continue |
+| A submitted, B finished Stage 1 | "Analyzing your empathy attempt..." | Stage 2 (can write their own empathy) |
+| A→B: AWAITING_SHARING | "Waiting for [B] to respond..." | "Would you like to share something to help [A] understand you better?" |
+| A→B: REFINING | "New context from [B]! Would you like to refine your empathy attempt?" | Stage 2 continues |
+| A→B: REVEALED | "Your empathy attempt has been shared with [B]" | A's statement in chat + validation UI |
+| A→B: VALIDATED | "[B] confirmed your attempt resonates with them" | Ready to continue |
 
 ## Information Boundaries
 
@@ -307,13 +307,13 @@ Add fields for the new flow:
 
 | Trigger | Recipient | Notification |
 |---------|-----------|--------------|
-| Partner completes Stage 1 + you have HELD empathy | You | "Analyzing your understanding of [partner]..." |
-| Share suggestion generated | Subject | "[Guesser] shared their understanding. Would you like to help them see more?" |
-| Subject shares context | Guesser | "[Subject] shared something to help you understand" |
-| Subject declines | Guesser | "Your understanding has been shared with [subject]" |
-| Empathy approved | Guesser | "Your understanding has been shared with [subject]" |
-| Empathy revealed | Subject | "[Guesser] shared their understanding of you" |
-| Subject validates | Guesser | "[Subject] confirmed your understanding feels right" |
+| Partner completes Stage 1 + you have HELD empathy | You | "Analyzing your empathy attempt..." |
+| Share suggestion generated | Subject | "[Guesser] shared their attempt to imagine how you feel. Would you like to help them see more?" |
+| Subject shares context | Guesser | "[Subject] shared something to help you understand them better" |
+| Subject declines | Guesser | "Your empathy attempt has been shared with [subject]" |
+| Empathy approved | Guesser | "Your empathy attempt has been shared with [subject]" |
+| Empathy revealed | Subject | "[Guesser] shared their attempt to imagine how you feel" |
+| Subject validates | Guesser | "[Subject] confirmed your attempt resonates with them" |
 | Both validated | Both | "You're both ready to move forward together" |
 
 ## Implementation Phases
