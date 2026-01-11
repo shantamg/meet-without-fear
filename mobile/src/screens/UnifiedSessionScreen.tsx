@@ -211,7 +211,6 @@ export function UnifiedSessionScreen({
     partnerEmpathyData,
 
     // Utility actions
-    clearMirrorIntervention,
     showCooling,
     setPendingConfirmation,
 
@@ -889,34 +888,6 @@ export function UnifiedSessionScreen({
           // The modal is triggered via openOverlay('support-options')
           return null;
 
-        case 'mirror-intervention':
-          return (
-            <View style={styles.interventionCard} key={card.id}>
-              <Text style={styles.interventionTitle}>Pause for a moment</Text>
-              <Text style={styles.interventionMessage}>{card.props.message as string}</Text>
-              <Text style={styles.interventionPatterns}>
-                Detected: {(card.props.patterns as string[]).join(', ')}
-              </Text>
-              <View style={styles.interventionButtons}>
-                <TouchableOpacity
-                  style={styles.rephraseButton}
-                  onPress={clearMirrorIntervention}
-                >
-                  <Text style={styles.rephraseButtonText}>Rephrase</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.interventionContinueButton}
-                  onPress={() => {
-                    clearMirrorIntervention();
-                    // Send pending message anyway
-                  }}
-                >
-                  <Text style={styles.interventionContinueButtonText}>Continue anyway</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-
         // Note: ready-to-share-confirmation case removed - now shown as panel above chat input
         // Note: empathy-draft-preview case removed - users access empathy statement via the overlay drawer
 
@@ -1048,7 +1019,6 @@ export function UnifiedSessionScreen({
       handleConfirmAllNeeds,
       handleMarkReadyToRank,
       handleRespondToShareOffer,
-      clearMirrorIntervention,
       sendMessage,
       onStageComplete,
       onNavigateBack,
@@ -2133,64 +2103,6 @@ const useStyles = () =>
       fontSize: 14,
       color: t.colors.textOnAccent,
       fontWeight: '600',
-    },
-
-    // Mirror Intervention
-    interventionCard: {
-      margin: 16,
-      padding: 16,
-      backgroundColor: 'rgba(245, 158, 11, 0.15)',
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: t.colors.warning,
-    },
-    interventionTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: t.colors.warning,
-      marginBottom: 8,
-    },
-    interventionMessage: {
-      fontSize: 14,
-      color: t.colors.textPrimary,
-      lineHeight: 20,
-      marginBottom: 8,
-    },
-    interventionPatterns: {
-      fontSize: 12,
-      color: t.colors.textSecondary,
-      marginBottom: 16,
-      fontStyle: 'italic',
-    },
-    interventionButtons: {
-      flexDirection: 'row',
-      gap: 12,
-    },
-    rephraseButton: {
-      flex: 1,
-      padding: 12,
-      backgroundColor: t.colors.accent,
-      borderRadius: 8,
-      alignItems: 'center',
-    },
-    rephraseButtonText: {
-      color: t.colors.textOnAccent,
-      fontSize: 14,
-      fontWeight: '600',
-    },
-    interventionContinueButton: {
-      flex: 1,
-      padding: 12,
-      backgroundColor: t.colors.bgTertiary,
-      borderRadius: 8,
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: t.colors.border,
-    },
-    interventionContinueButtonText: {
-      color: t.colors.textSecondary,
-      fontSize: 14,
-      fontWeight: '500',
     },
 
     // Confirmation Buttons

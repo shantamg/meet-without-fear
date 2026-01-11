@@ -13,11 +13,10 @@
  * 6. Complete - Both users have validated, stage advances
  *
  * Features:
- * - Mirror Intervention: Detects harmful language patterns (judgmental, accusatory)
  * - Revision Loop: Allows revision when partner rates empathy as inaccurate
  */
 
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -46,87 +45,6 @@ import { Stage, StageStatus } from '@meet-without-fear/shared';
 // ============================================================================
 
 type Phase = 'building' | 'ready_to_share' | 'waiting_for_partner' | 'validation' | 'revision' | 'complete';
-
-interface MirrorIntervention {
-  detected: boolean;
-  message: string;
-  patterns: string[];
-}
-
-// ============================================================================
-// Mirror Intervention Detection
-// ============================================================================
-
-/**
- * Harmful language patterns that may indicate judgmental or accusatory language.
- * Used to trigger the Mirror Intervention feature.
- */
-const HARMFUL_PATTERNS = {
-  judgmental: [
-    /\byou always\b/i,
-    /\byou never\b/i,
-    /\byou're (so|being|just)\b/i,
-    /\btypical(ly)?\b/i,
-    /\bof course you\b/i,
-  ],
-  accusatory: [
-    /\byou made me\b/i,
-    /\bit's your fault\b/i,
-    /\byou did this\b/i,
-    /\bbecause of you\b/i,
-    /\byou don't care\b/i,
-    /\byou're wrong\b/i,
-  ],
-  dismissive: [
-    /\bwhatever\b/i,
-    /\bI don't care\b/i,
-    /\bdoesn't matter\b/i,
-    /\bget over it\b/i,
-    /\byou're overreacting\b/i,
-    /\bthat's ridiculous\b/i,
-  ],
-};
-
-/**
- * Detects potentially harmful language patterns in text.
- */
-function detectHarmfulLanguage(text: string): MirrorIntervention {
-  const detectedPatterns: string[] = [];
-
-  // Check judgmental patterns
-  for (const pattern of HARMFUL_PATTERNS.judgmental) {
-    if (pattern.test(text)) {
-      detectedPatterns.push('judgmental language');
-      break;
-    }
-  }
-
-  // Check accusatory patterns
-  for (const pattern of HARMFUL_PATTERNS.accusatory) {
-    if (pattern.test(text)) {
-      detectedPatterns.push('accusatory language');
-      break;
-    }
-  }
-
-  // Check dismissive patterns
-  for (const pattern of HARMFUL_PATTERNS.dismissive) {
-    if (pattern.test(text)) {
-      detectedPatterns.push('dismissive language');
-      break;
-    }
-  }
-
-  if (detectedPatterns.length > 0) {
-    return {
-      detected: true,
-      message: 'I notice some strong language. Would you like to rephrase this to focus on understanding?',
-      patterns: detectedPatterns,
-    };
-  }
-
-  return { detected: false, message: '', patterns: [] };
-}
 
 // ============================================================================
 // Phase Determination
@@ -193,10 +111,6 @@ export function PerspectiveStretchScreen() {
   // Inner Thoughts hooks for linked session
   const { data: linkedData } = useLinkedInnerThoughts(sessionId);
   const createInnerThoughts = useCreateInnerThoughtsSession();
-
-  // Mirror intervention state
-  const [mirrorIntervention, setMirrorIntervention] = useState<MirrorIntervention | null>(null);
-  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
   // Revision state (for when partner rates empathy as inaccurate)
   const [needsRevision, setNeedsRevision] = useState(false);
@@ -309,35 +223,10 @@ export function PerspectiveStretchScreen() {
     });
   };
 
-  // Handle message sending with mirror intervention
+  // Handle message sending
   const handleSendMessage = (content: string) => {
     if (!sessionId) return;
-
-    // Check for harmful language patterns
-    const intervention = detectHarmfulLanguage(content);
-    if (intervention.detected) {
-      setMirrorIntervention(intervention);
-      setPendingMessage(content);
-      return;
-    }
-
     sendMessage({ sessionId, content });
-  };
-
-  // Handle mirror intervention - rephrase
-  const handleRephrase = () => {
-    setMirrorIntervention(null);
-    setPendingMessage(null);
-    // User will type a new message
-  };
-
-  // Handle mirror intervention - continue anyway
-  const handleContinueAnyway = () => {
-    if (pendingMessage && sessionId) {
-      sendMessage({ sessionId, content: pendingMessage });
-    }
-    setMirrorIntervention(null);
-    setPendingMessage(null);
   };
 
   // Handle revision submission (used for future partner feedback feature)
@@ -397,37 +286,6 @@ export function PerspectiveStretchScreen() {
     }
   }, [sessionId, linkedData, partnerName, router, createInnerThoughts]);
 
-  // Render mirror intervention card
-  const renderMirrorIntervention = () => {
-    if (!mirrorIntervention) return null;
-
-    return (
-      <View style={styles.interventionCard}>
-        <Text style={styles.interventionTitle}>Pause for a moment</Text>
-        <Text style={styles.interventionMessage}>{mirrorIntervention.message}</Text>
-        <Text style={styles.interventionPatterns}>
-          Detected: {mirrorIntervention.patterns.join(', ')}
-        </Text>
-        <View style={styles.interventionButtons}>
-          <TouchableOpacity
-            style={styles.rephraseButton}
-            onPress={handleRephrase}
-            accessibilityRole="button"
-          >
-            <Text style={styles.rephraseButtonText}>Rephrase</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.continueButton}
-            onPress={handleContinueAnyway}
-            accessibilityRole="button"
-          >
-            <Text style={styles.continueButtonText}>Continue anyway</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
-
   // Render phase-specific content
   const renderContent = () => {
     switch (phase) {
@@ -447,7 +305,6 @@ export function PerspectiveStretchScreen() {
                 Work with the AI to understand your partner's perspective
               </Text>
             </View>
-            {renderMirrorIntervention()}
             <ChatInterface
               messages={messages}
               onSendMessage={handleSendMessage}
@@ -533,7 +390,6 @@ export function PerspectiveStretchScreen() {
               attempt={empathyDraftData?.draft?.content || ''}
               testID="my-empathy-attempt-revision"
             />
-            {renderMirrorIntervention()}
             <View style={styles.revisionActions}>
               <ChatInterface
                 messages={messages}
@@ -621,64 +477,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: colors.textSecondary,
-  },
-
-  // Mirror Intervention styles
-  interventionCard: {
-    margin: 16,
-    padding: 16,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.warning,
-  },
-  interventionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.warning,
-    marginBottom: 8,
-  },
-  interventionMessage: {
-    fontSize: 14,
-    color: colors.textPrimary,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  interventionPatterns: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginBottom: 16,
-    fontStyle: 'italic',
-  },
-  interventionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  rephraseButton: {
-    flex: 1,
-    padding: 12,
-    backgroundColor: colors.accent,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  rephraseButtonText: {
-    color: colors.textOnAccent,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  continueButton: {
-    flex: 1,
-    padding: 12,
-    backgroundColor: colors.bgTertiary,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  continueButtonText: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '500',
   },
 
   // Revision phase styles

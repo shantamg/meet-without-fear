@@ -78,7 +78,6 @@ export type InlineCardType =
   | 'feel-heard-confirmation'
   | 'cooling-suggestion'
   // Stage 2: Perspective Stretch
-  | 'mirror-intervention'
   | 'consent-prompt'
   | 'ready-to-share-confirmation'
   | 'accuracy-feedback'
@@ -100,12 +99,6 @@ export interface InlineChatCard {
   dismissible?: boolean;
 }
 
-interface MirrorIntervention {
-  detected: boolean;
-  message: string;
-  patterns: string[];
-}
-
 // Re-export WaitingStatusType from the component for external use
 export type { WaitingStatusType } from '../components/WaitingStatusMessage';
 
@@ -119,8 +112,6 @@ interface UnifiedSessionState {
   dismissedCards: Set<string>;
   barometerValue: number;
   lastBarometerMessageCount: number;
-  mirrorIntervention: MirrorIntervention | null;
-  pendingMessage: string | null;
   showCoolingSuggestion: boolean;
   showFinalCheck: boolean;
   pendingConfirmation: boolean;
@@ -137,72 +128,6 @@ interface UnifiedSessionState {
 const BAROMETER_MESSAGE_INTERVAL = 5;
 const HIGH_INTENSITY_THRESHOLD = 8;
 
-const HARMFUL_PATTERNS = {
-  judgmental: [
-    /\byou always\b/i,
-    /\byou never\b/i,
-    /\byou're (so|being|just)\b/i,
-    /\btypical(ly)?\b/i,
-    /\bof course you\b/i,
-  ],
-  accusatory: [
-    /\byou made me\b/i,
-    /\bit's your fault\b/i,
-    /\byou did this\b/i,
-    /\bbecause of you\b/i,
-    /\byou don't care\b/i,
-    /\byou're wrong\b/i,
-  ],
-  dismissive: [
-    /\bwhatever\b/i,
-    /\bI don't care\b/i,
-    /\bdoesn't matter\b/i,
-    /\bget over it\b/i,
-    /\byou're overreacting\b/i,
-    /\bthat's ridiculous\b/i,
-  ],
-};
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-function detectHarmfulLanguage(text: string): MirrorIntervention {
-  const detectedPatterns: string[] = [];
-
-  for (const pattern of HARMFUL_PATTERNS.judgmental) {
-    if (pattern.test(text)) {
-      detectedPatterns.push('judgmental language');
-      break;
-    }
-  }
-
-  for (const pattern of HARMFUL_PATTERNS.accusatory) {
-    if (pattern.test(text)) {
-      detectedPatterns.push('accusatory language');
-      break;
-    }
-  }
-
-  for (const pattern of HARMFUL_PATTERNS.dismissive) {
-    if (pattern.test(text)) {
-      detectedPatterns.push('dismissive language');
-      break;
-    }
-  }
-
-  if (detectedPatterns.length > 0) {
-    return {
-      detected: true,
-      message:
-        'I notice some strong language. Would you like to rephrase this to focus on understanding?',
-      patterns: detectedPatterns,
-    };
-  }
-
-  return { detected: false, message: '', patterns: [] };
-}
-
 // ============================================================================
 // State Reducer
 // ============================================================================
@@ -212,11 +137,6 @@ type SessionAction =
   | { type: 'CLOSE_OVERLAY' }
   | { type: 'DISMISS_CARD'; payload: string }
   | { type: 'SET_BAROMETER'; payload: number }
-  | {
-    type: 'SET_MIRROR_INTERVENTION';
-    payload: { intervention: MirrorIntervention; pendingMessage: string };
-  }
-  | { type: 'CLEAR_MIRROR_INTERVENTION' }
   | { type: 'SET_FOLLOW_UP_DATE'; payload: Date | null }
   | { type: 'SET_LAST_BAROMETER_COUNT'; payload: number }
   | { type: 'SHOW_COOLING_SUGGESTION'; payload: boolean }
@@ -242,14 +162,6 @@ function sessionReducer(
       };
     case 'SET_BAROMETER':
       return { ...state, barometerValue: action.payload };
-    case 'SET_MIRROR_INTERVENTION':
-      return {
-        ...state,
-        mirrorIntervention: action.payload.intervention,
-        pendingMessage: action.payload.pendingMessage,
-      };
-    case 'CLEAR_MIRROR_INTERVENTION':
-      return { ...state, mirrorIntervention: null, pendingMessage: null };
     case 'SET_FOLLOW_UP_DATE':
       return { ...state, followUpDate: action.payload };
     case 'SET_LAST_BAROMETER_COUNT':
@@ -280,8 +192,6 @@ const initialState: UnifiedSessionState = {
   dismissedCards: new Set(),
   barometerValue: 5,
   lastBarometerMessageCount: 0,
-  mirrorIntervention: null,
-  pendingMessage: null,
   showCoolingSuggestion: false,
   showFinalCheck: false,
   pendingConfirmation: false,
@@ -772,19 +682,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
     // Stage 2: Perspective Stretch cards
     if (currentStage === Stage.PERSPECTIVE_STRETCH) {
-      // Mirror intervention
-      if (state.mirrorIntervention) {
-        cards.push({
-          id: 'mirror-intervention',
-          type: 'mirror-intervention',
-          position: 'end',
-          props: {
-            message: state.mirrorIntervention.message,
-            patterns: state.mirrorIntervention.patterns,
-          },
-        });
-      }
-
       // Note: ready-to-share-confirmation card removed - now shown as panel above chat input
       // The panel slides up when empathy statement is ready to review
 
@@ -914,18 +811,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
       // Reset activity timer
       lastActivityTime.current = Date.now();
-
-      // Check for mirror intervention (Stage 2)
-      if (currentStage === Stage.PERSPECTIVE_STRETCH) {
-        const intervention = detectHarmfulLanguage(content);
-        if (intervention.detected) {
-          dispatch({
-            type: 'SET_MIRROR_INTERVENTION',
-            payload: { intervention, pendingMessage: content },
-          });
-          return;
-        }
-      }
 
       // Add optimistic message
       const optimisticId = addOptimisticMessage(sessionId, {
@@ -1329,8 +1214,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
     // Local state
     barometerValue: state.barometerValue,
-    mirrorIntervention: state.mirrorIntervention,
-    pendingMessage: state.pendingMessage,
     showCoolingSuggestion: state.showCoolingSuggestion,
     showFinalCheck: state.showFinalCheck,
     pendingConfirmation: state.pendingConfirmation,
@@ -1410,7 +1293,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
     handleRespondToShareOffer,
 
     // Utility actions
-    clearMirrorIntervention: () => dispatch({ type: 'CLEAR_MIRROR_INTERVENTION' }),
     showCooling: (show: boolean) =>
       dispatch({ type: 'SHOW_COOLING_SUGGESTION', payload: show }),
     showFinal: (show: boolean) =>
