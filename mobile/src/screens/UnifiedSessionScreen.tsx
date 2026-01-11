@@ -21,8 +21,8 @@ import { BodyScanExercise } from '../components/BodyScanExercise';
 import { SupportOptionsModal, SupportOption } from '../components/SupportOptionsModal';
 import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
 // WaitingStatusMessage removed - we no longer show "waiting for partner" messages
-import { EmpathyAttemptCard } from '../components/EmpathyAttemptCard';
-import { AccuracyFeedback } from '../components/AccuracyFeedback';
+// EmpathyAttemptCard removed - now shown in AccuracyFeedbackDrawer
+import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
 import { NeedsSection } from '../components/NeedsSection';
 import { CommonGroundCard } from '../components/CommonGroundCard';
 import { StrategyPool } from '../components/StrategyPool';
@@ -439,6 +439,7 @@ export function UnifiedSessionScreen({
   const [showEmpathyDrawer, setShowEmpathyDrawer] = useState(false);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [showShareSuggestionDrawer, setShowShareSuggestionDrawer] = useState(false);
+  const [showAccuracyFeedbackDrawer, setShowAccuracyFeedbackDrawer] = useState(false);
 
   // Local latch to prevent panel flashing during server refetches
   // Once user clicks Share, this stays true even if server data temporarily reverts
@@ -1535,7 +1536,7 @@ export function UnifiedSessionScreen({
                         </View>
                       </Animated.View>
                     )
-                  // Show accuracy feedback panel when partner's empathy is ready for validation
+                  // Show accuracy feedback trigger when partner's empathy is ready for validation
                   : shouldShowAccuracyFeedback
                     ? () => (
                       <Animated.View
@@ -1543,7 +1544,7 @@ export function UnifiedSessionScreen({
                           opacity: accuracyFeedbackAnim,
                           maxHeight: accuracyFeedbackAnim.interpolate({
                             inputRange: [0, 1],
-                            outputRange: [0, 300],
+                            outputRange: [0, 80],
                           }),
                           transform: [{
                             translateY: accuracyFeedbackAnim.interpolate({
@@ -1556,24 +1557,16 @@ export function UnifiedSessionScreen({
                         pointerEvents={shouldShowAccuracyFeedback ? 'auto' : 'none'}
                       >
                         <View style={styles.accuracyFeedbackContainer}>
-                          <Text style={styles.accuracyFeedbackTitle}>
-                            {partnerName}'s understanding of you:
-                          </Text>
-                          <EmpathyAttemptCard
-                            attempt={partnerEmpathyData?.attempt?.content || ''}
-                            isPartner
-                            testID="partner-empathy-attempt-panel"
-                          />
-                          <AccuracyFeedback
-                            onAccurate={() => handleValidatePartnerEmpathy(true)}
-                            onPartiallyAccurate={() =>
-                              handleValidatePartnerEmpathy(false, 'Some parts are accurate')
-                            }
-                            onInaccurate={() =>
-                              handleValidatePartnerEmpathy(false, 'This does not capture my perspective')
-                            }
-                            testID="accuracy-feedback-panel"
-                          />
+                          <TouchableOpacity
+                            style={styles.accuracyFeedbackButton}
+                            onPress={() => setShowAccuracyFeedbackDrawer(true)}
+                            activeOpacity={0.7}
+                            testID="accuracy-feedback-trigger"
+                          >
+                            <Text style={styles.accuracyFeedbackButtonText}>
+                              Review {partnerName}'s understanding
+                            </Text>
+                          </TouchableOpacity>
                         </View>
                       </Animated.View>
                     )
@@ -1855,6 +1848,19 @@ export function UnifiedSessionScreen({
         />
       )}
 
+      {/* Accuracy Feedback Drawer - for validating partner's empathy statement */}
+      {partnerEmpathyData?.attempt?.content && (
+        <AccuracyFeedbackDrawer
+          visible={showAccuracyFeedbackDrawer}
+          statement={partnerEmpathyData.attempt.content}
+          partnerName={partnerName}
+          onAccurate={() => handleValidatePartnerEmpathy(true)}
+          onPartiallyAccurate={() => handleValidatePartnerEmpathy(false, 'Some parts are accurate')}
+          onInaccurate={() => handleValidatePartnerEmpathy(false, 'This does not capture my perspective')}
+          onClose={() => setShowAccuracyFeedbackDrawer(false)}
+        />
+      )}
+
       {/* Note: CuriosityCompactOverlay removed - now using inline CompactChatItem + CompactAgreementBar */}
 
       {/* Note: SessionEntryMoodCheck is now handled via early return above
@@ -1971,7 +1977,7 @@ const useStyles = () =>
       color: 'white',
     },
 
-    // Accuracy Feedback Panel
+    // Accuracy Feedback Panel (trigger button to open drawer)
     accuracyFeedbackContainer: {
       paddingHorizontal: t.spacing.lg,
       paddingVertical: t.spacing.md,
@@ -1979,11 +1985,18 @@ const useStyles = () =>
       borderTopWidth: 1,
       borderTopColor: t.colors.border,
     },
-    accuracyFeedbackTitle: {
+    accuracyFeedbackButton: {
+      paddingVertical: t.spacing.sm,
+      paddingHorizontal: t.spacing.md,
+      backgroundColor: t.colors.bgPrimary,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    accuracyFeedbackButtonText: {
       fontSize: t.typography.fontSize.md,
-      fontWeight: '600',
-      color: t.colors.textPrimary,
-      marginBottom: t.spacing.sm,
+      fontWeight: '500',
+      color: t.colors.brandBlue,
     },
 
     // Inline Cards
