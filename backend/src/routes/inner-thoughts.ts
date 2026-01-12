@@ -31,6 +31,9 @@ import {
   sendInnerWorkMessage,
   updateInnerWorkSession,
   archiveInnerWorkSession,
+  generateContext,
+  getInsights,
+  dismissInsight,
 } from '../controllers/inner-work';
 
 const router = Router();
@@ -90,6 +93,34 @@ router.patch('/inner-thoughts/:id', updateInnerWorkSession);
  * @access Private
  */
 router.delete('/inner-thoughts/:id', archiveInnerWorkSession);
+
+/**
+ * @route POST /api/v1/inner-thoughts/:id/generate-context
+ * @description Generate context summary for starting a partner session (US-3)
+ * @access Private
+ */
+router.post('/inner-thoughts/:id/generate-context', generateContext);
+
+// ============================================================================
+// Cross-Feature Intelligence: Insights Routes
+// ============================================================================
+
+/**
+ * @route GET /api/v1/inner-work/insights
+ * @description Get user insights (patterns, contradictions, suggestions)
+ * @query limit - Number of insights to return (default: 20)
+ * @query type - Filter by insight type (PATTERN, CONTRADICTION, SUGGESTION)
+ * @query includeDismissed - Include dismissed insights (default: false)
+ * @access Private
+ */
+router.get('/inner-work/insights', getInsights);
+
+/**
+ * @route POST /api/v1/inner-work/insights/:id/dismiss
+ * @description Dismiss an insight (hide from future lists)
+ * @access Private
+ */
+router.post('/inner-work/insights/:id/dismiss', dismissInsight);
 
 // ============================================================================
 // Legacy Routes: /inner-work (for backwards compatibility)

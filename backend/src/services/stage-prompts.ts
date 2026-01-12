@@ -1283,6 +1283,52 @@ WHAT INNER WORK IS NOT:
 `;
 
 /**
+ * Insight context for AI prompts.
+ */
+export interface InsightContext {
+  type: 'PATTERN' | 'CONTRADICTION' | 'SUGGESTION';
+  summary: string;
+  relatedFeatures?: string[];
+  confidence?: number;
+}
+
+/**
+ * Format insights for inclusion in AI prompts.
+ */
+function formatInsightsForPrompt(insights: InsightContext[]): string {
+  if (!insights || insights.length === 0) return '';
+
+  const formattedInsights = insights
+    .map((insight) => {
+      const typeLabel =
+        insight.type === 'PATTERN'
+          ? 'Pattern noticed'
+          : insight.type === 'CONTRADICTION'
+            ? 'Something to explore'
+            : 'Suggestion';
+      return `- ${typeLabel}: ${insight.summary}${insight.confidence ? ` (confidence: ${Math.round(insight.confidence * 100)}%)` : ''}`;
+    })
+    .join('\n');
+
+  return `
+CROSS-FEATURE INSIGHTS (Use naturally when relevant):
+${formattedInsights}
+
+HOW TO USE INSIGHTS:
+- Weave observations naturally into conversation, don't list them
+- Only reference if contextually relevant to what the user is sharing
+- Use phrases like "I notice..." or "It seems like..." rather than "My data shows..."
+- Don't force insights - if they're not relevant, don't mention them
+- Never sound like you're reading from a report
+
+EXAMPLES OF NATURAL INTEGRATION:
+- "You've mentioned Sarah a few times - sounds like that relationship is weighing on you."
+- "I notice you often express gratitude when spending time outdoors. Have you had a chance to get outside lately?"
+- "This feeling of not being heard seems to come up in different contexts for you."
+`;
+}
+
+/**
  * Build inner work prompt for self-reflection sessions.
  */
 export function buildInnerWorkPrompt(context: {
@@ -1291,8 +1337,9 @@ export function buildInnerWorkPrompt(context: {
   emotionalIntensity?: number;
   sessionSummary?: string;
   recentThemes?: string[];
+  insights?: InsightContext[];
 }): string {
-  const { userName, turnCount, emotionalIntensity = 5, sessionSummary, recentThemes } = context;
+  const { userName, turnCount, emotionalIntensity = 5, sessionSummary, recentThemes, insights } = context;
 
   const isEarlySession = turnCount < 3;
   const isHighIntensity = emotionalIntensity >= 8;
@@ -1315,7 +1362,7 @@ ${
 `
     : ''
 }
-
+${formatInsightsForPrompt(insights ?? [])}
 YOUR APPROACH:
 
 ${
@@ -1376,17 +1423,30 @@ BEFORE EVERY RESPONSE, think through in <analysis> tags:
 3. What mode should I be in? (welcoming / exploring / reflecting / deepening)
 4. Any patterns or themes emerging?
 5. What's my best next move to help them feel heard?
+6. Would any action be helpful to suggest? (Only if naturally relevant)
 </analysis>
 
-IMPORTANT: You MUST respond with a JSON object containing exactly these two fields:
+ACTION SUGGESTIONS:
+When appropriate (not every turn), you can suggest helpful actions the user might take:
+- "start_partner_session": If they mention wanting to talk with someone about an issue (include personName)
+- "start_meditation": If they seem stressed, anxious, or could benefit from grounding
+- "add_gratitude": If they mention something positive or express appreciation
+- "check_need": If they're exploring unmet needs
+
+Only suggest actions when naturally relevant. Don't force suggestions every response.
+
+IMPORTANT: You MUST respond with a JSON object containing these fields:
 \`\`\`json
 {
   "analysis": "Your internal reasoning (stripped before delivery)",
-  "response": "Your conversational response to the user"
+  "response": "Your conversational response to the user",
+  "suggestedActions": [
+    { "type": "start_partner_session", "label": "Start conversation with Sarah", "personName": "Sarah", "context": "User mentioned conflict" }
+  ]
 }
 \`\`\`
 
-BOTH FIELDS ARE REQUIRED.`;
+The "analysis" and "response" fields are REQUIRED. The "suggestedActions" array is optional (omit or use empty array if no actions make sense).`;
 }
 
 /**
@@ -1423,8 +1483,9 @@ export function buildLinkedInnerThoughtsPrompt(context: {
   sessionSummary?: string;
   recentThemes?: string[];
   linkedContext: LinkedPartnerSessionContext;
+  insights?: InsightContext[];
 }): string {
-  const { userName, turnCount, emotionalIntensity = 5, sessionSummary, recentThemes, linkedContext } = context;
+  const { userName, turnCount, emotionalIntensity = 5, sessionSummary, recentThemes, linkedContext, insights } = context;
 
   const isEarlySession = turnCount < 3;
   const isHighIntensity = emotionalIntensity >= 8;
@@ -1514,7 +1575,7 @@ ${
 `
     : ''
 }
-
+${formatInsightsForPrompt(insights ?? [])}
 YOUR APPROACH:
 
 ${

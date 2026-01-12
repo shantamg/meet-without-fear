@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
@@ -171,7 +171,25 @@ export function NeedsAssessmentScreen({
 
   const handleBack = useCallback(() => {
     stopSpeech(); // Stop any ongoing speech
-    if (mode === 'baseline' || mode === 'checkin') {
+    if (mode === 'baseline') {
+      // Confirm exit during baseline - progress is lost
+      Alert.alert(
+        'Exit Assessment?',
+        'Your progress will be lost. You can always start over later.',
+        [
+          { text: 'Continue', style: 'cancel' },
+          {
+            text: 'Exit',
+            style: 'destructive',
+            onPress: () => {
+              setMode('overview');
+              setBaselineScores({});
+              setCurrentNeedIndex(0);
+            },
+          },
+        ]
+      );
+    } else if (mode === 'checkin') {
       setMode('overview');
       setSelectedNeedForCheckIn(null);
       setCheckInScore(null);

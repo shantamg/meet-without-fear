@@ -7,13 +7,19 @@
 
 import {
   useQuery,
+  useMutation,
+  useQueryClient,
   UseQueryOptions,
+  UseMutationOptions,
 } from '@tanstack/react-query';
-import { get, ApiClientError } from '../lib/api';
+import { get, post, ApiClientError } from '../lib/api';
 import {
   InnerWorkOverviewDTO,
   GetInnerWorkOverviewResponse,
   GetCrossFeatureContextResponse,
+  GetInsightsResponse,
+  DismissInsightResponse,
+  InsightType,
 } from '@meet-without-fear/shared';
 
 // ============================================================================
@@ -24,6 +30,9 @@ export const innerWorkKeys = {
   all: ['innerWork'] as const,
   overview: () => [...innerWorkKeys.all, 'overview'] as const,
   context: () => [...innerWorkKeys.all, 'context'] as const,
+  insights: () => [...innerWorkKeys.all, 'insights'] as const,
+  insightsWithParams: (params: { type?: InsightType; includeDismissed?: boolean }) =>
+    [...innerWorkKeys.insights(), params] as const,
 };
 
 // ============================================================================
@@ -191,4 +200,66 @@ function daysSince(date: Date): number {
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+// ============================================================================
+// Insights Hooks
+// ============================================================================
+
+interface UseInsightsParams {
+  limit?: number;
+  type?: InsightType;
+  includeDismissed?: boolean;
+}
+
+/**
+ * Fetch user insights with optional filtering.
+ */
+export function useInsights(
+  params: UseInsightsParams = {},
+  options?: Omit<
+    UseQueryOptions<GetInsightsResponse, ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  const { limit = 20, type, includeDismissed = false } = params;
+
+  return useQuery({
+    queryKey: innerWorkKeys.insightsWithParams({ type, includeDismissed }),
+    queryFn: async () => {
+      const queryParams = new URLSearchParams();
+      queryParams.set('limit', String(limit));
+      if (type) queryParams.set('type', type);
+      if (includeDismissed) queryParams.set('includeDismissed', 'true');
+
+      return get<GetInsightsResponse>(`/inner-work/insights?${queryParams.toString()}`);
+    },
+    staleTime: 60_000, // 1 minute
+    ...options,
+  });
+}
+
+/**
+ * Dismiss an insight (hide from future lists).
+ */
+export function useDismissInsight(
+  options?: Omit<
+    UseMutationOptions<DismissInsightResponse, ApiClientError, string>,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (insightId: string) => {
+      return post<DismissInsightResponse>(`/inner-work/insights/${insightId}/dismiss`, {});
+    },
+    onSuccess: () => {
+      // Invalidate insights queries to refetch without the dismissed insight
+      queryClient.invalidateQueries({ queryKey: innerWorkKeys.insights() });
+      // Also invalidate overview which includes recent insights
+      queryClient.invalidateQueries({ queryKey: innerWorkKeys.overview() });
+    },
+    ...options,
+  });
 }

@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -26,6 +27,8 @@ import {
   ChevronRight,
   Volume2,
   VolumeX,
+  BookOpen,
+  Trash2,
 } from 'lucide-react-native';
 
 import {
@@ -34,6 +37,9 @@ import {
   useCreateMeditationSession,
   useUpdateMeditationSession,
   useGenerateMeditationScript,
+  useSavedMeditations,
+  useSavedMeditation,
+  useDeleteSavedMeditation,
   getDurationOptions,
   getFocusAreaSuggestions,
   formatDuration,
@@ -41,7 +47,7 @@ import {
   useSpeech,
   useAutoSpeech,
 } from '../hooks';
-import { MeditationType } from '@meet-without-fear/shared';
+import { MeditationType, formatDurationEstimate } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 
@@ -53,7 +59,7 @@ interface MeditationScreenProps {
   onNavigateBack?: () => void;
 }
 
-type ScreenMode = 'home' | 'setup' | 'active' | 'complete';
+type ScreenMode = 'home' | 'setup' | 'active' | 'complete' | 'saved-detail';
 
 // ============================================================================
 // Duration Selector Component
@@ -173,6 +179,7 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [timerInterval, setTimerInterval] = useState<ReturnType<typeof setInterval> | null>(null);
+  const [selectedSavedId, setSelectedSavedId] = useState<string | undefined>();
 
   // Speech for guided meditation
   const { isSpeaking, playMeditationScript, stop: stopSpeech } = useSpeech();
@@ -180,23 +187,41 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
 
   const { data: statsData, isLoading: loadingStats } = useMeditationStats();
   const { data: sessionsData } = useMeditationSessions({ limit: 5 });
+  const { data: savedData } = useSavedMeditations();
+  const { data: savedDetailData } = useSavedMeditation(selectedSavedId ?? '');
   const createSession = useCreateMeditationSession();
   const updateSession = useUpdateMeditationSession();
   const generateScript = useGenerateMeditationScript();
+  const deleteSaved = useDeleteSavedMeditation();
 
   const stats = statsData?.stats;
   const recentSessions = sessionsData?.sessions ?? [];
+  const savedMeditations = savedData?.meditations ?? [];
 
   const handleBack = useCallback(() => {
-    if (mode === 'setup' || mode === 'complete') {
+    if (mode === 'setup' || mode === 'complete' || mode === 'saved-detail') {
       setMode('home');
       setGeneratedScript(undefined);
+      setSelectedSavedId(undefined);
     } else if (mode === 'active') {
       // Confirm exit during active session
-      if (timerInterval) clearInterval(timerInterval);
-      stopSpeech(); // Stop any ongoing speech
-      setMode('home');
-      setTimerSeconds(0);
+      Alert.alert(
+        'End Session?',
+        'Your meditation session is still in progress. Are you sure you want to exit?',
+        [
+          { text: 'Continue', style: 'cancel' },
+          {
+            text: 'End Session',
+            style: 'destructive',
+            onPress: () => {
+              if (timerInterval) clearInterval(timerInterval);
+              stopSpeech(); // Stop any ongoing speech
+              setMode('home');
+              setTimerSeconds(0);
+            },
+          },
+        ]
+      );
     } else {
       onNavigateBack?.();
     }
@@ -206,6 +231,60 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
     setSelectedType(type);
     setMode('setup');
   }, []);
+
+  const handleSelectSaved = useCallback((id: string, durationSeconds: number) => {
+    setSelectedSavedId(id);
+    // Convert seconds to minutes for the session
+    setDuration(Math.ceil(durationSeconds / 60));
+    setSelectedType(MeditationType.GUIDED);
+    setMode('saved-detail');
+  }, []);
+
+  const handleDeleteSaved = useCallback((id: string) => {
+    deleteSaved.mutate(id);
+  }, [deleteSaved]);
+
+  const handlePlaySavedMeditation = useCallback(() => {
+    const script = savedDetailData?.meditation.script;
+    if (!script) return;
+
+    // Set the script for the active session view
+    setGeneratedScript(script);
+
+    // Start a session with the saved meditation
+    createSession.mutate(
+      {
+        type: MeditationType.GUIDED,
+        durationMinutes: duration,
+        focusArea: savedDetailData?.meditation.title ?? 'Custom Meditation',
+      },
+      {
+        onSuccess: (data) => {
+          setCurrentSessionId(data.session.id);
+          setTimerSeconds(duration * 60);
+          setMode('active');
+
+          // Auto-start speech if enabled
+          if (isAutoSpeechEnabled) {
+            playMeditationScript(script, 'meditation-script');
+          }
+
+          // Start countdown
+          const interval = setInterval(() => {
+            setTimerSeconds((prev) => {
+              if (prev <= 1) {
+                clearInterval(interval);
+                setMode('complete');
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+          setTimerInterval(interval);
+        },
+      }
+    );
+  }, [createSession, duration, savedDetailData, isAutoSpeechEnabled, playMeditationScript]);
 
   const handleGenerateScript = useCallback(() => {
     if (!focusArea) return;
@@ -463,7 +542,12 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
                 </TouchableOpacity>
               ) : (
                 <View style={styles.scriptPreview}>
-                  <Text style={styles.scriptPreviewLabel}>Preview</Text>
+                  <View style={styles.scriptPreviewHeader}>
+                    <Text style={styles.scriptPreviewLabel}>Preview</Text>
+                    <Text style={styles.durationEstimate}>
+                      {formatDurationEstimate(generatedScript)}
+                    </Text>
+                  </View>
                   <Text style={styles.scriptPreviewText} numberOfLines={4}>
                     {generatedScript}
                   </Text>
@@ -494,6 +578,62 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
             </Text>
           </TouchableOpacity>
         </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // Saved Detail View
+  if (mode === 'saved-detail' && selectedSavedId) {
+    const savedMeditation = savedDetailData?.meditation;
+    const isLoading = !savedMeditation;
+
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <ArrowLeft size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Saved Meditation</Text>
+          <TouchableOpacity
+            onPress={() => {
+              handleDeleteSaved(selectedSavedId);
+              handleBack();
+            }}
+            style={styles.backButton}
+          >
+            <Trash2 size={20} color={colors.error} />
+          </TouchableOpacity>
+        </View>
+
+        {isLoading ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color={colors.accent} />
+            <Text style={styles.loadingText}>Loading meditation...</Text>
+          </View>
+        ) : (
+          <ScrollView style={styles.scrollView} contentContainerStyle={styles.setupContent}>
+            <Text style={styles.savedTitle}>{savedMeditation.title}</Text>
+            <Text style={styles.durationEstimate}>
+              {formatDurationEstimate(savedMeditation.script)}
+            </Text>
+
+            <View style={styles.savedScriptContainer}>
+              <Text style={styles.scriptPreviewLabel}>Script</Text>
+              <Text style={styles.savedScriptText}>{savedMeditation.script}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.startButton}
+              onPress={handlePlaySavedMeditation}
+              disabled={createSession.isPending}
+            >
+              <Play size={24} color={colors.textOnAccent} />
+              <Text style={styles.startButtonText}>
+                {createSession.isPending ? 'Starting...' : 'Begin Meditation'}
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        )}
       </SafeAreaView>
     );
   }
@@ -575,6 +715,33 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
           </View>
           <ChevronRight size={24} color={colors.textMuted} />
         </TouchableOpacity>
+
+        {/* Saved Meditations Library */}
+        {savedMeditations.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>My Meditations</Text>
+            {savedMeditations.map((meditation) => (
+              <TouchableOpacity
+                key={meditation.id}
+                style={styles.typeCard}
+                onPress={() => handleSelectSaved(meditation.id, meditation.durationSeconds)}
+              >
+                <View style={styles.typeCardContent}>
+                  <View style={[styles.typeIcon, { backgroundColor: colors.accent + '20' }]}>
+                    <BookOpen size={28} color={colors.accent} />
+                  </View>
+                  <View style={styles.typeInfo}>
+                    <Text style={styles.typeName}>{meditation.title}</Text>
+                    <Text style={styles.typeDescription}>
+                      {Math.ceil(meditation.durationSeconds / 60)} min
+                    </Text>
+                  </View>
+                </View>
+                <ChevronRight size={24} color={colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </>
+        )}
 
         {/* Recent Sessions */}
         {recentSessions.length > 0 && (
@@ -840,10 +1007,20 @@ const styles = createStyles((t) => ({
     padding: t.spacing.md,
     marginTop: t.spacing.lg,
   },
+  scriptPreviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: t.spacing.sm,
+  },
   scriptPreviewLabel: {
     fontSize: 12,
     color: t.colors.textMuted,
-    marginBottom: t.spacing.sm,
+  },
+  durationEstimate: {
+    fontSize: 12,
+    color: t.colors.accent,
+    fontWeight: '500',
   },
   scriptPreviewText: {
     fontSize: 14,
@@ -1018,6 +1195,27 @@ const styles = createStyles((t) => ({
     fontSize: 14,
     fontWeight: '500',
     color: t.colors.accent,
+  },
+
+  // Saved Meditation Detail
+  savedTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: t.colors.textPrimary,
+    marginBottom: t.spacing.sm,
+  },
+  savedScriptContainer: {
+    backgroundColor: t.colors.bgSecondary,
+    borderRadius: t.radius.md,
+    padding: t.spacing.md,
+    marginTop: t.spacing.lg,
+    marginBottom: t.spacing.lg,
+  },
+  savedScriptText: {
+    fontSize: 15,
+    color: t.colors.textSecondary,
+    lineHeight: 24,
+    marginTop: t.spacing.sm,
   },
 }));
 

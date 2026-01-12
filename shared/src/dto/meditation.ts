@@ -190,6 +190,77 @@ export interface UpdateMeditationPreferencesResponse {
 }
 
 // ============================================================================
+// Saved Meditations (Custom User-Created)
+// ============================================================================
+
+export interface SavedMeditationDTO {
+  id: string;
+  title: string;
+  script: string; // Full script with [PAUSE:Xs] tokens
+  durationSeconds: number;
+  conversationId: string | null; // Link to chat that created it
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavedMeditationSummaryDTO {
+  id: string;
+  title: string;
+  durationSeconds: number;
+  createdAt: string;
+}
+
+// GET /api/v1/meditation/saved
+export interface ListSavedMeditationsResponse {
+  meditations: SavedMeditationSummaryDTO[];
+  total: number;
+}
+
+// GET /api/v1/meditation/saved/:id
+export interface GetSavedMeditationResponse {
+  meditation: SavedMeditationDTO;
+}
+
+// POST /api/v1/meditation/saved
+export interface CreateSavedMeditationRequest {
+  title: string;
+  script: string;
+  conversationId?: string;
+}
+
+export interface CreateSavedMeditationResponse {
+  meditation: SavedMeditationDTO;
+}
+
+// PATCH /api/v1/meditation/saved/:id
+export interface UpdateSavedMeditationRequest {
+  title?: string;
+  script?: string;
+}
+
+export interface UpdateSavedMeditationResponse {
+  meditation: SavedMeditationDTO;
+}
+
+// DELETE /api/v1/meditation/saved/:id
+export interface DeleteSavedMeditationResponse {
+  success: boolean;
+}
+
+// POST /api/v1/meditation/parse
+export interface ParseMeditationTextRequest {
+  text: string;
+}
+
+export interface ParseMeditationTextResponse {
+  script: string; // Converted script with [PAUSE:Xs] tokens
+  durationSeconds: number;
+  suggestedTitle: string;
+  hasAmbiguousPauses: boolean; // If AI couldn't determine timing
+  ambiguityQuestions?: string[]; // Follow-up questions if ambiguous
+}
+
+// ============================================================================
 // Duration Options
 // ============================================================================
 

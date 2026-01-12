@@ -112,6 +112,7 @@ let mockPartnerEmpathyLoading = false;
 
 const mockConsentToShare = jest.fn();
 const mockValidateEmpathy = jest.fn();
+const mockSkipRefinement = jest.fn();
 const mockSaveEmpathyDraft = jest.fn();
 const mockSendMessage = jest.fn();
 
@@ -145,6 +146,10 @@ jest.mock('../../hooks/useStages', () => ({
   }),
   useValidateEmpathy: () => ({
     mutate: mockValidateEmpathy,
+    isPending: false,
+  }),
+  useSkipRefinement: () => ({
+    mutate: mockSkipRefinement,
     isPending: false,
   }),
 }));
@@ -406,16 +411,13 @@ describe('PerspectiveStretchScreen', () => {
       );
     });
 
-    it('calls validateEmpathy with validated=false for inaccurate', () => {
+    it('opens feedback input when user selects inaccurate', () => {
       render(<PerspectiveStretchScreen />);
       const inaccurateButton = screen.getByText(/misses the mark/i);
       fireEvent.press(inaccurateButton);
-      expect(mockValidateEmpathy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sessionId: 'test-session-123',
-          validated: false,
-        })
-      );
+      // The new behavior opens a feedback input instead of calling validateEmpathy immediately
+      // The user must provide feedback before validation is submitted
+      expect(mockValidateEmpathy).not.toHaveBeenCalled();
     });
   });
 

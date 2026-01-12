@@ -26,9 +26,9 @@ import {
   MeditationStatsDTO,
   MeditationFavoriteDTO,
   MeditationPreferencesDTO,
-  CreateMeditationSessionRequest,
+  SavedMeditationDTO,
+  SavedMeditationSummaryDTO,
   CreateMeditationSessionResponse,
-  UpdateMeditationSessionRequest,
   UpdateMeditationSessionResponse,
   ListMeditationSessionsResponse,
   GetMeditationSuggestionResponse,
@@ -36,14 +36,19 @@ import {
   GenerateScriptResponse,
   GetMeditationStatsResponse,
   ListMeditationFavoritesResponse,
-  CreateMeditationFavoriteRequest,
   CreateMeditationFavoriteResponse,
   DeleteMeditationFavoriteResponse,
   GetMeditationPreferencesResponse,
-  UpdateMeditationPreferencesRequest,
   UpdateMeditationPreferencesResponse,
+  ListSavedMeditationsResponse,
+  GetSavedMeditationResponse,
+  CreateSavedMeditationResponse,
+  UpdateSavedMeditationResponse,
+  DeleteSavedMeditationResponse,
+  ParseMeditationTextResponse,
   MeditationType,
   FavoriteType,
+  calculateDuration,
 } from '@meet-without-fear/shared';
 import { z } from 'zod';
 import { getCompletion } from '../lib/bedrock';
@@ -292,7 +297,7 @@ OPENING (${Math.round(durationMinutes * 0.1)} min):
 
 CORE PRACTICE (${Math.round(durationMinutes * 0.75)} min):
 - Main technique/focus
-- Include [PAUSE 30s] and [PAUSE 60s] markers generously
+- Include [PAUSE:30s] and [PAUSE:60s] markers generously
 - Guided awareness with spacious silence
 - Gentle redirecting for wandering mind
 - More silence than words
@@ -324,25 +329,25 @@ REQUIREMENTS:
 - End with something grounding they can take forward
 
 OUTPUT FORMAT:
-- Use exactly this format for pauses: [PAUSE 30s] or [PAUSE 60s] (number followed by 's')
+- Use exactly this format for pauses: [PAUSE:30s] or [PAUSE:60s] (colon after PAUSE, number, then 's')
 - Use exactly this format for bells: [BELL]
 - Place pause markers on their own lines or at the end of sentences
 - Include generous pauses throughout, especially during core practice
 - Output ONLY the script text with these markers - no metadata, no commentary, no explanations
 - Example format:
   [BELL]
-  
+
   Welcome to this practice.
-  
-  [PAUSE 10s]
-  
+
+  [PAUSE:10s]
+
   Begin by noticing your breath.
-  
-  [PAUSE 30s]
-  
+
+  [PAUSE:30s]
+
   Let your attention settle...
-  
-  [PAUSE 60s]`;
+
+  [PAUSE:60s]`;
 
   // Generate synthetic IDs for standalone feature
   const syntheticSessionId = `meditation-${userId}`;
@@ -366,35 +371,35 @@ function generateFallbackScript(focusArea: string, durationMinutes: number): str
 Welcome. Find a comfortable position and let your body settle.
 There's nowhere you need to be right now except here.
 
-[PAUSE 10s]
+[PAUSE:10s]
 
 Begin by noticing your breath. Not changing it, just noticing.
 
-[PAUSE 20s]
+[PAUSE:20s]
 
 Let your attention settle on the sensations of breathing.
 The rise and fall. The natural rhythm.
 
-[PAUSE 30s]
+[PAUSE:30s]
 
 Now, gently bring your awareness to ${focusArea}.
 
-[PAUSE 60s]
+[PAUSE:60s]
 
 Whatever arises, just notice it. There's nothing to fix or change.
 
-[PAUSE 60s]
+[PAUSE:60s]
 
-${durationMinutes >= 10 ? `[PAUSE 60s]\n\nContinue resting in this awareness.\n\n[PAUSE 60s]\n` : ''}
+${durationMinutes >= 10 ? `[PAUSE:60s]\n\nContinue resting in this awareness.\n\n[PAUSE:60s]\n` : ''}
 
 Now, begin to widen your awareness. Include the sounds around you.
 The feeling of your body in space.
 
-[PAUSE 20s]
+[PAUSE:20s]
 
 As you prepare to return, carry this sense of presence with you.
 
-[PAUSE 10s]
+[PAUSE:10s]
 
 When you're ready, gently open your eyes.
 
@@ -850,6 +855,322 @@ export const updatePreferences = asyncHandler(
     const response: ApiResponse<UpdateMeditationPreferencesResponse> = {
       success: true,
       data: { preferences: mapPreferencesToDTO(prefs) },
+    };
+    res.json(response);
+  }
+);
+
+// ============================================================================
+// Saved Meditations
+// ============================================================================
+
+const createSavedMeditationSchema = z.object({
+  title: z.string().min(1).max(100),
+  script: z.string().min(1).max(50000),
+  conversationId: z.string().optional(),
+});
+
+const updateSavedMeditationSchema = z.object({
+  title: z.string().min(1).max(100).optional(),
+  script: z.string().min(1).max(50000).optional(),
+});
+
+const parseMeditationTextSchema = z.object({
+  text: z.string().min(1).max(50000),
+});
+
+function mapSavedMeditationToDTO(meditation: {
+  id: string;
+  title: string;
+  script: string;
+  durationSeconds: number;
+  conversationId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): SavedMeditationDTO {
+  return {
+    id: meditation.id,
+    title: meditation.title,
+    script: meditation.script,
+    durationSeconds: meditation.durationSeconds,
+    conversationId: meditation.conversationId,
+    createdAt: meditation.createdAt.toISOString(),
+    updatedAt: meditation.updatedAt.toISOString(),
+  };
+}
+
+function mapSavedMeditationToSummaryDTO(meditation: {
+  id: string;
+  title: string;
+  durationSeconds: number;
+  createdAt: Date;
+}): SavedMeditationSummaryDTO {
+  return {
+    id: meditation.id,
+    title: meditation.title,
+    durationSeconds: meditation.durationSeconds,
+    createdAt: meditation.createdAt.toISOString(),
+  };
+}
+
+/**
+ * GET /api/v1/meditation/saved
+ * List user's saved meditations.
+ */
+export const listSavedMeditations = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const user = getUser(req);
+
+    const [meditations, total] = await Promise.all([
+      prisma.savedMeditation.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          durationSeconds: true,
+          createdAt: true,
+        },
+      }),
+      prisma.savedMeditation.count({ where: { userId: user.id } }),
+    ]);
+
+    const response: ApiResponse<ListSavedMeditationsResponse> = {
+      success: true,
+      data: {
+        meditations: meditations.map(mapSavedMeditationToSummaryDTO),
+        total,
+      },
+    };
+    res.json(response);
+  }
+);
+
+/**
+ * GET /api/v1/meditation/saved/:id
+ * Get a specific saved meditation.
+ */
+export const getSavedMeditation = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const user = getUser(req);
+    const { id } = req.params;
+
+    const meditation = await prisma.savedMeditation.findFirst({
+      where: { id, userId: user.id },
+    });
+
+    if (!meditation) {
+      throw new NotFoundError('Saved meditation not found');
+    }
+
+    const response: ApiResponse<GetSavedMeditationResponse> = {
+      success: true,
+      data: { meditation: mapSavedMeditationToDTO(meditation) },
+    };
+    res.json(response);
+  }
+);
+
+/**
+ * POST /api/v1/meditation/saved
+ * Save a custom meditation.
+ */
+export const createSavedMeditation = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const user = getUser(req);
+
+    const parseResult = createSavedMeditationSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      throw new ValidationError('Invalid meditation data', {
+        errors: parseResult.error.flatten().fieldErrors,
+      });
+    }
+
+    const { title, script, conversationId } = parseResult.data;
+    const durationSeconds = calculateDuration(script);
+
+    const meditation = await prisma.savedMeditation.create({
+      data: {
+        userId: user.id,
+        title,
+        script,
+        durationSeconds,
+        conversationId,
+      },
+    });
+
+    const response: ApiResponse<CreateSavedMeditationResponse> = {
+      success: true,
+      data: { meditation: mapSavedMeditationToDTO(meditation) },
+    };
+    res.status(201).json(response);
+  }
+);
+
+/**
+ * PATCH /api/v1/meditation/saved/:id
+ * Update a saved meditation.
+ */
+export const updateSavedMeditation = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const user = getUser(req);
+    const { id } = req.params;
+
+    const parseResult = updateSavedMeditationSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      throw new ValidationError('Invalid update data', {
+        errors: parseResult.error.flatten().fieldErrors,
+      });
+    }
+
+    const existing = await prisma.savedMeditation.findFirst({
+      where: { id, userId: user.id },
+    });
+
+    if (!existing) {
+      throw new NotFoundError('Saved meditation not found');
+    }
+
+    const { title, script } = parseResult.data;
+
+    // Recalculate duration if script changed
+    const durationSeconds = script ? calculateDuration(script) : undefined;
+
+    const meditation = await prisma.savedMeditation.update({
+      where: { id },
+      data: {
+        ...(title && { title }),
+        ...(script && { script }),
+        ...(durationSeconds !== undefined && { durationSeconds }),
+      },
+    });
+
+    const response: ApiResponse<UpdateSavedMeditationResponse> = {
+      success: true,
+      data: { meditation: mapSavedMeditationToDTO(meditation) },
+    };
+    res.json(response);
+  }
+);
+
+/**
+ * DELETE /api/v1/meditation/saved/:id
+ * Delete a saved meditation.
+ */
+export const deleteSavedMeditation = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const user = getUser(req);
+    const { id } = req.params;
+
+    const meditation = await prisma.savedMeditation.findFirst({
+      where: { id, userId: user.id },
+    });
+
+    if (!meditation) {
+      throw new NotFoundError('Saved meditation not found');
+    }
+
+    await prisma.savedMeditation.delete({ where: { id } });
+
+    const response: ApiResponse<DeleteSavedMeditationResponse> = {
+      success: true,
+      data: { success: true },
+    };
+    res.json(response);
+  }
+);
+
+/**
+ * POST /api/v1/meditation/parse
+ * Parse user-provided text into a structured meditation script with timing tokens.
+ */
+export const parseMeditationText = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const user = getUser(req);
+
+    const parseResult = parseMeditationTextSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      throw new ValidationError('Invalid request', {
+        errors: parseResult.error.flatten().fieldErrors,
+      });
+    }
+
+    const { text } = parseResult.data;
+
+    // Use AI to convert raw text to structured script with timing tokens
+    const syntheticSessionId = `meditation-parse-${user.id}`;
+    const syntheticTurnId = `${syntheticSessionId}-${Date.now()}`;
+
+    const prompt = `You are a meditation script formatter. Your task is to take user-provided meditation text and convert it to a structured format with proper timing tokens.
+
+INPUT TEXT:
+${text}
+
+INSTRUCTIONS:
+1. Preserve all spoken content exactly as provided (do not edit the meditation text itself)
+2. Add [PAUSE:Xs] tokens where pauses should occur:
+   - [PAUSE:3s] - short breath pause after a sentence
+   - [PAUSE:5s] to [PAUSE:10s] - medium pause between sections or after instructions
+   - [PAUSE:30s] to [PAUSE:60s] - longer pauses for practice/silence periods
+3. Add [BELL] token at the beginning and/or end if not already present
+4. Look for cues like "pause", "moment of silence", "take time to...", "..." and convert to appropriate pause durations
+5. If timing is ambiguous, use reasonable defaults and note the ambiguity
+
+RESPOND IN THIS EXACT JSON FORMAT:
+{
+  "script": "the formatted script with [PAUSE:Xs] and [BELL] tokens",
+  "suggestedTitle": "a short descriptive title based on the content",
+  "hasAmbiguousPauses": true/false,
+  "ambiguityQuestions": ["array of questions if timing was unclear, empty array if no ambiguity"]
+}
+
+Output only valid JSON, no markdown or explanation.`;
+
+    const rawResponse = await getCompletion({
+      systemPrompt: prompt,
+      messages: [{ role: 'user', content: 'Convert this meditation text to structured format.' }],
+      maxTokens: 8000,
+      operation: 'meditation-parse',
+      sessionId: syntheticSessionId,
+      turnId: syntheticTurnId,
+    });
+
+    // Parse the AI response
+    let parsedResult: {
+      script: string;
+      suggestedTitle: string;
+      hasAmbiguousPauses: boolean;
+      ambiguityQuestions: string[];
+    };
+
+    try {
+      // Try to extract JSON from the response
+      const jsonMatch = rawResponse?.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in response');
+      }
+      parsedResult = JSON.parse(jsonMatch[0]);
+    } catch {
+      // Fallback: treat the text as-is with default pauses
+      parsedResult = {
+        script: `[BELL]\n\n${text}\n\n[BELL]`,
+        suggestedTitle: 'Custom Meditation',
+        hasAmbiguousPauses: true,
+        ambiguityQuestions: ['Could not automatically detect pause timing. Please review and add [PAUSE:Xs] tokens manually.'],
+      };
+    }
+
+    const durationSeconds = calculateDuration(parsedResult.script);
+
+    const response: ApiResponse<ParseMeditationTextResponse> = {
+      success: true,
+      data: {
+        script: parsedResult.script,
+        durationSeconds,
+        suggestedTitle: parsedResult.suggestedTitle,
+        hasAmbiguousPauses: parsedResult.hasAmbiguousPauses,
+        ambiguityQuestions: parsedResult.ambiguityQuestions.length > 0 ? parsedResult.ambiguityQuestions : undefined,
+      },
     };
     res.json(response);
   }

@@ -92,3 +92,6 @@ export { ScreenHeader } from './ScreenHeader';
 
 // Memory components
 export { MemorySuggestionCard } from './MemorySuggestionCard';
+
+// Inner Work components
+export { SuggestedActionButtons } from './SuggestedActionButtons';

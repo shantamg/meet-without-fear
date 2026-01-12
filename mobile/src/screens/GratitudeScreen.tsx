@@ -16,6 +16,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -103,6 +104,22 @@ function NewEntryForm({ onSubmit, onCancel, isSubmitting, prompt }: NewEntryForm
     }
   }, [content, onSubmit]);
 
+  const handleCancel = useCallback(() => {
+    if (content.trim()) {
+      // Confirm discard when there's unsaved content
+      Alert.alert(
+        'Discard Entry?',
+        'You have unsaved text. Are you sure you want to discard it?',
+        [
+          { text: 'Keep Writing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: onCancel },
+        ]
+      );
+    } else {
+      onCancel();
+    }
+  }, [content, onCancel]);
+
   const handlePromptSpeech = useCallback(() => {
     if (prompt) {
       toggleSpeech(prompt, 'gratitude-prompt');
@@ -115,7 +132,7 @@ function NewEntryForm({ onSubmit, onCancel, isSubmitting, prompt }: NewEntryForm
     <View style={styles.newEntryForm}>
       <View style={styles.newEntryHeader}>
         <Text style={styles.newEntryTitle}>What are you grateful for?</Text>
-        <TouchableOpacity onPress={onCancel} style={styles.closeButton}>
+        <TouchableOpacity onPress={handleCancel} style={styles.closeButton}>
           <X size={24} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>

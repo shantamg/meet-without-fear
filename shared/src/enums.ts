@@ -160,3 +160,13 @@ export enum FavoriteType {
   EXACT = 'EXACT', // Replay exact script
   THEME = 'THEME', // Generate fresh variation
 }
+
+// ============================================================================
+// Inner Work: Cross-Feature Intelligence
+// ============================================================================
+
+export enum InsightType {
+  PATTERN = 'PATTERN', // Recurring behavior or theme detected
+  CONTRADICTION = 'CONTRADICTION', // Conflicting self-reports or behaviors
+  SUGGESTION = 'SUGGESTION', // Recommended action based on patterns
+}

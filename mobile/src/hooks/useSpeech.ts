@@ -18,6 +18,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { getAuthToken } from '../lib/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { parseMeditationScript } from '@meet-without-fear/shared';
 
 // ============================================================================
 // Constants
@@ -436,21 +437,13 @@ export function useSpeech(): UseSpeechReturn {
 
   /**
    * Parse meditation script, split into segments, and play with pauses.
-   * Strips out [PAUSE Xs] and [BELL] markers and plays segments sequentially.
+   * Uses shared parseMeditationScript utility for consistent parsing.
+   * Supports [PAUSE:Xs] and [BELL] markers.
    */
   const playMeditationScript = useCallback(async (script: string, id?: string) => {
-    // Parse script: split by pause markers and bell markers
-    // Pattern: [PAUSE 30s], [PAUSE 60s], [BELL], etc.
-    const pausePattern = /\[PAUSE\s+(\d+)s?\]/gi;
-    const bellPattern = /\[BELL\]/gi;
-
-    // Replace markers with a special delimiter we can split on
-    let processedScript = script
-      .replace(pausePattern, (match, seconds) => `|||PAUSE:${seconds}|||`)
-      .replace(bellPattern, '|||BELL|||');
-
-    // Split by our delimiter
-    const segments = processedScript.split('|||').filter(seg => seg.trim().length > 0);
+    // Use shared parser for consistent parsing
+    const parsed = parseMeditationScript(script);
+    const { segments } = parsed;
 
     const speechId = id ?? 'meditation-script';
     currentIdRef.current = speechId;
@@ -468,28 +461,24 @@ export function useSpeech(): UseSpeechReturn {
         break;
       }
 
-      const segment = segments[i].trim();
+      const segment = segments[i];
 
-      if (segment.startsWith('PAUSE:')) {
-        // Extract pause duration
-        const pauseSeconds = parseInt(segment.replace('PAUSE:', ''), 10);
-        if (!isNaN(pauseSeconds) && pauseSeconds > 0) {
-          console.log(`[Meditation] Pausing for ${pauseSeconds} seconds`);
-          // Wait for the pause duration
-          await new Promise(resolve => setTimeout(resolve, pauseSeconds * 1000));
-        }
-      } else if (segment === 'BELL') {
+      if (segment.type === 'pause' && segment.durationSeconds) {
+        // Wait for the pause duration
+        console.log(`[Meditation] Pausing for ${segment.durationSeconds} seconds`);
+        await new Promise(resolve => setTimeout(resolve, segment.durationSeconds! * 1000));
+      } else if (segment.type === 'bell') {
         // TODO: Play bell sound if we have one
         console.log('[Meditation] Bell marker (bell sound not implemented)');
-      } else if (segment.length > 0) {
+      } else if (segment.type === 'speech' && segment.content) {
         // This is a text segment - play it with slow speech
-        console.log(`[Meditation] Playing segment ${i + 1}/${segments.length}: "${segment.substring(0, 50)}..."`);
+        console.log(`[Meditation] Playing segment ${i + 1}/${segments.length}: "${segment.content.substring(0, 50)}..."`);
 
         try {
           // Wrap playTTS in a Promise that resolves when audio finishes
           await new Promise<void>((resolve, reject) => {
             playTTS(
-              segment,
+              segment.content!,
               voiceSettingsRef.current,
               // onStart (only for first segment)
               i === 0 ? () => {

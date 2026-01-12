@@ -35,6 +35,18 @@ import {
   GetMeditationPreferencesResponse,
   UpdateMeditationPreferencesRequest,
   UpdateMeditationPreferencesResponse,
+  // Saved Meditations
+  SavedMeditationDTO,
+  SavedMeditationSummaryDTO,
+  ListSavedMeditationsResponse,
+  GetSavedMeditationResponse,
+  CreateSavedMeditationRequest,
+  CreateSavedMeditationResponse,
+  UpdateSavedMeditationRequest,
+  UpdateSavedMeditationResponse,
+  DeleteSavedMeditationResponse,
+  ParseMeditationTextRequest,
+  ParseMeditationTextResponse,
 } from '@meet-without-fear/shared';
 
 // ============================================================================
@@ -48,6 +60,8 @@ export const meditationKeys = {
   favorites: () => [...meditationKeys.all, 'favorites'] as const,
   preferences: () => [...meditationKeys.all, 'preferences'] as const,
   suggestion: () => [...meditationKeys.all, 'suggestion'] as const,
+  saved: () => [...meditationKeys.all, 'saved'] as const,
+  savedDetail: (id: string) => [...meditationKeys.all, 'saved', id] as const,
 };
 
 // ============================================================================
@@ -293,6 +307,135 @@ export function useUpdateMeditationPreferences(
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: meditationKeys.preferences() });
+    },
+    ...options,
+  });
+}
+
+// ============================================================================
+// Saved Meditations Hooks
+// ============================================================================
+
+/**
+ * Fetch all saved meditations for the current user.
+ */
+export function useSavedMeditations(
+  options?: Omit<
+    UseQueryOptions<ListSavedMeditationsResponse, ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: meditationKeys.saved(),
+    queryFn: async () => {
+      return get<ListSavedMeditationsResponse>('/meditation/saved');
+    },
+    staleTime: 60_000, // 1 minute
+    ...options,
+  });
+}
+
+/**
+ * Fetch a specific saved meditation by ID.
+ */
+export function useSavedMeditation(
+  id: string,
+  options?: Omit<
+    UseQueryOptions<GetSavedMeditationResponse, ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: meditationKeys.savedDetail(id),
+    queryFn: async () => {
+      return get<GetSavedMeditationResponse>(`/meditation/saved/${id}`);
+    },
+    enabled: !!id,
+    staleTime: 60_000, // 1 minute
+    ...options,
+  });
+}
+
+/**
+ * Create a new saved meditation.
+ */
+export function useCreateSavedMeditation(
+  options?: Omit<
+    UseMutationOptions<CreateSavedMeditationResponse, ApiClientError, CreateSavedMeditationRequest>,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: CreateSavedMeditationRequest) => {
+      return post<CreateSavedMeditationResponse, CreateSavedMeditationRequest>('/meditation/saved', data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: meditationKeys.saved() });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Update an existing saved meditation.
+ */
+export function useUpdateSavedMeditation(
+  options?: Omit<
+    UseMutationOptions<UpdateSavedMeditationResponse, ApiClientError, { id: string; data: UpdateSavedMeditationRequest }>,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: UpdateSavedMeditationRequest }) => {
+      return patch<UpdateSavedMeditationResponse, UpdateSavedMeditationRequest>(`/meditation/saved/${id}`, data);
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: meditationKeys.saved() });
+      queryClient.invalidateQueries({ queryKey: meditationKeys.savedDetail(id) });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Delete a saved meditation.
+ */
+export function useDeleteSavedMeditation(
+  options?: Omit<
+    UseMutationOptions<DeleteSavedMeditationResponse, ApiClientError, string>,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      return del<DeleteSavedMeditationResponse>(`/meditation/saved/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: meditationKeys.saved() });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Parse meditation text to structured format with timing tokens.
+ * Useful for converting free-form meditation text into the standard [PAUSE:Xs] format.
+ */
+export function useParseMeditationText(
+  options?: Omit<
+    UseMutationOptions<ParseMeditationTextResponse, ApiClientError, ParseMeditationTextRequest>,
+    'mutationFn'
+  >
+) {
+  return useMutation({
+    mutationFn: async (data: ParseMeditationTextRequest) => {
+      return post<ParseMeditationTextResponse, ParseMeditationTextRequest>('/meditation/parse', data);
     },
     ...options,
   });

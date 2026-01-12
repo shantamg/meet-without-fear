@@ -58,6 +58,8 @@ export const prisma = {
   meditationStats: createMockModel(),
   meditationFavorite: createMockModel(),
   meditationPreferences: createMockModel(),
+  savedMeditation: createMockModel(),
+  insight: createMockModel(),
   auditLog: createMockModel(),
   $executeRaw: jest.fn(() => Promise.resolve(0)),
   $queryRaw: jest.fn(() => Promise.resolve([])),

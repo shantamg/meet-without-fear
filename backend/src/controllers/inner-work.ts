@@ -28,8 +28,14 @@ import {
   SendInnerWorkMessageResponse,
   UpdateInnerWorkSessionResponse,
   ArchiveInnerWorkSessionResponse,
+  GenerateContextResponse,
   GetInnerWorkOverviewResponse,
+  GetInsightsResponse,
+  DismissInsightResponse,
+  InsightDTO,
+  InsightDataDTO,
   InnerWorkStatus,
+  InsightType,
   createInnerWorkSessionRequestSchema,
   sendInnerWorkMessageRequestSchema,
   updateInnerWorkSessionRequestSchema,
@@ -298,7 +304,7 @@ export const createInnerWorkSession = asyncHandler(
       });
     }
 
-    const { title } = parseResult.data;
+    const { title, initialMessage } = parseResult.data;
 
     // Extract optional linked session fields (not in shared schema yet)
     const linkedPartnerSessionId = req.body.linkedPartnerSessionId as string | undefined;
@@ -338,10 +344,94 @@ export const createInnerWorkSession = asyncHandler(
       },
     });
 
-    // Generate initial AI message
     const userName = user.firstName || user.name || 'there';
+    const turnId = `${session.id}-inner-work-create`;
 
-    // Use context-aware prompt if linked to a partner session
+    // If initialMessage is provided, save user message first then generate AI response
+    if (initialMessage) {
+      // Save the user's initial message
+      const userMessage = await prisma.innerWorkMessage.create({
+        data: {
+          sessionId: session.id,
+          role: 'USER',
+          content: initialMessage,
+        },
+      });
+
+      // Build prompt for responding to user's message (not a greeting prompt)
+      let prompt: string;
+      if (linkedPartnerSessionId) {
+        const linkedContext = await fetchLinkedPartnerSessionContext(user.id, linkedPartnerSessionId);
+        if (linkedContext) {
+          prompt = buildLinkedInnerThoughtsPrompt({
+            userName,
+            turnCount: 1,
+            emotionalIntensity: 5,
+            linkedContext,
+          });
+        } else {
+          prompt = buildInnerWorkPrompt({
+            userName,
+            turnCount: 1,
+            emotionalIntensity: 5,
+          });
+        }
+      } else {
+        prompt = buildInnerWorkPrompt({
+          userName,
+          turnCount: 1,
+          emotionalIntensity: 5,
+        });
+      }
+
+      const fallbackResponse = "I hear you. Tell me more about what you're experiencing.";
+      const aiResponse = await getCompletion({
+        systemPrompt: prompt,
+        messages: [{ role: 'user', content: initialMessage }],
+        maxTokens: 1024,
+        sessionId: session.id,
+        turnId,
+        operation: 'inner-work-initial-response',
+      });
+      const parsed = extractJsonSafe<{ response?: string }>(aiResponse || '', {
+        response: fallbackResponse,
+      });
+
+      const aiMessage = await prisma.innerWorkMessage.create({
+        data: {
+          sessionId: session.id,
+          role: 'AI',
+          content: parsed.response || fallbackResponse,
+        },
+      });
+
+      // Embed both messages (non-blocking)
+      Promise.all([
+        embedInnerWorkMessage(userMessage.id, turnId),
+        embedInnerWorkMessage(aiMessage.id, turnId),
+      ]).catch((err) =>
+        console.warn('[Inner Work] Failed to embed initial messages:', err)
+      );
+
+      // Update session metadata (non-blocking)
+      updateSessionMetadata(session.id, turnId).catch((err) =>
+        console.warn('[Inner Work] Failed to update metadata:', err)
+      );
+
+      const response: ApiResponse<CreateInnerWorkSessionResponse> = {
+        success: true,
+        data: {
+          session: mapSessionToSummary({ ...session, _count: { messages: 2 } }),
+          initialMessage: mapMessageToDTO(aiMessage),
+          userMessage: mapMessageToDTO(userMessage),
+        },
+      };
+
+      res.status(201).json(response);
+      return;
+    }
+
+    // Standard flow: AI generates greeting first
     let prompt: string;
     let fallbackMessage = "Hey there. What's on your mind today?";
 
@@ -356,9 +446,6 @@ export const createInnerWorkSession = asyncHandler(
     } else {
       prompt = buildInnerWorkInitialMessagePrompt(userName);
     }
-
-    // Create turnId for this inner work session creation - used for cost attribution
-    const turnId = `${session.id}-inner-work-create`;
 
     const aiResponse = await getCompletion({
       systemPrompt: prompt,
@@ -626,7 +713,16 @@ export const sendInnerWorkMessage = asyncHandler(
       turnId,
       operation: 'inner-work-response',
     });
-    const parsed = extractJsonSafe<{ response?: string; analysis?: string }>(aiResponse || '', {
+    const parsed = extractJsonSafe<{
+      response?: string;
+      analysis?: string;
+      suggestedActions?: Array<{
+        type: string;
+        label: string;
+        personName?: string;
+        context?: string;
+      }>;
+    }>(aiResponse || '', {
       response: fallbackResponse,
     });
 
@@ -695,12 +791,28 @@ export const sendInnerWorkMessage = asyncHandler(
       console.log(`[Inner Thoughts] Skipping memory detection (turn ${totalTurnCount} < 2)`);
     }
 
+    // Validate and map suggested actions from AI response
+    const validActionTypes = ['start_partner_session', 'start_meditation', 'add_gratitude', 'check_need'] as const;
+    const suggestedActions = (parsed.suggestedActions || [])
+      .filter((action): action is typeof action & { type: typeof validActionTypes[number] } =>
+        validActionTypes.includes(action.type as typeof validActionTypes[number]) &&
+        typeof action.label === 'string' &&
+        action.label.length > 0
+      )
+      .map(action => ({
+        type: action.type as typeof validActionTypes[number],
+        label: action.label,
+        personName: action.personName,
+        context: action.context || 'AI suggestion',
+      }));
+
     const response: ApiResponse<SendInnerWorkMessageResponse> = {
       success: true,
       data: {
         userMessage: mapMessageToDTO(userMessage),
         aiMessage: mapMessageToDTO(aiMessage),
         memorySuggestion,
+        suggestedActions: suggestedActions.length > 0 ? suggestedActions : undefined,
       },
     };
 
@@ -803,6 +915,115 @@ export const archiveInnerWorkSession = asyncHandler(
 );
 
 // ============================================================================
+// POST /inner-thoughts/:id/generate-context - Generate context for partner session (US-3)
+// ============================================================================
+
+export const generateContext = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const user = getUser(req);
+    const sessionId = req.params.id;
+
+    // Fetch session with messages
+    const session = await prisma.innerWorkSession.findFirst({
+      where: {
+        id: sessionId,
+        userId: user.id,
+      },
+      include: {
+        messages: {
+          orderBy: { timestamp: 'asc' },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new ValidationError('Session not found');
+    }
+
+    // If session already has summary and theme, use those
+    if (session.summary && session.theme) {
+      const response: ApiResponse<GenerateContextResponse> = {
+        success: true,
+        data: {
+          contextSummary: session.summary,
+          themes: [session.theme],
+          innerThoughtsSessionId: sessionId,
+        },
+      };
+      res.json(response);
+      return;
+    }
+
+    // Generate context summary from messages
+    const userName = user.firstName || user.name || 'User';
+    const messageHistory = session.messages.map(msg => ({
+      role: msg.role === 'USER' ? 'user' : 'assistant' as const,
+      content: msg.content,
+    }));
+
+    const turnId = `${sessionId}-generate-context`;
+
+    const prompt = `You are analyzing an Inner Thoughts session to help prepare the user for a conversation with someone.
+
+Analyze the conversation below and extract:
+1. A brief contextual summary (2-3 sentences) that captures what ${userName} has been processing
+2. The name of the person they want to talk with (if mentioned)
+3. Key themes or emotions present
+
+User's conversation:
+${messageHistory.map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`).join('\n')}
+
+Respond ONLY with JSON:
+{
+  "contextSummary": "A brief summary focused on what the user wants to discuss",
+  "personName": "The person's name if mentioned, or null",
+  "themes": ["theme1", "theme2"]
+}`;
+
+    const aiResponse = await getCompletion({
+      systemPrompt: prompt,
+      messages: [{ role: 'user', content: 'Generate the context summary.' }],
+      maxTokens: 512,
+      sessionId,
+      turnId,
+      operation: 'inner-work-context',
+    });
+
+    const parsed = extractJsonSafe<{
+      contextSummary?: string;
+      personName?: string | null;
+      themes?: string[];
+    }>(aiResponse || '', {
+      contextSummary: session.summary || 'User has been reflecting on their thoughts.',
+      themes: session.theme ? [session.theme] : [],
+    });
+
+    // Update session with generated summary if not already set
+    if (!session.summary || !session.theme) {
+      await prisma.innerWorkSession.update({
+        where: { id: sessionId },
+        data: {
+          summary: parsed.contextSummary || session.summary,
+          theme: (parsed.themes && parsed.themes.length > 0) ? parsed.themes[0] : session.theme,
+        },
+      });
+    }
+
+    const response: ApiResponse<GenerateContextResponse> = {
+      success: true,
+      data: {
+        contextSummary: parsed.contextSummary || 'User has been reflecting on their thoughts.',
+        personName: parsed.personName || undefined,
+        themes: parsed.themes || [],
+        innerThoughtsSessionId: sessionId,
+      },
+    };
+
+    res.json(response);
+  }
+);
+
+// ============================================================================
 // GET /sessions/:id/inner-thoughts - Get linked Inner Thoughts session
 // ============================================================================
 
@@ -856,8 +1077,35 @@ export const getInnerWorkOverview = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const user = getUser(req);
 
-    // For now, return stub data since needs/gratitude/meditation features
-    // are not yet fully implemented. This prevents the mobile app from crashing.
+    // Fetch recent insights (non-dismissed, sorted by priority)
+    const recentInsights = await prisma.insight.findMany({
+      where: {
+        userId: user.id,
+        dismissed: false,
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } },
+        ],
+      },
+      orderBy: [
+        { priority: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      take: 5,
+    });
+
+    const insightDTOs: InsightDTO[] = recentInsights.map((insight) => ({
+      id: insight.id,
+      type: insight.type as InsightType,
+      summary: insight.summary,
+      data: insight.data as InsightDataDTO,
+      priority: insight.priority,
+      dismissed: insight.dismissed,
+      expiresAt: insight.expiresAt?.toISOString() ?? null,
+      createdAt: insight.createdAt.toISOString(),
+    }));
+
+    // For now, return stub data for other features since they're not yet fully implemented
     const response: ApiResponse<GetInnerWorkOverviewResponse> = {
       success: true,
       data: {
@@ -883,8 +1131,110 @@ export const getInnerWorkOverview = asyncHandler(
             totalTracked: 0,
             recentlyMentioned: [],
           },
-          recentInsights: [],
+          recentInsights: insightDTOs,
         },
+      },
+    };
+
+    res.json(response);
+  }
+);
+
+// ============================================================================
+// GET /inner-work/insights - Get user insights
+// ============================================================================
+
+export const getInsights = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const user = getUser(req);
+    const limit = parseInt(req.query.limit as string) || 20;
+    const type = req.query.type as InsightType | undefined;
+    const includeDismissed = req.query.includeDismissed === 'true';
+
+    const whereClause: {
+      userId: string;
+      type?: InsightType;
+      dismissed?: boolean;
+      OR?: { expiresAt: null | { gt: Date } }[];
+    } = {
+      userId: user.id,
+    };
+
+    if (type) {
+      whereClause.type = type;
+    }
+
+    if (!includeDismissed) {
+      whereClause.dismissed = false;
+      whereClause.OR = [
+        { expiresAt: null },
+        { expiresAt: { gt: new Date() } },
+      ];
+    }
+
+    const insights = await prisma.insight.findMany({
+      where: whereClause,
+      orderBy: [
+        { priority: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      take: limit + 1, // Fetch one extra to check hasMore
+    });
+
+    const hasMore = insights.length > limit;
+    const insightDTOs: InsightDTO[] = insights.slice(0, limit).map((insight) => ({
+      id: insight.id,
+      type: insight.type as InsightType,
+      summary: insight.summary,
+      data: insight.data as InsightDataDTO,
+      priority: insight.priority,
+      dismissed: insight.dismissed,
+      expiresAt: insight.expiresAt?.toISOString() ?? null,
+      createdAt: insight.createdAt.toISOString(),
+    }));
+
+    const response: ApiResponse<GetInsightsResponse> = {
+      success: true,
+      data: {
+        insights: insightDTOs,
+        hasMore,
+      },
+    };
+
+    res.json(response);
+  }
+);
+
+// ============================================================================
+// POST /inner-work/insights/:id/dismiss - Dismiss an insight
+// ============================================================================
+
+export const dismissInsight = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const user = getUser(req);
+    const insightId = req.params.id;
+
+    // Verify the insight belongs to the user
+    const insight = await prisma.insight.findFirst({
+      where: {
+        id: insightId,
+        userId: user.id,
+      },
+    });
+
+    if (!insight) {
+      throw new ValidationError('Insight not found');
+    }
+
+    await prisma.insight.update({
+      where: { id: insightId },
+      data: { dismissed: true },
+    });
+
+    const response: ApiResponse<DismissInsightResponse> = {
+      success: true,
+      data: {
+        success: true,
       },
     };
 

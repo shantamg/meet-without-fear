@@ -4,7 +4,7 @@
  * Data Transfer Objects for pattern recognition and insights across Inner Work features.
  */
 
-import { NeedsCategory } from '../enums';
+import { InsightType } from '../enums';
 
 // ============================================================================
 // Cross-Feature Context
@@ -67,13 +67,22 @@ export interface GapDTO {
 
 export interface InsightDTO {
   id: string;
-  type: 'contradiction' | 'correlation' | 'gap' | 'pattern';
-  title: string;
-  description: string;
-  confidence: number;
+  type: InsightType;
+  summary: string;
+  data: InsightDataDTO;
+  priority: number; // 0-10
+  dismissed: boolean;
+  expiresAt: string | null;
   createdAt: string;
-  actionable: boolean;
+}
+
+export interface InsightDataDTO {
+  title?: string;
+  description?: string;
+  confidence?: number; // 0-1
+  evidence?: string[];
   suggestedAction?: string;
+  relatedFeatures?: string[];
 }
 
 export interface WeeklyInsightSummaryDTO {
@@ -102,12 +111,18 @@ export interface GetCrossFeatureContextResponse {
 // GET /api/v1/inner-work/insights
 export interface GetInsightsRequest {
   limit?: number;
-  type?: 'contradiction' | 'correlation' | 'gap' | 'pattern';
+  type?: InsightType;
+  includeDismissed?: boolean;
 }
 
 export interface GetInsightsResponse {
   insights: InsightDTO[];
   hasMore: boolean;
+}
+
+// POST /api/v1/inner-work/insights/:id/dismiss
+export interface DismissInsightResponse {
+  success: boolean;
 }
 
 // GET /api/v1/inner-work/weekly-summary

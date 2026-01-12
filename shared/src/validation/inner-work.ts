@@ -19,6 +19,8 @@ export const innerWorkStatusSchema = z.nativeEnum(InnerWorkStatus);
 
 export const createInnerWorkSessionRequestSchema = z.object({
   title: z.string().max(200).optional(),
+  /** Optional initial message - if provided, creates session with user message first (no AI greeting) */
+  initialMessage: z.string().min(1).max(10000).optional(),
 });
 
 export type CreateInnerWorkSessionRequestInput = z.infer<typeof createInnerWorkSessionRequestSchema>;

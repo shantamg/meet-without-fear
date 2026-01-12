@@ -7,9 +7,12 @@
  *
  * After creation, navigates directly to the session where the AI
  * will help craft an invitation message.
+ *
+ * If innerThoughtsId is provided (from Inner Thoughts flow), fetches context
+ * and pre-fills the partner name if available.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,15 +25,16 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Send, User, UserPlus, Check } from 'lucide-react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Send, User, UserPlus, Check, Layers } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useCreateSession } from '@/src/hooks/useSessions';
 import { usePeople } from '@/src/hooks/usePerson';
+import { useGenerateContext } from '@/src/hooks/useInnerThoughts';
 import { colors } from '@/src/theme';
 import { trackSessionCreated, trackPersonSelected } from '@/src/services/analytics';
-import type { PersonSummaryDTO } from '@meet-without-fear/shared';
+import type { PersonSummaryDTO, GenerateContextResponse } from '@meet-without-fear/shared';
 
 // ============================================================================
 // Component
@@ -38,13 +42,50 @@ import type { PersonSummaryDTO } from '@meet-without-fear/shared';
 
 export default function NewSessionScreen() {
   const router = useRouter();
+  const { partnerName, innerThoughtsId } = useLocalSearchParams<{
+    partnerName?: string;
+    innerThoughtsId?: string;
+  }>();
+
   const [mode, setMode] = useState<'pick' | 'new'>('pick');
   const [selectedPerson, setSelectedPerson] = useState<PersonSummaryDTO | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [innerThoughtsContext, setInnerThoughtsContext] = useState<GenerateContextResponse | null>(null);
 
   const { data: people = [], isLoading: peopleLoading } = usePeople();
   const { mutateAsync: createSession, isPending } = useCreateSession();
+  const { mutateAsync: generateContext, isPending: isGeneratingContext } = useGenerateContext();
+
+  // Generate context from Inner Thoughts session if linked
+  useEffect(() => {
+    if (innerThoughtsId && !innerThoughtsContext) {
+      generateContext({ sessionId: innerThoughtsId })
+        .then((context) => {
+          setInnerThoughtsContext(context);
+          // Pre-fill partner name if available and no name was passed as param
+          if (context.personName && !partnerName) {
+            const nameParts = context.personName.split(' ');
+            setFirstName(nameParts[0] || '');
+            setLastName(nameParts.slice(1).join(' ') || '');
+            setMode('new'); // Switch to new person mode since we have a name
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to generate context from Inner Thoughts:', err);
+        });
+    }
+  }, [innerThoughtsId, innerThoughtsContext, generateContext, partnerName]);
+
+  // Pre-fill partner name from query params (from InnerThoughtsScreen navigation)
+  useEffect(() => {
+    if (partnerName && !firstName) {
+      const nameParts = partnerName.split(' ');
+      setFirstName(nameParts[0] || '');
+      setLastName(nameParts.slice(1).join(' ') || '');
+      setMode('new'); // Switch to new person mode since we have a name
+    }
+  }, [partnerName, firstName]);
 
   // Determine if we have people to pick from
   const hasPeople = people.length > 0;
@@ -53,6 +94,10 @@ export default function NewSessionScreen() {
   const effectiveMode = hasPeople ? mode : 'new';
 
   const handleSubmit = async () => {
+    // Build optional context and innerThoughtsId for session creation
+    const context = innerThoughtsContext?.contextSummary;
+    const linkedInnerThoughtsId = innerThoughtsId;
+
     if (effectiveMode === 'pick' && selectedPerson) {
       // Track person selection
       trackPersonSelected(selectedPerson.id, false);
@@ -60,6 +105,8 @@ export default function NewSessionScreen() {
       try {
         const response = await createSession({
           personId: selectedPerson.id,
+          ...(context && { context }),
+          ...(linkedInnerThoughtsId && { innerThoughtsId: linkedInnerThoughtsId }),
         });
         // Track session creation
         trackSessionCreated(response.session.id, selectedPerson.id);
@@ -81,6 +128,8 @@ export default function NewSessionScreen() {
       try {
         const response = await createSession({
           inviteName,
+          ...(context && { context }),
+          ...(linkedInnerThoughtsId && { innerThoughtsId: linkedInnerThoughtsId }),
         });
         // Track person selection (new person) and session creation
         // Note: personId not available in response, using relationshipId
@@ -114,6 +163,26 @@ export default function NewSessionScreen() {
                 ? 'Pick someone you know or add a new person.'
                 : "Enter their name and we'll create a session."}
             </Text>
+
+            {/* Inner Thoughts Context Banner - show when linked from Inner Thoughts */}
+            {innerThoughtsId && (
+              <View style={styles.contextBanner}>
+                <View style={styles.contextBannerHeader}>
+                  <Layers size={16} color={colors.brandBlue} />
+                  <Text style={styles.contextBannerTitle}>From Inner Thoughts</Text>
+                </View>
+                {isGeneratingContext ? (
+                  <View style={styles.contextLoading}>
+                    <ActivityIndicator size="small" color={colors.brandBlue} />
+                    <Text style={styles.contextLoadingText}>Preparing context...</Text>
+                  </View>
+                ) : innerThoughtsContext ? (
+                  <Text style={styles.contextBannerText} numberOfLines={3}>
+                    {innerThoughtsContext.contextSummary}
+                  </Text>
+                ) : null}
+              </View>
+            )}
 
             {/* Mode Tabs - only show if there are existing people */}
             {hasPeople && (
@@ -424,5 +493,38 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  // Context banner (from Inner Thoughts)
+  contextBanner: {
+    backgroundColor: `${colors.brandBlue}15`,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: `${colors.brandBlue}30`,
+  },
+  contextBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  contextBannerTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.brandBlue,
+  },
+  contextBannerText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  contextLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  contextLoadingText: {
+    fontSize: 13,
+    color: colors.textMuted,
   },
 });

@@ -1424,9 +1424,10 @@ Respond in JSON format:
     if (partnerId) {
       // We can use notifyPartner or a session-wide event if available.
       // publishSessionEvent is generic
-      await publishSessionEvent(sessionId, 'session.stage_transition', {
+      await publishSessionEvent(sessionId, 'partner.stage_completed', {
         previousStage: 2,
         currentStage: 3,
+        userId,
         message: {
           id: message.id,
           content: message.content,

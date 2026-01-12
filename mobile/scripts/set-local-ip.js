@@ -1,8 +1,38 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 
+function getLocalIP() {
+  // Try common macOS interfaces
+  const interfaces = ['en0', 'en1', 'en2', 'en3', 'en4', 'en5'];
+
+  for (const iface of interfaces) {
+    try {
+      const ip = execSync(`ipconfig getifaddr ${iface}`, { stdio: ['pipe', 'pipe', 'pipe'] }).toString().trim();
+      if (ip && ip.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+        return ip;
+      }
+    } catch {
+      // Interface doesn't exist or has no IP, try next
+    }
+  }
+
+  // Fallback: use Node's os module
+  const os = require('os');
+  const networkInterfaces = os.networkInterfaces();
+
+  for (const [, addresses] of Object.entries(networkInterfaces)) {
+    for (const addr of addresses) {
+      if (addr.family === 'IPv4' && !addr.internal) {
+        return addr.address;
+      }
+    }
+  }
+
+  throw new Error('No local IP address found');
+}
+
 try {
-  const ip = execSync('ipconfig getifaddr en0').toString().trim();
+  const ip = getLocalIP();
   const newApiUrl = `EXPO_PUBLIC_API_URL=http://${ip}:3000`;
 
   // Read existing .env file if it exists
@@ -37,7 +67,7 @@ try {
     .join('\n') + '\n';
 
   fs.writeFileSync('.env', newContent);
-  console.log(`⇢ EXPO_PUBLIC_API_URL=${newApiUrl}`);
+  console.log(`⇢ ${newApiUrl}`);
   console.log('✅ Local IP address detected and set successfully!');
 } catch (error) {
   console.error('❌ Failed to detect local IP address automatically.');

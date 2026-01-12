@@ -37,3 +37,6 @@ export * from './validation';
 
 // API contracts
 export * from './contracts';
+
+// Utilities
+export * from './utils/meditation';

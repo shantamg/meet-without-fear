@@ -234,6 +234,7 @@ export {
   useUpdateInnerThoughtsSession,
   useArchiveInnerThoughtsSession,
   useLinkedInnerThoughts,
+  useGenerateContext,
   // Legacy aliases
   useInnerWorkSessions,
   useInnerWorkSession,
@@ -325,6 +326,13 @@ export {
   // Preferences
   useMeditationPreferences,
   useUpdateMeditationPreferences,
+  // Saved Meditations (Custom User-Created)
+  useSavedMeditations,
+  useSavedMeditation,
+  useCreateSavedMeditation,
+  useUpdateSavedMeditation,
+  useDeleteSavedMeditation,
+  useParseMeditationText,
   // Helpers
   getDurationOptions,
   getFocusAreaSuggestions,
@@ -342,6 +350,8 @@ export {
   // Hooks
   useInnerWorkOverview,
   useCrossFeatureContext,
+  useInsights,
+  useDismissInsight,
   // Helpers
   hasCompletedOnboarding,
   getSuggestedAction,

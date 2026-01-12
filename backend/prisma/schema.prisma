@@ -65,6 +65,10 @@ model User {
   meditationStats     MeditationStats?
   meditationFavorites MeditationFavorite[]
   meditationPreferences MeditationPreferences?
+  savedMeditations    SavedMeditation[]
+
+  // Inner Work: Cross-Feature Intelligence
+  insights            Insight[]
 }
 
 model Relationship {
@@ -1037,6 +1041,33 @@ enum MentionSourceType {
 }
 
 // ============================================================================
+// Inner Work: Cross-Feature Intelligence (Insights)
+// ============================================================================
+
+// AI-generated insights from cross-feature pattern recognition
+model Insight {
+  id         String      @id @default(cuid())
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  type       InsightType
+  summary    String      @db.Text // Human-readable insight summary
+  data       Json        // Structured data supporting the insight
+  priority   Int         @default(0) // Higher = more important (0-10)
+  dismissed  Boolean     @default(false)
+  expiresAt  DateTime?   // Auto-expire old insights
+  createdAt  DateTime    @default(now())
+
+  @@index([userId, dismissed, priority])
+  @@index([userId, expiresAt])
+}
+
+enum InsightType {
+  PATTERN       // Recurring behavior or theme detected
+  CONTRADICTION // Conflicting self-reports or behaviors
+  SUGGESTION    // Recommended action based on patterns
+}
+
+// ============================================================================
 // Inner Work: Gratitude Practice ("See the Positive")
 // ============================================================================
 
@@ -1168,6 +1199,21 @@ model MeditationPreferences {
   backgroundSound String  @default("silence")
   reminderEnabled Boolean @default(false)
   reminderTime    String? // HH:MM
+}
+
+// User's custom-created meditations (via chat or text import)
+model SavedMeditation {
+  id              String   @id @default(cuid())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  title           String   // User-provided or AI-generated title
+  script          String   @db.Text // Full script with [PAUSE:Xs] tokens
+  durationSeconds Int      // Calculated from script
+  conversationId  String?  // Link to InnerWorkSession that created it (for editing)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId, createdAt])
 }
 
 // ============================================================================

@@ -11,7 +11,7 @@
  * - Self-Reflection, Needs Assessment, Gratitude, Meditation
  */
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -26,7 +26,7 @@ import { useAuth } from '@/src/hooks/useAuth';
 import { useBiometricAuth, usePendingInvitation } from '@/src/hooks';
 import { useInvitationDetails } from '@/src/hooks/useInvitation';
 import { useSessions, useAcceptInvitation } from '../../../src/hooks/useSessions';
-import { BiometricPrompt, Logo } from '../../../src/components';
+import { BiometricPrompt, Logo, ChatInput } from '../../../src/components';
 import { createStyles } from '@/src/theme/styled';
 import { colors } from '@/src/theme';
 
@@ -56,6 +56,15 @@ export default function HomeScreen() {
       await clearInvitation();
     },
   });
+
+  // Handle sending a message from home page chat input
+  // Navigate immediately for optimistic UX - session is created on the chat screen
+  const handleHomeChat = useCallback((message: string) => {
+    router.push({
+      pathname: '/inner-work/self-reflection/new',
+      params: { initialMessage: message },
+    });
+  }, [router]);
 
   // Wait for auth, sessions, and pending invitation check to load
   const isLoading = isAuthLoading || isSessionsLoading || isPendingLoading;
@@ -120,7 +129,7 @@ export default function HomeScreen() {
   // Loading state
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
+      <SafeAreaView style={styles.container} edges={[]}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={colors.accent} />
           <Text style={styles.loadingText}>Loading...</Text>
@@ -130,7 +139,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       <View style={styles.content}>
         {/* Main greeting section - centered */}
         <View style={styles.greetingSection}>
@@ -141,7 +150,7 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* Low-profile action buttons at bottom */}
+        {/* Low-profile action buttons */}
         <View style={styles.actionsSection}>
           {/* Accept pending invitation - shown first if there's a pending invitation */}
           {hasPendingInvitation && (
@@ -202,6 +211,14 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* Chat input - full width at bottom */}
+      <View style={styles.chatInputSection}>
+        <ChatInput
+          onSend={handleHomeChat}
+          placeholder="What's on your mind?"
+        />
+      </View>
+
       {/* Biometric opt-in prompt */}
       <BiometricPrompt
         visible={showBiometricPrompt}
@@ -238,10 +255,9 @@ const useStyles = () =>
       paddingHorizontal: t.spacing.xl,
     },
     greetingSection: {
-      flex: 1,
-      justifyContent: 'center',
       alignItems: 'center',
-      paddingBottom: 60, // Offset slightly above center
+      paddingTop: t.spacing.xl,
+      paddingBottom: t.spacing.lg,
     },
     greeting: {
       fontSize: 36,
@@ -259,8 +275,14 @@ const useStyles = () =>
       maxWidth: 280,
     },
     actionsSection: {
-      paddingBottom: t.spacing['3xl'],
+      flex: 1,
+      justifyContent: 'center',
       gap: t.spacing.sm,
+    },
+    chatInputSection: {
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
+      backgroundColor: t.colors.bgPrimary,
     },
     actionButton: {
       flexDirection: 'row',

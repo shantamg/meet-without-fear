@@ -19,13 +19,18 @@ import {
   MessageCircle,
   ChevronRight,
   TrendingUp,
+  Lightbulb,
+  X,
+  AlertTriangle,
 } from 'lucide-react-native';
 
 import {
   useInnerWorkOverview,
+  useDismissInsight,
   getSuggestedAction,
   calculateWellnessScore,
 } from '../hooks';
+import { InsightDTO, InsightType } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 
@@ -48,6 +53,12 @@ interface FeatureCardProps {
   stats?: { label: string; value: string }[];
   accentColor: string;
   onPress: () => void;
+}
+
+interface InsightCardProps {
+  insight: InsightDTO;
+  onDismiss: (id: string) => void;
+  onLearnMore?: (insight: InsightDTO) => void;
 }
 
 // ============================================================================
@@ -86,6 +97,71 @@ function FeatureCard({ title, subtitle, icon, stats, accentColor, onPress }: Fea
 }
 
 // ============================================================================
+// Insight Card Component
+// ============================================================================
+
+function getInsightIcon(type: InsightType) {
+  switch (type) {
+    case InsightType.PATTERN:
+      return <TrendingUp size={18} color={colors.brandBlue} />;
+    case InsightType.CONTRADICTION:
+      return <AlertTriangle size={18} color={colors.warning} />;
+    case InsightType.SUGGESTION:
+      return <Lightbulb size={18} color={colors.success} />;
+    default:
+      return <Lightbulb size={18} color={colors.accent} />;
+  }
+}
+
+function getInsightAccentColor(type: InsightType): string {
+  switch (type) {
+    case InsightType.PATTERN:
+      return colors.brandBlue;
+    case InsightType.CONTRADICTION:
+      return colors.warning;
+    case InsightType.SUGGESTION:
+      return colors.success;
+    default:
+      return colors.accent;
+  }
+}
+
+function InsightCard({ insight, onDismiss, onLearnMore }: InsightCardProps) {
+  const accentColor = getInsightAccentColor(insight.type);
+
+  return (
+    <View style={[styles.insightCard, { borderLeftColor: accentColor }]}>
+      <View style={styles.insightHeader}>
+        <View style={[styles.insightIconContainer, { backgroundColor: accentColor + '20' }]}>
+          {getInsightIcon(insight.type)}
+        </View>
+        <TouchableOpacity
+          onPress={() => onDismiss(insight.id)}
+          style={styles.insightDismissButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <X size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.insightSummary}>{insight.summary}</Text>
+
+      {onLearnMore && (
+        <TouchableOpacity
+          onPress={() => onLearnMore(insight)}
+          style={styles.insightLearnMoreButton}
+        >
+          <Text style={[styles.insightLearnMoreText, { color: accentColor }]}>
+            Learn more
+          </Text>
+          <ChevronRight size={14} color={accentColor} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
@@ -97,14 +173,37 @@ export function InnerWorkHubScreen({
   onNavigateToSelfReflection,
 }: InnerWorkHubScreenProps) {
   const { data, isLoading, error } = useInnerWorkOverview();
+  const dismissInsight = useDismissInsight();
   const overview = data?.overview;
 
   const suggestedAction = getSuggestedAction(overview);
   const wellnessScore = calculateWellnessScore(overview);
 
+  // Get top 2 insights from overview
+  const topInsights = overview?.recentInsights?.slice(0, 2) ?? [];
+
   const handleBack = useCallback(() => {
     onBack?.();
   }, [onBack]);
+
+  const handleDismissInsight = useCallback((insightId: string) => {
+    dismissInsight.mutate(insightId);
+  }, [dismissInsight]);
+
+  const handleLearnMoreInsight = useCallback((insight: InsightDTO) => {
+    // Navigate based on insight's related features
+    const relatedFeatures = insight.data?.relatedFeatures ?? [];
+    if (relatedFeatures.includes('meditation')) {
+      onNavigateToMeditation?.();
+    } else if (relatedFeatures.includes('gratitude')) {
+      onNavigateToGratitude?.();
+    } else if (relatedFeatures.includes('needs')) {
+      onNavigateToNeedsAssessment?.();
+    } else {
+      // Default to self-reflection
+      onNavigateToSelfReflection?.();
+    }
+  }, [onNavigateToMeditation, onNavigateToGratitude, onNavigateToNeedsAssessment, onNavigateToSelfReflection]);
 
   // Loading state
   if (isLoading) {
@@ -146,6 +245,20 @@ export function InnerWorkHubScreen({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Insight Cards - Show up to 2 above other content */}
+        {topInsights.length > 0 && (
+          <View style={styles.insightsSection}>
+            {topInsights.map((insight) => (
+              <InsightCard
+                key={insight.id}
+                insight={insight}
+                onDismiss={handleDismissInsight}
+                onLearnMore={handleLearnMoreInsight}
+              />
+            ))}
+          </View>
+        )}
+
         {/* Wellness Score Card */}
         {wellnessScore !== null && (
           <View style={styles.wellnessCard}>
@@ -329,6 +442,52 @@ const styles = createStyles((t) => ({
   },
   scrollContent: {
     padding: t.spacing.md,
+  },
+
+  // Insights Section
+  insightsSection: {
+    marginBottom: t.spacing.md,
+  },
+  insightCard: {
+    backgroundColor: t.colors.bgSecondary,
+    borderRadius: t.radius.lg,
+    padding: t.spacing.md,
+    marginBottom: t.spacing.sm,
+    borderLeftWidth: 4,
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: t.spacing.sm,
+  },
+  insightIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  insightDismissButton: {
+    padding: t.spacing.xs,
+  },
+  insightSummary: {
+    fontSize: 14,
+    color: t.colors.textPrimary,
+    lineHeight: 20,
+  },
+  insightLearnMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: t.spacing.sm,
+    paddingTop: t.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: t.colors.border,
+  },
+  insightLearnMoreText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginRight: t.spacing.xs,
   },
 
   // Wellness Card

@@ -9,11 +9,13 @@
 import { useCallback, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { ArrowLeft, Layers } from 'lucide-react-native';
-import { MessageRole, MemorySuggestion } from '@meet-without-fear/shared';
+import { MessageRole, MemorySuggestion, SuggestedAction } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage } from '../components/ChatInterface';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
+import { SuggestedActionButtons } from '../components/SuggestedActionButtons';
 import { useInnerThoughtsSession, useSendInnerThoughtsMessage } from '../hooks';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -31,6 +33,8 @@ interface InnerThoughtsScreenProps {
   onNavigateToPartnerSession?: () => void;
   /** Whether a new session is being created (shows typing indicator) */
   isCreating?: boolean;
+  /** Initial message to show optimistically while creating session */
+  initialMessage?: string;
 }
 
 // ============================================================================
@@ -43,11 +47,15 @@ export function InnerThoughtsScreen({
   onNavigateBack,
   onNavigateToPartnerSession,
   isCreating = false,
+  initialMessage,
 }: InnerThoughtsScreenProps) {
   const styles = useStyles();
+  const router = useRouter();
 
   // Memory suggestion state
   const [memorySuggestion, setMemorySuggestion] = useState<MemorySuggestion | null>(null);
+  // Suggested actions state
+  const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([]);
 
   // Only fetch session if we have a valid sessionId (not creating)
   const { data, isLoading, error } = useInnerThoughtsSession(
@@ -58,7 +66,21 @@ export function InnerThoughtsScreen({
   const session = data?.session;
 
   // Convert inner thoughts messages to ChatMessage format
+  // When creating with an initial message, show it optimistically
   const messages: ChatMessage[] = useMemo(() => {
+    // If creating with initial message, show it optimistically
+    if (isCreating && initialMessage) {
+      return [{
+        id: 'optimistic-initial',
+        sessionId: sessionId || 'pending',
+        senderId: 'user',
+        role: MessageRole.USER,
+        content: initialMessage,
+        stage: 1,
+        timestamp: new Date().toISOString(),
+      }];
+    }
+
     if (!session?.messages) return [];
 
     return session.messages.map((msg) => ({
@@ -70,7 +92,7 @@ export function InnerThoughtsScreen({
       stage: 1, // Inner thoughts doesn't use stages, but ChatMessage requires it
       timestamp: msg.timestamp,
     }));
-  }, [session?.messages, sessionId]);
+  }, [session?.messages, sessionId, isCreating, initialMessage]);
 
   const handleSendMessage = useCallback(
     async (content: string) => {
@@ -79,6 +101,13 @@ export function InnerThoughtsScreen({
         // Check for memory suggestion in response
         if (result.memorySuggestion) {
           setMemorySuggestion(result.memorySuggestion);
+        }
+        // Check for suggested actions in response
+        if (result.suggestedActions && result.suggestedActions.length > 0) {
+          setSuggestedActions(result.suggestedActions);
+        } else {
+          // Clear previous suggestions when no new ones
+          setSuggestedActions([]);
         }
       } catch (err) {
         console.error('Failed to send inner thoughts message:', err);
@@ -90,6 +119,35 @@ export function InnerThoughtsScreen({
   const handleDismissMemorySuggestion = useCallback(() => {
     setMemorySuggestion(null);
   }, []);
+
+  const handleDismissSuggestedActions = useCallback(() => {
+    setSuggestedActions([]);
+  }, []);
+
+  const handleActionPress = useCallback((action: SuggestedAction) => {
+    // Clear the actions immediately
+    setSuggestedActions([]);
+
+    // Navigate based on action type
+    switch (action.type) {
+      case 'start_partner_session':
+        // Navigate to new session flow, optionally with person name pre-filled
+        router.push({
+          pathname: '/session/new',
+          params: action.personName ? { partnerName: action.personName, innerThoughtsId: sessionId } : { innerThoughtsId: sessionId },
+        });
+        break;
+      case 'start_meditation':
+        router.push('/inner-work/meditation');
+        break;
+      case 'add_gratitude':
+        router.push('/inner-work/gratitude');
+        break;
+      case 'check_need':
+        router.push('/inner-work/needs');
+        break;
+    }
+  }, [router, sessionId]);
 
   const handleBack = useCallback(() => {
     onNavigateBack?.();
@@ -170,6 +228,15 @@ export function InnerThoughtsScreen({
         emptyStateTitle="Inner Thoughts"
         emptyStateMessage="A private space for reflection. Share what's on your mind."
       />
+
+      {/* Suggested Action Buttons - shown when AI suggests next steps */}
+      {suggestedActions.length > 0 && (
+        <SuggestedActionButtons
+          actions={suggestedActions}
+          onActionPress={handleActionPress}
+          onDismiss={handleDismissSuggestedActions}
+        />
+      )}
 
       {/* Memory Suggestion Card - shown when AI detects a memory intent */}
       {memorySuggestion && (

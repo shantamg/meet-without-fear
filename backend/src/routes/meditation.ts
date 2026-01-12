@@ -18,6 +18,12 @@ import {
   deleteFavorite,
   getPreferences,
   updatePreferences,
+  listSavedMeditations,
+  getSavedMeditation,
+  createSavedMeditation,
+  updateSavedMeditation,
+  deleteSavedMeditation,
+  parseMeditationText,
 } from '../controllers/meditation';
 
 const router = Router();
@@ -57,5 +63,27 @@ router.post('/favorites', createFavorite);
 
 // DELETE /api/v1/meditation/favorites/:id - Delete favorite
 router.delete('/favorites/:id', deleteFavorite);
+
+// ============================================================================
+// Saved Meditations (Custom User-Created)
+// ============================================================================
+
+// GET /api/v1/meditation/saved - List saved meditations
+router.get('/saved', listSavedMeditations);
+
+// GET /api/v1/meditation/saved/:id - Get specific saved meditation
+router.get('/saved/:id', getSavedMeditation);
+
+// POST /api/v1/meditation/saved - Create saved meditation
+router.post('/saved', createSavedMeditation);
+
+// PATCH /api/v1/meditation/saved/:id - Update saved meditation
+router.patch('/saved/:id', updateSavedMeditation);
+
+// DELETE /api/v1/meditation/saved/:id - Delete saved meditation
+router.delete('/saved/:id', deleteSavedMeditation);
+
+// POST /api/v1/meditation/parse - Parse text to structured format
+router.post('/parse', parseMeditationText);
 
 export default router;

@@ -54,11 +54,39 @@ export interface InnerWorkMessageDTO {
 
 export interface CreateInnerWorkSessionRequest {
   title?: string; // Optional user-provided title
+  /** Optional initial message - if provided, creates session with user message first (no AI greeting) */
+  initialMessage?: string;
 }
 
 export interface CreateInnerWorkSessionResponse {
   session: InnerWorkSessionSummaryDTO;
+  /** The first AI message (always present) */
   initialMessage: InnerWorkMessageDTO;
+  /** If initialMessage was provided, this contains the saved user message */
+  userMessage?: InnerWorkMessageDTO;
+}
+
+// ============================================================================
+// Suggested Actions (AI can suggest next steps during Inner Thoughts)
+// ============================================================================
+
+export type SuggestedActionType =
+  | 'start_partner_session'
+  | 'start_meditation'
+  | 'add_gratitude'
+  | 'check_need';
+
+export interface SuggestedAction {
+  /** Type of action being suggested */
+  type: SuggestedActionType;
+  /** Display label for the action button */
+  label: string;
+  /** Person's name if action involves a person */
+  personName?: string;
+  /** Person's ID if they're already tracked */
+  personId?: string;
+  /** Context/reason for the suggestion (for logging/analytics) */
+  context: string;
 }
 
 // ============================================================================
@@ -74,6 +102,8 @@ export interface SendInnerWorkMessageResponse {
   aiMessage: InnerWorkMessageDTO;
   /** Memory suggestion if detected in user message */
   memorySuggestion?: MemorySuggestion | null;
+  /** Suggested actions the user can take (e.g., start partner session, meditation) */
+  suggestedActions?: SuggestedAction[];
 }
 
 // ============================================================================
@@ -116,4 +146,19 @@ export interface UpdateInnerWorkSessionResponse {
 export interface ArchiveInnerWorkSessionResponse {
   archived: boolean;
   archivedAt: string;
+}
+
+// ============================================================================
+// Generate Context for Partner Session (US-3)
+// ============================================================================
+
+export interface GenerateContextResponse {
+  /** AI-generated context summary from the Inner Thoughts session */
+  contextSummary: string;
+  /** Person's name if mentioned in the Inner Thoughts session */
+  personName?: string;
+  /** Key themes or topics from the session */
+  themes: string[];
+  /** The Inner Thoughts session ID for reference */
+  innerThoughtsSessionId: string;
 }

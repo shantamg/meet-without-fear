@@ -17,11 +17,12 @@ import { trackInnerThoughtsCreated, trackInnerThoughtsLinked } from '@/src/servi
 
 export default function SelfReflectionChatScreen() {
   const router = useRouter();
-  const { id, partnerSessionId, partnerName, linkedTrigger } = useLocalSearchParams<{
+  const { id, partnerSessionId, partnerName, linkedTrigger, initialMessage } = useLocalSearchParams<{
     id: string;
     partnerSessionId?: string;
     partnerName?: string;
     linkedTrigger?: string;
+    initialMessage?: string;
   }>();
 
   // Track the created session ID in state to avoid route replacement remounting
@@ -37,6 +38,7 @@ export default function SelfReflectionChatScreen() {
         {
           linkedPartnerSessionId: partnerSessionId,
           linkedTrigger: linkedTrigger || 'voluntary',
+          initialMessage: initialMessage,
         },
         {
           onSuccess: (result) => {
@@ -58,7 +60,7 @@ export default function SelfReflectionChatScreen() {
         }
       );
     }
-  }, [id, partnerSessionId, linkedTrigger, createSession, router]);
+  }, [id, partnerSessionId, linkedTrigger, initialMessage, createSession, router]);
 
   // Use created session ID if available, otherwise use URL id
   const effectiveSessionId = createdSessionId || (id === 'new' ? '' : (id || ''));
@@ -77,6 +79,7 @@ export default function SelfReflectionChatScreen() {
             : undefined
         }
         isCreating={isCreating}
+        initialMessage={initialMessage}
       />
     </>
   );

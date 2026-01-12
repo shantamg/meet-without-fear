@@ -50,8 +50,9 @@ jest.mock('@/src/hooks/useAuth', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
-// Mock useBiometricAuth and usePendingInvitation hooks to prevent async state updates
+// Mock useBiometricAuth, usePendingInvitation, and useCreateInnerThoughtsSession hooks to prevent async state updates
 const mockUsePendingInvitation = jest.fn();
+const mockCreateInnerThoughts = jest.fn();
 jest.mock('@/src/hooks', () => ({
   useBiometricAuth: () => ({
     isAvailable: false,
@@ -70,6 +71,10 @@ jest.mock('@/src/hooks', () => ({
     refresh: jest.fn(),
   }),
   usePendingInvitation: () => mockUsePendingInvitation(),
+  useCreateInnerThoughtsSession: () => ({
+    mutate: mockCreateInnerThoughts,
+    isPending: false,
+  }),
 }));
 
 // Mock useInvitationDetails hook
@@ -90,6 +95,17 @@ jest.mock('../../../../src/components', () => ({
     );
   },
   Logo: () => null,
+  ChatInput: ({ onSend, placeholder, testID }: { onSend?: (msg: string) => void; placeholder?: string; testID?: string }) => {
+    const { View, TextInput, TouchableOpacity, Text } = require('react-native');
+    return (
+      <View testID={testID || 'chat-input'}>
+        <TextInput placeholder={placeholder} testID="chat-input-field" />
+        <TouchableOpacity onPress={() => onSend?.('test message')} testID="chat-input-send">
+          <Text>Send</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  },
 }));
 
 // Mock react-native-safe-area-context

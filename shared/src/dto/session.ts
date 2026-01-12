@@ -103,6 +103,9 @@ export interface CreateSessionRequest {
 
   // Optional: initial context
   context?: string; // What this session is about (private to creator)
+
+  // Optional: link to Inner Thoughts session that originated this partner session
+  innerThoughtsId?: string;
 }
 
 export interface CreateSessionResponse {

@@ -28,6 +28,7 @@ import {
   UpdateInnerWorkSessionRequest,
   UpdateInnerWorkSessionResponse,
   ArchiveInnerWorkSessionResponse,
+  GenerateContextResponse,
   InnerWorkStatus,
 } from '@meet-without-fear/shared';
 
@@ -168,6 +169,8 @@ export interface CreateInnerThoughtsRequest extends CreateInnerWorkSessionReques
   linkedAtStage?: number;
   /** Why it was opened: "empathy_wait", "voluntary", "witness_wait" */
   linkedTrigger?: string;
+  /** Optional initial message - if provided, session starts with user message (no AI greeting) */
+  initialMessage?: string;
 }
 
 /**
@@ -198,10 +201,15 @@ export function useCreateInnerThoughtsSession(
       queryClient.invalidateQueries({ queryKey: innerThoughtsKeys.lists() });
 
       // Pre-populate the cache with the new session detail
+      // If userMessage is present, include it before the AI response
+      const messages = data.userMessage
+        ? [data.userMessage, data.initialMessage]
+        : [data.initialMessage];
+
       queryClient.setQueryData(innerThoughtsKeys.detail(data.session.id), {
         session: {
           ...data.session,
-          messages: [data.initialMessage],
+          messages,
         },
       });
 
@@ -458,3 +466,32 @@ export function useArchiveInnerThoughtsSession(
 
 // Legacy alias
 export const useArchiveInnerWorkSession = useArchiveInnerThoughtsSession;
+
+// ============================================================================
+// Generate Context for Partner Session Hook (US-3)
+// ============================================================================
+
+/**
+ * Generate a context summary from an Inner Thoughts session for starting a partner session.
+ * This allows the AI in the partner session to understand what was discussed in Inner Thoughts.
+ */
+export function useGenerateContext(
+  options?: Omit<
+    UseMutationOptions<
+      GenerateContextResponse,
+      ApiClientError,
+      { sessionId: string }
+    >,
+    'mutationFn'
+  >
+) {
+  return useMutation({
+    mutationFn: async ({ sessionId }) => {
+      return post<GenerateContextResponse, Record<string, never>>(
+        `/inner-thoughts/${sessionId}/generate-context`,
+        {}
+      );
+    },
+    ...options,
+  });
+}

@@ -1,4 +1,4 @@
-import { buildStagePrompt, PromptContext, BuildStagePromptOptions } from '../stage-prompts';
+import { buildStagePrompt, PromptContext, BuildStagePromptOptions, buildInnerWorkPrompt, InsightContext } from '../stage-prompts';
 import { type ContextBundle } from '../context-assembler';
 import { type MemoryIntentResult } from '../memory-intent';
 
@@ -232,6 +232,90 @@ describe('Stage Prompts Service', () => {
       // Should be regular perspective prompt, not transition
       expect(prompt).toContain('LISTENING MODE');
       expect(prompt).toContain('BRIDGING MODE');
+    });
+  });
+
+  describe('buildInnerWorkPrompt with insights', () => {
+    it('includes insights in the prompt when provided', () => {
+      const insights: InsightContext[] = [
+        {
+          type: 'PATTERN',
+          summary: 'You frequently mention work stress in your reflections',
+          confidence: 0.85,
+        },
+        {
+          type: 'SUGGESTION',
+          summary: 'Consider trying a short meditation before difficult conversations',
+          relatedFeatures: ['meditation'],
+        },
+      ];
+
+      const prompt = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+        insights,
+      });
+
+      expect(prompt).toContain('CROSS-FEATURE INSIGHTS');
+      expect(prompt).toContain('Pattern noticed: You frequently mention work stress');
+      expect(prompt).toContain('Suggestion: Consider trying a short meditation');
+      expect(prompt).toContain('85%'); // confidence percentage
+      expect(prompt).toContain('Weave observations naturally');
+    });
+
+    it('does not include insights section when no insights provided', () => {
+      const prompt = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+        insights: [],
+      });
+
+      expect(prompt).not.toContain('CROSS-FEATURE INSIGHTS');
+    });
+
+    it('does not include insights section when insights is undefined', () => {
+      const prompt = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+      });
+
+      expect(prompt).not.toContain('CROSS-FEATURE INSIGHTS');
+    });
+
+    it('formats CONTRADICTION insights with appropriate label', () => {
+      const insights: InsightContext[] = [
+        {
+          type: 'CONTRADICTION',
+          summary: 'You say trust is important but mentioned avoiding vulnerability',
+        },
+      ];
+
+      const prompt = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 3,
+        insights,
+      });
+
+      expect(prompt).toContain('Something to explore: You say trust is important');
+    });
+
+    it('includes guidance on natural integration of insights', () => {
+      const insights: InsightContext[] = [
+        {
+          type: 'PATTERN',
+          summary: 'Test pattern',
+        },
+      ];
+
+      const prompt = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 3,
+        insights,
+      });
+
+      expect(prompt).toContain('HOW TO USE INSIGHTS');
+      expect(prompt).toContain('Don\'t force insights');
+      expect(prompt).toContain('EXAMPLES OF NATURAL INTEGRATION');
     });
   });
 });
