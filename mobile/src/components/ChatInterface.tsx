@@ -44,12 +44,7 @@ export interface CustomEmptyStateItem {
   id: string;
 }
 
-export interface NewMessagesSeparatorItem {
-  type: 'new-messages-separator';
-  id: string;
-}
-
-export type ChatListItem = ChatMessage | ChatIndicatorItem | CustomEmptyStateItem | NewMessagesSeparatorItem;
+export type ChatListItem = ChatMessage | ChatIndicatorItem | CustomEmptyStateItem;
 
 function isIndicator(item: ChatListItem): item is ChatIndicatorItem {
   return 'type' in item && item.type === 'indicator';
@@ -57,10 +52,6 @@ function isIndicator(item: ChatListItem): item is ChatIndicatorItem {
 
 function isCustomEmptyState(item: ChatListItem): item is CustomEmptyStateItem {
   return 'type' in item && item.type === 'custom-empty-state';
-}
-
-function isNewMessagesSeparator(item: ChatListItem): item is NewMessagesSeparatorItem {
-  return 'type' in item && item.type === 'new-messages-separator';
 }
 
 interface ChatInterfaceProps {
@@ -198,27 +189,7 @@ export function ChatInterface({
       return b.id.localeCompare(a.id);
     });
 
-    // 3. Inject "New messages" separator after the last seen item
-    // In an inverted list sorted newest-first:
-    // - Index 0 = newest message (visual bottom, closest to input)
-    // - Higher index = older messages (visual top)
-    // We insert the separator AFTER the last seen item (at higher index = visually above it)
-    if (lastSeenChatItemId && messages.length > 0) {
-      const lastSeenIndex = items.findIndex(item => item.id === lastSeenChatItemId);
-      // Only show separator if:
-      // 1. We found the last seen item
-      // 2. There are newer items above it (lastSeenIndex > 0)
-      if (lastSeenIndex > 0) {
-        // Insert after the last seen item (at its index, pushing it down)
-        // This places the separator visually BELOW the new messages
-        items.splice(lastSeenIndex, 0, {
-          type: 'new-messages-separator',
-          id: 'new-messages-separator',
-        });
-      }
-    }
-
-    // 4. Inject Compact Item (Custom Empty State)
+    // 3. Inject Compact Item (Custom Empty State)
     // Condition: We have a custom state and NO messages
     // This handles both:
     // - New sessions (no indicators): Compact appears as first item
@@ -384,7 +355,6 @@ export function ChatInterface({
       const item = listItems[i];
       if (isIndicator(item)) continue;
       if (isCustomEmptyState(item)) continue;
-      if (isNewMessagesSeparator(item)) continue;
       // At this point, item must be a ChatMessage
       const message = item as ChatMessage;
       // Skip user messages and optimistic messages
@@ -416,18 +386,7 @@ export function ChatInterface({
       );
     }
 
-    // 2. Render New Messages Separator
-    if (isNewMessagesSeparator(item)) {
-      return (
-        <View style={styles.newMessagesSeparator} testID="new-messages-separator">
-          <View style={styles.newMessagesSeparatorLine} />
-          <Text style={styles.newMessagesSeparatorText}>New</Text>
-          <View style={styles.newMessagesSeparatorLine} />
-        </View>
-      );
-    }
-
-    // 3. Render Indicators
+    // 2. Render Indicators
     if (isIndicator(item)) {
       return <ChatIndicator type={item.indicatorType} timestamp={item.timestamp} />;
     }
@@ -730,24 +689,5 @@ const useStyles = () =>
       // Container for emotion slider, panels above input, and input
       // This ensures KeyboardAvoidingView adjusts relative to this container's bottom
       // rather than just the input field itself
-    },
-    newMessagesSeparator: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
-      gap: t.spacing.sm,
-    },
-    newMessagesSeparatorLine: {
-      flex: 1,
-      height: 1,
-      backgroundColor: t.colors.error,
-    },
-    newMessagesSeparatorText: {
-      fontSize: t.typography.fontSize.xs,
-      fontWeight: '600',
-      color: t.colors.error,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
     },
   }));
