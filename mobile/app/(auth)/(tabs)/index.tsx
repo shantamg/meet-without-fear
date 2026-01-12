@@ -17,6 +17,10 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowRight, Plus, Layers, UserPlus } from 'lucide-react-native';
@@ -140,84 +144,90 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={[]}>
-      <View style={styles.content}>
-        {/* Main greeting section - centered */}
-        <View style={styles.greetingSection}>
-          <Logo size={120} />
-          <Text style={styles.greeting}>Hi {userName}</Text>
-          <Text style={styles.question}>
-            What can I help you work through today?
-          </Text>
-        </View>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={90}
+      >
+        <Pressable style={styles.content} onPress={Keyboard.dismiss}>
+          {/* Main greeting section - centered */}
+          <View style={styles.greetingSection}>
+            <Logo size={120} />
+            <Text style={styles.greeting}>Hi {userName}</Text>
+            <Text style={styles.question}>
+              What can I help you work through today?
+            </Text>
+          </View>
 
-        {/* Low-profile action buttons */}
-        <View style={styles.actionsSection}>
-          {/* Accept pending invitation - shown first if there's a pending invitation */}
-          {hasPendingInvitation && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.invitationButton]}
-              onPress={handleAcceptInvitation}
-              accessibilityRole="button"
-              accessibilityLabel={`Accept ${inviterName}'s invitation`}
-              disabled={acceptInvitation.isPending}
-            >
-              {acceptInvitation.isPending ? (
-                <ActivityIndicator size="small" color={colors.accent} />
-              ) : (
-                <UserPlus color={colors.accent} size={18} />
-              )}
-              <Text style={[styles.actionText, styles.invitationText]}>
-                Accept {inviterName}&apos;s invitation
-              </Text>
-            </TouchableOpacity>
-          )}
+          {/* Low-profile action buttons */}
+          <View style={styles.actionsSection}>
+            {/* Accept pending invitation - shown first if there's a pending invitation */}
+            {hasPendingInvitation && (
+              <TouchableOpacity
+                style={[styles.actionButton, styles.invitationButton]}
+                onPress={handleAcceptInvitation}
+                accessibilityRole="button"
+                accessibilityLabel={`Accept ${inviterName}'s invitation`}
+                disabled={acceptInvitation.isPending}
+              >
+                {acceptInvitation.isPending ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : (
+                  <UserPlus color={colors.accent} size={18} />
+                )}
+                <Text style={[styles.actionText, styles.invitationText]}>
+                  Accept {inviterName}&apos;s invitation
+                </Text>
+              </TouchableOpacity>
+            )}
 
-          {/* Continue with partner - only show if there's a recent session and no pending invitation */}
-          {!hasPendingInvitation && mostRecentSession && partnerDisplayName && (
+            {/* Continue with partner - only show if there's a recent session and no pending invitation */}
+            {!hasPendingInvitation && mostRecentSession && partnerDisplayName && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleContinueSession}
+                accessibilityRole="button"
+                accessibilityLabel={`Continue with ${partnerDisplayName}`}
+              >
+                <ArrowRight color="#888" size={18} />
+                <Text style={styles.actionText}>
+                  Continue with {partnerDisplayName}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* New Session */}
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={handleContinueSession}
+              onPress={handleNewSession}
               accessibilityRole="button"
-              accessibilityLabel={`Continue with ${partnerDisplayName}`}
+              accessibilityLabel="Start new session"
             >
-              <ArrowRight color="#888" size={18} />
-              <Text style={styles.actionText}>
-                Continue with {partnerDisplayName}
-              </Text>
+              <Plus color="#888" size={18} />
+              <Text style={styles.actionText}>New Session</Text>
             </TouchableOpacity>
-          )}
 
-          {/* New Session */}
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handleNewSession}
-            accessibilityRole="button"
-            accessibilityLabel="Start new session"
-          >
-            <Plus color="#888" size={18} />
-            <Text style={styles.actionText}>New Session</Text>
-          </TouchableOpacity>
+            {/* Inner Work */}
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleInnerWork}
+              accessibilityRole="button"
+              accessibilityLabel="Inner Work"
+            >
+              <Layers color="#888" size={18} />
+              <Text style={styles.actionText}>Inner Work</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
 
-          {/* Inner Work */}
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handleInnerWork}
-            accessibilityRole="button"
-            accessibilityLabel="Inner Work"
-          >
-            <Layers color="#888" size={18} />
-            <Text style={styles.actionText}>Inner Work</Text>
-          </TouchableOpacity>
+        {/* Chat input - full width at bottom */}
+        <View style={styles.chatInputSection}>
+          <ChatInput
+            onSend={handleHomeChat}
+            placeholder="What's on your mind?"
+          />
         </View>
-      </View>
-
-      {/* Chat input - full width at bottom */}
-      <View style={styles.chatInputSection}>
-        <ChatInput
-          onSend={handleHomeChat}
-          placeholder="What's on your mind?"
-        />
-      </View>
+      </KeyboardAvoidingView>
 
       {/* Biometric opt-in prompt */}
       <BiometricPrompt
@@ -238,6 +248,9 @@ const useStyles = () =>
     container: {
       flex: 1,
       backgroundColor: t.colors.bgPrimary,
+    },
+    keyboardAvoid: {
+      flex: 1,
     },
     centerContainer: {
       flex: 1,
