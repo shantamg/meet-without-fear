@@ -94,13 +94,13 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         result.aUnderstandingB.gaps.severity === 'significant' ||
         result.aUnderstandingB.recommendation.action === 'OFFER_SHARING';
 
-      const newStatus = hasSignificantGaps ? 'NEEDS_WORK' : 'REVEALED';
+      // Use READY instead of REVEALED - will reveal when both are ready
+      const newStatus = hasSignificantGaps ? 'AWAITING_SHARING' : 'READY';
 
       await prisma.empathyAttempt.updateMany({
         where: { sessionId, sourceUserId: userAId },
         data: {
           status: newStatus,
-          revealedAt: newStatus === 'REVEALED' ? new Date() : null,
         },
       });
 
@@ -116,13 +116,13 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         result.bUnderstandingA.gaps.severity === 'significant' ||
         result.bUnderstandingA.recommendation.action === 'OFFER_SHARING';
 
-      const newStatus = hasSignificantGaps ? 'NEEDS_WORK' : 'REVEALED';
+      // Use READY instead of REVEALED - will reveal when both are ready
+      const newStatus = hasSignificantGaps ? 'AWAITING_SHARING' : 'READY';
 
       await prisma.empathyAttempt.updateMany({
         where: { sessionId, sourceUserId: userBId },
         data: {
           status: newStatus,
-          revealedAt: newStatus === 'REVEALED' ? new Date() : null,
         },
       });
 
@@ -131,6 +131,10 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         `(alignment: ${result.bUnderstandingA.alignment.score}%, gaps: ${result.bUnderstandingA.gaps.severity})`
       );
     }
+
+    // Check if both are now READY and reveal both simultaneously
+    const { checkAndRevealBothIfReady } = await import('../services/reconciler');
+    await checkAndRevealBothIfReady(sessionId);
   } catch (error) {
     console.error('[triggerReconcilerAndUpdateStatuses] Error:', error);
     throw error;
@@ -1524,13 +1528,13 @@ async function triggerReconcilerForUser(
       reconcilerResult.gaps.severity === 'significant' ||
       reconcilerResult.recommendation.action === 'OFFER_SHARING';
 
-    const newStatus = hasSignificantGaps ? 'NEEDS_WORK' : 'REVEALED';
+    // Use READY instead of REVEALED - will reveal when both are ready
+    const newStatus = hasSignificantGaps ? 'AWAITING_SHARING' : 'READY';
 
     await prisma.empathyAttempt.updateMany({
       where: { sessionId, sourceUserId: guesserId },
       data: {
         status: newStatus,
-        revealedAt: newStatus === 'REVEALED' ? new Date() : null,
       },
     });
 
@@ -1538,6 +1542,10 @@ async function triggerReconcilerForUser(
       `[triggerReconcilerForUser] Updated status to ${newStatus} ` +
       `(alignment: ${reconcilerResult.alignment.score}%, gaps: ${reconcilerResult.gaps.severity})`
     );
+
+    // Check if both are now READY and reveal both simultaneously
+    const { checkAndRevealBothIfReady } = await import('../services/reconciler');
+    await checkAndRevealBothIfReady(sessionId);
   } catch (error) {
     console.error('[triggerReconcilerForUser] Error:', error);
     throw error;

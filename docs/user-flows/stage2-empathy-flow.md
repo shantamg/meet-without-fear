@@ -19,13 +19,15 @@ stateDiagram-v2
     [*] --> HELD: User shares empathy statement
 
     HELD --> ANALYZING: Partner confirms "feel heard" (Stage 1)
-    ANALYZING --> REVEALED: Reconciler finds minor/no gaps
+    ANALYZING --> READY: Reconciler finds minor/no gaps
     ANALYZING --> AWAITING_SHARING: Reconciler finds significant gaps
 
     AWAITING_SHARING --> REFINING: Subject shares context
-    REFINING --> REVEALED: Guesser revises empathy
+    REFINING --> ANALYZING: Guesser revises empathy (re-analyzed)
 
-    AWAITING_SHARING --> REVEALED: Subject declines to share
+    AWAITING_SHARING --> READY: Subject declines to share
+
+    READY --> REVEALED: Both directions are READY (mutual reveal)
 
     REVEALED --> VALIDATED: Subject validates empathy as accurate
     REVEALED --> NEEDS_WORK: Subject says empathy is inaccurate
@@ -34,6 +36,8 @@ stateDiagram-v2
 
     VALIDATED --> [*]
 ```
+
+> **Mutual Reveal**: Empathy statements are only revealed when BOTH users have completed Stage 2 and had their empathy analyzed. The `READY` status means "reconciler complete, waiting for partner to also finish Stage 2".
 
 ## Share Offer States
 
@@ -76,12 +80,15 @@ flowchart TB
 
     E --> F{Gap Severity?}
 
-    F -->|None/Minor + PROCEED| G[REVEAL directly]
+    F -->|None/Minor + PROCEED| G[Mark as READY]
     F -->|Moderate + OFFER_OPTIONAL| G
     F -->|Significant + OFFER_SHARING| H[Create Share Suggestion]
 
     G --> I["Guesser sees:<br/>'Partner is considering<br/>your perspective'"]
-    G --> J[Update status to REVEALED]
+    G --> J[Update status to READY]
+    J --> CHECK{Both directions<br/>READY?}
+    CHECK -->|Yes| REVEAL[Reveal both empathy<br/>statements simultaneously]
+    CHECK -->|No| WAIT[Wait for partner to<br/>complete Stage 2]
 
     H --> K[Subject sees:<br/>Share Suggestion Panel]
     H --> L[Update status to AWAITING_SHARING]
@@ -98,17 +105,19 @@ flowchart TB
     P --> J
 
     Q --> R[Guesser revises<br/>empathy statement]
-    R --> J
+    R --> D
 ```
 
 ### Reconciler Actions by Gap Severity
 
 | Gap Severity | Recommended Action | Effect on Guesser | Effect on Subject |
 |--------------|-------------------|-------------------|-------------------|
-| None | `PROCEED` | Empathy REVEALED immediately | Sees partner's empathy |
-| Minor | `PROCEED` | Empathy REVEALED immediately | Sees partner's empathy |
-| Moderate | `OFFER_OPTIONAL` | Empathy REVEALED immediately | Sees partner's empathy |
+| None | `PROCEED` | Status → READY (waiting for mutual reveal) | Continues with their empathy |
+| Minor | `PROCEED` | Status → READY (waiting for mutual reveal) | Continues with their empathy |
+| Moderate | `OFFER_OPTIONAL` | Status → READY (waiting for mutual reveal) | Continues with their empathy |
 | Significant | `OFFER_SHARING` | Status → AWAITING_SHARING | Sees share suggestion panel |
+
+> **Note**: When both directions are in `READY` status, both empathy statements are revealed simultaneously. Neither user sees their partner's empathy until both have completed Stage 2.
 
 ### Share Suggestion Generation Flow
 
@@ -330,10 +339,11 @@ Only one panel shows at a time, in this priority order:
   sessionId: string;
   sourceUserId: string;       // The guesser
   content: string;            // The empathy statement
-  status: 'HELD' | 'ANALYZING' | 'REVEALED' | 'AWAITING_SHARING' |
-          'REFINING' | 'VALIDATED' | 'NEEDS_WORK';
+  status: 'HELD' | 'ANALYZING' | 'AWAITING_SHARING' | 'REFINING' |
+          'READY' | 'REVEALED' | 'VALIDATED' | 'NEEDS_WORK';
+  // READY = reconciler complete, waiting for partner to also complete Stage 2
   sharedAt: Date;             // When initially shared
-  revealedAt: Date | null;    // When revealed to subject
+  revealedAt: Date | null;    // When revealed to subject (after mutual reveal)
   deliveryStatus: 'PENDING' | 'DELIVERED' | 'SEEN';
   deliveredAt: Date | null;
   seenAt: Date | null;

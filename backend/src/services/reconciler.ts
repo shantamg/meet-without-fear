@@ -411,7 +411,7 @@ export async function runReconcilerForDirection(
   subjectId: string
 ): Promise<{
   result: ReconcilerResult | null;
-  empathyStatus: 'REVEALED' | 'AWAITING_SHARING';
+  empathyStatus: 'READY' | 'AWAITING_SHARING';
   shareOffer: {
     suggestedContent: string;
     reason: string;
@@ -481,16 +481,12 @@ export async function runReconcilerForDirection(
   console.log(`[Reconciler] Outcome analysis: severity=${result.gaps.severity}, action=${result.recommendation.action}, significant=${hasSignificantGaps}`);
 
   if (!hasSignificantGaps) {
-    // No significant gaps - reveal directly
-    console.log(`[Reconciler] NO significant gaps. Revealing empathy directly for ${guesserInfo.name} → ${subjectInfo.name}`);
-    const revealedNow = new Date();
+    // No significant gaps - mark as READY (will reveal when both directions are ready)
+    console.log(`[Reconciler] NO significant gaps. Marking empathy as READY for ${guesserInfo.name} → ${subjectInfo.name}`);
     await prisma.empathyAttempt.updateMany({
       where: { sessionId, sourceUserId: guesserId },
       data: {
-        status: 'REVEALED',
-        revealedAt: revealedNow,
-        deliveryStatus: 'DELIVERED',
-        deliveredAt: revealedNow,
+        status: 'READY',
       },
     });
 
@@ -527,9 +523,12 @@ export async function runReconcilerForDirection(
       {} // No metadata needed
     );
 
+    // Check if both directions are now READY and reveal both if so
+    await checkAndRevealBothIfReady(sessionId);
+
     return {
       result,
-      empathyStatus: 'REVEALED',
+      empathyStatus: 'READY',
       shareOffer: null,
     };
   }
@@ -807,10 +806,10 @@ export async function respondToShareSuggestion(
   }
 
   if (response.action === 'decline') {
-    console.log(`[Reconciler] User ${userId} declined share offer. Revealing guesser's empathy directly.`);
+    console.log(`[Reconciler] User ${userId} declined share offer. Marking guesser's empathy as READY.`);
 
     // Log the decline for dashboard visibility
-    await auditLog('RECONCILER', `Share suggestion declined - revealing empathy directly`, {
+    await auditLog('RECONCILER', `Share suggestion declined - marking empathy as READY`, {
       sessionId,
       eventType: 'share_declined',
       subjectId: userId,
@@ -818,7 +817,7 @@ export async function respondToShareSuggestion(
       subjectName: shareOffer.result.subjectName,
     });
 
-    // User declined - mark offer as declined and reveal empathy as-is
+    // User declined - mark offer as declined
     await prisma.reconcilerShareOffer.update({
       where: { id: shareOffer.id },
       data: {
@@ -827,15 +826,11 @@ export async function respondToShareSuggestion(
       },
     });
 
-    // Reveal guesser's empathy statement
-    const revealedNow = new Date();
+    // Mark guesser's empathy as READY (will reveal when both directions are ready)
     await prisma.empathyAttempt.updateMany({
       where: { sessionId, sourceUserId: shareOffer.result.guesserId },
       data: {
-        status: 'REVEALED',
-        revealedAt: revealedNow,
-        deliveryStatus: 'DELIVERED',
-        deliveredAt: revealedNow,
+        status: 'READY',
       },
     });
 
@@ -848,6 +843,9 @@ export async function respondToShareSuggestion(
       },
     });
     console.log(`[Reconciler] Deleted SHARE_SUGGESTION message for user ${userId} (declined)`);
+
+    // Check if both directions are now READY and reveal both if so
+    await checkAndRevealBothIfReady(sessionId);
 
     return {
       status: 'declined',
@@ -1822,4 +1820,66 @@ function getDefaultReconcilerResult(): ReconcilerResult {
       suggestedShareFocus: null,
     },
   };
+}
+
+// ============================================================================
+// Mutual Reveal: Both directions must be READY before revealing either
+// ============================================================================
+
+/**
+ * Check if both empathy attempts are READY and if so, reveal both simultaneously.
+ * This ensures neither user sees their partner's empathy until both have completed Stage 2.
+ *
+ * @returns true if both were revealed, false otherwise
+ */
+export async function checkAndRevealBothIfReady(sessionId: string): Promise<boolean> {
+  console.log(`[Reconciler] checkAndRevealBothIfReady called for session ${sessionId}`);
+
+  // Get both empathy attempts for this session
+  const attempts = await prisma.empathyAttempt.findMany({
+    where: { sessionId },
+  });
+
+  if (attempts.length !== 2) {
+    console.log(`[Reconciler] Session ${sessionId} has ${attempts.length} empathy attempts, need 2 for mutual reveal`);
+    return false;
+  }
+
+  // Check if both are in READY status
+  const bothReady = attempts.every((a) => a.status === 'READY');
+  if (!bothReady) {
+    const statuses = attempts.map((a) => `${a.sourceUserId}: ${a.status}`).join(', ');
+    console.log(`[Reconciler] Not both READY yet: ${statuses}`);
+    return false;
+  }
+
+  console.log(`[Reconciler] Both empathy attempts are READY - revealing both simultaneously`);
+
+  // Reveal both attempts
+  const revealedNow = new Date();
+  await prisma.empathyAttempt.updateMany({
+    where: {
+      sessionId,
+      status: 'READY',
+    },
+    data: {
+      status: 'REVEALED',
+      revealedAt: revealedNow,
+      deliveryStatus: 'DELIVERED',
+      deliveredAt: revealedNow,
+    },
+  });
+
+  // Notify both users that empathy has been revealed
+  const { notifyPartner } = await import('./realtime');
+
+  for (const attempt of attempts) {
+    // Notify the guesser that their empathy was revealed to their partner
+    await notifyPartner(sessionId, attempt.sourceUserId!, 'empathy.revealed', {
+      direction: 'outgoing',
+    });
+  }
+
+  console.log(`[Reconciler] Both empathy attempts revealed and notifications sent`);
+  return true;
 }

@@ -1083,12 +1083,10 @@ Respond in JSON format:
                 });
               }
 
-              // If empathy was revealed directly (no gaps), notify the partner (guesser)
-              if (result.empathyStatus === 'REVEALED') {
-                console.log(`[confirmFeelHeard] No significant gaps - notifying guesser ${partnerId} that empathy was revealed`);
-                await notifyPartner(sessionId, partnerId, 'empathy.revealed', {
-                  direction: 'outgoing',
-                });
+              // If empathy is READY (no gaps), the guesser already got the alignment message.
+              // The reveal notification will be sent when both directions are READY.
+              if (result.empathyStatus === 'READY') {
+                console.log(`[confirmFeelHeard] No significant gaps - empathy marked READY, waiting for partner to complete Stage 2`);
               }
             } catch (error) {
               console.error('[confirmFeelHeard] Reconciler background task failed:', error);

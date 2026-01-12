@@ -16,122 +16,91 @@ The reconciler no longer waits for both users to submit empathy statements. Inst
 4. Based on gaps, reconciler may suggest something User B could share to help User A understand better
 5. User B can consent to share (or refine) the suggested content
 6. User A receives the shared context and can refine their empathy statement
-7. Once User A's empathy is approved → status = `REVEALED` → User B can see it
+7. Once User A's empathy is approved → status = `READY` (waiting for mutual reveal)
+8. **Mutual Reveal**: When BOTH directions are `READY`, both empathy statements are revealed simultaneously
 
 ### Suggestion-to-Share Flow
 
 When the reconciler detects significant gaps, it can identify specific content from the subject's (User B's) witnessing that would help the guesser (User A) understand better. This creates a consent-based sharing flow:
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                        ASYMMETRIC RECONCILER FLOW                            │
-└──────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph UserA["User A (Guesser)"]
+        A1[Stage 1: Shares feelings]
+        A2[Stage 2: Writes empathy about B]
+        A3[Consents to share<br/>status = HELD]
+    end
 
-User A (Guesser)                              User B (Subject)
-──────────────────                            ──────────────────
-Stage 1: Shares feelings                      Stage 1: Shares feelings
-         ↓                                             ↓
-         │                                    Confirms "I feel heard"
-         │                                             │
-         ↓                                             │
-Stage 2: Writes empathy                                │
-         about User B                                  │
-         ↓                                             │
-Consents to share                                      │
-(status = HELD)                                        │
-         │                                             │
-         │←─────────── User B completes Stage 1 ──────┘
-         │
-         ↓
-┌─────────────────────────────────────────┐
-│     RECONCILER RUNS (A→B direction)     │
-│                                         │
-│  Compares A's empathy guess             │
-│  vs B's actual Stage 1 content          │
-└─────────────────────────────────────────┘
-         │
-         ├── Minor/No gaps ─────────────→ A's empathy → REVEALED
-         │                                 B can see it
-         │
-         └── Significant gaps ────────────┐
-                                          │
-                                          ↓
-                              ┌─────────────────────────────────┐
-                              │   SUGGESTION-TO-SHARE FLOW      │
-                              │                                 │
-                              │   Reconciler identifies:        │
-                              │   "B mentioned feeling unseen   │
-                              │    at work. A missed this."     │
-                              │                                 │
-                              │   Suggests B could share:       │
-                              │   "I've been feeling invisible  │
-                              │    at work lately..."           │
-                              └─────────────────────────────────┘
-                                          │
-                                          ↓
-                              User B receives suggestion
-                              (can consent, refine, or decline)
-                                          │
-                                          ├── Declines ──────→ A's empathy → REVEALED
-                                          │                    (as-is, gaps noted)
-                                          │
-                                          └── Consents to share ─┐
-                                                                 │
-                                          ↓←────────────────────┘
-                              User A receives B's shared context
-                              Gets notification to refine empathy
-                                          │
-                                          ↓
-                              User A refines empathy statement
-                              Resubmits → Reconciler re-checks
-                                          │
-                                          ├── Still gaps → Loop (with limit)
-                                          │
-                                          └── Approved ────────→ REVEALED
+    subgraph UserB["User B (Subject)"]
+        B1[Stage 1: Shares feelings]
+        B2["Confirms 'I feel heard'"]
+    end
+
+    A1 --> A2
+    A2 --> A3
+    B1 --> B2
+
+    A3 --> TRIGGER["B completes Stage 1"]
+    B2 --> TRIGGER
+
+    TRIGGER --> RECONCILER["RECONCILER RUNS (A→B direction)<br/>Compares A's empathy guess<br/>vs B's actual Stage 1 content"]
+
+    RECONCILER --> GAPS{Gap Severity?}
+
+    GAPS -->|"Minor/No gaps"| READY1["A's empathy → READY<br/>(waiting for B to also complete Stage 2)"]
+
+    GAPS -->|"Significant gaps"| SUGGEST["SUGGESTION-TO-SHARE FLOW<br/>Reconciler identifies gaps and<br/>suggests what B could share"]
+
+    SUGGEST --> CHOICE{B's Choice?}
+
+    CHOICE -->|Decline| READY2["A's empathy → READY<br/>(as-is, waiting for mutual reveal)"]
+
+    CHOICE -->|"Accept/Refine"| SHARE[B shares context with A]
+
+    SHARE --> REFINE[A receives context<br/>Refines empathy statement]
+
+    REFINE --> RECHECK["Resubmit → Reconciler re-checks"]
+
+    RECHECK --> LOOP{Still gaps?}
+    LOOP -->|Yes| SUGGEST
+    LOOP -->|"No (Approved)"| READY3["A's empathy → READY"]
+
+    READY1 --> MUTUAL{Both directions READY?}
+    READY2 --> MUTUAL
+    READY3 --> MUTUAL
+
+    MUTUAL -->|Yes| REVEALED["REVEALED<br/>(both see each other's empathy)"]
+    MUTUAL -->|No| WAIT[Wait for partner to complete Stage 2]
 ```
 
 ## State Model
 
 Each empathy direction (A→B, B→A) progresses independently:
 
-```
-┌──────────────┐
-│   DRAFTING   │  User building empathy statement with AI
-└──────┬───────┘
-       │ User consents to share
-       ▼
-┌──────────────┐
-│    HELD      │  Waiting for PARTNER to complete Stage 1
-└──────┬───────┘
-       │ Partner completes Stage 1 → Reconciler runs
-       ▼
-┌──────────────┐
-│  ANALYZING   │  Reconciler comparing guess vs actual Stage 1 content
-└──────┬───────┘
-       │
-  ┌────┴────────────────┐
-  ▼                     ▼
-┌────────┐     ┌────────────────┐
-│REVEALED│     │AWAITING_SHARING│  Gaps detected, subject may share
-└───┬────┘     └───────┬────────┘
-    │                  │ Subject responds (share/decline)
-    │                  ▼
-    │          ┌──────────────┐
-    │          │REFINING      │  Guesser refining with new context
-    │          └──────┬───────┘
-    │                 │ Resubmit → Re-analyze
-    │                 ▼
-    │          [REVEALED or loop back]
-    │
-    ▼
-┌──────────────┐
-│   REVEALED   │  Recipient can now see statement
-└──────┬───────┘
-       │ Recipient validates accuracy
-       ▼
-┌──────────────┐
-│  VALIDATED   │  This direction complete
-└──────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFTING: User building empathy statement
+
+    DRAFTING --> HELD: User consents to share
+
+    HELD --> ANALYZING: Partner completes Stage 1
+
+    ANALYZING --> READY: Minor/no gaps
+    ANALYZING --> AWAITING_SHARING: Significant gaps
+
+    AWAITING_SHARING --> REFINING: Subject shares context
+    AWAITING_SHARING --> READY: Subject declines
+
+    REFINING --> ANALYZING: Guesser resubmits (re-analyze)
+
+    READY --> REVEALED: Both directions READY (mutual reveal)
+
+    REVEALED --> VALIDATED: Recipient validates accuracy
+    REVEALED --> NEEDS_WORK: Marked inaccurate
+
+    NEEDS_WORK --> HELD: Guesser resubmits
+
+    VALIDATED --> [*]
 ```
 
 ## UI States Per User
@@ -142,6 +111,8 @@ Each empathy direction (A→B, B→A) progresses independently:
 | A submitted, B finished Stage 1 | "Analyzing your empathy attempt..." | Stage 2 (can write their own empathy) |
 | A→B: AWAITING_SHARING | "Waiting for [B] to respond..." | "Would you like to share something to help [A] understand you better?" |
 | A→B: REFINING | "New context from [B]! Would you like to refine your empathy attempt?" | Stage 2 continues |
+| A→B: READY | "[B] is now considering how you might feel..." | Stage 2 continues (working on their empathy) |
+| Both READY | "Both empathy statements will be shared soon..." | "Both empathy statements will be shared soon..." |
 | A→B: REVEALED | "Your empathy attempt has been shared with [B]" | A's statement in chat + validation UI |
 | A→B: VALIDATED | "[B] confirmed your attempt resonates with them" | Ready to continue |
 
@@ -167,7 +138,8 @@ enum EmpathyStatus {
   ANALYZING         // Reconciler is comparing guess vs actual Stage 1 content
   AWAITING_SHARING  // Gaps detected, waiting for subject to respond to share suggestion
   REFINING          // Guesser is refining after receiving shared context
-  REVEALED          // Recipient can now see statement
+  READY             // Reconciler complete, waiting for partner to also complete Stage 2
+  REVEALED          // Recipient can now see statement (after mutual reveal)
   VALIDATED         // Recipient has validated accuracy
 }
 

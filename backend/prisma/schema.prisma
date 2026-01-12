@@ -612,6 +612,7 @@ enum EmpathyStatus {
   AWAITING_SHARING  // Gaps detected, waiting for subject to respond to share suggestion
   REFINING          // Guesser is refining after receiving shared context
   NEEDS_WORK        // Significant gaps detected, guesser should refine (legacy - use AWAITING_SHARING)
+  READY             // Reconciler complete, waiting for partner to also complete Stage 2 before revealing
   REVEALED          // Recipient can now see statement
   VALIDATED         // Recipient has validated accuracy
 }
