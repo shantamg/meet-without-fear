@@ -468,9 +468,12 @@ export function useUnifiedSession(sessionId: string | undefined) {
     // not on waiting for their partner.
 
     // Stage 1: Waiting for partner to complete witness
+    // Only show this AFTER user has shared their empathy - before sharing, user should
+    // be able to work on their empathy draft without waiting
     if (
       myProgress?.stage === Stage.PERSPECTIVE_STRETCH &&
-      partnerProgress?.stage === Stage.WITNESS
+      partnerProgress?.stage === Stage.WITNESS &&
+      empathyDraftData?.alreadyConsented
     ) {
       newWaitingStatus = 'witness-pending';
     }
@@ -514,7 +517,9 @@ export function useUnifiedSession(sessionId: string | undefined) {
     }
     // Stage 2: Reconciler is analyzing
     else if (empathyStatusData?.analyzing) {
-      newWaitingStatus = 'reconciler-analyzing';
+      // For revisions (revisionCount > 0), use a different status with no spinner
+      const revisionCount = empathyStatusData?.myAttempt?.revisionCount ?? 0;
+      newWaitingStatus = revisionCount > 0 ? 'revision-analyzing' : 'reconciler-analyzing';
     }
     // Stage 2: Waiting for user to respond to share suggestion (Subject)
     else if (shareOfferData?.hasSuggestion) {

@@ -205,6 +205,13 @@ export interface ResubmitEmpathyResponse {
     /** Delivery status: pending until delivered */
     deliveryStatus: SharedContentDeliveryStatus;
   };
+  /** AI acknowledgment message for the revision (optional) */
+  transitionMessage?: {
+    id: string;
+    content: string;
+    timestamp: string;
+    stage: number;
+  } | null;
 }
 
 // ============================================================================

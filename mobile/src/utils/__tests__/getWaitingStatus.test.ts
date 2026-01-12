@@ -90,10 +90,23 @@ describe('Priority 2: Stage 2 Reconciler States', () => {
 // ============================================================================
 
 describe('Priority 3: Stage 1 (Witness)', () => {
-  it('returns witness-pending when user is in Stage 2 but partner is in Stage 1', () => {
+  it('returns null when user is in Stage 2 but partner is in Stage 1 and user has NOT consented', () => {
+    // User should be able to work on their empathy draft without waiting
     const inputs = createDefaultInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       partnerStage: Stage.WITNESS,
+      empathyDraft: { alreadyConsented: false },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBeNull();
+  });
+
+  it('returns witness-pending when user is in Stage 2 and partner is in Stage 1 and user HAS consented', () => {
+    // After sharing empathy, user should wait for partner to feel heard
+    const inputs = createDefaultInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      partnerStage: Stage.WITNESS,
+      empathyDraft: { alreadyConsented: true },
     });
 
     expect(computeWaitingStatus(inputs)).toBe('witness-pending');

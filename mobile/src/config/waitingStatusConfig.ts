@@ -86,7 +86,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     bannerSubtext: "Once they share, you'll both be able to reflect on what each other shared.",
   },
 
-  // Stage 2: Reconciler is analyzing empathy match
+  // Stage 2: Reconciler is analyzing empathy match (first time)
   'reconciler-analyzing': {
     showBanner: true,
     hideInput: true,
@@ -95,6 +95,17 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     showSpinner: true,
     showKeepChattingAction: false, // Uses inner thoughts link instead
     bannerText: () => `AI is analyzing your empathy match...`,
+  },
+
+  // Stage 2: Reconciler is re-analyzing revised empathy (no spinner, keep chatting style)
+  'revision-analyzing': {
+    showBanner: true,
+    hideInput: true,
+    showInnerThoughts: true,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: true,
+    bannerText: () => `Re-analyzing your understanding...`,
   },
 
   // Stage 2: User (Subject) needs to respond to share suggestion

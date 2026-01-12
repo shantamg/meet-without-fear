@@ -1088,19 +1088,46 @@ export function useResubmitEmpathy(
         skipTypewriter: true,
       };
 
-      // Update the message with the server response
+      // Update the message with the server response and add transition message if present
       queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
         messageKeys.infinite(sessionId),
         (old) => {
           if (!old) return old;
 
           // Replace optimistic message with server message
-          const newPages = old.pages.map((page) => ({
+          let newPages = old.pages.map((page) => ({
             ...page,
             messages: page.messages.map((msg) =>
               msg.id.startsWith('optimistic-resubmit-') ? serverMessage : msg
             ),
           }));
+
+          // Add transition message if present
+          if (data.transitionMessage) {
+            const transitionMsg = {
+              id: data.transitionMessage.id,
+              sessionId,
+              senderId: null,
+              role: MessageRole.AI,
+              content: data.transitionMessage.content,
+              stage: data.transitionMessage.stage,
+              timestamp: data.transitionMessage.timestamp,
+            };
+
+            // Add to the first page (most recent messages)
+            if (newPages.length > 0) {
+              const existingIds = new Set(newPages[0].messages.map((m) => m.id));
+              if (!existingIds.has(transitionMsg.id)) {
+                newPages = [
+                  {
+                    ...newPages[0],
+                    messages: [...newPages[0].messages, transitionMsg],
+                  },
+                  ...newPages.slice(1),
+                ];
+              }
+            }
+          }
 
           return { ...old, pages: newPages };
         }

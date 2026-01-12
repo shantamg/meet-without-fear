@@ -166,11 +166,13 @@ describe('Above Input Panel Priority', () => {
   });
 
   it('shows waiting-banner when waiting for partner', () => {
+    // witness-pending only shows after user has consented to share empathy
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       partnerStage: Stage.WITNESS,
       compactMySigned: true,
       myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      empathyDraft: { alreadyConsented: true },
     });
 
     const result = computeChatUIState(inputs);
@@ -275,11 +277,13 @@ describe('Inner Thoughts Button (shouldShowInnerThoughts)', () => {
   });
 
   it('shows inner thoughts when waiting for partner in Stage 2 (witness-pending)', () => {
+    // witness-pending only shows after user has consented to share empathy
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       partnerStage: Stage.WITNESS,
       compactMySigned: true,
       myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      empathyDraft: { alreadyConsented: true },
     });
 
     const result = computeChatUIState(inputs);
@@ -440,11 +444,13 @@ describe('Empathy Panel Visibility', () => {
 
 describe('Waiting Status Integration', () => {
   it('correctly computes waiting status from inputs', () => {
+    // witness-pending only shows after user has consented to share empathy
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       partnerStage: Stage.WITNESS,
       compactMySigned: true,
       myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      empathyDraft: { alreadyConsented: true },
     });
 
     const result = computeChatUIState(inputs);

@@ -1890,11 +1890,115 @@ export async function resubmitEmpathy(
 
     console.log(`[resubmitEmpathy] Created new EMPATHY_STATEMENT message ${newMessage.id} (revision ${previousRevision + 1})`);
 
+    // Create turnId for this user action
+    const turnId = `${sessionId}-${user.id}-resubmit-empathy`;
+    updateContext({ turnId, sessionId, userId: user.id });
+
+    // Embed for cross-session retrieval (non-blocking)
+    embedMessage(newMessage.id, turnId).catch((err) =>
+      console.warn('[resubmitEmpathy] Failed to embed revised empathy statement:', err)
+    );
+
     // Run reconciler for just this direction
     if (partnerId) {
       triggerReconcilerForUser(sessionId, user.id, partnerId).catch((err) =>
         console.warn('[resubmitEmpathy] Failed to run reconciler:', err)
       );
+    }
+
+    // Generate AI acknowledgment message for the revision
+    let transitionMessage: {
+      id: string;
+      content: string;
+      timestamp: string;
+      stage: number;
+    } | null = null;
+
+    try {
+      const userName = user.firstName || user.name || 'The user';
+
+      const transitionPrompt = `You are Meet Without Fear, a Process Guardian. ${userName} has just revised their empathy statement based on new context they received about their partner's experience.
+
+Generate a brief, warm acknowledgment message (2-3 sentences) for ${userName} that:
+1. Acknowledges the effort to refine their understanding
+2. Notes that their updated statement is being re-analyzed
+3. Encourages them that this iterative process helps build deeper understanding
+
+Keep it natural and conversational. Don't be overly effusive.
+
+Respond in JSON format:
+\`\`\`json
+{
+  "response": "Your acknowledgment message"
+}
+\`\`\``;
+
+      const aiResponse = await getSonnetResponse({
+        systemPrompt: transitionPrompt,
+        messages: [{ role: 'user', content: 'Generate the acknowledgment message for the revised empathy statement.' }],
+        maxTokens: 256,
+        sessionId,
+        turnId,
+        operation: 'stage2-revision-acknowledgment',
+      });
+
+      let transitionContent: string;
+      if (aiResponse) {
+        try {
+          const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
+          transitionContent = typeof parsed.response === 'string'
+            ? parsed.response
+            : `You're showing real understanding here. Re-analyzing your updated perspective...`;
+        } catch {
+          transitionContent = `You're showing real understanding here. Re-analyzing your updated perspective...`;
+        }
+      } else {
+        transitionContent = `You're showing real understanding here. Re-analyzing your updated perspective...`;
+      }
+
+      // Save the transition message to the database
+      const aiMessage = await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          forUserId: user.id,
+          role: 'AI',
+          content: transitionContent,
+          stage: 2,
+        },
+      });
+
+      // Embed for cross-session retrieval (non-blocking)
+      embedMessage(aiMessage.id, turnId).catch((err) =>
+        console.warn('[resubmitEmpathy] Failed to embed transition message:', err)
+      );
+
+      // Summarize older parts of the conversation (non-blocking)
+      updateSessionSummary(sessionId, user.id, turnId).catch((err) =>
+        console.warn('[resubmitEmpathy] Failed to update session summary after transition:', err)
+      );
+
+      transitionMessage = {
+        id: aiMessage.id,
+        content: aiMessage.content,
+        timestamp: aiMessage.timestamp.toISOString(),
+        stage: aiMessage.stage,
+      };
+
+      // Audit log the transition message
+      auditLog('RESPONSE', 'Stage 2 revision acknowledgment generated', {
+        turnId,
+        sessionId,
+        userId: user.id,
+        stage: 2,
+        operation: 'stage2-revision-acknowledgment',
+        responseText: transitionContent,
+        messageId: aiMessage.id,
+        revisionCount: previousRevision + 1,
+      });
+    } catch (error) {
+      console.error('[resubmitEmpathy] Failed to generate transition message:', error);
+      // Continue without transition message - not a critical failure
     }
 
     successResponse(res, {
@@ -1907,6 +2011,7 @@ export async function resubmitEmpathy(
         stage: newMessage.stage,
         deliveryStatus: 'pending',
       },
+      transitionMessage,
     });
   } catch (error) {
     console.error('[resubmitEmpathy] Error:', error);

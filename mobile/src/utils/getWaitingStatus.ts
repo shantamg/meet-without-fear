@@ -27,7 +27,8 @@ export type WaitingStatusState =
   | 'partner-completed-witness' // Partner completed witness stage (transient)
   | 'partner-shared-empathy' // Partner shared their empathy attempt (transient)
   | 'partner-confirmed-needs' // Partner confirmed their needs (transient)
-  | 'reconciler-analyzing' // Reconciler is analyzing empathy
+  | 'reconciler-analyzing' // Reconciler is analyzing empathy (first time)
+  | 'revision-analyzing' // Reconciler is re-analyzing revised empathy (no spinner, same as first share UI)
   | 'awaiting-context-share' // Waiting for user to share context (Subject side)
   | 'refining-empathy' // Guesser is refining empathy after receiving shared context
   | null;
@@ -50,6 +51,7 @@ export interface WaitingStatusInputs {
     awaitingSharing?: boolean;
     hasNewSharedContext?: boolean;
     myAttemptStatus?: string; // 'REVEALED', 'NEEDS_WORK', etc.
+    myAttemptRevisionCount?: number; // Number of times empathy was revised
   } | undefined;
 
   // Stage 2: Empathy draft state
@@ -125,6 +127,10 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
 
   // Reconciler is running
   if (empathyStatus?.analyzing) {
+    // For revisions (revisionCount > 0), use a different status with no spinner
+    if (empathyStatus.myAttemptRevisionCount && empathyStatus.myAttemptRevisionCount > 0) {
+      return 'revision-analyzing';
+    }
     return 'reconciler-analyzing';
   }
 
@@ -136,7 +142,13 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
 
   // --- Priority 3: Stage 1 (Witness) ---
 
-  if (myStage === Stage.PERSPECTIVE_STRETCH && partnerStage === Stage.WITNESS) {
+  // Only show witness-pending AFTER user has shared their empathy
+  // Before sharing, user should be able to work on their empathy draft without waiting
+  if (
+    myStage === Stage.PERSPECTIVE_STRETCH &&
+    partnerStage === Stage.WITNESS &&
+    empathyDraft?.alreadyConsented
+  ) {
     return 'witness-pending';
   }
 

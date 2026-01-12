@@ -286,6 +286,7 @@ function computeShouldShowWaitingBanner(status: WaitingStatusState): boolean {
     status === 'empathy-pending' ||
     status === 'partner-considering-perspective' ||
     status === 'reconciler-analyzing' ||
+    status === 'revision-analyzing' ||
     status === 'awaiting-context-share'
   );
 }
@@ -356,7 +357,8 @@ function computeShouldShowInnerThoughts(
     currentStage === Stage.PERSPECTIVE_STRETCH &&
     (waitingStatus === 'witness-pending' ||
       waitingStatus === 'empathy-pending' ||
-      waitingStatus === 'partner-considering-perspective')
+      waitingStatus === 'partner-considering-perspective' ||
+      waitingStatus === 'revision-analyzing')
   ) {
     return true;
   }
