@@ -46,6 +46,8 @@ model User {
   invitationsSent     Invitation[]                  @relation("InvitedBy")
   innerWorkSessions   InnerWorkSession[]
   userMemories        UserMemory[]
+  validationFeedbackDrafts ValidationFeedbackDraft[]
+
 
   // Inner Work: Needs Assessment
   needScores          NeedScore[]
@@ -117,6 +119,8 @@ model Session {
   exerciseCompletions EmotionalExerciseCompletion[]
   invitations         Invitation[]
   userMemories        UserMemory[]
+  validationFeedbackDrafts ValidationFeedbackDraft[]
+
 
   // Linked Inner Thoughts sessions for private reflection during partner session
   linkedInnerThoughts InnerWorkSession[] @relation("LinkedInnerThoughts")
@@ -1183,4 +1187,18 @@ model AuditLog {
   @@index([sessionId])
   @@index([turnId])
   @@index([timestamp])
+}
+
+model ValidationFeedbackDraft {
+  id           String   @id @default(cuid())
+  session      Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId    String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  content      String   @db.Text
+  readyToShare Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([sessionId, userId])
 }

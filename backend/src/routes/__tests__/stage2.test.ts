@@ -42,7 +42,16 @@ import {
   consentToShare,
   getPartnerEmpathy,
   validateEmpathy,
+  saveValidationFeedbackDraft,
+  refineValidationFeedback,
+  skipRefinement,
 } from '../../controllers/stage2';
+
+// Explicitly mock new Prisma models that auto-mock might miss if types are stale
+(prisma as any).validationFeedbackDraft = {
+  upsert: jest.fn(),
+};
+
 
 // Mock Express request/response
 function mockRequest(overrides: Record<string, unknown> = {}) {
@@ -461,3 +470,124 @@ describe('Stage 2 API', () => {
     });
   });
 });
+
+describe('Validation Feedback Routes', () => {
+  describe('POST /sessions/:id/empathy/feedback/draft', () => {
+    it('saves validation feedback draft', async () => {
+      const req = mockRequest({
+        body: { content: 'This is feedback', readyToShare: false },
+      });
+      const res = mockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.validationFeedbackDraft.upsert as jest.Mock).mockResolvedValue({
+        id: 'draft-1',
+        content: 'This is feedback',
+        readyToShare: false,
+        updatedAt: new Date(),
+      });
+
+
+      await saveValidationFeedbackDraft(req, res);
+
+      expect(prisma.validationFeedbackDraft.upsert).toHaveBeenCalled();
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({ draftId: 'draft-1' }),
+        })
+      );
+    });
+  });
+
+  describe('POST /sessions/:id/empathy/feedback/refine', () => {
+    it('returns refined feedback from AI', async () => {
+      const req = mockRequest({
+        body: { message: 'Raw feedback' },
+      });
+      const res = mockResponse();
+
+      // Mocks already set up for bedrock/getSonnetResponse top of file
+      // But we need to ensure json-extractor returns what we want
+      const { extractJsonFromResponse } = require('../../utils/json-extractor');
+      extractJsonFromResponse.mockReturnValueOnce({
+        response: 'AI response',
+        proposedFeedback: 'Refined feedback',
+      });
+
+      await refineValidationFeedback(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            response: 'AI response',
+            proposedFeedback: 'Refined feedback',
+          }),
+        })
+      );
+    });
+  });
+
+  describe('POST /sessions/:id/empathy/skip-refinement', () => {
+    it('records acceptance (Agreement to Disagree)', async () => {
+      const req = mockRequest({
+        body: { willingToAccept: true },
+      });
+      const res = mockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue(mockSession()); // Fix: controller uses findUnique
+
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({ id: 'attempt-1' });
+      (prisma.empathyAttempt.update as jest.Mock).mockResolvedValue({});
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        gatesSatisfied: {},
+      });
+      (prisma.empathyValidation.upsert as jest.Mock).mockResolvedValue({});
+      (prisma.stageProgress.update as jest.Mock).mockResolvedValue({});
+
+
+      await skipRefinement(req, res);
+
+      expect(prisma.empathyValidation.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ feedback: 'ACCEPTED_DIFFERENCE', validated: true })
+        })
+      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+
+    it('records refusal', async () => {
+      const req = mockRequest({
+        body: { willingToAccept: false, reason: 'I just cant' },
+      });
+      const res = mockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue(mockSession());
+
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({ id: 'attempt-1' });
+      (prisma.empathyAttempt.update as jest.Mock).mockResolvedValue({});
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        gatesSatisfied: {},
+      });
+      (prisma.empathyValidation.upsert as jest.Mock).mockResolvedValue({});
+
+
+      await skipRefinement(req, res);
+
+      expect(prisma.empathyValidation.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            feedback: expect.stringContaining('REJECTED_OTHER_EXPERIENCE'),
+            validated: true
+          })
+        })
+      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+  });
+});
+

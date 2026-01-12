@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { View, ScrollView, StyleSheet, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, ScrollView, StyleSheet, Text, ActivityIndicator, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
@@ -29,6 +29,7 @@ import {
   useSaveEmpathyDraft,
   useConsentToShareEmpathy,
   useValidateEmpathy,
+  useSkipRefinement,
 } from '../hooks/useStages';
 import { useMessages, useSendMessage } from '../hooks/useMessages';
 import { useCreateInnerThoughtsSession, useLinkedInnerThoughts } from '../hooks/useInnerThoughts';
@@ -37,6 +38,7 @@ import { ChatHeader } from '../components/ChatHeader';
 import { EmpathyAttemptCard } from '../components/EmpathyAttemptCard';
 import { ConsentPrompt, SharingOption } from '../components/ConsentPrompt';
 import { AccuracyFeedback } from '../components/AccuracyFeedback';
+import { ValidationCoachChat } from '../components/ValidationCoachChat';
 import { WaitingRoom } from '../components/WaitingRoom';
 import { Stage, StageStatus } from '@meet-without-fear/shared';
 
@@ -107,6 +109,7 @@ export function PerspectiveStretchScreen() {
   const { mutate: saveDraft } = useSaveEmpathyDraft();
   const { mutate: consentToShare } = useConsentToShareEmpathy();
   const { mutate: validateEmpathy } = useValidateEmpathy();
+  const { mutate: skipRefinement } = useSkipRefinement();
 
   // Inner Thoughts hooks for linked session
   const { data: linkedData } = useLinkedInnerThoughts(sessionId);
@@ -115,6 +118,16 @@ export function PerspectiveStretchScreen() {
   // Revision state (for when partner rates empathy as inaccurate)
   const [needsRevision, setNeedsRevision] = useState(false);
   const [partnerFeedback, setPartnerFeedback] = useState<string | null>(null);
+
+  // Feedback Coach State
+  const [showFeedbackCoach, setShowFeedbackCoach] = useState(false);
+  const [showInitialInput, setShowInitialInput] = useState(false);
+  const [initialFeedback, setInitialFeedback] = useState('');
+
+  // Acceptance Check State
+  const [showAcceptanceCheck, setShowAcceptanceCheck] = useState(false);
+  const [acceptanceReason, setAcceptanceReason] = useState('');
+  const [showRefusalInput, setShowRefusalInput] = useState(false);
 
   // Derived data
   const session = sessionData?.session;
@@ -213,14 +226,35 @@ export function PerspectiveStretchScreen() {
     });
   };
 
+
+
   const handleInaccurate = () => {
     if (!sessionId) return;
-    // When partner says inaccurate, trigger revision for the other user
+    // Open initial feedback input
+    setInitialFeedback('');
+    setShowInitialInput(true);
+  };
+
+  // Feedback Coach Handlers
+  const handleSubmitInitialFeedback = () => {
+    if (!initialFeedback.trim()) return;
+    setShowInitialInput(false);
+    setShowFeedbackCoach(true);
+  };
+
+  const handleCompleteFeedback = (refinedFeedback: string) => {
+    if (!sessionId) return;
     validateEmpathy({
       sessionId,
       validated: false,
-      feedback: 'This does not capture my perspective accurately.',
+      feedback: refinedFeedback,
     });
+    setShowFeedbackCoach(false);
+  };
+
+  const handleCancelFeedback = () => {
+    setShowFeedbackCoach(false);
+    setInitialFeedback('');
   };
 
   // Handle message sending
@@ -242,7 +276,31 @@ export function PerspectiveStretchScreen() {
   };
 
   // Handle skipping revision and continuing
+  // Handle skipping revision and continuing
   const handleSkipRevision = () => {
+    setShowAcceptanceCheck(true);
+  };
+
+  const handleConfirmAcceptance = () => {
+    if (!sessionId) return;
+    skipRefinement({ sessionId, willingToAccept: true });
+    setShowAcceptanceCheck(false);
+    // Optimistically proceed
+    setNeedsRevision(false);
+    setPartnerFeedback(null);
+  };
+
+  const handleRejectAcceptance = () => {
+    setShowAcceptanceCheck(false);
+    setAcceptanceReason('');
+    setShowRefusalInput(true);
+  };
+
+  const handleSubmitRefusal = () => {
+    if (!sessionId) return;
+    skipRefinement({ sessionId, willingToAccept: false, reason: acceptanceReason });
+    setShowRefusalInput(false);
+    // Optimistically proceed
     setNeedsRevision(false);
     setPartnerFeedback(null);
   };
@@ -420,6 +478,20 @@ export function PerspectiveStretchScreen() {
     }
   };
 
+  if (showFeedbackCoach && sessionId) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <ValidationCoachChat
+          sessionId={sessionId}
+          initialDraft={initialFeedback}
+          onCancel={handleCancelFeedback}
+          onComplete={handleCompleteFeedback}
+          partnerName={partnerName}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <>
       <Stack.Screen
@@ -430,17 +502,107 @@ export function PerspectiveStretchScreen() {
       />
       <SafeAreaView style={styles.container} edges={['bottom']}>
         {renderContent()}
+
+        {/* Initial Feedback Modal */}
+        <Modal
+          visible={showInitialInput}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowInitialInput(false)}
+        >
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>What felt off?</Text>
+              <Text style={styles.modalSubtitle}>Briefly describe what wasn't quite right.</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={initialFeedback}
+                onChangeText={setInitialFeedback}
+                placeholder="It felt like..."
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                autoFocus
+              />
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={[styles.modalButton, styles.secondaryButton]} onPress={() => setShowInitialInput(false)}>
+                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalButton, styles.primaryButton]} onPress={handleSubmitInitialFeedback}>
+                  <Text style={styles.buttonText}>Next</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* Acceptance Check Modal */}
+        <Modal
+          visible={showAcceptanceCheck}
+          transparent
+          animationType="fade"
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Moving On</Text>
+              <Text style={styles.modalSubtitle}>Since you're not revising your empathy statement, are you willing to accept your partner's experience as valid, even if you see it differently?</Text>
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={[styles.modalButton, styles.secondaryButton]} onPress={handleRejectAcceptance}>
+                  <Text style={[styles.secondaryButtonText, { color: colors.error }]}>No, I don't accept it</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalButton, styles.primaryButton]} onPress={handleConfirmAcceptance}>
+                  <Text style={styles.buttonText}>Yes, I accept it</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Refusal Reason Modal */}
+        <Modal
+          visible={showRefusalInput}
+          transparent
+          animationType="fade"
+        >
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Help us understand</Text>
+              <Text style={styles.modalSubtitle}>Please share why you can't accept this experience right now.</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={acceptanceReason}
+                onChangeText={setAcceptanceReason}
+                placeholder="I can't accept this because..."
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                autoFocus
+              />
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={[styles.modalButton, styles.secondaryButton]} onPress={() => setShowRefusalInput(false)}>
+                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalButton, styles.primaryButton]} onPress={handleSubmitRefusal}>
+                  <Text style={styles.buttonText}>Submit</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </SafeAreaView>
     </>
   );
 }
 
-// ============================================================================
-// Styles
-// ============================================================================
-
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: colors.bgPrimary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chatContainer: {
     flex: 1,
     backgroundColor: colors.bgPrimary,
   },
@@ -448,82 +610,160 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.bgPrimary,
-    padding: 20,
-  },
-  chatContainer: {
-    flex: 1,
-  },
-  header: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 4,
-    color: colors.textPrimary,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
-  scrollContent: {
-    paddingBottom: 24,
+    padding: 24,
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: 16,
+    color: colors.textSecondary,
+    fontSize: 16,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  header: {
+    padding: 24,
+    paddingBottom: 0,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.textPrimary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subtitle: {
     fontSize: 16,
     color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 24,
   },
-
-  // Revision phase styles
-  feedbackCard: {
-    margin: 16,
-    marginBottom: 8,
+  section: {
+    padding: 24,
+    marginTop: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 16,
+  },
+  card: {
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 16,
     padding: 16,
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.warning,
+    borderColor: colors.border,
+  },
+  feedbackCard: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)', // Light error red
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.error,
   },
   feedbackLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: colors.warning,
-    marginBottom: 8,
+    fontWeight: '700',
+    color: colors.error,
+    marginBottom: 4,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   feedbackText: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textPrimary,
-    lineHeight: 20,
+    fontStyle: 'italic',
+    lineHeight: 22,
   },
   revisionActions: {
-    flex: 1,
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    gap: 16,
   },
   revisionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    padding: 16,
-    gap: 12,
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   skipRevisionButton: {
     padding: 12,
-    paddingHorizontal: 24,
-    backgroundColor: colors.bgTertiary,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   skipRevisionText: {
     color: colors.textSecondary,
     fontSize: 14,
     fontWeight: '500',
   },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: colors.bgPrimary,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  modalInput: {
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 12,
+    padding: 16,
+    color: colors.textPrimary,
+    minHeight: 120,
+    textAlignVertical: 'top',
+    marginBottom: 24,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+  },
+  primaryButton: {
+    backgroundColor: colors.accent,
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  secondaryButtonText: {
+    color: colors.textSecondary,
+    fontWeight: '600',
+    fontSize: 16,
+  },
 });
+
 
 export default PerspectiveStretchScreen;

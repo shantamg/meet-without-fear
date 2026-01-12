@@ -130,6 +130,44 @@ export interface ValidateEmpathyResponse {
   partnerValidated: boolean;
 }
 
+/**
+ * Handle "Skip Refinement" / "Acceptance Check"
+ */
+export interface SkipRefinementRequest {
+  willingToAccept: boolean;
+  reason?: string;
+}
+
+export interface SkipRefinementResponse {
+  success: true;
+}
+
+// ============================================================================
+// Validation Feedback Flow (Feedback Coach)
+// ============================================================================
+
+export interface SaveValidationFeedbackDraftRequest {
+  sessionId: string;
+  content: string;
+  readyToShare: boolean;
+}
+
+export interface SaveValidationFeedbackDraftResponse {
+  success: boolean;
+  draftId?: string;
+  savedAt?: string;
+}
+
+export interface RefineValidationFeedbackRequest {
+  message: string;
+}
+
+export interface RefineValidationFeedbackResponse {
+  response: string;
+  proposedFeedback: string | null;
+  canSend: boolean;
+}
+
 // ============================================================================
 // Refinement Flow (Phase 4)
 // ============================================================================

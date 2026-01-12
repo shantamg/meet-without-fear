@@ -15,6 +15,9 @@ import {
   saveEmpathyDraftRequestSchema,
   consentToShareRequestSchema,
   validateEmpathyRequestSchema,
+  skipRefinementRequestSchema,
+  saveValidationFeedbackDraftRequestSchema,
+  refineValidationFeedbackRequestSchema,
 } from '@meet-without-fear/shared';
 import { notifyPartner } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
@@ -1026,11 +1029,420 @@ export async function validateEmpathy(
       canAdvance: validated,
       partnerValidated: partnerValidation ? partnerValidation.validated : false,
     });
+
+    // Check if both have validated (Accurate/Partial) and trigger transition
+    if (validated && partnerValidation?.validated) {
+      triggerStage3Transition(sessionId, user.id, partnerId).catch(err =>
+        console.warn('[validateEmpathy] Failed to trigger transition:', err)
+      );
+    }
+
   } catch (error) {
     console.error('[validateEmpathy] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to validate empathy', 500);
   }
 }
+
+/**
+ * Handle "Skip Refinement" / "Acceptance Check"
+ * POST /sessions/:id/empathy/skip-refinement
+ */
+export async function skipRefinement(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+
+    const parseResult = skipRefinementRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid request body', 400);
+      return;
+    }
+
+    const { willingToAccept, reason } = parseResult.data;
+
+    // Get user's empathy attempt
+    const attempt = await prisma.empathyAttempt.findFirst({
+      where: { sessionId, sourceUserId: user.id },
+    });
+
+    if (!attempt) {
+      errorResponse(res, 'NOT_FOUND', 'Empathy attempt not found', 404);
+      return;
+    }
+
+    // Create validation record with skip status
+    await prisma.empathyValidation.upsert({
+      where: {
+        attemptId_userId: {
+          attemptId: attempt.id,
+          userId: user.id
+        }
+      },
+      create: {
+        attemptId: attempt.id,
+        sessionId,
+        userId: user.id,
+        validated: true, // Treated as validated for gate purposes
+        // We use a feedback value to indicate the special status since we don't have a status enum on Validation
+        // Or we could store it in JSON metadata if available, but for now strict feedback string or validated boolean is what we have.
+        // Wait, the test expects 'status' field in create, but EmpathyValidation model doesn't have a status enum field visible in the previous schema view.
+        // Let's check schema again. EmpathyValidation has: validated (bool), feedback (string), feedbackShared (bool).
+        // The test expects: create: expect.objectContaining({ status: 'ACCEPTED_DIFFERENCE' })
+        // This implies I should have added a status field or used a different model.
+        // But checking schema again (lines 620+), EmpathyValidation only has validated, feedback, feedbackShared.
+        // So the test is asserting on a field that implies a schema change I haven't made or I misunderstood.
+        // Let's assume for now I should store this status in the `feedback` field or add a new field.
+        // Actually, looking at the previous implementation plan, "Mark as 'Accepted Difference'" was the goal.
+        // But since I didn't add a status field to EmpathyValidation, I should probably put this info in `feedback` or just relying on StageProgress keys.
+        // However, the test is written expecting a `status` field in the create/update payload.
+        // This means my test is out of sync with my schema.
+        // I should probably fix the TEST to check for what I actually implemented (updating StageProgress), OR update the schema to support this status.
+        // Given I already updated StageProgress in the code, I will update the tests to match the implementation logic (checking StageProgress and EmpathyAttempt updates),
+        // rather than checking for a non-existent EmpathyValidation.status field.
+        // BUT, I do need to mark it as validated in EmpathyValidation so `validateEmpathy` logic elsewhere works.
+
+        feedback: willingToAccept ? 'ACCEPTED_DIFFERENCE' : `REJECTED_OTHER_EXPERIENCE: ${reason || ''}`,
+      },
+      update: {
+        validated: true,
+        feedback: willingToAccept ? 'ACCEPTED_DIFFERENCE' : `REJECTED_OTHER_EXPERIENCE: ${reason || ''}`,
+      }
+    });
+
+    // Update attempt status to SKIPPED_REFINEMENT
+    await prisma.empathyAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        status: 'VALIDATED', // Treat as validated for collecting purposes
+        deliveryStatus: 'SEEN',
+      },
+    });
+
+    // Mark gate as satisfied
+    await prisma.stageProgress.update({
+      where: {
+        sessionId_userId_stage: {
+          sessionId,
+          userId: user.id,
+          stage: 2,
+        },
+      },
+      data: {
+        gatesSatisfied: {
+          empathyValidated: true, // Gate passed via skip
+          skippedRefinement: true,
+          willingToAccept,
+          skipReason: reason,
+        },
+      },
+    });
+
+    // Notify partner
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { relationship: { include: { members: true } } }
+    });
+    const partnerId = getPartnerUserIdFromSession(session as any, user.id);
+
+    if (partnerId) {
+      await notifyPartner(sessionId, partnerId, 'partner.skipped_refinement', {
+        willingToAccept,
+      });
+
+      // Check for mutual completion
+      triggerStage3Transition(sessionId, user.id, partnerId).catch(console.warn);
+    }
+
+    successResponse(res, { success: true });
+
+  } catch (error) {
+    console.error('[skipRefinement] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to skip refinement', 500);
+  }
+}
+
+/**
+ * Save Validation Feedback Draft (Feedback Coach Flow)
+ * POST /sessions/:id/empathy/validation-feedback/draft
+ */
+export async function saveValidationFeedbackDraft(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+
+    const parseResult = saveValidationFeedbackDraftRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid request body', 400);
+      return;
+    }
+
+    const { content, readyToShare } = parseResult.data;
+
+    const draft = await prisma.validationFeedbackDraft.upsert({
+      where: {
+        sessionId_userId: {
+          sessionId,
+          userId: user.id,
+        },
+      },
+      create: {
+        sessionId,
+        userId: user.id,
+        content,
+        readyToShare: readyToShare ?? false,
+      },
+      update: {
+        content,
+        readyToShare: readyToShare ?? false,
+      },
+    });
+
+    successResponse(res, {
+      draftId: draft.id,
+      savedAt: draft.updatedAt.toISOString(),
+      readyToShare: draft.readyToShare,
+    });
+  } catch (error) {
+    console.error('[saveValidationFeedbackDraft] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to save feedback draft', 500);
+  }
+}
+
+/**
+ * Refine Validation Feedback (Feedback Coach Flow)
+ * POST /sessions/:id/empathy/validation-feedback/refine
+ */
+export async function refineValidationFeedback(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+
+    const parseResult = refineValidationFeedbackRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid request body', 400);
+      return;
+    }
+
+    const { message } = parseResult.data;
+
+    // Create turnId
+    const turnId = `${sessionId}-${user.id}-feedback-refine-${Date.now()}`;
+    updateContext({ turnId, sessionId, userId: user.id });
+
+    // Prompt for feedback coaching
+    const systemPrompt = `You are a Feedback Coach for Meet Without Fear.
+The user wants to give feedback to their partner about an empathy statement that felt "off" or inaccurate.
+Your goal is to help them rephrase their feedback to be constructive, specific, and non-blaming (Non-Violent Communication style).
+
+User's raw feedback: "${message}"
+
+1. Acknowledge the validity of their feeling.
+2. Draft a "Proposed Feedback" statement that they could send to their partner. This should be:
+   - Direct but kind.
+   - Focus on what was missed or misunderstood.
+   - Avoid "You are wrong" language; use "I felt..." or "My experience was...".
+
+Respond in JSON format:
+\`\`\`json
+{
+  "response": "Your conversational coaching response to the user",
+  "proposedFeedback": "The refined feedback statement ready to be sent"
+}
+\`\`\``;
+
+    const aiResponse = await getSonnetResponse({
+      systemPrompt,
+      messages: [{ role: 'user', content: 'Help me refine this.' }],
+      maxTokens: 512,
+      sessionId,
+      operation: 'feedback-refinement',
+      turnId,
+    });
+
+    let response = "I'm here to help you phrase that.";
+    let proposedFeedback = "";
+
+    if (aiResponse) {
+      try {
+        const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
+        response = typeof parsed.response === 'string' ? parsed.response : aiResponse;
+        proposedFeedback = typeof parsed.proposedFeedback === 'string' ? parsed.proposedFeedback : "";
+      } catch {
+        response = aiResponse;
+      }
+    }
+
+    successResponse(res, {
+      response,
+      proposedFeedback,
+    });
+
+  } catch (error) {
+    console.error('[refineValidationFeedback] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to refine feedback', 500);
+  }
+}
+
+async function triggerStage3Transition(sessionId: string, userId: string, partnerId: string | null) {
+  try {
+    // 1. Get user names for personalization
+    const users = await prisma.user.findMany({
+      where: {
+        id: { in: [userId, partnerId].filter((id): id is string => id !== null) }
+      },
+      select: { id: true, firstName: true, name: true }
+    });
+
+    const userMap = new Map(users.map(u => [u.id, u.firstName || u.name || 'User']));
+    const nameA = userMap.get(userId) || 'User';
+    const nameB = partnerId ? (userMap.get(partnerId) || 'Partner') : 'Partner';
+
+    // 2. Generate Transition Message
+    const transitionPrompt = `You are Meet Without Fear, a Process Guardian.
+${nameA} and ${nameB} have just successfully completed the Empathy Exchange (Stage 2).
+They have each guessed the other's feelings and needs, and validated those guesses (or accepted remaining differences).
+
+Your goal is to transition them to Stage 3: Co-Creation / Strategy.
+In Stage 3, they will brainstorm solutions that meet everyone's needs.
+
+Generate a warm, encouraging transition message (2-3 sentences) that:
+1. Celebrates their success in hearing each other.
+2. Pivots to the future: "Now that we understand each other, let's find a way forward together."
+3. Introduces Stage 3: Strategy & Solutions.
+
+Respond in JSON format:
+\`\`\`json
+{
+  "response": "Your transition message addressed to both of them"
+}
+\`\`\``;
+
+    const turnId = `${sessionId}-stage3-transition-${Date.now()}`;
+    // We can't use updateContext here easily as it's async background, but we can pass turnId to services
+
+    const aiResponse = await getSonnetResponse({
+      systemPrompt: transitionPrompt,
+      messages: [{ role: 'user', content: 'Generate transition message.' }],
+      maxTokens: 512,
+      sessionId,
+      operation: 'stage3-transition',
+      turnId,
+    });
+
+    let content = `Congratulations ${nameA} and ${nameB}! You've successfully built a foundation of understanding. Now it's time to move to Stage 3, where you'll co-create solutions that work for everyone.`;
+
+    if (aiResponse) {
+      try {
+        const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
+        if (typeof parsed.response === 'string') {
+          content = parsed.response;
+        }
+      } catch (e) {
+        console.warn('Failed to parse transition AI response', e);
+      }
+    }
+
+    // 3. Save Message
+    const message = await prisma.message.create({
+      data: {
+        sessionId,
+        senderId: null, // AI
+        role: 'AI',
+        content,
+        stage: 2, // Technically end of stage 2 / start of 3
+      }
+    });
+
+    // 4. Update Stage Progress for both to Stage 3
+    // Mark Stage 2 as COMPLETED
+    await prisma.stageProgress.updateMany({
+      where: {
+        sessionId,
+        stage: 2,
+        userId: { in: [userId, partnerId].filter((id): id is string => id !== null) }
+      },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date()
+      }
+    });
+
+    // Create Stage 3 records if not exist
+    // We do this loop to handle each user individualy just in case
+    const userIds = [userId, partnerId].filter((id): id is string => id !== null);
+    for (const uid of userIds) {
+      await prisma.stageProgress.upsert({
+        where: {
+          sessionId_userId_stage: {
+            sessionId,
+            userId: uid,
+            stage: 3
+          }
+        },
+        create: {
+          sessionId,
+          userId: uid,
+          stage: 3,
+          status: 'IN_PROGRESS',
+          startedAt: new Date(),
+        },
+        update: {
+          // If it exists, ensure it's in progress? Or leave it if they already started?
+          // Let's ensure it's IN_PROGRESS if it was NOT_STARTED
+          // But upsert update is unconditional. Let's just create if missing, or no-op if exists.
+          // Actually, if we are transitioning, we should probably ensure it's active.
+        }
+      });
+    }
+
+    // 5. Notify Realtime
+    // Notify session channel that stage changed
+    if (partnerId) {
+      // We can use notifyPartner or a session-wide event if available.
+      // publishSessionEvent is generic
+      await publishSessionEvent(sessionId, 'session.stage_transition', {
+        previousStage: 2,
+        currentStage: 3,
+        message: {
+          id: message.id,
+          content: message.content,
+          timestamp: message.timestamp
+        }
+      });
+    }
+
+    // Embed message
+    embedMessage(message.id, turnId).catch(console.warn);
+
+  } catch (error) {
+    console.error('[triggerStage3Transition] Error:', error);
+  }
+}
+
 
 // ============================================================================
 // Refinement Flow (Phase 4)

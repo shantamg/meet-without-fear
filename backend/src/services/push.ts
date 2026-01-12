@@ -104,6 +104,10 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'Empathy revealed',
     body: "Your partner's empathy statement is now visible.",
   },
+  'partner.skipped_refinement': {
+    title: 'Ready to move on',
+    body: 'Your partner has accepted the current understanding.',
+  },
   'empathy.share_suggestion': {
     title: 'Share suggestion available',
     body: 'You can share additional context to help your partner understand you better.',

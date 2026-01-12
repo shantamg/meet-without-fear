@@ -60,6 +60,12 @@ import {
   RespondToShareSuggestionRequest,
   RespondToShareSuggestionResponse,
   ResubmitEmpathyResponse,
+  SkipRefinementRequest,
+  SkipRefinementResponse,
+  SaveValidationFeedbackDraftRequest,
+  SaveValidationFeedbackDraftResponse,
+  RefineValidationFeedbackRequest,
+  RefineValidationFeedbackResponse,
 } from '@meet-without-fear/shared';
 
 // Import query keys from centralized file to avoid circular dependencies
@@ -1110,6 +1116,84 @@ export function useResubmitEmpathy(
       if (context?.previousInfinite) {
         queryClient.setQueryData(messageKeys.infinite(sessionId), context.previousInfinite);
       }
+    },
+    ...options,
+  });
+}
+
+/**
+ * Skip refinement (Acceptance Check).
+ */
+export function useSkipRefinement(
+  options?: Omit<
+    UseMutationOptions<
+      SkipRefinementResponse,
+      ApiClientError,
+      { sessionId: string } & SkipRefinementRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, ...request }) => {
+      return post<SkipRefinementResponse>(
+        `/sessions/${sessionId}/empathy/skip-refinement`,
+        request
+      );
+    },
+    onSuccess: (_, { sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Save validation feedback draft.
+ */
+export function useSaveValidationFeedbackDraft(
+  options?: Omit<
+    UseMutationOptions<
+      SaveValidationFeedbackDraftResponse,
+      ApiClientError,
+      { sessionId: string } & SaveValidationFeedbackDraftRequest
+    >,
+    'mutationFn'
+  >
+) {
+  return useMutation({
+    mutationFn: async ({ sessionId, ...request }) => {
+      return post<SaveValidationFeedbackDraftResponse>(
+        `/sessions/${sessionId}/empathy/feedback/draft`,
+        request
+      );
+    },
+    ...options,
+  });
+}
+
+/**
+ * Refine validation feedback (AI Coach).
+ */
+export function useRefineValidationFeedback(
+  options?: Omit<
+    UseMutationOptions<
+      RefineValidationFeedbackResponse,
+      ApiClientError,
+      { sessionId: string } & RefineValidationFeedbackRequest
+    >,
+    'mutationFn'
+  >
+) {
+  return useMutation({
+    mutationFn: async ({ sessionId, ...request }) => {
+      return post<RefineValidationFeedbackResponse>(
+        `/sessions/${sessionId}/empathy/feedback/refine`,
+        request
+      );
     },
     ...options,
   });

@@ -39,6 +39,20 @@ export {
   type ValidateEmpathyRequestInput,
   type ValidateEmpathyResponseInput,
 
+  // Feedback validation (Not Quite flow)
+  skipRefinementRequestSchema,
+  skipRefinementResponseSchema,
+  saveValidationFeedbackDraftRequestSchema,
+  saveValidationFeedbackDraftResponseSchema,
+  refineValidationFeedbackRequestSchema,
+  refineValidationFeedbackResponseSchema,
+  type SkipRefinementRequestInput,
+  type SkipRefinementResponseInput,
+  type SaveValidationFeedbackDraftRequestInput,
+  type SaveValidationFeedbackDraftResponseInput,
+  type RefineValidationFeedbackRequestInput,
+  type RefineValidationFeedbackResponseInput,
+
   // Emotional barometer
   recordEmotionRequestSchema,
   recordEmotionResponseSchema,

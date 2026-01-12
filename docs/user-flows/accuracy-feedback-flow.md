@@ -121,23 +121,34 @@ sequenceDiagram
             Partner->>API: Resubmits revised empathy
             API->>User: Shows new empathy for validation
         else Declines to change
-            Partner->>API: POST /empathy/skip-refinement
-            API->>User: Notify "Partner is ready to move on"
-            Note over User,Partner: Proceed to Stage 3 (Agreed to Disagree)
+            Note over Partner: AI asks: "Are you willing to accept<br/>this as their experience?"
+            alt Yes (Accepts experience but won't change words)
+                Partner->>API: POST /empathy/skip-refinement<br/>{willingToAccept: true}
+                API->>User: Notify "Partner accepts your experience"
+                Note over User,Partner: Proceed to Stage 3
+            else No (Does not accept)
+                Partner->>AI: "No, because..."
+                AI->>Partner: "Why?" (Collects reason)
+                Partner->>API: POST /empathy/skip-refinement<br/>{willingToAccept: false, reason: "..."}
+                API->>User: Notify "Moving to next stage"
+                Note over User,Partner: Proceed to Stage 3 (Unresolved)
+            end
         end
     end
 ```
 
 ## AI Feedback Coach (Subject's Experience)
-This flow mirrors the **Reconciler Share Suggestion** flow, but triggered by the user instead of the AI detecting a gap.
+This flow mirrors the **Reconciler Share Suggestion** flow...
 
-1. **Drawer Input**: User types rough thoughts (e.g., "They missed that I was scared").
-2. **Chat Transition**: Drawer closes, main chat opens.
-3. **Refinement**: AI helps user refine this into a constructive message.
-4. **Sending**: User approves/sends the message.
-5. **Partner's Choice**: 
-    - **Refine**: Partner updates their statement (standard loop).
-    - **Move On**: Partner decides they cannot/will not change it. System allows progression.
+[... standard feedback coach details ...]
+
+## Acceptance Check (Guesser's Experience)
+If the Guesser cannot/will not refine their statement to match the Subject's feedback:
+1. **AI Presentation**: "You said [Original], and they say [Feedback]. With this adjustment, they say their experience is accurately reflected."
+2. **The Question**: "Are you willing to accept this as their experience?"
+3. **Outcomes**:
+    - **Yes**: "I accept that is their experience (even if I see it differently)." -> **Proceed**.
+    - **No**: "I cannot accept that is their experience." -> AI asks **Why?** -> User answers -> **Proceed** (with disagreement logged).
 
 ## API Contract
 

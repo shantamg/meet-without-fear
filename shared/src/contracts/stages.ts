@@ -121,6 +121,52 @@ export const validateEmpathyResponseSchema = z.object({
 
 export type ValidateEmpathyResponseInput = z.infer<typeof validateEmpathyResponseSchema>;
 
+export const skipRefinementRequestSchema = z.object({
+  willingToAccept: z.boolean(),
+  reason: z.string().optional(),
+});
+
+export type SkipRefinementRequestInput = z.infer<typeof skipRefinementRequestSchema>;
+
+export const skipRefinementResponseSchema = z.object({
+  success: z.boolean(),
+});
+
+export type SkipRefinementResponseInput = z.infer<typeof skipRefinementResponseSchema>;
+
+// ============================================================================
+// Feedback Coach (Stage 2)
+// ============================================================================
+
+export const saveValidationFeedbackDraftRequestSchema = z.object({
+  content: z.string().min(1, 'Content is required').max(500, 'Feedback too long'),
+  readyToShare: z.boolean(),
+});
+
+export type SaveValidationFeedbackDraftRequestInput = z.infer<typeof saveValidationFeedbackDraftRequestSchema>;
+
+export const saveValidationFeedbackDraftResponseSchema = z.object({
+  success: z.boolean(),
+  draftId: z.string().optional(),
+  savedAt: z.string().datetime().optional(),
+});
+
+export type SaveValidationFeedbackDraftResponseInput = z.infer<typeof saveValidationFeedbackDraftResponseSchema>;
+
+export const refineValidationFeedbackRequestSchema = z.object({
+  message: z.string().min(1, 'Message is required'),
+});
+
+export type RefineValidationFeedbackRequestInput = z.infer<typeof refineValidationFeedbackRequestSchema>;
+
+export const refineValidationFeedbackResponseSchema = z.object({
+  response: z.string(),
+  proposedFeedback: z.string().nullable(),
+  canSend: z.boolean(),
+});
+
+export type RefineValidationFeedbackResponseInput = z.infer<typeof refineValidationFeedbackResponseSchema>;
+
 // ============================================================================
 // Emotional Barometer
 // ============================================================================

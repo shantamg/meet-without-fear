@@ -24,6 +24,7 @@ export type SessionEvent = Extract<
   | 'partner.empathy_shared'
   | 'partner.additional_context_shared'
   | 'partner.empathy_revealed'
+  | 'partner.skipped_refinement'
   | 'partner.needs_shared'
   | 'partner.ranking_submitted'
   | 'partner.common_ground_confirmed'
@@ -168,7 +169,7 @@ export async function publishSessionEvent(
 export async function publishUserEvent(
   userId: string,
   event: UserEventType,
-  data: { sessionId: string; [key: string]: unknown }
+  data: { sessionId: string;[key: string]: unknown }
 ): Promise<void> {
   const ably = getAbly();
 
