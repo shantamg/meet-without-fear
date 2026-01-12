@@ -18,6 +18,7 @@ import {
   Minus,
   Volume2,
   VolumeX,
+  CheckCircle,
 } from 'lucide-react-native';
 
 import {
@@ -42,7 +43,7 @@ interface NeedsAssessmentScreenProps {
   onNavigateBack?: () => void;
 }
 
-type AssessmentMode = 'overview' | 'baseline' | 'checkin';
+type AssessmentMode = 'overview' | 'baseline' | 'summary' | 'checkin';
 
 // ============================================================================
 // Score Selection Component
@@ -193,6 +194,11 @@ export function NeedsAssessmentScreen({
       setMode('overview');
       setSelectedNeedForCheckIn(null);
       setCheckInScore(null);
+    } else if (mode === 'summary') {
+      // From summary, go to overview to see full results
+      setMode('overview');
+      setBaselineScores({});
+      setCurrentNeedIndex(0);
     } else {
       onNavigateBack?.();
     }
@@ -215,8 +221,8 @@ export function NeedsAssessmentScreen({
       }));
       submitBaseline.mutate({ scores }, {
         onSuccess: () => {
-          setMode('overview');
           refetch();
+          setMode('summary');
         },
       });
     }
@@ -377,6 +383,91 @@ export function NeedsAssessmentScreen({
               {checkInNeed.isPending ? 'Saving...' : 'Save'}
             </Text>
           </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // Summary Mode - Shown after completing baseline assessment
+  if (mode === 'summary') {
+    // Calculate summary from the baseline scores just submitted
+    const totalScore = Object.values(baselineScores).reduce((sum, score) => sum + score, 0);
+    const avgScore = needs.length > 0 ? totalScore / needs.length : 0;
+    const lowCount = Object.values(baselineScores).filter((score) => score === 0).length;
+    const highCount = Object.values(baselineScores).filter((score) => score === 2).length;
+
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.summaryContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.summaryHeader}>
+            <CheckCircle size={64} color={colors.success} />
+            <Text style={styles.summaryTitle}>Assessment Complete!</Text>
+            <Text style={styles.summarySubtitle}>
+              You've assessed all {needs.length} core human needs
+            </Text>
+          </View>
+
+          {/* Score Summary Card */}
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryCardTitle}>Your Score</Text>
+            <Text style={styles.summaryScoreValue}>{avgScore.toFixed(1)}</Text>
+            <Text style={styles.summaryScoreScale}>out of 2.0</Text>
+          </View>
+
+          {/* Quick Stats */}
+          <View style={styles.summaryStatsRow}>
+            <View style={styles.summaryStat}>
+              <Text style={[styles.summaryStatValue, { color: colors.success }]}>{highCount}</Text>
+              <Text style={styles.summaryStatLabel}>Fully Met</Text>
+            </View>
+            <View style={styles.summaryStat}>
+              <Text style={[styles.summaryStatValue, { color: colors.warning }]}>{needs.length - highCount - lowCount}</Text>
+              <Text style={styles.summaryStatLabel}>Somewhat</Text>
+            </View>
+            <View style={styles.summaryStat}>
+              <Text style={[styles.summaryStatValue, { color: colors.error }]}>{lowCount}</Text>
+              <Text style={styles.summaryStatLabel}>Unmet</Text>
+            </View>
+          </View>
+
+          {/* Insight */}
+          {lowCount > 0 && (
+            <View style={styles.summaryInsight}>
+              <Text style={styles.summaryInsightText}>
+                You identified {lowCount} need{lowCount > 1 ? 's' : ''} that {lowCount > 1 ? 'are' : 'is'} not being met.
+                Tap "View Results" to explore these needs and check in on them over time.
+              </Text>
+            </View>
+          )}
+
+          {/* Action Buttons */}
+          <View style={styles.summaryActions}>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => {
+                setMode('overview');
+                setBaselineScores({});
+                setCurrentNeedIndex(0);
+              }}
+            >
+              <Text style={styles.primaryButtonText}>View Results</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                setBaselineScores({});
+                setCurrentNeedIndex(0);
+                onNavigateBack?.();
+              }}
+            >
+              <Text style={styles.secondaryButtonText}>Back to Hub</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </SafeAreaView>
     );
@@ -733,6 +824,94 @@ const styles = createStyles((t) => ({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: t.spacing.sm,
+  },
+
+  // Summary Screen
+  summaryContent: {
+    padding: t.spacing.lg,
+    alignItems: 'center',
+  },
+  summaryHeader: {
+    alignItems: 'center',
+    marginBottom: t.spacing.xl,
+    marginTop: t.spacing.xl,
+  },
+  summaryTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: t.colors.textPrimary,
+    marginTop: t.spacing.lg,
+    marginBottom: t.spacing.sm,
+  },
+  summarySubtitle: {
+    fontSize: 15,
+    color: t.colors.textSecondary,
+    textAlign: 'center',
+  },
+  summaryCard: {
+    backgroundColor: t.colors.bgSecondary,
+    borderRadius: t.radius.lg,
+    padding: t.spacing.xl,
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: t.spacing.lg,
+  },
+  summaryCardTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: t.colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: t.spacing.sm,
+  },
+  summaryScoreValue: {
+    fontSize: 56,
+    fontWeight: '700',
+    color: t.colors.textPrimary,
+  },
+  summaryScoreScale: {
+    fontSize: 14,
+    color: t.colors.textSecondary,
+    marginTop: t.spacing.xs,
+  },
+  summaryStatsRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: t.spacing.sm,
+    marginBottom: t.spacing.lg,
+  },
+  summaryStat: {
+    flex: 1,
+    backgroundColor: t.colors.bgSecondary,
+    borderRadius: t.radius.md,
+    padding: t.spacing.md,
+    alignItems: 'center',
+  },
+  summaryStatValue: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  summaryStatLabel: {
+    fontSize: 12,
+    color: t.colors.textMuted,
+    marginTop: t.spacing.xs,
+  },
+  summaryInsight: {
+    backgroundColor: t.colors.bgSecondary,
+    borderRadius: t.radius.md,
+    padding: t.spacing.md,
+    width: '100%',
+    marginBottom: t.spacing.lg,
+  },
+  summaryInsightText: {
+    fontSize: 14,
+    color: t.colors.textSecondary,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  summaryActions: {
+    width: '100%',
+    gap: t.spacing.sm,
   },
 
   // Bottom

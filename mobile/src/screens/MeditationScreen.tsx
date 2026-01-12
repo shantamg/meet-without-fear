@@ -47,6 +47,7 @@ import {
   useSpeech,
   useAutoSpeech,
 } from '../hooks';
+import { useToast } from '../contexts/ToastContext';
 import { MeditationType, formatDurationEstimate } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -181,6 +182,9 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
   const [timerInterval, setTimerInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   const [selectedSavedId, setSelectedSavedId] = useState<string | undefined>();
 
+  // Toast notifications for error handling
+  const { showError } = useToast();
+
   // Speech for guided meditation
   const { isSpeaking, playMeditationScript, stop: stopSpeech } = useSpeech();
   const { isAutoSpeechEnabled } = useAutoSpeech();
@@ -282,9 +286,15 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
           }, 1000);
           setTimerInterval(interval);
         },
+        onError: () => {
+          showError(
+            'Session Failed',
+            'Could not start meditation session. Please try again.'
+          );
+        },
       }
     );
-  }, [createSession, duration, savedDetailData, isAutoSpeechEnabled, playMeditationScript]);
+  }, [createSession, duration, savedDetailData, isAutoSpeechEnabled, playMeditationScript, showError]);
 
   const handleGenerateScript = useCallback(() => {
     if (!focusArea) return;
@@ -297,9 +307,15 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
         onSuccess: (data) => {
           setGeneratedScript(data.script);
         },
+        onError: () => {
+          showError(
+            'Generation Failed',
+            'Could not generate meditation script. Please try again.'
+          );
+        },
       }
     );
-  }, [generateScript, duration, focusArea]);
+  }, [generateScript, duration, focusArea, showError]);
 
   const handleStartSession = useCallback(() => {
     createSession.mutate(
@@ -333,9 +349,15 @@ export function MeditationScreen({ onNavigateBack }: MeditationScreenProps) {
           }, 1000);
           setTimerInterval(interval);
         },
+        onError: () => {
+          showError(
+            'Session Failed',
+            'Could not start meditation session. Please try again.'
+          );
+        },
       }
     );
-  }, [createSession, selectedType, duration, focusArea, generatedScript, isAutoSpeechEnabled, playMeditationScript]);
+  }, [createSession, selectedType, duration, focusArea, generatedScript, isAutoSpeechEnabled, playMeditationScript, showError]);
 
   const handlePauseResume = useCallback(() => {
     if (isPaused) {

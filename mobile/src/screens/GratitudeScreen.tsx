@@ -40,6 +40,7 @@ import {
   getTodaysEntries,
   useSpeech,
 } from '../hooks';
+import { useToast } from '../contexts/ToastContext';
 import { GratitudeEntryDTO } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -182,6 +183,7 @@ function NewEntryForm({ onSubmit, onCancel, isSubmitting, prompt }: NewEntryForm
 export function GratitudeScreen({ onNavigateBack }: GratitudeScreenProps) {
   const [isAddingEntry, setIsAddingEntry] = useState(false);
 
+  const { showSuccess, showError } = useToast();
   const { data: entriesData, isLoading } = useGratitudeEntries({ limit: 50 });
   const { data: patternsData } = useGratitudePatterns();
   const { data: promptData } = useGratitudePrompt();
@@ -212,11 +214,15 @@ export function GratitudeScreen({ onNavigateBack }: GratitudeScreenProps) {
         {
           onSuccess: () => {
             setIsAddingEntry(false);
+            showSuccess('Gratitude Saved', 'Your gratitude entry has been recorded.');
+          },
+          onError: () => {
+            showError('Save Failed', 'Could not save your gratitude entry. Please try again.');
           },
         }
       );
     },
-    [createGratitude]
+    [createGratitude, showSuccess, showError]
   );
 
   // Loading state

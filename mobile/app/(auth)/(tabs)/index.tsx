@@ -65,8 +65,8 @@ export default function HomeScreen() {
   // Navigate immediately for optimistic UX - session is created on the chat screen
   const handleHomeChat = useCallback((message: string) => {
     router.push({
-      pathname: '/inner-work/self-reflection/new',
-      params: { initialMessage: message },
+      pathname: '/inner-work/self-reflection/[id]',
+      params: { id: 'new', initialMessage: message },
     });
   }, [router]);
 

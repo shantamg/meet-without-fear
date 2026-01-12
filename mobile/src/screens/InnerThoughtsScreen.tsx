@@ -7,10 +7,10 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Layers } from 'lucide-react-native';
+import { ArrowLeft, Layers, MoreVertical } from 'lucide-react-native';
 import { MessageRole, MemorySuggestion, SuggestedAction } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage } from '../components/ChatInterface';
@@ -153,6 +153,23 @@ export function InnerThoughtsScreen({
     onNavigateBack?.();
   }, [onNavigateBack]);
 
+  const handleEndSession = useCallback(() => {
+    Alert.alert(
+      'End Session?',
+      'Are you sure you want to end this inner thoughts session? Your reflections have been saved.',
+      [
+        { text: 'Continue', style: 'cancel' },
+        {
+          text: 'End Session',
+          style: 'destructive',
+          onPress: () => {
+            onNavigateBack?.();
+          },
+        },
+      ]
+    );
+  }, [onNavigateBack]);
+
   // Loading state - but NOT when creating (we show typing indicator instead)
   if (isLoading && !isCreating) {
     return (
@@ -215,8 +232,18 @@ export function InnerThoughtsScreen({
           ) : null}
         </View>
 
-        {/* Spacer to balance the back button */}
-        <View style={{ width: 48 }} />
+        {/* End Session button */}
+        {!isCreating && (
+          <TouchableOpacity
+            style={styles.headerMenuButton}
+            onPress={handleEndSession}
+            accessibilityRole="button"
+            accessibilityLabel="End session"
+          >
+            <MoreVertical color={colors.textMuted} size={20} />
+          </TouchableOpacity>
+        )}
+        {isCreating && <View style={{ width: 48 }} />}
       </View>
 
       {/* Chat Interface */}
@@ -298,6 +325,9 @@ const useStyles = () =>
       borderBottomColor: t.colors.border,
     },
     headerBackButton: {
+      padding: t.spacing.sm,
+    },
+    headerMenuButton: {
       padding: t.spacing.sm,
     },
     headerContent: {
