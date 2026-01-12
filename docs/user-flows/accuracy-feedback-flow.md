@@ -104,15 +104,40 @@ sequenceDiagram
         API-->>Panel: Success
     else Inaccurate
         User->>Panel: Taps "Not quite"
-        Panel->>User: Shows feedback input (required)
-        User->>Panel: Explains what was missed
-        Panel->>API: POST /empathy/validate<br/>{validated: false, rating: "inaccurate", feedback}
-        API->>API: Status → NEEDS_WORK
-        API-->>Panel: Success
-        API->>Partner: Notify to revise
-        Note over Partner: Enters refinement flow
+        Panel->>User: Shows input for initial thoughts
+        User->>Panel: Submits initial thoughts
+        Panel->>User: Closes panel, opens Chat
+        Note over User: Enters Refinement Chat (Subject)
+        
+        User->>AI: Chat to refine feedback
+        AI->>User: Helps craft constructive feedback
+        User->>AI: Approves final feedback message
+        
+        AI->>API: POST /empathy/validate<br/>{validated: false, rating: "inaccurate", feedback: "final message"}
+        API->>Partner: Notify "Partner shared feedback"
+        
+        Note over Partner: Enters Refinement Chat (Guesser)
+        alt Refines
+            Partner->>API: Resubmits revised empathy
+            API->>User: Shows new empathy for validation
+        else Declines to change
+            Partner->>API: POST /empathy/skip-refinement
+            API->>User: Notify "Partner is ready to move on"
+            Note over User,Partner: Proceed to Stage 3 (Agreed to Disagree)
+        end
     end
 ```
+
+## AI Feedback Coach (Subject's Experience)
+This flow mirrors the **Reconciler Share Suggestion** flow, but triggered by the user instead of the AI detecting a gap.
+
+1. **Drawer Input**: User types rough thoughts (e.g., "They missed that I was scared").
+2. **Chat Transition**: Drawer closes, main chat opens.
+3. **Refinement**: AI helps user refine this into a constructive message.
+4. **Sending**: User approves/sends the message.
+5. **Partner's Choice**: 
+    - **Refine**: Partner updates their statement (standard loop).
+    - **Move On**: Partner decides they cannot/will not change it. System allows progression.
 
 ## API Contract
 
