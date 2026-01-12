@@ -223,6 +223,7 @@ export function UnifiedSessionScreen({
 
   // User-level events (memory suggestions are now sent to specific user, not session)
   useUserSessionUpdates({
+    disableRefetch: true,
     onMemorySuggestion: (suggestion) => {
       // Only show memory suggestions for the current session
       if (suggestion.sessionId === sessionId) {

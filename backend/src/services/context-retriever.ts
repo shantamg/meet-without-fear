@@ -484,6 +484,20 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
   const effectiveThreshold = memoryIntent?.threshold ?? similarityThreshold;
   const effectiveMaxCrossSession = memoryIntent?.maxCrossSession ?? maxCrossSessionMessages;
 
+  // Fetch user preferences if not provided
+  let effectiveUserPrefs = userPreferences;
+  if (!effectiveUserPrefs) {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { memoryPreferences: true },
+      });
+      effectiveUserPrefs = (user?.memoryPreferences as MemoryPreferencesDTO | null) ?? undefined;
+    } catch (error) {
+      console.warn('[ContextRetriever] Failed to fetch user preferences:', error);
+    }
+  }
+
   // Run detection and basic retrieval in parallel using Promise.all()
   // This is critical for performance - sequential execution would kill user experience
   // All three operations are independent and can run simultaneously
@@ -529,7 +543,7 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
     const shouldSearchCrossSession =
       (memoryIntent?.allowCrossSession ?? true) ||
       referenceDetection.needsRetrieval ||
-      (userPreferences?.crossSessionRecall ?? false);
+      (effectiveUserPrefs?.crossSessionRecall ?? false);
 
     // Search using the generated queries
     const searchPromises = referenceDetection.searchQueries.map(async (query) => {

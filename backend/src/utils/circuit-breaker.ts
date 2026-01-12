@@ -32,9 +32,9 @@ export async function withTimeout<T>(
 
 /**
  * Circuit breaker for Haiku operations.
- * Default timeout: 1.5 seconds
+ * Default timeout: 3 seconds (was 1.5s - increased for robustness)
  */
-export const HAIKU_TIMEOUT_MS = 1500;
+export const HAIKU_TIMEOUT_MS = 3000;
 
 /**
  * Execute a Haiku operation with circuit breaker protection.

@@ -22,6 +22,7 @@ const createSessionSchema = z.object({
   personId: z.string().optional(),
   inviteName: z.string().min(1).optional(),
   context: z.string().optional(),
+  innerThoughtsId: z.string().optional(),
 }).refine(
   (data) => data.personId || data.inviteName,
   { message: 'Must provide personId or inviteName' }
@@ -268,7 +269,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const { personId, inviteName } = parseResult.data;
+    const { personId, inviteName, innerThoughtsId } = parseResult.data;
 
     // Create or find relationship
     let relationship;
@@ -325,6 +326,22 @@ export async function createSession(req: Request, res: Response): Promise<void> 
         status: 'CREATED',
       },
     });
+
+    // If originated from Inner Thoughts, link it back
+    if (innerThoughtsId) {
+      try {
+        await prisma.innerWorkSession.updateMany({
+          where: { id: innerThoughtsId, userId: user.id },
+          data: {
+            linkedPartnerSessionId: session.id,
+            linkedTrigger: 'suggestion_start',
+          },
+        });
+        console.log(`[createSession] Linked session ${session.id} to origin inner thoughts ${innerThoughtsId}`);
+      } catch (err) {
+        console.warn(`[createSession] Failed to link inner thoughts session:`, err);
+      }
+    }
 
     // Create invitation with 7-day expiry
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);

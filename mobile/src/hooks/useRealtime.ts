@@ -658,6 +658,8 @@ interface UseUserSessionUpdatesConfig {
     evidence: string;
     sessionId: string;
   }) => void;
+  /** Whether to disable automatic query refetching on events */
+  disableRefetch?: boolean;
 }
 
 /**
@@ -672,9 +674,9 @@ export function useUserSessionUpdates(
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Store callback in ref to avoid stale closures
-  const onMemorySuggestionRef = useRef(config?.onMemorySuggestion);
-  onMemorySuggestionRef.current = config?.onMemorySuggestion;
+  // Store options in refs to avoid stale closures
+  const optionsRef = useRef(config);
+  optionsRef.current = config;
 
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(() => {
     return mapAblyState(getAblyConnectionState());
@@ -691,14 +693,19 @@ export function useUserSessionUpdates(
       // Handle memory suggestions targeted to this specific user
       if (eventName === 'memory.suggested') {
         const suggestion = (_data as { suggestion?: { id: string; suggestedContent: string; category: string; confidence: string; evidence: string } }).suggestion;
-        if (suggestion && onMemorySuggestionRef.current) {
+        if (suggestion && optionsRef.current?.onMemorySuggestion) {
           console.log('[UserSessionUpdates] Memory suggestion received:', suggestion);
-          onMemorySuggestionRef.current({
+          optionsRef.current.onMemorySuggestion({
             ...suggestion,
             sessionId: _data.sessionId,
           });
         }
         return; // Don't refetch queries for memory suggestions
+      }
+
+      if (optionsRef.current?.disableRefetch) {
+        console.log('[UserSessionUpdates] Refetch disabled by config');
+        return;
       }
 
       console.log('[UserSessionUpdates] Refetching queries...');

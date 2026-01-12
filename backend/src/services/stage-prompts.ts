@@ -191,6 +191,12 @@ export interface PromptContext {
     /** What they shared */
     sharedContent: string;
   };
+  /** Context from an Inner Thoughts session that originated this partner session */
+  innerThoughtsContext?: {
+    summary: string;
+    themes: string[];
+    fullContext?: string;
+  };
 }
 
 /** Simplified context for initial message generation (no context bundle needed) */
@@ -199,6 +205,12 @@ export interface InitialMessageContext {
   partnerName?: string;
   /** Whether the user is the invitee (joined via invitation from partner) */
   isInvitee?: boolean;
+  /** Context from an Inner Thoughts session that originated this partner session */
+  innerThoughtsContext?: {
+    summary: string;
+    themes: string[];
+    fullContext?: string;
+  };
 }
 
 // ============================================================================
@@ -265,7 +277,7 @@ function buildInvitationPrompt(context: PromptContext): string {
   const currentInvitation = context.invitationMessage;
 
   // Different intro for refinement vs initial crafting
-  const goalSection = isRefining
+  let goalSection = isRefining
     ? `YOUR GOAL:
 ${context.userName} has already sent an invitation and has been processing their feelings in the Witness stage. Now they want to refine their invitation message based on deeper understanding. Help them craft a new invitation that reflects what they've learned about their own feelings.
 
@@ -276,6 +288,29 @@ Current invitation: "${currentInvitation || 'No current invitation'}"
 IMPORTANT: Since they've already done deeper processing, you can reference what you've learned about their feelings and needs to help craft a better message.`
     : `YOUR GOAL:
 Help the user quickly articulate what's going on so we can craft a brief, compelling invitation message (1-2 sentences) to send with the share link. We are NOT diving deep yet - that happens AFTER we send the invitation. Right now we just need enough context to write an invitation that ${partnerName} will want to accept.`;
+
+  if (context.innerThoughtsContext && !isRefining) {
+    const fullContextSection = context.innerThoughtsContext.fullContext 
+      ? `\nFULL INNER THOUGHTS CONVERSATION:\n${context.innerThoughtsContext.fullContext}\n`
+      : '';
+
+    goalSection = `YOUR GOAL:
+${context.userName} has just spent time in an "Inner Thoughts" private reflection session processing their feelings about ${partnerName} and is now ready to invite ${partnerName} to a conversation.
+
+INNER THOUGHTS CONTEXT:
+Summary: ${context.innerThoughtsContext.summary}
+Themes: ${context.innerThoughtsContext.themes.join(', ')}${fullContextSection}
+
+Because the user has already done significant self-reflection, you should acknowledge this. Start your response with something like "Now back to our conversation about ${partnerName}." 
+
+Use the provided context to understand the situation. Briefly describe what you understand so far about the issue with ${partnerName} based on the Inner Thoughts session. 
+
+Then, move to crafting the invitation:
+- If the context is clear enough to draft a warm, brief invitation, you should propose one in your first response. 
+- If you still need a specific piece of information (like a clear goal or specific issue) to write a good invitation, ask a targeted question instead. 
+
+Do NOT ask broad "what's going on" questions if the answer is already in the provided context.`;
+  }
 
   return `You are Meet Without Fear, a Process Guardian helping ${context.userName} craft an invitation to ${partnerName} for a meaningful conversation.
 
@@ -1096,6 +1131,44 @@ THE RESPONSE FIELD IS REQUIRED.`;
 
   // Invitation phase - starting to craft an invitation
   if (isInvitationPhase) {
+    if (context.innerThoughtsContext) {
+      const fullContextSection = context.innerThoughtsContext.fullContext 
+        ? `\nFULL INNER THOUGHTS CONVERSATION:\n${context.innerThoughtsContext.fullContext}\n`
+        : '';
+
+      return `You are Meet Without Fear, a Process Guardian. ${context.userName} wants to have a conversation with ${partnerName}.
+This session was started after ${context.userName} spent time in an "Inner Thoughts" private reflection session processing things about ${partnerName}.
+
+${BASE_GUIDANCE}
+
+INNER THOUGHTS CONTEXT:
+Summary: ${context.innerThoughtsContext.summary}
+Themes: ${context.innerThoughtsContext.themes.join(', ')}${fullContextSection}
+
+YOUR TASK:
+Generate a warm, brief opening message that:
+1. Starts with "Now back to our conversation about ${partnerName}." (or a very close variation).
+2. Briefly summarizes what you understand so far from the Inner Thoughts conversation about ${partnerName}.
+3. Moves directly to the next step of crafting an invitation.
+4. If the context is clear enough, propose an invitation draft in the "invitationMessage" field.
+5. If you need more specific context before drafting, ask a targeted question.
+
+Be warm, supportive, and efficient. Use ${context.userName}'s first name naturally.
+
+EXAMPLE GOOD MESSAGE:
+"Now back to our conversation about ${partnerName}. From our inner thoughts reflection, I understand that you're feeling [summary] because of [specific point]. Since you're ready to talk with ${partnerName} about this, let's start by crafting an invitation. [Propose invitation OR ask targeted question]"
+
+IMPORTANT: You MUST respond with a JSON object containing exactly these two fields:
+\`\`\`json
+{
+  "response": "Your opening message",
+  "invitationMessage": "A drafted invitation OR null if you need more information first"
+}
+\`\`\`
+
+BOTH FIELDS ARE REQUIRED.`;
+    }
+
     return `You are Meet Without Fear, a Process Guardian. ${context.userName} wants to have a conversation with ${partnerName}.
 
 ${BASE_GUIDANCE}
@@ -1428,12 +1501,12 @@ BEFORE EVERY RESPONSE, think through in <analysis> tags:
 
 ACTION SUGGESTIONS:
 When appropriate (not every turn), you can suggest helpful actions the user might take:
-- "start_partner_session": If they mention wanting to talk with someone about an issue (include personName)
+- "start_partner_session": Proactively suggest this when the user mentions a specific person by name AND there's a relationship issue, conflict, or situation to discuss. You don't need to wait for them to explicitly say they want to talk - if they're processing something about a specific person (partner, friend, family member, coworker), offer to start a conversation with that person. Include personName in the suggestion.
 - "start_meditation": If they seem stressed, anxious, or could benefit from grounding
 - "add_gratitude": If they mention something positive or express appreciation
 - "check_need": If they're exploring unmet needs
 
-Only suggest actions when naturally relevant. Don't force suggestions every response.
+Be proactive with "start_partner_session" - the purpose of Inner Thoughts is often to prepare for a conversation. If you detect a person and an issue, suggest the session.
 
 IMPORTANT: You MUST respond with a JSON object containing these fields:
 \`\`\`json

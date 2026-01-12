@@ -176,40 +176,40 @@ export async function assembleContextBundle(
   const progress = session.stageProgress[0];
   const gatesSatisfied = (progress?.gatesSatisfied as Record<string, unknown>) || {};
 
-  // Build conversation context based on depth
+  // PARALLEL EXECUTION of context assembly steps
+  // All these operations are independent and can run simultaneously to reduce latency.
   const turnBufferSize = getTurnBufferSize(stage, intent.intent);
-  const conversationContext = await buildConversationContext(
-    sessionId,
-    userId,
-    turnBufferSize,
-    depth
-  );
+  
+  const [conversationContext, emotionalThread, priorThemes, sessionSummary, innerThoughtsContext, userMemories] = await Promise.all([
+    buildConversationContext(sessionId, userId, turnBufferSize, depth),
+    buildEmotionalThread(sessionId, userId, depth),
+    (depth === 'full' || depth === 'light') 
+      ? buildPriorThemes(sessionId, userId, session.relationshipId) 
+      : Promise.resolve(undefined),
+    (depth !== 'none') 
+      ? buildSessionSummary(sessionId, userId) 
+      : Promise.resolve(undefined),
+    (depth === 'full' || depth === 'light') 
+      ? buildInnerThoughtsContext(sessionId, userId, []) // Will fill conversationContext below
+      : Promise.resolve(undefined),
+    buildUserMemoriesContext(userId, sessionId)
+  ]);
 
-  // Build emotional thread
-  const emotionalThread = await buildEmotionalThread(sessionId, userId, depth);
+  // Special case: innerThoughtsContext needs conversationContext for search
+  // If depth allowed it, we might need a quick follow-up or just use the empty array fallback
+  // but let's re-run it with conversationContext if needed, or just accept the parallel limitation.
+  // Actually, buildInnerThoughtsContext uses the last user message from conversationContext.
+  // Let's refine this to be more efficient.
+  
+  let finalInnerThoughts = innerThoughtsContext;
+  if ((depth === 'full' || depth === 'light') && conversationContext.length > 0) {
+    // Re-run inner thoughts with the actual conversation context for semantic search
+    finalInnerThoughts = await buildInnerThoughtsContext(sessionId, userId, conversationContext);
+  }
 
-  // Build prior themes (if depth allows)
-  const priorThemes = depth === 'full' || depth === 'light'
-    ? await buildPriorThemes(sessionId, userId, session.relationshipId)
-    : undefined;
-
-  // Build session summary (for long sessions, if depth allows)
   const sessionDurationMinutes = Math.floor(
     (now.getTime() - session.createdAt.getTime()) / 60000
   );
-  // Session summary (rolling, stored on the user's vessel). We try to load it whenever
-  // depth allows—it's cheap when absent and prevents long sessions from losing early context.
-  const sessionSummary = depth !== 'none'
-    ? await buildSessionSummary(sessionId, userId)
-    : undefined;
-
-  // Build Inner Thoughts context (if depth allows)
-  const innerThoughtsContext = depth === 'full' || depth === 'light'
-    ? await buildInnerThoughtsContext(sessionId, userId, conversationContext)
-    : undefined;
-
-  // Build user memories context (always include - these are user preferences)
-  const userMemories = await buildUserMemoriesContext(userId, sessionId);
 
   return {
     conversationContext: {
@@ -220,7 +220,7 @@ export async function assembleContextBundle(
     emotionalThread,
     priorThemes,
     sessionSummary,
-    innerThoughtsContext,
+    innerThoughtsContext: finalInnerThoughts,
     userMemories,
     stageContext: {
       stage,

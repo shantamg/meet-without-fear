@@ -27,9 +27,9 @@ export function useUnreadSessionCount() {
   const { data: count = 0, isLoading, error } = useQuery({
     queryKey: sessionKeys.unreadCount(),
     queryFn: fetchUnreadSessionCount,
-    // Refetch every 30 seconds to keep badge up to date
-    refetchInterval: 30000,
-    // Refetch when window regains focus
+    // Data is considered fresh for 1 minute
+    staleTime: 60000,
+    // Refetch when window regains focus (app comes to foreground)
     refetchOnWindowFocus: true,
   });
 

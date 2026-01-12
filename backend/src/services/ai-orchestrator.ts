@@ -160,9 +160,6 @@ export async function orchestrateResponse(
     isFirstTurnInSession: context.isFirstTurnInSession,
   });
 
-  // Step 0: Fetch user preferences
-  const userPrefs = await getUserMemoryPreferences(context.userId);
-
   // Step 1: Determine memory intent (DECISION LAYER - Time to Decision)
   const memoryIntentContext: MemoryIntentContext = {
     stage: context.stage,
@@ -191,126 +188,116 @@ export async function orchestrateResponse(
     console.warn(`[AI Orchestrator] Decision layer took ${decisionTime}ms (>1s) - consider optimization`);
   }
 
-  // Step 1.5: Memory Detection (synchronous, before response generation)
-  // Detect memory intents and validate them. If invalid, we'll pass the rejection reason
-  // to Sonnet so it can address the request therapeutically in the response.
+  // PARALLEL PRE-PROCESSING: Run Step 0, Step 1.5, Step 2, and Step 2.5 in parallel
+  // This significantly reduces latency by avoiding sequential network/DB calls.
   const recentMessagesForMemory = context.conversationHistory.slice(-5);
-  let memoryDetectionResult: { suggestion?: MemorySuggestion; validation?: { valid: boolean; reason?: string } } | null = null;
   
-  try {
-    const detectionResult = await detectMemoryIntent(
+  console.log(`[AI Orchestrator] Starting parallel pre-processing (Intent: ${memoryIntent.intent})...`);
+  const parallelStartTime = Date.now();
+
+  const [userPrefs, detectionResult, contextBundle, retrievedContext] = await Promise.all([
+    getUserMemoryPreferences(context.userId),
+    detectMemoryIntent(
       context.userMessage,
       context.sessionId,
       turnId,
       'partner-session',
       recentMessagesForMemory
-    );
+    ).catch(err => {
+      console.warn('[AI Orchestrator] Memory detection failed (parallel):', err);
+      return { hasMemoryIntent: false, suggestions: [], topicContext: '' };
+    }),
+    assembleContextBundle(
+      context.sessionId,
+      context.userId,
+      context.stage,
+      memoryIntent
+    ),
+    retrieveContext({
+      userId: context.userId,
+      currentMessage: context.userMessage,
+      currentSessionId: context.sessionId,
+      turnId,
+      includePreSession: true,
+      maxCrossSessionMessages: memoryIntent.maxCrossSession,
+      similarityThreshold: memoryIntent.threshold,
+      memoryIntent,
+      // We'll pass preferences if we had them, but since we're fetching in parallel,
+      // retrieveContext will use its internal defaults for cross-session permission.
+      // Most of the time memoryIntent.allowCrossSession will be used anyway.
+    }).catch(err => {
+      console.warn('[AI Orchestrator] Context retrieval failed (parallel):', err);
+      return undefined;
+    })
+  ]);
 
-    if (detectionResult.hasMemoryIntent && detectionResult.suggestions.length > 0) {
-      // Validate the first suggestion synchronously before showing to user
-      const suggestion = detectionResult.suggestions[0];
+  const parallelTime = Date.now() - parallelStartTime;
+  console.log(`[AI Orchestrator] Parallel pre-processing completed in ${parallelTime}ms`);
 
-      try {
-        // Validate BEFORE generating response - only show valid suggestions to user
-        const validation = await validateMemory(
-          suggestion.suggestedContent,
-          suggestion.category,
-          { sessionId: context.sessionId, turnId, useAI: true }
-        );
+  // Step 1.5: Process memory detection and validation (logic from original flow)
+  let memoryDetectionResult: { suggestion?: MemorySuggestion; validation?: { valid: boolean; reason?: string } } | null = null;
+  
+  if (detectionResult.hasMemoryIntent && detectionResult.suggestions.length > 0) {
+    const suggestion = detectionResult.suggestions[0];
+    try {
+      const validation = await validateMemory(
+        suggestion.suggestedContent,
+        suggestion.category,
+        { sessionId: context.sessionId, turnId, useAI: true }
+      );
 
-        console.log('[AI Orchestrator] Memory validation result:', {
-          content: suggestion.suggestedContent,
-          category: suggestion.category,
-          valid: validation.valid,
-          reason: validation.reason,
-        });
-
-        if (validation.valid) {
-          auditLog('MEMORY_DETECTION', 'Memory suggestion detected', {
-            turnId,
-            sessionId: context.sessionId,
-            content: suggestion.suggestedContent,
-            category: suggestion.category,
-            confidence: suggestion.confidence,
-            evidence: suggestion.evidence,
-            validation: 'valid',
-          });
-
-          // Persist as PENDING (always global, no sessionId)
-          const memory = await memoryService.createPendingMemory({
-            userId: context.userId,
-            content: suggestion.suggestedContent,
-            category: suggestion.category,
-            suggestedBy: `AI Confidence: ${suggestion.confidence} | Evidence: ${suggestion.evidence}`,
-          });
-
-          // Send memory suggestion to the SPECIFIC USER who made the statement
-          // (not broadcast to all session members - this is a personal memory offer)
-          await publishUserEvent(
-            context.userId,
-            'memory.suggested',
-            {
-              sessionId: context.sessionId,
-              suggestion: {
-                id: memory.id,
-                suggestedContent: suggestion.suggestedContent,
-                category: suggestion.category,
-                confidence: suggestion.confidence,
-                evidence: suggestion.evidence,
-                validation: 'valid',
-              },
-            }
-          );
-
-          memoryDetectionResult = {
-            suggestion,
-            validation: { valid: true },
-          };
-        } else {
-          // Invalid memory request - log it but don't show to user
-          auditLog('MEMORY_DETECTION', 'Memory suggestion rejected', {
-            turnId,
-            sessionId: context.sessionId,
-            content: suggestion.suggestedContent,
-            category: suggestion.category,
-            confidence: suggestion.confidence,
-            evidence: suggestion.evidence,
-            validation: 'invalid',
-            rejectionReason: validation.reason,
-          });
-
-          memoryDetectionResult = {
-            suggestion,
-            validation: { valid: false, reason: validation.reason },
-          };
-        }
-      } catch (error) {
-        console.warn('[AI Orchestrator] Memory validation failed:', error);
-        // If validation fails, don't show to user (safer to skip than show invalid)
-        auditLog('MEMORY_DETECTION', 'Memory suggestion skipped (validation error)', {
+      if (validation.valid) {
+        auditLog('MEMORY_DETECTION', 'Memory suggestion detected', {
           turnId,
           sessionId: context.sessionId,
           content: suggestion.suggestedContent,
           category: suggestion.category,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          confidence: suggestion.confidence,
+          evidence: suggestion.evidence,
+          validation: 'valid',
         });
+
+        const memory = await memoryService.createPendingMemory({
+          userId: context.userId,
+          content: suggestion.suggestedContent,
+          category: suggestion.category,
+          suggestedBy: `AI Confidence: ${suggestion.confidence} | Evidence: ${suggestion.evidence}`,
+        });
+
+        await publishUserEvent(context.userId, 'memory.suggested', {
+          sessionId: context.sessionId,
+          suggestion: {
+            id: memory.id,
+            suggestedContent: suggestion.suggestedContent,
+            category: suggestion.category,
+            confidence: suggestion.confidence,
+            evidence: suggestion.evidence,
+            validation: 'valid',
+          },
+        });
+
+        memoryDetectionResult = { suggestion, validation: { valid: true } };
+      } else {
+        auditLog('MEMORY_DETECTION', 'Memory suggestion rejected', {
+          turnId,
+          sessionId: context.sessionId,
+          content: suggestion.suggestedContent,
+          category: suggestion.category,
+          confidence: suggestion.confidence,
+          evidence: suggestion.evidence,
+          validation: 'invalid',
+          rejectionReason: validation.reason,
+        });
+
+        memoryDetectionResult = { suggestion, validation: { valid: false, reason: validation.reason } };
       }
+    } catch (error) {
+      console.warn('[AI Orchestrator] Memory validation failed:', error);
     }
-  } catch (error) {
-    console.warn('[AI Orchestrator] Memory detection failed:', error);
-    // Continue without memory detection - don't block the response
   }
 
-  // Step 2: Assemble context bundle
-  const contextBundle = await assembleContextBundle(
-    context.sessionId,
-    context.userId,
-    context.stage,
-    memoryIntent
-  );
-  console.log(
-    `[AI Orchestrator] Context assembled: ${contextBundle.conversationContext.turnCount} turns`
-  );
+  // Log progress for parallel steps
+  console.log(`[AI Orchestrator] Context assembled: ${contextBundle.conversationContext.turnCount} turns`);
   auditLog('RETRIEVAL', 'Context bundle assembled', {
     turnId,
     sessionId: context.sessionId,
@@ -318,26 +305,8 @@ export async function orchestrateResponse(
     turnCount: contextBundle.conversationContext.turnCount,
   });
 
-  // Step 2.5: Universal context retrieval
-  // This ensures awareness of relevant content from other sessions or earlier history
-  // Uses stage-aware thresholds from memory intent
-  let retrievedContext: RetrievedContext | undefined;
-  try {
-    retrievedContext = await retrieveContext({
-      userId: context.userId,
-      currentMessage: context.userMessage,
-      currentSessionId: context.sessionId,
-      turnId,
-      includePreSession: true,
-      // Use stage-aware config from memory intent
-      maxCrossSessionMessages: memoryIntent.maxCrossSession,
-      similarityThreshold: memoryIntent.threshold,
-      memoryIntent,
-      userPreferences: userPrefs,
-    });
-    console.log(
-      `[AI Orchestrator] Context retrieved: ${retrievedContext.retrievalSummary}`
-    );
+  if (retrievedContext) {
+    console.log(`[AI Orchestrator] Context retrieved: ${retrievedContext.retrievalSummary}`);
     auditLog('RETRIEVAL', 'Context retrieved', {
       turnId,
       sessionId: context.sessionId,
@@ -348,42 +317,19 @@ export async function orchestrateResponse(
       withinSessionCount: retrievedContext.relevantFromCurrentSession.length,
       preSessionCount: retrievedContext.preSessionMessages.length,
       referencesDetected: retrievedContext.detectedReferences.length,
-      // Include sample of retrieved messages (first 3 of each type)
-      crossSessionSamples: retrievedContext.relevantFromOtherSessions.slice(0, 3).map(m => ({
-        content: m.content.substring(0, 200),
-        similarity: m.similarity.toFixed(3),
-        timeContext: m.timeContext,
-      })),
-      withinSessionSamples: retrievedContext.relevantFromCurrentSession.slice(0, 3).map(m => ({
-        content: m.content.substring(0, 200),
-        similarity: m.similarity.toFixed(3),
-        timeContext: m.timeContext,
-      })),
-    });
-  } catch (error) {
-    console.warn('[AI Orchestrator] Context retrieval failed, continuing without:', error);
-    auditLog('ERROR', 'Context retrieval failed', {
-      turnId,
-      sessionId: context.sessionId,
-      stage: context.stage,
-      error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 
   // Step 2.6: Apply surfacing policy
-  // Determine how/whether to surface pattern observations
-  // TODO: Get lastSurfacingTurn from session metadata (for now, undefined = no cooldown check)
   const surfacingDecision = decideSurfacing(
     context.stage,
     context.turnCount,
     userAskedForPattern(context.userMessage),
     userPrefs.patternInsights,
     countPatternEvidence(retrievedContext ?? null),
-    undefined // lastSurfacingTurn - TODO: fetch from session metadata
+    undefined // lastSurfacingTurn
   );
-  console.log(
-    `[AI Orchestrator] Surfacing decision: shouldSurface=${surfacingDecision.shouldSurface}, style=${surfacingDecision.style}`
-  );
+  console.log(`[AI Orchestrator] Surfacing decision: shouldSurface=${surfacingDecision.shouldSurface}, style=${surfacingDecision.style}`);
 
   // Step 3: Plan retrieval (for full depth, use Haiku)
   let retrievalPlan: RetrievalPlan | undefined;
@@ -397,28 +343,16 @@ export async function orchestrateResponse(
         context.userMessage,
         memoryIntent.intent
       );
-      console.log(
-        `[AI Orchestrator] Retrieval planned: ${retrievalPlan.queries.length} queries`
-      );
+      console.log(`[AI Orchestrator] Retrieval planned: ${retrievalPlan.queries.length} queries`);
       auditLog('RETRIEVAL', 'Retrieval plan created', {
         turnId,
         sessionId: context.sessionId,
         stage: context.stage,
         queryCount: retrievalPlan.queries.length,
-        queries: retrievalPlan.queries.map(q => ({
-          type: q.type,
-          source: q.source,
-        })),
       });
     } catch (error) {
       console.warn('[AI Orchestrator] Retrieval planning failed, using mock plan:', error);
       retrievalPlan = getMockRetrievalPlan(context.stage, context.userId);
-      auditLog('ERROR', 'Retrieval planning failed, using mock plan', {
-        turnId,
-        sessionId: context.sessionId,
-        stage: context.stage,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
     }
   }
 

@@ -1354,12 +1354,72 @@ export async function getInitialMessage(
       partnerName = invitation?.name || undefined;
     }
 
+    // Check if this session originated from an Inner Thoughts session
+    let innerThoughtsContext: { summary: string; themes: string[]; fullContext?: string } | undefined;
+    if (!isInvitee && isInvitationPhase) {
+      const originInnerThoughts = await prisma.innerWorkSession.findFirst({
+        where: {
+          linkedPartnerSessionId: sessionId,
+          userId: user.id,
+          linkedTrigger: 'suggestion_start',
+        },
+        select: { 
+          summary: true, 
+          theme: true,
+          messages: {
+            orderBy: { timestamp: 'asc' },
+            select: { role: true, content: true }
+          }
+        },
+      });
+
+      if (originInnerThoughts) {
+        // Build a richer context from the messages if available
+        let fullContext = '';
+        if (originInnerThoughts.messages.length > 0) {
+          fullContext = originInnerThoughts.messages
+            .map(m => `${m.role === 'USER' ? 'User' : 'AI'}: ${m.content}`)
+            .join('\n\n');
+        }
+
+        innerThoughtsContext = {
+          summary: originInnerThoughts.summary || '',
+          themes: originInnerThoughts.theme ? [originInnerThoughts.theme] : [],
+          fullContext: fullContext || undefined
+        };
+      }
+    }
+
     // Build the initial message prompt
-    const prompt = buildInitialMessagePrompt(
-      currentStage,
-      { userName, partnerName, isInvitee },
-      isInvitationPhase
-    );
+    let prompt: string;
+    if (!isInvitee && isInvitationPhase && innerThoughtsContext) {
+      // Use the actual invitation crafting prompt with extra context
+      // This allows the AI to propose an invitation in the first message
+      prompt = buildStagePrompt(0, {
+        userName,
+        partnerName,
+        turnCount: 1,
+        emotionalIntensity: 5,
+        contextBundle: {
+          vessel: {
+            emotionalReadings: [],
+            events: [],
+            identifiedNeeds: [],
+            boundaries: [],
+            documents: [],
+          },
+          history: [],
+          memories: [],
+        },
+        innerThoughtsContext,
+      }, { isInvitationPhase: true });
+    } else {
+      prompt = buildInitialMessagePrompt(
+        currentStage,
+        { userName, partnerName, isInvitee, innerThoughtsContext },
+        isInvitationPhase
+      );
+    }
 
     // Generate turnId for this user action - the invitee accessing their session
     const turnId = `${sessionId}-${user.id}-welcome`;
@@ -1368,6 +1428,7 @@ export async function getInitialMessage(
 
     // Get AI response
     let responseContent: string;
+    let extractedInvitationMessage: string | null = null;
     try {
       // AWS Bedrock requires conversations to start with a user message
       const aiResponse = await getSonnetResponse({
@@ -1381,10 +1442,14 @@ export async function getInitialMessage(
 
       if (aiResponse) {
         // Parse the JSON response
-        const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
+        const parsed = extractJsonFromResponse(aiResponse) as Record<string, any>;
         responseContent = typeof parsed.response === 'string'
           ? parsed.response
           : getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
+        
+        if (isInvitationPhase && typeof parsed.invitationMessage === 'string') {
+          extractedInvitationMessage = parsed.invitationMessage;
+        }
       } else {
         // Fallback if AI unavailable
         responseContent = getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
@@ -1392,6 +1457,18 @@ export async function getInitialMessage(
     } catch (error) {
       console.error('[getInitialMessage] AI response error:', error);
       responseContent = getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
+    }
+
+    // If an invitation message was extracted, update the invitation
+    if (isInvitationPhase && extractedInvitationMessage) {
+      console.log(`[getInitialMessage] Extracted invitation draft from initial message: "${extractedInvitationMessage}"`);
+      await prisma.invitation.updateMany({
+        where: { sessionId, invitedById: user.id },
+        data: {
+          invitationMessage: extractedInvitationMessage,
+          messageConfirmed: false
+        },
+      });
     }
 
     // Save the AI message
@@ -1425,6 +1502,7 @@ export async function getInitialMessage(
       isInvitee,
       responseText: responseContent,
       messageId: aiMessage.id,
+      invitationMessage: extractedInvitationMessage,
     });
 
     successResponse(res, {
@@ -1437,6 +1515,7 @@ export async function getInitialMessage(
         stage: aiMessage.stage,
         timestamp: aiMessage.timestamp.toISOString(),
       },
+      invitationMessage: extractedInvitationMessage,
     });
   } catch (error) {
     console.error('[getInitialMessage] Error:', error);
