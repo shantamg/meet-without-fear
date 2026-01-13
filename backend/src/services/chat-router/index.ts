@@ -149,20 +149,24 @@ export async function processMessage(
   });
 
   // Get semantic matches from vector search (if embeddings available)
+  // Skip if we are already in an active session to avoid duplicate embeddings/orphaned logs
+  // (Intent detection can still handle explicit context switching via prompt)
   let semanticMatches: SemanticMatch[] = [];
-  try {
-    const vectorResults = await findRelevantSessions(userId, content);
-    semanticMatches = vectorResults.map((r) => ({
-      sessionId: r.sessionId,
-      partnerName: r.partnerName,
-      similarity: r.similarity,
-    }));
-    if (semanticMatches.length > 0) {
-      console.log('[ChatRouter] Semantic matches:', semanticMatches);
+  if (!activeSession) {
+    try {
+      const vectorResults = await findRelevantSessions(userId, content);
+      semanticMatches = vectorResults.map((r) => ({
+        sessionId: r.sessionId,
+        partnerName: r.partnerName,
+        similarity: r.similarity,
+      }));
+      if (semanticMatches.length > 0) {
+        console.log('[ChatRouter] Semantic matches:', semanticMatches);
+      }
+    } catch (error) {
+      // Vector search failed - continue without it
+      console.warn('[ChatRouter] Vector search failed:', error);
     }
-  } catch (error) {
-    // Vector search failed - continue without it
-    console.warn('[ChatRouter] Vector search failed:', error);
   }
 
   // Detect intent with session context and semantic matches

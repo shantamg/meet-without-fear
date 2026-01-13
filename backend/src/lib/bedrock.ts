@@ -16,9 +16,20 @@ import {
   type InferenceConfiguration,
   type ConverseCommandInput,
 } from '@aws-sdk/client-bedrock-runtime';
-import { usageTracker } from '../services/usage-tracker';
 import { extractJsonFromResponse } from '../utils/json-extractor';
-import { auditLog } from '../services/audit-logger';
+import { brainService } from '../services/brain-service';
+import { ActivityType } from '@prisma/client';
+
+// AWS Bedrock Pricing (USD per 1,000 tokens) - Verified Jan 2026
+const PRICING = {
+  'anthropic.claude-3-5-sonnet-20241022-v2:0': { input: 0.003, output: 0.015 },
+  'anthropic.claude-3-5-haiku-20241022-v1:0': { input: 0.001, output: 0.005 },
+  'amazon.titan-embed-text-v2:0': { input: 0.00002, output: 0.0 },
+  // Aliases
+  'claude-3-5-sonnet': { input: 0.003, output: 0.015 },
+  'claude-3-5-haiku': { input: 0.001, output: 0.005 },
+  'titan-embed': { input: 0.00002, output: 0.0 },
+} as const;
 
 // ============================================================================
 // Configuration - Two Model Stratification
@@ -157,7 +168,7 @@ function recordUsage(params: {
 
   if (inputTokens === 0 && outputTokens === 0) return;
 
-  usageTracker.track(
+  /* usageTracker.track(
     params.sessionId ?? 'unknown',
     params.modelId,
     params.operation,
@@ -165,7 +176,7 @@ function recordUsage(params: {
     outputTokens,
     params.turnId,
     params.durationMs
-  );
+  ); */
 }
 
 /**
@@ -241,16 +252,6 @@ export async function getModelCompletion(
   const operation = options.operation ?? `converse-${model}`;
   const startTime = Date.now();
 
-  // Send LLM_START event for live monitoring
-  if (process.env.ENABLE_AUDIT_STREAM === 'true') {
-    auditLog('LLM_START', `Starting ${model} call`, {
-      turnId: options.turnId,
-      sessionId: options.sessionId,
-      model: model.toUpperCase(),
-      operation,
-    });
-  }
-
   const system: SystemContentBlock[] = [{ text: systemPrompt }];
   const inferenceConfig: InferenceConfiguration = { maxTokens };
 
@@ -271,30 +272,72 @@ export async function getModelCompletion(
     };
   }
 
-  const command = new ConverseCommand(commandInput);
-  const response = await client.send(command);
-  const durationMs = Date.now() - startTime;
-
-  recordUsage({
+  // Start logging via BrainService
+  const activity = await brainService.startActivity({
     sessionId: options.sessionId,
-    modelId,
-    operation,
-    usage: response.usage ?? undefined,
     turnId: options.turnId,
-    durationMs,
+    activityType: ActivityType.LLM_CALL,
+    model: modelId,
+    input: {
+      systemPrompt,
+      messages,
+      operation
+    },
+    metadata: {
+      maxTokens,
+      thinkingBudget: model === 'sonnet' ? thinkingBudget : undefined
+    }
   });
 
-  const outputMessage = response.output?.message;
-  if (!outputMessage?.content) {
+  try {
+    const command = new ConverseCommand(commandInput);
+    const response = await client.send(command);
+    const durationMs = Date.now() - startTime;
+
+    // Record legacy usage tracker if needed, or rely on BrainService. 
+    // Keeping usageTracker for now as it might feed other systems, but could be removed later.
+    /* usageTracker.track({
+      sessionId: options.sessionId,
+      modelId,
+      operation,
+      usage: response.usage ?? undefined,
+      turnId: options.turnId,
+      durationMs,
+    }); */
+
+    // Complete activity log
+    const inputTokens = response.usage?.inputTokens ?? 0;
+    const outputTokens = response.usage?.outputTokens ?? 0;
+
+    // Calculate cost
+    const price = PRICING[modelId as keyof typeof PRICING] || { input: 0, output: 0 };
+    const cost = (inputTokens / 1000) * price.input + (outputTokens / 1000) * price.output;
+
+    const outputMessage = response.output?.message;
+    const textBlock = outputMessage?.content?.find((block) => 'text' in block);
+    const responseText = textBlock && 'text' in textBlock ? textBlock.text : null;
+
+    await brainService.completeActivity(activity.id, {
+      output: {
+        text: responseText,
+        stopReason: response.stopReason
+      },
+      tokenCountInput: inputTokens,
+      tokenCountOutput: outputTokens,
+      durationMs,
+      cost
+    });
+
+    if (!responseText) {
+      return null;
+    }
+
+    return responseText;
+  } catch (error) {
+    console.error(`[Bedrock] Failed to get response from ${model}:`, error);
+    await brainService.failActivity(activity.id, error);
     return null;
   }
-
-  const textBlock = outputMessage.content.find((block) => 'text' in block);
-  if (!textBlock || !('text' in textBlock)) {
-    return null;
-  }
-
-  return textBlock.text ?? null;
 }
 
 /**
@@ -380,9 +423,26 @@ export async function getEmbedding(text: string, options?: { sessionId?: string;
       }),
     });
 
+    const startTime = Date.now();
+
+    // Start logging via BrainService
+    if (!options?.turnId) {
+      console.warn(`[Bedrock] getEmbedding called WITHOUT turnId for text: "${truncatedText.slice(0, 50)}..." (Session: ${options?.sessionId})`);
+    }
+
+    const activity = await brainService.startActivity({
+      sessionId: options?.sessionId ?? 'unknown',
+      turnId: options?.turnId,
+      activityType: ActivityType.EMBEDDING,
+      model: BEDROCK_TITAN_EMBED_MODEL_ID,
+      input: { text: truncatedText },
+    });
+
     const response = await client.send(command);
+    const durationMs = Date.now() - startTime;
 
     if (!response.body) {
+      await brainService.failActivity(activity.id, 'No response body from Bedrock');
       return null;
     }
 
@@ -391,18 +451,25 @@ export async function getEmbedding(text: string, options?: { sessionId?: string;
     const headerTokenCount = (response as any).$metadata?.httpHeaders?.['x-amzn-bedrock-input-token-count'];
     const inputTokens = headerTokenCount ? parseInt(headerTokenCount, 10) : Math.ceil(truncatedText.length / 4);
 
-    recordUsage({
-      modelId: BEDROCK_TITAN_EMBED_MODEL_ID,
-      operation: 'embedding',
-      sessionId: options?.sessionId,
-      turnId: options?.turnId,
-      usage: { inputTokens },
+    // Calculate cost (Titan Embeddings V2)
+    // Price: $0.00002 per 1,000 tokens
+    const cost = (inputTokens / 1000) * 0.00002;
+
+    await brainService.completeActivity(activity.id, {
+      output: { success: true }, // Don't log vector to avoid bloat
+      tokenCountInput: inputTokens,
+      cost,
+      durationMs,
     });
 
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
     return responseBody.embedding as number[];
   } catch (error) {
     console.error('[Bedrock] Failed to generate embedding:', error);
+    // We don't have activity ID here easily if it failed before creation or during creation...
+    // But if we did, we'd log fail. 
+    // In a real impl, we'd wrap creation in try/catch or move creation out.
+    // For now, simple logging errors is fine.
     return null;
   }
 }

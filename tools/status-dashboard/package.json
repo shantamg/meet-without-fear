@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build"
+    "build": "tsc && vite build",
+    "check": "tsc"
   },
   "dependencies": {
     "ably": "^2.16.0",

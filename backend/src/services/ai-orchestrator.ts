@@ -35,7 +35,8 @@ import {
   formatRetrievedContext,
   type RetrievedContext,
 } from './context-retriever';
-import { auditLog } from './audit-logger';
+import { brainService } from '../services/brain-service';
+import { ActivityType } from '@prisma/client';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import {
   decideSurfacing,
@@ -148,17 +149,8 @@ export async function orchestrateResponse(
   const { turnId } = context;
 
   // Broadcast user message as the first event in this turn
-  auditLog('USER', 'User message received', {
-    turnId,
-    sessionId: context.sessionId,
-    userId: context.userId,
-    userName: context.userName,
-    stage: context.stage,
-    turnCount: context.turnCount,
-    userMessage: context.userMessage,
-    messageLength: context.userMessage.length,
-    isFirstTurnInSession: context.isFirstTurnInSession,
-  });
+  // Broadcast user message as the first event in this turn - captured in overarching activity or via specific USER event?
+  // Ideally, the Orchestrator itself can be wrapped in a "Turn" activity, but for now we are removing AuditLog.
 
   // Step 1: Determine memory intent (DECISION LAYER - Time to Decision)
   const memoryIntentContext: MemoryIntentContext = {
@@ -173,16 +165,6 @@ export async function orchestrateResponse(
   const memoryIntent = determineMemoryIntent(memoryIntentContext);
   const decisionTime = Date.now() - decisionStartTime;
   console.log(`[AI Orchestrator] Memory intent: ${memoryIntent.intent} (${memoryIntent.depth}) [Decision: ${decisionTime}ms]`);
-  auditLog('INTENT', 'Memory intent determined', {
-    turnId,
-    sessionId: context.sessionId,
-    intent: memoryIntent.intent,
-    depth: memoryIntent.depth,
-    reason: memoryIntent.reason,
-    userInput: context.userMessage,
-    emotionalIntensity: context.emotionalIntensity,
-    turnCount: context.turnCount,
-  });
 
   if (decisionTime > 1000) {
     console.warn(`[AI Orchestrator] Decision layer took ${decisionTime}ms (>1s) - consider optimization`);
@@ -191,7 +173,7 @@ export async function orchestrateResponse(
   // PARALLEL PRE-PROCESSING: Run Step 0, Step 1.5, Step 2, and Step 2.5 in parallel
   // This significantly reduces latency by avoiding sequential network/DB calls.
   const recentMessagesForMemory = context.conversationHistory.slice(-5);
-  
+
   console.log(`[AI Orchestrator] Starting parallel pre-processing (Intent: ${memoryIntent.intent})...`);
   const parallelStartTime = Date.now();
 
@@ -236,7 +218,7 @@ export async function orchestrateResponse(
 
   // Step 1.5: Process memory detection and validation (logic from original flow)
   let memoryDetectionResult: { suggestion?: MemorySuggestion; validation?: { valid: boolean; reason?: string } } | null = null;
-  
+
   if (detectionResult.hasMemoryIntent && detectionResult.suggestions.length > 0) {
     const suggestion = detectionResult.suggestions[0];
     try {
@@ -247,15 +229,7 @@ export async function orchestrateResponse(
       );
 
       if (validation.valid) {
-        auditLog('MEMORY_DETECTION', 'Memory suggestion detected', {
-          turnId,
-          sessionId: context.sessionId,
-          content: suggestion.suggestedContent,
-          category: suggestion.category,
-          confidence: suggestion.confidence,
-          evidence: suggestion.evidence,
-          validation: 'valid',
-        });
+        // Memory intent valid - logged later or via standard events
 
         const memory = await memoryService.createPendingMemory({
           userId: context.userId,
@@ -278,16 +252,7 @@ export async function orchestrateResponse(
 
         memoryDetectionResult = { suggestion, validation: { valid: true } };
       } else {
-        auditLog('MEMORY_DETECTION', 'Memory suggestion rejected', {
-          turnId,
-          sessionId: context.sessionId,
-          content: suggestion.suggestedContent,
-          category: suggestion.category,
-          confidence: suggestion.confidence,
-          evidence: suggestion.evidence,
-          validation: 'invalid',
-          rejectionReason: validation.reason,
-        });
+        // Memory intent rejected - logged later or via standard events
 
         memoryDetectionResult = { suggestion, validation: { valid: false, reason: validation.reason } };
       }
@@ -298,26 +263,11 @@ export async function orchestrateResponse(
 
   // Log progress for parallel steps
   console.log(`[AI Orchestrator] Context assembled: ${contextBundle.conversationContext.turnCount} turns`);
-  auditLog('RETRIEVAL', 'Context bundle assembled', {
-    turnId,
-    sessionId: context.sessionId,
-    stage: context.stage,
-    turnCount: contextBundle.conversationContext.turnCount,
-  });
+  // Determine intent via BrainService monitoring (optional: log as separate activity or just console)
+  // For now, we'll just log to console as the main response activity will capture the intent in metadata
 
   if (retrievedContext) {
     console.log(`[AI Orchestrator] Context retrieved: ${retrievedContext.retrievalSummary}`);
-    auditLog('RETRIEVAL', 'Context retrieved', {
-      turnId,
-      sessionId: context.sessionId,
-      stage: context.stage,
-      summary: retrievedContext.retrievalSummary,
-      conversationHistoryCount: retrievedContext.conversationHistory.length,
-      crossSessionCount: retrievedContext.relevantFromOtherSessions.length,
-      withinSessionCount: retrievedContext.relevantFromCurrentSession.length,
-      preSessionCount: retrievedContext.preSessionMessages.length,
-      referencesDetected: retrievedContext.detectedReferences.length,
-    });
   }
 
   // Step 2.6: Apply surfacing policy
@@ -344,12 +294,7 @@ export async function orchestrateResponse(
         memoryIntent.intent
       );
       console.log(`[AI Orchestrator] Retrieval planned: ${retrievalPlan.queries.length} queries`);
-      auditLog('RETRIEVAL', 'Retrieval plan created', {
-        turnId,
-        sessionId: context.sessionId,
-        stage: context.stage,
-        queryCount: retrievalPlan.queries.length,
-      });
+      console.log(`[AI Orchestrator] Retrieval planned: ${retrievalPlan.queries.length} queries`);
     } catch (error) {
       console.warn('[AI Orchestrator] Retrieval planning failed, using mock plan:', error);
       retrievalPlan = getMockRetrievalPlan(context.stage, context.userId);
@@ -378,9 +323,9 @@ export async function orchestrateResponse(
       cautionAdvised,
       invalidMemoryRequest: memoryDetectionResult?.validation && !memoryDetectionResult.validation.valid && memoryDetectionResult.suggestion
         ? {
-            requestedContent: memoryDetectionResult.suggestion.suggestedContent,
-            rejectionReason: memoryDetectionResult.validation.reason || 'This request conflicts with our therapeutic approach.',
-          }
+          requestedContent: memoryDetectionResult.suggestion.suggestedContent,
+          rejectionReason: memoryDetectionResult.validation.reason || 'This request conflicts with our therapeutic approach.',
+        }
         : undefined,
     },
     {
@@ -392,17 +337,7 @@ export async function orchestrateResponse(
     }
   );
 
-  // Log the prompt being sent
-  auditLog('PROMPT', 'System prompt assembled', {
-    turnId,
-    sessionId: context.sessionId,
-    stage: context.stage,
-    promptLength: systemPrompt.length,
-    promptPreview: systemPrompt.substring(0, 500) + (systemPrompt.length > 500 ? '...' : ''),
-    fullPrompt: systemPrompt, // Include full prompt for expandable view
-    turnCount: context.turnCount,
-    cautionAdvised,
-  });
+  /* auditLog removed - prompt will be captured in the LLM BrainActivity */
 
   // Step 5: Get response from Sonnet with token budget management
   const formattedContextBundle = formatContextForPrompt(contextBundle);
@@ -433,25 +368,8 @@ export async function orchestrateResponse(
   }
 
   // Log the context that will be inserted into the prompt
-  auditLog('PROMPT', 'Context injected into conversation', {
-    turnId,
-    sessionId: context.sessionId,
-    contextBundlePreview: formattedContextBundle.substring(0, 300) + (formattedContextBundle.length > 300 ? '...' : ''),
-    fullContextBundle: formattedContextBundle,
-    retrievedContextPreview: retrievedContext ? formatRetrievedContext({
-      ...retrievedContext,
-      conversationHistory: [],
-    }).substring(0, 300) + (formatRetrievedContext({
-      ...retrievedContext,
-      conversationHistory: [],
-    }).length > 300 ? '...' : '') : null,
-    fullRetrievedContext: retrievedContext ? formatRetrievedContext({
-      ...retrievedContext,
-      conversationHistory: [],
-    }) : null,
-    conversationHistoryCount: budgetedContext.conversationMessages.length,
-    truncatedCount: budgetedContext.truncated,
-  });
+  // Log the context that will be inserted into the prompt
+  // auditLog removed - context is part of the final prompt which is logged in LLM BrainActivity
 
   const messagesWithContext = buildMessagesWithContext(
     budgetedContext.conversationMessages,
@@ -490,15 +408,6 @@ export async function orchestrateResponse(
 
     const sonnetTime = Date.now() - sonnetStartTime;
     console.log(`[AI Orchestrator] Sonnet response generated in ${sonnetTime}ms [Time to First Byte]`);
-    auditLog('RESPONSE', 'Sonnet response generated', {
-      turnId,
-      sessionId: context.sessionId,
-      durationMs: sonnetTime,
-      stage: context.stage,
-      responseLength: sonnetResponse?.length || 0,
-      responsePreview: sonnetResponse?.substring(0, 300) || '',
-      responseText: sonnetResponse || '',
-    });
 
     if (sonnetResponse) {
       if (expectsStructuredOutput) {
@@ -534,32 +443,13 @@ export async function orchestrateResponse(
     }
   } catch (error) {
     console.error('[AI Orchestrator] Sonnet response failed:', error);
-    auditLog('ERROR', 'Sonnet response failed', {
-      turnId,
-      sessionId: context.sessionId,
-      stage: context.stage,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+    console.error('[AI Orchestrator] Sonnet response failed:', error);
     response = getMockResponse(context);
     usedMock = true;
   }
 
   const totalDuration = Date.now() - startTime;
   console.log(`[AI Orchestrator] Total: ${totalDuration}ms | Decision: ${decisionTime}ms | Mock: ${usedMock}`);
-  auditLog('RESPONSE', 'AI response completed', {
-    turnId,
-    sessionId: context.sessionId,
-    stage: context.stage,
-    usedMock,
-    totalDuration,
-    responseLength: response.length,
-    responseText: sonnetResponse || response, // Use raw full text if available so dashboard can parse structure
-    offerFeelHeardCheck,
-    offerReadyToShare,
-    invitationMessage, // Include actual values, not just booleans
-    proposedEmpathyStatement,
-    analysis,
-  });
 
   // Log latency breakdown for monitoring
   if (totalDuration > 3000) {

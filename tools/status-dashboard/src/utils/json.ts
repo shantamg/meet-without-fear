@@ -83,7 +83,7 @@ export function parseJsonSafely(text: string): any {
   try {
     return JSON.parse(repaired);
   } catch (e) {
-    console.debug('Failed to parse repaired JSON', e);
+    // console.debug('Failed to parse repaired JSON', e);
   }
 
   // 5. Fallback: Last ditch regex effort (for simple cases if logic above failed)

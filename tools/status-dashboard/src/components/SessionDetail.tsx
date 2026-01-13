@@ -2,17 +2,17 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import Ably from 'ably';
-import { AuditLogEntry } from '../types';
+import { BrainActivity, ActivityType } from '../types';
 import { parseJsonSafely } from '../utils/json';
 
 const ablyKey = import.meta.env.VITE_ABLY_KEY;
 
 interface Turn {
   id: string;
-  logs: AuditLogEntry[];
+  activities: BrainActivity[];
   timestamp: string;
-  userMessage?: string;
   userId?: string;
+  userMessageContent?: string;
 }
 
 interface UserInfo {
@@ -23,11 +23,12 @@ interface UserInfo {
 
 function SessionDetail() {
   const { sessionId } = useParams<{ sessionId: string }>();
-  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [activities, setActivities] = useState<BrainActivity[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [totalCost, setTotalCost] = useState(0);
   const [sessionData, setSessionData] = useState<any>(null);
+  const [summary, setSummary] = useState<any>(null);
   const [ablyStatus, setAblyStatus] = useState<'connecting' | 'connected' | 'error' | 'disconnected'>('disconnected');
 
   const leftColumnRef = useRef<HTMLDivElement>(null);
@@ -40,9 +41,9 @@ function SessionDetail() {
     }
 
     const members = sessionData.relationship.members;
-    
+
     // Sort by createdAt to determine initiator (first to join) vs invitee
-    const sortedMembers = [...members].sort((a: any, b: any) => 
+    const sortedMembers = [...members].sort((a: any, b: any) =>
       new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
 
@@ -64,118 +65,138 @@ function SessionDetail() {
     return { initiator, invitee };
   }, [sessionData]);
 
-  // Group logs into turns and associate with users
+  // Group activities into turns
   const turns = React.useMemo(() => {
     const groups: Turn[] = [];
     const turnMap = new Map<string, Turn>();
 
-    logs.forEach(log => {
-      let turnId = log.turnId;
-      if (!turnId && log.data?.sessionId && log.data?.turnCount) {
-        turnId = `${log.data.sessionId}-${log.data.turnCount}`;
+    activities.forEach(activity => {
+      let turnId = activity.turnId;
+      // If no turnId, try to find one in metadata
+      if (!turnId && activity.metadata?.turnId) {
+        turnId = activity.metadata.turnId;
       }
       if (!turnId) {
-        turnId = `orphan-${Math.floor(new Date(log.timestamp).getTime() / 10000)}`;
+        // Fallback for system events or orphans
+        turnId = `orphan-${Math.floor(new Date(activity.createdAt).getTime() / 60000)}`; // Group by minute
       }
 
       if (!turnMap.has(turnId)) {
-        const newTurn: Turn = { id: turnId, logs: [], timestamp: log.timestamp };
+        const newTurn: Turn = {
+          id: turnId,
+          activities: [],
+          timestamp: activity.createdAt
+        };
         turnMap.set(turnId, newTurn);
         groups.push(newTurn);
       }
 
       const turn = turnMap.get(turnId)!;
-      turn.logs.push(log);
+      turn.activities.push(activity);
 
-      // Extract user message and userId if present
-      if (log.section === 'USER') {
-        if (log.data?.userMessage) {
-          turn.userMessage = log.data.userMessage;
-        }
-        if (log.data?.userId) {
-          turn.userId = log.data.userId;
-        }
-      }
-
-      // Also try to extract userId from any log's data (for system events like welcome messages)
-      if (!turn.userId && log.data?.userId) {
-        turn.userId = log.data.userId;
-      }
-    });
-
-    // For turns without userId, try to parse it from the turnId
-    // Format: sessionId-userId-suffix (e.g., sessionId-userId-welcome, sessionId-userId-3)
-    groups.forEach(turn => {
-      if (!turn.userId && turn.id) {
-        const parts = turn.id.split('-');
-        // turnId format: sessionId-userId-suffix
-        // sessionId is typically a cuid (26 chars), userId is also a cuid
-        // So we look for the second cuid-like segment
-        if (parts.length >= 3) {
-          // The userId is the second segment (index 1) if it looks like a cuid
-          const potentialUserId = parts[1];
-          if (potentialUserId && potentialUserId.length > 20) {
-            turn.userId = potentialUserId;
+      // Try to determine userId for the turn
+      if (!turn.userId) {
+        if (activity.metadata?.userId) {
+          turn.userId = activity.metadata.userId;
+        } else if (activity.turnId && activity.turnId.includes('-')) {
+          // Try to extract UUID segment from turnId (session-USERID-suffix)
+          const parts = activity.turnId.split('-');
+          if (parts.length >= 2) {
+            // Check if any part matches user IDs
+            if (users.initiator && activity.turnId.includes(users.initiator.id)) turn.userId = users.initiator.id;
+            else if (users.invitee && activity.turnId.includes(users.invitee.id)) turn.userId = users.invitee.id;
           }
         }
       }
     });
 
-    return groups.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [logs]);
+    // Sort turns by timestamp descending (newest first)
+    const sortedGroups = groups.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-  // Split turns by user - unassigned turns go to initiator column by default
+    // Match messages to turns
+    if (messages.length > 0) {
+      const usedMessageIds = new Set<string>();
+
+      // First pass: Try to assign messages to "Real" turns (with valid IDs)
+      sortedGroups.forEach(turn => {
+        if (turn.id.startsWith('orphan-')) return;
+
+        const turnStart = new Date(turn.timestamp).getTime();
+
+        const candidates = messages.filter(m => {
+          if (usedMessageIds.has(m.id)) return false;
+          const msgTime = new Date(m.timestamp).getTime();
+          return Math.abs(msgTime - turnStart) < 30000;
+        });
+
+        if (candidates.length > 0) {
+          const closest = candidates.reduce((prev, curr) => {
+            const prevDiff = Math.abs(new Date(prev.timestamp).getTime() - turnStart);
+            const currDiff = Math.abs(new Date(curr.timestamp).getTime() - turnStart);
+            return (currDiff < prevDiff) ? curr : prev;
+          });
+          turn.userMessageContent = closest.content;
+          usedMessageIds.add(closest.id);
+        }
+      });
+
+      // Second pass: Assign remaining messages to Orphan turns
+      sortedGroups.forEach(turn => {
+        if (!turn.id.startsWith('orphan-')) return;
+
+        const turnStart = new Date(turn.timestamp).getTime();
+
+        const candidates = messages.filter(m => {
+          if (usedMessageIds.has(m.id)) return false;
+          const msgTime = new Date(m.timestamp).getTime();
+          return Math.abs(msgTime - turnStart) < 30000;
+        });
+
+        if (candidates.length > 0) {
+          const closest = candidates.reduce((prev, curr) => {
+            const prevDiff = Math.abs(new Date(prev.timestamp).getTime() - turnStart);
+            const currDiff = Math.abs(new Date(curr.timestamp).getTime() - turnStart);
+            return (currDiff < prevDiff) ? curr : prev;
+          });
+          turn.userMessageContent = closest.content;
+          usedMessageIds.add(closest.id);
+        }
+      });
+    }
+
+    return sortedGroups;
+  }, [activities, users, messages]);
+
+  // Split turns by user
   const { initiatorTurns, inviteeTurns } = React.useMemo(() => {
-    const initiatorTurns: Turn[] = [];
-    const inviteeTurns: Turn[] = [];
-
-    // Helper for case-insensitive ID comparison
-    const idsMatch = (id1?: string, id2?: string) => {
-      if (!id1 || !id2) return false;
-      return id1.toLowerCase() === id2.toLowerCase();
-    };
+    const iTurns: Turn[] = [];
+    const invTurns: Turn[] = [];
 
     turns.forEach(turn => {
-      if (idsMatch(turn.userId, users.initiator?.id)) {
-        initiatorTurns.push(turn);
-      } else if (idsMatch(turn.userId, users.invitee?.id)) {
-        inviteeTurns.push(turn);
+      if (users.initiator && turn.userId === users.initiator.id) {
+        iTurns.push(turn);
+      } else if (users.invitee && turn.userId === users.invitee.id) {
+        invTurns.push(turn);
       } else {
-        // For turns without userId, try to infer from userName in logs
-        const userLog = turn.logs.find(l => l.section === 'USER');
-        const logUserName = userLog?.data?.userName;
-
-        if (logUserName && users.initiator?.name && logUserName === users.initiator.name) {
-          initiatorTurns.push(turn);
-        } else if (logUserName && users.invitee?.name && logUserName === users.invitee.name) {
-          inviteeTurns.push(turn);
-        } else {
-          // Unassigned turns default to initiator column for now
-          // These will be properly linked once turnId is globally set at request start
-          initiatorTurns.push(turn);
-        }
+        // Unassigned - maybe duplicate to both or put in a specific list?
+        // For now, put in initiator as default column or check if it's system (orphan)
+        iTurns.push(turn);
       }
     });
 
-    return { initiatorTurns, inviteeTurns };
+    return { initiatorTurns: iTurns, inviteeTurns: invTurns };
   }, [turns, users]);
 
-  // Auto-scroll to top when new turns arrive
+
+  // Auto-scroll logic (same as before)
   const prevTurnCountRef = useRef({ initiator: 0, invitee: 0 });
   const isInitialLoadRef = useRef(true);
-
   useEffect(() => {
-    // Skip auto-scroll on initial load
     if (isInitialLoadRef.current) {
-      prevTurnCountRef.current = {
-        initiator: initiatorTurns.length,
-        invitee: inviteeTurns.length,
-      };
+      prevTurnCountRef.current = { initiator: initiatorTurns.length, invitee: inviteeTurns.length };
       isInitialLoadRef.current = false;
       return;
     }
-
-    // Small delay to ensure DOM has updated before scrolling
     const timeoutId = setTimeout(() => {
       if (initiatorTurns.length > prevTurnCountRef.current.initiator) {
         leftColumnRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -183,21 +204,53 @@ function SessionDetail() {
       if (inviteeTurns.length > prevTurnCountRef.current.invitee) {
         rightColumnRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
       }
-
-      prevTurnCountRef.current = {
-        initiator: initiatorTurns.length,
-        invitee: inviteeTurns.length,
-      };
+      prevTurnCountRef.current = { initiator: initiatorTurns.length, invitee: inviteeTurns.length };
     }, 100);
-
     return () => clearTimeout(timeoutId);
   }, [initiatorTurns.length, inviteeTurns.length]);
 
+
+  // Data fetching
+  const fetchActivities = async () => {
+    try {
+      const res = await fetch(`/api/brain/activity/${sessionId}`);
+      if (!res.ok) throw new Error(res.statusText);
+      const json = await res.json();
+      if (json.success) {
+        setActivities(json.data.activities);
+        setMessages(json.data.messages || []);
+        setSummary(json.data.summary);
+        // Also fetch session data if not available
+        if (!sessionData) {
+          // We might need a separate call for session details if not included in activity
+          // But we can infer some things or fetch /api/brain/sessions and find it
+          // For now let's assume we can fetch session info or stick with what we have
+          // Actually the previous implementation fetched /logs which returned { logs, session }
+          // Using /api/brain/sessions is an option, or we can add include to /activity endpoint
+          // Let's call /api/brain/sessions/ID specifically? No valid endpoint yet.
+          // Just fetch all sessions and find one (inefficient but works for now)
+          const sessionsRes = await fetch('/api/brain/sessions');
+          const sessionsJson = await sessionsRes.json();
+          if (sessionsJson.success) {
+            const found = sessionsJson.data.sessions.find((s: any) => s.id === sessionId);
+            if (found) setSessionData(found);
+          }
+        }
+        setError(null);
+      } else {
+        setError('API Error');
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchLogs();
+    fetchActivities();
 
     if (!ablyKey) {
-      console.error('VITE_ABLY_KEY missing');
       setAblyStatus('error');
       return;
     }
@@ -208,15 +261,39 @@ function SessionDetail() {
     client.connection.on('connected', () => setAblyStatus('connected'));
     client.connection.on('disconnected', () => setAblyStatus('disconnected'));
 
-    channel.subscribe('log', (msg) => {
-      const data = msg.data as AuditLogEntry;
-      const logSessionId = data.sessionId || data.data?.sessionId;
-
-      if (logSessionId === sessionId) {
-        setLogs(prev => [...prev, data]);
-        if (data.cost) {
-          setTotalCost(c => c + data.cost!);
+    // Listen for brain-activity events
+    channel.subscribe('brain-activity', (msg) => {
+      const activity = msg.data as BrainActivity;
+      if (activity.sessionId === sessionId) {
+        setActivities(prev => {
+          // Check if update or new
+          const index = prev.findIndex(p => p.id === activity.id);
+          if (index >= 0) {
+            const newArr = [...prev];
+            newArr[index] = activity;
+            return newArr;
+          }
+          return [...prev, activity];
+        });
+        // Update summary roughly
+        if (activity.cost) {
+          setSummary((prev: any) => ({ ...prev, totalCost: (prev?.totalCost || 0) + activity.cost }));
         }
+      }
+    });
+
+    // Listen for new messages
+    channel.subscribe('new-message', (msg) => {
+      const message = msg.data;
+      // Only process USER messages for the main chat view
+      // AI messages will be handled by seeing the response activities, 
+      // or if we want to show them purely from DB, they are not USER messages.
+      if (message.sessionId === sessionId && message.role === 'USER') {
+        setMessages(prev => {
+          // Avoid duplicates
+          if (prev.some(m => m.id === message.id)) return prev;
+          return [...prev, message];
+        });
       }
     });
 
@@ -226,34 +303,9 @@ function SessionDetail() {
     };
   }, [sessionId]);
 
-  const fetchLogs = async () => {
-    try {
-      const res = await fetch(`/api/audit/sessions/${sessionId}/logs`);
-      if (!res.ok) {
-        setError(`HTTP ${res.status}: ${res.statusText}`);
-        return;
-      }
-      const json = await res.json();
-      if (json.success) {
-        setLogs(json.data.logs || []);
-        setTotalCost(json.data.summary?.totalCost || 0);
-        setSessionData(json.data.session);
-        setError(null);
-      } else {
-        setError('API returned success: false');
-      }
-    } catch (err) {
-      console.error('Failed to fetch logs', err);
-      setError(`Failed to connect: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <div className="loading">Loading logs...</div>;
+  if (loading) return <div className="loading">Loading Brain Activity...</div>;
   if (error) return <div className="error">Error: {error}</div>;
 
-  // Check if we have two users
   const hasTwoUsers = users.initiator && users.invitee;
 
   return (
@@ -266,7 +318,8 @@ function SessionDetail() {
           </span>
         </div>
         <div className="total-cost">
-          Total Cost: <FormattedPrice value={totalCost} />
+          Total Cost: <FormattedPrice value={summary?.totalCost} />
+          <span className="token-count" style={{ marginLeft: '8px' }}>({summary?.totalTokens?.toLocaleString()} tokens)</span>
         </div>
       </header>
 
@@ -283,9 +336,7 @@ function SessionDetail() {
               {initiatorTurns.map(turn => (
                 <TurnView key={turn.id} turn={turn} userName={users.initiator?.name || 'User'} />
               ))}
-              {initiatorTurns.length === 0 && (
-                <div className="empty-column">No messages yet</div>
-              )}
+              {initiatorTurns.length === 0 && <div className="empty-column">No activity</div>}
             </div>
           </div>
 
@@ -300,164 +351,101 @@ function SessionDetail() {
               {inviteeTurns.map(turn => (
                 <TurnView key={turn.id} turn={turn} userName={users.invitee?.name || 'User'} />
               ))}
-              {inviteeTurns.length === 0 && (
-                <div className="empty-column">No messages yet</div>
-              )}
+              {inviteeTurns.length === 0 && <div className="empty-column">No activity</div>}
             </div>
           </div>
         </div>
       ) : (
-        // Fallback to single column view if only one user
         <div className="turns-feed">
           {turns.map(turn => (
             <TurnView key={turn.id} turn={turn} userName={users.initiator?.name || 'User'} />
           ))}
-          {turns.length === 0 && logs.length > 0 && (
-            <div className="empty-state">
-              <p>{logs.length} log(s) found but no displayable turns.</p>
-              <p>Sections: {[...new Set(logs.map(l => l.section))].join(', ')}</p>
-            </div>
-          )}
-          {turns.length === 0 && logs.length === 0 && (
-            <div className="empty-state">No activity recorded for this session.</div>
-          )}
         </div>
       )}
-
-      {/* Unassigned turns are now integrated into user columns via turnId linkage */}
     </div>
   );
 }
 
-function TurnView({ turn, userName: _userName }: { turn: Turn, userName: string }) {
-  const userLog = turn.logs.find(l => l.section === 'USER');
-  let otherLogs = turn.logs.filter(l => l !== userLog);
+function TurnView({ turn, userName }: { turn: Turn, userName: string }) {
+  // Sort activities by time
+  const sortedActivities = [...turn.activities].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // Separate out LLM_START and COST logs to pair them
-  const derivedLogs: AuditLogEntry[] = [];
-  const costLogs: AuditLogEntry[] = [];
-  const llmStartLogs: AuditLogEntry[] = [];
+  // Extract high-level summaries
+  const firstActivity = sortedActivities[0];
+  const lastActivity = sortedActivities[sortedActivities.length - 1];
 
-  otherLogs.forEach(log => {
-    if (log.section === 'COST') {
-      costLogs.push(log);
-    } else if (log.section === 'LLM_START') {
-      llmStartLogs.push(log);
-    } else {
-      derivedLogs.push({ ...log, data: { ...log.data } });
-    }
-  });
+  const userMessage = React.useMemo(() => {
+    // 0. Use canonical message from DB if matched
+    if (turn.userMessageContent) return turn.userMessageContent;
 
-  // Match LLM_START with COST by operation
-  const completedOps = new Set(costLogs.map(c => c.data?.operation));
-  const pendingLlmCalls = llmStartLogs.filter(start => !completedOps.has(start.data?.operation));
+    // Helper to check if activity is internal detection/planning
+    const isInternal = (act: BrainActivity) => {
+      const parsedInput = act.input ? deepParse(act.input) : null;
+      const op = act.metadata?.operation || (parsedInput as any)?.operation;
+      return op === 'memory-detection' || op === 'retrieval-planning' || op === 'intent-detection';
+    };
 
-  // Merge LLM_START info into COST log
-  costLogs.forEach(costLog => {
-    const matchingStart = llmStartLogs.find(start => start.data?.operation === costLog.data?.operation);
-    if (matchingStart && !costLog.data?.startTimestamp) {
-      costLog.data = {
-        ...costLog.data,
-        startTimestamp: matchingStart.timestamp,
-      };
-    }
-  });
+    // 1. Try to find the main orchestrator activity
+    const mainActivity = sortedActivities.find(a =>
+      (a.metadata?.operation === 'orchestrator-response') ||
+      (a.metadata?.operation === 'converse-sonnet')
+    );
 
-  // Attach costs to their relevant operation
-  costLogs.forEach(costLog => {
-    const op = costLog.data?.operation;
-    let targetLog: AuditLogEntry | undefined;
+    // 2. Fallback: Find first non-internal activity (e.g. if main failed or not started yet)
+    // 3. Fallback: First activity (if all else fails)
+    const targetActivity = mainActivity || sortedActivities.find(a => !isInternal(a)) || sortedActivities[0];
 
-    if (op === 'orchestrator-response' || op === 'sonnet-response') {
-      targetLog = derivedLogs.find(l => l.section === 'RESPONSE');
-    } else if (op === 'retrieval-planning' || op === 'haiku-json' || op === 'embedding') {
-      targetLog = derivedLogs.find(l => l.section === 'RETRIEVAL');
-      if (!targetLog) targetLog = derivedLogs.find(l => l.section === 'INTENT');
-    } else if (op === 'memory-detection') {
-      targetLog = derivedLogs.find(l => l.section === 'MEMORY_DETECTION');
-    }
+    if (!targetActivity?.input) return null;
 
-    if (targetLog) {
-      if (!targetLog.data) targetLog.data = {};
-      const existing = targetLog.data.costInfo || { totalCost: 0, inputTokens: 0, outputTokens: 0, model: '' };
+    const parsed = deepParse(targetActivity.input);
+    if (parsed.messages && Array.isArray(parsed.messages)) {
+      const userMsgs = parsed.messages.filter((m: any) => m.role === 'user');
+      if (userMsgs.length > 0) {
+        let content = userMsgs[userMsgs.length - 1].content;
+        // Clean up context injection if present to show only user's typed message
+        if (typeof content === 'string') {
+          // Remove [Context ...] blocks
+          content = content.replace(/^\[[\s\S]*?\]\n*/, '');
+          // Remove <system_context> ... </system_context> blocks if they appear at start (heuristic)
+          content = content.replace(/^<[\w_]+>[\s\S]*?<\/[\w_]+>\n*/, '');
+          // Remove "Context:" or "Current State:" prefixes if they exist
+          content = content.replace(/^(Context|Current State|System Info):[\s\S]*?\n\n/, '');
 
-      targetLog.data.costInfo = {
-        model: existing.model ? `${existing.model} + ${costLog.data.model}` : costLog.data.model,
-        inputTokens: (existing.inputTokens || 0) + (costLog.data.inputTokens || 0),
-        outputTokens: (existing.outputTokens || 0) + (costLog.data.outputTokens || 0),
-        totalCost: (existing.totalCost || 0) + (costLog.data.totalCost || 0),
-      };
-    } else {
-      if (derivedLogs.length > 0) {
-        const lastLog = derivedLogs[derivedLogs.length - 1];
-        if (!lastLog.data) lastLog.data = {};
-        lastLog.data.costInfo = {
-          model: costLog.data?.model || 'unknown',
-          inputTokens: costLog.data?.inputTokens,
-          outputTokens: costLog.data?.outputTokens,
-          totalCost: costLog.data?.totalCost
-        };
+          return content.trim();
+        }
       }
     }
-  });
+    return null;
+  }, [sortedActivities, turn.userMessageContent]);
 
-  // Merge redundant RESPONSE logs
-  const responseLogs = derivedLogs.filter(l => l.section === 'RESPONSE');
-  if (responseLogs.length > 1) {
-    const mainResponse = responseLogs.find(l => {
-      const text = l.data?.responseText || l.data?.responsePreview || '';
-      return text.includes('<analysis>') || text.includes('"invitationMessage"');
-    }) || responseLogs.find(l => l.data?.responseText) || responseLogs[0];
-    const otherResponses = responseLogs.filter(l => l !== mainResponse);
+  const assistantResponse = React.useMemo(() => {
+    // Helper to check if activity is internal detection/planning
+    // (Not strictly needed for finding assistant response if we prioritize orchestrator, but good for consistency)
 
-    otherResponses.forEach(other => {
-      if (other.data?.durationMs) mainResponse.data.durationMs = other.data.durationMs;
-      if (other.data?.totalDuration) mainResponse.data.totalDuration = other.data.totalDuration;
+    // 1. Try to find the main orchestrator activity
+    const mainActivity = sortedActivities.find(a =>
+      (a.metadata?.operation === 'orchestrator-response') ||
+      (a.metadata?.operation === 'converse-sonnet')
+    );
 
-      if (other.data?.costInfo) {
-        const existing = mainResponse.data.costInfo || { totalCost: 0, inputTokens: 0, outputTokens: 0, model: '' };
-        const otherCost = other.data.costInfo;
+    // 2. Fallback: Last activity (usually the response)
+    const targetActivity = mainActivity || lastActivity;
 
-        mainResponse.data.costInfo = {
-          model: existing.model || otherCost.model,
-          inputTokens: (existing.inputTokens || 0) + (otherCost.inputTokens || 0),
-          outputTokens: (existing.outputTokens || 0) + (otherCost.outputTokens || 0),
-          totalCost: (existing.totalCost || 0) + (otherCost.totalCost || 0),
-        };
-      }
+    if (!targetActivity?.output) return null;
+    const parsed = deepParse(targetActivity.output);
 
-      const idx = derivedLogs.indexOf(other);
-      if (idx > -1) derivedLogs.splice(idx, 1);
-    });
-  }
+    // Handle structured output (common in our app)
+    if (parsed.text) {
+      if (typeof parsed.text === 'string') return parsed.text;
+      if (typeof parsed.text === 'object' && parsed.text.response) return parsed.text.response;
+    }
 
-  // Show standalone cost logs if nothing to attach them to
-  if (derivedLogs.length === 0 && costLogs.length > 0) {
-    costLogs.forEach(costLog => {
-      derivedLogs.push({ ...costLog, data: { ...costLog.data } });
-    });
-  }
+    // Handle direct properties
+    if (typeof parsed.response === 'string') return parsed.response;
+    if (typeof parsed.content === 'string') return parsed.content;
 
-  // Add pending LLM calls
-  pendingLlmCalls.forEach(startLog => {
-    derivedLogs.push({
-      ...startLog,
-      section: 'LLM_START',
-      data: { ...startLog.data, pending: true },
-    });
-  });
-
-  // Sort by timestamp
-  derivedLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
-  // Determine Turn Title
-  const intentLog = turn.logs.find(l => l.section === 'INTENT');
-  const userMessage = turn.userMessage ||
-    userLog?.message ||
-    intentLog?.data?.userInput ||
-    (derivedLogs.length > 0 ? <span className="placeholder">System Event</span> : null);
-
-  if (!userMessage && derivedLogs.length === 0) return null;
+    return null;
+  }, [sortedActivities, lastActivity]);
 
   return (
     <div className="turn-container">
@@ -466,845 +454,500 @@ function TurnView({ turn, userName: _userName }: { turn: Turn, userName: string 
         <span className="turn-id">Turn {turn.id}</span>
       </div>
 
-      <div className="turn-user-message">
-        <div className="icon">{userLog ? '💬' : '⚙️'}</div>
-        <div className="message-content">
-          {userMessage}
+      {userMessage && (
+        <div className="turn-summary user">
+          <span className="summary-icon">👤</span>
+          <div className="summary-bubble">{userMessage}</div>
         </div>
-      </div>
+      )}
 
       <div className="turn-steps">
-        {derivedLogs.map((log, i) => (
-          <LogStep key={i} log={log} />
+        {sortedActivities.map(activity => (
+          <ActivityItem key={activity.id} activity={activity} />
         ))}
       </div>
+
+      {assistantResponse && (
+        <div className="turn-summary assistant">
+          <div className="summary-bubble">{assistantResponse}</div>
+          <span className="summary-icon">🤖</span>
+        </div>
+      )}
     </div>
   );
 }
 
-function LogStep({ log }: { log: AuditLogEntry }) {
+function ActivityItem({ activity }: { activity: BrainActivity }) {
   const [expanded, setExpanded] = useState(false);
 
-  const renderContent = () => {
-    switch (log.section) {
-      case 'INTENT':
-        return <IntentDetail data={log.data} />;
-      case 'RETRIEVAL':
-        return <RetrievalDetail data={log.data} />;
-      case 'RESPONSE':
-        return <ResponseDetail log={log} />;
-      case 'PROMPT':
-        return <PromptDetail data={log.data} />;
-      case 'COST':
-        return <CostDetail data={log.data} cost={log.cost} />;
-      case 'LLM_START':
-        return <LlmStartDetail data={log.data} />;
-      case 'MEMORY_DETECTION':
-        return <MemoryDetail data={log.data} />;
-      case 'RECONCILER':
-        return <ReconcilerDetail data={log.data} />;
-      default:
-        return <GenericDetail data={log.data || { message: log.message }} />;
+  const getIcon = (type: ActivityType) => {
+    switch (type) {
+      case 'LLM_CALL': return '🤖';
+      case 'EMBEDDING': return '🧠';
+      case 'RETRIEVAL': return '🔍';
+      case 'TOOL_USE': return '🛠️';
+      default: return '📝';
     }
   };
 
+  const isError = activity.status === 'FAILED';
+  const isPending = activity.status === 'PENDING';
+  const isEmbedding = activity.activityType === 'EMBEDDING';
+
+  // Formatters
+  const formatModelName = (model?: string) => {
+    if (!model) return '';
+    if (model.includes('haiku')) return 'Haiku';
+    if (model.includes('sonnet')) return 'Sonnet';
+    if (model.includes('opus')) return 'Opus';
+    if (model.includes('titan')) return 'Titan';
+    return model.split('/').pop() || model;
+  };
+
+  const formatDuration = (ms: number) => {
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(2)}s`;
+  };
+
+  const getIntent = () => {
+    // 0. Special case for Embedding: show text in header
+    if (isEmbedding) {
+      const parsed = deepParse(activity.input);
+      if (typeof parsed === 'string') return parsed;
+      if (parsed?.text) return parsed.text;
+    }
+
+    // 1. Check metadata
+    if (activity.metadata?.operation) return activity.metadata.operation;
+    if (activity.metadata?.action) return activity.metadata.action;
+
+    // 2. Check Input (if object)
+    if (activity.input && typeof activity.input === 'object') {
+      if (activity.input.operation) return activity.input.operation;
+    }
+
+    // 3. Fallback to basic type
+    return activity.activityType;
+  };
+
+  const intent = getIntent();
+  const modelDisplay = formatModelName(activity.model || undefined);
+  const durationDisplay = activity.durationMs > 0 ? formatDuration(activity.durationMs) : '';
+
   return (
-    <div className={`log-step type-${log.section}`}>
+    <div className={`log-step type-${activity.activityType} ${isError ? 'error' : ''} ${isPending ? 'pending' : ''}`}>
       <div className="step-header" onClick={() => setExpanded(!expanded)}>
-        <span className="step-uicon">{getIcon(log.section)}</span>
-        <span className="step-title">{log.section}</span>
-        <span className="step-preview">{getPreview(log)}</span>
-        {log.data?.costInfo && (
+        <span className="step-uicon">{getIcon(activity.activityType)}</span>
+
+        <div className="step-main-info">
+          {isEmbedding ? (
+            <span className="step-title" title={intent || ''}>
+              Embedding: <span style={{ color: '#888', fontWeight: 'normal', marginLeft: '4px' }}>{intent}</span>
+            </span>
+          ) : (
+            <span className="step-title" title={intent || ''}>{intent}</span>
+          )}
+          <div className="step-meta">
+            {modelDisplay && <span className="meta-tag model">{modelDisplay}</span>}
+            {durationDisplay && <span className="meta-tag duration">{durationDisplay}</span>}
+          </div>
+        </div>
+
+        {activity.cost > 0 && (
           <div className="step-cost-preview">
-            <FormattedPrice value={log.data.costInfo.totalCost} />
+            <FormattedPrice value={activity.cost} />
           </div>
         )}
+        <div className={`step-status-icon ${activity.status.toLowerCase()}`} title={activity.status}>
+          {activity.status === 'PENDING' && <span className="spinner">↻</span>}
+          {activity.status === 'COMPLETED' && <span className="icon-success">✓</span>}
+          {activity.status === 'FAILED' && <span className="icon-error">✕</span>}
+        </div>
         <span className="step-toggle">{expanded ? '▼' : '▶'}</span>
       </div>
 
       {expanded && (
         <div className="step-body">
-          {renderContent()}
+          <DetailBlock title="Metadata" data={activity.metadata} defaultOpen={false} />
+          <DetailBlock title="Input" data={activity.input} defaultOpen={isEmbedding} />
+          <DetailBlock title="Output" data={activity.output} defaultOpen={!isEmbedding} />
+          <div className="stats-row" style={{ marginTop: '8px', display: 'flex', gap: '16px', fontSize: '0.85em', color: '#888' }}>
+            <span>Tokens In: {activity.tokenCountInput}</span>
+            <span>Tokens Out: {activity.tokenCountOutput}</span>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// --- Helper Components ---
 
-function formatModelName(model?: string) {
-  if (!model) return '';
-  const lower = model.toLowerCase();
-  if (lower.includes('sonnet')) return 'SONNET';
-  if (lower.includes('haiku')) return 'HAIKU';
-  if (lower.includes('titan')) return 'TITAN';
-  return model.split('/').pop()?.split(':')[0] || model;
+function deepParse(data: any): any {
+  if (typeof data === 'string') {
+    // Attempt robust parsing
+    const parsed = parseJsonSafely(data);
+
+    // If parsing succeeded
+    if (parsed !== null) {
+      // If result is an object/array, recurse to handle nested JSON in values
+      if (typeof parsed === 'object') {
+        return deepParse(parsed);
+      }
+      // If result is a string and different from input (e.g. double encoded), recurse
+      if (typeof parsed === 'string' && parsed !== data) {
+        return deepParse(parsed);
+      }
+      return parsed;
+    }
+    return data;
+  }
+
+  if (Array.isArray(data)) {
+    return data.map(deepParse);
+  }
+
+  if (data !== null && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k, deepParse(v)])
+    );
+  }
+
+  return data;
 }
 
-function FormattedPrice({ value }: { value?: number }) {
-  if (value === undefined || value === null) return <span className="price-component">$0.00</span>;
+function DetailBlock({ title, data, defaultOpen = false }: { title: string, data: any, defaultOpen?: boolean }) {
+  if (!data) return null;
 
-  const str = value.toFixed(5);
-  const match = str.match(/^(\d+\.\d{2})(\d*)$/);
+  // Memoize parsing
+  const cleanData = React.useMemo(() => deepParse(data), [data]);
 
-  if (!match) return <span className="price-component">${str}</span>;
+  // Check for empty (array or object)
+  if (!cleanData) return null;
+  if (Array.isArray(cleanData) && cleanData.length === 0) return null;
+  if (typeof cleanData === 'object' && Object.keys(cleanData).length === 0) return null;
 
-  const [_, main, fraction] = match;
+  const hasMessages = cleanData?.messages && Array.isArray(cleanData.messages) && cleanData.messages.length > 0;
+
+  // Retrieval checks
+  const hasRetrievalInput = cleanData?.searchQueries && Array.isArray(cleanData.searchQueries);
+  const hasRetrievalOutput = Array.isArray(cleanData?.topMatches);
+
+  // Memory check
+  const hasMemoryOutput = (cleanData?.text && cleanData.text.hasMemoryIntent !== undefined) || (cleanData?.hasMemoryIntent !== undefined);
+
+  // Retrieval Planning check
+  const hasRetrievalPlanning = (cleanData?.text && cleanData.text.needsRetrieval !== undefined) || (cleanData?.needsRetrieval !== undefined);
+
+  // Orchestrator Analysis check
+  const hasOrchestratorAnalysis = (cleanData?.text && cleanData.text.analysis !== undefined) || (cleanData?.analysis !== undefined);
+
+  // Reconciler checks
+  const hasReconcilerShareSuggestion = !!(cleanData?.suggestedContent);
+  const hasReconcilerThemes = !!(cleanData?.themes && Array.isArray(cleanData.themes));
+
+  // Intelligent text extraction (only if no specific preview handles it)
+  let textContent: string | null = null;
+
+  if (!hasOrchestratorAnalysis) {
+    if (typeof cleanData?.text === 'string') {
+      textContent = cleanData.text;
+    } else if (typeof cleanData?.text === 'object' && cleanData?.text !== null) {
+      if (typeof cleanData.text.response === 'string') {
+        textContent = cleanData.text.response;
+      } else if (typeof cleanData.text.text === 'string') {
+        textContent = cleanData.text.text;
+      }
+    } else if (typeof cleanData?.response === 'string') {
+      textContent = cleanData.response;
+    } else if (typeof cleanData?.content === 'string') {
+      textContent = cleanData.content;
+    }
+  }
+
+
+  const hasPreview = hasMessages || (textContent !== null && textContent.trim().length > 0) || hasRetrievalInput || hasRetrievalOutput || hasMemoryOutput || hasRetrievalPlanning || hasOrchestratorAnalysis || hasReconcilerShareSuggestion || hasReconcilerThemes;
 
   return (
-    <span className="price-component">
-      <span className="price-main">${main}</span>
-      <span className="price-fraction">{fraction}</span>
-    </span>
+    <details className="detail-section" open={defaultOpen}>
+      <summary className="detail-header-summary">
+        <h4>{title}</h4>
+      </summary>
+
+      <div className="detail-content-wrapper">
+        {hasMessages && (
+          <ChatPreview messages={cleanData.messages} />
+        )}
+
+        {hasRetrievalInput && (
+          <RetrievalInputPreview data={cleanData} />
+        )}
+
+        {hasRetrievalOutput && (
+          <RetrievalOutputPreview data={cleanData} />
+        )}
+
+        {hasRetrievalPlanning && (
+          <RetrievalPlanningPreview data={cleanData} />
+        )}
+
+        {hasMemoryOutput && (
+          <MemoryOutputPreview data={cleanData} />
+        )}
+
+        {hasOrchestratorAnalysis && (
+          <OrchestratorAnalysisPreview data={cleanData} />
+        )}
+
+        {hasReconcilerShareSuggestion && (
+          <ReconcilerShareSuggestionPreview data={cleanData} />
+        )}
+
+        {hasReconcilerThemes && (
+          <ReconcilerThemesPreview data={cleanData} />
+        )}
+
+        {textContent && (
+          <div className="text-preview">{textContent}</div>
+        )}
+
+        {/* Full JSON Fallback */}
+        {hasPreview ? (
+          <details>
+            <summary className="json-summary">Raw JSON</summary>
+            <JsonViewer data={cleanData} />
+          </details>
+        ) : (
+          <JsonViewer data={cleanData} />
+        )}
+      </div>
+    </details>
   );
 }
 
-function DetailWrapper({ children, data, title }: { children: React.ReactNode, data: any, title?: string }) {
-  const [showJson, setShowJson] = useState(false);
-
+function RetrievalInputPreview({ data }: { data: any }) {
   return (
-    <div className="detail-wrapper">
-      <div className="detail-header-row">
-        {title && <h3 className="detail-title">{title}</h3>}
-        {data?.costInfo && (
-          <div className="inline-cost-badge">
-            <span className="model-name">{formatModelName(data.costInfo.model)}</span>
-            <FormattedPrice value={data.costInfo.totalCost} />
+    <div className="retrieval-preview">
+      <div className="preview-label">Queries:</div>
+      <ul className="query-list">
+        {data.searchQueries.map((q: string, i: number) => <li key={i}>{q}</li>)}
+      </ul>
+      {data.referencesDetected && data.referencesDetected.length > 0 && (
+        <>
+          <div className="preview-label" style={{ marginTop: 10 }}>References:</div>
+          <div className="refs-list">
+            {data.referencesDetected.map((ref: any, i: number) => (
+              <div key={i} className="ref-item">
+                <span className="ref-text">"{ref.text}"</span>
+                <span className="ref-meta">{ref.type} • {ref.confidence}</span>
+              </div>
+            ))}
           </div>
-        )}
-      </div>
-
-      <div className="formatted-view">
-        {children}
-      </div>
-
-      <div className="json-toggle-container">
-        <button
-          className="json-toggle-btn"
-          onClick={() => setShowJson(!showJson)}
-        >
-          {showJson ? 'Hide Raw JSON' : 'Show Raw JSON'}
-        </button>
-
-        {showJson && (
-          <div className="raw-json-container">
-            <JsonViewer data={data} />
-          </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
 
-function IntentDetail({ data }: { data: any }) {
-  if (!data) return null;
+function RetrievalOutputPreview({ data }: { data: any }) {
+  const count = (data.crossSessionResultsCount || 0) + (data.withinSessionResultsCount || 0);
+  const matches = data.topMatches || [];
+
+  if (matches.length === 0) {
+    if (count === 0) return <div className="text-preview">No matches found.</div>;
+    return <div className="text-preview">Found {count} results (no top matches returned).</div>;
+  }
 
   return (
-    <DetailWrapper data={data}>
-      <div className="key-value-grid">
-        <div className="kv-item">
-          <span className="kv-label">Intent</span>
-          <span className="kv-value highlight">{data.intent}</span>
-        </div>
-        <div className="kv-item">
-          <span className="kv-label">Depth</span>
-          <span className="kv-value">{data.depth}</span>
-        </div>
-        <div className="kv-item">
-          <span className="kv-label">Intensity</span>
-          <span className="kv-value">{data.emotionalIntensity}/10</span>
-        </div>
-        <div className="kv-item full-width">
-          <span className="kv-label">Reasoning</span>
-          <span className="kv-value text-block">{data.reason}</span>
-        </div>
-        {data.userInput && (
-          <div className="kv-item full-width">
-            <span className="kv-label">Analyzed Input</span>
-            <span className="kv-value text-block dim">{data.userInput}</span>
-          </div>
-        )}
+    <div className="retrieval-preview">
+      <div className="preview-stats">
+        Found {count} results. Top {matches.length}:
       </div>
-    </DetailWrapper>
-  );
+      {matches.map((match: any, i: number) => (
+        <div key={i} className="match-item">
+          <div className="match-score">{(match.score * 100).toFixed(0)}%</div>
+          <div className="match-content">{match.content || match.text || JSON.stringify(match)}</div>
+          <div className="match-meta">{match.source || 'Unknown source'}</div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
-function RetrievalDetail({ data }: { data: any }) {
-  if (!data) return null;
+function RetrievalPlanningPreview({ data }: { data: any }) {
+  const plan = data.text?.needsRetrieval !== undefined ? data.text : data;
+  return (
+    <div className="retrieval-preview">
+      <div className="preview-label">Retrieval Planning</div>
+      <div style={{ margin: '8px 0', color: plan.needsRetrieval ? '#4caf50' : '#888' }}>
+        Needs Retrieval: <strong>{plan.needsRetrieval ? 'YES' : 'NO'}</strong>
+      </div>
+
+      {plan.searchQueries && plan.searchQueries.length > 0 && (
+        <>
+          <div className="preview-label">Planned Queries:</div>
+          <ul className="query-list">
+            {plan.searchQueries.map((q: string, i: number) => <li key={i}>{q}</li>)}
+          </ul>
+        </>
+      )}
+    </div>
+  )
+}
+
+function MemoryOutputPreview({ data }: { data: any }) {
+  const mem = data.text?.hasMemoryIntent !== undefined ? data.text : data;
 
   return (
-    <DetailWrapper data={data}>
-      {data.searchQueries && (
-        <div className="retrieval-section">
-          <strong>Queries:</strong>
+    <div className="retrieval-preview">
+      <div className="preview-label">Memory Analysis</div>
+      <div style={{ margin: '8px 0', color: mem.hasMemoryIntent ? '#4caf50' : '#888' }}>
+        Detected Intent: <strong>{mem.hasMemoryIntent ? 'YES' : 'NO'}</strong>
+      </div>
+
+      {mem.topicContext && (
+        <div style={{ marginBottom: 8, color: '#ccc', fontStyle: 'italic' }}>
+          Context: "{mem.topicContext}"
+        </div>
+      )}
+
+      {mem.suggestions && mem.suggestions.length > 0 ? (
+        <div>
+          <div className="preview-label">Suggestions:</div>
           <ul className="query-list">
-            {data.searchQueries.map((q: string, i: number) => <li key={i}>{q}</li>)}
+            {mem.suggestions.map((s: any, i: number) => (
+              <li key={i}>
+                {typeof s === 'string' ? s : JSON.stringify(s)}
+              </li>
+            ))}
           </ul>
         </div>
-      )}
-
-      {!data.searchQueries && !data.topMatches && !data.summary && (data.turnCount !== undefined || data.stage !== undefined) && (
-        <div className="key-value-grid">
-          {data.stage !== undefined && (
-            <div className="kv-item">
-              <span className="kv-label">Stage</span>
-              <span className="kv-value">{data.stage}</span>
-            </div>
-          )}
-          {data.turnCount !== undefined && (
-            <div className="kv-item">
-              <span className="kv-label">Turn Count</span>
-              <span className="kv-value">{data.turnCount}</span>
-            </div>
-          )}
-          <div className="kv-item full-width">
-            <span className="kv-label">Status</span>
-            <span className="kv-value">Context Bundle Assembled</span>
-          </div>
-        </div>
-      )}
-
-      {(data.topMatches || []).length > 0 && (
-        <div className="retrieval-section">
-          <strong>Matches:</strong>
-          <div className="memory-list">
-            {data.topMatches.map((m: any, i: number) => (
-              <div key={i} className="memory-item">
-                <span className="memory-source">{m.source}</span>
-                <p>{m.content}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {data.summary && (
-        <div className="retrieval-section">
-          <strong>Summary:</strong>
-          <p>{data.summary}</p>
-        </div>
-      )}
-    </DetailWrapper>
-  );
-}
-
-
-function MemoryDetail({ data }: { data: any }) {
-  if (!data) return null;
-
-  const valid = data.validation === 'valid' || data.validation === true;
-
-  return (
-    <DetailWrapper data={data}>
-      <div className="key-value-grid">
-        <div className="kv-item full-width">
-          <span className="kv-label">Suggestion</span>
-          <span className="kv-value text-block highlight">"{data.content}"</span>
-        </div>
-
-        <div className="kv-item">
-          <span className="kv-label">Category</span>
-          <span className="kv-value">{data.category}</span>
-        </div>
-
-        <div className="kv-item">
-          <span className="kv-label">Scope</span>
-          <span className={`kv-value tag ${data.scope === 'global' ? 'scope-global' : 'scope-session'}`}>
-            {data.scope?.toUpperCase()}
-          </span>
-        </div>
-
-        <div className="kv-item">
-          <span className="kv-label">Confidence</span>
-          <span className="kv-value">{data.confidence}</span>
-        </div>
-
-        <div className="kv-item full-width">
-          <span className="kv-label">Evidence</span>
-          <span className="kv-value text-block dim">{data.evidence}</span>
-        </div>
-
-        {data.rejectionReason && (
-          <div className="kv-item full-width validation-error">
-            <span className="kv-label">Rejection Reason</span>
-            <span className="kv-value error-text">{data.rejectionReason}</span>
-          </div>
-        )}
-
-        <div className="kv-item full-width">
-          <span className="kv-label">Status</span>
-          <span className={`kv-value status-badge ${valid ? 'valid' : 'invalid'}`}>
-            {valid ? '✓ Validated' : '✕ Rejected'}
-          </span>
-        </div>
-      </div>
-    </DetailWrapper>
-  );
-}
-
-function ReconcilerDetail({ data }: { data: any }) {
-  if (!data) return null;
-
-  const eventType = data.eventType;
-
-  // Analysis event
-  if (eventType === 'analysis') {
-    const severityColors: Record<string, string> = {
-      none: 'severity-none',
-      minor: 'severity-minor',
-      moderate: 'severity-moderate',
-      significant: 'severity-significant',
-    };
-
-    return (
-      <DetailWrapper data={data} title="Empathy Analysis">
-        <div className="reconciler-detail">
-          <div className="reconciler-header">
-            <span className="reconciler-direction">
-              {data.guesserName} → {data.subjectName}
-            </span>
-          </div>
-
-          {/* Alignment Section */}
-          <div className="reconciler-section">
-            <h4>Alignment</h4>
-            <div className="key-value-grid">
-              <div className="kv-item">
-                <span className="kv-label">Score</span>
-                <span className="kv-value highlight">{data.alignment?.score}%</span>
-              </div>
-              <div className="kv-item full-width">
-                <span className="kv-label">Summary</span>
-                <span className="kv-value text-block">{data.alignment?.summary}</span>
-              </div>
-              {data.alignment?.correctlyIdentified?.length > 0 && (
-                <div className="kv-item full-width">
-                  <span className="kv-label">Correctly Identified</span>
-                  <div className="tag-list">
-                    {data.alignment.correctlyIdentified.map((item: string, i: number) => (
-                      <span key={i} className="tag success">{item}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Gaps Section */}
-          <div className="reconciler-section">
-            <h4>Gaps</h4>
-            <div className="key-value-grid">
-              <div className="kv-item">
-                <span className="kv-label">Severity</span>
-                <span className={`kv-value tag ${severityColors[data.gaps?.severity] || ''}`}>
-                  {data.gaps?.severity?.toUpperCase()}
-                </span>
-              </div>
-              <div className="kv-item full-width">
-                <span className="kv-label">Summary</span>
-                <span className="kv-value text-block">{data.gaps?.summary}</span>
-              </div>
-              {data.gaps?.missedFeelings?.length > 0 && (
-                <div className="kv-item full-width">
-                  <span className="kv-label">Missed Feelings</span>
-                  <div className="tag-list">
-                    {data.gaps.missedFeelings.map((feeling: string, i: number) => (
-                      <span key={i} className="tag warning">{feeling}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {data.gaps?.misattributions?.length > 0 && (
-                <div className="kv-item full-width">
-                  <span className="kv-label">Misattributions</span>
-                  <div className="tag-list">
-                    {data.gaps.misattributions.map((item: string, i: number) => (
-                      <span key={i} className="tag error">{item}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {data.gaps?.mostImportantGap && (
-                <div className="kv-item full-width">
-                  <span className="kv-label">Most Important Gap</span>
-                  <span className="kv-value text-block highlight">{data.gaps.mostImportantGap}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Recommendation Section */}
-          <div className="reconciler-section">
-            <h4>Recommendation</h4>
-            <div className="key-value-grid">
-              <div className="kv-item">
-                <span className="kv-label">Action</span>
-                <span className={`kv-value tag ${data.recommendation?.action === 'PROCEED' ? 'success' : 'warning'}`}>
-                  {data.recommendation?.action}
-                </span>
-              </div>
-              <div className="kv-item full-width">
-                <span className="kv-label">Rationale</span>
-                <span className="kv-value text-block">{data.recommendation?.rationale}</span>
-              </div>
-              {data.recommendation?.sharingWouldHelp && (
-                <div className="kv-item full-width">
-                  <span className="kv-label">Suggested Share Focus</span>
-                  <span className="kv-value text-block dim">{data.recommendation?.suggestedShareFocus}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </DetailWrapper>
-    );
-  }
-
-  // Share suggestion event
-  if (eventType === 'share_suggestion') {
-    return (
-      <DetailWrapper data={data} title="Share Suggestion">
-        <div className="reconciler-detail">
-          <div className="reconciler-header">
-            <span className="reconciler-direction">
-              Suggestion for {data.subjectName} to help {data.guesserName}
-            </span>
-          </div>
-
-          <div className="key-value-grid">
-            <div className="kv-item full-width">
-              <span className="kv-label">Suggested Content</span>
-              <span className="kv-value text-block highlight">"{data.suggestedContent}"</span>
-            </div>
-            <div className="kv-item full-width">
-              <span className="kv-label">Reason</span>
-              <span className="kv-value text-block">{data.reason}</span>
-            </div>
-            {data.gapContext && (
-              <>
-                <div className="kv-item">
-                  <span className="kv-label">Gap Severity</span>
-                  <span className="kv-value tag">{data.gapContext.severity}</span>
-                </div>
-                {data.gapContext.mostImportantGap && (
-                  <div className="kv-item full-width">
-                    <span className="kv-label">Gap Being Addressed</span>
-                    <span className="kv-value text-block dim">{data.gapContext.mostImportantGap}</span>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </DetailWrapper>
-    );
-  }
-
-  // Share response events (accepted, refined, declined)
-  if (eventType === 'share_accepted' || eventType === 'share_refined' || eventType === 'share_declined') {
-    const isDeclined = eventType === 'share_declined';
-    const wasRefined = eventType === 'share_refined';
-
-    return (
-      <DetailWrapper data={data} title={isDeclined ? 'Share Declined' : 'Context Shared'}>
-        <div className="reconciler-detail">
-          <div className="reconciler-header">
-            <span className={`status-badge ${isDeclined ? 'declined' : 'shared'}`}>
-              {isDeclined ? '✕ Declined' : wasRefined ? '✎ Refined & Shared' : '✓ Accepted & Shared'}
-            </span>
-          </div>
-
-          <div className="key-value-grid">
-            <div className="kv-item">
-              <span className="kv-label">Subject</span>
-              <span className="kv-value">{data.subjectName}</span>
-            </div>
-            <div className="kv-item">
-              <span className="kv-label">Guesser</span>
-              <span className="kv-value">{data.guesserName}</span>
-            </div>
-
-            {!isDeclined && (
-              <>
-                <div className="kv-item full-width">
-                  <span className="kv-label">Shared Content</span>
-                  <span className="kv-value text-block highlight">"{data.sharedContent}"</span>
-                </div>
-                {wasRefined && data.originalSuggestion && (
-                  <div className="kv-item full-width">
-                    <span className="kv-label">Original Suggestion</span>
-                    <span className="kv-value text-block dim">"{data.originalSuggestion}"</span>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </DetailWrapper>
-    );
-  }
-
-  // Fallback for unknown reconciler events
-  return (
-    <DetailWrapper data={data}>
-      <div className="generic-preview">
-        <p>Reconciler Event: {eventType}</p>
-      </div>
-    </DetailWrapper>
-  );
-}
-
-function ResponseDetail({ log }: { log: AuditLogEntry }) {
-  const data = log.data || {};
-  let responseText = data.responseText || data.responsePreview || log.message;
-
-  const analysisMatch = responseText.match(/<analysis>([\s\S]*?)<\/analysis>/);
-  let analysis = data.analysis || null;
-  let jsonContent = null;
-
-  if (analysisMatch && !analysis) {
-    analysis = analysisMatch[1].trim();
-    responseText = responseText.replace(analysisMatch[0], '').trim();
-  }
-
-  const parsed = parseJsonSafely(responseText);
-  if (parsed) {
-    jsonContent = parsed;
-    if (!analysis && typeof jsonContent.analysis === 'string') {
-      analysis = jsonContent.analysis;
-    }
-  } else {
-    if (data.invitationMessage || data.proposedEmpathyStatement || data.offerReadyToShare !== undefined) {
-      jsonContent = {
-        response: null,
-        invitationMessage: data.invitationMessage,
-        proposedEmpathyStatement: data.proposedEmpathyStatement,
-        offerReadyToShare: data.offerReadyToShare,
-        offerFeelHeardCheck: data.offerFeelHeardCheck
-      };
-    }
-  }
-
-  return (
-    <DetailWrapper data={data}>
-      {analysis && (
-        <div className="analysis-block">
-          <h4>Analysis</h4>
-          <div className="analysis-text">
-            {analysis.split('\n').map((line: string, i: number) => (
-              <p key={i}>{line}</p>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {jsonContent ? (
-        <div className="response-full">
-          {jsonContent.response && (
-            <div className="assistant-response">
-              {jsonContent.response.split('\n').map((line: string, i: number) => (
-                <p key={i}>{line}</p>
-              ))}
-            </div>
-          )}
-
-          <div className="structured-fields">
-            {jsonContent.invitationMessage && (
-              <div className="structured-card invitation">
-                <h5>Proposed Invitation</h5>
-                <p>"{jsonContent.invitationMessage}"</p>
-              </div>
-            )}
-
-            {jsonContent.proposedEmpathyStatement && (
-              <div className="structured-card empathy">
-                <h5>Empathy Statement</h5>
-                <p>"{jsonContent.proposedEmpathyStatement}"</p>
-              </div>
-            )}
-          </div>
-
-          <div className="status-flags">
-            {jsonContent.offerReadyToShare !== undefined && (
-              <span className={`status-tag ${jsonContent.offerReadyToShare ? 'success' : 'neutral'}`}>
-                {jsonContent.offerReadyToShare ? '✓ Ready to Share' : '○ Not Ready'}
-              </span>
-            )}
-            {jsonContent.offerFeelHeardCheck !== undefined && (
-              <span className={`status-tag ${jsonContent.offerFeelHeardCheck ? 'success' : 'neutral'}`}>
-                {jsonContent.offerFeelHeardCheck ? '✓ Check: Feel Heard' : '○ No Check'}
-              </span>
-            )}
-          </div>
-
-          <div className="raw-json-fallback"></div>
-        </div>
       ) : (
-        <div className="response-full">
-          {responseText.split('\n').map((line: string, i: number) => (
-            <p key={i}>{line}</p>
-          ))}
-        </div>
+        <div style={{ fontSize: '0.85em', color: '#666' }}>No suggestions generated.</div>
       )}
-    </DetailWrapper>
+    </div>
   );
 }
 
-function PromptDetail({ data }: { data: any }) {
-  if (!data) return null;
+function OrchestratorAnalysisPreview({ data }: { data: any }) {
+  // Extract fields from either root or .text property
+  const root = data.text?.analysis !== undefined ? data.text : data;
 
   return (
-    <DetailWrapper data={data}>
-      {data.fullPrompt && (
-        <div className="full-prompt">
-          <h3>System Prompt</h3>
-          <div className="prompt-text">
-            {data.fullPrompt}
+    <div className="retrieval-preview">
+      {/* Response Section */}
+      {root.response && (
+        <div className="assistant-response">
+          <strong>Response</strong>
+          <div style={{ whiteSpace: 'pre-wrap' }}>{root.response}</div>
+        </div>
+      )}
+
+      {/* Analysis Section */}
+      {root.analysis && (
+        <div className="analysis-block">
+          <h4>AI Analysis</h4>
+          <div className="analysis-text" style={{ whiteSpace: 'pre-wrap' }}>
+            {root.analysis}
           </div>
         </div>
       )}
 
-      {data.fullContextBundle && (
-        <div className="context-preview">
-          <h4>Context Bundle</h4>
-          <pre>{data.fullContextBundle}</pre>
-        </div>
-      )}
-
-      {data.fullRetrievedContext && (
-        <div className="context-preview">
-          <h4>Retrieved Context</h4>
-          <pre>{data.fullRetrievedContext}</pre>
-        </div>
-      )}
-    </DetailWrapper>
-  );
-}
-
-function LlmStartDetail({ data }: { data: any }) {
-  const getOperationLabel = (op?: string) => {
-    if (!op) return 'AI Operation';
-    const labels: Record<string, string> = {
-      'stage1-initial-message': 'Welcome Message',
-      'stage1-transition': 'Stage 1→2 Transition',
-      'stage2-transition': 'Stage 2→3 Transition',
-      'chat-router-response': 'Chat Response',
-      'chat-router-welcome': 'Welcome Message',
-      'intent-detection': 'Intent Detection',
-      'orchestrator-response': 'AI Response',
-      'sonnet-response': 'AI Response',
-      'retrieval-planning': 'Memory Planning',
-      'memory-detection': 'Memory Detection',
-      'memory-validation': 'Memory Validation',
-      'haiku-json': 'Quick Analysis',
-    };
-    return labels[op] || op.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  };
-
-  return (
-    <DetailWrapper data={data}>
-      <div className="llm-start-detail">
-        <div className="in-progress-indicator">
-          <span className="spinner">⏳</span>
-          <span className="status-text">In Progress...</span>
-        </div>
-        <div className="key-value-grid">
-          {data?.operation && (
-            <div className="kv-item">
-              <span className="kv-label">Operation</span>
-              <span className="kv-value highlight">{getOperationLabel(data.operation)}</span>
-            </div>
-          )}
-          {data?.model && (
-            <div className="kv-item">
-              <span className="kv-label">Model</span>
-              <span className="kv-value">{formatModelName(data.model)}</span>
-            </div>
-          )}
-        </div>
-      </div>
-    </DetailWrapper>
-  );
-}
-
-function CostDetail({ data, cost }: { data: any, cost?: number }) {
-  const getOperationLabel = (op?: string) => {
-    if (!op) return 'AI Operation';
-    const labels: Record<string, string> = {
-      'stage1-initial-message': 'Welcome Message',
-      'stage1-transition': 'Stage 1→2 Transition',
-      'stage2-transition': 'Stage 2→3 Transition',
-      'chat-router-response': 'Chat Response',
-      'chat-router-welcome': 'Welcome Message',
-      'intent-detection': 'Intent Detection',
-      'people-extraction': 'People Extraction',
-      'orchestrator-response': 'AI Response',
-      'sonnet-response': 'AI Response',
-      'retrieval-planning': 'Memory Planning',
-      'memory-detection': 'Memory Detection',
-      'memory-validation': 'Memory Validation',
-      'inner-work-initial': 'Inner Work Welcome',
-      'inner-work-response': 'Inner Work Response',
-      'inner-work-metadata': 'Inner Work Setup',
-      'inner-thoughts-summary': 'Thoughts Summary',
-      'meditation-script': 'Meditation Script',
-      'gratitude-response': 'Gratitude Response',
-      'pre-session-witnessing': 'Pre-Session Witnessing',
-      'conversation-summary': 'Conversation Summary',
-      'extract-needs': 'Needs Extraction',
-      'common-ground': 'Common Ground Analysis',
-      'haiku-json': 'Quick Analysis',
-      'embedding': 'Text Embedding',
-    };
-    return labels[op] || op.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  };
-
-  return (
-    <DetailWrapper data={data}>
-      <div className="cost-detail">
-        {data?.operation && (
-          <div className="cost-metric full-width">
-            <span className="label">Operation</span>
-            <span className="value highlight">{getOperationLabel(data.operation)}</span>
-          </div>
+      {/* Flags Section */}
+      <div className="status-flags">
+        {root.offerFeelHeardCheck !== undefined && (
+          <span className={`status-tag ${root.offerFeelHeardCheck ? 'success' : 'neutral'}`}>
+            Offer Feel Heard Check: {root.offerFeelHeardCheck ? 'YES' : 'NO'}
+          </span>
         )}
-        {data?.model && (
-          <div className="cost-metric">
-            <span className="label">Model</span>
-            <span className="value">{formatModelName(data.model)}</span>
-          </div>
-        )}
-        <div className="cost-metric">
-          <span className="label">Input Tokens</span>
-          <span className="value">{data?.inputTokens || 0}</span>
-        </div>
-        <div className="cost-metric">
-          <span className="label">Output Tokens</span>
-          <span className="value">{data?.outputTokens || 0}</span>
-        </div>
-        <div className="cost-metric">
-          <span className="label">Total Cost</span>
-          <span className="value cost-highlight">${cost?.toFixed(5) || data?.totalCost?.toFixed(5) || '0.00000'}</span>
-        </div>
-        {data?.durationMs && (
-          <div className="cost-metric">
-            <span className="label">Duration</span>
-            <span className="value">{formatDuration(data.durationMs)}</span>
-          </div>
+        {root.modeDecision && (
+          <span className="status-tag neutral">
+            Mode: {root.modeDecision}
+          </span>
         )}
       </div>
-    </DetailWrapper>
+
+      {/* Show other miscellaneous keys if present */}
+      {Object.keys(root).map(key => {
+        if (['analysis', 'response', 'offerFeelHeardCheck', 'modeDecision'].includes(key)) return null;
+        const val = root[key];
+        if (typeof val === 'object' || Array.isArray(val)) return null; // Skip complex objects for simple list
+        return (
+          <div key={key} style={{ fontSize: '0.85em', color: '#666', marginTop: 4 }}>
+            {key}: {String(val)}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
-function GenericDetail({ data }: { data: any }) {
+function ChatPreview({ messages }: { messages: any[] }) {
   return (
-    <DetailWrapper data={data}>
-      <div className="generic-preview">
-        {data.message && <p>{data.message}</p>}
-      </div>
-    </DetailWrapper>
+    <div className="chat-preview">
+      {messages.map((m: any, i: number) => (
+        <div key={i} className={`chat-message role-${m.role}`}>
+          <span className="msg-role">{m.role}:</span>
+          <span className="msg-content">{typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
 function JsonViewer({ data }: { data: any }) {
+  if (typeof data !== 'object' || data === null) {
+    return <div className="raw-text">{String(data)}</div>;
+  }
   return (
-    <pre className="json-view">
+    <pre className="json-block">
       {JSON.stringify(data, null, 2)}
     </pre>
   );
 }
 
-function getIcon(section: string) {
-  switch (section) {
-    case 'INTENT': return '🧠';
-    case 'RETRIEVAL': return '🔍';
-    case 'RESPONSE': return '🤖';
-    case 'COST': return '💰';
-    case 'LLM_START': return '⏳';
-    case 'MEMORY_DETECTION': return '📝';
-    case 'RECONCILER': return '⚖️';
-    default: return '📝';
-  }
+function FormattedPrice({ value }: { value?: number }) {
+  if (value === undefined || value === null) return <span className="price-component">$0.00</span>;
+
+  // Format to 5 decimal places
+  const str = value.toFixed(5);
+  // Split into primary (upto 2 decimals) and secondary (rest) parts
+  const [intPart, decPart] = str.split('.');
+  const primaryDec = decPart ? decPart.substring(0, 2) : '00';
+  const secondaryDec = decPart ? decPart.substring(2) : '';
+
+  return (
+    <span className="price-component" title={`$${str}`}>
+      ${intPart}.{primaryDec}
+      <span style={{ color: '#888' }}>{secondaryDec}</span>
+    </span>
+  );
 }
 
-function getPreview(log: AuditLogEntry) {
-  if (log.section === 'INTENT') return log.data?.reason || log.message;
-  if (log.section === 'LLM_START') {
-    const op = log.data?.operation;
-    const opLabels: Record<string, string> = {
-      'stage1-initial-message': 'Welcome',
-      'stage1-transition': 'Stage 1→2',
-      'stage2-transition': 'Stage 2→3',
-      'chat-router-response': 'Chat',
-      'orchestrator-response': 'Response',
-      'sonnet-response': 'Response',
-      'retrieval-planning': 'Memory Plan',
-      'memory-detection': 'Memory',
-      'haiku-json': 'Analysis',
-      'reconciler-analysis': 'Reconciler',
-      'reconciler-share-suggestion': 'Share Suggestion',
-      'reconciler-share-offer': 'Share Offer',
-      'reconciler-quote-selection': 'Quote Selection',
-      'reconciler-summary': 'Reconciler Summary',
-      'reconciler-extract-themes': 'Theme Extraction',
-    };
-    const label = op ? (opLabels[op] || op) : 'AI Call';
-    const model = formatModelName(log.data?.model);
-    return `${model ? model + ' · ' : ''}${label} · Running...`;
-  }
-  if (log.section === 'COST') {
-    const op = log.data?.operation;
-    const opLabels: Record<string, string> = {
-      'stage1-initial-message': 'Welcome',
-      'stage1-transition': 'Stage 1→2',
-      'stage2-transition': 'Stage 2→3',
-      'chat-router-response': 'Chat',
-      'chat-router-welcome': 'Welcome',
-      'intent-detection': 'Intent',
-      'orchestrator-response': 'Response',
-      'sonnet-response': 'Response',
-      'retrieval-planning': 'Memory Plan',
-      'memory-detection': 'Memory',
-      'memory-validation': 'Validation',
-      'inner-work-initial': 'Inner Work',
-      'inner-work-response': 'Inner Work',
-      'meditation-script': 'Meditation',
-      'gratitude-response': 'Gratitude',
-      'haiku-json': 'Analysis',
-      'embedding': 'Embed',
-      'reconciler-analysis': 'Reconciler',
-      'reconciler-share-suggestion': 'Share Suggestion',
-      'reconciler-share-offer': 'Share Offer',
-      'reconciler-quote-selection': 'Quote Selection',
-      'reconciler-summary': 'Reconciler Summary',
-      'reconciler-extract-themes': 'Theme Extraction',
-    };
-    const label = op ? (opLabels[op] || op) : 'AI Call';
-    const duration = log.data?.durationMs ? ` · ${formatDuration(log.data.durationMs)}` : '';
-    return `${label} · $${log.cost?.toFixed(4) || log.data?.totalCost?.toFixed(4) || '0.00'}${duration}`;
-  }
-  if (log.section === 'RECONCILER') {
-    const eventType = log.data?.eventType;
-    const eventLabels: Record<string, string> = {
-      'analysis': 'Empathy Analysis',
-      'share_suggestion': 'Share Suggestion',
-      'share_accepted': 'Shared',
-      'share_refined': 'Refined & Shared',
-      'share_declined': 'Declined',
-    };
-    const label = eventType ? (eventLabels[eventType] || eventType) : 'Event';
-    const score = log.data?.alignment?.score ? ` · ${log.data.alignment.score}%` : '';
-    const severity = log.data?.gaps?.severity ? ` · ${log.data.gaps.severity}` : '';
-    return `${label}${score}${severity}`;
-  }
-  return log.message.substring(0, 50) + (log.message.length > 50 ? '...' : '');
+function ReconcilerShareSuggestionPreview({ data }: { data: any }) {
+  return (
+    <div className="structured-card invitation">
+      <h5>Share Suggestion</h5>
+      <p style={{ fontStyle: 'normal', color: '#fff', marginBottom: '0.5rem' }}>"{data.suggestedContent}"</p>
+      <div style={{ fontSize: '0.9em', color: '#c084fc', borderTop: '1px solid rgba(192, 132, 252, 0.2)', paddingTop: '0.5rem', marginTop: '0.5rem' }}>
+        <strong style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Reason:</strong> {data.reason}
+      </div>
+    </div>
+  );
+}
+
+function ReconcilerThemesPreview({ data }: { data: any }) {
+  return (
+    <div className="structured-card empathy">
+      <h5>Extracted Themes</h5>
+      <div className="status-flags" style={{ marginTop: 0 }}>
+        {data.themes.map((theme: string, i: number) => (
+          <span key={i} className="status-tag neutral" style={{ background: 'rgba(236, 72, 153, 0.1)', borderColor: 'rgba(236, 72, 153, 0.2)', color: '#fbcfe8' }}>
+            {theme}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default SessionDetail;
