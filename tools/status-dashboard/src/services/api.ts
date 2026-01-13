@@ -33,12 +33,15 @@ export const api = {
   /**
    * Fetches all sessions.
    */
-  async getSessions(): Promise<{ sessions: Session[] }> {
-    const res = await fetch('/api/brain/sessions');
+  async getSessions(cursor?: string): Promise<{ sessions: Session[]; nextCursor?: string | null }> {
+    const params = new URLSearchParams();
+    if (cursor) params.append('cursor', cursor);
+
+    const res = await fetch(`/api/brain/sessions?${params.toString()}`);
     if (!res.ok) {
       throw new Error(`Failed to fetch sessions: ${res.statusText}`);
     }
-    const json: ApiResponse<SessionsResponse> = await res.json();
+    const json: ApiResponse<SessionsResponse & { nextCursor?: string | null }> = await res.json();
     if (!json.success) {
       throw new Error(json.error || 'Failed to load sessions');
     }

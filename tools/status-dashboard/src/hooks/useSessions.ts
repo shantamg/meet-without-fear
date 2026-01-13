@@ -6,24 +6,33 @@ import { useAblyConnection } from './useAblyConnection';
 interface UseSessionsResult {
   sessions: Session[];
   loading: boolean;
+  loadingMore: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  loadMore: () => Promise<void>;
+  hasMore: boolean;
   connectionStatus: 'connecting' | 'connected' | 'error' | 'disconnected';
 }
 
 /**
- * Hook for fetching and managing sessions list with real-time updates.
+ * Hook for fetching and managing sessions list with real-time updates and infinite scroll.
  */
 export function useSessions(): UseSessionsResult {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
 
+  // Initial fetch
   const fetchSessions = useCallback(async () => {
     try {
       setLoading(true);
-      const { sessions } = await api.getSessions();
-      setSessions(sessions);
+      const data = await api.getSessions();
+      setSessions(data.sessions);
+      setNextCursor(data.nextCursor || null);
+      setHasMore(!!data.nextCursor);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not connect to backend');
@@ -33,9 +42,37 @@ export function useSessions(): UseSessionsResult {
     }
   }, []);
 
+  // Load more pages
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !nextCursor) return;
+
+    try {
+      setLoadingMore(true);
+      const data = await api.getSessions(nextCursor);
+
+      setSessions(prev => {
+        // Prevent duplicates
+        const existingIds = new Set(prev.map(s => s.id));
+        const newSessions = data.sessions.filter(s => !existingIds.has(s.id));
+        return [...prev, ...newSessions];
+      });
+
+      setNextCursor(data.nextCursor || null);
+      setHasMore(!!data.nextCursor);
+    } catch (err) {
+      console.error('Failed to load more sessions:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, nextCursor]);
+
   // Set up Ably connection with session-created callback
   const { status: connectionStatus } = useAblyConnection({
-    onSessionCreated: fetchSessions,
+    onSessionCreated: async () => {
+      // For updates, we just re-fetch the first page to get the new item
+      // A better approach might be to prepend the new session if we had the data
+      fetchSessions();
+    },
   });
 
   useEffect(() => {
@@ -45,8 +82,11 @@ export function useSessions(): UseSessionsResult {
   return {
     sessions,
     loading,
+    loadingMore,
     error,
     refetch: fetchSessions,
+    loadMore,
+    hasMore,
     connectionStatus,
   };
 }

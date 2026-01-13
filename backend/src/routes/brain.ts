@@ -60,9 +60,19 @@ router.get('/activity/:sessionId', async (req, res) => {
 // Get sessions list (replacement for audit/sessions)
 router.get('/sessions', async (req, res) => {
   try {
+    const cursor = req.query.cursor as string | undefined;
+    const limit = parseInt(req.query.limit as string || '20', 10);
+    const fetchLimit = limit + 1; // Fetch one extra to detect next page
+
+    // Common where clause for cursor pagination
+    const whereClause = cursor
+      ? { updatedAt: { lt: new Date(cursor) } }
+      : {};
+
     // 1. Fetch Partner Sessions
     const partnerSessions = await prisma.session.findMany({
-      take: 50,
+      take: fetchLimit,
+      where: whereClause,
       orderBy: { updatedAt: 'desc' },
       include: {
         relationship: {
@@ -75,7 +85,8 @@ router.get('/sessions', async (req, res) => {
 
     // 2. Fetch Inner Work Sessions
     const innerWorkSessions = await prisma.innerWorkSession.findMany({
-      take: 50,
+      take: fetchLimit,
+      where: whereClause,
       orderBy: { updatedAt: 'desc' },
       include: {
         user: true // Include user for display name if needed
@@ -87,40 +98,50 @@ router.get('/sessions', async (req, res) => {
     const innerSessionIds = innerWorkSessions.map(s => s.id);
     const allSessionIds = [...partnerSessionIds, ...innerSessionIds];
 
-    const stats = await prisma.brainActivity.groupBy({
-      by: ['sessionId'],
-      _sum: {
-        cost: true,
-        tokenCountInput: true,
-        tokenCountOutput: true,
-      },
-      _count: {
-        id: true,
-      },
-      where: {
-        sessionId: { in: allSessionIds }
-      }
-    });
+    // Only fetch stats if we have sessions
+    let stats: any[] = [];
+    if (allSessionIds.length > 0) {
+      stats = await prisma.brainActivity.groupBy({
+        by: ['sessionId'],
+        _sum: {
+          cost: true,
+          tokenCountInput: true,
+          tokenCountOutput: true,
+        },
+        _count: {
+          id: true,
+        },
+        where: {
+          sessionId: { in: allSessionIds }
+        }
+      });
+    }
 
     // 4. Estimate user turns (Partner Sessions)
-    const partnerTurnCounts = await prisma.message.groupBy({
-      by: ['sessionId'],
-      _count: { id: true },
-      where: {
-        sessionId: { in: partnerSessionIds },
-        role: 'USER'
-      }
-    });
+    let partnerTurnCounts: any[] = [];
+    if (partnerSessionIds.length > 0) {
+      partnerTurnCounts = await prisma.message.groupBy({
+        by: ['sessionId'],
+        _count: { id: true },
+        where: {
+          sessionId: { in: partnerSessionIds },
+          role: 'USER'
+        }
+      });
+    }
 
     // 5. Estimate user turns (Inner Work Sessions)
-    const innerTurnCounts = await prisma.innerWorkMessage.groupBy({
-      by: ['sessionId'],
-      _count: { id: true },
-      where: {
-        sessionId: { in: innerSessionIds },
-        role: 'USER'
-      }
-    });
+    let innerTurnCounts: any[] = [];
+    if (innerSessionIds.length > 0) {
+      innerTurnCounts = await prisma.innerWorkMessage.groupBy({
+        by: ['sessionId'],
+        _count: { id: true },
+        where: {
+          sessionId: { in: innerSessionIds },
+          role: 'USER'
+        }
+      });
+    }
 
     // 6. Map and Merge
     const mappedPartnerSessions = partnerSessions.map(session => {
@@ -167,11 +188,25 @@ router.get('/sessions', async (req, res) => {
     });
 
     // Combine and sort by updatedAt desc
-    const allSessions = [...mappedPartnerSessions, ...mappedInnerSessions]
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-      .slice(0, 50); // Limit total return to 50
+    let allSessions = [...mappedPartnerSessions, ...mappedInnerSessions]
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
-    return successResponse(res, { sessions: allSessions });
+    // Determine next cursor (NOTE: complex since we merge two sources)
+    // We fetched limited from EACH source, so we have potentially 2*limit items
+    // We take top limit items
+    const hasNextPage = allSessions.length > limit;
+    if (hasNextPage) {
+      allSessions = allSessions.slice(0, limit);
+    }
+
+    const nextCursor = hasNextPage && allSessions.length > 0
+      ? allSessions[allSessions.length - 1].updatedAt.toISOString()
+      : null;
+
+    return successResponse(res, {
+      sessions: allSessions,
+      nextCursor
+    });
   } catch (error) {
     console.error('[BrainRoutes] Failed to fetch sessions:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch sessions', 500);
