@@ -583,12 +583,14 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
 
   const startTime = Date.now();
 
-  // For Inner Thoughts, use higher threshold since we skip Haiku gating
-  const innerThoughtsThreshold = 0.75;
+
 
   // Use memory intent to override thresholds and limits if provided
   const effectiveThreshold = memoryIntent?.threshold ?? similarityThreshold;
   const effectiveMaxCrossSession = memoryIntent?.maxCrossSession ?? maxCrossSessionMessages;
+
+  // For Inner Thoughts, use effective threshold (was hardcoded 0.75)
+  const innerThoughtsThreshold = effectiveThreshold;
 
   // Fetch user preferences if not provided
   let effectiveUserPrefs = userPreferences;

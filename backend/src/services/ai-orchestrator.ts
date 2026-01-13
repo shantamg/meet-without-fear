@@ -186,9 +186,9 @@ export async function orchestrateResponse(
       currentSessionId: context.sessionId,
       turnId,
       includePreSession: true,
-      maxCrossSessionMessages: memoryIntent.maxCrossSession,
-      similarityThreshold: memoryIntent.threshold,
-      memoryIntent,
+      maxCrossSessionMessages: 10,
+      similarityThreshold: 0.4, // Lowered for better recall (0.51 was borderline)
+      includeInnerThoughts: true,
       skipDetection: true, // Detection moved to fire-and-forget (partner-session-classifier.ts)
     }).catch((err: Error) => {
       console.warn('[AI Orchestrator] Context retrieval failed (parallel):', err);

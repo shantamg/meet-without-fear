@@ -360,6 +360,24 @@ export const createInnerWorkSession = asyncHandler(
       });
 
       // Build prompt for responding to user's message (not a greeting prompt)
+      // Universal Retrieval for Initial Message
+      const retrievedContext = await retrieveContext({
+        userId: user.id,
+        currentMessage: initialMessage,
+        currentSessionId: session.id,
+        turnId,
+        includeInnerThoughts: true,
+        excludeInnerThoughtsSessionId: session.id,
+        linkedPartnerSessionId: linkedPartnerSessionId,
+        skipDetection: true,
+        maxCrossSessionMessages: 10,
+        similarityThreshold: 0.4,
+        includePreSession: false,
+      }).catch((err) => {
+        console.warn('[Inner Work] Initial retrieval failed:', err);
+        return null;
+      });
+
       let prompt: string;
       if (linkedPartnerSessionId) {
         const linkedContext = await fetchLinkedPartnerSessionContext(user.id, linkedPartnerSessionId);
@@ -385,10 +403,29 @@ export const createInnerWorkSession = asyncHandler(
         });
       }
 
+      // Inject context if found
+      let messagesForLLM = [{ role: 'user' as const, content: initialMessage }];
+
+      if (retrievedContext && retrievedContext.relevantFromOtherSessions.length > 0) {
+        const formattedContext = formatRetrievedContext({
+          ...retrievedContext,
+          conversationHistory: [],
+          preSessionMessages: [],
+        });
+
+        if (formattedContext.trim()) {
+          console.log(`[Inner Work] Injecting ${retrievedContext.relevantFromOtherSessions.length} retrieved messages into initial context`);
+          messagesForLLM = [{
+            role: 'user' as const,
+            content: `[Retrieved context:\n${formattedContext}]\n\n${initialMessage}`
+          }];
+        }
+      }
+
       const fallbackResponse = "I hear you. Tell me more about what you're experiencing.";
       const aiResponse = await getCompletion({
         systemPrompt: prompt,
-        messages: [{ role: 'user', content: initialMessage }],
+        messages: messagesForLLM,
         maxTokens: 1024,
         sessionId: session.id,
         turnId,
@@ -681,15 +718,15 @@ export const sendInnerWorkMessage = asyncHandler(
       // Skip retrieval on first message (no context to search against)
       totalTurnCount >= 2
         ? retrieveContext({
-            userId: user.id,
-            currentMessage: content,
-            turnId,
-            includeInnerThoughts: true, // Search both partner sessions AND inner thoughts
-            excludeInnerThoughtsSessionId: sessionId, // Don't include current session
-            linkedPartnerSessionId: session.linkedPartnerSessionId || undefined, // Boost linked session
-            skipDetection: true, // Always search - no Haiku gating for Inner Thoughts
-            includePreSession: false,
-          })
+          userId: user.id,
+          currentMessage: content,
+          turnId,
+          includeInnerThoughts: true, // Search both partner sessions AND inner thoughts
+          excludeInnerThoughtsSessionId: sessionId, // Don't include current session
+          linkedPartnerSessionId: session.linkedPartnerSessionId || undefined, // Boost linked session
+          skipDetection: true, // Always search - no Haiku gating for Inner Thoughts
+          includePreSession: false,
+        })
         : Promise.resolve(null),
     ]);
 
