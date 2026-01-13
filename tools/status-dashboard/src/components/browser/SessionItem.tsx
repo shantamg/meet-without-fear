@@ -18,12 +18,16 @@ export function SessionItem({ session }: SessionItemProps) {
         <span className="session-time">{formatDateTime(session.updatedAt)}</span>
       </div>
       <div className="session-members">
-        {session.relationship.members.map((m, i) => (
-          <span key={m.id}>
-            {i > 0 && ' & '}
-            <span className="member-name">{m.user.firstName || m.user.email}</span>
-          </span>
-        ))}
+        {session.relationship ? (
+          session.relationship.members.map((m, i) => (
+            <span key={m.id}>
+              {i > 0 && ' & '}
+              <span className="member-name">{m.user.firstName || m.user.email}</span>
+            </span>
+          ))
+        ) : (
+          <span className="member-name">{session.title || session.user?.firstName || 'Inner Thoughts'}</span>
+        )}
       </div>
       {session.stats && (
         <div className="session-stats">

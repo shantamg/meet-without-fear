@@ -15,12 +15,27 @@ router.get('/activity/:sessionId', async (req, res) => {
       orderBy: { createdAt: 'asc' },
     });
 
-    // Fetch canonical User messages for clean display
-    const messages = await prisma.message.findMany({
+    // Try fetching as partner session messages first
+    let messages = await prisma.message.findMany({
       where: { sessionId, role: 'USER' },
       orderBy: { timestamp: 'asc' },
       select: { id: true, content: true, timestamp: true, senderId: true }
     });
+
+    // If no messages found, it might be an Inner Work session
+    if (messages.length === 0) {
+      const innerMessages = await prisma.innerWorkMessage.findMany({
+        where: { sessionId, role: 'USER' },
+        orderBy: { timestamp: 'asc' },
+        select: { id: true, content: true, timestamp: true }
+      });
+
+      // Map to same structure (senderId is not needed for Inner Work as it's implied)
+      messages = innerMessages.map(m => ({
+        ...m,
+        senderId: null
+      }));
+    }
 
     // Calculate summary stats
     const totalCost = activities.reduce((sum: number, a: any) => sum + (a.cost || 0), 0);
@@ -45,7 +60,8 @@ router.get('/activity/:sessionId', async (req, res) => {
 // Get sessions list (replacement for audit/sessions)
 router.get('/sessions', async (req, res) => {
   try {
-    const sessions = await prisma.session.findMany({
+    // 1. Fetch Partner Sessions
+    const partnerSessions = await prisma.session.findMany({
       take: 50,
       orderBy: { updatedAt: 'desc' },
       include: {
@@ -57,8 +73,20 @@ router.get('/sessions', async (req, res) => {
       }
     });
 
-    // Aggregate stats for these sessions
-    const sessionIds = sessions.map(s => s.id);
+    // 2. Fetch Inner Work Sessions
+    const innerWorkSessions = await prisma.innerWorkSession.findMany({
+      take: 50,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        user: true // Include user for display name if needed
+      }
+    });
+
+    // 3. Aggregate stats for ALL sessions
+    const partnerSessionIds = partnerSessions.map(s => s.id);
+    const innerSessionIds = innerWorkSessions.map(s => s.id);
+    const allSessionIds = [...partnerSessionIds, ...innerSessionIds];
+
     const stats = await prisma.brainActivity.groupBy({
       by: ['sessionId'],
       _sum: {
@@ -70,27 +98,43 @@ router.get('/sessions', async (req, res) => {
         id: true,
       },
       where: {
-        sessionId: { in: sessionIds }
+        sessionId: { in: allSessionIds }
       }
     });
 
-    // Estimate user turns from Messages
-    const turnCounts = await prisma.message.groupBy({
+    // 4. Estimate user turns (Partner Sessions)
+    const partnerTurnCounts = await prisma.message.groupBy({
       by: ['sessionId'],
-      _count: {
-        id: true
-      },
+      _count: { id: true },
       where: {
-        sessionId: { in: sessionIds },
+        sessionId: { in: partnerSessionIds },
         role: 'USER'
       }
     });
 
-    const sessionsWithStats = sessions.map(session => {
+    // 5. Estimate user turns (Inner Work Sessions)
+    const innerTurnCounts = await prisma.innerWorkMessage.groupBy({
+      by: ['sessionId'],
+      _count: { id: true },
+      where: {
+        sessionId: { in: innerSessionIds },
+        role: 'USER'
+      }
+    });
+
+    // 6. Map and Merge
+    const mappedPartnerSessions = partnerSessions.map(session => {
       const stat = stats.find(s => s.sessionId === session.id);
-      const turns = turnCounts.find(t => t.sessionId === session.id);
+      const turns = partnerTurnCounts.find(t => t.sessionId === session.id);
       return {
-        ...session,
+        id: session.id,
+        type: 'PARTNER',
+        status: session.status,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        // UI specific fields
+        title: null, // Partner sessions use relationship members
+        relationship: session.relationship,
         stats: {
           totalCost: stat?._sum.cost || 0,
           totalTokens: (stat?._sum.tokenCountInput || 0) + (stat?._sum.tokenCountOutput || 0),
@@ -100,7 +144,34 @@ router.get('/sessions', async (req, res) => {
       };
     });
 
-    return successResponse(res, { sessions: sessionsWithStats });
+    const mappedInnerSessions = innerWorkSessions.map(session => {
+      const stat = stats.find(s => s.sessionId === session.id);
+      const turns = innerTurnCounts.find(t => t.sessionId === session.id);
+      return {
+        id: session.id,
+        type: 'INNER_WORK',
+        status: session.status,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        // UI specific fields
+        title: session.title || 'Untitled Session',
+        relationship: null, // No relationship for inner work
+        user: session.user,
+        stats: {
+          totalCost: stat?._sum.cost || 0,
+          totalTokens: (stat?._sum.tokenCountInput || 0) + (stat?._sum.tokenCountOutput || 0),
+          activityCount: stat?._count.id || 0,
+          turnCount: turns?._count.id || 0
+        }
+      };
+    });
+
+    // Combine and sort by updatedAt desc
+    const allSessions = [...mappedPartnerSessions, ...mappedInnerSessions]
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .slice(0, 50); // Limit total return to 50
+
+    return successResponse(res, { sessions: allSessions });
   } catch (error) {
     console.error('[BrainRoutes] Failed to fetch sessions:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch sessions', 500);

@@ -1,19 +1,23 @@
 import React from 'react';
 import { AblyConnectionStatus } from '../../constants/ably';
-import { SessionSummary } from '../../types/session';
+import { Session, SessionSummary } from '../../types/session';
 import { FormattedPrice } from './FormattedPrice';
 
 interface SessionDetailHeaderProps {
   sessionId: string;
   connectionStatus: AblyConnectionStatus;
   summary: SessionSummary | null;
+  session?: Session | null;
 }
 
-export function SessionDetailHeader({ sessionId, connectionStatus, summary }: SessionDetailHeaderProps) {
+export function SessionDetailHeader({ sessionId, connectionStatus, summary, session }: SessionDetailHeaderProps) {
+  const displayTitle = session?.title || `Session: ${sessionId}`;
+
   return (
     <header className="detail-header">
       <div className="header-info">
-        <h2>Session: {sessionId}</h2>
+        <h2>{displayTitle}</h2>
+        {session?.type === 'INNER_WORK' && <span className="session-tag inner-work">Inner Thoughts</span>}
         <span className={`connection-status ${connectionStatus}`}>
           {connectionStatus === 'connected' ? '● Live' : '○ Offline'}
         </span>

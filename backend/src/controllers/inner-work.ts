@@ -41,7 +41,7 @@ import {
   updateInnerWorkSessionRequestSchema,
   listInnerWorkSessionsQuerySchema,
 } from '@meet-without-fear/shared';
-import { getCompletion, getHaikuJson } from '../lib/bedrock';
+import { getSonnetResponse, getHaikuJson } from '../lib/bedrock';
 import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildLinkedInnerThoughtsInitialMessagePrompt, buildInnerWorkSummaryPrompt, buildLinkedInnerThoughtsPrompt, LinkedPartnerSessionContext } from '../services/stage-prompts';
 import { extractJsonSafe } from '../utils/json-extractor';
 import { embedInnerWorkMessage } from '../services/embedding';
@@ -423,7 +423,7 @@ export const createInnerWorkSession = asyncHandler(
       }
 
       const fallbackResponse = "I hear you. Tell me more about what you're experiencing.";
-      const aiResponse = await getCompletion({
+      const aiResponse = await getSonnetResponse({
         systemPrompt: prompt,
         messages: messagesForLLM,
         maxTokens: 1024,
@@ -509,7 +509,7 @@ export const createInnerWorkSession = asyncHandler(
       prompt = buildInnerWorkInitialMessagePrompt(userName);
     }
 
-    const aiResponse = await getCompletion({
+    const aiResponse = await getSonnetResponse({
       systemPrompt: prompt,
       messages: [{ role: 'user', content: 'Start the conversation.' }],
       maxTokens: 256,
@@ -797,11 +797,11 @@ export const sendInnerWorkMessage = asyncHandler(
     updateContext({ turnId, sessionId, userId: user.id });
 
     const fallbackResponse = "I'm here with you. Tell me more about what's on your mind.";
-    const aiResponse = await getCompletion({
+    const aiResponse = await getSonnetResponse({
       systemPrompt: prompt,
-      messages: messagesForLLM, // Use messages with injected retrieved context
+      messages: messagesForLLM,
       maxTokens: 1024,
-      sessionId,
+      sessionId: sessionId,
       turnId,
       operation: 'inner-work-response',
     });

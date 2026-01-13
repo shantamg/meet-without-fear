@@ -133,7 +133,7 @@ function cleanMessageContent(content: string, role?: string): { main: string; co
   if (role?.toLowerCase() !== 'user' || typeof content !== 'string') {
     return { main: content, context: null };
   }
-  
+
   // Detect context injection patterns like [Context for this turn: ... ]
   const contextMatch = content.match(/^\[([^\]]*(?:RECENT CONVERSATION|EMOTIONAL STATE|Context)[^\]]*)\]\s*/s);
   if (contextMatch) {
@@ -141,7 +141,7 @@ function cleanMessageContent(content: string, role?: string): { main: string; co
     const main = content.slice(contextMatch[0].length).trim();
     return { main: main || '(empty message)', context };
   }
-  
+
   // Detect <system_context>...</system_context> or similar tags
   const tagMatch = content.match(/^<(\w+)>([\s\S]*?)<\/\1>\s*/);
   if (tagMatch) {
@@ -149,22 +149,22 @@ function cleanMessageContent(content: string, role?: string): { main: string; co
     const main = content.slice(tagMatch[0].length).trim();
     return { main: main || '(empty message)', context };
   }
-  
+
   return { main: content, context: null };
 }
 
 function MessagesView({ messages, keyName }: { messages: any; keyName?: string }) {
   const msgs: Message[] = Array.isArray(messages) ? messages : (messages?.messages || []);
-  
+
   return (
     <div className="sv-messages">
       {keyName && <span className="sv-key">{keyName}:</span>}
       <div className="sv-messages-list">
         {msgs.map((msg: Message, i: number) => {
-          const { main, context } = typeof msg.content === 'string' 
+          const { main, context } = typeof msg.content === 'string'
             ? cleanMessageContent(msg.content, msg.role)
             : { main: msg.content, context: null };
-          
+
           return (
             <div key={i} className={`sv-message sv-message-${msg.role?.toLowerCase() || 'unknown'}`}>
               <span className="sv-message-role">{msg.role}</span>
@@ -193,7 +193,9 @@ function MatchesView({ matches, keyName }: { matches: any[]; keyName?: string })
         {matches.map((match, i) => (
           <div key={i} className="sv-match">
             <div className="sv-match-header">
-              <span className="sv-match-score">{((match.score || 0) * 100).toFixed(0)}%</span>
+              {match.score !== undefined && match.score > 0 && (
+                <span className="sv-match-score">{((match.score || 0) * 100).toFixed(0)}%</span>
+              )}
               {match.source && <span className="sv-match-source">{match.source}</span>}
             </div>
             <div className="sv-match-content">{match.content || match.text || JSON.stringify(match)}</div>
@@ -262,7 +264,7 @@ function StringValue({ value, keyName }: { value: string; keyName?: string }) {
 
 function ArrayView({ data, depth, maxDepth, keyName }: { data: any[]; depth: number; maxDepth: number; keyName?: string }) {
   const [expanded, setExpanded] = useState(depth < 2);
-  
+
   if (data.length === 0) {
     return (
       <span className="sv-primitive">
@@ -344,23 +346,23 @@ function ObjectView({ data, depth, maxDepth, keyName }: { data: object; depth: n
   // Sort keys: metadata first, then alphabetically, response-like fields last
   const firstKeys = ['id', 'type', 'status', 'name', 'operation', 'model'];
   const lastKeys = ['analysis', 'content', 'text', 'response']; // User-facing content at the end
-  
+
   const sortedKeys = [...keys].sort((a, b) => {
     const aFirstIdx = firstKeys.indexOf(a);
     const bFirstIdx = firstKeys.indexOf(b);
     const aLastIdx = lastKeys.indexOf(a);
     const bLastIdx = lastKeys.indexOf(b);
-    
+
     // First priority keys come first
     if (aFirstIdx !== -1 && bFirstIdx !== -1) return aFirstIdx - bFirstIdx;
     if (aFirstIdx !== -1) return -1;
     if (bFirstIdx !== -1) return 1;
-    
+
     // Last priority keys come last  
     if (aLastIdx !== -1 && bLastIdx !== -1) return aLastIdx - bLastIdx;
     if (aLastIdx !== -1) return 1;
     if (bLastIdx !== -1) return -1;
-    
+
     // Everything else alphabetically
     return a.localeCompare(b);
   });
@@ -381,11 +383,11 @@ function ObjectView({ data, depth, maxDepth, keyName }: { data: object; depth: n
         <div className="sv-object-entries">
           {sortedKeys.map(key => (
             <div key={key} className="sv-entry">
-              <DataNode 
-                data={(data as any)[key]} 
-                depth={depth + 1} 
-                maxDepth={maxDepth} 
-                keyName={key} 
+              <DataNode
+                data={(data as any)[key]}
+                depth={depth + 1}
+                maxDepth={maxDepth}
+                keyName={key}
               />
             </div>
           ))}

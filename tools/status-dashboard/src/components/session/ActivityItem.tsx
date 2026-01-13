@@ -60,10 +60,12 @@ export function ActivityItem({ activity }: ActivityItemProps) {
           <DetailBlock title="Metadata" data={activity.metadata} defaultOpen={false} />
           <DetailBlock title="Input" data={activity.input} defaultOpen={isEmbedding} />
           <DetailBlock title="Output" data={activity.output} defaultOpen={!isEmbedding} />
-          <div className="stats-row" style={{ marginTop: '8px', display: 'flex', gap: '16px', fontSize: '0.85em', color: '#888' }}>
-            <span>Tokens In: {activity.tokenCountInput}</span>
-            <span>Tokens Out: {activity.tokenCountOutput}</span>
-          </div>
+          {activity.activityType !== 'RETRIEVAL' && (
+            <div className="stats-row" style={{ marginTop: '8px', display: 'flex', gap: '16px', fontSize: '0.85em', color: '#888' }}>
+              <span>Tokens In: {activity.tokenCountInput}</span>
+              <span>Tokens Out: {activity.tokenCountOutput}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

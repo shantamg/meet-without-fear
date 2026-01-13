@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Session, BrainActivity, SessionSummary } from '../types';
 import { api } from '../services/api';
 import { useAblyConnection } from './useAblyConnection';
-import { 
-  groupActivitiesIntoTurns, 
-  matchMessagesToTurns, 
-  splitTurnsByUser, 
-  Turn, 
-  UserInfo 
+import {
+  groupActivitiesIntoTurns,
+  matchMessagesToTurns,
+  splitTurnsByUser,
+  Turn,
+  UserInfo
 } from '../utils/turnGrouping';
 
 interface UseSessionActivityResult {
@@ -38,7 +38,7 @@ export function useSessionActivity(sessionId: string | undefined): UseSessionAct
 
   const fetchActivity = useCallback(async () => {
     if (!sessionId) return;
-    
+
     try {
       setLoading(true);
       const activityData = await api.getSessionActivity(sessionId);
@@ -105,6 +105,18 @@ export function useSessionActivity(sessionId: string | undefined): UseSessionAct
 
   // Extract users from session data
   const users = useMemo((): { initiator: UserInfo | null; invitee: UserInfo | null } => {
+    // Handle Inner Work sessions (single user)
+    if (sessionData?.type === 'INNER_WORK' && sessionData?.user) {
+      return {
+        initiator: {
+          id: sessionData.user.id,
+          name: sessionData.user.firstName || sessionData.user.name || 'User',
+          isInitiator: true,
+        },
+        invitee: null,
+      };
+    }
+
     if (!sessionData?.relationship?.members) {
       return { initiator: null, invitee: null };
     }

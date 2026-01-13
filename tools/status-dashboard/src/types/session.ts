@@ -1,4 +1,4 @@
-export type SessionStatus = 'CREATED' | 'INVITED' | 'ACTIVE' | 'WAITING' | 'PAUSED' | 'ABANDONED' | 'RESOLVED';
+export type SessionStatus = 'CREATED' | 'INVITED' | 'ACTIVE' | 'WAITING' | 'PAUSED' | 'ABANDONED' | 'RESOLVED' | 'COMPLETED' | 'ARCHIVED';
 
 export interface User {
   id: string;
@@ -34,8 +34,10 @@ export interface Session {
   createdAt: string;
   updatedAt: string;
   status: SessionStatus;
-  type: string;
-  relationship: Relationship;
+  type: string; // 'PARTNER' | 'INNER_WORK'
+  relationship?: Relationship;
+  title?: string | null;
+  user?: User;
   stats?: SessionStats;
 }
 

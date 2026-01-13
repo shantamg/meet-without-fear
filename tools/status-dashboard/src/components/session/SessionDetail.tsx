@@ -7,7 +7,7 @@ import { TurnView } from './TurnView';
 
 function SessionDetail() {
   const { sessionId } = useParams<{ sessionId: string }>();
-  
+
   const {
     loading,
     error,
@@ -18,6 +18,7 @@ function SessionDetail() {
     initiatorTurns,
     inviteeTurns,
     hasTwoUsers,
+    sessionData,
   } = useSessionActivity(sessionId);
 
   if (loading) return <div className="loading">Loading Brain Activity...</div>;
@@ -29,6 +30,7 @@ function SessionDetail() {
         sessionId={sessionId || ''}
         connectionStatus={connectionStatus}
         summary={summary}
+        session={sessionData}
       />
 
       {hasTwoUsers && users.initiator && users.invitee ? (
