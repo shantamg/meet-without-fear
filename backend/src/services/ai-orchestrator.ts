@@ -204,9 +204,9 @@ export async function orchestrateResponse(
       maxCrossSessionMessages: memoryIntent.maxCrossSession,
       similarityThreshold: memoryIntent.threshold,
       memoryIntent,
-      // We'll pass preferences if we had them, but since we're fetching in parallel,
-      // retrieveContext will use its internal defaults for cross-session permission.
-      // Most of the time memoryIntent.allowCrossSession will be used anyway.
+      // Skip detectReferences Haiku call - we already have memory intent from orchestrator
+      // This eliminates a redundant ~2s+ Haiku call that was doing the same detection
+      skipDetection: true,
     }).catch(err => {
       console.warn('[AI Orchestrator] Context retrieval failed (parallel):', err);
       return undefined;
