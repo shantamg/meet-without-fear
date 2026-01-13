@@ -28,6 +28,7 @@ import { embedMessage } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
 import { runReconcilerForDirection, getSharedContextForGuesser } from '../services/reconciler';
 import { updateContext } from '../lib/request-context';
+import { runPartnerSessionClassifier } from '../services/partner-session-classifier';
 
 // ============================================================================
 // Helpers
@@ -664,6 +665,22 @@ async function processAIResponseInBackground(ctx: {
     // Summarize older parts of the conversation (non-blocking)
     updateSessionSummary(sessionId, userId, turnId).catch((err) =>
       console.warn(`[sendMessage:${requestId}] [BG] Failed to update session summary:`, err)
+    );
+
+    // Run partner session classifier for memory detection (fire-and-forget)
+    // This consolidates memory intent detection + validation into one non-blocking Haiku call
+    runPartnerSessionClassifier({
+      userMessage: content,
+      conversationHistory: history.slice(-5).map((m) => ({
+        role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+        content: m.content,
+      })),
+      sessionId,
+      userId,
+      turnId,
+      partnerName,
+    }).catch((err) =>
+      console.warn(`[sendMessage:${requestId}] [BG] Partner session classifier failed:`, err)
     );
 
     // =========================================================================

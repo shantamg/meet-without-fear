@@ -20,9 +20,7 @@ import {
   type MemoryIntentContext,
   type MemoryIntentResult,
 } from './memory-intent';
-import { detectMemoryIntent } from './memory-detector';
-import { validateMemory } from './memory-validator';
-import type { MemorySuggestion } from '@meet-without-fear/shared';
+// Memory detection and validation moved to fire-and-forget (partner-session-classifier.ts)
 import {
   assembleContextBundle,
   formatContextForPrompt,
@@ -49,8 +47,7 @@ import {
   estimateTokens,
   getRecommendedLimits,
 } from '../utils/token-budget';
-import { publishUserEvent } from './realtime';
-import { memoryService } from './memory-service';
+// publishUserEvent and memoryService imports removed - handled in partner-session-classifier.ts
 
 // ============================================================================
 // Types
@@ -170,25 +167,13 @@ export async function orchestrateResponse(
     console.warn(`[AI Orchestrator] Decision layer took ${decisionTime}ms (>1s) - consider optimization`);
   }
 
-  // PARALLEL PRE-PROCESSING: Run Step 0, Step 1.5, Step 2, and Step 2.5 in parallel
-  // This significantly reduces latency by avoiding sequential network/DB calls.
-  const recentMessagesForMemory = context.conversationHistory.slice(-5);
-
+  // PARALLEL PRE-PROCESSING: Run context assembly and retrieval in parallel
+  // Memory detection moved to fire-and-forget (partner-session-classifier.ts)
   console.log(`[AI Orchestrator] Starting parallel pre-processing (Intent: ${memoryIntent.intent})...`);
   const parallelStartTime = Date.now();
 
-  const [userPrefs, detectionResult, contextBundle, retrievedContext] = await Promise.all([
+  const [userPrefs, contextBundle, retrievedContext] = await Promise.all([
     getUserMemoryPreferences(context.userId),
-    detectMemoryIntent(
-      context.userMessage,
-      context.sessionId,
-      turnId,
-      'partner-session',
-      recentMessagesForMemory
-    ).catch(err => {
-      console.warn('[AI Orchestrator] Memory detection failed (parallel):', err);
-      return { hasMemoryIntent: false, suggestions: [], topicContext: '' };
-    }),
     assembleContextBundle(
       context.sessionId,
       context.userId,
@@ -204,10 +189,8 @@ export async function orchestrateResponse(
       maxCrossSessionMessages: memoryIntent.maxCrossSession,
       similarityThreshold: memoryIntent.threshold,
       memoryIntent,
-      // Skip detectReferences Haiku call - we already have memory intent from orchestrator
-      // This eliminates a redundant ~2s+ Haiku call that was doing the same detection
-      skipDetection: true,
-    }).catch(err => {
+      skipDetection: true, // Detection moved to fire-and-forget (partner-session-classifier.ts)
+    }).catch((err: Error) => {
       console.warn('[AI Orchestrator] Context retrieval failed (parallel):', err);
       return undefined;
     })
@@ -216,50 +199,8 @@ export async function orchestrateResponse(
   const parallelTime = Date.now() - parallelStartTime;
   console.log(`[AI Orchestrator] Parallel pre-processing completed in ${parallelTime}ms`);
 
-  // Step 1.5: Process memory detection and validation (logic from original flow)
-  let memoryDetectionResult: { suggestion?: MemorySuggestion; validation?: { valid: boolean; reason?: string } } | null = null;
-
-  if (detectionResult.hasMemoryIntent && detectionResult.suggestions.length > 0) {
-    const suggestion = detectionResult.suggestions[0];
-    try {
-      const validation = await validateMemory(
-        suggestion.suggestedContent,
-        suggestion.category,
-        { sessionId: context.sessionId, turnId, useAI: true }
-      );
-
-      if (validation.valid) {
-        // Memory intent valid - logged later or via standard events
-
-        const memory = await memoryService.createPendingMemory({
-          userId: context.userId,
-          content: suggestion.suggestedContent,
-          category: suggestion.category,
-          suggestedBy: `AI Confidence: ${suggestion.confidence} | Evidence: ${suggestion.evidence}`,
-        });
-
-        await publishUserEvent(context.userId, 'memory.suggested', {
-          sessionId: context.sessionId,
-          suggestion: {
-            id: memory.id,
-            suggestedContent: suggestion.suggestedContent,
-            category: suggestion.category,
-            confidence: suggestion.confidence,
-            evidence: suggestion.evidence,
-            validation: 'valid',
-          },
-        });
-
-        memoryDetectionResult = { suggestion, validation: { valid: true } };
-      } else {
-        // Memory intent rejected - logged later or via standard events
-
-        memoryDetectionResult = { suggestion, validation: { valid: false, reason: validation.reason } };
-      }
-    } catch (error) {
-      console.warn('[AI Orchestrator] Memory validation failed:', error);
-    }
-  }
+  // Memory detection and validation moved to fire-and-forget (partner-session-classifier.ts)
+  // This reduces blocking latency for the user response
 
   // Log progress for parallel steps
   console.log(`[AI Orchestrator] Context assembled: ${contextBundle.conversationContext.turnCount} turns`);
@@ -321,12 +262,8 @@ export async function orchestrateResponse(
       sharedContextFromPartner: context.sharedContextFromPartner,
       surfacingStyle: surfacingDecision.style,
       cautionAdvised,
-      invalidMemoryRequest: memoryDetectionResult?.validation && !memoryDetectionResult.validation.valid && memoryDetectionResult.suggestion
-        ? {
-          requestedContent: memoryDetectionResult.suggestion.suggestedContent,
-          rejectionReason: memoryDetectionResult.validation.reason || 'This request conflicts with our therapeutic approach.',
-        }
-        : undefined,
+      // invalidMemoryRequest moved to fire-and-forget - not available at prompt-build time
+      invalidMemoryRequest: undefined,
     },
     {
       isInvitationPhase: context.isInvitationPhase,

@@ -25,6 +25,11 @@ jest.mock('../../services/realtime', () => ({
   publishMessageError: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Mock partner session classifier (fire-and-forget memory detection)
+jest.mock('../../services/partner-session-classifier', () => ({
+  runPartnerSessionClassifier: jest.fn().mockResolvedValue(null),
+}));
+
 
 // Helper to create mock request
 function createMockRequest(options: {
