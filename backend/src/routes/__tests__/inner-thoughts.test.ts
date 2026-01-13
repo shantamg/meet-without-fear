@@ -45,6 +45,19 @@ jest.mock('../../services/memory-detector', () => ({
   }),
 }));
 
+// Mock context retriever
+jest.mock('../../services/context-retriever', () => ({
+  retrieveContext: jest.fn().mockResolvedValue({
+    conversationHistory: [],
+    relevantFromOtherSessions: [],
+    relevantFromCurrentSession: [],
+    preSessionMessages: [],
+    detectedReferences: [],
+    retrievalSummary: '',
+  }),
+  formatRetrievedContext: jest.fn().mockReturnValue(''),
+}));
+
 // Helper to create mock request
 function createMockRequest(options: {
   user?: {

@@ -384,9 +384,91 @@ describe('Reconciler API', () => {
             hasSuggestion: true,
             suggestion: expect.objectContaining({
               guesserName: 'Alice',
-              suggestedContent: expect.stringContaining('Bob understood'),
+              // Should use the recommended quote content, not the offerMessage
+              suggestedContent: 'I felt afraid we might grow apart.',
               reason: 'Fear of disconnection was not captured.',
               canRefine: true,
+            }),
+          }),
+        })
+      );
+    });
+
+    it('uses suggestedContent when available (not quoteOptions)', async () => {
+      const req = mockRequest({ user: { id: 'partner-1', name: 'Bob' } });
+      const res = mockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.reconcilerShareOffer.findFirst as jest.Mock).mockResolvedValue(
+        mockShareOffer({ suggestedContent: 'Pre-populated suggested content' })
+      );
+
+      await getShareOfferHandler(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            hasSuggestion: true,
+            suggestion: expect.objectContaining({
+              suggestedContent: 'Pre-populated suggested content',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('falls back to quoteOptions when suggestedContent is NULL', async () => {
+      const req = mockRequest({ user: { id: 'partner-1', name: 'Bob' } });
+      const res = mockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.reconcilerShareOffer.findFirst as jest.Mock).mockResolvedValue(
+        mockShareOffer({
+          suggestedContent: null,
+          quoteOptions: [{ content: 'Quote 1' }, { content: 'Quote 2' }],
+          recommendedQuote: 1,
+        })
+      );
+
+      await getShareOfferHandler(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            hasSuggestion: true,
+            suggestion: expect.objectContaining({
+              suggestedContent: 'Quote 2', // Index 1
+            }),
+          }),
+        })
+      );
+    });
+
+    it('falls back to offerMessage only when no suggestedContent or quoteOptions', async () => {
+      const req = mockRequest({ user: { id: 'partner-1', name: 'Bob' } });
+      const res = mockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.reconcilerShareOffer.findFirst as jest.Mock).mockResolvedValue(
+        mockShareOffer({
+          suggestedContent: null,
+          quoteOptions: null,
+          recommendedQuote: null,
+          offerMessage: 'Fallback offer message',
+        })
+      );
+
+      await getShareOfferHandler(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            hasSuggestion: true,
+            suggestion: expect.objectContaining({
+              suggestedContent: 'Fallback offer message',
             }),
           }),
         })

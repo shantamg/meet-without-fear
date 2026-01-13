@@ -43,8 +43,19 @@ export default function AuthLayout() {
         },
       }}
     >
-      {/* Tabs are the main navigation */}
+      {/* Main screens (Home, Settings) */}
       <Stack.Screen name="(tabs)" />
+
+      {/* Inner Work - animation is handled at the screen level */}
+      <Stack.Screen name="inner-work" />
+
+      {/* Settings - slide from right */}
+      <Stack.Screen
+        name="settings"
+        options={{
+          animation: 'slide_from_right',
+        }}
+      />
 
       {/* Session flow screens */}
       <Stack.Screen

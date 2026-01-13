@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import auditRoutes from './audit';
+import brainRoutes from './brain';
 import authRoutes from './auth';
 import chatRoutes from './chat';
 import consentRoutes from './consent';
@@ -25,7 +25,7 @@ const router = Router();
 console.log('[Routes] Loading main router...');
 
 // Mount all route modules
-router.use('/audit', auditRoutes);
+router.use('/brain', brainRoutes);
 router.use('/auth', authRoutes);
 router.use('/tts', ttsRoutes);
 router.use(chatRoutes); // Unified chat router

@@ -1,8 +1,7 @@
-
 import React from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
-import SessionBrowser from './components/SessionBrowser';
-import SessionDetail from './components/SessionDetail';
+import { SessionBrowser } from './components/browser';
+import SessionDetail from './components/session/SessionDetail';
 
 function App() {
   return (

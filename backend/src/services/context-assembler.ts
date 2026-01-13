@@ -178,9 +178,10 @@ export async function assembleContextBundle(
 
   // PARALLEL EXECUTION of context assembly steps
   // All these operations are independent and can run simultaneously to reduce latency.
+  // Note: buildInnerThoughtsContext depends on conversationContext, so it runs after.
   const turnBufferSize = getTurnBufferSize(stage, intent.intent);
   
-  const [conversationContext, emotionalThread, priorThemes, sessionSummary, innerThoughtsContext, userMemories] = await Promise.all([
+  const [conversationContext, emotionalThread, priorThemes, sessionSummary, userMemories] = await Promise.all([
     buildConversationContext(sessionId, userId, turnBufferSize, depth),
     buildEmotionalThread(sessionId, userId, depth),
     (depth === 'full' || depth === 'light') 
@@ -189,23 +190,13 @@ export async function assembleContextBundle(
     (depth !== 'none') 
       ? buildSessionSummary(sessionId, userId) 
       : Promise.resolve(undefined),
-    (depth === 'full' || depth === 'light') 
-      ? buildInnerThoughtsContext(sessionId, userId, []) // Will fill conversationContext below
-      : Promise.resolve(undefined),
     buildUserMemoriesContext(userId, sessionId)
   ]);
 
-  // Special case: innerThoughtsContext needs conversationContext for search
-  // If depth allowed it, we might need a quick follow-up or just use the empty array fallback
-  // but let's re-run it with conversationContext if needed, or just accept the parallel limitation.
-  // Actually, buildInnerThoughtsContext uses the last user message from conversationContext.
-  // Let's refine this to be more efficient.
-  
-  let finalInnerThoughts = innerThoughtsContext;
-  if ((depth === 'full' || depth === 'light') && conversationContext.length > 0) {
-    // Re-run inner thoughts with the actual conversation context for semantic search
-    finalInnerThoughts = await buildInnerThoughtsContext(sessionId, userId, conversationContext);
-  }
+  // Build Inner Thoughts context after we have conversation context (it needs the last user message)
+  const finalInnerThoughts = (depth === 'full' || depth === 'light')
+    ? await buildInnerThoughtsContext(sessionId, userId, conversationContext)
+    : undefined;
 
   const sessionDurationMinutes = Math.floor(
     (now.getTime() - session.createdAt.getTime()) / 60000
@@ -538,20 +529,13 @@ async function buildUserMemoriesContext(
 }
 
 /**
- * Format context bundle for prompt injection
+ * Format context bundle for prompt injection.
+ * Note: Recent conversation is NOT included here because it's already sent
+ * as separate messages in the messages array. Including it here would duplicate
+ * the conversation and waste tokens.
  */
 export function formatContextForPrompt(bundle: ContextBundle): string {
   const parts: string[] = [];
-
-  // Recent conversation
-  if (bundle.conversationContext.recentTurns.length > 0) {
-    parts.push('RECENT CONVERSATION:');
-    for (const turn of bundle.conversationContext.recentTurns) {
-      const role = turn.role === 'user' ? bundle.userName : 'Meet Without Fear';
-      parts.push(`${role}: "${turn.content}"`);
-    }
-    parts.push('');
-  }
 
   // Emotional thread
   if (bundle.emotionalThread.currentIntensity !== null) {

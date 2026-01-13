@@ -376,3 +376,17 @@ export {
   type UseSpeechReturn,
   type UseAutoSpeechReturn,
 } from './useSpeech';
+
+// ============================================================================
+// Session Drawer (Hamburger Menu Navigation)
+// ============================================================================
+
+export {
+  // Context Provider
+  SessionDrawerProvider,
+  // Hook
+  useSessionDrawer,
+  // Types
+  type DrawerTab,
+  type SessionDrawerContextValue,
+} from './useSessionDrawer';

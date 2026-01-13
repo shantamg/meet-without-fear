@@ -15,6 +15,7 @@
 
 import { MemoryCategory } from 'shared';
 import { getHaikuJson } from '../lib/bedrock';
+import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 
 // ============================================================================
 // Types
@@ -109,34 +110,41 @@ Does this memory request conflict with therapeutic values?`;
   const effectiveSessionId = sessionId || 'memory-validation';
   const effectiveTurnId = turnId || (sessionId ? `${sessionId}-${Date.now()}` : `memory-validation-${Date.now()}`);
 
-  try {
-    const response = await getHaikuJson<AIValidationResponse>({
-      systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-      maxTokens: 256,
-      sessionId: effectiveSessionId,
-      turnId: effectiveTurnId,
-      operation: 'memory-validation',
-    });
+  // Use circuit breaker to prevent slow Haiku calls from blocking the response
+  // If validation times out, reject to be safe (fail-secure)
+  const fallbackResult: ValidationResult = { 
+    valid: false, 
+    reason: 'Unable to validate this memory request. Please try again.' 
+  };
 
-    if (!response) {
-      // If AI validation fails, reject to be safe
-      return { valid: false, reason: 'Unable to validate this memory request. Please try again.' };
-    }
+  const response = await withHaikuCircuitBreaker(
+    async () => {
+      return await getHaikuJson<AIValidationResponse>({
+        systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+        maxTokens: 256,
+        sessionId: effectiveSessionId,
+        turnId: effectiveTurnId,
+        operation: 'memory-validation',
+      });
+    },
+    null, // Fallback to null if timeout/failure
+    'memory-validation'
+  );
 
-    if (!response.valid) {
-      return {
-        valid: false,
-        reason: response.reason || 'This memory conflicts with our therapeutic approach.',
-      };
-    }
-
-    return { valid: true };
-  } catch (error) {
-    console.warn('[Memory Validator] AI validation failed:', error);
-    // If AI validation fails, reject to be safe
-    return { valid: false, reason: 'Unable to validate this memory request. Please try again.' };
+  if (!response) {
+    // If AI validation fails or times out, reject to be safe
+    return fallbackResult;
   }
+
+  if (!response.valid) {
+    return {
+      valid: false,
+      reason: response.reason || 'This memory conflicts with our therapeutic approach.',
+    };
+  }
+
+  return { valid: true };
 }
 
 // ============================================================================

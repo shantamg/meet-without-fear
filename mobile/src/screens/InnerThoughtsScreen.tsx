@@ -6,7 +6,7 @@
  * Reuses the ChatInterface component for consistency with partner sessions.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -35,6 +35,10 @@ interface InnerThoughtsScreenProps {
   isCreating?: boolean;
   /** Initial message to show optimistically while creating session */
   initialMessage?: string;
+  /** Initial suggested actions from session creation (when user sent first message) */
+  initialSuggestedActions?: SuggestedAction[];
+  /** Hide chat content until transition completes (for fade-in effect) */
+  hideContentUntilReady?: boolean;
 }
 
 // ============================================================================
@@ -48,14 +52,26 @@ export function InnerThoughtsScreen({
   onNavigateToPartnerSession,
   isCreating = false,
   initialMessage,
+  initialSuggestedActions,
+  hideContentUntilReady = false,
 }: InnerThoughtsScreenProps) {
   const styles = useStyles();
   const router = useRouter();
 
   // Memory suggestion state
   const [memorySuggestion, setMemorySuggestion] = useState<MemorySuggestion | null>(null);
-  // Suggested actions state
-  const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([]);
+  // Suggested actions state - initialize with any actions from session creation
+  const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>(
+    initialSuggestedActions || []
+  );
+
+  // Update suggested actions when they arrive from session creation
+  // (useState default only applies on initial mount, so we need this effect)
+  useEffect(() => {
+    if (initialSuggestedActions && initialSuggestedActions.length > 0) {
+      setSuggestedActions(initialSuggestedActions);
+    }
+  }, [initialSuggestedActions]);
 
   // Only fetch session if we have a valid sessionId (not creating)
   const { data, isLoading, error } = useInnerThoughtsSession(
@@ -246,11 +262,11 @@ export function InnerThoughtsScreen({
         {isCreating && <View style={{ width: 48 }} />}
       </View>
 
-      {/* Chat Interface */}
+      {/* Chat Interface - hide content during fade transition */}
       <ChatInterface
-        messages={messages}
+        messages={hideContentUntilReady ? [] : messages}
         onSendMessage={handleSendMessage}
-        isLoading={isCreating || sendMessage.isPending}
+        isLoading={hideContentUntilReady ? false : (isCreating || sendMessage.isPending)}
         disabled={isCreating || sendMessage.isPending}
         emptyStateTitle="Inner Thoughts"
         emptyStateMessage="A private space for reflection. Share what's on your mind."

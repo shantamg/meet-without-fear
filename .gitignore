@@ -71,6 +71,7 @@ planning-docs-bundle.md
 # Claude Flow generated files
 .claude/settings.local.json
 .claude/*.local.md
+.claude/lisa-draft.md
 .mcp.json
 claude-flow.config.json
 .swarm/
@@ -101,3 +102,14 @@ hive-mind-prompt-*.txt
 # Expo native folders (regenerate with: npx expo prebuild)
 mobile/android/
 mobile/ios/
+
+# Ralph session files
+.ralph_session
+.ralph_session_history
+.circuit_breaker_history
+.circuit_breaker_state
+.call_count
+.exit_signals
+.last_reset
+progress.json
+status.json

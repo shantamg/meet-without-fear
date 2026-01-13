@@ -2,6 +2,9 @@
  * Self-Reflection Layout
  *
  * Stack navigator for Self-Reflection screens.
+ * - New sessions: fade transition, content appears after fade completes
+ * - Existing sessions: normal slide transition
+ * - Back navigation: standard swipe gesture
  */
 
 import { Stack } from 'expo-router';
@@ -24,6 +27,8 @@ export default function SelfReflectionLayout() {
         contentStyle: {
           backgroundColor: colors.bgPrimary,
         },
+        // Allow swipe back gesture
+        gestureEnabled: true,
       }}
     >
       <Stack.Screen
@@ -36,6 +41,7 @@ export default function SelfReflectionLayout() {
         name="[id]"
         options={{
           headerShown: false,
+          // Animation is handled dynamically in the screen
         }}
       />
     </Stack>

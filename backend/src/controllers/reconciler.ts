@@ -254,11 +254,13 @@ export async function getShareOfferHandler(
       const offer = await generateShareOffer(sessionId, user.id);
 
       if (offer) {
+        // Get the recommended quote content, falling back to offerMessage only as last resort
+        const recommendedQuoteContent = offer.quoteOptions?.[offer.recommendedIndex ?? 0]?.content;
         successResponse(res, {
           hasSuggestion: true,
           suggestion: {
             guesserName: 'Your partner',
-            suggestedContent: offer.offerMessage,
+            suggestedContent: recommendedQuoteContent || offer.offerMessage,
             reason: offer.gapDescription || 'To help them understand better',
             canRefine: true,
           }
@@ -285,11 +287,15 @@ export async function getShareOfferHandler(
       console.log(`[Reconciler] Marked share offer ${shareOffer.id} as OFFERED for user ${user.id}`);
     }
 
+    // Get recommended quote content as fallback when suggestedContent is NULL
+    const quoteOptions = shareOffer.quoteOptions as Array<{ content: string }> | null;
+    const recommendedQuoteContent = quoteOptions?.[shareOffer.recommendedQuote ?? 0]?.content;
+
     successResponse(res, {
       hasSuggestion: true,
       suggestion: {
         guesserName,
-        suggestedContent: shareOffer.suggestedContent || shareOffer.offerMessage || '',
+        suggestedContent: shareOffer.suggestedContent || recommendedQuoteContent || shareOffer.offerMessage || '',
         reason: shareOffer.suggestedReason || shareOffer.result.mostImportantGap || 'This will help them understand your perspective more fully.',
         canRefine: true,
       }

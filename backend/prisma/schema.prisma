@@ -1220,19 +1220,49 @@ model SavedMeditation {
 // Core System
 // ============================================================================
 
-model AuditLog {
-  id        String   @id @default(cuid())
-  timestamp DateTime @default(now())
-  section   String   // AuditSection enum string
-  message   String   @db.Text
-  turnId    String?
-  sessionId String?
-  data      Json?
-  cost      Float?
+// ============================================================================
+// Core System
+// ============================================================================
+
+model BrainActivity {
+  id              String           @id @default(cuid())
+  sessionId       String
+  turnId          String?
+  activityType    ActivityType
+  model           String           // e.g. "claude-3-5-sonnet", "titan-embed"
   
+  // Full telemetry
+  input           Json?            // Prompt, query, etc.
+  output          Json?            // Response, retrieved items, etc.
+  metadata        Json?            // Reasoning, confidence, errors
+  
+  // Stats
+  tokenCountInput  Int             @default(0)
+  tokenCountOutput Int             @default(0)
+  cost             Float           @default(0.0)
+  durationMs       Int             @default(0)
+  
+  status          ActivityStatus   @default(PENDING)
+  createdAt       DateTime         @default(now())
+  completedAt     DateTime?
+
   @@index([sessionId])
   @@index([turnId])
-  @@index([timestamp])
+  @@index([activityType])
+  @@index([createdAt])
+}
+
+enum ActivityType {
+  LLM_CALL
+  EMBEDDING
+  RETRIEVAL
+  TOOL_USE
+}
+
+enum ActivityStatus {
+  PENDING
+  COMPLETED
+  FAILED
 }
 
 model ValidationFeedbackDraft {

@@ -54,6 +54,7 @@ import {
 import { detectMemoryIntent } from '../services/memory-detector';
 import type { MemorySuggestion } from '@meet-without-fear/shared';
 import { updateContext } from '../lib/request-context';
+import { retrieveContext, formatRetrievedContext } from '../services/context-retriever';
 
 // ============================================================================
 // Helper Functions
@@ -393,7 +394,15 @@ export const createInnerWorkSession = asyncHandler(
         turnId,
         operation: 'inner-work-initial-response',
       });
-      const parsed = extractJsonSafe<{ response?: string }>(aiResponse || '', {
+      const parsed = extractJsonSafe<{
+        response?: string;
+        suggestedActions?: Array<{
+          type: string;
+          label: string;
+          personName?: string;
+          context?: string;
+        }>;
+      }>(aiResponse || '', {
         response: fallbackResponse,
       });
 
@@ -418,12 +427,28 @@ export const createInnerWorkSession = asyncHandler(
         console.warn('[Inner Work] Failed to update metadata:', err)
       );
 
+      // Validate and map suggested actions from AI response
+      const validActionTypes = ['start_partner_session', 'start_meditation', 'add_gratitude', 'check_need'] as const;
+      const suggestedActions = (parsed.suggestedActions || [])
+        .filter((action): action is typeof action & { type: typeof validActionTypes[number] } =>
+          validActionTypes.includes(action.type as typeof validActionTypes[number]) &&
+          typeof action.label === 'string' &&
+          action.label.length > 0
+        )
+        .map(action => ({
+          type: action.type as typeof validActionTypes[number],
+          label: action.label,
+          personName: action.personName,
+          context: action.context || 'AI suggestion',
+        }));
+
       const response: ApiResponse<CreateInnerWorkSessionResponse> = {
         success: true,
         data: {
           session: mapSessionToSummary({ ...session, _count: { messages: 2 } }),
           initialMessage: mapMessageToDTO(aiMessage),
           userMessage: mapMessageToDTO(userMessage),
+          suggestedActions: suggestedActions.length > 0 ? suggestedActions : undefined,
         },
       };
 
@@ -627,8 +652,47 @@ export const sendInnerWorkMessage = asyncHandler(
       },
     });
 
-    // Get conversation summary if it exists (for long conversations)
-    const summaryData = await getInnerThoughtsSummary(sessionId);
+    // Calculate total turn count (all messages, not just recent)
+    const totalTurnCount = session.messages.length + 1;
+    const userName = user.firstName || user.name || 'there';
+
+    // Generate turnId early - needed for retrieval and LLM calls
+    const turnId = `${sessionId}-${user.id}-inner-work-${totalTurnCount}`;
+
+    // =========================================================================
+    // PARALLEL PRE-LLM OPERATIONS (Performance Optimization)
+    // Run all these in parallel to minimize latency
+    // =========================================================================
+    const [
+      summaryData,
+      recentThemes,
+      linkedContext,
+      retrievedContext,
+    ] = await Promise.all([
+      // 1. Get conversation summary if it exists
+      getInnerThoughtsSummary(sessionId),
+      // 2. Get recent themes
+      getRecentThemes(user.id, sessionId),
+      // 3. Fetch linked partner session context (if applicable)
+      session.linkedPartnerSessionId
+        ? fetchLinkedPartnerSessionContext(user.id, session.linkedPartnerSessionId)
+        : Promise.resolve(null),
+      // 4. Run semantic retrieval for cross-session context
+      // Skip retrieval on first message (no context to search against)
+      totalTurnCount >= 2
+        ? retrieveContext({
+            userId: user.id,
+            currentMessage: content,
+            turnId,
+            includeInnerThoughts: true, // Search both partner sessions AND inner thoughts
+            excludeInnerThoughtsSessionId: sessionId, // Don't include current session
+            linkedPartnerSessionId: session.linkedPartnerSessionId || undefined, // Boost linked session
+            skipDetection: true, // Always search - no Haiku gating for Inner Thoughts
+            includePreSession: false,
+          })
+        : Promise.resolve(null),
+    ]);
+
     const conversationSummaryText = summaryData
       ? formatInnerThoughtsSummaryForPrompt(summaryData)
       : undefined;
@@ -644,10 +708,6 @@ export const sendInnerWorkMessage = asyncHandler(
       role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
       content: m.content,
     }));
-    history.push({ role: 'user', content });
-
-    // Get recent themes for context
-    const recentThemes = await getRecentThemes(user.id, sessionId);
 
     // Build the rich session summary that includes conversation summary if available
     const richSessionSummary = conversationSummaryText
@@ -655,41 +715,20 @@ export const sendInnerWorkMessage = asyncHandler(
       : session.summary || undefined;
 
     // Build prompt - use linked prompt if this session is connected to a partner session
-    const userName = user.firstName || user.name || 'there';
     let prompt: string;
 
-    // Calculate total turn count (all messages, not just recent)
-    const totalTurnCount = session.messages.length + 1;
-
-    if (session.linkedPartnerSessionId) {
-      // Fetch context from the linked partner session
-      const linkedContext = await fetchLinkedPartnerSessionContext(
-        user.id,
-        session.linkedPartnerSessionId
-      );
-
-      if (linkedContext) {
-        // Use the linked Inner Thoughts prompt with partner session context
-        prompt = buildLinkedInnerThoughtsPrompt({
-          userName,
-          turnCount: totalTurnCount,
-          emotionalIntensity: 5,
-          sessionSummary: richSessionSummary,
-          recentThemes: recentThemes.length > 0 ? recentThemes : undefined,
-          linkedContext,
-        });
-      } else {
-        // Fallback to regular prompt if context fetch fails
-        prompt = buildInnerWorkPrompt({
-          userName,
-          turnCount: totalTurnCount,
-          emotionalIntensity: 5,
-          sessionSummary: richSessionSummary,
-          recentThemes: recentThemes.length > 0 ? recentThemes : undefined,
-        });
-      }
+    if (linkedContext) {
+      // Use the linked Inner Thoughts prompt with partner session context
+      prompt = buildLinkedInnerThoughtsPrompt({
+        userName,
+        turnCount: totalTurnCount,
+        emotionalIntensity: 5,
+        sessionSummary: richSessionSummary,
+        recentThemes: recentThemes.length > 0 ? recentThemes : undefined,
+        linkedContext,
+      });
     } else {
-      // Not linked - use regular Inner Thoughts prompt
+      // Not linked or context fetch failed - use regular Inner Thoughts prompt
       prompt = buildInnerWorkPrompt({
         userName,
         turnCount: totalTurnCount,
@@ -699,15 +738,31 @@ export const sendInnerWorkMessage = asyncHandler(
       });
     }
 
-    // Generate turnId for this inner work message - used for cost attribution
-    const turnId = `${sessionId}-${user.id}-inner-work-${totalTurnCount}`;
+    // Inject retrieved context into history if we have relevant results
+    let messagesForLLM = [...history, { role: 'user' as const, content }];
+    if (retrievedContext && retrievedContext.relevantFromOtherSessions.length > 0) {
+      const formattedContext = formatRetrievedContext({
+        ...retrievedContext,
+        conversationHistory: [], // Don't duplicate - already in history
+        preSessionMessages: [],
+      });
+
+      // Inject context before the current user message
+      if (formattedContext.trim()) {
+        console.log(`[Inner Thoughts] Injecting ${retrievedContext.relevantFromOtherSessions.length} retrieved messages into context`);
+        messagesForLLM = [
+          ...history,
+          { role: 'user' as const, content: `[Retrieved context:\n${formattedContext}]\n\n${content}` },
+        ];
+      }
+    }
     // Update request context so all downstream code can access this turnId
     updateContext({ turnId, sessionId, userId: user.id });
 
     const fallbackResponse = "I'm here with you. Tell me more about what's on your mind.";
     const aiResponse = await getCompletion({
       systemPrompt: prompt,
-      messages: history,
+      messages: messagesForLLM, // Use messages with injected retrieved context
       maxTokens: 1024,
       sessionId,
       turnId,

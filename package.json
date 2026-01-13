@@ -8,7 +8,8 @@
     "backend",
     "shared",
     "docs-site",
-    "website"
+    "website",
+    "tools/status-dashboard"
   ],
   "scripts": {
     "deploy:mobile:ios": "node scripts/update-build-number.js && cd mobile && EXPO_NO_CAPABILITY_SYNC=1 eas build --platform ios --profile production --auto-submit",

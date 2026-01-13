@@ -11,6 +11,7 @@
 
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import { EmpathyStatus } from '@prisma/client';
 import {
   saveEmpathyDraftRequestSchema,
   consentToShareRequestSchema,
@@ -32,10 +33,10 @@ import {
   hasPartnerCompletedStage1,
   getSharedContextForGuesser,
   getSharedContentDeliveryStatus,
+  generateShareSuggestionForDirection,
 } from '../services/reconciler';
 import { isSessionCreator } from '../utils/session';
 import { publishSessionEvent } from '../services/realtime';
-import { auditLog } from '../services/audit-logger';
 import { updateContext } from '../lib/request-context';
 
 // ============================================================================
@@ -91,49 +92,78 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
     const userAId = session.relationship.members[0].user.id;
     const userBId = session.relationship.members[1].user.id;
 
+    // Track new statuses for notification
+    let statusA: EmpathyStatus | null = null;
+    let statusB: EmpathyStatus | null = null;
+
     // Update empathy attempt for User A (A's guess about B)
     if (result.aUnderstandingB) {
-      const hasSignificantGaps =
+      const hasSignificantGapsA =
         result.aUnderstandingB.gaps.severity === 'significant' ||
         result.aUnderstandingB.recommendation.action === 'OFFER_SHARING';
 
       // Use READY instead of REVEALED - will reveal when both are ready
-      const newStatus = hasSignificantGaps ? 'AWAITING_SHARING' : 'READY';
+      statusA = hasSignificantGapsA ? EmpathyStatus.AWAITING_SHARING : EmpathyStatus.READY;
 
       await prisma.empathyAttempt.updateMany({
         where: { sessionId, sourceUserId: userAId },
         data: {
-          status: newStatus,
+          status: statusA,
         },
       });
 
       console.log(
-        `[triggerReconcilerAndUpdateStatuses] Updated User A's attempt to ${newStatus} ` +
+        `[triggerReconcilerAndUpdateStatuses] Updated User A's attempt to ${statusA} ` +
         `(alignment: ${result.aUnderstandingB.alignment.score}%, gaps: ${result.aUnderstandingB.gaps.severity})`
       );
+
+      // Bug 2 fix: Generate share suggestion proactively if AWAITING_SHARING
+      if (hasSignificantGapsA) {
+        generateShareSuggestionForDirection(sessionId, userAId, userBId).catch((err) =>
+          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to generate share suggestion for A→B:', err)
+        );
+      }
     }
 
     // Update empathy attempt for User B (B's guess about A)
     if (result.bUnderstandingA) {
-      const hasSignificantGaps =
+      const hasSignificantGapsB =
         result.bUnderstandingA.gaps.severity === 'significant' ||
         result.bUnderstandingA.recommendation.action === 'OFFER_SHARING';
 
       // Use READY instead of REVEALED - will reveal when both are ready
-      const newStatus = hasSignificantGaps ? 'AWAITING_SHARING' : 'READY';
+      statusB = hasSignificantGapsB ? EmpathyStatus.AWAITING_SHARING : EmpathyStatus.READY;
 
       await prisma.empathyAttempt.updateMany({
         where: { sessionId, sourceUserId: userBId },
         data: {
-          status: newStatus,
+          status: statusB,
         },
       });
 
       console.log(
-        `[triggerReconcilerAndUpdateStatuses] Updated User B's attempt to ${newStatus} ` +
+        `[triggerReconcilerAndUpdateStatuses] Updated User B's attempt to ${statusB} ` +
         `(alignment: ${result.bUnderstandingA.alignment.score}%, gaps: ${result.bUnderstandingA.gaps.severity})`
       );
+
+      // Bug 2 fix: Generate share suggestion proactively if AWAITING_SHARING
+      if (hasSignificantGapsB) {
+        generateShareSuggestionForDirection(sessionId, userBId, userAId).catch((err) =>
+          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to generate share suggestion for B→A:', err)
+        );
+      }
     }
+
+    // Bug 1 fix: Notify both clients that empathy statuses have been updated
+    // This allows the UI to immediately show share suggestions or reveal empathy
+    await publishSessionEvent(sessionId, 'empathy.status_updated', {
+      stage: 2,
+      statuses: {
+        [userAId]: statusA,
+        [userBId]: statusB,
+      },
+    });
+    console.log(`[triggerReconcilerAndUpdateStatuses] Published empathy.status_updated event`);
 
     // Check if both are now READY and reveal both simultaneously
     const { checkAndRevealBothIfReady } = await import('../services/reconciler');
@@ -699,7 +729,7 @@ Respond in JSON format:
 
 
       // Audit log the transition message
-      auditLog('RESPONSE', 'Stage 2 transition message generated', {
+      /* auditLog('RESPONSE', 'Stage 2 transition message generated', {
         turnId,
         sessionId,
         userId: user.id,
@@ -707,7 +737,7 @@ Respond in JSON format:
         operation: 'stage2-transition',
         responseText: transitionContent,
         messageId: aiMessage.id,
-      });
+      }); */
     } catch (error) {
       console.error('[consentToShare] Failed to generate transition message:', error);
       // Continue without transition message - not a critical failure
@@ -1986,7 +2016,7 @@ Respond in JSON format:
       };
 
       // Audit log the transition message
-      auditLog('RESPONSE', 'Stage 2 revision acknowledgment generated', {
+      /* auditLog('RESPONSE', 'Stage 2 revision acknowledgment generated', {
         turnId,
         sessionId,
         userId: user.id,
@@ -1995,7 +2025,7 @@ Respond in JSON format:
         responseText: transitionContent,
         messageId: aiMessage.id,
         revisionCount: previousRevision + 1,
-      });
+      }); */
     } catch (error) {
       console.error('[resubmitEmpathy] Failed to generate transition message:', error);
       // Continue without transition message - not a critical failure

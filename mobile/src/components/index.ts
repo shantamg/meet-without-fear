@@ -95,3 +95,6 @@ export { MemorySuggestionCard } from './MemorySuggestionCard';
 
 // Inner Work components
 export { SuggestedActionButtons } from './SuggestedActionButtons';
+
+// Navigation components
+export { SessionDrawer } from './SessionDrawer';

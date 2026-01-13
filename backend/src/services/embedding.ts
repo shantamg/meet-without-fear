@@ -216,10 +216,11 @@ export async function findSimilarSessions(
   userId: string,
   queryText: string,
   limit: number = 5,
-  threshold: number = 0.7 // Cosine similarity threshold (0-1, higher = more similar)
+  threshold: number = 0.7, // Cosine similarity threshold (0-1, higher = more similar)
+  turnId?: string
 ): Promise<SimilarSession[]> {
   console.log('[Embedding] findSimilarSessions - generating query embedding');
-  const queryEmbedding = await getEmbedding(queryText);
+  const queryEmbedding = await getEmbedding(queryText, { turnId });
   if (!queryEmbedding) {
     console.warn('[Embedding] Failed to generate query embedding (Bedrock not configured?)');
     return [];
@@ -269,9 +270,10 @@ export async function findSimilarMessages(
   sessionId: string,
   queryText: string,
   limit: number = 5,
-  threshold: number = 0.6
+  threshold: number = 0.6,
+  turnId?: string
 ): Promise<SimilarMessage[]> {
-  const queryEmbedding = await getEmbedding(queryText, { sessionId });
+  const queryEmbedding = await getEmbedding(queryText, { sessionId, turnId });
   if (!queryEmbedding) {
     return [];
   }
@@ -308,12 +310,13 @@ export async function findSimilarMessages(
 export async function findRelevantSessions(
   userId: string,
   userMessage: string,
-  limit: number = 3
+  limit: number = 3,
+  turnId?: string
 ): Promise<SimilarSession[]> {
   console.log('[Embedding] findRelevantSessions for:', userMessage.slice(0, 50));
 
   // First try vector search
-  const vectorResults = await findSimilarSessions(userId, userMessage, limit, 0.5);
+  const vectorResults = await findSimilarSessions(userId, userMessage, limit, 0.5, turnId);
 
   console.log('[Embedding] Vector search results:', vectorResults.length);
 
@@ -391,9 +394,10 @@ export async function findSimilarInnerWorkMessages(
   queryText: string,
   limit: number = 5,
   threshold: number = 0.6,
-  sessionId?: string
+  sessionId?: string,
+  turnId?: string
 ): Promise<Array<{ messageId: string; sessionId: string; content: string; similarity: number }>> {
-  const queryEmbedding = await getEmbedding(queryText, { sessionId });
+  const queryEmbedding = await getEmbedding(queryText, { sessionId, turnId });
   if (!queryEmbedding) {
     return [];
   }
@@ -435,7 +439,8 @@ export async function findSimilarInnerThoughtsWithBoost(
   linkedPartnerSessionId: string,
   boostFactor: number = 1.3, // 30% boost for linked sessions
   limit: number = 5,
-  threshold: number = 0.5
+  threshold: number = 0.5,
+  turnId?: string
 ): Promise<Array<{
   messageId: string;
   sessionId: string;
@@ -443,7 +448,7 @@ export async function findSimilarInnerThoughtsWithBoost(
   similarity: number;
   isLinked: boolean;
 }>> {
-  const queryEmbedding = await getEmbedding(queryText, { sessionId: linkedPartnerSessionId });
+  const queryEmbedding = await getEmbedding(queryText, { sessionId: linkedPartnerSessionId, turnId });
   if (!queryEmbedding) {
     return [];
   }

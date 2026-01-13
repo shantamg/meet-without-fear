@@ -23,7 +23,7 @@ import { useAuth } from '@/src/hooks/useAuth';
 import { colors } from '@/src/theme';
 
 /**
- * Settings tab screen
+ * Settings screen
  * User settings and account management
  */
 export default function SettingsScreen() {

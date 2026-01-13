@@ -24,7 +24,8 @@ import {
 } from '../utils/time-language';
 import { CONTEXT_LIMITS } from '../utils/token-budget';
 import { withHaikuCircuitBreaker, HAIKU_TIMEOUT_MS } from '../utils/circuit-breaker';
-import { auditLog } from './audit-logger';
+import { brainService } from '../services/brain-service';
+import { ActivityType } from '@prisma/client';
 
 // ============================================================================
 // Types
@@ -70,6 +71,8 @@ export interface RelevantMessage {
   role: 'user' | 'assistant';
   /** Time context for this message (how long ago, phrasing) */
   timeContext?: TimeContext;
+  /** Source of the message: partner-session or inner-thoughts */
+  source?: 'partner-session' | 'inner-thoughts';
 }
 
 export interface DetectedReference {
@@ -105,6 +108,20 @@ export interface RetrievalOptions {
 
   /** User's memory preferences (controls cross-session recall permission) */
   userPreferences?: MemoryPreferencesDTO;
+
+  // Inner Thoughts retrieval options
+
+  /** Include InnerWorkMessage search (for Inner Thoughts sessions) */
+  includeInnerThoughts?: boolean;
+
+  /** Current Inner Thoughts session ID to exclude from search */
+  excludeInnerThoughtsSessionId?: string;
+
+  /** Linked partner session ID for similarity boost */
+  linkedPartnerSessionId?: string;
+
+  /** Skip reference detection - always search (for Inner Thoughts) */
+  skipDetection?: boolean;
 }
 
 // ============================================================================
@@ -190,16 +207,11 @@ If no references, return empty arrays and needsRetrieval: false.`;
  */
 async function searchAcrossSessions(
   userId: string,
-  queryText: string,
+  queryEmbedding: number[],
   excludeSessionId?: string,
   limit: number = 5,
   threshold: number = 0.5
 ): Promise<RelevantMessage[]> {
-  const queryEmbedding = await getEmbedding(queryText, { sessionId: excludeSessionId });
-  if (!queryEmbedding) {
-    return [];
-  }
-
   const vectorSql = `[${queryEmbedding.join(',')}]`;
 
   // Search messages across all user's sessions
@@ -287,15 +299,10 @@ async function searchAcrossSessions(
 async function searchWithinSession(
   sessionId: string,
   userId: string,
-  queryText: string,
+  queryEmbedding: number[],
   limit: number = 5,
   threshold: number = 0.5
 ): Promise<RelevantMessage[]> {
-  const queryEmbedding = await getEmbedding(queryText, { sessionId });
-  if (!queryEmbedding) {
-    return [];
-  }
-
   const vectorSql = `[${queryEmbedding.join(',')}]`;
 
   // Data isolation: Only return user's own messages and AI responses TO them
@@ -410,15 +417,10 @@ async function getPreSessionMessages(userId: string): Promise<ConversationMessag
  */
 async function searchPreSessionMessages(
   userId: string,
-  queryText: string,
+  queryEmbedding: number[],
   limit: number = 5,
   threshold: number = 0.5
 ): Promise<RelevantMessage[]> {
-  const queryEmbedding = await getEmbedding(queryText);
-  if (!queryEmbedding) {
-    return [];
-  }
-
   const vectorSql = `[${queryEmbedding.join(',')}]`;
 
   const results = await prisma.$queryRaw<
@@ -458,6 +460,102 @@ async function searchPreSessionMessages(
 }
 
 // ============================================================================
+// Inner Thoughts Retrieval
+// ============================================================================
+
+/**
+ * Search for semantically similar messages from Inner Thoughts sessions.
+ * Optionally boosts similarity for messages from sessions linked to a specific partner session.
+ */
+async function searchInnerWorkMessages(
+  userId: string,
+  queryEmbedding: number[],
+  excludeSessionId?: string,
+  linkedPartnerSessionId?: string,
+  boostFactor: number = 1.3,
+  limit: number = 15,
+  threshold: number = 0.75
+): Promise<RelevantMessage[]> {
+  const vectorSql = `[${queryEmbedding.join(',')}]`;
+
+  type InnerWorkMessageResult = {
+    id: string;
+    session_id: string;
+    content: string;
+    role: string;
+    timestamp: Date;
+    distance: number;
+    linked_partner_session_id: string | null;
+  };
+
+  let results: InnerWorkMessageResult[];
+
+  // Use different queries based on whether we need to exclude a session
+  if (excludeSessionId) {
+    results = await prisma.$queryRaw<InnerWorkMessageResult[]>`
+      SELECT
+        m.id,
+        m."sessionId" as session_id,
+        m.content,
+        m.role,
+        m.timestamp,
+        m.embedding <=> ${vectorSql}::vector as distance,
+        s."linkedPartnerSessionId" as linked_partner_session_id
+      FROM "InnerWorkMessage" m
+      JOIN "InnerWorkSession" s ON m."sessionId" = s.id
+      WHERE s."userId" = ${userId}
+        AND m.embedding IS NOT NULL
+        AND m."sessionId" != ${excludeSessionId}
+      ORDER BY distance ASC
+      LIMIT ${limit * 2}
+    `;
+  } else {
+    results = await prisma.$queryRaw<InnerWorkMessageResult[]>`
+      SELECT
+        m.id,
+        m."sessionId" as session_id,
+        m.content,
+        m.role,
+        m.timestamp,
+        m.embedding <=> ${vectorSql}::vector as distance,
+        s."linkedPartnerSessionId" as linked_partner_session_id
+      FROM "InnerWorkMessage" m
+      JOIN "InnerWorkSession" s ON m."sessionId" = s.id
+      WHERE s."userId" = ${userId}
+        AND m.embedding IS NOT NULL
+      ORDER BY distance ASC
+      LIMIT ${limit * 2}
+    `;
+  }
+
+  // Apply boost to linked sessions and convert to RelevantMessage format
+  return results
+    .map((r) => {
+      const baseSimilarity = 1 - r.distance / 2;
+      // Apply boost for linked sessions (capped at 1.0)
+      const isLinked = linkedPartnerSessionId && r.linked_partner_session_id === linkedPartnerSessionId;
+      const similarity = isLinked
+        ? Math.min(baseSimilarity * boostFactor, 1)
+        : baseSimilarity;
+      const timestamp = r.timestamp.toISOString();
+
+      return {
+        content: r.content,
+        sessionId: r.session_id,
+        partnerName: 'Your reflections', // Label for Inner Thoughts
+        similarity,
+        timestamp,
+        role: r.role === 'USER' ? 'user' as const : 'assistant' as const,
+        timeContext: getTimeContext(timestamp),
+        source: 'inner-thoughts' as const,
+      };
+    })
+    .filter((r) => r.similarity >= threshold)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
+}
+
+// ============================================================================
 // Main Retrieval Function
 // ============================================================================
 
@@ -476,9 +574,17 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
     includePreSession = true,
     memoryIntent,
     userPreferences,
+    // Inner Thoughts options
+    includeInnerThoughts = false,
+    excludeInnerThoughtsSessionId,
+    linkedPartnerSessionId,
+    skipDetection = false,
   } = options;
 
   const startTime = Date.now();
+
+  // For Inner Thoughts, use higher threshold since we skip Haiku gating
+  const innerThoughtsThreshold = 0.75;
 
   // Use memory intent to override thresholds and limits if provided
   const effectiveThreshold = memoryIntent?.threshold ?? similarityThreshold;
@@ -501,16 +607,19 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
   // Run detection and basic retrieval in parallel using Promise.all()
   // This is critical for performance - sequential execution would kill user experience
   // All three operations are independent and can run simultaneously
-  // detectReferences requires a sessionId for cost attribution - skip if no session context
+  // When skipDetection is true (for Inner Thoughts), we bypass Haiku detection and always search
   const fallbackReferenceResult: ReferenceDetectionResult = { references: [], needsRetrieval: false, searchQueries: [] };
+  const alwaysSearchResult: ReferenceDetectionResult = { references: [], needsRetrieval: true, searchQueries: [currentMessage] };
   const [
     referenceDetection,
     conversationHistory,
     preSessionMessages,
   ] = await Promise.all([
-    currentSessionId
-      ? detectReferences(currentMessage, currentSessionId, turnId) // Haiku call (with circuit breaker)
-      : Promise.resolve(fallbackReferenceResult), // No session context - skip detection
+    skipDetection
+      ? Promise.resolve(alwaysSearchResult) // Skip Haiku detection - always search with current message
+      : (currentSessionId
+        ? detectReferences(currentMessage, currentSessionId, turnId) // Haiku call (with circuit breaker)
+        : Promise.resolve(fallbackReferenceResult)), // No session context - skip detection
     currentSessionId ? getSessionHistory(currentSessionId, userId) : Promise.resolve([]), // DB query
     includePreSession ? getPreSessionMessages(userId) : Promise.resolve([]), // DB query
   ]);
@@ -521,19 +630,9 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
 
   if (referenceDetection.needsRetrieval && referenceDetection.searchQueries.length > 0) {
     // Log the search queries being used
-    auditLog('RETRIEVAL', 'Semantic search initiated', {
-      turnId,
-      sessionId: currentSessionId,
-      userId,
-      searchQueries: referenceDetection.searchQueries,
-      referencesDetected: referenceDetection.references.map(r => ({
-        type: r.type,
-        text: r.text,
-        confidence: r.confidence,
-      })),
-      threshold: effectiveThreshold,
-      maxCrossSession: effectiveMaxCrossSession,
-    });
+    // Log the search queries being used via simplified metadata tracking in the main retrieval activity
+    // or we can allow the main retrieval activity to capturing this detail.
+    // For now, removing the partial auditLog call to avoid clutter and relying on the final complete log.
 
     // Determine if cross-session recall is allowed
     // Cross-session is allowed if:
@@ -546,17 +645,43 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
       (effectiveUserPrefs?.crossSessionRecall ?? false);
 
     // Search using the generated queries
+    // For Inner Thoughts, we search both partner session Messages AND InnerWorkMessages
     const searchPromises = referenceDetection.searchQueries.map(async (query) => {
-      const [crossSession, withinSession] = await Promise.all([
-        // Only search cross-session if allowed
+      // Generate embedding once per query - this fixes duplicates and ensures turnId is logged
+      const embedding = await getEmbedding(query, { sessionId: currentSessionId, turnId });
+
+      if (!embedding) {
+        return { query, crossSession: [], withinSession: [], innerThoughts: [] };
+      }
+
+      const searchOps: Promise<RelevantMessage[]>[] = [
+        // Search partner session Messages (cross-session)
         shouldSearchCrossSession
-          ? searchAcrossSessions(userId, query, currentSessionId, effectiveMaxCrossSession, effectiveThreshold)
+          ? searchAcrossSessions(userId, embedding, currentSessionId, effectiveMaxCrossSession, effectiveThreshold)
           : Promise.resolve([]),
+        // Search within current session (if applicable)
         currentSessionId
-          ? searchWithinSession(currentSessionId, userId, query, 5, effectiveThreshold)
+          ? searchWithinSession(currentSessionId, userId, embedding, 5, effectiveThreshold)
           : Promise.resolve([]),
-      ]);
-      return { query, crossSession, withinSession };
+      ];
+
+      // Add Inner Thoughts search if enabled
+      if (includeInnerThoughts) {
+        searchOps.push(
+          searchInnerWorkMessages(
+            userId,
+            embedding,
+            excludeInnerThoughtsSessionId,
+            linkedPartnerSessionId,
+            1.3, // boost factor for linked sessions
+            15,  // limit
+            innerThoughtsThreshold
+          )
+        );
+      }
+
+      const [crossSession, withinSession, innerThoughts = []] = await Promise.all(searchOps);
+      return { query, crossSession, withinSession, innerThoughts };
     });
 
     const searchResults = await Promise.all(searchPromises);
@@ -570,7 +695,17 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
         const key = `${msg.sessionId}:${msg.content.slice(0, 50)}`;
         if (!seenCross.has(key)) {
           seenCross.add(key);
-          relevantFromOtherSessions.push(msg);
+          // Mark source as partner-session
+          relevantFromOtherSessions.push({ ...msg, source: 'partner-session' });
+        }
+      }
+      // Add Inner Thoughts results to relevantFromOtherSessions
+      // They're treated as "other sessions" for context purposes
+      for (const msg of result.innerThoughts || []) {
+        const key = `inner:${msg.sessionId}:${msg.content.slice(0, 50)}`;
+        if (!seenCross.has(key)) {
+          seenCross.add(key);
+          relevantFromOtherSessions.push(msg); // Already has source: 'inner-thoughts'
         }
       }
       for (const msg of result.withinSession) {
@@ -582,26 +717,45 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
       }
     }
 
-    // Log search results
-    auditLog('RETRIEVAL', 'Semantic search completed', {
+    // Log search results via BrainService
+    await brainService.startActivity({
+      sessionId: currentSessionId || 'unknown',
       turnId,
-      sessionId: currentSessionId,
-      userId,
-      queryCount: referenceDetection.searchQueries.length,
-      crossSessionResults: relevantFromOtherSessions.length,
-      withinSessionResults: relevantFromCurrentSession.length,
-      topMatches: [
-        ...relevantFromOtherSessions.slice(0, 2).map(m => ({
-          content: m.content.substring(0, 150),
-          similarity: m.similarity.toFixed(3),
-          source: 'cross-session',
-        })),
-        ...relevantFromCurrentSession.slice(0, 2).map(m => ({
-          content: m.content.substring(0, 150),
-          similarity: m.similarity.toFixed(3),
-          source: 'within-session',
-        })),
-      ],
+      activityType: ActivityType.RETRIEVAL,
+      model: 'system-retrieval',
+      input: {
+        userId,
+        searchQueries: referenceDetection.searchQueries,
+        referencesDetected: referenceDetection.references,
+        threshold: effectiveThreshold,
+        maxCrossSession: effectiveMaxCrossSession,
+      },
+      metadata: {
+        queryCount: referenceDetection.searchQueries.length,
+      }
+    }).then(async (activity) => {
+      // Complete immediately as we already have results
+      await brainService.completeActivity(activity.id, {
+        output: {
+          crossSessionResultsCount: relevantFromOtherSessions.length,
+          withinSessionResultsCount: relevantFromCurrentSession.length,
+          topMatches: [
+            ...relevantFromOtherSessions.slice(0, 5).map(m => ({
+              content: m.content, // Full content, NO TRUNCATION
+              similarity: m.similarity,
+              source: 'cross-session',
+              timestamp: m.timestamp
+            })),
+            ...relevantFromCurrentSession.slice(0, 5).map(m => ({
+              content: m.content, // Full content, NO TRUNCATION
+              similarity: m.similarity,
+              source: 'within-session',
+              timestamp: m.timestamp
+            })),
+          ]
+        },
+        durationMs: 0 // Already elapsed in search time effectively
+      });
     });
 
     // Sort by similarity and limit
@@ -683,6 +837,7 @@ export function formatRetrievedContext(context: RetrievedContext): string {
   }
 
   // Relevant messages from other sessions - with time context
+  // Now includes both partner sessions AND inner thoughts
   if (context.relevantFromOtherSessions.length > 0) {
     sections.push('\n[Related content from previous sessions]');
     for (const msg of context.relevantFromOtherSessions) {
@@ -690,11 +845,22 @@ export function formatRetrievedContext(context: RetrievedContext): string {
       const timePhrase = msg.timeContext?.phrase ?? new Date(msg.timestamp).toLocaleDateString();
       const useMemoryLanguage = msg.timeContext?.useRememberingLanguage ?? true;
 
-      if (useMemoryLanguage) {
-        sections.push(`[Session with ${msg.partnerName}, ${timePhrase}]`);
+      // Format differently based on source
+      if (msg.source === 'inner-thoughts') {
+        // Inner Thoughts formatting
+        if (useMemoryLanguage) {
+          sections.push(`[Your reflections, ${timePhrase}]`);
+        } else {
+          sections.push(`[Your reflections]`);
+        }
       } else {
-        // For very recent content, minimal framing
-        sections.push(`[${msg.partnerName}]`);
+        // Partner session formatting (default)
+        if (useMemoryLanguage) {
+          sections.push(`[Session with ${msg.partnerName}, ${timePhrase}]`);
+        } else {
+          // For very recent content, minimal framing
+          sections.push(`[${msg.partnerName}]`);
+        }
       }
       sections.push(`${msg.role === 'user' ? 'User' : 'AI'}: ${msg.content}`);
     }

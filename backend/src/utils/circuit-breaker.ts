@@ -32,9 +32,10 @@ export async function withTimeout<T>(
 
 /**
  * Circuit breaker for Haiku operations.
- * Default timeout: 3 seconds (was 1.5s - increased for robustness)
+ * Default timeout: 10 seconds - provides ample room for network latency and cold starts.
+ * Previous values (1.5s, 3s) proved too aggressive.
  */
-export const HAIKU_TIMEOUT_MS = 3000;
+export const HAIKU_TIMEOUT_MS = 10000;
 
 /**
  * Execute a Haiku operation with circuit breaker protection.
@@ -46,25 +47,25 @@ export async function withHaikuCircuitBreaker<T>(
   operationName: string
 ): Promise<T> {
   const startTime = Date.now();
-  
+
   try {
     const result = await withTimeout(
       operation(),
       HAIKU_TIMEOUT_MS,
       operationName
     );
-    
+
     const duration = Date.now() - startTime;
-    
+
     if (result === null) {
       console.warn(`[CircuitBreaker] ${operationName} failed, using fallback (took ${duration}ms)`);
       return fallback;
     }
-    
+
     if (duration > 1000) {
       console.warn(`[CircuitBreaker] ${operationName} took ${duration}ms (slow but succeeded)`);
     }
-    
+
     return result;
   } catch (error) {
     const duration = Date.now() - startTime;

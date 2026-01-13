@@ -64,6 +64,8 @@ export interface CreateInnerWorkSessionResponse {
   initialMessage: InnerWorkMessageDTO;
   /** If initialMessage was provided, this contains the saved user message */
   userMessage?: InnerWorkMessageDTO;
+  /** Suggested actions the user can take (only when initialMessage provided) */
+  suggestedActions?: SuggestedAction[];
 }
 
 // ============================================================================

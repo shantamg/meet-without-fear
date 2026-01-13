@@ -10,6 +10,7 @@ import { ClerkProvider, ClerkLoaded, useAuth as useClerkAuth } from '@clerk/cler
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
 
 import { AuthContext, useAuthProvider } from '@/src/hooks/useAuth';
+import { SessionDrawerProvider } from '@/src/hooks/useSessionDrawer';
 import { QueryProvider } from '@/src/providers/QueryProvider';
 import { setTokenProvider } from '@/src/lib/api';
 import { ToastProvider } from '@/src/contexts/ToastContext';
@@ -91,15 +92,17 @@ function AuthProviderWrapper() {
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaProvider>
         <AuthContext.Provider value={auth}>
-          <ToastProvider>
-            <MixpanelInitializer />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(public)" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-            </Stack>
-            <StatusBar style="light" />
-          </ToastProvider>
+          <SessionDrawerProvider>
+            <ToastProvider>
+              <MixpanelInitializer />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(public)" />
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+              </Stack>
+              <StatusBar style="light" />
+            </ToastProvider>
+          </SessionDrawerProvider>
         </AuthContext.Provider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

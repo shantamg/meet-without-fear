@@ -7,6 +7,7 @@
  */
 
 import { getHaikuJson } from '../lib/bedrock';
+import { withHaikuCircuitBreaker, HAIKU_TIMEOUT_MS } from '../utils/circuit-breaker';
 import type { MemoryDetectionResult, MemoryCategory } from 'shared';
 
 // ============================================================================
@@ -198,50 +199,50 @@ Output only valid JSON with no markdown formatting or extra text.`;
   const effectiveSessionId = sessionId || 'memory-detection';
   const effectiveTurnId = turnId || (sessionId ? `${sessionId}-${Date.now()}` : `memory-detection-${Date.now()}`);
 
-  try {
-    const response = await getHaikuJson<HaikuDetectionResponse>({
-      systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-      maxTokens: 512,
-      sessionId: effectiveSessionId,
-      turnId: effectiveTurnId,
-      operation: 'memory-detection',
-    });
+  // Use circuit breaker to prevent slow Haiku calls from blocking the entire response
+  const fallbackResult: MemoryDetectionResult = {
+    hasMemoryIntent: false,
+    suggestions: [],
+    topicContext: '',
+  };
 
-    console.log(`${logPrefix} Haiku raw response:`, JSON.stringify(response, null, 2));
+  const response = await withHaikuCircuitBreaker(
+    async () => {
+      return await getHaikuJson<HaikuDetectionResponse>({
+        systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+        maxTokens: 512,
+        sessionId: effectiveSessionId,
+        turnId: effectiveTurnId,
+        operation: 'memory-detection',
+      });
+    },
+    null, // Fallback to null if timeout/failure
+    'memory-detection'
+  );
 
-    if (!response) {
-      console.warn(`${logPrefix} Haiku returned null, no memory detected`);
-      return {
-        hasMemoryIntent: false,
-        suggestions: [],
-        topicContext: '',
-      };
-    }
-
-    // Validate and normalize the response
-    const result = normalizeDetectionResult(response);
-
-    console.log(`${logPrefix} Detection result:`, {
-      hasMemoryIntent: result.hasMemoryIntent,
-      suggestionCount: result.suggestions.length,
-      suggestions: result.suggestions.map(s => ({
-        category: s.category,
-        content: s.suggestedContent,
-        confidence: s.confidence,
-      })),
-      topicContext: result.topicContext,
-    });
-
-    return result;
-  } catch (error) {
-    console.error(`${logPrefix} Error detecting memory intent:`, error);
-    return {
-      hasMemoryIntent: false,
-      suggestions: [],
-      topicContext: '',
-    };
+  if (!response) {
+    console.warn(`${logPrefix} Haiku timed out or returned null, using fallback`);
+    return fallbackResult;
   }
+
+  console.log(`${logPrefix} Haiku raw response:`, JSON.stringify(response, null, 2));
+
+  // Validate and normalize the response
+  const result = normalizeDetectionResult(response);
+
+  console.log(`${logPrefix} Detection result:`, {
+    hasMemoryIntent: result.hasMemoryIntent,
+    suggestionCount: result.suggestions.length,
+    suggestions: result.suggestions.map(s => ({
+      category: s.category,
+      content: s.suggestedContent,
+      confidence: s.confidence,
+    })),
+    topicContext: result.topicContext,
+  });
+
+  return result;
 }
 
 /**

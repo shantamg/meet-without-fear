@@ -12,6 +12,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
 import { getSonnetResponse } from '../lib/bedrock';
+import { brainService } from '../services/brain-service';
 import { buildInitialMessagePrompt, buildStagePrompt } from '../services/stage-prompts';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import {
@@ -25,7 +26,6 @@ import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { embedMessage } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
-import { auditLog } from '../services/audit-logger';
 import { runReconcilerForDirection, getSharedContextForGuesser } from '../services/reconciler';
 import { updateContext } from '../lib/request-context';
 
@@ -255,6 +255,9 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     });
     console.log(`[sendMessage:${requestId}] ✅ User message created: ID=${userMessage.id}, timestamp=${userMessage.timestamp.toISOString()}, stage=${userMessage.stage}`);
     console.log(`[sendMessage:${requestId}] User message creation took ${Date.now() - userMessageStartTime}ms`);
+
+    // Broadcast to Status Site
+    brainService.broadcastMessage(userMessage);
 
     // =========================================================================
     // Mark shared content as SEEN if user is in REFINING status
@@ -647,6 +650,9 @@ async function processAIResponseInBackground(ctx: {
     });
     console.log(`[sendMessage:${requestId}] [BG] ✅ AI message created: ID=${aiMessage.id}`);
 
+    // Broadcast text to Status Site
+    brainService.broadcastMessage(aiMessage);
+
     // Embed messages for cross-session retrieval (non-blocking)
     embedMessage(userMessageId, turnId).catch((err) =>
       console.warn(`[sendMessage:${requestId}] [BG] Failed to embed user message:`, err)
@@ -1001,7 +1007,7 @@ Respond in JSON format:
         console.log(`[confirmFeelHeard] Generated transition message for session ${sessionId}`);
 
         // Audit log the transition message
-        auditLog('RESPONSE', 'Stage transition message generated', {
+        /* auditLog('RESPONSE', 'Stage transition message generated', {
           turnId,
           sessionId,
           userId: user.id,
@@ -1009,7 +1015,7 @@ Respond in JSON format:
           operation: 'stage1-transition',
           responseText: transitionContent,
           messageId: aiMessage.id,
-        });
+        }); */
       } catch (error) {
         console.error('[confirmFeelHeard] Failed to generate transition message:', error);
         // Continue without transition message - not a critical failure
@@ -1363,8 +1369,8 @@ export async function getInitialMessage(
           userId: user.id,
           linkedTrigger: 'suggestion_start',
         },
-        select: { 
-          summary: true, 
+        select: {
+          summary: true,
           theme: true,
           messages: {
             orderBy: { timestamp: 'asc' },
@@ -1401,15 +1407,33 @@ export async function getInitialMessage(
         turnCount: 1,
         emotionalIntensity: 5,
         contextBundle: {
-          vessel: {
-            emotionalReadings: [],
-            events: [],
-            identifiedNeeds: [],
-            boundaries: [],
-            documents: [],
+          conversationContext: {
+            recentTurns: [],
+            turnCount: 0,
+            sessionDurationMinutes: 0,
           },
-          history: [],
-          memories: [],
+          emotionalThread: {
+            initialIntensity: null,
+            currentIntensity: null,
+            trend: 'unknown',
+            notableShifts: [],
+          },
+          stageContext: {
+            stage: 0,
+            gatesSatisfied: {},
+          },
+          userName,
+          partnerName,
+          intent: {
+            intent: 'stage_enforcement',
+            depth: 'minimal',
+            reason: 'Stage 0 - onboarding with minimal context',
+            threshold: 0.60,
+            maxCrossSession: 0,
+            allowCrossSession: false,
+            surfaceStyle: 'silent',
+          },
+          assembledAt: new Date().toISOString(),
         },
         innerThoughtsContext,
       }, { isInvitationPhase: true });
@@ -1446,7 +1470,7 @@ export async function getInitialMessage(
         responseContent = typeof parsed.response === 'string'
           ? parsed.response
           : getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
-        
+
         if (isInvitationPhase && typeof parsed.invitationMessage === 'string') {
           extractedInvitationMessage = parsed.invitationMessage;
         }
@@ -1492,7 +1516,7 @@ export async function getInitialMessage(
     console.log(`[getInitialMessage] Generated initial message for session ${sessionId}, stage ${currentStage}`);
 
     // Audit log the initial message
-    auditLog('RESPONSE', 'Initial welcome message generated', {
+    /* auditLog('RESPONSE', 'Initial welcome message generated', {
       turnId,
       sessionId,
       userId: user.id,
@@ -1503,7 +1527,7 @@ export async function getInitialMessage(
       responseText: responseContent,
       messageId: aiMessage.id,
       invitationMessage: extractedInvitationMessage,
-    });
+    }); */
 
     successResponse(res, {
       message: {

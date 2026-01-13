@@ -22,7 +22,6 @@ import { MessageRole } from '@meet-without-fear/shared';
 import { getSonnetResponse, getHaikuJson } from '../lib/bedrock';
 import { publishMessageAIResponse } from './realtime';
 import { getCurrentUserId } from '../lib/request-context';
-import { auditLog } from './audit-logger';
 import {
   buildReconcilerPrompt,
   buildShareOfferPrompt,
@@ -163,10 +162,14 @@ async function generatePostShareContinuation(
   });
 
   // Convert to format expected by prompt (reverse to chronological order)
-  const conversationHistory = recentMessages.reverse().map(m => ({
-    role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
-    content: m.content,
-  }));
+  // Only include USER and AI messages - exclude EMPATHY_STATEMENT, SHARED_CONTEXT, etc.
+  const conversationHistory = recentMessages
+    .filter(m => m.role === 'USER' || m.role === 'AI')
+    .reverse()
+    .map(m => ({
+      role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: m.content,
+    }));
 
   const turnId = `${sessionId}-${Date.now()}`;
 
@@ -237,8 +240,30 @@ async function generatePostShareContinuation(
     return getFallbackContinuation(currentStage, partnerName);
   }
 
-  console.log(`[Reconciler] Generated continuation for stage ${currentStage}: "${response.substring(0, 50)}..."`);
-  return response;
+  // Parse the JSON response and extract just the response field
+  // The stage prompt returns: { "response": "...", "analysis": "...", ... }
+  try {
+    const parsed = extractJsonFromResponse(response) as { response?: string };
+    if (parsed && typeof parsed.response === 'string') {
+      console.log(`[Reconciler] Generated continuation for stage ${currentStage}: "${parsed.response.substring(0, 50)}..."`);
+      return parsed.response;
+    }
+  } catch (error) {
+    console.warn(`[Reconciler] Failed to parse JSON response, attempting fallback extraction:`, error);
+  }
+
+  // Fallback: strip analysis tags and try to extract response field via regex
+  const stripped = response.replace(/<analysis>[\s\S]*?<\/analysis>/gi, '').trim();
+  const responseMatch = stripped.match(/"response"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (responseMatch) {
+    const extracted = responseMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
+    console.log(`[Reconciler] Extracted response via regex: "${extracted.substring(0, 50)}..."`);
+    return extracted;
+  }
+
+  // Last resort: use fallback
+  console.warn(`[Reconciler] All parsing failed, using fallback for stage ${currentStage}`);
+  return getFallbackContinuation(currentStage, partnerName);
 }
 
 /**
@@ -392,6 +417,91 @@ export async function runReconciler(
       ? null
       : 'There are empathy gaps that could benefit from additional sharing',
   };
+}
+
+/**
+ * Generate a share suggestion for a specific direction after reconciler analysis.
+ * Called when empathy status is set to AWAITING_SHARING to proactively create
+ * the share offer so users see it immediately without needing to reload.
+ *
+ * @param sessionId - The session ID
+ * @param guesserId - The user who made the empathy guess
+ * @param subjectId - The user being guessed about (who will receive the share suggestion)
+ */
+export async function generateShareSuggestionForDirection(
+  sessionId: string,
+  guesserId: string,
+  subjectId: string
+): Promise<void> {
+  console.log(`[Reconciler] generateShareSuggestionForDirection called: guesser=${guesserId}, subject=${subjectId}`);
+
+  // Get user names
+  const [guesser, subject] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: guesserId },
+      select: { id: true, name: true, firstName: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: subjectId },
+      select: { id: true, name: true, firstName: true },
+    }),
+  ]);
+
+  if (!guesser || !subject) {
+    console.error(`[Reconciler] generateShareSuggestionForDirection: Guesser or subject not found`);
+    return;
+  }
+
+  const guesserInfo: UserInfo = {
+    id: guesser.id,
+    name: guesser.firstName || guesser.name || 'User',
+  };
+  const subjectInfo: UserInfo = {
+    id: subject.id,
+    name: subject.firstName || subject.name || 'User',
+  };
+
+  // Get the reconciler result
+  const dbResult = await prisma.reconcilerResult.findUnique({
+    where: {
+      sessionId_guesserId_subjectId: {
+        sessionId,
+        guesserId,
+        subjectId,
+      },
+    },
+    include: {
+      shareOffer: true,
+    },
+  });
+
+  if (!dbResult) {
+    console.warn(`[Reconciler] generateShareSuggestionForDirection: No reconciler result found`);
+    return;
+  }
+
+  // If share offer already exists, don't regenerate
+  if (dbResult.shareOffer && dbResult.shareOffer.suggestedContent) {
+    console.log(`[Reconciler] generateShareSuggestionForDirection: Share offer already exists, skipping`);
+    return;
+  }
+
+  // Convert DB result to ReconcilerResult type
+  const reconcilerResult = dbResultToReconcilerResult(dbResult);
+
+  // Get subject's witnessing content
+  const witnessingContent = await getWitnessingContent(sessionId, subjectId);
+
+  // Generate the share suggestion (calls the private function)
+  await generateShareSuggestion(
+    sessionId,
+    guesserInfo,
+    subjectInfo,
+    reconcilerResult,
+    witnessingContent
+  );
+
+  console.log(`[Reconciler] generateShareSuggestionForDirection: Share suggestion created for subject ${subjectInfo.name}`);
 }
 
 /**
@@ -622,12 +732,11 @@ Respond in JSON:
       reason: `${guesser.name} may have missed some important aspects of what you're going through.`,
     };
   }
-
   console.log(`[Reconciler] Share suggestion generated: "${response.suggestedContent.substring(0, 50)}..."`);
   console.log(`[Reconciler] Share reason: "${response.reason}"`);
 
   // Log the share suggestion for dashboard visibility (same turnId as COST log)
-  await auditLog('RECONCILER', `Generated share suggestion for ${subject.name} to help ${guesser.name}`, {
+  /* await auditLog('RECONCILER', `Generated share suggestion for ${subject.name} to help ${guesser.name}`, {
     sessionId,
     turnId,
     eventType: 'share_suggestion',
@@ -639,7 +748,7 @@ Respond in JSON:
       severity: reconcilerResult.gaps.severity,
       mostImportantGap: reconcilerResult.gaps.mostImportantGap,
     },
-  });
+  }); */
 
   // Save to reconciler result - retry up to 3 times to handle potential race condition
   // where the record might not be immediately visible after creation
@@ -809,13 +918,13 @@ export async function respondToShareSuggestion(
     console.log(`[Reconciler] User ${userId} declined share offer. Marking guesser's empathy as READY.`);
 
     // Log the decline for dashboard visibility
-    await auditLog('RECONCILER', `Share suggestion declined - marking empathy as READY`, {
+    /* await auditLog('RECONCILER', `Share suggestion declined - marking empathy as READY`, {
       sessionId,
       eventType: 'share_declined',
       subjectId: userId,
       guesserName: shareOffer.result.guesserName,
       subjectName: shareOffer.result.subjectName,
-    });
+    }); */
 
     // User declined - mark offer as declined
     await prisma.reconcilerShareOffer.update({
@@ -869,7 +978,7 @@ export async function respondToShareSuggestion(
   console.log(`[Reconciler] User ${userId} ${response.action}ed share offer. Shared content: "${sharedContent.substring(0, 50)}..."`);
 
   // Log the share acceptance for dashboard visibility
-  await auditLog('RECONCILER', `Share suggestion ${response.action}ed - context shared with guesser`, {
+  /* await auditLog('RECONCILER', `Share suggestion ${response.action}ed - context shared with guesser`, {
     sessionId,
     eventType: response.action === 'refine' ? 'share_refined' : 'share_accepted',
     subjectId: userId,
@@ -878,7 +987,7 @@ export async function respondToShareSuggestion(
     sharedContent,
     wasRefined: response.action === 'refine',
     originalSuggestion: shareOffer.suggestedContent,
-  });
+  }); */
 
   // Update share offer - set to DELIVERED since we're about to create the SHARED_CONTEXT message
   const now = new Date();
@@ -1234,7 +1343,7 @@ async function analyzeEmpathyGap(
   );
 
   // Log the reconciler analysis for dashboard visibility (same turnId as COST log)
-  await auditLog('RECONCILER', `Analyzed ${input.guesser.name}'s understanding of ${input.subject.name}`, {
+  /* await auditLog('RECONCILER', `Analyzed ${input.guesser.name}'s understanding of ${input.subject.name}`, {
     sessionId: input.sessionId,
     turnId,
     eventType: 'analysis',
@@ -1258,7 +1367,7 @@ async function analyzeEmpathyGap(
       sharingWouldHelp: result.recommendation.sharingWouldHelp,
       suggestedShareFocus: result.recommendation.suggestedShareFocus,
     },
-  });
+  }); */
 
   return result;
 }
