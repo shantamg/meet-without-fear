@@ -1951,8 +1951,10 @@ export async function resubmitEmpathy(
 
 Generate a brief, warm acknowledgment message (2-3 sentences) for ${userName} that:
 1. Acknowledges the effort to refine their understanding
-2. Notes that their updated statement is being re-analyzed
+2. Notes that the internal reconciler (a separate system, not you) will review their updated statement
 3. Encourages them that this iterative process helps build deeper understanding
+
+IMPORTANT: You are NOT the reconciler. Reference "the internal reconciler" or "our reconciler" as a separate system that will do the analysis. Do not say "I'm analyzing" or "I'll review" - the reconciler does that work privately.
 
 Keep it natural and conversational. Don't be overly effusive.
 
@@ -1978,12 +1980,12 @@ Respond in JSON format:
           const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
           transitionContent = typeof parsed.response === 'string'
             ? parsed.response
-            : `You're showing real understanding here. Re-analyzing your updated perspective...`;
+            : `You're showing real understanding here. The reconciler will review your updated perspective shortly.`;
         } catch {
-          transitionContent = `You're showing real understanding here. Re-analyzing your updated perspective...`;
+          transitionContent = `You're showing real understanding here. The reconciler will review your updated perspective shortly.`;
         }
       } else {
-        transitionContent = `You're showing real understanding here. Re-analyzing your updated perspective...`;
+        transitionContent = `You're showing real understanding here. The reconciler will review your updated perspective shortly.`;
       }
 
       // Save the transition message to the database
@@ -2033,7 +2035,7 @@ Respond in JSON format:
 
     successResponse(res, {
       status: 'ANALYZING',
-      message: 'Re-analyzing your updated understanding...',
+      message: 'The reconciler is reviewing your updated understanding...',
       empathyMessage: {
         id: newMessage.id,
         content: newMessage.content,

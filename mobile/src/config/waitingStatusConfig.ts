@@ -94,7 +94,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: true,
     showKeepChattingAction: false, // Uses inner thoughts link instead
-    bannerText: () => `AI is analyzing your empathy match...`,
+    bannerText: () => `The reconciler is analyzing your empathy match...`,
   },
 
   // Stage 2: Reconciler is re-analyzing revised empathy (no spinner, keep chatting style)
@@ -105,10 +105,10 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: true,
-    bannerText: () => `Re-analyzing your understanding...`,
+    bannerText: () => `The reconciler is reviewing your updated understanding...`,
   },
 
-  // Stage 2: User (Subject) needs to respond to share suggestion
+  // Stage 2: User (Subject) needs to respond to share suggestion (OFFER_SHARING - significant gaps)
   'awaiting-context-share': {
     showBanner: true,
     hideInput: false, // User can still chat
@@ -118,6 +118,52 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     showKeepChattingAction: false,
     bannerText: (p) => `${p}'s understanding has some gaps.`,
     bannerSubtext: 'Review the suggestion below to help them understand you better.',
+  },
+
+  // Stage 2: User (Subject) may optionally share context (OFFER_OPTIONAL - moderate gaps)
+  'awaiting-context-share-optional': {
+    showBanner: true,
+    hideInput: false, // User can still chat
+    showInnerThoughts: false,
+    isActionRequired: false, // Optional - user can skip
+    showSpinner: false,
+    showKeepChattingAction: false,
+    bannerText: (p) => `You might help ${p} understand a little more.`,
+    bannerSubtext: 'This is optional - see the suggestion below.',
+  },
+
+  // Stage 2: Guesser waiting for subject to decide whether to share (Guesser side)
+  'awaiting-subject-decision': {
+    showBanner: true,
+    hideInput: false, // Guesser can chat
+    showInnerThoughts: true,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: true,
+    bannerText: (p) => `${p} is deciding whether to share more context.`,
+    bannerSubtext: 'You can keep chatting while you wait.',
+  },
+
+  // Stage 2: Subject declined sharing (transient - positive message)
+  'subject-skipped-sharing': {
+    showBanner: false, // Handled via chat message instead
+    hideInput: false,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
+  },
+
+  // Stage 2: Empathy match is good, no sharing needed (PROCEED - positive feedback)
+  'empathy-proceed': {
+    showBanner: true,
+    hideInput: false,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
+    bannerText: (p) => `Your understanding of ${p} looks good!`,
+    bannerSubtext: 'Continue exploring when ready.',
   },
 
   // Stage 2: Guesser is refining empathy after receiving shared context
