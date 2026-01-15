@@ -25,6 +25,8 @@ jest.mock('lucide-react-native', () => ({
   Heart: () => 'HeartIcon',
   UserPlus: () => 'UserPlusIcon',
   Layers: () => 'LayersIcon',
+  Menu: () => 'MenuIcon',
+  Settings: () => 'SettingsIcon',
 }));
 
 // Mock useSessions hook
@@ -32,8 +34,8 @@ const mockUseSessions = jest.fn();
 const mockAcceptInvitation = jest.fn();
 jest.mock('../../../../src/hooks/useSessions', () => ({
   useSessions: () => mockUseSessions(),
-  useAcceptInvitation: (options: { onSuccess?: (data: { session: { id: string } }) => void; onError?: () => void }) => {
-    mockAcceptInvitation.mockImplementation((params: { invitationId: string }) => {
+  useAcceptInvitation: (options) => {
+    mockAcceptInvitation.mockImplementation((params) => {
       // Simulate successful acceptance
       options.onSuccess?.({ session: { id: 'accepted-session' } });
     });
@@ -53,6 +55,7 @@ jest.mock('@/src/hooks/useAuth', () => ({
 // Mock useBiometricAuth, usePendingInvitation, and useCreateInnerThoughtsSession hooks to prevent async state updates
 const mockUsePendingInvitation = jest.fn();
 const mockCreateInnerThoughts = jest.fn();
+const mockOpenDrawer = jest.fn();
 jest.mock('@/src/hooks', () => ({
   useBiometricAuth: () => ({
     isAvailable: false,
@@ -75,6 +78,12 @@ jest.mock('@/src/hooks', () => ({
     mutate: mockCreateInnerThoughts,
     isPending: false,
   }),
+  useSessionDrawer: () => ({
+    openDrawer: mockOpenDrawer,
+  }),
+  useUnreadSessionCount: () => ({
+    count: 0,
+  }),
 }));
 
 // Mock useInvitationDetails hook
@@ -85,7 +94,7 @@ jest.mock('@/src/hooks/useInvitation', () => ({
 
 // Mock components that may have dependencies
 jest.mock('../../../../src/components', () => ({
-  BiometricPrompt: ({ visible, testID }: { visible: boolean; testID?: string }) => {
+  BiometricPrompt: ({ visible, testID }) => {
     const { View, Text } = require('react-native');
     if (!visible) return null;
     return (
@@ -95,7 +104,7 @@ jest.mock('../../../../src/components', () => ({
     );
   },
   Logo: () => null,
-  ChatInput: ({ onSend, placeholder, testID }: { onSend?: (msg: string) => void; placeholder?: string; testID?: string }) => {
+  ChatInput: ({ onSend, placeholder, testID }) => {
     const { View, TextInput, TouchableOpacity, Text } = require('react-native');
     return (
       <View testID={testID || 'chat-input'}>
@@ -106,11 +115,12 @@ jest.mock('../../../../src/components', () => ({
       </View>
     );
   },
+  SessionDrawer: ({ children }) => children,
 }));
 
 // Mock react-native-safe-area-context
 jest.mock('react-native-safe-area-context', () => ({
-  SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
+  SafeAreaView: ({ children }) => children,
 }));
 
 // Helper to create mock session

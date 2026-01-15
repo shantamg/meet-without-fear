@@ -30,6 +30,50 @@ jest.mock('../../services/partner-session-classifier', () => ({
   runPartnerSessionClassifier: jest.fn().mockResolvedValue(null),
 }));
 
+// Mock bedrock
+jest.mock('../../lib/bedrock', () => ({
+  getSonnetResponse: jest.fn().mockResolvedValue('Mock response'),
+}));
+
+// Mock brain service
+jest.mock('../../services/brain-service', () => ({
+  brainService: {
+    recordThinking: jest.fn().mockResolvedValue(undefined),
+    broadcastMessage: jest.fn(),
+  },
+}));
+
+// Mock stage prompts
+jest.mock('../../services/stage-prompts', () => ({
+  buildInitialMessagePrompt: jest.fn().mockReturnValue('Mock prompt'),
+  buildStagePrompt: jest.fn().mockReturnValue('Mock stage prompt'),
+}));
+
+// Mock json extractor
+jest.mock('../../utils/json-extractor', () => ({
+  extractJsonFromResponse: jest.fn().mockReturnValue({}),
+}));
+
+// Mock embedding service
+jest.mock('../../services/embedding', () => ({
+  embedMessage: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock conversation summarizer
+jest.mock('../../services/conversation-summarizer', () => ({
+  updateSessionSummary: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock reconciler
+jest.mock('../../services/reconciler', () => ({
+  runReconcilerForDirection: jest.fn().mockResolvedValue(null),
+  getSharedContextForGuesser: jest.fn().mockResolvedValue(null),
+}));
+
+// Mock request context
+jest.mock('../../lib/request-context', () => ({
+  updateContext: jest.fn(),
+}));
 
 // Helper to create mock request
 function createMockRequest(options: {

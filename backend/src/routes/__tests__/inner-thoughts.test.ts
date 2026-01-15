@@ -158,7 +158,7 @@ describe('Inner Thoughts API', () => {
     it('creates session with AI greeting when no initialMessage provided', async () => {
       (prisma.innerWorkSession.create as jest.Mock).mockResolvedValue(mockSession);
       (prisma.innerWorkMessage.create as jest.Mock).mockResolvedValue(mockMessage);
-      (bedrock.getCompletion as jest.Mock).mockResolvedValue(
+      (bedrock.getSonnetResponse as jest.Mock).mockResolvedValue(
         '{"response": "Hey there. What\'s on your mind today?"}'
       );
 
@@ -210,7 +210,7 @@ describe('Inner Thoughts API', () => {
       (prisma.innerWorkMessage.create as jest.Mock)
         .mockResolvedValueOnce(userMessage)
         .mockResolvedValueOnce(aiMessage);
-      (bedrock.getCompletion as jest.Mock).mockResolvedValue(
+      (bedrock.getSonnetResponse as jest.Mock).mockResolvedValue(
         '{"response": "I hear that you\'re feeling anxious. Tell me more."}'
       );
 
@@ -272,7 +272,7 @@ describe('Inner Thoughts API', () => {
       (prisma.innerWorkMessage.create as jest.Mock)
         .mockResolvedValueOnce(userMessage)
         .mockResolvedValueOnce(aiMessage);
-      (bedrock.getCompletion as jest.Mock).mockResolvedValue('{"response": "Response"}');
+      (bedrock.getSonnetResponse as jest.Mock).mockResolvedValue('{"response": "Response"}');
 
       const req = createMockRequest({
         user: mockUser,
@@ -283,7 +283,7 @@ describe('Inner Thoughts API', () => {
       await callHandler(createInnerWorkSession, req, res);
 
       // Verify getCompletion was called with the user's message
-      expect(bedrock.getCompletion).toHaveBeenCalledWith(
+      expect(bedrock.getSonnetResponse).toHaveBeenCalledWith(
         expect.objectContaining({
           messages: [{ role: 'user', content: 'Test message' }],
         })
@@ -328,7 +328,7 @@ describe('Inner Thoughts API', () => {
       (prisma.innerWorkMessage.create as jest.Mock)
         .mockResolvedValueOnce(userMessage)
         .mockResolvedValueOnce(aiMessage);
-      (bedrock.getCompletion as jest.Mock).mockResolvedValue('{"response": "Response"}');
+      (bedrock.getSonnetResponse as jest.Mock).mockResolvedValue('{"response": "Response"}');
 
       const req = createMockRequest({
         user: mockUser,
@@ -496,7 +496,7 @@ describe('Inner Thoughts API', () => {
           content: 'Hello human',
           timestamp: new Date(),
         });
-      (bedrock.getCompletion as jest.Mock).mockResolvedValue('{"response": "Hello human"}');
+      (bedrock.getSonnetResponse as jest.Mock).mockResolvedValue('{"response": "Hello human"}');
 
       const req = createMockRequest({
         user: mockUser,

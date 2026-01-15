@@ -20,7 +20,6 @@ import * as LoginScreen from '../../app/(public)/login';
 import * as SignupScreen from '../../app/(public)/signup';
 import * as HomeScreen from '../../app/(auth)/(tabs)/index';
 import * as SessionsScreen from '../../app/(auth)/(tabs)/sessions';
-import * as SettingsScreen from '../../app/(auth)/(tabs)/settings';
 import * as SessionLayout from '../../app/(auth)/session/[id]/_layout';
 import * as NotFound from '../../app/+not-found';
 import * as NavigationTypes from '../types/navigation';
@@ -206,10 +205,6 @@ describe('Navigation Structure', () => {
 
     it('has sessions tab screen', () => {
       expect(SessionsScreen.default).toBeDefined();
-    });
-
-    it('has settings tab screen', () => {
-      expect(SettingsScreen.default).toBeDefined();
     });
 
     it('has session detail layout', () => {
