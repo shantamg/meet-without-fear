@@ -101,7 +101,7 @@ router.get('/sessions', async (req, res) => {
     // Only fetch stats if we have sessions
     let stats: any[] = [];
     if (allSessionIds.length > 0) {
-      stats = await prisma.brainActivity.groupBy({
+      stats = await (prisma.brainActivity.groupBy as any)({
         by: ['sessionId'],
         _sum: {
           cost: true,
@@ -120,7 +120,7 @@ router.get('/sessions', async (req, res) => {
     // 4. Estimate user turns (Partner Sessions)
     let partnerTurnCounts: any[] = [];
     if (partnerSessionIds.length > 0) {
-      partnerTurnCounts = await prisma.message.groupBy({
+      partnerTurnCounts = await (prisma.message.groupBy as any)({
         by: ['sessionId'],
         _count: { id: true },
         where: {
@@ -133,7 +133,7 @@ router.get('/sessions', async (req, res) => {
     // 5. Estimate user turns (Inner Work Sessions)
     let innerTurnCounts: any[] = [];
     if (innerSessionIds.length > 0) {
-      innerTurnCounts = await prisma.innerWorkMessage.groupBy({
+      innerTurnCounts = await (prisma.innerWorkMessage.groupBy as any)({
         by: ['sessionId'],
         _count: { id: true },
         where: {
