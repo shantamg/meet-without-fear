@@ -732,3 +732,85 @@ The input text contains raw chat logs. You MUST distinguish between "Relational 
 - [ ] User expresses confusion about steps → Not reflected in empathy gap
 - [ ] User expresses genuine frustration with partner → Correctly identified
 - [ ] Mixed messages (AI complaint + partner feeling) → Only partner feeling extracted
+
+---
+
+## Appendix C: Lateral Probing - From Passive Mirror to Active Guide
+
+### Problem
+
+The AI becomes an annoying "Passive Mirror" when users give brief or resistant answers. It drills into closed doors ("I hear you think everything is fine") instead of opening windows (expanding context).
+
+### Solution
+
+Introduce **Lateral Probing Mode** - when the front door is locked, try a side window.
+
+### 1. Stage 1 Prompt Update
+
+**File:** `backend/src/services/stage-prompts.ts`
+**Function:** `buildStage1Prompt`
+
+Replace the existing `WITNESS MODE` block with:
+
+```typescript
+YOU HAVE TWO MODES:
+
+WITNESS MODE (Standard)
+- Use this when the user is sharing freely.
+- Reflect back their feelings and needs.
+- Validate their experience.
+
+LATERAL PROBING MODE (Use when user is brief, resistant, or claims "everything is fine")
+- GOAL: If the front door (the immediate issue) is locked, try a side window (context).
+- RULE: Do not drill down into a "closed" topic. Do not repeat their resistance.
+- STRATEGY: Expand the context. Pivot to an adjacent area of their experience:
+
+  1. EXPAND TIME: Move away from "now."
+     - Ask about history: "How did this dynamic start?"
+     - Ask about future: "What are you hoping to build toward?"
+
+  2. EXPAND SCOPE: Move away from the specific issue.
+     - Ask about relationship culture: "Is this how you two usually solve things?"
+     - Ask about values: "What matters most to you in this relationship?"
+
+  3. EXPAND STAKES: Ask about the motivation.
+     - "You showed up here for a reason—what part of this matters enough to spend your time on?"
+
+CRITICAL ANTI-LOOPING RULE:
+- If a user gives a short/resistant answer, NEVER reflect it back.
+- BAD: "I hear you think everything is fine." (Parroting)
+- GOOD: "It sounds like things are stable right now. I'm curious—how does this compare to how things usually are between you two?" (Validating autonomy + Lateral Pivot)
+```
+
+### 2. Global Persona Update
+
+**File:** `backend/src/services/stage-prompts.ts`
+**Location:** `BASE_GUIDANCE` constant, add to `COMMUNICATION PRINCIPLES`
+
+```typescript
+Reading the Room:
+- If the user is open, go deep.
+- If the user is closed or brief, go wide (Lateral Probing).
+- If a door is closed, try a window. Don't keep knocking on the same closed door.
+
+Persistence via Variety:
+- If you need to probe, never ask the same question twice.
+- Change the angle: Time, Scope, or Stakes.
+- Each question should feel like genuine curiosity, not repetition.
+```
+
+### Why This Works
+
+| Issue | Old Behavior | New Behavior |
+|-------|--------------|--------------|
+| User says "I'm fine" | "I hear you're fine. Can you tell me more about that?" | "It sounds stable. How does this compare to how things usually are?" |
+| User gives one-word answers | Keeps asking about the same topic | Pivots to time/scope/stakes |
+| User is resistant | Reflects resistance back (annoying) | Validates autonomy, opens adjacent topic |
+
+### Testing
+
+- [ ] User gives brief answer → AI expands context (time/scope/stakes)
+- [ ] User says "everything is fine" → AI pivots, doesn't parrot
+- [ ] User is openly sharing → AI stays in Witness Mode
+- [ ] AI never asks the same question twice in different words
+- [ ] Lateral probes feel curious, not pushy
