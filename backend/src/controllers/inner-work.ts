@@ -41,7 +41,7 @@ import {
   updateInnerWorkSessionRequestSchema,
   listInnerWorkSessionsQuerySchema,
 } from '@meet-without-fear/shared';
-import { getSonnetResponse, getHaikuJson } from '../lib/bedrock';
+import { getSonnetResponse, getHaikuJson, getCompletion } from '../lib/bedrock';
 import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildLinkedInnerThoughtsInitialMessagePrompt, buildInnerWorkSummaryPrompt, buildLinkedInnerThoughtsPrompt, LinkedPartnerSessionContext } from '../services/stage-prompts';
 import { extractJsonSafe } from '../utils/json-extractor';
 import { embedInnerWorkMessage } from '../services/embedding';
@@ -715,19 +715,18 @@ export const sendInnerWorkMessage = asyncHandler(
         ? fetchLinkedPartnerSessionContext(user.id, session.linkedPartnerSessionId)
         : Promise.resolve(null),
       // 4. Run semantic retrieval for cross-session context
-      // Skip retrieval on first message (no context to search against)
-      totalTurnCount >= 2
-        ? retrieveContext({
-          userId: user.id,
-          currentMessage: content,
-          turnId,
-          includeInnerThoughts: true, // Search both partner sessions AND inner thoughts
-          excludeInnerThoughtsSessionId: sessionId, // Don't include current session
-          linkedPartnerSessionId: session.linkedPartnerSessionId || undefined, // Boost linked session
-          skipDetection: true, // Always search - no Haiku gating for Inner Thoughts
-          includePreSession: false,
-        })
-        : Promise.resolve(null),
+      // Search on every message (as requested)
+      retrieveContext({
+        userId: user.id,
+        currentMessage: content,
+        turnId,
+        includeInnerThoughts: true, // Search both partner sessions AND inner thoughts
+        excludeInnerThoughtsSessionId: sessionId, // Don't include current session
+        linkedPartnerSessionId: session.linkedPartnerSessionId || undefined, // Boost linked session
+        skipDetection: true, // Always search - no Haiku gating for Inner Thoughts
+        includePreSession: false,
+        similarityThreshold: 0.4,
+      }),
     ]);
 
     const conversationSummaryText = summaryData

@@ -488,9 +488,9 @@ export function useUnifiedSession(sessionId: string | undefined) {
     // Stage 2: Guesser's empathy has gaps, waiting for subject to decide whether to share
     // This happens when: reconciler found gaps, created a share suggestion for subject,
     // and we're waiting for subject to respond (share or skip).
-    // Guesser should see waiting banner and not be able to chat until subject responds.
+    // Guesser should see waiting banner but can keep chatting.
     else if (empathyStatusData?.awaitingSharing && !empathyStatusData?.hasNewSharedContext) {
-      newWaitingStatus = 'empathy-pending';
+      newWaitingStatus = 'awaiting-subject-decision';
     }
     // Stage 2: Guesser received new shared context from subject
     // CHECK THIS FIRST - when user has new shared context, they should be able to chat

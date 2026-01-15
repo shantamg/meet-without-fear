@@ -35,7 +35,7 @@ export async function withTimeout<T>(
  * Default timeout: 10 seconds - provides ample room for network latency and cold starts.
  * Previous values (1.5s, 3s) proved too aggressive.
  */
-export const HAIKU_TIMEOUT_MS = 10000;
+export const HAIKU_TIMEOUT_MS = 20000;
 
 /**
  * Execute a Haiku operation with circuit breaker protection.

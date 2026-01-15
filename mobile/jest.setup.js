@@ -597,6 +597,21 @@ try {
   // If react-native isn't available for some reason, ignore
 }
 
+// Mock react-native-safe-area-context
+jest.mock('react-native-safe-area-context', () => {
+  const React = require('react');
+  return {
+    SafeAreaProvider: ({ children }) => React.createElement('SafeAreaProvider', null, children),
+    SafeAreaView: ({ children, ...props }) => React.createElement('SafeAreaView', props, children),
+    useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+    useSafeAreaFrame: () => ({ x: 0, y: 0, width: 375, height: 812 }),
+    initialWindowMetrics: {
+      frame: { x: 0, y: 0, width: 375, height: 812 },
+      insets: { top: 0, right: 0, bottom: 0, left: 0 },
+    },
+  };
+});
+
 // Mock mixpanel-react-native
 jest.mock('mixpanel-react-native', () => {
   class MockMixpanel {

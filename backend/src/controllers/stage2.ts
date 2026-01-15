@@ -1536,9 +1536,9 @@ export async function getEmpathyExchangeStatus(
     // Check if both have consented
     const bothConsented = !!(myAttempt && partnerAttempt);
 
-    // Check if analyzing
-    const analyzing =
-      myAttempt?.status === 'ANALYZING' || partnerAttempt?.status === 'ANALYZING';
+    // Check if MY attempt is being analyzed (not partner's)
+    // Subject shouldn't see "analyzing" while working on their empathy draft
+    const analyzing = myAttempt?.status === 'ANALYZING';
 
     // Get refinement hint if my attempt needs work
     let refinementHint = null;
