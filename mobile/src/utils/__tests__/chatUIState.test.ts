@@ -457,7 +457,7 @@ describe('Waiting Status Integration', () => {
     expect(result.waitingStatus).toBe('witness-pending');
   });
 
-  it('includes spinner info in config for reconciler-analyzing', () => {
+  it('includes Keep Chatting style for reconciler-analyzing (no spinner)', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -467,7 +467,8 @@ describe('Waiting Status Integration', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.waitingStatus).toBe('reconciler-analyzing');
-    expect(result.waitingStatusConfig.showSpinner).toBe(true);
+    expect(result.waitingStatusConfig.showSpinner).toBe(false);
+    expect(result.waitingStatusConfig.showKeepChattingAction).toBe(true);
   });
 });
 

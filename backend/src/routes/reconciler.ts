@@ -16,6 +16,7 @@ import {
   respondToShareOfferHandler,
   getReconcilerSummaryHandler,
   skipShareOfferHandler,
+  generateShareDraftHandler,
 } from '../controllers/reconciler';
 
 const router = Router();
@@ -64,6 +65,15 @@ router.post('/sessions/:id/reconciler/share-offer/respond', respondToShareOfferH
  * Marks the share offer as skipped, allowing progression without sharing.
  */
 router.post('/sessions/:id/reconciler/share-offer/skip', skipShareOfferHandler);
+
+/**
+ * Generate a share draft for the user
+ * POST /sessions/:id/reconciler/share-offer/generate-draft
+ *
+ * Called when user taps "Yes, help me share" in the ShareTopicDrawer.
+ * Generates a draft based on suggestedShareFocus and saves as AI message.
+ */
+router.post('/sessions/:id/reconciler/share-offer/generate-draft', generateShareDraftHandler);
 
 /**
  * Get reconciler summary after completion

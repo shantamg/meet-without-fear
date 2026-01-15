@@ -138,14 +138,14 @@ describe('Priority 3: Stage 1 (Witness)', () => {
 // ============================================================================
 
 describe('Priority 4: Stage 2 (Empathy)', () => {
-  it('returns empathy-pending when awaiting partner sharing response', () => {
+  it('returns awaiting-subject-decision when guesser is waiting for subject to decide on sharing', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       partnerStage: Stage.PERSPECTIVE_STRETCH, // Partner also in Stage 2
       empathyStatus: { awaitingSharing: true },
     });
 
-    expect(computeWaitingStatus(inputs)).toBe('empathy-pending');
+    expect(computeWaitingStatus(inputs)).toBe('awaiting-subject-decision');
   });
 
   it('returns partner-considering-perspective when my attempt is REVEALED', () => {

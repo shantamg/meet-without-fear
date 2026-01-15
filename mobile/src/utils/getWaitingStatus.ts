@@ -29,7 +29,11 @@ export type WaitingStatusState =
   | 'partner-confirmed-needs' // Partner confirmed their needs (transient)
   | 'reconciler-analyzing' // Reconciler is analyzing empathy (first time)
   | 'revision-analyzing' // Reconciler is re-analyzing revised empathy (no spinner, same as first share UI)
-  | 'awaiting-context-share' // Waiting for user to share context (Subject side)
+  | 'awaiting-context-share' // Waiting for user to share context (Subject side - OFFER_SHARING)
+  | 'awaiting-context-share-optional' // Waiting for user to share context (Subject side - OFFER_OPTIONAL)
+  | 'awaiting-subject-decision' // Guesser waiting for subject to decide whether to share
+  | 'subject-skipped-sharing' // Subject declined sharing (transient)
+  | 'empathy-proceed' // Empathy match is good, no sharing needed (PROCEED)
   | 'refining-empathy' // Guesser is refining empathy after receiving shared context
   | null;
 
@@ -166,7 +170,7 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
   // Guesser waiting for Subject to decide on sharing (Guesser side)
   // This happens when reconciler found gaps and is waiting for subject response
   if (empathyStatus?.awaitingSharing && !empathyStatus?.hasNewSharedContext) {
-    return 'empathy-pending';
+    return 'awaiting-subject-decision';
   }
 
   // Good alignment: User is revealed, Partner is working on their empathy for us

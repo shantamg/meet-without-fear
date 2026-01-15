@@ -124,6 +124,10 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'New context to consider',
     body: 'Your partner shared something to help you understand them better. Time to refine your empathy.',
   },
+  'empathy.status_updated': {
+    title: 'Partner update',
+    body: 'Your partner is considering sharing more context.',
+  },
 };
 
 /**

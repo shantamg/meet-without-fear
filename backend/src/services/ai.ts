@@ -68,6 +68,18 @@ export interface FullAIContext extends WitnessContext {
   sharedContextFromPartner?: string | null;
   /** Whether the user is in onboarding mode (compact not yet signed) */
   isOnboarding?: boolean;
+  /**
+   * Topic/area the subject should focus on when generating a share draft.
+   * Set when user taps "Yes, help me share" in the ShareTopicDrawer.
+   * The AI will use this to generate a draft focused on this specific topic.
+   */
+  suggestedShareFocus?: string | null;
+  /**
+   * Whether this is a request to generate a share draft.
+   * When true, the AI should generate content focused on suggestedShareFocus
+   * and include a "Review and share" action button.
+   */
+  isGeneratingShareDraft?: boolean;
 }
 
 // Re-export orchestrator types for convenience

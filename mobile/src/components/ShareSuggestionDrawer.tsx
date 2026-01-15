@@ -133,14 +133,14 @@ export function ShareSuggestionDrawer({
             showsVerticalScrollIndicator={true}
             keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.title}>Before you see {partnerName}'s attempt...</Text>
+            <Text style={styles.title}>Review what you'll share</Text>
 
             <Text style={styles.contextText}>
-              {partnerName} shared what they think you might be feeling. Before showing it to you, our internal reconciler noticed some gaps that additional context could help fill.
+              Based on the conversation so far, here's a draft of something you could share with {partnerName} to help them understand you better.
             </Text>
 
             <Text style={styles.askText}>
-              Would you be willing to share something like this with {partnerName}? I can also help you refine it first.
+              You can send this as-is, edit it first, or skip sharing.
             </Text>
 
             {/* Suggested content - styled with left border */}

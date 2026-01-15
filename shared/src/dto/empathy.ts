@@ -301,12 +301,27 @@ export type ReconcilerShareStatus = (typeof ReconcilerShareStatus)[keyof typeof 
 export interface ShareSuggestionDTO {
   /** Name of the person trying to understand (the guesser) */
   guesserName: string;
-  /** AI-suggested content the subject could share */
+  /**
+   * Topic/area to share about (shown in Phase 1 of the two-phase flow)
+   * This is the high-level focus identified by the reconciler.
+   */
+  suggestedShareFocus: string | null;
+  /**
+   * AI-suggested draft content the subject could share (shown in Phase 2)
+   * Generated on-demand when user opts in with "Yes, help me share"
+   */
   suggestedContent: string;
   /** Why sharing this would help the guesser understand */
   reason: string;
   /** Whether the user can refine the suggestion */
   canRefine: boolean;
+  /**
+   * Reconciler action that determines UI language/styling:
+   * - OFFER_SHARING: Strong language (significant gaps)
+   * - OFFER_OPTIONAL: Soft language (moderate gaps)
+   * - PROCEED: No sharing needed (only returned if suggestedShareFocus is null)
+   */
+  action: 'PROCEED' | 'OFFER_OPTIONAL' | 'OFFER_SHARING';
 }
 
 /** Response when getting share suggestion */

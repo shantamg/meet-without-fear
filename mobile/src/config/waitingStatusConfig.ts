@@ -86,26 +86,27 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     bannerSubtext: "Once they share, you'll both be able to reflect on what each other shared.",
   },
 
-  // Stage 2: Reconciler is analyzing empathy match (first time)
+  // Stage 2: Reconciler is analyzing empathy match (brief transient state)
+  // Uses "Keep Chatting" style - no spinner, input enabled
   'reconciler-analyzing': {
     showBanner: true,
-    hideInput: true,
-    showInnerThoughts: true,
-    isActionRequired: false,
-    showSpinner: true,
-    showKeepChattingAction: false, // Uses inner thoughts link instead
-    bannerText: () => `The reconciler is analyzing your empathy match...`,
-  },
-
-  // Stage 2: Reconciler is re-analyzing revised empathy (no spinner, keep chatting style)
-  'revision-analyzing': {
-    showBanner: true,
-    hideInput: true,
-    showInnerThoughts: true,
+    hideInput: false,
+    showInnerThoughts: false,
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: true,
-    bannerText: () => `The reconciler is reviewing your updated understanding...`,
+    bannerText: () => `Checking how well you captured their perspective...`,
+  },
+
+  // Stage 2: Reconciler is re-analyzing revised empathy (same style as first time)
+  'revision-analyzing': {
+    showBanner: true,
+    hideInput: false,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: true,
+    bannerText: () => `Checking your updated understanding...`,
   },
 
   // Stage 2: User (Subject) needs to respond to share suggestion (OFFER_SHARING - significant gaps)
