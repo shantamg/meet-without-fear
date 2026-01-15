@@ -25,7 +25,6 @@ import { getCurrentUserId } from '../lib/request-context';
 import {
   buildReconcilerPrompt,
   buildShareOfferPrompt,
-  buildQuoteSelectionPrompt,
   buildReconcilerSummaryPrompt,
   buildStagePrompt,
   type ReconcilerContext,
@@ -37,7 +36,6 @@ import type { ContextBundle } from './context-assembler';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import type {
   ReconcilerResult,
-  QuoteSelectionResult,
   ShareOfferMessage,
   ReconcilerSummary,
 } from '@meet-without-fear/shared';
@@ -1414,8 +1412,8 @@ export async function generateShareOffer(
   subjectId: string
 ): Promise<{
   offerMessage: string;
-  quoteOptions: QuoteSelectionResult['options'];
-  recommendedIndex: number | null;
+  suggestedContent: string;
+  suggestedReason: string;
   gapDescription: string;
 } | null> {
   // Get the reconciler result for this direction
@@ -1439,7 +1437,7 @@ export async function generateShareOffer(
     return null;
   }
 
-  // Get the subject's witnessing content for quote extraction
+  // Get the subject's witnessing content for crafting the suggestion
   const witnessingContent = await getWitnessingContent(sessionId, subjectId);
 
   // Get partner name
@@ -1455,16 +1453,15 @@ export async function generateShareOffer(
   });
   const userName = subject?.firstName || subject?.name || 'you';
 
-  // Generate the share offer message
+  // Generate the offer message and AI-crafted share suggestion in parallel
   const shareOfferContext: ShareOfferContext = {
     userName,
     partnerName,
     gapSummary: result.gapSummary,
     mostImportantGap: result.mostImportantGap || result.gapSummary,
-    relevantQuote: undefined, // Will be determined by quote selection
   };
 
-  const [offerResult, quoteResult] = await Promise.all([
+  const [offerResult, suggestionResult] = await Promise.all([
     getSonnetJson<ShareOfferMessage>({
       systemPrompt: buildShareOfferPrompt(shareOfferContext),
       messages: [{ role: 'user', content: 'Generate the share offer message.' }],
@@ -1472,29 +1469,71 @@ export async function generateShareOffer(
       sessionId,
       operation: 'reconciler-share-offer',
     }),
-    getSonnetJson<QuoteSelectionResult>({
-      systemPrompt: buildQuoteSelectionPrompt({
-        userName,
-        partnerName,
-        gapDescription: result.mostImportantGap || result.gapSummary,
-        witnessingTranscript: witnessingContent.userMessages,
-      }),
-      messages: [{ role: 'user', content: 'Extract shareable quotes.' }],
-      maxTokens: 1024,
+    // Generate an AI-crafted, feelings-focused suggestion (not direct quotes)
+    getSonnetJson<{ suggestedContent: string; reason: string }>({
+      systemPrompt: `You are helping ${userName} express their feelings to ${partnerName} in a way that builds understanding.
+
+${partnerName} tried to understand ${userName}'s experience but missed some important aspects:
+- Gap summary: ${result.gapSummary}
+${result.mostImportantGap ? `- Most important gap: ${result.mostImportantGap}` : ''}
+
+Here is what ${userName} actually shared about their experience:
+---
+${witnessingContent.userMessages}
+---
+
+Your job is to CRAFT a feelings-focused message that ${userName} could share. This is NOT about extracting quotes - you must transform their raw expression into something that:
+
+1. FOCUSES ON FEELINGS AND NEEDS
+   - Transform complaints into expressions of underlying feelings
+   - Example: "They never listen!" → "I feel unheard when I share something important and don't get a response"
+   - Example: "They're so controlling!" → "I feel anxious when decisions are made without including me"
+
+2. USES SIMPLE, CONVERSATIONAL LANGUAGE
+   - No psychology jargon or "NVC speak"
+   - Write like a wise friend would talk, not a textbook
+   - Keep it natural and genuine
+
+3. REMOVES ATTACKING OR BLAMING LANGUAGE
+   - No "you always" or "you never" accusations
+   - No character judgments about ${partnerName}
+   - Focus on ${userName}'s internal experience, not ${partnerName}'s behavior
+
+4. STAYS TRUE TO WHAT THEY SHARED
+   - Draw from their actual content (don't invent new feelings)
+   - But express it in a way that invites understanding rather than defensiveness
+
+5. IS BRIEF AND FOCUSED
+   - 1-3 sentences maximum
+   - Address the most important gap in understanding
+
+IMPORTANT GUIDELINES:
+- Never start with confrontational phrases like "Look," or "Listen,"
+- Never include accusations or blame
+- The goal is to help ${partnerName} understand, not to convince them they're wrong
+
+Respond in JSON:
+\`\`\`json
+{
+  "suggestedContent": "The feelings-focused message",
+  "reason": "Brief explanation of why this helps bridge the gap"
+}
+\`\`\``,
+      messages: [{ role: 'user', content: 'Craft a feelings-focused share suggestion.' }],
+      maxTokens: 512,
       sessionId,
-      operation: 'reconciler-quote-selection',
+      operation: 'reconciler-share-suggestion-craft',
     }),
   ]);
 
-  if (!offerResult) {
-    console.warn(`[Reconciler] Failed to generate share offer message`);
+  if (!offerResult || !suggestionResult) {
+    console.warn(`[Reconciler] Failed to generate share offer or suggestion`);
     return null;
   }
 
-  // Create or update share offer record
-  const quoteOptions = quoteResult?.options || [];
-  const recommendedIndex = quoteResult?.noGoodOptions ? null : 0;
+  console.log(`[Reconciler] Generated feelings-focused suggestion: "${suggestionResult.suggestedContent.substring(0, 50)}..."`);
 
+  // Create or update share offer record with the crafted suggestion
   await prisma.reconcilerShareOffer.upsert({
     where: { resultId: result.id },
     create: {
@@ -1502,21 +1541,21 @@ export async function generateShareOffer(
       userId: subjectId,
       status: 'OFFERED',
       offerMessage: offerResult.message,
-      quoteOptions: quoteOptions,
-      recommendedQuote: recommendedIndex,
+      suggestedContent: suggestionResult.suggestedContent,
+      suggestedReason: suggestionResult.reason,
     },
     update: {
       status: 'OFFERED',
       offerMessage: offerResult.message,
-      quoteOptions: quoteOptions,
-      recommendedQuote: recommendedIndex,
+      suggestedContent: suggestionResult.suggestedContent,
+      suggestedReason: suggestionResult.reason,
     },
   });
 
   return {
     offerMessage: offerResult.message,
-    quoteOptions,
-    recommendedIndex,
+    suggestedContent: suggestionResult.suggestedContent,
+    suggestedReason: suggestionResult.reason,
     gapDescription: result.mostImportantGap || result.gapSummary,
   };
 }
@@ -1529,7 +1568,6 @@ export async function respondToShareOffer(
   userId: string,
   response: {
     accept: boolean;
-    selectedQuoteIndex?: number;
     customContent?: string;
   }
 ): Promise<{
@@ -1554,24 +1592,12 @@ export async function respondToShareOffer(
   }
 
   if (response.accept) {
-    // Determine what content to share
-    let sharedContent: string;
+    // Use customContent if provided, otherwise use the AI-crafted suggestedContent
+    const sharedContent = response.customContent || shareOffer.suggestedContent;
 
-    if (response.customContent) {
-      sharedContent = response.customContent;
-    } else if (
-      response.selectedQuoteIndex !== undefined &&
-      shareOffer.quoteOptions &&
-      Array.isArray(shareOffer.quoteOptions)
-    ) {
-      const options = shareOffer.quoteOptions as Array<{ content: string }>;
-      if (options[response.selectedQuoteIndex]) {
-        sharedContent = options[response.selectedQuoteIndex].content;
-      } else {
-        throw new Error('Invalid quote index');
-      }
-    } else {
-      throw new Error('No content provided to share');
+    if (!sharedContent) {
+      console.error(`[Reconciler] No content available for share offer ${shareOffer.id}`);
+      throw new Error('No content available to share');
     }
 
     // Update the share offer

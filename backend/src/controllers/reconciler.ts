@@ -17,8 +17,7 @@ import {
   type RunReconcilerResponse,
   type ReconcilerStatusResponse,
   type RespondToShareOfferResponse,
-  type GetQuoteOptionsResponse,
-  type ReconcilerSummary,
+  MessageRole,
 } from '@meet-without-fear/shared';
 import {
   runReconciler,
@@ -254,14 +253,12 @@ export async function getShareOfferHandler(
       const offer = await generateShareOffer(sessionId, user.id);
 
       if (offer) {
-        // Get the recommended quote content, falling back to offerMessage only as last resort
-        const recommendedQuoteContent = offer.quoteOptions?.[offer.recommendedIndex ?? 0]?.content;
         successResponse(res, {
           hasSuggestion: true,
           suggestion: {
             guesserName: 'Your partner',
-            suggestedContent: recommendedQuoteContent || offer.offerMessage,
-            reason: offer.gapDescription || 'To help them understand better',
+            suggestedContent: offer.suggestedContent,
+            reason: offer.suggestedReason || offer.gapDescription || 'To help them understand better',
             canRefine: true,
           }
         });
@@ -287,17 +284,18 @@ export async function getShareOfferHandler(
       console.log(`[Reconciler] Marked share offer ${shareOffer.id} as OFFERED for user ${user.id}`);
     }
 
-    // Get recommended quote content as fallback when suggestedContent is NULL
-    const quoteOptions = shareOffer.quoteOptions as Array<{ content: string }> | null;
-    const recommendedQuoteContent = quoteOptions?.[shareOffer.recommendedQuote ?? 0]?.content;
-
     successResponse(res, {
       hasSuggestion: true,
       suggestion: {
         guesserName,
-        suggestedContent: shareOffer.suggestedContent || recommendedQuoteContent || shareOffer.offerMessage || '',
+        // For the new two-phase flow: suggestedShareFocus is the topic (shown first)
+        suggestedShareFocus: shareOffer.result.suggestedShareFocus || null,
+        // suggestedContent is the AI-crafted, feelings-focused suggestion
+        suggestedContent: shareOffer.suggestedContent || shareOffer.offerMessage || '',
         reason: shareOffer.suggestedReason || shareOffer.result.mostImportantGap || 'This will help them understand your perspective more fully.',
         canRefine: true,
+        // Action determines styling: OFFER_SHARING (strong language) vs OFFER_OPTIONAL (soft language)
+        action: shareOffer.result.recommendedAction as 'PROCEED' | 'OFFER_OPTIONAL' | 'OFFER_SHARING',
       }
     });
   } catch (error) {
@@ -361,7 +359,6 @@ export async function respondToShareOfferHandler(
       // Use legacy reciprocal reconciler service
       result = await respondToShareOffer(sessionId, user.id, {
         accept: parseResult.data.accept,
-        selectedQuoteIndex: parseResult.data.selectedQuoteIndex,
         customContent: parseResult.data.customContent,
       });
     } else {
@@ -532,5 +529,171 @@ export async function skipShareOfferHandler(
   } catch (error) {
     console.error('[skipShareOfferHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to skip share offer', 500);
+  }
+}
+
+/**
+ * Generate a share draft for the user based on suggestedShareFocus.
+ * This is called when the user taps "Yes, help me share" in the ShareTopicDrawer.
+ * POST /sessions/:id/reconciler/share-offer/generate-draft
+ *
+ * The draft is generated and saved as a message so it persists.
+ * The response includes the draft and metadata for the UI to show the "Review and share" button.
+ */
+export async function generateShareDraftHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+
+    // Check session access
+    const { session, error } = await checkSessionAccess(sessionId, user.id);
+    if (error || !session) {
+      errorResponse(res, 'NOT_FOUND', error || 'Session not found', 404);
+      return;
+    }
+
+    // Find the share offer with reconciler result
+    const shareOffer = await prisma.reconcilerShareOffer.findFirst({
+      where: {
+        userId: user.id,
+        result: { sessionId },
+        status: { in: ['OFFERED', 'PENDING'] },
+      },
+      include: {
+        result: true,
+      },
+    });
+
+    if (!shareOffer) {
+      errorResponse(res, 'NOT_FOUND', 'No pending share offer found', 404);
+      return;
+    }
+
+    const suggestedShareFocus = shareOffer.result.suggestedShareFocus;
+    const guesserName = shareOffer.result.guesserName;
+
+    if (!suggestedShareFocus) {
+      errorResponse(res, 'VALIDATION_ERROR', 'No share focus available', 400);
+      return;
+    }
+
+    // Get the full conversation history for this user (all stages, both user and AI)
+    // This gives the AI proper context about what the user has already shared
+    const conversationMessages = await prisma.message.findMany({
+      where: {
+        sessionId,
+        OR: [
+          // Messages user sent (broadcast)
+          { senderId: user.id, forUserId: null },
+          // Messages specifically for this user (AI responses)
+          { forUserId: user.id },
+        ],
+      },
+      orderBy: { timestamp: 'asc' },
+      take: 30, // Limit to recent context
+      select: { content: true, role: true },
+    });
+
+    // Format as conversation transcript
+    const conversationTranscript = conversationMessages
+      .map((m) => `${m.role === 'USER' ? user.name : 'AI'}: ${m.content}`)
+      .join('\n\n');
+
+    // Generate the draft using AI
+    const { getSonnetResponse } = await import('../lib/bedrock');
+    const turnId = `${sessionId}-share-draft-${Date.now()}`;
+
+    const prompt = `You are helping ${user.name} prepare something to share with ${guesserName} to help them understand ${user.name}'s perspective better.
+
+The reconciler identified this topic as important for ${guesserName} to understand:
+"${suggestedShareFocus}"
+
+Conversation history (${user.name}'s messages and AI responses):
+---
+${conversationTranscript || 'No previous conversation available.'}
+---
+
+Generate a brief, personal message (1-3 sentences) that ${user.name} could share with ${guesserName} about the topic above. The message should:
+1. Be written in first person as if ${user.name} is speaking directly to ${guesserName}
+2. Draw from what ${user.name} actually shared in the conversation above (don't invent new content)
+3. Address the specific topic mentioned
+4. Feel natural and genuine, not forced
+
+Respond with ONLY the message text, no additional formatting or explanation.`;
+
+    const draftContent = await getSonnetResponse({
+      systemPrompt: prompt,
+      messages: [{ role: 'user', content: 'Generate the share message.' }],
+      maxTokens: 512,
+      sessionId,
+      turnId,
+      operation: 'share-draft-generation',
+    });
+
+    if (!draftContent) {
+      errorResponse(res, 'INTERNAL_ERROR', 'Failed to generate draft', 500);
+      return;
+    }
+
+    // Update the share offer with the generated draft
+    await prisma.reconcilerShareOffer.update({
+      where: { id: shareOffer.id },
+      data: {
+        suggestedContent: draftContent.trim(),
+      },
+    });
+
+    // Create an AI message with the draft so it persists in chat
+    // The message content includes a marker that the mobile can parse to show the button
+    const aiMessage = await prisma.message.create({
+      data: {
+        sessionId,
+        senderId: null, // AI message
+        forUserId: user.id,
+        role: 'AI',
+        content: `Here's what you could share with ${guesserName}:\n\n"${draftContent.trim()}"`,
+        stage: 2,
+      },
+    });
+
+    // Publish via Ably so UI updates immediately
+    // The metadata will be included in the Ably message for the mobile to detect
+    const { publishMessageAIResponse } = await import('../services/realtime');
+    await publishMessageAIResponse(
+      sessionId,
+      user.id,
+      {
+        id: aiMessage.id,
+        sessionId,
+        senderId: null,
+        content: aiMessage.content,
+        timestamp: aiMessage.timestamp.toISOString(),
+        role: MessageRole.AI,
+        stage: aiMessage.stage,
+      },
+      {
+        // Standard metadata fields that the realtime handler expects
+        // The mobile will detect this is a share draft via the response payload
+      }
+    );
+
+    successResponse(res, {
+      success: true,
+      draft: draftContent.trim(),
+      messageId: aiMessage.id,
+      guesserName,
+      suggestedShareFocus,
+    });
+  } catch (error) {
+    console.error('[generateShareDraftHandler] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to generate share draft', 500);
   }
 }

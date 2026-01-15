@@ -2150,64 +2150,6 @@ Respond in JSON:
 }
 
 /**
- * Context for quote selection
- */
-export interface QuoteSelectionContext {
-  /** The person whose witnessing to extract from */
-  userName: string;
-  /** Their partner who will receive the quote */
-  partnerName: string;
-  /** Description of the gap to address */
-  gapDescription: string;
-  /** Full witnessing transcript/content */
-  witnessingTranscript: string;
-}
-
-/**
- * Build the prompt that helps extract shareable quotes from witnessing content.
- */
-export function buildQuoteSelectionPrompt(context: QuoteSelectionContext): string {
-  return `You are helping ${context.userName} select what to share with ${context.partnerName} to bridge an empathy gap.
-
-GAP TO ADDRESS:
-${context.gapDescription}
-
-${context.userName.toUpperCase()}'s WITNESSING CONTENT:
-"${context.witnessingTranscript}"
-
-YOUR TASK:
-Extract 2-3 potential quotes or paraphrased statements from ${context.userName}'s witnessing that would best address this gap. These should be:
-
-1. AUTHENTIC: Directly from or closely paraphrasing what they said
-2. FOCUSED: Specifically addresses the identified gap
-3. APPROPRIATE: Not too vulnerable or raw - something they'd likely be comfortable sharing
-4. CLEAR: Understandable without extensive context
-5. IMPACTFUL: Would genuinely help ${context.partnerName} understand
-
-For each option, provide:
-- The quote/paraphrase
-- Why it addresses the gap
-- Emotional intensity level (low/medium/high)
-
-Respond in JSON:
-\`\`\`json
-{
-  "options": [
-    {
-      "content": "<quote or paraphrase>",
-      "addressesGap": "<how this helps>",
-      "intensity": "low" | "medium" | "high",
-      "requiresContext": true | false
-    }
-  ],
-  "recommendation": "<which option and why>",
-  "noGoodOptions": true | false,
-  "noGoodOptionsReason": "<if true, why>" | null
-}
-\`\`\``;
-}
-
-/**
  * Context for the reconciler summary shown to both users
  */
 export interface ReconcilerSummaryContext {

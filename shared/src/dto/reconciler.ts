@@ -127,42 +127,6 @@ export const reconcilerResultSchema = z.object({
 export type ReconcilerResult = z.infer<typeof reconcilerResultSchema>;
 
 // ============================================================================
-// Quote Selection Types
-// ============================================================================
-
-/**
- * A shareable quote option extracted from witnessing
- */
-export const quoteOptionSchema = z.object({
-  /** The quote or paraphrase content */
-  content: z.string(),
-  /** How this addresses the gap */
-  addressesGap: z.string(),
-  /** Emotional intensity level */
-  intensity: z.enum(['low', 'medium', 'high']),
-  /** Whether additional context is needed */
-  requiresContext: z.boolean(),
-});
-
-export type QuoteOption = z.infer<typeof quoteOptionSchema>;
-
-/**
- * Quote selection result from the AI
- */
-export const quoteSelectionResultSchema = z.object({
-  /** Available quote options */
-  options: z.array(quoteOptionSchema),
-  /** Which option is recommended and why */
-  recommendation: z.string(),
-  /** Whether there are no good options to share */
-  noGoodOptions: z.boolean(),
-  /** If noGoodOptions, why */
-  noGoodOptionsReason: z.string().nullable(),
-});
-
-export type QuoteSelectionResult = z.infer<typeof quoteSelectionResultSchema>;
-
-// ============================================================================
 // Share Offer Types
 // ============================================================================
 
@@ -239,8 +203,7 @@ export type RunReconcilerResponse = z.infer<typeof runReconcilerResponseSchema>;
 export const respondToShareOfferRequestSchema = z.object({
   /** Whether they accept to share */
   accept: z.boolean().optional(),
-  /** If accepting, selected quote option index or custom content */
-  selectedQuoteIndex: z.number().optional(),
+  /** If accepting with custom content instead of AI suggestion */
   customContent: z.string().optional(),
   /** New asymmetric flow action */
   action: z.enum(['accept', 'decline', 'refine']).optional(),
@@ -272,32 +235,6 @@ export const respondToShareOfferResponseSchema = z.object({
 });
 
 export type RespondToShareOfferResponse = z.infer<typeof respondToShareOfferResponseSchema>;
-
-/**
- * Request to get quote options for sharing
- */
-export const getQuoteOptionsRequestSchema = z.object({
-  /** Optional: specific gap to focus on */
-  focusGap: z.string().optional(),
-});
-
-export type GetQuoteOptionsRequest = z.infer<typeof getQuoteOptionsRequestSchema>;
-
-/**
- * Response with quote options
- */
-export const getQuoteOptionsResponseSchema = z.object({
-  /** The gap being addressed */
-  gapDescription: z.string(),
-  /** Available quotes to share */
-  quoteOptions: z.array(quoteOptionSchema),
-  /** Recommended option index */
-  recommendedIndex: z.number().nullable(),
-  /** Whether there are good options */
-  hasGoodOptions: z.boolean(),
-});
-
-export type GetQuoteOptionsResponse = z.infer<typeof getQuoteOptionsResponseSchema>;
 
 /**
  * Reconciler status for a session

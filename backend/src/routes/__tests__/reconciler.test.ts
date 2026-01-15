@@ -141,11 +141,8 @@ function mockShareOffer(overrides: Record<string, unknown> = {}) {
     userId: 'partner-1',
     status: 'OFFERED',
     offerMessage: 'Bob understood a lot, but missed something. Would you like to share more?',
-    quoteOptions: [
-      { content: 'I felt afraid we might grow apart.', addressesGap: 'Addresses fear of disconnection', intensity: 'medium', requiresContext: false },
-      { content: 'The distance was scary.', addressesGap: 'Shows vulnerability', intensity: 'low', requiresContext: false },
-    ],
-    recommendedQuote: 0,
+    suggestedContent: 'I felt afraid we might grow apart, and that distance was scary for me.',
+    suggestedReason: 'Helps convey the underlying fear of disconnection.',
     sharedContent: null,
     sharedAt: null,
     declinedAt: null,
@@ -384,9 +381,9 @@ describe('Reconciler API', () => {
             hasSuggestion: true,
             suggestion: expect.objectContaining({
               guesserName: 'Alice',
-              // Should use the recommended quote content, not the offerMessage
-              suggestedContent: 'I felt afraid we might grow apart.',
-              reason: 'Fear of disconnection was not captured.',
+              // Uses the AI-crafted suggestedContent from the share offer
+              suggestedContent: 'I felt afraid we might grow apart, and that distance was scary for me.',
+              reason: 'Helps convey the underlying fear of disconnection.',
               canRefine: true,
             }),
           }),
@@ -394,13 +391,13 @@ describe('Reconciler API', () => {
       );
     });
 
-    it('uses suggestedContent when available (not quoteOptions)', async () => {
+    it('uses suggestedContent from AI-crafted suggestion', async () => {
       const req = mockRequest({ user: { id: 'partner-1', name: 'Bob' } });
       const res = mockResponse();
 
       (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
       (prisma.reconcilerShareOffer.findFirst as jest.Mock).mockResolvedValue(
-        mockShareOffer({ suggestedContent: 'Pre-populated suggested content' })
+        mockShareOffer({ suggestedContent: 'I felt afraid we might grow apart.' })
       );
 
       await getShareOfferHandler(req, res);
@@ -411,14 +408,14 @@ describe('Reconciler API', () => {
           data: expect.objectContaining({
             hasSuggestion: true,
             suggestion: expect.objectContaining({
-              suggestedContent: 'Pre-populated suggested content',
+              suggestedContent: 'I felt afraid we might grow apart.',
             }),
           }),
         })
       );
     });
 
-    it('falls back to quoteOptions when suggestedContent is NULL', async () => {
+    it('falls back to offerMessage when suggestedContent is NULL', async () => {
       const req = mockRequest({ user: { id: 'partner-1', name: 'Bob' } });
       const res = mockResponse();
 
@@ -426,36 +423,6 @@ describe('Reconciler API', () => {
       (prisma.reconcilerShareOffer.findFirst as jest.Mock).mockResolvedValue(
         mockShareOffer({
           suggestedContent: null,
-          quoteOptions: [{ content: 'Quote 1' }, { content: 'Quote 2' }],
-          recommendedQuote: 1,
-        })
-      );
-
-      await getShareOfferHandler(req, res);
-
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: true,
-          data: expect.objectContaining({
-            hasSuggestion: true,
-            suggestion: expect.objectContaining({
-              suggestedContent: 'Quote 2', // Index 1
-            }),
-          }),
-        })
-      );
-    });
-
-    it('falls back to offerMessage only when no suggestedContent or quoteOptions', async () => {
-      const req = mockRequest({ user: { id: 'partner-1', name: 'Bob' } });
-      const res = mockResponse();
-
-      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
-      (prisma.reconcilerShareOffer.findFirst as jest.Mock).mockResolvedValue(
-        mockShareOffer({
-          suggestedContent: null,
-          quoteOptions: null,
-          recommendedQuote: null,
           offerMessage: 'Fallback offer message',
         })
       );
@@ -492,10 +459,10 @@ describe('Reconciler API', () => {
       );
     });
 
-    it('accepts share offer with selected quote', async () => {
+    it('accepts share offer with AI-crafted suggestion', async () => {
       const req = mockRequest({
         user: { id: 'partner-1', name: 'Bob' },
-        body: { accept: true, selectedQuoteIndex: 0 },
+        body: { accept: true },
       });
       const res = mockResponse();
 
@@ -504,7 +471,7 @@ describe('Reconciler API', () => {
       (prisma.reconcilerShareOffer.update as jest.Mock).mockResolvedValue({
         ...mockShareOffer(),
         status: 'ACCEPTED',
-        sharedContent: 'I felt afraid we might grow apart.',
+        sharedContent: 'I felt afraid we might grow apart, and that distance was scary for me.',
         sharedAt: new Date(),
       });
       (prisma.relationshipMember.findMany as jest.Mock).mockResolvedValue([
@@ -518,7 +485,7 @@ describe('Reconciler API', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             status: 'ACCEPTED',
-            sharedContent: 'I felt afraid we might grow apart.',
+            sharedContent: 'I felt afraid we might grow apart, and that distance was scary for me.',
           }),
         })
       );
@@ -534,7 +501,7 @@ describe('Reconciler API', () => {
           success: true,
           data: expect.objectContaining({
             status: 'ACCEPTED',
-            sharedContent: 'I felt afraid we might grow apart.',
+            sharedContent: 'I felt afraid we might grow apart, and that distance was scary for me.',
           }),
         })
       );
@@ -783,40 +750,62 @@ describe('Reconciler API', () => {
   });
 
   describe('Edge Cases', () => {
-    it('handles accept with invalid quote index', async () => {
+    it('handles accept when share offer has no suggestedContent', async () => {
       const req = mockRequest({
         user: { id: 'partner-1', name: 'Bob' },
-        body: { accept: true, selectedQuoteIndex: 99 }, // Invalid index
+        body: { accept: true },
       });
       const res = mockResponse();
 
       (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
-      (prisma.reconcilerShareOffer.findFirst as jest.Mock).mockResolvedValue(mockShareOffer());
+      // Share offer without suggestedContent
+      (prisma.reconcilerShareOffer.findFirst as jest.Mock).mockResolvedValue({
+        ...mockShareOffer(),
+        suggestedContent: null,
+      });
 
       await respondToShareOfferHandler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
     });
 
-    it('handles accept without content', async () => {
+    it('handles accept without custom content (uses suggestedContent)', async () => {
       const req = mockRequest({
         user: { id: 'partner-1', name: 'Bob' },
-        body: { accept: true }, // No content provided
+        body: { accept: true }, // Uses AI-crafted suggestedContent
       });
       const res = mockResponse();
 
       (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
       (prisma.reconcilerShareOffer.findFirst as jest.Mock).mockResolvedValue(mockShareOffer());
+      (prisma.reconcilerShareOffer.update as jest.Mock).mockResolvedValue({
+        ...mockShareOffer(),
+        status: 'ACCEPTED',
+        sharedContent: 'I felt afraid we might grow apart, and that distance was scary for me.',
+        sharedAt: new Date(),
+      });
+      (prisma.relationshipMember.findMany as jest.Mock).mockResolvedValue([
+        { userId: 'user-1' },
+        { userId: 'partner-1' },
+      ]);
 
       await respondToShareOfferHandler(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(500);
+      // Should succeed using the AI-crafted suggestedContent
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            status: 'ACCEPTED',
+          }),
+        })
+      );
     });
 
     it('handles missing share offer when responding', async () => {
       const req = mockRequest({
         user: { id: 'partner-1', name: 'Bob' },
-        body: { accept: true, selectedQuoteIndex: 0 },
+        body: { accept: true },
       });
       const res = mockResponse();
 
