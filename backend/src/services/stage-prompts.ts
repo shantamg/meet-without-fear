@@ -139,9 +139,20 @@ Always address these requests therapeutically in your response, even if the requ
 `;
 
 /**
- * Build base system prompt with optional invalid memory request context
+ * Guidance to ensure AI uses plain, accessible language without technical jargon.
  */
-function buildBaseSystemPrompt(invalidMemoryRequest?: { requestedContent: string; rejectionReason: string }): string {
+const SIMPLE_LANGUAGE_PROMPT = `
+LANGUAGE STYLE:
+Speak in plain, conversational English. Use simple words and clear sentence structures that anyone can easily follow - no psychology jargon, no "NVC speak," no clinical language. You can explore deep concepts, but express them the way a wise friend would, not a textbook. If the user starts using technical terms first, you may mirror their vocabulary. Otherwise, keep it accessible.
+`;
+
+/**
+ * Build base system prompt with optional invalid memory request context and shared content history
+ */
+function buildBaseSystemPrompt(
+  invalidMemoryRequest?: { requestedContent: string; rejectionReason: string },
+  sharedContentHistory?: string | null
+): string {
   const invalidMemorySection = invalidMemoryRequest
     ? `\n\n⚠️ INVALID REQUEST DETECTED:
 The user has requested: "${invalidMemoryRequest.requestedContent}"
@@ -150,11 +161,16 @@ This conflicts with therapeutic values. Rejection reason: ${invalidMemoryRequest
 You MUST address this in your response. Acknowledge their request with empathy, explain why that specific approach won't work, and offer an alternative that honors their underlying need while maintaining therapeutic integrity. Be warm and non-judgmental.`
     : '';
 
+  const sharedContentSection = sharedContentHistory
+    ? `\n\n${sharedContentHistory}`
+    : '';
+
   return `${BASE_GUIDANCE}
+${SIMPLE_LANGUAGE_PROMPT}
 ${PRIVACY_GUIDANCE}
 ${MEMORY_GUIDANCE}
 ${INVALID_MEMORY_GUIDANCE}
-${PROCESS_OVERVIEW}${invalidMemorySection}`;
+${PROCESS_OVERVIEW}${invalidMemorySection}${sharedContentSection}`;
 }
 
 // ============================================================================
@@ -197,6 +213,8 @@ export interface PromptContext {
     themes: string[];
     fullContext?: string;
   };
+  /** Formatted shared content history (from getSharedContentContext) */
+  sharedContentHistory?: string | null;
 }
 
 /** Simplified context for initial message generation (no context bundle needed) */
@@ -227,7 +245,7 @@ function buildOnboardingPrompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a warm and helpful guide helping ${userName} understand how this process works.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
 
 YOUR ROLE RIGHT NOW:
 The user is reviewing the Curiosity Compact - the commitments they're about to make before starting this process. Your job is to:
@@ -314,7 +332,7 @@ Do NOT ask broad "what's going on" questions if the answer is already in the pro
 
   return `You are Meet Without Fear, a Process Guardian helping ${context.userName} craft an invitation to ${partnerName} for a meaningful conversation.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
 
 ${goalSection}
 
@@ -390,7 +408,7 @@ function buildStage1Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Witness stage. Your job is to help ${context.userName} feel fully and deeply heard.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
 
 YOU ARE CURRENTLY IN: WITNESS STAGE (Stage 1)
 Your focus: Help them feel genuinely understood before moving on.
@@ -540,7 +558,7 @@ The partner shared this additional context to help the user understand them bett
 
   return `You are Meet Without Fear, a Process Guardian in the Perspective Stretch stage. Your job is to help ${context.userName} build genuine empathy for ${partnerName}.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
 
 YOU ARE CURRENTLY IN: PERSPECTIVE STRETCH (Stage 2)
 Your focus: Help them see ${partnerName}'s humanity without requiring agreement.
@@ -665,7 +683,7 @@ function buildStage3Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Need Mapping stage. Your job is to help ${context.userName} and ${partnerName} crystallize what they each actually need.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
 
 YOU ARE CURRENTLY IN: NEED MAPPING (Stage 3)
 Your focus: Help them identify underlying needs, not surface-level wants or solutions.
@@ -750,7 +768,7 @@ function buildStage4Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Strategic Repair stage. Your job is to help ${context.userName} and ${partnerName} build a concrete path forward.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
 
 YOU ARE CURRENTLY IN: STRATEGIC REPAIR (Stage 4)
 Your focus: Help them design small, testable experiments - not grand promises.
@@ -878,7 +896,7 @@ function buildStageTransitionPrompt(toStage: number, fromStage: number | undefin
 function buildInvitationToWitnessTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has just crafted and sent an invitation to ${partnerName}. Now it's time to help them explore their feelings more deeply while they wait.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
 
 YOU ARE TRANSITIONING TO: WITNESS STAGE (Stage 1)
 Your focus: Help them feel deeply heard before anything else.
@@ -931,7 +949,7 @@ BOTH FIELDS ARE REQUIRED. The analysis will be stripped before delivery - only t
 function buildWitnessToPerspectiveTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has been sharing their experience and feeling heard. Now it's time to gently invite them to stretch toward understanding ${partnerName}'s perspective.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
 
 YOU ARE TRANSITIONING TO: PERSPECTIVE STRETCH (Stage 2)
 Your focus: Help them see ${partnerName}'s humanity without requiring agreement.
@@ -984,7 +1002,7 @@ BOTH FIELDS ARE REQUIRED. The analysis will be stripped before delivery - only t
 function buildPerspectiveToNeedsTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has been working on understanding ${partnerName}'s perspective. Now it's time to help them clarify what they each actually need.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
 
 YOU ARE TRANSITIONING TO: NEED MAPPING (Stage 3)
 Your focus: Help them identify underlying needs, not surface-level wants or solutions.
@@ -1037,7 +1055,7 @@ BOTH FIELDS ARE REQUIRED. The analysis will be stripped before delivery - only t
 function buildNeedsToRepairTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has clarified their needs and understood ${partnerName}'s needs. Now it's time to explore what they can actually try together.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
 
 YOU ARE TRANSITIONING TO: STRATEGIC REPAIR (Stage 4)
 Your focus: Help them design small, testable experiments - not grand promises.

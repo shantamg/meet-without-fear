@@ -264,6 +264,8 @@ export function ChatInterface({
   // Track message IDs that should skip typewriter (existed on initial load or loaded as history)
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
+  // Track the timestamp of when initial load completed - messages created before this are "known"
+  const initialLoadCompletedAtRef = useRef<string | null>(null);
 
   // Track previous value of customEmptyState to detect compact signing
   const prevCustomEmptyStateRef = useRef(customEmptyState);
@@ -278,15 +280,38 @@ export function ChatInterface({
   // lastSeenChatItemId. This prevents hot reload issues where all messages would animate.
   // The lastSeenChatItemId is only used for the "New messages" separator, not for
   // determining which messages to animate.
+  //
+  // RACE CONDITION FIX: When async query loads messages after first empty render,
+  // we capture the "initial load completed" timestamp. Any messages with timestamps
+  // before this are considered history and won't animate. This handles cases where
+  // messages arrive in batches or race with Ably events.
   if (isInitialLoadRef.current && messages.length > 0) {
     const shouldSkip = skipInitialHistory && messages.length === 1;
     if (!shouldSkip) {
       // Mark ALL current messages as known on initial load
       // New messages arriving AFTER this point will animate (not in this set)
       messages.forEach(m => knownMessageIdsRef.current.add(m.id));
+      // Capture timestamp for race condition handling
+      if (initialLoadCompletedAtRef.current === null) {
+        initialLoadCompletedAtRef.current = new Date().toISOString();
+      }
     }
     isInitialLoadRef.current = false;
   }
+
+  // RACE CONDITION FIX: After initial load, check incoming messages.
+  // If a message's timestamp is before initialLoadCompletedAt, it's history
+  // that arrived via async query and should be marked as known.
+  useEffect(() => {
+    if (initialLoadCompletedAtRef.current && messages.length > 0) {
+      messages.forEach(m => {
+        // If message timestamp is before initial load completed, it's history
+        if (m.timestamp && m.timestamp < initialLoadCompletedAtRef.current!) {
+          knownMessageIdsRef.current.add(m.id);
+        }
+      });
+    }
+  }, [messages]);
 
   // Detect when custom empty state is removed (e.g., compact was signed)
   // Mark initial load as complete so new messages after this get typewriter effect

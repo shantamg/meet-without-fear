@@ -47,6 +47,7 @@ import {
   estimateTokens,
   getRecommendedLimits,
 } from '../utils/token-budget';
+import { getSharedContentContext } from './shared-context';
 // publishUserEvent and memoryService imports removed - handled in partner-session-classifier.ts
 
 // ============================================================================
@@ -172,7 +173,7 @@ export async function orchestrateResponse(
   console.log(`[AI Orchestrator] Starting parallel pre-processing (Intent: ${memoryIntent.intent})...`);
   const parallelStartTime = Date.now();
 
-  const [userPrefs, contextBundle, retrievedContext] = await Promise.all([
+  const [userPrefs, contextBundle, retrievedContext, sharedContentHistory] = await Promise.all([
     getUserMemoryPreferences(context.userId),
     assembleContextBundle(
       context.sessionId,
@@ -187,12 +188,16 @@ export async function orchestrateResponse(
       turnId,
       includePreSession: true,
       maxCrossSessionMessages: 10,
-      similarityThreshold: 0.4, // Lowered for better recall (0.51 was borderline)
+      similarityThreshold: 0.4,
       includeInnerThoughts: true,
       skipDetection: true, // Detection moved to fire-and-forget (partner-session-classifier.ts)
     }).catch((err: Error) => {
       console.warn('[AI Orchestrator] Context retrieval failed (parallel):', err);
       return undefined;
+    }),
+    getSharedContentContext(context.sessionId, context.userId).catch((err: Error) => {
+      console.warn('[AI Orchestrator] Shared content context fetch failed:', err);
+      return null;
     })
   ]);
 
@@ -264,6 +269,7 @@ export async function orchestrateResponse(
       cautionAdvised,
       // invalidMemoryRequest moved to fire-and-forget - not available at prompt-build time
       invalidMemoryRequest: undefined,
+      sharedContentHistory,
     },
     {
       isInvitationPhase: context.isInvitationPhase,

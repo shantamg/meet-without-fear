@@ -131,6 +131,62 @@ export function trackInnerThoughtsLinked(
 }
 
 // ============================================================================
+// Share Topic Events (OFFER_OPTIONAL / OFFER_SHARING flow)
+// ============================================================================
+
+export function trackShareTopicShown(
+  sessionId: string,
+  action: 'OFFER_SHARING' | 'OFFER_OPTIONAL'
+): void {
+  track('Share Topic Shown', {
+    session_id: sessionId,
+    action,
+  });
+}
+
+export function trackShareTopicAccepted(
+  sessionId: string,
+  action: 'OFFER_SHARING' | 'OFFER_OPTIONAL'
+): void {
+  track('Share Topic Accepted', {
+    session_id: sessionId,
+    action,
+  });
+}
+
+export function trackShareTopicDeclined(
+  sessionId: string,
+  action: 'OFFER_SHARING' | 'OFFER_OPTIONAL'
+): void {
+  track('Share Topic Declined', {
+    session_id: sessionId,
+    action,
+  });
+}
+
+export function trackShareTopicDismissed(
+  sessionId: string,
+  action: 'OFFER_SHARING' | 'OFFER_OPTIONAL'
+): void {
+  track('Share Topic Dismissed', {
+    session_id: sessionId,
+    action,
+  });
+}
+
+export function trackShareDraftSent(
+  sessionId: string,
+  action: 'OFFER_SHARING' | 'OFFER_OPTIONAL',
+  wasEdited: boolean
+): void {
+  track('Share Draft Sent', {
+    session_id: sessionId,
+    action,
+    was_edited: wasEdited,
+  });
+}
+
+// ============================================================================
 // Error Events
 // ============================================================================
 

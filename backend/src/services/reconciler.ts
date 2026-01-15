@@ -404,8 +404,20 @@ export async function runReconciler(
   }
 
   // Determine if ready to proceed
-  const aReady = !aUnderstandingB || aUnderstandingB.recommendation.action === 'PROCEED';
-  const bReady = !bUnderstandingA || bUnderstandingA.recommendation.action === 'PROCEED';
+  // A direction is "ready" if:
+  // - No result (skipped), OR
+  // - Action is PROCEED, OR
+  // - Action is OFFER_OPTIONAL but there's no suggestedShareFocus (treat as PROCEED per US-8)
+  const isDirectionReady = (result: ReconcilerResult | null): boolean => {
+    if (!result) return true;
+    const { action, suggestedShareFocus } = result.recommendation;
+    if (action === 'PROCEED') return true;
+    if (action === 'OFFER_OPTIONAL' && !suggestedShareFocus) return true;
+    return false;
+  };
+
+  const aReady = isDirectionReady(aUnderstandingB);
+  const bReady = isDirectionReady(bUnderstandingA);
   const readyToProceed = aReady && bReady;
 
   return {
@@ -584,15 +596,22 @@ export async function runReconcilerForDirection(
   });
 
   // Determine outcome based on gaps
-  const hasSignificantGaps =
-    result.gaps.severity === 'significant' ||
-    result.recommendation.action === 'OFFER_SHARING';
+  // OFFER_SHARING: Significant gaps - strongly recommend sharing
+  // OFFER_OPTIONAL: Moderate gaps - optionally offer sharing (only if suggestedShareFocus exists)
+  // PROCEED: No/minor gaps - proceed without sharing
+  const action = result.recommendation.action;
+  const hasSuggestedFocus = !!result.recommendation.suggestedShareFocus;
 
-  console.log(`[Reconciler] Outcome analysis: severity=${result.gaps.severity}, action=${result.recommendation.action}, significant=${hasSignificantGaps}`);
+  // Treat OFFER_OPTIONAL with null suggestedShareFocus as PROCEED (US-8)
+  const shouldOfferSharing =
+    action === 'OFFER_SHARING' ||
+    (action === 'OFFER_OPTIONAL' && hasSuggestedFocus);
 
-  if (!hasSignificantGaps) {
-    // No significant gaps - mark as READY (will reveal when both directions are ready)
-    console.log(`[Reconciler] NO significant gaps. Marking empathy as READY for ${guesserInfo.name} → ${subjectInfo.name}`);
+  console.log(`[Reconciler] Outcome analysis: severity=${result.gaps.severity}, action=${action}, hasSuggestedFocus=${hasSuggestedFocus}, shouldOfferSharing=${shouldOfferSharing}`);
+
+  if (!shouldOfferSharing) {
+    // No sharing needed - mark as READY (will reveal when both directions are ready)
+    console.log(`[Reconciler] No sharing needed (action=${action}, focus=${hasSuggestedFocus}). Marking empathy as READY for ${guesserInfo.name} → ${subjectInfo.name}`);
     await prisma.empathyAttempt.updateMany({
       where: { sessionId, sourceUserId: guesserId },
       data: {
@@ -600,9 +619,9 @@ export async function runReconcilerForDirection(
       },
     });
 
-    // Create a message for the guesser explaining that the subject has shared their side
-    // and is now considering the guesser's perspective
-    const alignmentMessage = `${subjectInfo.name} has shared their side and is now considering how you might be feeling. Once they do, both of you will be able to reflect on what each other shared.`;
+    // Create a positive feedback message for the guesser (US-6: PROCEED Positive Feedback)
+    // This confirms that their empathy attempt was well-aligned with the subject's experience
+    const alignmentMessage = `${subjectInfo.name} has felt heard. The reconciler reports your attempt to imagine what they're feeling was quite accurate. ${subjectInfo.name} is now considering your perspective, and once they do, you'll both see what each other shared.`;
 
     const savedMessage = await prisma.message.create({
       data: {
@@ -660,6 +679,18 @@ export async function runReconcilerForDirection(
     data: { status: 'AWAITING_SHARING' },
   });
 
+  // Notify the guesser that the subject is considering a share suggestion (US-5)
+  const { notifyPartner } = await import('./realtime');
+  await notifyPartner(sessionId, guesserId, 'empathy.status_updated', {
+    sessionId,
+    timestamp: Date.now(),
+    status: 'AWAITING_SHARING',
+    subjectName: subjectInfo.name,
+    message: `${subjectInfo.name} is considering a suggestion to share more`,
+  }).catch((err) => {
+    console.warn(`[Reconciler] Failed to notify guesser of AWAITING_SHARING status:`, err);
+  });
+
   return {
     result,
     empathyStatus: 'AWAITING_SHARING',
@@ -708,6 +739,12 @@ Generate a brief, specific suggestion for what ${subject.name} could share to he
 3. Address the most important gap in understanding
 4. Feel natural and not forced
 
+IMPORTANT GUIDELINES for the suggestion:
+- Never start with confrontational phrases like "Look," or "Listen,"
+- Focus on sharing ${subject.name}'s experience, not making claims about ${guesser.name}'s behavior
+- Use "I" statements, never "you" accusations
+- Keep the tone warm and vulnerable, not defensive or aggressive
+
 Also explain briefly WHY sharing this would help (1 sentence).
 
 Respond in JSON:
@@ -725,12 +762,9 @@ Respond in JSON:
   });
 
   if (!response) {
-    console.warn(`[Reconciler] AI failed to generate share suggestion, using fallback`);
-    // Fallback suggestion
-    return {
-      suggestedContent: `There's something about my experience that might help you understand better.`,
-      reason: `${guesser.name} may have missed some important aspects of what you're going through.`,
-    };
+    console.warn(`[Reconciler] AI failed to generate share suggestion, returning null to signal error`);
+    // Return null to signal failure - let caller handle the error state
+    return null;
   }
   console.log(`[Reconciler] Share suggestion generated: "${response.suggestedContent.substring(0, 50)}..."`);
   console.log(`[Reconciler] Share reason: "${response.reason}"`);
@@ -969,10 +1003,10 @@ export async function respondToShareSuggestion(
       ? response.refinedContent
       : shareOffer.suggestedContent || '';
 
-  // Fallback if suggestedContent was somehow empty
+  // Error if suggestedContent was somehow empty - this is a data integrity issue
   if (!sharedContent.trim()) {
-    console.warn(`[Reconciler] suggestedContent was empty for share offer ${shareOffer.id}, using fallback`);
-    sharedContent = `There's something about my experience that might help you understand better.`;
+    console.error(`[Reconciler] suggestedContent was empty for share offer ${shareOffer.id}, cannot proceed`);
+    throw new Error('Share suggestion content is empty - cannot share');
   }
 
   console.log(`[Reconciler] User ${userId} ${response.action}ed share offer. Shared content: "${sharedContent.substring(0, 50)}..."`);
@@ -1024,8 +1058,8 @@ export async function respondToShareSuggestion(
   const subjectName = shareOffer.result.subjectName;
   const guesserName = shareOffer.result.guesserName;
 
-  // Create AI message BEFORE the shared context (introduces what's coming)
-  const introMessage = `Your empathy statement hasn't been shown to ${subjectName} yet because our internal reconciler found some gaps and got ${subjectName}'s consent to share the following:`;
+  // Create AI message BEFORE the shared context (introduces what's coming) - US-7: Shared Content Label
+  const introMessage = `${subjectName} hasn't seen your empathy statement yet because the reconciler suggested they share more. This is what they shared:`;
 
   await prisma.message.create({
     data: {
