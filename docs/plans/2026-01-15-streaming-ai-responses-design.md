@@ -658,3 +658,77 @@ es.addEventListener('complete', (event) => {
   es.close();
 });
 ```
+
+---
+
+## Appendix B: Reconciler Signal-to-Noise Filtering
+
+### Problem
+
+The Reconciler treats **Process Friction** (annoyance with the AI) as **Relational Content** (feelings about the partner).
+
+This happens because `reconciler.ts` fetches all Stage 1 messages and feeds them into analysis. The LLM then "helpfully" tries to reconcile everything the user said, including complaints like "You sound like a robot" or "Stop asking me that."
+
+**Result:** The partner receives suggestions that misattribute frustration, e.g., "They seem angry and dismissive" when the user was actually just annoyed at the bot.
+
+### Solution
+
+Add a **Critical Filtering Rule** to the Reconciler system prompt. No new classifier needed - Claude Sonnet excels at understanding sentiment direction when explicitly instructed.
+
+**File:** `backend/src/services/stage-prompts.ts`
+
+Update `buildReconcilerPrompt`:
+
+```typescript
+export function buildReconcilerPrompt(context: ReconcilerContext): string {
+  // ... existing setup ...
+
+  return `You are the Empathy Reconciler...
+
+CONTEXT:
+You are analyzing the empathy exchange between ${context.guesserName} and ${context.subjectName}.
+
+[What ${context.subjectName} Actually Expressed]
+"${context.witnessingContent}"
+
+---
+
+CRITICAL FILTERING RULE:
+
+The input text contains raw chat logs. You MUST distinguish between "Relational Content" and "Process Noise".
+
+1. **IGNORE "Process Noise":**
+   - Complaints about the AI or app ("You sound like a robot", "Stop asking me that")
+   - Confusion about UI or steps ("What do I do next?", "I don't understand this")
+   - Resistance to the format ("This is stupid", "I want to skip")
+   - Meta-commentary about the conversation itself
+
+2. **FOCUS ONLY on "Relational Content":**
+   - Feelings about the partner or relationship
+   - Reactions to the partner's behavior (past or present)
+   - Fears, needs, or hopes regarding the conflict
+   - Emotional themes directed at the other person
+
+**WARNING:** If ${context.subjectName} expressed anger at *you* (the AI), do NOT interpret this as anger at ${context.guesserName}. Treat all AI-directed sentiment as noise and discard it from your analysis.
+
+---
+
+// ... rest of prompt ...
+`;
+}
+```
+
+### Why This Works
+
+| Benefit | Explanation |
+|---------|-------------|
+| **Semantic Distinction** | Claude Sonnet excels at understanding sentiment direction. Explicit instruction is sufficient. |
+| **Zero Latency Cost** | Adds ~50 tokens to prompt, no additional API calls. |
+| **Robustness** | Handles anger, confusion, frustration - any sentiment misdirected at the medium. |
+
+### Testing
+
+- [ ] User complains about AI → Reconciler ignores it
+- [ ] User expresses confusion about steps → Not reflected in empathy gap
+- [ ] User expresses genuine frustration with partner → Correctly identified
+- [ ] Mixed messages (AI complaint + partner feeling) → Only partner feeling extracted
