@@ -1,6 +1,13 @@
 import { validateMemory, validateMemories, needsReview } from '../memory-validator';
 import { getHaikuJson } from '../../lib/bedrock';
 
+// Mock circuit breaker to execute immediately without timeout
+jest.mock('../../utils/circuit-breaker', () => ({
+  withHaikuCircuitBreaker: jest.fn().mockImplementation(async (fn) => fn()),
+  withTimeout: jest.fn().mockImplementation(async (fn) => fn()),
+  HAIKU_TIMEOUT_MS: 20000,
+}));
+
 // Mock Bedrock
 jest.mock('../../lib/bedrock', () => ({
   getHaikuJson: jest.fn(),

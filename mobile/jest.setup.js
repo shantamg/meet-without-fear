@@ -612,6 +612,19 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+// Mock useSessionDrawer hook
+jest.mock('./src/hooks/useSessionDrawer', () => ({
+  useSessionDrawer: () => ({
+    isOpen: false,
+    openDrawer: jest.fn(),
+    closeDrawer: jest.fn(),
+    toggleDrawer: jest.fn(),
+    selectedTab: 'inner-thoughts',
+    setSelectedTab: jest.fn(),
+  }),
+  SessionDrawerProvider: ({ children }) => children,
+}));
+
 // Mock mixpanel-react-native
 jest.mock('mixpanel-react-native', () => {
   class MockMixpanel {

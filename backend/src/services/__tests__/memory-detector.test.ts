@@ -1,5 +1,21 @@
 import { detectMemoryIntent, detectMemoryIntentMock } from '../memory-detector';
 
+// Mock circuit breaker to execute immediately without timeout
+jest.mock('../../utils/circuit-breaker', () => ({
+  withHaikuCircuitBreaker: jest.fn().mockImplementation(async (fn) => fn()),
+  withTimeout: jest.fn().mockImplementation(async (fn) => fn()),
+  HAIKU_TIMEOUT_MS: 20000,
+}));
+
+// Mock Bedrock for tests that use the actual detectMemoryIntent
+jest.mock('../../lib/bedrock', () => ({
+  getHaikuJson: jest.fn().mockResolvedValue({
+    hasMemoryIntent: false,
+    suggestions: [],
+    topicContext: null,
+  }),
+}));
+
 describe('Memory Detector Service', () => {
   describe('detectMemoryIntentMock', () => {
     describe('AI_NAME detection', () => {
