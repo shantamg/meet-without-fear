@@ -1,5 +1,7 @@
 # Backend Prompting Architecture Audit
 
+**Last Updated:** 2026-01-15
+
 This document provides a comprehensive overview of how prompting works in the Meet Without Fear backend, including prompt construction, model usage, parallel vs sequential operations, and memory handling.
 
 ## Table of Contents
@@ -554,6 +556,41 @@ graph TD
 - Used later for semantic search across sessions
 - **Never blocks** the main response flow
 
+#### 4. Conversation Summarization (Non-Blocking)
+
+```mermaid
+graph TD
+    START[AI Response Saved] --> CHECK{Message Count >= 30?}
+    CHECK -->|No| SKIP[Skip Summarization]
+    CHECK -->|Yes| CHECK_INTERVAL{Time to<br/>Summarize?}
+    CHECK_INTERVAL -->|No| SKIP
+    CHECK_INTERVAL -->|Yes| SUMMARIZE[updateSessionSummary<br/>Fire-and-forget]
+
+    SUMMARIZE --> HAIKU[Haiku generates summary]
+    HAIKU --> STORE[Store in UserVessel.conversationSummary]
+    SKIP --> CONTINUE[Continue - User sees response immediately]
+    STORE --> CONTINUE
+```
+
+**Summarization Strategy:**
+
+- **Threshold:** Kicks in at 30+ messages
+- **Re-summarize:** Every 20 messages after threshold
+- **Keeps recent:** Last 15 messages always in full
+- **Summarizes:** Older messages condensed by Haiku
+- **Non-blocking:** Fire-and-forget, doesn't delay response
+- **Output:** Summary text, key themes, emotional journey, unresolved topics
+
+**Where Called:**
+
+- `messages.ts` - After AI message saved
+- `sessions.ts` - After session message
+- `stage2.ts` - After Stage 2 responses
+- `session-processor.ts` - After processing
+- `session-creation.ts` - After creation
+
+**Key File:** `backend/src/services/conversation-summarizer.ts`
+
 ---
 
 ## Service-Specific Flows
@@ -714,6 +751,7 @@ sequenceDiagram
 | Retrieval Planning                      | Haiku              | Plan structured queries         | When depth='full'                  |
 | Intent Detection                        | Haiku              | Classify user intent            | Pre-session messages               |
 | Memory Detection                        | Haiku              | Detect implicit memory requests | Conditional (turnCount >= 3, etc.) |
+| Conversation Summarization              | Haiku              | Summarize older messages        | When message count >= 30           |
 | Response Generation                     | Sonnet             | User-facing responses           | Every message                      |
 | Witnessing                              | Sonnet             | Pre-session witnessing          | Pre-session messages               |
 | Reconciler                              | Sonnet             | Analyze empathy gaps            | Post-Stage 2                       |
@@ -745,10 +783,12 @@ sequenceDiagram
 
 - `backend/src/services/stage-prompts.ts` - Stage-specific prompts
 
-### Memory
+### Memory & Summarization
 
 - `backend/src/services/memory-detector.ts` - Detects implicit memory requests
 - `backend/src/controllers/memories.ts` - Memory CRUD operations
+- `backend/src/services/conversation-summarizer.ts` - Rolling conversation summarization
+- `backend/src/utils/token-budget.ts` - Token counting and budget management
 
 ### Other Services
 

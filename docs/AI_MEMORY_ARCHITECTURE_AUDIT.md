@@ -1,6 +1,6 @@
 # AI Memory & Context Architecture Audit
 
-**Date:** 2026-01-07  
+**Date:** 2026-01-15 (Updated)
 **Scope:** Backend AI memory, context window, RAG, and summarization systems
 
 ---
@@ -11,11 +11,11 @@ Your system has a **sophisticated multi-layered memory architecture** with:
 
 - ✅ **RAG system** using pgvector embeddings for semantic search
 - ✅ **Token budget management** to maximize context window usage
-- ✅ **Summarization infrastructure** (implemented but **NOT ACTIVELY CALLED** for partner sessions)
+- ✅ **Summarization** actively called for partner sessions (30+ messages)
 - ✅ **Stage-aware memory intent** system that adjusts retrieval depth
-- ⚠️ **Critical Gap:** Summarization exists but is **not being invoked** for partner sessions
+- ⚠️ **Minor Gap:** Prior themes from previous sessions not yet populated
 
-**Current State:** You're relying on a **sliding window of recent messages** (6-20 turns depending on stage) + **semantic retrieval** when references are detected. Summaries are generated for Inner Thoughts but **not for partner sessions**, meaning long sessions lose older context.
+**Current State:** You use a **stage-aware sliding window** (6-20 turns) + **semantic retrieval** when references are detected + **rolling summarization** for long sessions (30+ messages). Summaries are generated and injected for both partner sessions and Inner Thoughts.
 
 ---
 
@@ -23,12 +23,7 @@ Your system has a **sophisticated multi-layered memory architecture** with:
 
 ### Where Messages Are Selected
 
-**Primary Selection Point:** `backend/src/controllers/stage1.ts` (lines 276-293)
-
-- Fetches **last 20 messages** (newest first, then reversed)
-- This is the **raw history** passed to the orchestrator
-
-**Secondary Selection Point:** `backend/src/services/context-assembler.ts` (lines 236-276)
+**Primary Selection Point:** `backend/src/services/context-assembler.ts` (lines 230-269)
 
 - `buildConversationContext()` uses **stage-aware buffer sizes**:
   - Stage 1: **6 turns** (12 messages)
@@ -49,10 +44,11 @@ Your system has a **sophisticated multi-layered memory architecture** with:
 
 **No** - it's more sophisticated:
 
-1. **Stage-based buffer sizes** (6-8 turns depending on stage)
+1. **Stage-based buffer sizes** (4-8 turns depending on stage)
 2. **Token budget protection** - last 10 turns are always included
 3. **Older messages can be included** if token budget allows
 4. **RAG retrieval** can pull older messages semantically (see section 2)
+5. **Summarization** condenses older content when sessions exceed 30 messages
 
 ### Token Counting
 
@@ -88,22 +84,24 @@ Your system has a **sophisticated multi-layered memory architecture** with:
 
 **RAG Flow:** `backend/src/services/context-retriever.ts`
 
-1. **Reference Detection** (lines 127-175):
+1. **Reference Detection** (lines 144-199):
    - Uses **Haiku** to detect if user message references past content
    - Detects: people, events, agreements, feelings, time references
    - **Enhanced pattern matching** for implicit commitments:
      - "But I thought...", "I assumed...", "I believed..."
    - Generates **search queries** for semantic retrieval
+   - Protected by **circuit breaker** - graceful fallback if Haiku fails
 
-2. **Semantic Search** (lines 184-451):
+2. **Semantic Search** (lines 208-347):
    - **Cross-session search:** `searchAcrossSessions()` - finds similar messages from other sessions
    - **Within-session search:** `searchWithinSession()` - finds relevant older messages in current session
    - **Pre-session search:** `searchPreSessionMessages()` - finds unassociated pre-session messages
+   - **Inner Thoughts search:** `searchInnerWorkMessages()` - finds relevant private reflections
    - Uses **cosine distance** (`<=>` operator) for similarity matching
-   - **Similarity threshold:** Stage-aware (0.45-0.70, higher = more strict)
+   - **Similarity threshold:** Stage-aware (0.50-0.65, higher = more strict)
    - **Max results:** Stage-aware (0-10 cross-session, 5 within-session)
 
-3. **Context Injection** (lines 641-699):
+3. **Context Injection** (lines 822-892):
    - Retrieved messages are **formatted and injected** into the prompt
    - Format: `[Context for this turn:\n{formattedContext}]\n\n{currentMessage}`
    - Includes time context ("yesterday", "last week") for natural phrasing
@@ -124,46 +122,64 @@ Your system has a **sophisticated multi-layered memory architecture** with:
 
 ## 3. Summarization & Long-term Memory
 
-### Summarization Infrastructure: ✅ EXISTS BUT NOT ACTIVELY USED
+### Summarization Status: ✅ ACTIVE FOR BOTH PARTNER SESSIONS AND INNER THOUGHTS
 
 **Schema Support:**
 
-- `UserVessel.conversationSummary` (JSON field)
-- `InnerWorkSession.conversationSummary` (JSON field)
+- `UserVessel.conversationSummary` (JSON field) - for partner sessions
+- `InnerWorkSession.conversationSummary` (JSON field) - for Inner Thoughts
 
 **Implementation:** `backend/src/services/conversation-summarizer.ts`
 
-**For Partner Sessions:**
+### Partner Session Summarization
 
-- `updateSessionSummary()` - **EXISTS** but **NOT CALLED** anywhere in partner session flow
-- `getSessionSummary()` - **EXISTS** but **NOT CALLED** in context assembly
-- `buildSessionSummary()` in `context-assembler.ts` (line 418) - **RETURNS `undefined`** (TODO comment)
+**Configuration** (lines 56-68):
 
-**For Inner Thoughts:**
+```typescript
+SUMMARIZATION_CONFIG = {
+  minMessagesForSummary: 30,      // Kicks in at 30 messages
+  recentMessagesToKeep: 15,       // Always keeps 15 recent in full
+  targetSummaryTokens: 500,       // Target summary length
+  resummaryInterval: 20,          // Re-summarize every 20 new messages
+}
+```
 
-- `updateInnerThoughtsSummary()` - **ACTIVELY CALLED** in `inner-work.ts` (line 647)
-- `getInnerThoughtsSummary()` - **ACTIVELY USED** in Inner Thoughts prompts
-- Summaries are **injected into prompts** for long conversations
+**Where It's Called:**
 
-**Summarization Logic:**
+`updateSessionSummary()` is called fire-and-forget after AI messages in:
+- `backend/src/controllers/messages.ts` (lines 690, 2027)
+- `backend/src/controllers/sessions.ts` (line 1047)
+- `backend/src/controllers/stage2.ts` (lines 573, 719, 2009)
+- `backend/src/services/chat-router/session-processor.ts` (line 263)
+- `backend/src/services/chat-router/handlers/session-creation.ts` (line 307)
 
-- **Threshold:** 30 messages minimum
-- **Re-summarization:** Every 20 messages after threshold
-- **Keeps recent:** Last 10 messages always in full
-- **Summarizes:** Older messages (everything except last 10)
-- **Uses Haiku** to generate summaries with:
-  - Summary text
-  - Key themes
-  - Emotional journey
-  - Unresolved topics
+**Where Summaries Are Used:**
 
-**The Problem:**
+`buildSessionSummary()` in `context-assembler.ts` (lines 412-429):
+- Calls `getSessionSummary(sessionId, userId)`
+- Formats summary data into `SessionSummary` structure
+- Injected into context bundle and prompts
 
-- `buildSessionSummary()` in `context-assembler.ts` has a **TODO comment** and returns `undefined`
-- Even though `updateSessionSummary()` exists, it's **never called** after partner session messages
-- This means **long partner sessions lose older context** - they rely purely on:
-  1. Recent sliding window (6-20 turns)
-  2. Semantic retrieval (if references detected)
+### Inner Thoughts Summarization
+
+**Configuration** (lines 388-400):
+
+```typescript
+INNER_THOUGHTS_SUMMARIZATION_CONFIG = {
+  minMessagesForSummary: 20,      // Lower threshold for private reflection
+  recentMessagesToKeep: 12,       // Fewer recent messages kept
+  targetSummaryTokens: 500,
+  resummaryInterval: 15,
+}
+```
+
+**Summarization Output:**
+
+Both types generate structured summaries with:
+- `summary.text` - 2-3 paragraph narrative
+- `keyThemes[]` - Array of themes
+- `emotionalJourney` - One sentence emotional arc
+- `unresolvedTopics[]` - Topics needing follow-up
 
 ---
 
@@ -177,7 +193,7 @@ Your system has a **sophisticated multi-layered memory architecture** with:
    - "we agreed", "you said", "last time", "we decided", "remember when"
    - These trigger `recall_commitment` with `depth: 'full'`
 
-2. **Stage-based defaults** (lines 326-357):
+2. **Stage-based defaults** (lines 285-369):
    - **Stage 2:** Default intent is `recall_commitment` (light depth)
    - **Stage 3:** Default intent is `recall_commitment` (full depth)
    - **Stage 4:** Default intent is `recall_commitment` (full depth)
@@ -193,9 +209,10 @@ When `recall_commitment` triggers with `depth: 'full'`:
 1. **Context Bundle** (`assembleContextBundle`):
    - Recent turns (stage-based buffer: 4-8 turns)
    - Emotional thread (intensity tracking)
-   - Prior themes (from previous sessions - **currently empty**, TODO)
+   - Session summary (if exists, from long sessions)
    - Inner Thoughts context (if linked)
    - User memories (always included)
+   - Prior themes (from previous sessions - **currently empty**, TODO)
 
 2. **Universal Context Retrieval** (`retrieveContext`):
    - **Full conversation history** (all messages, not limited)
@@ -207,24 +224,112 @@ When `recall_commitment` triggers with `depth: 'full'`:
 3. **Retrieval Planning** (if `depth === 'full'`):
    - Uses **Haiku** to plan structured queries
    - Can query: user events, needs, boundaries, agreements, experiments
-   - **Currently mostly mock** - full implementation pending
 
 **Stage-Aware Configuration:**
 
-- **Stage 1:**
-  - Threshold: 0.65 (very strict)
-  - Max cross-session: 0-3 (only after turn 3)
-  - Surface style: `silent` (no pattern observations)
+| Stage | Threshold | Max Cross-Session | Allow Cross-Session | Surface Style |
+|-------|-----------|-------------------|---------------------|---------------|
+| 1 | 0.65 | 0-3 (after turn 3) | false | silent |
+| 2 | 0.55 | 5 | true | tentative |
+| 3 | 0.50 | 10 | true | explicit |
+| 4 | 0.50 | 10 | true | explicit |
 
-- **Stage 2:**
-  - Threshold: 0.55 (moderate)
-  - Max cross-session: 5
-  - Surface style: `tentative` (gentle pattern hints)
+---
 
-- **Stage 3-4:**
-  - Threshold: 0.50 (permissive)
-  - Max cross-session: 10
-  - Surface style: `explicit` (clear pattern observations with evidence)
+## 5. Full Orchestration Flow
+
+**File:** `backend/src/services/ai-orchestrator.ts`
+
+```
+User Message Arrives
+        ↓
+┌─────────────────────────────────────────┐
+│ 1. determineMemoryIntent() [rules-based, ~0ms]
+│    → Returns intent, depth, thresholds
+└─────────────────────────────────────────┘
+        ↓
+┌─────────────────────────────────────────┐
+│ 2. PARALLEL PRE-PROCESSING (~200-500ms)
+│    ├─ getUserMemoryPreferences()
+│    ├─ assembleContextBundle()
+│    │   └─ buildSessionSummary() ← loads summary if exists
+│    ├─ retrieveContext() [includes Haiku detection]
+│    └─ getSharedContentContext()
+└─────────────────────────────────────────┘
+        ↓
+┌─────────────────────────────────────────┐
+│ 3. decideSurfacing() [rules-based]
+│    → Determines how to surface patterns
+└─────────────────────────────────────────┘
+        ↓
+┌─────────────────────────────────────────┐
+│ 4. planRetrieval() [Haiku, only if depth=full]
+└─────────────────────────────────────────┘
+        ↓
+┌─────────────────────────────────────────┐
+│ 5. buildStagePrompt()
+│    → Inject context bundle + retrieved context
+└─────────────────────────────────────────┘
+        ↓
+┌─────────────────────────────────────────┐
+│ 6. buildBudgetedContext()
+│    → Apply token budget, truncate if needed
+└─────────────────────────────────────────┘
+        ↓
+┌─────────────────────────────────────────┐
+│ 7. getSonnetResponse() [~1-3s]
+└─────────────────────────────────────────┘
+        ↓
+┌─────────────────────────────────────────┐
+│ 8. FIRE-AND-FORGET (non-blocking)
+│    └─ updateSessionSummary()
+└─────────────────────────────────────────┘
+```
+
+---
+
+## 6. What Gets Injected Into Prompts
+
+### Context Bundle (from `context-assembler.ts:537-599`)
+
+```
+EMOTIONAL STATE:
+Current intensity: 7/10
+Trend: escalating
+Notable shifts: 5 → 8
+
+SESSION SUMMARY: (if exists, for long sessions)
+Key themes: trust, communication
+Current focus: [narrative summary from Haiku]
+Emotional journey: [one-sentence arc]
+Topics that may need follow-up: [list]
+
+FROM USER'S PRIVATE REFLECTIONS: (if Inner Thoughts linked)
+- "[reflection content]" [linked to this session]
+
+USER MEMORIES (Always Honor These):
+- [preference] Never call me by my full name
+```
+
+### Retrieved Context (from `context-retriever.ts:822-892`)
+
+```
+[MEMORY CONTEXT GUIDANCE: This content is from several months ago...]
+
+[Related content from previous sessions]
+[Session with Partner, last month]
+User: [message]
+AI: [response]
+
+[Your reflections, last week]
+User: [inner thoughts message]
+
+[Related content from earlier in this session]
+User: [message]
+
+[Detected references in user message]
+- agreement: "we agreed" (high confidence)
+```
 
 ---
 
@@ -237,38 +342,30 @@ When `recall_commitment` triggers with `depth: 'full'`:
 3. **Stage-aware memory** adjusts retrieval depth appropriately
 4. **Reference detection** catches both explicit and implicit patterns
 5. **Data isolation** prevents partner message leakage
+6. **Summarization is active** - called after AI messages for long sessions
+7. **Summaries are used** - injected into context bundle for prompts
 
-### ⚠️ Critical Gaps
+### ⚠️ Remaining Gaps
 
-1. **Summarization Not Active for Partner Sessions**
-   - Code exists but `buildSessionSummary()` returns `undefined`
-   - `updateSessionSummary()` is never called
-   - **Impact:** Long sessions (>30 messages) lose older context
-   - **Fix:** Call `updateSessionSummary()` after messages, use `getSessionSummary()` in context assembly
-
-2. **Prior Themes Empty**
-   - `buildPriorThemes()` returns empty themes array (line 409)
-   - **Impact:** No continuity between sessions in same relationship
-   - **Fix:** Extract themes from UserVessel needs/events
-
-3. **Session Summary Not Used**
-   - Even if summaries existed, `buildSessionSummary()` doesn't load them
-   - **Impact:** Summaries wouldn't be injected even if generated
-   - **Fix:** Load from `UserVessel.conversationSummary` and format for prompt
+1. **Prior Themes Empty**
+   - `buildPriorThemes()` returns empty themes array (line 400-406)
+   - **Impact:** No extracted theme continuity between sessions in same relationship
+   - **Fix:** Extract themes from previous sessions' UserVessel data
 
 ### 📊 Current Memory Strategy
 
 **For Recent Memory (< 30 messages):**
 
-- ✅ Sliding window (6-20 turns based on stage)
+- ✅ Sliding window (6-16 messages based on stage)
 - ✅ Token budget protection (last 10 turns always included)
 - ✅ Semantic retrieval when references detected
 
 **For Long Sessions (> 30 messages):**
 
-- ⚠️ **Still using sliding window only** (summarization not active)
-- ✅ Semantic retrieval can pull older messages
-- ❌ **No summarized long-term memory** (summaries not generated/used)
+- ✅ Rolling summarization (every 20 messages after threshold)
+- ✅ Keeps 15 recent messages in full
+- ✅ Summary injected into prompts with key themes, emotional journey
+- ✅ Semantic retrieval can still pull specific older messages
 
 **For Cross-Session Memory:**
 
@@ -281,46 +378,30 @@ When `recall_commitment` triggers with `depth: 'full'`:
 
 ## Recommendations
 
-### Immediate Fixes
+### Remaining Enhancement
 
-1. **Activate Summarization for Partner Sessions:**
+1. **Populate Prior Themes:**
+
+   In `context-assembler.ts`, `buildPriorThemes()` currently returns empty themes:
 
    ```typescript
-   // In stage1.ts, after saving AI message:
-   updateSessionSummary(sessionId, userId).catch(console.warn);
-
-   // In context-assembler.ts, buildSessionSummary():
-   const summary = await getSessionSummary(sessionId, userId);
-   if (summary) {
-     return {
-       keyThemes: summary.keyThemes,
-       emotionalJourney: summary.emotionalJourney,
-       currentFocus: summary.text,
-       userStatedGoals: summary.unresolvedTopics,
-     };
-   }
+   // Current (line 400-406):
+   return {
+     themes: [], // TODO: Extract from UserVessel
+     lastSessionDate: previousSessions[0].updatedAt.toISOString(),
+     sessionCount: previousSessions.length,
+   };
    ```
 
-2. **Populate Prior Themes:**
-   - Extract needs/themes from previous sessions' UserVessels
-   - Store in a cache or query on-demand
-   - Inject into context bundle for continuity
-
-3. **Use Summaries in Prompts:**
-   - When `sessionSummary` exists, inject it into system prompt
-   - Format: `[Earlier in this session: {summary}]\n\n[Recent conversation: ...]`
+   **Fix:** Extract themes/needs from previous sessions' UserVessels and include in context bundle.
 
 ### Future Enhancements
 
-1. **Rolling Summarization:**
-   - Summarize every 20 messages (not just at 30+)
-   - Keep multiple summary "chunks" for very long sessions
-
-2. **Thematic Memory:**
+1. **Thematic Memory:**
    - Extract recurring themes across sessions
    - Build a "relationship memory" that persists
 
-3. **Agreement Memory:**
+2. **Agreement Memory:**
    - Track all agreements/experiments across sessions
    - Make them easily retrievable when user references them
 
@@ -328,15 +409,13 @@ When `recall_commitment` triggers with `depth: 'full'`:
 
 ## Conclusion
 
-Your architecture is **well-designed** with sophisticated RAG and token management. The main gap is **summarization not being active** for partner sessions, which means you're currently relying on:
+Your architecture is **well-designed and fully operational** with:
 
-1. **Recent sliding window** (6-20 turns)
-2. **Semantic retrieval** (when references detected)
+1. **Stage-aware sliding window** (4-8 turns based on stage)
+2. **Token budget protection** (last 10 turns never dropped)
+3. **Semantic retrieval** (when references detected)
+4. **Rolling summarization** (active for sessions > 30 messages)
 
-To maximize recent memory and ensure nothing important is forgotten, you should:
+The system provides: **Recent full messages + Summarized older context + Semantically retrieved relevant content** = comprehensive memory without token bloat.
 
-1. ✅ **Activate summarization** - call `updateSessionSummary()` after messages
-2. ✅ **Use summaries in prompts** - load and inject `conversationSummary` from UserVessel
-3. ✅ **Populate prior themes** - extract themes from previous sessions
-
-This will give you: **Recent full messages + Summarized older context + Semantically retrieved relevant content** = comprehensive memory without token bloat.
+**One remaining enhancement:** Populate prior themes from previous sessions to improve cross-session continuity.
