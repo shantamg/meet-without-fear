@@ -366,6 +366,7 @@ User: [message]
 - ✅ Keeps 15 recent messages in full
 - ✅ Summary injected into prompts with key themes, emotional journey
 - ✅ Semantic retrieval can still pull specific older messages
+- ✅ **Summary-aware history fetch** - raw history excludes messages covered by summary (prevents duplication)
 
 **For Cross-Session Memory:**
 
@@ -415,7 +416,10 @@ Your architecture is **well-designed and fully operational** with:
 2. **Token budget protection** (last 10 turns never dropped)
 3. **Semantic retrieval** (when references detected)
 4. **Rolling summarization** (active for sessions > 30 messages)
+5. **Summary-aware history fetch** (prevents summary + raw history overlap)
 
 The system provides: **Recent full messages + Summarized older context + Semantically retrieved relevant content** = comprehensive memory without token bloat.
+
+**How summary-aware history works:** When a summary exists (sessions > 30 messages), the raw conversation history only fetches messages AFTER the summary's boundary timestamp (`newestMessageAt`). This prevents the "lazy eviction" problem where both summary AND overlapping raw messages were sent to the LLM.
 
 **One remaining enhancement:** Populate prior themes from previous sessions to improve cross-session continuity.

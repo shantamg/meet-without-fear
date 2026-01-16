@@ -10,7 +10,7 @@ import { prisma } from '../../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../ai';
 import { getPartnerUserId } from '../../utils/session';
 import { embedMessage } from '../embedding';
-import { updateSessionSummary } from '../conversation-summarizer';
+import { updateSessionSummary, getSessionSummary } from '../conversation-summarizer';
 import { publishUserEvent } from '../realtime';
 import { updateContext } from '../../lib/request-context';
 
@@ -127,17 +127,32 @@ export async function processSessionMessage(
   // NOTE: User message embedding moved below after turnId is generated
 
   // Get conversation history (only this user's messages and AI responses to them - data isolation)
-  const history = await prisma.message.findMany({
+  // Check for existing summary to avoid "lazy eviction" - fetching messages already summarized
+  const existingSummary = await getSessionSummary(sessionId, userId);
+  const summaryBoundary = existingSummary?.summary.newestMessageAt;
+
+  // Determine how many messages to fetch based on whether summary exists
+  // If summary exists, fetch all messages after boundary (~15 based on recentMessagesToKeep)
+  // If no summary, limit to 20 to avoid excessive context
+  const historyLimit = summaryBoundary ? 30 : 20;
+
+  // Use DESC + reverse to get most recent messages in chronological order
+  // (ASC + take N returns the oldest N, which can make the prompt stale in long sessions)
+  const historyDesc = await prisma.message.findMany({
     where: {
       sessionId,
       OR: [
         { senderId: userId },
         { role: 'AI', forUserId: userId },
       ],
+      // If summary exists, only fetch messages AFTER the summary boundary
+      // This prevents duplicate context (summary + raw messages covering same content)
+      ...(summaryBoundary ? { timestamp: { gt: summaryBoundary } } : {}),
     },
-    orderBy: { timestamp: 'asc' },
-    take: 20,
+    orderBy: { timestamp: 'desc' },
+    take: historyLimit,
   });
+  const history = historyDesc.slice().reverse();
 
   const userTurnCount = history.filter((m) => m.role === 'USER').length;
 

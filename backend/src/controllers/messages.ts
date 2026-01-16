@@ -11,10 +11,17 @@ import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
-import { getSonnetResponse } from '../lib/bedrock';
+import { getSonnetResponse, getSonnetStreamingResponse, type StreamEvent } from '../lib/bedrock';
 import { brainService } from '../services/brain-service';
 import { buildInitialMessagePrompt, buildStagePrompt } from '../services/stage-prompts';
 import { extractJsonFromResponse } from '../utils/json-extractor';
+import {
+  SESSION_STATE_TOOL,
+  SESSION_STATE_TOOL_NAME,
+  parseSessionStateToolInput,
+  getToolsForStage,
+  type SessionStateToolInput,
+} from '../services/stage-tools';
 import {
   sendMessageRequestSchema,
   feelHeardRequestSchema,
@@ -25,7 +32,7 @@ import { notifyPartner, publishSessionEvent, notifySessionMembers, publishMessag
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { embedMessage } from '../services/embedding';
-import { updateSessionSummary } from '../services/conversation-summarizer';
+import { updateSessionSummary, getSessionSummary } from '../services/conversation-summarizer';
 import { runReconcilerForDirection, getSharedContextForGuesser } from '../services/reconciler';
 import { updateContext } from '../lib/request-context';
 import { runPartnerSessionClassifier } from '../services/partner-session-classifier';
@@ -403,8 +410,23 @@ async function processAIResponseInBackground(ctx: {
 
   try {
     // Get conversation history for context (only this user's messages and AI responses to them)
+    // Check if a summary exists to avoid fetching messages already covered by summary
     console.log(`[sendMessage:${requestId}] [BG] Fetching conversation history...`);
     const historyStartTime = Date.now();
+
+    // Check for existing summary to avoid "lazy eviction" - fetching messages already summarized
+    const existingSummary = await getSessionSummary(sessionId, userId);
+    const summaryBoundary = existingSummary?.summary.newestMessageAt;
+
+    if (summaryBoundary) {
+      console.log(`[sendMessage:${requestId}] [BG] Summary exists, fetching messages after ${summaryBoundary.toISOString()}`);
+    }
+
+    // Determine how many messages to fetch based on whether summary exists
+    // If summary exists, fetch all messages after boundary (~15 based on recentMessagesToKeep)
+    // If no summary, limit to 20 to avoid excessive context
+    const historyLimit = summaryBoundary ? 30 : 20;
+
     const historyDesc = await prisma.message.findMany({
       where: {
         sessionId,
@@ -412,12 +434,15 @@ async function processAIResponseInBackground(ctx: {
           { senderId: userId, forUserId: null },
           { forUserId: userId },
         ],
+        // If summary exists, only fetch messages AFTER the summary boundary
+        // This prevents duplicate context (summary + raw messages covering same content)
+        ...(summaryBoundary ? { timestamp: { gt: summaryBoundary } } : {}),
       },
       orderBy: { timestamp: 'desc' },
-      take: 20,
+      take: historyLimit,
     });
     const history = historyDesc.slice().reverse();
-    console.log(`[sendMessage:${requestId}] [BG] ✅ History fetched: ${history.length} messages (took ${Date.now() - historyStartTime}ms)`);
+    console.log(`[sendMessage:${requestId}] [BG] ✅ History fetched: ${history.length} messages (took ${Date.now() - historyStartTime}ms)${summaryBoundary ? ' [summary-aware]' : ''}`);
 
     // Count user turns for AI context
     const userTurnCount = history.filter((m) => m.role === 'USER').length;
@@ -1565,5 +1590,485 @@ export async function getInitialMessage(
   } catch (error) {
     console.error('[getInitialMessage] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get initial message', 500);
+  }
+}
+
+// ============================================================================
+// Streaming Endpoint (SSE)
+// ============================================================================
+
+/**
+ * SSE event type definitions
+ */
+type SSEEvent =
+  | { event: 'user_message'; data: { id: string; content: string; timestamp: string } }
+  | { event: 'chunk'; data: { text: string } }
+  | { event: 'metadata'; data: { metadata: SessionStateToolInput } }
+  | { event: 'text_complete'; data: { metadata: SessionStateToolInput } }
+  | { event: 'complete'; data: { messageId: string; metadata: SessionStateToolInput } }
+  | { event: 'error'; data: { message: string; retryable: boolean } };
+
+/**
+ * Send SSE event to client
+ */
+function sendSSE(res: Response, event: SSEEvent): void {
+  res.write(`event: ${event.event}\n`);
+  res.write(`data: ${JSON.stringify(event.data)}\n\n`);
+}
+
+/**
+ * Send a message with streaming AI response
+ * POST /sessions/:id/messages/stream
+ *
+ * Uses Server-Sent Events (SSE) to stream the AI response in real-time.
+ * Events:
+ * - user_message: User message saved (includes ID)
+ * - chunk: Text delta from AI
+ * - text_complete: AI text finished streaming (sent before DB saves)
+ * - complete: AI response complete (includes messageId and metadata)
+ * - error: Error occurred (includes retryable flag)
+ */
+export async function sendMessageStream(req: Request, res: Response): Promise<void> {
+  const requestId = `stream-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // Track if client disconnected
+  let clientDisconnected = false;
+  req.on('close', () => {
+    clientDisconnected = true;
+    console.log(`[sendMessageStream:${requestId}] Client disconnected`);
+  });
+
+  try {
+    console.log(`[sendMessageStream:${requestId}] ========== SSE STREAM REQUEST START ==========`);
+
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+
+    // Validate request body
+    const parseResult = sendMessageRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({ error: 'Invalid request body', details: parseResult.error.issues });
+      return;
+    }
+
+    const { content } = parseResult.data;
+
+    // Check session exists and user has access
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        relationship: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    // Check session allows messaging
+    if (session.status !== 'ACTIVE') {
+      if (session.status === 'CREATED') {
+        const isCreator = await isSessionCreator(sessionId, user.id);
+        if (!isCreator) {
+          res.status(400).json({ error: 'Session is not active' });
+          return;
+        }
+      } else if (session.status !== 'INVITED') {
+        res.status(400).json({ error: 'Session is not active' });
+        return;
+      }
+    }
+
+    // Get user's current stage progress
+    let progress = await prisma.stageProgress.findFirst({
+      where: {
+        sessionId,
+        userId: user.id,
+        status: { in: ['IN_PROGRESS', 'GATE_PENDING'] },
+      },
+      orderBy: { stage: 'desc' },
+    });
+
+    const currentStage = progress?.stage ?? 0;
+
+    // =========================================================================
+    // Save user message
+    // =========================================================================
+    const userMessage = await prisma.message.create({
+      data: {
+        sessionId,
+        senderId: user.id,
+        role: 'USER',
+        content,
+        stage: currentStage,
+      },
+    });
+    console.log(`[sendMessageStream:${requestId}] User message created: ${userMessage.id}`);
+
+    // Broadcast to Status Site
+    brainService.broadcastMessage(userMessage);
+
+    // =========================================================================
+    // Set up SSE headers
+    // =========================================================================
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    res.flushHeaders();
+
+    // Send user_message event
+    sendSSE(res, {
+      event: 'user_message',
+      data: {
+        id: userMessage.id,
+        content: userMessage.content,
+        timestamp: userMessage.timestamp.toISOString(),
+      },
+    });
+
+    // =========================================================================
+    // Get conversation history for context
+    // =========================================================================
+    const historyDesc = await prisma.message.findMany({
+      where: {
+        sessionId,
+        OR: [
+          { senderId: user.id, forUserId: null },
+          { forUserId: user.id },
+        ],
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 20,
+    });
+    const history = historyDesc.slice().reverse();
+
+    const userTurnCount = history.filter((m) => m.role === 'USER').length;
+    const turnId = `${sessionId}-${user.id}-${userTurnCount}`;
+    updateContext({ turnId, sessionId, userId: user.id });
+
+    // Get partner name for context
+    const partnerId = await getPartnerUserId(sessionId, user.id);
+    let partnerName: string | undefined;
+    if (partnerId) {
+      const partner = await prisma.user.findUnique({
+        where: { id: partnerId },
+        select: { name: true },
+      });
+      partnerName = partner?.name || undefined;
+    } else if (session.status === 'CREATED') {
+      const invitation = await prisma.invitation.findFirst({
+        where: { sessionId, invitedById: user.id },
+        select: { name: true },
+      });
+      partnerName = invitation?.name || undefined;
+    }
+
+    // Build stage prompt
+    const userName = user.name || 'there';
+    const isInvitationPhase = session.status === 'CREATED';
+
+    const prompt = buildStagePrompt(currentStage, {
+      userName,
+      partnerName,
+      turnCount: userTurnCount,
+      emotionalIntensity: 5,
+      contextBundle: {
+        conversationContext: {
+          recentTurns: history.slice(-10).map(m => ({
+            role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+            content: m.content,
+            timestamp: m.timestamp.toISOString(),
+          })),
+          turnCount: userTurnCount,
+          sessionDurationMinutes: Math.floor((Date.now() - session.createdAt.getTime()) / 60000),
+        },
+        emotionalThread: {
+          initialIntensity: null,
+          currentIntensity: null,
+          trend: 'unknown',
+          notableShifts: [],
+        },
+        stageContext: {
+          stage: currentStage,
+          gatesSatisfied: (progress?.gatesSatisfied as Record<string, unknown>) ?? {},
+        },
+        userName,
+        partnerName,
+        intent: {
+          intent: 'stage_enforcement' as const,
+          depth: 'minimal' as const,
+          reason: 'Streaming response',
+          threshold: 0.60,
+          maxCrossSession: 0,
+          allowCrossSession: false,
+          surfaceStyle: 'silent' as const,
+        },
+        assembledAt: new Date().toISOString(),
+      },
+    }, { isInvitationPhase });
+
+    // Add tool use instruction to prompt
+    const promptWithToolInstruction = `${prompt}
+
+IMPORTANT: After your text response, you MUST call the update_session_state tool to report session state. Include any relevant metadata for the current stage.`;
+
+    // =========================================================================
+    // Stream AI response (with analysis block trap)
+    // =========================================================================
+    let accumulatedText = '';
+    let metadata: SessionStateToolInput = {};
+    let streamError: Error | null = null;
+
+    // Analysis trap state - Claude outputs <analysis>...</analysis> first, which we hide
+    let isInsideAnalysis = true;
+    let analysisBuffer = '';
+    let analysisContent = ''; // Store hidden analysis for logging
+
+    try {
+      const streamGenerator = getSonnetStreamingResponse({
+        systemPrompt: promptWithToolInstruction,
+        messages: history.map(m => ({
+          role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+          content: m.content,
+        })),
+        tools: getToolsForStage(currentStage),
+        maxTokens: 2048,
+        sessionId,
+        turnId,
+        operation: 'streaming-response',
+      });
+
+      const streamStartTime = Date.now();
+      let firstChunkTime: number | null = null;
+      let toolUseTime: number | null = null;
+      let lastChunkTime: number | null = null;
+      let analysisEndTime: number | null = null;
+
+      for await (const event of streamGenerator) {
+        if (event.type === 'text') {
+          lastChunkTime = Date.now();
+
+          // ANALYSIS TRAP: Buffer until </analysis> is found
+          if (isInsideAnalysis) {
+            analysisBuffer += event.text;
+
+            // Check for closing tag
+            const closingTagIndex = analysisBuffer.indexOf('</analysis>');
+            if (closingTagIndex !== -1) {
+              // Analysis phase complete
+              isInsideAnalysis = false;
+              analysisEndTime = Date.now();
+
+              // Extract and log the hidden analysis
+              analysisContent = analysisBuffer.substring(0, closingTagIndex);
+              console.log(`[sendMessageStream:${requestId}] [TIMING] Analysis phase complete at ${analysisEndTime - streamStartTime}ms`);
+              console.log(`[sendMessageStream:${requestId}] [HIDDEN ANALYSIS]:`, analysisContent.substring(0, 200) + (analysisContent.length > 200 ? '...' : ''));
+
+              // Extract text after </analysis> (11 chars) and send to client
+              const remainingText = analysisBuffer.substring(closingTagIndex + 11).trimStart();
+              if (remainingText.length > 0) {
+                if (!firstChunkTime) firstChunkTime = Date.now();
+                accumulatedText += remainingText;
+                if (!clientDisconnected) {
+                  sendSSE(res, { event: 'chunk', data: { text: remainingText } });
+                }
+              }
+
+              // Clear buffer
+              analysisBuffer = '';
+            }
+            // Safety: If buffer > 2000 chars without finding tag, assume no analysis and flush
+            else if (analysisBuffer.length > 2000) {
+              console.warn(`[sendMessageStream:${requestId}] Analysis buffer exceeded 2000 chars without closing tag, flushing`);
+              isInsideAnalysis = false;
+              if (!firstChunkTime) firstChunkTime = Date.now();
+              accumulatedText += analysisBuffer;
+              if (!clientDisconnected) {
+                sendSSE(res, { event: 'chunk', data: { text: analysisBuffer } });
+              }
+              analysisBuffer = '';
+            }
+          } else {
+            // Normal streaming - analysis phase is over
+            if (!firstChunkTime) firstChunkTime = Date.now();
+            accumulatedText += event.text;
+            if (!clientDisconnected) {
+              sendSSE(res, { event: 'chunk', data: { text: event.text } });
+            }
+          }
+        } else if (event.type === 'tool_use') {
+          if (event.name === SESSION_STATE_TOOL_NAME) {
+            toolUseTime = Date.now();
+            metadata = parseSessionStateToolInput(event.input);
+            console.log(`[sendMessageStream:${requestId}] [T+${toolUseTime - streamStartTime}ms] Received tool call:`,
+              metadata.invitationMessage ? `invitationMessage: "${metadata.invitationMessage.substring(0, 50)}..."` : metadata);
+
+            // Send metadata immediately so UI can show panels while stream continues
+            if (!clientDisconnected) {
+              console.log(`[sendMessageStream:${requestId}] [TIMING] Sending metadata event immediately`);
+              sendSSE(res, { event: 'metadata', data: { metadata } });
+            }
+          }
+        }
+        // 'done' event is handled after the loop
+      }
+
+      const streamEndTime = Date.now();
+      console.log(`[sendMessageStream:${requestId}] [TIMING] Stream complete:`,
+        `total=${streamEndTime - streamStartTime}ms`,
+        `analysisEnd=${analysisEndTime ? analysisEndTime - streamStartTime : 'none'}ms`,
+        `firstVisibleChunk=${firstChunkTime ? firstChunkTime - streamStartTime : 'none'}ms`,
+        `toolUse=${toolUseTime ? toolUseTime - streamStartTime : 'none'}ms`,
+        `lastChunk=${lastChunkTime ? lastChunkTime - streamStartTime : 'none'}ms`);
+    } catch (error) {
+      console.error(`[sendMessageStream:${requestId}] Stream error:`, error);
+      streamError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    // =========================================================================
+    // Signal that text streaming is complete (before DB saves for faster UX)
+    // =========================================================================
+    if (!clientDisconnected && !streamError) {
+      console.log(`[sendMessageStream:${requestId}] [TIMING] Sending text_complete with metadata:`,
+        metadata.invitationMessage ? 'has invitationMessage' : 'no invitationMessage');
+      sendSSE(res, { event: 'text_complete', data: { metadata } });
+    }
+
+    // =========================================================================
+    // Save AI message (even if client disconnected or error occurred)
+    // =========================================================================
+    const aiMessage = await prisma.message.create({
+      data: {
+        sessionId,
+        senderId: null,
+        forUserId: user.id,
+        role: 'AI',
+        content: accumulatedText || 'I apologize, but I encountered an issue generating a response. Please try again.',
+        stage: currentStage,
+      },
+    });
+    console.log(`[sendMessageStream:${requestId}] AI message created: ${aiMessage.id}`);
+
+    // Broadcast to Status Site
+    brainService.broadcastMessage(aiMessage);
+
+    // =========================================================================
+    // Process metadata (persist to database)
+    // =========================================================================
+    if (currentStage === 1 && metadata.offerFeelHeardCheck && progress?.id) {
+      const currentGates = (progress.gatesSatisfied as Record<string, unknown>) ?? {};
+      await prisma.stageProgress.update({
+        where: { id: progress.id },
+        data: {
+          gatesSatisfied: {
+            ...currentGates,
+            feelHeardCheckOffered: true,
+          },
+        },
+      });
+    }
+
+    // Save invitation message
+    if (isInvitationPhase && metadata.invitationMessage) {
+      await prisma.invitation.updateMany({
+        where: { sessionId, invitedById: user.id },
+        data: {
+          invitationMessage: metadata.invitationMessage,
+          messageConfirmed: false,
+        },
+      });
+    }
+
+    // Save empathy draft
+    if (currentStage === 2 && metadata.offerReadyToShare && metadata.proposedEmpathyStatement) {
+      await prisma.empathyDraft.upsert({
+        where: {
+          sessionId_userId: { sessionId, userId: user.id },
+        },
+        create: {
+          sessionId,
+          userId: user.id,
+          content: metadata.proposedEmpathyStatement,
+          readyToShare: false,
+          version: 1,
+        },
+        update: {
+          content: metadata.proposedEmpathyStatement,
+          version: { increment: 1 },
+        },
+      });
+    }
+
+    // =========================================================================
+    // Send final event or error
+    // =========================================================================
+    if (!clientDisconnected) {
+      if (streamError) {
+        sendSSE(res, {
+          event: 'error',
+          data: {
+            message: 'An error occurred while generating the response.',
+            retryable: true,
+          },
+        });
+      } else {
+        sendSSE(res, {
+          event: 'complete',
+          data: {
+            messageId: aiMessage.id,
+            metadata,
+          },
+        });
+      }
+    }
+
+    // =========================================================================
+    // Background tasks (non-blocking)
+    // =========================================================================
+    embedMessage(userMessage.id, turnId).catch(err =>
+      console.warn(`[sendMessageStream:${requestId}] Failed to embed user message:`, err)
+    );
+    embedMessage(aiMessage.id, turnId).catch(err =>
+      console.warn(`[sendMessageStream:${requestId}] Failed to embed AI message:`, err)
+    );
+    updateSessionSummary(sessionId, user.id, turnId).catch(err =>
+      console.warn(`[sendMessageStream:${requestId}] Failed to update session summary:`, err)
+    );
+
+    // End response
+    res.end();
+    console.log(`[sendMessageStream:${requestId}] ========== SSE STREAM COMPLETE ==========`);
+
+  } catch (error) {
+    console.error(`[sendMessageStream:${requestId}] Error:`, error);
+
+    // If headers already sent, try to send error event
+    if (res.headersSent) {
+      try {
+        sendSSE(res, {
+          event: 'error',
+          data: {
+            message: 'An unexpected error occurred.',
+            retryable: true,
+          },
+        });
+        res.end();
+      } catch {
+        // Ignore - client may have disconnected
+      }
+    } else {
+      res.status(500).json({ error: 'Failed to process message' });
+    }
   }
 }
