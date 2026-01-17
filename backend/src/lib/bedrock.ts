@@ -10,11 +10,15 @@
 import {
   BedrockRuntimeClient,
   ConverseCommand,
+  ConverseStreamCommand,
   InvokeModelCommand,
   type Message,
   type SystemContentBlock,
   type InferenceConfiguration,
   type ConverseCommandInput,
+  type Tool,
+  type ToolConfiguration,
+  type ContentBlock,
 } from '@aws-sdk/client-bedrock-runtime';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import { brainService } from '../services/brain-service';
@@ -485,4 +489,183 @@ export async function getEmbeddings(texts: string[]): Promise<(number[] | null)[
   // Titan doesn't support batch embeddings natively, so we parallelize
   const results = await Promise.all(texts.map((text) => getEmbedding(text)));
   return results;
+}
+
+// ============================================================================
+// Streaming (SSE Support)
+// ============================================================================
+
+/**
+ * Stream event types for SSE response handling.
+ */
+export type StreamEvent =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; toolUseId: string; name: string; input: Record<string, unknown> }
+  | { type: 'done'; usage: { inputTokens: number; outputTokens: number } };
+
+/**
+ * Options for Sonnet streaming completion requests.
+ */
+export interface SonnetStreamingOptions {
+  systemPrompt: string;
+  messages: SimpleMessage[];
+  tools?: Tool[];
+  maxTokens?: number;
+  /** Session ID for cost attribution - REQUIRED */
+  sessionId: string;
+  /** Operation name for cost breakdown */
+  operation: string;
+  /** Turn ID to group all costs from a single user action - REQUIRED */
+  turnId: string;
+}
+
+/**
+ * Get streaming response from Sonnet using ConverseStreamCommand.
+ * Use for: real-time user-facing responses with SSE delivery.
+ *
+ * Yields StreamEvent objects:
+ * - { type: 'text', text: string } - Text delta as it arrives
+ * - { type: 'tool_use', toolUseId: string, name: string, input: object } - Tool call when complete
+ * - { type: 'done', usage: { inputTokens, outputTokens } } - Final event with token usage
+ *
+ * @param options - Streaming completion options including system prompt, messages, and optional tools
+ * @yields StreamEvent objects as the response streams in
+ */
+export async function* getSonnetStreamingResponse(
+  options: SonnetStreamingOptions
+): AsyncGenerator<StreamEvent, void, unknown> {
+  const client = getBedrockClient();
+  if (!client) {
+    // If client not configured, yield a done event with no usage
+    yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 } };
+    return;
+  }
+
+  const { systemPrompt, messages, tools, maxTokens = 2048 } = options;
+  const startTime = Date.now();
+
+  const system: SystemContentBlock[] = [{ text: systemPrompt }];
+  const inferenceConfig: InferenceConfiguration = { maxTokens };
+
+  // Build tool configuration if tools are provided
+  let toolConfig: ToolConfiguration | undefined;
+  if (tools && tools.length > 0) {
+    toolConfig = { tools };
+  }
+
+  // Start logging via BrainService
+  const activity = await brainService.startActivity({
+    sessionId: options.sessionId,
+    turnId: options.turnId,
+    activityType: ActivityType.LLM_CALL,
+    model: BEDROCK_SONNET_MODEL_ID,
+    input: {
+      systemPrompt,
+      messages,
+      operation: options.operation,
+      streaming: true,
+    },
+    metadata: {
+      maxTokens,
+      toolCount: tools?.length ?? 0,
+    },
+  });
+
+  try {
+    const command = new ConverseStreamCommand({
+      modelId: BEDROCK_SONNET_MODEL_ID,
+      messages: toBedrockMessages(messages),
+      system,
+      inferenceConfig,
+      toolConfig,
+    });
+
+    const response = await client.send(command);
+
+    if (!response.stream) {
+      throw new Error('No stream in Bedrock response');
+    }
+
+    // Track accumulated content for tool use
+    let currentToolUseId: string | undefined;
+    let currentToolName: string | undefined;
+    let accumulatedToolInput = '';
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    // Process the stream
+    for await (const event of response.stream) {
+      // Text delta
+      if (event.contentBlockDelta?.delta?.text) {
+        yield { type: 'text', text: event.contentBlockDelta.delta.text };
+      }
+
+      // Tool use start
+      if (event.contentBlockStart?.start?.toolUse) {
+        const toolUse = event.contentBlockStart.start.toolUse;
+        currentToolUseId = toolUse.toolUseId;
+        currentToolName = toolUse.name;
+        accumulatedToolInput = '';
+      }
+
+      // Tool use delta (accumulate input JSON)
+      if (event.contentBlockDelta?.delta?.toolUse?.input) {
+        accumulatedToolInput += event.contentBlockDelta.delta.toolUse.input;
+      }
+
+      // Content block stop - emit accumulated tool use
+      if (event.contentBlockStop !== undefined && currentToolUseId && currentToolName) {
+        try {
+          const parsedInput = accumulatedToolInput
+            ? JSON.parse(accumulatedToolInput)
+            : {};
+          yield {
+            type: 'tool_use',
+            toolUseId: currentToolUseId,
+            name: currentToolName,
+            input: parsedInput,
+          };
+        } catch (parseError) {
+          console.error('[Bedrock] Failed to parse tool input JSON:', parseError);
+          yield {
+            type: 'tool_use',
+            toolUseId: currentToolUseId,
+            name: currentToolName,
+            input: {},
+          };
+        }
+        currentToolUseId = undefined;
+        currentToolName = undefined;
+        accumulatedToolInput = '';
+      }
+
+      // Message stop with usage
+      if (event.metadata?.usage) {
+        inputTokens = event.metadata.usage.inputTokens ?? 0;
+        outputTokens = event.metadata.usage.outputTokens ?? 0;
+      }
+    }
+
+    const durationMs = Date.now() - startTime;
+
+    // Calculate cost
+    const price = PRICING[BEDROCK_SONNET_MODEL_ID as keyof typeof PRICING] || { input: 0, output: 0 };
+    const cost = (inputTokens / 1000) * price.input + (outputTokens / 1000) * price.output;
+
+    // Complete activity log
+    await brainService.completeActivity(activity.id, {
+      output: { streaming: true, stopReason: 'end_turn' },
+      tokenCountInput: inputTokens,
+      tokenCountOutput: outputTokens,
+      durationMs,
+      cost,
+    });
+
+    // Yield done event with usage
+    yield { type: 'done', usage: { inputTokens, outputTokens } };
+  } catch (error) {
+    console.error('[Bedrock] Streaming error:', error);
+    await brainService.failActivity(activity.id, error);
+    throw error;
+  }
 }

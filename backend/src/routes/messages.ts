@@ -13,6 +13,7 @@ import { requireAuth, requireSessionAccess } from '../middleware/auth';
 import { asyncHandler } from '../middleware/errors';
 import {
   sendMessage,
+  sendMessageStream,
   confirmFeelHeard,
   getConversationHistory,
   getInitialMessage,
@@ -26,6 +27,14 @@ router.post(
   requireAuth,
   requireSessionAccess,
   asyncHandler(sendMessage)
+);
+
+// Send message with streaming AI response (SSE)
+router.post(
+  '/sessions/:id/messages/stream',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(sendMessageStream)
 );
 
 // Confirm user feels heard

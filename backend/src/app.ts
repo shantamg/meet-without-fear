@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import routes from './routes';
 import { requestContextMiddleware } from './middleware/request-context';
 
@@ -9,6 +10,20 @@ const app = express();
 // Security middleware
 app.use(helmet());
 app.use(cors());
+
+// Compression middleware - skip SSE endpoints to prevent buffering
+app.use(
+  compression({
+    filter: (req, res) => {
+      // Skip compression for SSE streaming endpoints
+      if (req.path.includes('/messages/stream')) {
+        return false;
+      }
+      // Use default compression filter for other requests
+      return compression.filter(req, res);
+    },
+  })
+);
 
 // Body parsing
 app.use(express.json());

@@ -17,10 +17,10 @@ import {
 } from './useSessions';
 import {
   useInfiniteMessages,
-  useSendMessage,
   useRecordEmotion,
   useFetchInitialMessage,
 } from './useMessages';
+import { useStreamingMessage, StreamMetadata } from './useStreamingMessage';
 import {
   useSignCompact,
   useAdvanceStage,
@@ -288,7 +288,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // -------------------------------------------------------------------------
   // Mutation Hooks
   // -------------------------------------------------------------------------
-  const { mutate: sendMessage, isPending: isSending } = useSendMessage();
   const { mutate: recordEmotion } = useRecordEmotion();
   const { mutate: confirmHeard, isPending: isConfirmingFeelHeard } = useConfirmFeelHeard();
   const { mutate: signCompact, isPending: isSigningCompact } = useSignCompact();
@@ -316,6 +315,55 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { mutate: confirmAgreement } = useConfirmAgreement();
   useCreateAgreement(); // Available if needed for hybrid strategies
   const { mutate: resolveSession } = useResolveSession();
+
+  // Streaming message hook with callbacks for metadata handling
+  const handleStreamMetadata = useCallback(
+    (_sessionId: string, metadata: StreamMetadata) => {
+      console.log(`[useUnifiedSession] [TIMING] handleStreamMetadata called at ${Date.now()}`);
+      // Update feel-heard check recommendation from AI
+      if (metadata.offerFeelHeardCheck === true) {
+        setAiRecommendsFeelHeardCheck(true);
+      }
+      // Update ready-to-share recommendation from AI (Stage 2)
+      if (metadata.offerReadyToShare === true) {
+        setAiRecommendsReadyToShare(true);
+      }
+      // Capture live invitation message from AI (for refinement flow)
+      if (metadata.invitationMessage !== undefined && metadata.invitationMessage !== null) {
+        console.log(`[useUnifiedSession] [TIMING] Setting liveInvitationMessage at ${Date.now()}`);
+        setLiveInvitationMessage(metadata.invitationMessage);
+        console.log(`[useUnifiedSession] [TIMING] setLiveInvitationMessage called at ${Date.now()}`);
+      }
+      // Capture AI-proposed empathy statement (Stage 2)
+      // Save to database immediately so it persists across reloads
+      if (sessionId && metadata.proposedEmpathyStatement !== undefined && metadata.proposedEmpathyStatement !== null) {
+        setLiveProposedEmpathyStatement(metadata.proposedEmpathyStatement);
+        // Save to database with readyToShare: false (user hasn't confirmed yet)
+        saveDraft({ sessionId, content: metadata.proposedEmpathyStatement, readyToShare: false });
+      }
+    },
+    [sessionId, saveDraft, setAiRecommendsFeelHeardCheck, setAiRecommendsReadyToShare,
+     setLiveInvitationMessage, setLiveProposedEmpathyStatement]
+  );
+
+  const handleStreamError = useCallback(
+    (error: Error) => {
+      const message = error instanceof ApiClientError
+        ? error.message
+        : 'Failed to send message. Please try again.';
+      showError('Message not sent', message);
+    },
+    [showError]
+  );
+
+  const {
+    sendMessage: streamingSendMessage,
+    isSending,
+    isStreaming,
+  } = useStreamingMessage({
+    onMetadata: handleStreamMetadata,
+    onError: handleStreamError,
+  });
 
   const handleRespondToShareOffer = useCallback(
     (action: 'accept' | 'decline' | 'refine', refinedContent?: string) => {
@@ -806,7 +854,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
       if (!sessionId) return;
 
       // Prevent duplicate submissions
-      if (isSending) {
+      if (isSending || isStreaming) {
         console.warn('[handleSendMessage] Already sending a message, ignoring duplicate call');
         return;
       }
@@ -814,64 +862,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
       // Reset activity timer
       lastActivityTime.current = Date.now();
 
-      // Send message with currentStage for optimistic update placement
-      // The useSendMessage hook handles optimistic updates via onMutate
-      sendMessage(
-        { sessionId, content, currentStage },
-        {
-          onSuccess: (data) => {
-            // Update feel-heard check recommendation from AI
-            // Only set to true - once AI recommends feel-heard check, keep it sticky
-            // until user confirms or dismisses (prevents flashing card on/off)
-            if (data.offerFeelHeardCheck === true) {
-              setAiRecommendsFeelHeardCheck(true);
-            }
-            // Update ready-to-share recommendation from AI (Stage 2)
-            // Only set to true - once AI recommends ready-to-share, keep it sticky
-            if (data.offerReadyToShare === true) {
-              setAiRecommendsReadyToShare(true);
-            }
-            // Capture live invitation message from AI (for refinement flow)
-            if (data.invitationMessage !== undefined) {
-              setLiveInvitationMessage(data.invitationMessage);
-            }
-            // Capture AI-proposed empathy statement (Stage 2)
-            // Save to database immediately so it persists across reloads
-            if (data.proposedEmpathyStatement !== undefined && data.proposedEmpathyStatement !== null) {
-              setLiveProposedEmpathyStatement(data.proposedEmpathyStatement);
-              // Save to database with readyToShare: false (user hasn't confirmed yet)
-              saveDraft({ sessionId, content: data.proposedEmpathyStatement, readyToShare: false });
-            }
-            // Capture AI-detected memory suggestion
-            // Only shows one suggestion at a time - replaces previous if any
-            if (data.memorySuggestion !== undefined) {
-              setMemorySuggestion(data.memorySuggestion);
-            }
-          },
-          onError: (error) => {
-            // Show error message to user
-            // Note: Rollback is handled by useSendMessage's onError via context
-            const message = error instanceof ApiClientError
-              ? error.message
-              : 'Failed to send message. Please try again.';
-            showError('Message not sent', message);
-          },
-        }
-      );
+      // Send message with SSE streaming for AI response
+      // Metadata handling is done via onMetadata callback to the streaming hook
+      streamingSendMessage({ sessionId, content, currentStage });
     },
-    [
-      sessionId,
-      currentStage,
-      sendMessage,
-      isSending,
-      showError,
-      saveDraft,
-      setAiRecommendsFeelHeardCheck,
-      setAiRecommendsReadyToShare,
-      setLiveInvitationMessage,
-      setLiveProposedEmpathyStatement,
-      setMemorySuggestion,
-    ]
+    [sessionId, currentStage, streamingSendMessage, isSending, isStreaming]
   );
 
   const handleBarometerChange = useCallback(
@@ -1196,6 +1191,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     messages,
     inlineCards,
     isSending,
+    isStreaming,
     isSigningCompact,
     isConfirmingFeelHeard,
     isConfirmingInvitation,

@@ -587,18 +587,30 @@ export function UnifiedSessionScreen({
   // When typewriter is animating:
   //   - Panel is mounted (opacity: 0, maxHeight: 0, pointerEvents: none)
   //   - User can't see or interact with it
-  // When typewriter finishes:
+  // When data becomes available:
   //   - Animation target becomes 1, panel smoothly animates in
   //   - Panel was already mounted, so no mount/unmount cycle = no flicker
-  const readyToShowInvitation = shouldShowInvitationPanel && !isTypewriterAnimating;
-  const readyToShowEmpathy = shouldShowEmpathyPanel && !isTypewriterAnimating;
-  const readyToShowFeelHeard = shouldShowFeelHeard && !isTypewriterAnimating;
-  const readyToShowShareSuggestion = shouldShowShareSuggestion && !isTypewriterAnimating;
-  const readyToShowAccuracyFeedback = shouldShowAccuracyFeedback && !isTypewriterAnimating;
-  const readyToShowWaitingBanner = shouldShowWaitingBanner && !isTypewriterAnimating;
+  // Note: Panels show as soon as data is available, not waiting for typewriter/streaming
+  const readyToShowInvitation = shouldShowInvitationPanel;
+  const readyToShowEmpathy = shouldShowEmpathyPanel;
+  const readyToShowFeelHeard = shouldShowFeelHeard;
+  const readyToShowShareSuggestion = shouldShowShareSuggestion;
+  const readyToShowAccuracyFeedback = shouldShowAccuracyFeedback;
+  const readyToShowWaitingBanner = shouldShowWaitingBanner;
+
+  // Debug logging for invitation panel timing
+  useEffect(() => {
+    console.log(`[UnifiedSessionScreen] [TIMING] invitationMessage changed at ${Date.now()}:`,
+      invitationMessage ? `"${invitationMessage.substring(0, 30)}..."` : 'null');
+  }, [invitationMessage]);
+
+  useEffect(() => {
+    console.log(`[UnifiedSessionScreen] [TIMING] shouldShowInvitationPanel changed at ${Date.now()}:`, shouldShowInvitationPanel);
+  }, [shouldShowInvitationPanel]);
 
   // Animate invitation panel - synced with mount condition
   useEffect(() => {
+    console.log(`[UnifiedSessionScreen] [TIMING] readyToShowInvitation changed at ${Date.now()}:`, readyToShowInvitation);
     Animated.spring(invitationPanelAnim, {
       toValue: readyToShowInvitation ? 1 : 0,
       useNativeDriver: false,

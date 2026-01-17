@@ -75,6 +75,15 @@ export {
   useOptimisticMessage,
 } from './useMessages';
 
+export {
+  useStreamingMessage,
+  type StreamMetadata,
+  type StreamStatus,
+  type SendStreamingMessageParams,
+  type UseStreamingMessageOptions,
+  type UseStreamingMessageResult,
+} from './useStreamingMessage';
+
 // ============================================================================
 // Profile
 // ============================================================================

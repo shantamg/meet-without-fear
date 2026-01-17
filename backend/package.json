@@ -30,6 +30,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
     "ably": "^2.16.0",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "csv-writer": "^1.6.0",
     "dotenv": "^16.4.5",
@@ -43,6 +44,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
     "@types/jest": "^29.5.14",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",

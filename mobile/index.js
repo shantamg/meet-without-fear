@@ -1,3 +1,6 @@
+// Polyfill TextDecoder for React Native (required for SSE streaming)
+import 'fast-text-encoding';
+
 import { registerRootComponent } from 'expo';
 import { ExpoRoot } from 'expo-router';
 

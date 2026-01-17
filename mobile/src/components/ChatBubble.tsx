@@ -3,14 +3,14 @@ import { View, Text, Animated } from 'react-native';
 import { MessageRole, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
-import { TypewriterText } from './TypewriterText';
+import { StreamingText } from './StreamingText';
 import { SpeakerButton } from './SpeakerButton';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type MessageDeliveryStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'error';
+export type MessageDeliveryStatus = 'sending' | 'streaming' | 'sent' | 'delivered' | 'read' | 'error';
 
 export interface ChatBubbleMessage {
   id: string;
@@ -31,11 +31,9 @@ interface ChatBubbleProps {
   /** Enable typewriter effect for AI messages */
   enableTypewriter?: boolean;
   /** Callback when animation starts (to track animation state) */
-  onTypewriterStart?: () => void;
+  onAnimationStart?: () => void;
   /** Callback when animation completes */
-  onTypewriterComplete?: () => void;
-  /** Callback during typewriter animation (for scrolling) */
-  onTypewriterProgress?: () => void;
+  onAnimationComplete?: () => void;
   /** Whether speech is currently playing for this message */
   isSpeaking?: boolean;
   /** Callback when speaker button is pressed */
@@ -50,13 +48,10 @@ interface ChatBubbleProps {
 // Constants
 // ============================================================================
 
-/** Delay between each word appearing (ms) */
-const WORD_DELAY_MS = 70;
+/** Duration of the fade-in animation for streaming text (ms) */
+const STREAMING_FADE_DURATION_MS = 200;
 
-/** Duration of the fade-in animation for each word (ms) */
-const FADE_DURATION_MS = 200;
-
-/** Duration of the fade-in animation for non-typewriter messages (ms) */
+/** Duration of the fade-in animation for non-streaming messages (ms) */
 const MESSAGE_FADE_DURATION_MS = 400;
 
 // ============================================================================
@@ -67,9 +62,8 @@ export function ChatBubble({
   message,
   showTimestamp = false,
   enableTypewriter = true,
-  onTypewriterStart,
-  onTypewriterComplete,
-  onTypewriterProgress,
+  onAnimationStart,
+  onAnimationComplete,
   isSpeaking = false,
   onSpeakerPress,
   hideSpeaker = false,
@@ -106,25 +100,23 @@ export function ChatBubble({
   }
 
   // Store callbacks in refs to avoid re-triggering animation
-  const onStartRef = useRef(onTypewriterStart);
-  const onCompleteRef = useRef(onTypewriterComplete);
-  const onProgressRef = useRef(onTypewriterProgress);
-  onStartRef.current = onTypewriterStart;
-  onCompleteRef.current = onTypewriterComplete;
-  onProgressRef.current = onTypewriterProgress;
+  const onStartRef = useRef(onAnimationStart);
+  const onCompleteRef = useRef(onAnimationComplete);
+  onStartRef.current = onAnimationStart;
+  onCompleteRef.current = onAnimationComplete;
 
-  // Determine if we should use typewriter effect (AI messages only)
-  const shouldUseTypewriter = isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
+  // Determine if we should use streaming text effect (AI messages only)
+  const shouldUseStreamingText = isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
 
   // Determine if we should use fade-in effect (non-AI, non-USER messages that should animate)
   const shouldUseFadeIn = !isUser && !isAI && enableTypewriter && !message.skipTypewriter && !hasAnimatedRef.current;
 
   // Track whether this message is next to animate (callback is provided)
   // This allows the effect to re-run when the message becomes "next"
-  const isNextToAnimate = onTypewriterStart !== undefined;
+  const isNextToAnimate = onAnimationStart !== undefined;
 
-  // Handle fade-in animation for non-typewriter messages
-  // Only starts when this message is next in the animation queue (onTypewriterStart is provided)
+  // Handle fade-in animation for non-streaming messages
+  // Only starts when this message is next in the animation queue (onAnimationStart is provided)
   useEffect(() => {
     if (shouldUseFadeIn && !hasStartedRef.current && isNextToAnimate) {
       hasStartedRef.current = true;
@@ -146,16 +138,16 @@ export function ChatBubble({
     }
   }, [shouldUseFadeIn, isNextToAnimate, fadeAnim]);
 
-  // Call onStart when typewriter begins - use effect to avoid setState during render
+  // Call onStart when streaming text begins - use effect to avoid setState during render
   // Only starts when this message is next in the animation queue (onTypewriterStart is provided)
   useEffect(() => {
-    if (shouldUseTypewriter && !hasStartedRef.current && isNextToAnimate && onStartRef.current) {
+    if (shouldUseStreamingText && !hasStartedRef.current && isNextToAnimate && onStartRef.current) {
       hasStartedRef.current = true;
       onStartRef.current();
     }
-  }, [shouldUseTypewriter, isNextToAnimate]);
+  }, [shouldUseStreamingText, isNextToAnimate]);
 
-  // Mark as animated when complete (for typewriter)
+  // Mark as animated when complete (for streaming text)
   const handleComplete = useCallback(() => {
     hasAnimatedRef.current = true;
     onCompleteRef.current?.();
@@ -170,6 +162,8 @@ export function ChatBubble({
     switch (status) {
       case 'sending':
         return 'Sending...';
+      case 'streaming':
+        return 'Responding...';
       case 'sent':
         return 'Sent';
       case 'delivered':
@@ -240,9 +234,9 @@ export function ChatBubble({
 
   // Check if this message is waiting to animate (not its turn yet)
   // For fade-in messages: willAnimate is true, hasn't started, not next in queue
-  // For typewriter messages: shouldUseTypewriter is true, hasn't started, not next in queue
+  // For typewriter messages: shouldUseStreamingText is true, hasn't started, not next in queue
   const isWaitingToAnimate =
-    ((willAnimate || shouldUseTypewriter) && !hasStartedRef.current && !isNextToAnimate);
+    ((willAnimate || shouldUseStreamingText) && !hasStartedRef.current && !isNextToAnimate);
 
   // Hide the entire bubble until it's this message's turn to animate
   // This prevents showing empty bubbles or bubble containers while waiting
@@ -330,17 +324,15 @@ export function ChatBubble({
       return content;
     }
 
-    // Use typewriter for new AI messages
+    // Use streaming text for new AI messages - fades in chunks as they arrive
     // Note: We only reach here if !isWaitingToAnimate (checked at component level)
-    if (shouldUseTypewriter) {
+    if (shouldUseStreamingText) {
       return (
-        <TypewriterText
+        <StreamingText
           text={message.content}
           style={getTextStyle()}
-          wordDelay={WORD_DELAY_MS}
-          fadeDuration={FADE_DURATION_MS}
+          fadeDuration={STREAMING_FADE_DURATION_MS}
           onComplete={handleComplete}
-          onProgress={onProgressRef.current}
         />
       );
     }

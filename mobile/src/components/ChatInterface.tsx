@@ -299,19 +299,20 @@ export function ChatInterface({
     isInitialLoadRef.current = false;
   }
 
-  // RACE CONDITION FIX: After initial load, check incoming messages.
+  // RACE CONDITION FIX: After initial load, check incoming messages SYNCHRONOUSLY.
   // If a message's timestamp is before initialLoadCompletedAt, it's history
-  // that arrived via async query and should be marked as known.
-  useEffect(() => {
-    if (initialLoadCompletedAtRef.current && messages.length > 0) {
-      messages.forEach(m => {
-        // If message timestamp is before initial load completed, it's history
-        if (m.timestamp && m.timestamp < initialLoadCompletedAtRef.current!) {
-          knownMessageIdsRef.current.add(m.id);
-        }
-      });
-    }
-  }, [messages]);
+  // that arrived via async query (or refetch) and should be marked as known.
+  // This MUST run synchronously during render (not in useEffect) to prevent
+  // a race where nextAnimatableMessageId is calculated before messages are marked as known.
+  if (initialLoadCompletedAtRef.current && messages.length > 0) {
+    messages.forEach(m => {
+      // If message timestamp is before initial load completed, it's history
+      // Use <= to catch messages created at the same millisecond as initial load
+      if (m.timestamp && m.timestamp <= initialLoadCompletedAtRef.current!) {
+        knownMessageIdsRef.current.add(m.id);
+      }
+    });
+  }
 
   // Detect when custom empty state is removed (e.g., compact was signed)
   // Mark initial load as complete so new messages after this get typewriter effect
@@ -426,6 +427,7 @@ export function ChatInterface({
     // 3. The currently animating message (use stable state, don't restart)
     // 4. Optimistic messages (they may re-render with real IDs)
     // 5. User messages (only AI messages get typewriter)
+    // Streaming messages also use typewriter - TypewriterText handles growing text
     const isFromHistory = knownMessageIdsRef.current.has(message.id);
     const hasAlreadyAnimated = animatedMessageIdsRef.current.has(message.id);
     const isCurrentlyAnimating = message.id === animatingMessageId;
@@ -433,7 +435,7 @@ export function ChatInterface({
     const isAIMessage = message.role !== MessageRole.USER;
 
     // Animate if: AI message, not from history, not already animated, not optimistic
-    // For currently animating message, keep animating (don't skip)
+    // Streaming messages also animate - TypewriterText handles text that grows over time
     const shouldAnimateTypewriter = isAIMessage &&
       !isFromHistory &&
       !hasAlreadyAnimated &&
@@ -455,8 +457,8 @@ export function ChatInterface({
     return (
       <ChatBubble
         message={bubbleMessage}
-        onTypewriterStart={isNextAnimatable ? () => setAnimatingMessageId(message.id) : undefined}
-        onTypewriterComplete={(isNextAnimatable || isCurrentlyAnimating) ? () => {
+        onAnimationStart={isNextAnimatable ? () => setAnimatingMessageId(message.id) : undefined}
+        onAnimationComplete={(isNextAnimatable || isCurrentlyAnimating) ? () => {
           // Mark this message as animated so it won't re-animate on future renders
           animatedMessageIdsRef.current.add(message.id);
           setAnimatingMessageId(null);
