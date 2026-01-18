@@ -37,6 +37,15 @@ router.get('/activity/:sessionId', async (req, res) => {
       }));
     }
 
+    // Fetch notable facts from UserVessel for this session
+    const userVessels = await prisma.userVessel.findMany({
+      where: { sessionId },
+      select: { userId: true, notableFacts: true }
+    });
+
+    // Combine all notable facts from all users in this session
+    const notableFacts = userVessels.flatMap(v => v.notableFacts);
+
     // Calculate summary stats
     const totalCost = activities.reduce((sum: number, a: any) => sum + (a.cost || 0), 0);
     const totalTokens = activities.reduce((sum: number, a: any) => sum + ((a.tokenCountInput || 0) + (a.tokenCountOutput || 0)), 0);
@@ -44,6 +53,7 @@ router.get('/activity/:sessionId', async (req, res) => {
     return successResponse(res, {
       activities,
       messages,
+      notableFacts,
       summary: {
         totalCost,
         totalTokens,

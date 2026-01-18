@@ -11,7 +11,7 @@ import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
-import { getSonnetResponse, getSonnetStreamingResponse, type StreamEvent } from '../lib/bedrock';
+import { getSonnetResponse, getSonnetStreamingResponse, type StreamEvent, BrainActivityCallType } from '../lib/bedrock';
 import { brainService } from '../services/brain-service';
 import { buildInitialMessagePrompt, buildStagePrompt } from '../services/stage-prompts';
 import { extractJsonFromResponse } from '../utils/json-extractor';
@@ -448,6 +448,15 @@ async function processAIResponseInBackground(ctx: {
     const userTurnCount = history.filter((m) => m.role === 'USER').length;
     console.log(`[sendMessage:${requestId}] [BG] User turn count: ${userTurnCount}`);
 
+    // Fetch existing notable facts for the classifier (fire-and-forget)
+    const userVessel = await prisma.userVessel.findUnique({
+      where: {
+        userId_sessionId: { userId, sessionId },
+      },
+      select: { notableFacts: true },
+    });
+    const existingFacts = userVessel?.notableFacts ?? [];
+
     // Generate turnId for this user action (includes userId to differentiate users)
     const turnId = `${sessionId}-${userId}-${userTurnCount}`;
     // Update request context so all downstream code can access this turnId
@@ -595,6 +604,7 @@ async function processAIResponseInBackground(ctx: {
       userId,
       turnId,
       partnerName,
+      existingFacts,
     }).catch((err) =>
       console.warn(`[sendMessage:${requestId}] [BG] Partner session classifier failed:`, err)
     );
@@ -679,7 +689,7 @@ async function processAIResponseInBackground(ctx: {
       }
     }
 
-    // Save AI response
+    // Save AI response (trim whitespace that Claude sometimes adds)
     console.log(`[sendMessage:${requestId}] [BG] Creating AI message in database...`);
     const aiMessage = await prisma.message.create({
       data: {
@@ -687,7 +697,7 @@ async function processAIResponseInBackground(ctx: {
         senderId: null,
         forUserId: userId,
         role: 'AI',
-        content: aiResponseContent,
+        content: aiResponseContent.trim(),
         stage: currentStage,
       },
     });
@@ -1008,6 +1018,7 @@ Respond in JSON format:
           sessionId,
           turnId,
           operation: 'stage1-transition',
+          callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
         });
 
         let transitionContent: string;
@@ -1032,7 +1043,7 @@ Respond in JSON format:
             senderId: null,
             forUserId: user.id, // Track which user this AI response is for (data isolation)
             role: 'AI',
-            content: transitionContent,
+            content: transitionContent.trim(),
             stage: 2, // Stage 2 - perspective stretch begins
           },
         });
@@ -1508,6 +1519,7 @@ export async function getInitialMessage(
         sessionId,
         turnId,
         operation: 'stage1-initial-message',
+        callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
       });
 
       if (aiResponse) {
@@ -1541,14 +1553,14 @@ export async function getInitialMessage(
       });
     }
 
-    // Save the AI message
+    // Save the AI message (trim whitespace that Claude sometimes adds)
     const aiMessage = await prisma.message.create({
       data: {
         sessionId,
         senderId: null,
         forUserId: user.id, // Track which user this AI response is for (data isolation)
         role: 'AI',
-        content: responseContent,
+        content: responseContent.trim(),
         stage: currentStage,
       },
     });
@@ -1834,6 +1846,7 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
     let isInsideAnalysis = true;
     let analysisBuffer = '';
     let analysisContent = ''; // Store hidden analysis for logging
+    let needsTrimStart = false; // Trim leading whitespace from first visible chunk after analysis
 
     try {
       const streamGenerator = getSonnetStreamingResponse({
@@ -1847,6 +1860,7 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
         sessionId,
         turnId,
         operation: 'streaming-response',
+        callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
       });
 
       const streamStartTime = Date.now();
@@ -1883,6 +1897,9 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
                 if (!clientDisconnected) {
                   sendSSE(res, { event: 'chunk', data: { text: remainingText } });
                 }
+              } else {
+                // No text after </analysis> in this chunk - trim start of next chunk
+                needsTrimStart = true;
               }
 
               // Clear buffer
@@ -1901,10 +1918,22 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
             }
           } else {
             // Normal streaming - analysis phase is over
+            let textToSend = event.text;
+
+            // Trim leading whitespace from first visible chunk after analysis ends
+            if (needsTrimStart) {
+              textToSend = textToSend.trimStart();
+              needsTrimStart = false;
+              if (textToSend.length === 0) {
+                // Entire chunk was whitespace, skip it
+                continue;
+              }
+            }
+
             if (!firstChunkTime) firstChunkTime = Date.now();
-            accumulatedText += event.text;
+            accumulatedText += textToSend;
             if (!clientDisconnected) {
-              sendSSE(res, { event: 'chunk', data: { text: event.text } });
+              sendSSE(res, { event: 'chunk', data: { text: textToSend } });
             }
           }
         } else if (event.type === 'tool_use') {
@@ -1947,6 +1976,7 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
 
     // =========================================================================
     // Save AI message (even if client disconnected or error occurred)
+    // Trim whitespace that Claude sometimes adds
     // =========================================================================
     const aiMessage = await prisma.message.create({
       data: {
@@ -1954,7 +1984,7 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
         senderId: null,
         forUserId: user.id,
         role: 'AI',
-        content: accumulatedText || 'I apologize, but I encountered an issue generating a response. Please try again.',
+        content: (accumulatedText || 'I apologize, but I encountered an issue generating a response. Please try again.').trim(),
         stage: currentStage,
       },
     });

@@ -1,7 +1,7 @@
 
 import { prisma } from '../lib/prisma';
 import { getAbly } from '../services/realtime';
-import { ActivityType, ActivityStatus, BrainActivity, Prisma } from '@prisma/client';
+import { ActivityType, ActivityStatus, BrainActivity, BrainActivityCallType } from '@prisma/client';
 
 export type ActivityInput = {
   sessionId: string;
@@ -10,7 +10,10 @@ export type ActivityInput = {
   model: string;
   input: any;
   metadata?: any;
+  callType?: BrainActivityCallType;
 };
+
+export { BrainActivityCallType };
 
 export class BrainService {
   private static instance: BrainService;
@@ -40,6 +43,7 @@ export class BrainService {
           model: params.model,
           input: params.input ?? {},
           metadata: params.metadata ?? {},
+          callType: params.callType,
           status: ActivityStatus.PENDING,
           tokenCountInput: 0,
           tokenCountOutput: 0,
@@ -71,6 +75,7 @@ export class BrainService {
       cost?: number;
       durationMs?: number;
       metadata?: any;
+      structuredOutput?: any;
     }
   ): Promise<BrainActivity | null> {
     try {
@@ -89,6 +94,7 @@ export class BrainService {
           status: ActivityStatus.COMPLETED,
           completedAt: new Date(),
           metadata: result.metadata ? result.metadata : undefined, // Depending on merge strategy
+          structuredOutput: result.structuredOutput,
         },
       });
 

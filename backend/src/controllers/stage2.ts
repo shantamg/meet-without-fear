@@ -22,7 +22,7 @@ import {
 } from '@meet-without-fear/shared';
 import { notifyPartner } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
-import { getSonnetResponse } from '../lib/bedrock';
+import { getSonnetResponse, BrainActivityCallType } from '../lib/bedrock';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import { embedMessage } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
@@ -674,6 +674,7 @@ Respond in JSON format:
         sessionId,
         turnId,  // Use same turnId for all operations in this request
         operation: 'stage2-transition',
+        callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
       });
 
       let transitionContent: string;
@@ -1311,6 +1312,7 @@ Respond in JSON format:
       sessionId,
       operation: 'feedback-refinement',
       turnId,
+      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
     });
 
     let response = "I'm here to help you phrase that.";
@@ -1381,6 +1383,7 @@ Respond in JSON format:
       sessionId,
       operation: 'stage3-transition',
       turnId,
+      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
     });
 
     let content = `Congratulations ${nameA} and ${nameB}! You've successfully built a foundation of understanding. Now it's time to move to Stage 3, where you'll co-create solutions that work for everyone.`;
@@ -1792,6 +1795,7 @@ When they seem ready to revise their statement, propose a revision in JSON forma
       sessionId,
       operation: 'empathy-refinement',
       turnId,
+      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
     });
 
     let response = "I'd love to help you explore this further. What do you think might be going on for them beneath the surface?";
@@ -1972,6 +1976,7 @@ Respond in JSON format:
         sessionId,
         turnId,
         operation: 'stage2-revision-acknowledgment',
+        callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
       });
 
       let transitionContent: string;

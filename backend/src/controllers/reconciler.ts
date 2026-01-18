@@ -608,7 +608,7 @@ export async function generateShareDraftHandler(
       .join('\n\n');
 
     // Generate the draft using AI
-    const { getSonnetResponse } = await import('../lib/bedrock');
+    const { getSonnetResponse, BrainActivityCallType } = await import('../lib/bedrock');
     const turnId = `${sessionId}-share-draft-${Date.now()}`;
 
     const prompt = `You are helping ${user.name} prepare something to share with ${guesserName} to help them understand ${user.name}'s perspective better.
@@ -636,6 +636,7 @@ Respond with ONLY the message text, no additional formatting or explanation.`;
       sessionId,
       turnId,
       operation: 'share-draft-generation',
+      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
     });
 
     if (!draftContent) {

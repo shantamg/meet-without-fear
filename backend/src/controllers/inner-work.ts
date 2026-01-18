@@ -41,7 +41,7 @@ import {
   updateInnerWorkSessionRequestSchema,
   listInnerWorkSessionsQuerySchema,
 } from '@meet-without-fear/shared';
-import { getSonnetResponse, getHaikuJson, getCompletion } from '../lib/bedrock';
+import { getSonnetResponse, getHaikuJson, getCompletion, BrainActivityCallType } from '../lib/bedrock';
 import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildLinkedInnerThoughtsInitialMessagePrompt, buildInnerWorkSummaryPrompt, buildLinkedInnerThoughtsPrompt, LinkedPartnerSessionContext } from '../services/stage-prompts';
 import { extractJsonSafe } from '../utils/json-extractor';
 import { embedInnerWorkMessage } from '../services/embedding';
@@ -430,6 +430,7 @@ export const createInnerWorkSession = asyncHandler(
         sessionId: session.id,
         turnId,
         operation: 'inner-work-initial-response',
+        callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
       });
       const parsed = extractJsonSafe<{
         response?: string;
@@ -516,6 +517,7 @@ export const createInnerWorkSession = asyncHandler(
       sessionId: session.id,
       turnId,
       operation: 'inner-work-initial',
+      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
     });
     const parsed = extractJsonSafe<{ response?: string }>(aiResponse || '', {
       response: fallbackMessage,
@@ -803,6 +805,7 @@ export const sendInnerWorkMessage = asyncHandler(
       sessionId: sessionId,
       turnId,
       operation: 'inner-work-response',
+      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
     });
     const parsed = extractJsonSafe<{
       response?: string;
