@@ -228,59 +228,36 @@ export function useStreamingMessage(
   );
 
   /**
-   * Replace a message in cache by removing old ID and adding new message
-   * Used to swap optimistic messages with real server messages
+   * Update a message in cache by ID without changing the ID.
+   * Used to update optimistic messages with server data while keeping
+   * the same ID for React's key reconciliation (prevents visual jumps).
    */
-  const replaceMessageInCache = useCallback(
-    (sessionId: string, oldId: string, newMessage: MessageDTO, stage?: Stage) => {
+  const updateMessageInCache = useCallback(
+    (sessionId: string, messageId: string, updates: Partial<Omit<MessageDTO, 'id'>>, stage?: Stage) => {
       const updateCache = (old: GetMessagesResponse | undefined) => {
-        if (!old) {
-          return { messages: [newMessage], hasMore: false };
-        }
-        // Remove old message and add new one in its place
+        if (!old) return old;
         const messages = old.messages || [];
-        const oldIndex = messages.findIndex((m) => m.id === oldId);
-        if (oldIndex !== -1) {
-          // Replace in place
-          const updatedMessages = [...messages];
-          updatedMessages[oldIndex] = newMessage;
-          return { ...old, messages: updatedMessages };
-        }
-        // Old message not found, just add the new one
-        return { ...old, messages: [...messages, newMessage] };
+        const index = messages.findIndex((m) => m.id === messageId);
+        if (index === -1) return old;
+
+        const updatedMessages = [...messages];
+        updatedMessages[index] = { ...updatedMessages[index], ...updates };
+        return { ...old, messages: updatedMessages };
       };
 
       const updateInfiniteCache = (
         old: InfiniteData<GetMessagesResponse> | undefined
       ): InfiniteData<GetMessagesResponse> | undefined => {
-        if (!old || old.pages.length === 0) {
-          return {
-            pages: [{ messages: [newMessage], hasMore: false }],
-            pageParams: [undefined],
-          };
-        }
+        if (!old || old.pages.length === 0) return old;
 
-        // Search all pages for the old message
         const updatedPages = old.pages.map((page) => {
-          const oldIndex = (page.messages || []).findIndex((m) => m.id === oldId);
-          if (oldIndex !== -1) {
-            const updatedMessages = [...(page.messages || [])];
-            updatedMessages[oldIndex] = newMessage;
-            return { ...page, messages: updatedMessages };
-          }
-          return page;
-        });
+          const index = (page.messages || []).findIndex((m) => m.id === messageId);
+          if (index === -1) return page;
 
-        // If we didn't find the old message in any page, add to first page
-        const foundInAnyPage = old.pages.some((page) =>
-          (page.messages || []).some((m) => m.id === oldId)
-        );
-        if (!foundInAnyPage) {
-          updatedPages[0] = {
-            ...updatedPages[0],
-            messages: [...(updatedPages[0].messages || []), newMessage],
-          };
-        }
+          const updatedMessages = [...(page.messages || [])];
+          updatedMessages[index] = { ...updatedMessages[index], ...updates };
+          return { ...page, messages: updatedMessages };
+        });
 
         return { ...old, pages: updatedPages };
       };
@@ -437,25 +414,30 @@ export function useStreamingMessage(
           addMessageToCache(sessionId, placeholderAIMessage, currentStage);
         };
 
-        // Handle user_message event - replace optimistic message with real one
+        // Handle user_message event - update optimistic message with server data
+        // We keep the same ID to avoid React key changes that cause visual jumps
         es.addEventListener('user_message', (event) => {
           if (!event.data) return;
           try {
             const data = JSON.parse(event.data) as UserMessageEvent;
-            const realUserMessage: MessageDTO = {
-              id: data.id,
-              sessionId,
-              senderId: null,
-              role: MessageRole.USER,
-              content: data.content,
-              stage: currentStage ?? Stage.ONBOARDING,
-              timestamp: data.timestamp,
-            };
-            // Replace optimistic message with real server message
+            // Update optimistic message with server timestamp (keep same ID for React key stability)
             if (optimisticUserIdRef.current) {
-              replaceMessageInCache(sessionId, optimisticUserIdRef.current, realUserMessage, currentStage);
-              optimisticUserIdRef.current = ''; // Clear after replacement
+              updateMessageInCache(sessionId, optimisticUserIdRef.current, {
+                timestamp: data.timestamp,
+                content: data.content, // In case server modified content
+              }, currentStage);
+              optimisticUserIdRef.current = ''; // Clear after update
             } else {
+              // Fallback: add as new message if no optimistic message exists
+              const realUserMessage: MessageDTO = {
+                id: data.id,
+                sessionId,
+                senderId: null,
+                role: MessageRole.USER,
+                content: data.content,
+                stage: currentStage ?? Stage.ONBOARDING,
+                timestamp: data.timestamp,
+              };
               addMessageToCache(sessionId, realUserMessage, currentStage);
             }
           } catch (e) {
@@ -650,7 +632,7 @@ export function useStreamingMessage(
         onError?.(error as Error);
       }
     },
-    [addMessageToCache, replaceMessageInCache, handleMetadata, queryClient, onComplete, onError]
+    [addMessageToCache, updateMessageInCache, handleMetadata, queryClient, onComplete, onError]
   );
 
   /**

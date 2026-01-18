@@ -21,6 +21,42 @@ import { createStyles } from '../theme/styled';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 
 // ============================================================================
+// Module-Level Animation Cache
+// ============================================================================
+// This cache persists animated message IDs across component remounts.
+// When ChatInterface remounts (e.g., during stage transitions), the refs are reset,
+// but this cache remembers which messages have already been animated.
+// Key: sessionId (extracted from first message), Value: Set of animated message IDs
+const animatedMessageCache = new Map<string, Set<string>>();
+
+/**
+ * Get the animated message IDs for a session from the persistent cache.
+ * Creates a new Set if none exists.
+ */
+function getAnimatedCache(sessionId: string): Set<string> {
+  let cache = animatedMessageCache.get(sessionId);
+  if (!cache) {
+    cache = new Set<string>();
+    animatedMessageCache.set(sessionId, cache);
+  }
+  return cache;
+}
+
+/**
+ * Mark a message as animated in the persistent cache.
+ */
+function markAnimatedInCache(sessionId: string, messageId: string): void {
+  getAnimatedCache(sessionId).add(messageId);
+}
+
+/**
+ * Check if a message has been animated (from persistent cache).
+ */
+function isAnimatedInCache(sessionId: string, messageId: string): boolean {
+  return getAnimatedCache(sessionId).has(messageId);
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -55,6 +91,8 @@ function isCustomEmptyState(item: ChatListItem): item is CustomEmptyStateItem {
 }
 
 interface ChatInterfaceProps {
+  /** Session ID - used for persistent animation state tracking across remounts */
+  sessionId?: string;
   messages: ChatMessage[];
   indicators?: ChatIndicatorItem[];
   onSendMessage: (content: string) => void;
@@ -113,6 +151,7 @@ const DEFAULT_EMPTY_MESSAGE =
   "Share what's on your mind. I'm here to listen and help you work through it.";
 
 export function ChatInterface({
+  sessionId,
   messages,
   indicators = [],
   onSendMessage,
@@ -314,6 +353,18 @@ export function ChatInterface({
     });
   }
 
+  // DEFENSIVE FIX: Copy animatedMessageIds to knownMessageIds synchronously.
+  // This ensures that messages which have already animated are protected from
+  // re-animation even during rapid refetches (e.g., after feel-heard confirmation).
+  // Without this, a race condition could occur where animatedMessageIdsRef contains
+  // a message ID, but due to timing of state updates during refetch, the message
+  // might slip through the checks in nextAnimatableMessageId.
+  if (animatedMessageIdsRef.current.size > 0) {
+    animatedMessageIdsRef.current.forEach(id => {
+      knownMessageIdsRef.current.add(id);
+    });
+  }
+
   // Detect when custom empty state is removed (e.g., compact was signed)
   // Mark initial load as complete so new messages after this get typewriter effect
   useEffect(() => {
@@ -390,11 +441,13 @@ export function ChatInterface({
       if (knownMessageIdsRef.current.has(message.id)) continue;
       // Skip messages that have already completed animation
       if (animatedMessageIdsRef.current.has(message.id)) continue;
+      // Skip messages animated in persistent cache (survives component remounts)
+      if (sessionId && isAnimatedInCache(sessionId, message.id)) continue;
       // This is the oldest non-user message that needs animation
       return message.id;
     }
     return null;
-  }, [listItems, animatingMessageId]);
+  }, [listItems, animatingMessageId, sessionId]);
 
   // Notify parent when typewriter state changes
   useEffect(() => {
@@ -430,15 +483,19 @@ export function ChatInterface({
     // Streaming messages also use typewriter - TypewriterText handles growing text
     const isFromHistory = knownMessageIdsRef.current.has(message.id);
     const hasAlreadyAnimated = animatedMessageIdsRef.current.has(message.id);
+    // Also check the persistent cache (survives component remounts)
+    const isAnimatedInPersistentCache = sessionId ? isAnimatedInCache(sessionId, message.id) : false;
     const isCurrentlyAnimating = message.id === animatingMessageId;
     const isOptimisticMessage = message.id.startsWith('optimistic-');
     const isAIMessage = message.role !== MessageRole.USER;
 
     // Animate if: AI message, not from history, not already animated, not optimistic
+    // Check both the ref (current session) and persistent cache (survives remounts)
     // Streaming messages also animate - TypewriterText handles text that grows over time
     const shouldAnimateTypewriter = isAIMessage &&
       !isFromHistory &&
       !hasAlreadyAnimated &&
+      !isAnimatedInPersistentCache &&
       !isOptimisticMessage;
 
     // Track animation for the next message in queue (oldest unanimatied)
@@ -461,6 +518,10 @@ export function ChatInterface({
         onAnimationComplete={(isNextAnimatable || isCurrentlyAnimating) ? () => {
           // Mark this message as animated so it won't re-animate on future renders
           animatedMessageIdsRef.current.add(message.id);
+          // Also mark in persistent cache (survives component remounts)
+          if (sessionId) {
+            markAnimatedInCache(sessionId, message.id);
+          }
           setAnimatingMessageId(null);
           onTypewriterComplete?.();
         } : undefined}
@@ -469,7 +530,7 @@ export function ChatInterface({
         partnerName={partnerName}
       />
     );
-  }, [nextAnimatableMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName]);
+  }, [sessionId, nextAnimatableMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 

@@ -29,6 +29,12 @@ import {
   GetMessagesResponse,
   MessageRole,
   SessionStateResponse,
+  TimelineResponse,
+  ChatItemType,
+  IndicatorType,
+  IndicatorItem,
+  AIMessageItem,
+  AIMessageStatus,
 } from '@meet-without-fear/shared';
 
 // Import query keys from centralized file to avoid circular dependencies
@@ -36,6 +42,7 @@ import {
   sessionKeys,
   stageKeys,
   messageKeys,
+  timelineKeys,
 } from './queryKeys';
 
 // Re-export for backwards compatibility
@@ -428,6 +435,7 @@ export function useUpdateInvitationMessage(
 interface ConfirmInvitationContext {
   previousSessionState: SessionStateResponse | undefined;
   previousInvitation: { invitation?: InvitationDTO } | undefined;
+  previousTimeline: InfiniteData<TimelineResponse, string | undefined> | undefined;
   optimisticTimestamp: string;
 }
 
@@ -487,6 +495,7 @@ export function useConfirmInvitationMessage(
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: sessionKeys.state(sessionId) });
       await queryClient.cancelQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
+      await queryClient.cancelQueries({ queryKey: timelineKeys.infinite(sessionId) });
 
       // Snapshot previous values for rollback
       const previousSessionState = queryClient.getQueryData<SessionStateResponse>(
@@ -494,6 +503,9 @@ export function useConfirmInvitationMessage(
       );
       const previousInvitation = queryClient.getQueryData<{ invitation?: InvitationDTO }>(
         sessionKeys.sessionInvitation(sessionId)
+      );
+      const previousTimeline = queryClient.getQueryData<InfiniteData<TimelineResponse, string | undefined>>(
+        timelineKeys.infinite(sessionId)
       );
 
       const optimisticTimestamp = new Date().toISOString();
@@ -530,7 +542,47 @@ export function useConfirmInvitationMessage(
         }
       );
 
-      return { previousSessionState, previousInvitation, optimisticTimestamp };
+      // Optimistically add the "Invitation Sent" indicator to the timeline cache
+      // This ensures the indicator appears immediately and persists through cache updates
+      const indicatorItem: IndicatorItem = {
+        type: ChatItemType.INDICATOR,
+        id: 'invitation-sent',
+        timestamp: optimisticTimestamp,
+        indicatorType: IndicatorType.INVITATION_SENT,
+      };
+
+      queryClient.setQueryData<InfiniteData<TimelineResponse, string | undefined>>(
+        timelineKeys.infinite(sessionId),
+        (oldData): InfiniteData<TimelineResponse, string | undefined> => {
+          if (!oldData || oldData.pages.length === 0) {
+            return {
+              pages: [{ items: [indicatorItem], hasMore: false }],
+              pageParams: [undefined],
+            };
+          }
+
+          // Check if indicator already exists
+          const exists = oldData.pages.some(page =>
+            page.items.some(item => item.id === 'invitation-sent')
+          );
+          if (exists) return oldData;
+
+          // Add to first page
+          const newPages = oldData.pages.map((page, index) => {
+            if (index === 0) {
+              return {
+                ...page,
+                items: [indicatorItem, ...page.items],
+              };
+            }
+            return page;
+          });
+
+          return { ...oldData, pages: newPages };
+        }
+      );
+
+      return { previousSessionState, previousInvitation, previousTimeline, optimisticTimestamp };
     },
 
     // =========================================================================
@@ -552,20 +604,9 @@ export function useConfirmInvitationMessage(
       queryClient.invalidateQueries({
         queryKey: sessionKeys.state(sessionId),
       });
-      // Invalidate ALL messages queries for this session (both with and without stage filter)
-      // This ensures the transition message appears when stage 1 loads
-      // Include both 'list' and 'infinite' query types
-      queryClient.invalidateQueries({
-        predicate: (query) => {
-          const key = query.queryKey;
-          return (
-            Array.isArray(key) &&
-            key[0] === 'messages' &&
-            (key[1] === 'list' || key[1] === 'infinite') &&
-            key[2] === sessionId
-          );
-        },
-      });
+      // NOTE: We do NOT invalidate messages queries here!
+      // Instead, we add the transition message directly to the cache below.
+      // This prevents refetching all messages and avoids re-animation issues.
 
       // If we received a transition message, add it to the messages cache
       if (data.transitionMessage && data.advancedToStage === Stage.WITNESS) {
@@ -614,6 +655,46 @@ export function useConfirmInvitationMessage(
             return { ...old, pages: updatedPages };
           }
         );
+
+        // Also add to the timeline cache (for ChatTimeline component)
+        const aiMessageItem: AIMessageItem = {
+          type: ChatItemType.AI_MESSAGE,
+          id: data.transitionMessage.id,
+          timestamp: data.transitionMessage.timestamp,
+          content: data.transitionMessage.content,
+          status: AIMessageStatus.SENT,
+        };
+
+        queryClient.setQueryData<InfiniteData<TimelineResponse, string | undefined>>(
+          timelineKeys.infinite(sessionId),
+          (oldData): InfiniteData<TimelineResponse, string | undefined> | undefined => {
+            if (!oldData || oldData.pages.length === 0) {
+              return {
+                pages: [{ items: [aiMessageItem], hasMore: false }],
+                pageParams: [undefined],
+              };
+            }
+
+            // Check if message already exists
+            const exists = oldData.pages.some(page =>
+              page.items.some(item => item.id === aiMessageItem.id)
+            );
+            if (exists) return oldData;
+
+            // Add to first page
+            const newPages = oldData.pages.map((page, index) => {
+              if (index === 0) {
+                return {
+                  ...page,
+                  items: [aiMessageItem, ...page.items],
+                };
+              }
+              return page;
+            });
+
+            return { ...oldData, pages: newPages };
+          }
+        );
       }
     },
 
@@ -627,6 +708,9 @@ export function useConfirmInvitationMessage(
         }
         if (context.previousInvitation !== undefined) {
           queryClient.setQueryData(sessionKeys.sessionInvitation(sessionId), context.previousInvitation);
+        }
+        if (context.previousTimeline !== undefined) {
+          queryClient.setQueryData(timelineKeys.infinite(sessionId), context.previousTimeline);
         }
       }
     },

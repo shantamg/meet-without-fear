@@ -560,27 +560,72 @@ export function useConfirmFeelHeard(
     },
 
     // =========================================================================
-    // SUCCESS: Invalidate queries to sync with server
+    // SUCCESS: Update caches directly (no refetch needed!)
     // =========================================================================
     onSuccess: (data, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       // Invalidate session state to update milestones (feelHeardConfirmedAt)
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-      // Invalidate messages to fetch the transition message if one was generated
-      // Include both 'list' and 'infinite' query types to ensure React Query refetches
+
+      // Add transition message directly to cache instead of refetching
+      // This preserves existing messages and prevents re-animation
       if (data.transitionMessage) {
-        queryClient.invalidateQueries({
-          predicate: (query) => {
-            const key = query.queryKey;
-            return (
-              Array.isArray(key) &&
-              key[0] === 'messages' &&
-              (key[1] === 'list' || key[1] === 'infinite') &&
-              key[2] === sessionId
-            );
-          },
-        });
+        const newMessage = {
+          id: data.transitionMessage.id,
+          content: data.transitionMessage.content,
+          timestamp: data.transitionMessage.timestamp,
+          stage: data.transitionMessage.stage,
+          role: MessageRole.AI,
+          sessionId,
+          senderId: null, // AI messages have no sender
+        };
+
+        const updateCache = (old: GetMessagesResponse | undefined): GetMessagesResponse => {
+          if (!old) {
+            return { messages: [newMessage], hasMore: false };
+          }
+          // Check for duplicates
+          const existingIds = new Set((old.messages || []).map((m) => m.id));
+          if (existingIds.has(newMessage.id)) {
+            return old;
+          }
+          return {
+            ...old,
+            messages: [...(old.messages || []), newMessage],
+          };
+        };
+
+        const updateInfiniteCache = (
+          old: InfiniteData<GetMessagesResponse> | undefined
+        ): InfiniteData<GetMessagesResponse> => {
+          if (!old || old.pages.length === 0) {
+            return {
+              pages: [{ messages: [newMessage], hasMore: false }],
+              pageParams: [undefined],
+            };
+          }
+          // Update the first page (newest messages)
+          const updatedPages = [...old.pages];
+          const firstPage = updatedPages[0];
+          const existingIds = new Set((firstPage.messages || []).map((m) => m.id));
+          if (existingIds.has(newMessage.id)) {
+            return old;
+          }
+          updatedPages[0] = {
+            ...firstPage,
+            messages: [...(firstPage.messages || []), newMessage],
+          };
+          return { ...old, pages: updatedPages };
+        };
+
+        // Update all message caches
+        queryClient.setQueryData<GetMessagesResponse>(messageKeys.list(sessionId), updateCache);
+        queryClient.setQueryData<GetMessagesResponse>(messageKeys.list(sessionId, 2), updateCache);
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(messageKeys.infinite(sessionId), updateInfiniteCache);
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(messageKeys.infinite(sessionId, 2), updateInfiniteCache);
+
+        console.log(`[useConfirmFeelHeard] Added transition message ${newMessage.id} directly to cache`);
       }
     },
 

@@ -1392,6 +1392,7 @@ export function UnifiedSessionScreen({
       />
       <View style={styles.content}>
         <ChatInterface
+          sessionId={sessionId}
           messages={displayMessages}
           indicators={indicators}
           onSendMessage={sendMessageWithTracking}
