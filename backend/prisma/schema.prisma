@@ -272,6 +272,11 @@ model UserVessel {
   // The ID of the last chat item the user saw (for "new messages" line placement)
   lastSeenChatItemId String?
 
+  // === Notable Facts ===
+  // AI-extracted facts about the user's situation, emotions, and circumstances
+  // Updated by Haiku after each message, used to reduce chat history in prompts
+  notableFacts String[] @default([])
+
   @@unique([userId, sessionId])
   @@index([userId])
   @@index([sessionId])
@@ -1230,18 +1235,22 @@ model BrainActivity {
   turnId          String?
   activityType    ActivityType
   model           String           // e.g. "claude-3-5-sonnet", "titan-embed"
-  
+
   // Full telemetry
   input           Json?            // Prompt, query, etc.
   output          Json?            // Response, retrieved items, etc.
   metadata        Json?            // Reasoning, confidence, errors
-  
+
+  // Typed call information for dashboard display
+  callType         BrainActivityCallType?  // Specific LLM call type for component rendering
+  structuredOutput Json?                   // Typed output data for dashboard components
+
   // Stats
   tokenCountInput  Int             @default(0)
   tokenCountOutput Int             @default(0)
   cost             Float           @default(0.0)
   durationMs       Int             @default(0)
-  
+
   status          ActivityStatus   @default(PENDING)
   createdAt       DateTime         @default(now())
   completedAt     DateTime?
@@ -1250,6 +1259,25 @@ model BrainActivity {
   @@index([turnId])
   @@index([activityType])
   @@index([createdAt])
+}
+
+enum BrainActivityCallType {
+  ORCHESTRATED_RESPONSE
+  RETRIEVAL_PLANNING
+  INTENT_DETECTION
+  BACKGROUND_CLASSIFICATION
+  PARTNER_SESSION_CLASSIFICATION
+  CHAT_ROUTER_RESPONSE
+  REFERENCE_DETECTION
+  PEOPLE_EXTRACTION
+  MEMORY_DETECTION
+  MEMORY_VALIDATION
+  RECONCILER_ANALYSIS
+  SUMMARIZATION
+  NEEDS_EXTRACTION
+  WITNESSING_RESPONSE
+  MEMORY_FORMATTING
+  THEME_EXTRACTION
 }
 
 enum ActivityType {

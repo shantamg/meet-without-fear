@@ -389,11 +389,17 @@ export function getRetrievalDepth(intent: MemoryIntent): RetrievalDepth {
 
 /**
  * Get turn buffer size based on stage and intent
- * From prompt docs:
- * - Stage 1: 6 turns (deep witnessing needs thread memory)
- * - Stage 2: 4 turns (empathy building is more structured)
+ *
+ * REDUCED BUFFER SIZES (notable-facts-extraction feature):
+ * Now that notable facts are extracted and maintained per-user, we can reduce
+ * the conversation history buffer. Facts provide emotional context, situational
+ * facts, and relationship info that would otherwise require extensive history.
+ *
+ * Target: 8-10 messages total (4-5 turns)
+ * - Stage 1: 5 turns (witnessing needs some thread memory)
+ * - Stage 2: 4 turns (empathy building is structured)
  * - Stage 3: 4 turns (need confirmation is procedural)
- * - Stage 4: 8 turns (negotiation requires full context)
+ * - Stage 4: 5 turns (negotiation with facts context)
  */
 export function getTurnBufferSize(stage: number, intent: MemoryIntent): number {
   // No buffer for avoid_recall
@@ -406,16 +412,16 @@ export function getTurnBufferSize(stage: number, intent: MemoryIntent): number {
     return 2;
   }
 
-  // Stage-based buffer sizes from docs
+  // Reduced stage-based buffer sizes (notable facts provide additional context)
   switch (stage) {
     case 1:
-      return 6;
+      return 5; // Reduced from 6: facts now capture emotional context
     case 2:
-      return 4;
+      return 4; // Unchanged: empathy building remains structured
     case 3:
-      return 4;
+      return 4; // Unchanged: need confirmation is procedural
     case 4:
-      return 8;
+      return 5; // Reduced from 8: facts provide relationship/situation context
     default:
       return 4;
   }
