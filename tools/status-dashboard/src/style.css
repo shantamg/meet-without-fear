@@ -1876,3 +1876,397 @@ body {
 .sv-query::marker {
   color: #3b82f6;
 }
+
+/* ============================================
+   Event Display System (US-20)
+   Typed LLM events with warm/cool accent colors
+   ============================================ */
+
+/* Color accent CSS variables */
+:root {
+  /* Warm accent - Sonnet (user-facing) calls */
+  --accent-warm: #f59e0b;
+  --accent-warm-bg: rgba(245, 158, 11, 0.08);
+  --accent-warm-border: rgba(245, 158, 11, 0.25);
+  --accent-warm-text: #fbbf24;
+
+  /* Cool accent - Haiku (background) calls */
+  --accent-cool: #06b6d4;
+  --accent-cool-bg: rgba(6, 182, 212, 0.08);
+  --accent-cool-border: rgba(6, 182, 212, 0.25);
+  --accent-cool-text: #22d3ee;
+}
+
+/* Event wrapper with accent stripe */
+.event-wrapper {
+  margin-bottom: 8px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.event-wrapper.accent-warm {
+  border-left: 3px solid var(--accent-warm);
+  background: var(--accent-warm-bg);
+}
+
+.event-wrapper.accent-cool {
+  border-left: 3px solid var(--accent-cool);
+  background: var(--accent-cool-bg);
+}
+
+/* Event item (from BaseEventWrapper) */
+.event-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.event-item:hover {
+  border-color: var(--text-secondary);
+}
+
+.event-item.error {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.event-item.pending {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+/* Event header */
+.event-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.2s;
+}
+
+.event-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.event-icon {
+  font-size: 1.2em;
+  flex-shrink: 0;
+}
+
+.event-main-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.event-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.event-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.event-preview {
+  color: var(--text-secondary);
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.event-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.event-cost {
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.event-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.event-status.pending .spinner {
+  color: #60a5fa;
+}
+
+.event-status.completed .icon-success {
+  color: #4ade80;
+}
+
+.event-status.failed .icon-error {
+  color: #ef4444;
+}
+
+.event-toggle {
+  color: var(--text-secondary);
+  font-size: 0.75em;
+  flex-shrink: 0;
+}
+
+/* Event body (expanded content) */
+.event-body {
+  padding: 14px;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.event-raw-data {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.event-stats {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+  font-size: 0.8em;
+  color: var(--text-secondary);
+}
+
+/* Event content sections */
+.event-section {
+  margin-bottom: 12px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  border-left: 2px solid var(--border);
+}
+
+.event-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.event-section p {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+/* Warm section (for Sonnet content) */
+.event-section.warm {
+  border-left-color: var(--accent-warm);
+  background: var(--accent-warm-bg);
+}
+
+.event-section.warm h4 {
+  color: var(--accent-warm-text);
+}
+
+/* Cool section (for Haiku content) */
+.event-section.cool {
+  border-left-color: var(--accent-cool);
+  background: var(--accent-cool-bg);
+}
+
+.event-section.cool h4 {
+  color: var(--accent-cool-text);
+}
+
+/* Chips for classifications/tags */
+.event-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.event-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.event-chip.success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.event-chip.warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.event-chip.info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.event-chip.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+/* Collapsible thinking/analysis block */
+.event-thinking {
+  margin-bottom: 12px;
+}
+
+.event-thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85em;
+  color: #a5b4fc;
+  transition: background 0.2s;
+}
+
+.event-thinking-header:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.event-thinking-content {
+  margin-top: 8px;
+  padding: 12px;
+  background: rgba(99, 102, 241, 0.05);
+  border-radius: 6px;
+  border-left: 2px solid #6366f1;
+  font-size: 0.9em;
+  line-height: 1.6;
+  color: #e0e7ff;
+  white-space: pre-wrap;
+}
+
+/* Response text block */
+.event-response {
+  padding: 12px;
+  background: rgba(16, 185, 129, 0.08);
+  border-radius: 6px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  line-height: 1.6;
+}
+
+.event-response-label {
+  display: block;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #34d399;
+  margin-bottom: 6px;
+}
+
+.event-response-text {
+  color: #d1fae5;
+  font-size: 1em;
+}
+
+/* Lists in events */
+.event-list {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.event-list li {
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+/* Grid for people/items */
+.event-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.event-grid-item {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.event-grid-item-title {
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.event-grid-item-subtitle {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+}
+
+/* Confidence bar */
+.confidence-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.confidence-bar-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.confidence-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.confidence-bar-fill.high {
+  background: #4ade80;
+}
+
+.confidence-bar-fill.medium {
+  background: #fbbf24;
+}
+
+.confidence-bar-fill.low {
+  background: #f87171;
+}
+
+.confidence-label {
+  font-size: 0.75em;
+  color: var(--text-secondary);
+  min-width: 50px;
+  text-align: right;
+}

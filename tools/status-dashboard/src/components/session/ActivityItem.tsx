@@ -4,12 +4,27 @@ import { formatModelName, formatDuration } from '../../utils/formatters';
 import { getActivityIcon, getActivityPreview } from '../../utils/activityDisplay';
 import { FormattedPrice } from './FormattedPrice';
 import { DetailBlock } from './DetailBlock';
+import { EventRenderer } from '../events/EventRenderer';
 
 interface ActivityItemProps {
   activity: BrainActivity;
 }
 
 export function ActivityItem({ activity }: ActivityItemProps) {
+  // If the activity has a typed callType, use the new EventRenderer
+  if (activity.callType) {
+    return <EventRenderer activity={activity} />;
+  }
+
+  // Legacy rendering for activities without callType
+  return <LegacyActivityItem activity={activity} />;
+}
+
+/**
+ * Legacy activity item rendering for backwards compatibility.
+ * Used when activity.callType is not set.
+ */
+function LegacyActivityItem({ activity }: ActivityItemProps) {
   const [expanded, setExpanded] = useState(false);
 
   const isError = activity.status === 'FAILED';
