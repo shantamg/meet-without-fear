@@ -85,3 +85,13 @@ export const messageKeys = {
     [...messageKeys.emotions(), sessionId, stage] as const,
 };
 
+// ============================================================================
+// Timeline Query Keys
+// ============================================================================
+
+export const timelineKeys = {
+  all: ['timeline'] as const,
+  session: (sessionId: string) => [...timelineKeys.all, sessionId] as const,
+  infinite: (sessionId: string) => [...timelineKeys.all, 'infinite', sessionId] as const,
+};
+

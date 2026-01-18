@@ -4,6 +4,7 @@
  * Routes for session-level operations:
  * - GET /sessions/:id - Get session details
  * - GET /sessions/:id/state - Get consolidated session state (all data in one request)
+ * - GET /sessions/:id/timeline - Get unified timeline (messages, indicators, emotions)
  * - POST /sessions/:id/pause - Pause active session
  * - POST /sessions/:id/resume - Resume paused session
  * - GET /sessions/:id/progress - Get stage progress
@@ -30,6 +31,7 @@ import {
 } from '../controllers/sessions';
 import { getSessionState } from '../controllers/session-state';
 import { getLinkedInnerThoughts } from '../controllers/inner-work';
+import { getTimeline } from '../controllers/timeline';
 
 const router = Router();
 
@@ -54,6 +56,15 @@ router.get('/sessions/:id', requireAuth, requireSessionAccess, asyncHandler(getS
  * @access Private - requires authentication and session access
  */
 router.get('/sessions/:id/state', requireAuth, requireSessionAccess, asyncHandler(getSessionState));
+
+/**
+ * @route GET /api/v1/sessions/:id/timeline
+ * @description Get unified timeline (messages, indicators, emotion changes)
+ * @access Private - requires authentication and session access
+ * @query before - ISO timestamp cursor (return items before this time)
+ * @query limit - Maximum message items (default 20, max 100)
+ */
+router.get('/sessions/:id/timeline', requireAuth, requireSessionAccess, asyncHandler(getTimeline));
 
 /**
  * @route POST /api/v1/sessions/:id/pause

@@ -31,6 +31,7 @@ export * from './dto/people-tracking';
 export * from './dto/gratitude';
 export * from './dto/meditation';
 export * from './dto/cross-feature';
+export * from './dto/chat-item';
 
 // Validation schemas
 export * from './validation';
