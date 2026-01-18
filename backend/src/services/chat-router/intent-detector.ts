@@ -14,6 +14,7 @@ import {
 } from '@meet-without-fear/shared';
 import { handlerRegistry } from './registry';
 import { getCurrentUserId } from '../../lib/request-context';
+import { BrainActivityCallType } from '@prisma/client';
 
 // ============================================================================
 // Intent Detection
@@ -231,6 +232,7 @@ export async function detectIntent(input: DetectionInput): Promise<IntentDetecti
     sessionId: effectiveSessionId,
     turnId,
     operation: 'intent-detection',
+    callType: BrainActivityCallType.INTENT_DETECTION,
   });
 
   // Handle null result (AI not available or parse error)

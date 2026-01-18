@@ -12,7 +12,7 @@
  * - Summary update
  */
 
-import { getHaikuJson } from '../lib/bedrock';
+import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 import type { MemorySuggestion, MemoryCategory } from '@meet-without-fear/shared';
 import { prisma } from '../lib/prisma';
@@ -196,6 +196,7 @@ Output only valid JSON.`;
           sessionId: input.sessionId,
           turnId: input.turnId,
           operation: 'background-classifier',
+          callType: BrainActivityCallType.BACKGROUND_CLASSIFICATION,
         });
       },
       null,

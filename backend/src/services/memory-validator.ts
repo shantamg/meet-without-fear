@@ -16,6 +16,7 @@
 import { MemoryCategory } from 'shared';
 import { getHaikuJson } from '../lib/bedrock';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
+import { BrainActivityCallType } from '@prisma/client';
 
 // ============================================================================
 // Types
@@ -126,6 +127,7 @@ Does this memory request conflict with therapeutic values?`;
         sessionId: effectiveSessionId,
         turnId: effectiveTurnId,
         operation: 'memory-validation',
+        callType: BrainActivityCallType.MEMORY_VALIDATION,
       });
     },
     null, // Fallback to null if timeout/failure

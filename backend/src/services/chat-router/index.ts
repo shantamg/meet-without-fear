@@ -15,6 +15,7 @@ import { registerBuiltInHandlers, hasPendingCreation, getPendingCreation } from 
 import { IntentHandlerContext } from './types';
 import { findRelevantSessions } from '../embedding';
 import { getModelCompletion } from '../../lib/bedrock';
+import { BrainActivityCallType } from '@prisma/client';
 
 // Export types and registry for external use
 export * from './types';
@@ -393,6 +394,7 @@ Just output the welcome message, nothing else.`;
       sessionId: recentSession.id,
       operation: 'chat-router-welcome',
       turnId,
+      callType: BrainActivityCallType.CHAT_ROUTER_RESPONSE,
     });
 
     return response?.trim() || undefined;

@@ -7,6 +7,7 @@
 
 import { getHaikuJson } from '../../lib/bedrock';
 import { getCurrentUserId } from '../../lib/request-context';
+import { BrainActivityCallType } from '@prisma/client';
 
 // ============================================================================
 // Response Templates
@@ -133,6 +134,7 @@ Output only JSON: { "response": "your response" }`;
     sessionId: effectiveSessionId,
     turnId,
     operation: 'chat-router-response',
+    callType: BrainActivityCallType.CHAT_ROUTER_RESPONSE,
   });
 
   return result?.response || TEMPLATES.fallback({});

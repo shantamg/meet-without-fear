@@ -9,6 +9,7 @@
 import { getHaikuJson } from '../lib/bedrock';
 import { withHaikuCircuitBreaker, HAIKU_TIMEOUT_MS } from '../utils/circuit-breaker';
 import type { MemoryDetectionResult, MemoryCategory } from 'shared';
+import { BrainActivityCallType } from '@prisma/client';
 
 // ============================================================================
 // Types
@@ -215,6 +216,7 @@ Output only valid JSON with no markdown formatting or extra text.`;
         sessionId: effectiveSessionId,
         turnId: effectiveTurnId,
         operation: 'memory-detection',
+        callType: BrainActivityCallType.MEMORY_DETECTION,
       });
     },
     null, // Fallback to null if timeout/failure

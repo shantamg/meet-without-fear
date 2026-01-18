@@ -14,6 +14,7 @@
 import { prisma } from '../lib/prisma';
 import { getHaikuJson } from '../lib/bedrock';
 import { estimateTokens } from '../utils/token-budget';
+import { BrainActivityCallType } from '@prisma/client';
 
 // ============================================================================
 // Types
@@ -124,6 +125,7 @@ ${conversationText}`;
     sessionId,
     operation: 'conversation-summary',
     turnId,
+    callType: BrainActivityCallType.SUMMARIZATION,
   });
 
   return result;
@@ -454,6 +456,7 @@ ${conversationText}`;
     sessionId,
     operation: 'inner-thoughts-summary',
     turnId,
+    callType: BrainActivityCallType.SUMMARIZATION,
   });
   return result;
 }

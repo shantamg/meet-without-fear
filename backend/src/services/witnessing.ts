@@ -12,7 +12,7 @@
 
 import { getSonnetResponse, getHaikuJson, getEmbedding } from '../lib/bedrock';
 import { prisma } from '../lib/prisma';
-import { MessageRole } from '@prisma/client';
+import { MessageRole, BrainActivityCallType } from '@prisma/client';
 import { createStateStore } from './chat-router/types';
 import {
   retrieveContext,
@@ -387,6 +387,7 @@ async function generateWitnessingResponseWithContext(
     operation: 'pre-session-witnessing',
     sessionId: syntheticSessionId,
     turnId: syntheticTurnId,
+    callType: BrainActivityCallType.WITNESSING_RESPONSE,
   });
 
   if (!response) {
@@ -418,6 +419,7 @@ async function detectPersonAndContext(message: string): Promise<DetectionResult 
     sessionId: syntheticSessionId,
     operation: 'person-detection',
     turnId: syntheticTurnId,
+    callType: BrainActivityCallType.NEEDS_EXTRACTION,
   });
 
   return result;

@@ -25,7 +25,7 @@ import {
 import { CONTEXT_LIMITS } from '../utils/token-budget';
 import { withHaikuCircuitBreaker, HAIKU_TIMEOUT_MS } from '../utils/circuit-breaker';
 import { brainService } from '../services/brain-service';
-import { ActivityType } from '@prisma/client';
+import { ActivityType, BrainActivityCallType } from '@prisma/client';
 
 // ============================================================================
 // Types
@@ -189,7 +189,8 @@ If no references, return empty arrays and needsRetrieval: false.`;
         maxTokens: 512,
         sessionId,
         turnId,
-        operation: 'retrieval-planning'
+        operation: 'retrieval-planning',
+        callType: BrainActivityCallType.REFERENCE_DETECTION,
       });
       return result;
     },

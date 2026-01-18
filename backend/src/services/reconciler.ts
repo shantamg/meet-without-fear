@@ -20,6 +20,7 @@
 import { prisma } from '../lib/prisma';
 import { MessageRole } from '@meet-without-fear/shared';
 import { getSonnetResponse, getHaikuJson } from '../lib/bedrock';
+import { BrainActivityCallType } from '@prisma/client';
 import { publishMessageAIResponse } from './realtime';
 import { getCurrentUserId } from '../lib/request-context';
 import {
@@ -67,6 +68,7 @@ async function getSonnetJson<T>(options: {
     sessionId: effectiveSessionId,
     turnId: effectiveTurnId,
     operation: effectiveOperation,
+    callType: BrainActivityCallType.RECONCILER_ANALYSIS,
   });
 
   if (!response) {
@@ -1828,6 +1830,7 @@ async function extractThemes(content: string, sessionId: string, userId?: string
     sessionId,
     turnId,
     operation: 'reconciler-extract-themes',
+    callType: BrainActivityCallType.THEME_EXTRACTION,
   });
 
   return result?.themes || [];

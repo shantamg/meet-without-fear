@@ -13,6 +13,7 @@ import type {
   FormattedMemorySuggestion,
   UpdateMemoryAIResponse,
 } from '@meet-without-fear/shared';
+import { BrainActivityCallType } from '@prisma/client';
 
 // ============================================================================
 // Types
@@ -117,6 +118,7 @@ Note: This memory will apply globally to all sessions.`;
       sessionId: syntheticSessionId,
       operation: 'memory-format',
       turnId: syntheticTurnId,
+      callType: BrainActivityCallType.MEMORY_FORMATTING,
     });
 
     console.log(`${logPrefix} Haiku response:`, JSON.stringify(response, null, 2));
@@ -255,6 +257,7 @@ Apply the requested changes while keeping the memory clear and concise.`;
       sessionId: syntheticSessionId,
       operation: 'memory-update',
       turnId: syntheticTurnId,
+      callType: BrainActivityCallType.MEMORY_FORMATTING,
     });
 
     console.log(`${logPrefix} Haiku update response:`, JSON.stringify(response, null, 2));

@@ -18,10 +18,9 @@ import {
   type ConverseCommandInput,
   type Tool,
   type ToolConfiguration,
-  type ContentBlock,
 } from '@aws-sdk/client-bedrock-runtime';
 import { extractJsonFromResponse } from '../utils/json-extractor';
-import { brainService } from '../services/brain-service';
+import { brainService, BrainActivityCallType } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
 
 // AWS Bedrock Pricing (USD per 1,000 tokens) - Verified Jan 2026
@@ -112,6 +111,8 @@ export interface CompletionOptions {
   operation: string;
   /** Turn ID to group all costs from a single user action - REQUIRED */
   turnId: string;
+  /** Call type for dashboard display categorization */
+  callType?: BrainActivityCallType;
 }
 
 /**
@@ -128,6 +129,8 @@ export interface HaikuCompletionOptions {
   operation: string;
   /** Turn ID to group all costs from a single user action - REQUIRED */
   turnId: string;
+  /** Call type for dashboard display categorization */
+  callType?: BrainActivityCallType;
 }
 
 /**
@@ -141,6 +144,9 @@ export interface SonnetCompletionOptions extends CompletionOptions {
 }
 
 export type ModelType = 'haiku' | 'sonnet';
+
+// Re-export BrainActivityCallType for convenience
+export { BrainActivityCallType };
 
 // ============================================================================
 // Helper Functions
@@ -290,7 +296,8 @@ export async function getModelCompletion(
     metadata: {
       maxTokens,
       thinkingBudget: model === 'sonnet' ? thinkingBudget : undefined
-    }
+    },
+    callType: options.callType,
   });
 
   try {
@@ -517,6 +524,8 @@ export interface SonnetStreamingOptions {
   operation: string;
   /** Turn ID to group all costs from a single user action - REQUIRED */
   turnId: string;
+  /** Call type for dashboard display categorization */
+  callType?: BrainActivityCallType;
 }
 
 /**
@@ -569,6 +578,7 @@ export async function* getSonnetStreamingResponse(
       maxTokens,
       toolCount: tools?.length ?? 0,
     },
+    callType: options.callType,
   });
 
   try {

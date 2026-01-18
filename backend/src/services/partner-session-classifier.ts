@@ -8,16 +8,18 @@
  * - Memory intent detection (user wants to save a memory)
  * - Memory validation (is the memory appropriate to save)
  * - Topic context extraction
+ * - Notable facts extraction (facts about user's situation, emotions, circumstances)
  *
  * This mirrors the pattern from background-classifier.ts (for Inner Thoughts)
  * but is tailored for partner session context.
  */
 
-import { getHaikuJson } from '../lib/bedrock';
+import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 import type { MemoryCategory } from '@meet-without-fear/shared';
 import { publishUserEvent } from './realtime';
 import { memoryService } from './memory-service';
+import { prisma } from '../lib/prisma';
 
 // ============================================================================
 // Types
@@ -34,6 +36,8 @@ export interface PartnerSessionClassifierResult {
     validationReason?: string;
   };
   topicContext?: string;
+  /** Notable facts about the user's situation, emotions, and circumstances */
+  notableFacts?: string[];
 }
 
 export interface PartnerSessionClassifierInput {
@@ -49,6 +53,8 @@ export interface PartnerSessionClassifierInput {
   turnId: string;
   /** Partner's name for context */
   partnerName?: string;
+  /** Existing notable facts for this user (to update/consolidate) */
+  existingFacts?: string[];
 }
 
 // ============================================================================
@@ -70,10 +76,10 @@ const VALID_CATEGORIES: MemoryCategory[] = [
 
 /**
  * Build the unified classification prompt.
- * Combines memory detection AND validation in one call.
+ * Combines memory detection, validation, and notable facts extraction in one call.
  */
 function buildClassifierPrompt(input: PartnerSessionClassifierInput): string {
-  const { userMessage, conversationHistory, partnerName } = input;
+  const { userMessage, conversationHistory, partnerName, existingFacts } = input;
 
   // Format conversation history
   const historyText = conversationHistory
@@ -83,7 +89,12 @@ function buildClassifierPrompt(input: PartnerSessionClassifierInput): string {
 
   const partnerContext = partnerName ? `Partner name: ${partnerName}` : '';
 
-  return `Analyze this partner session conversation for memory intents.
+  // Format existing facts if any
+  const existingFactsText = existingFacts && existingFacts.length > 0
+    ? `CURRENT NOTABLE FACTS:\n${existingFacts.map((f, i) => `${i + 1}. ${f}`).join('\n')}`
+    : 'CURRENT NOTABLE FACTS: (none yet)';
+
+  return `Analyze this partner session conversation for memory intents and notable facts.
 
 CONVERSATION CONTEXT:
 ${partnerContext}
@@ -93,6 +104,8 @@ ${historyText}
 
 CURRENT MESSAGE:
 User: ${userMessage}
+
+${existingFactsText}
 
 TASK 1 - MEMORY INTENT DETECTION:
 Only flag as detected=true if user EXPLICITLY asks to remember something using words like:
@@ -109,6 +122,25 @@ Check if the memory is appropriate to save:
 - Is it therapeutically appropriate (not reinforcing negative patterns)?
 - Is it something that should persist across sessions?
 
+TASK 3 - NOTABLE FACTS EXTRACTION:
+Maintain a curated list of facts about the user's situation. Output the COMPLETE updated list.
+
+WHAT TO INCLUDE:
+- Emotional context: feelings, frustrations, fears, hopes
+- Situational facts: events, circumstances, timeline of conflict
+- People & relationships: names, roles, relationships mentioned (e.g., "daughter Emma is 14")
+
+WHAT TO EXCLUDE:
+- Meta-commentary about the session/process
+- Questions to the AI
+- Session style preferences
+
+RULES:
+- Keep facts concise (1 sentence each)
+- Update/replace outdated facts with newer information
+- Soft limit: 15-20 facts. If exceeding, consolidate/merge similar facts
+- Output the FULL list each time (not just new facts)
+
 OUTPUT JSON only:
 {
   "memoryIntent": {
@@ -120,7 +152,8 @@ OUTPUT JSON only:
     "isValid": boolean (only if detected=true - result of validation),
     "validationReason": "why invalid (only if detected=true and isValid=false)"
   },
-  "topicContext": "brief description of what user is discussing"
+  "topicContext": "brief description of what user is discussing",
+  "notableFacts": ["fact 1", "fact 2", "..."]
 }`;
 }
 
@@ -137,6 +170,17 @@ function normalizeResult(raw: unknown): PartnerSessionClassifierResult {
     ? (category.toUpperCase() as MemoryCategory)
     : undefined;
 
+  // Normalize notable facts
+  const rawFacts = result.notableFacts;
+  let notableFacts: string[] | undefined;
+  if (Array.isArray(rawFacts)) {
+    // Filter to only valid non-empty strings, limit to 20 facts
+    notableFacts = rawFacts
+      .filter((f): f is string => typeof f === 'string' && f.trim().length > 0)
+      .map((f) => f.trim())
+      .slice(0, 20);
+  }
+
   return {
     memoryIntent: {
       detected: Boolean(memoryIntent?.detected),
@@ -150,6 +194,7 @@ function normalizeResult(raw: unknown): PartnerSessionClassifierResult {
       validationReason: memoryIntent?.validationReason as string | undefined,
     },
     topicContext: result.topicContext as string | undefined,
+    notableFacts,
   };
 }
 
@@ -169,8 +214,12 @@ export async function runPartnerSessionClassifier(
     console.log(`${logPrefix} Starting classification for session ${input.sessionId}`);
 
     const systemPrompt = `You are an AI assistant analyzing a partner session (couples/relationship conversation).
-Your job is to detect ONLY explicit memory requests and validate them if found.
+Your job is to:
+1. Detect ONLY explicit memory requests and validate them if found
+2. Extract and maintain notable facts about the user's situation
+
 Be conservative with memory detection - most messages are NOT memory requests.
+For notable facts, focus on emotional context, situational facts, and people/relationships.
 Output only valid JSON.`;
 
     const userPrompt = buildClassifierPrompt(input);
@@ -178,6 +227,7 @@ Output only valid JSON.`;
     // Use circuit breaker to prevent blocking
     const fallback: PartnerSessionClassifierResult = {
       memoryIntent: { detected: false, confidence: 'low' },
+      notableFacts: input.existingFacts, // Preserve existing facts on failure
     };
 
     const result = await withHaikuCircuitBreaker(
@@ -185,10 +235,11 @@ Output only valid JSON.`;
         return await getHaikuJson<Record<string, unknown>>({
           systemPrompt,
           messages: [{ role: 'user', content: userPrompt }],
-          maxTokens: 512,
+          maxTokens: 1024, // Increased to accommodate notable facts
           sessionId: input.sessionId,
           turnId: input.turnId,
           operation: 'partner-session-classifier',
+          callType: BrainActivityCallType.PARTNER_SESSION_CLASSIFICATION,
         });
       },
       null,
@@ -205,7 +256,26 @@ Output only valid JSON.`;
       memoryDetected: normalized.memoryIntent.detected,
       memoryValid: normalized.memoryIntent.isValid,
       topicContext: normalized.topicContext?.substring(0, 50),
+      factsCount: normalized.notableFacts?.length ?? 0,
     });
+
+    // Save notable facts to UserVessel (fire-and-forget)
+    if (normalized.notableFacts && normalized.notableFacts.length > 0) {
+      try {
+        await prisma.userVessel.updateMany({
+          where: {
+            userId: input.userId,
+            sessionId: input.sessionId,
+          },
+          data: {
+            notableFacts: normalized.notableFacts,
+          },
+        });
+        console.log(`${logPrefix} Saved ${normalized.notableFacts.length} notable facts to UserVessel`);
+      } catch (err) {
+        console.error(`${logPrefix} Failed to save notable facts:`, err);
+      }
+    }
 
     // If valid memory intent detected, create pending memory and publish via Ably
     if (

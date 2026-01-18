@@ -13,7 +13,7 @@
  * 4. Generate response using Sonnet
  */
 
-import { getSonnetResponse } from '../lib/bedrock';
+import { getSonnetResponse, BrainActivityCallType } from '../lib/bedrock';
 import { prisma } from '../lib/prisma';
 import {
   determineMemoryIntent,
@@ -346,6 +346,7 @@ export async function orchestrateResponse(
       sessionId: context.sessionId,
       operation: 'orchestrator-response',
       turnId,
+      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
       // thinkingBudget: 1024, // Disabled - not supported on Bedrock Sonnet v2
     });
 
@@ -490,14 +491,14 @@ function parseStructuredResponse(rawResponse: string): ParsedStructuredResponse 
     }
 
     return {
-      response: parsed.response,
+      response: parsed.response.trim(),
       offerFeelHeardCheck: typeof parsed.offerFeelHeardCheck === 'boolean' ? parsed.offerFeelHeardCheck : false,
       offerReadyToShare: typeof parsed.offerReadyToShare === 'boolean' ? parsed.offerReadyToShare : false,
       invitationMessage: typeof parsed.invitationMessage === 'string' && parsed.invitationMessage !== 'null'
-        ? parsed.invitationMessage
+        ? parsed.invitationMessage.trim()
         : null,
       proposedEmpathyStatement: typeof parsed.proposedEmpathyStatement === 'string' && parsed.proposedEmpathyStatement !== 'null'
-        ? parsed.proposedEmpathyStatement
+        ? parsed.proposedEmpathyStatement.trim()
         : null,
       analysis: typeof parsed.analysis === 'string' ? parsed.analysis : externalAnalysis,
     };
@@ -518,8 +519,8 @@ function extractResponseFallback(rawResponse: string): ParsedStructuredResponse 
   // This handles cases where the JSON structure is broken but the response field exists
   const responseMatch = rawResponse.match(/"response"\s*:\s*"((?:[^"\\]|\\.)*)"/);
   if (responseMatch) {
-    // Unescape the extracted string
-    const extracted = responseMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
+    // Unescape the extracted string and trim whitespace
+    const extracted = responseMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\').trim();
     console.log('[AI Orchestrator] Extracted response via regex fallback');
     return {
       response: extracted,

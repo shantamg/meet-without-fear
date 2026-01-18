@@ -9,7 +9,7 @@
  */
 
 import { z } from 'zod';
-import { getHaikuJson } from '../lib/bedrock';
+import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 
 // ============================================================================
@@ -217,6 +217,7 @@ export async function planRetrieval(
         sessionId,
         turnId,
         operation: 'retrieval-planning',
+        callType: BrainActivityCallType.RETRIEVAL_PLANNING,
       });
     },
     fallbackPlan,

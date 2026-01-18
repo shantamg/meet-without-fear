@@ -5,7 +5,7 @@
  * for cross-feature intelligence.
  */
 
-import { MentionSourceType, Person } from '@prisma/client';
+import { MentionSourceType, Person, BrainActivityCallType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { getHaikuJson } from '../lib/bedrock';
 import { getCurrentUserId } from '../lib/request-context';
@@ -171,6 +171,7 @@ OUTPUT (JSON):
       operation: 'people-extraction',
       sessionId: effectiveSessionId,
       turnId,
+      callType: BrainActivityCallType.PEOPLE_EXTRACTION,
     });
 
     return result;
