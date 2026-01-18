@@ -1,40 +1,53 @@
 # Specification: Notable Facts Extraction for Partner Sessions
 
 *Finalized: 2026-01-17*
+*Updated: 2026-01-18 - Fact-Ledger Architecture (Categorized Facts + Global Facts)*
+
+> **IMPLEMENTATION STATUS: ✅ COMPLETE**
+>
+> This spec has been implemented with enhancements beyond the original design:
+> - ✅ Categorized facts (`{ category, fact }` format instead of plain strings)
+> - ✅ Five fact categories: People, Logistics, Conflict, Emotional, History
+> - ✅ Global facts consolidation (cross-session user profile)
+> - ✅ Session-level embeddings
+> - ✅ Applies to both Partner Sessions and Inner Thoughts
 
 ## Overview
 
-Create a "Notable Facts" system that runs alongside the existing Haiku analysis pipeline. For each user message, Haiku extracts and maintains a curated list of facts about the user's situation, emotions, and circumstances. These facts persist across the session and reduce the need for extensive chat history in prompts.
+The "Notable Facts" system (Fact-Ledger Architecture) runs alongside the existing Haiku analysis pipeline. For each user message, Haiku extracts and maintains a curated list of **categorized facts** about the user's situation, emotions, and circumstances. These facts persist across the session and reduce the need for extensive chat history in prompts.
 
 ## Problem Statement
 
 Currently, the AI needs extensive chat history (20-30 messages) to maintain context about each user's situation. This is token-expensive and can lead to context window issues. By extracting and maintaining a curated list of "notable facts" about each user, we can:
 1. Reduce chat history tokens in prompts (from 20-30 to 8-10 messages)
 2. Provide more consistent context across messages
-3. Enable cross-session continuity (future enhancement)
+3. Enable cross-session continuity via Global Facts consolidation
 
 ## Key Design Decisions
 
 - **Extends existing partner-session-classifier.ts**: Add fact extraction to the fire-and-forget Haiku call that already runs after each response
 - **Facts are per-user within a session**: Each partner maintains their own facts list (stored in UserVessel)
-- **Free-form text**: Simple strings, no categorization overhead
+- **Categorized facts**: Facts have `{ category, fact }` format with five categories
+- **Categories**: People, Logistics, Conflict, Emotional, History
 - **Full list output each time**: Haiku outputs complete facts list to avoid drift
 - **N+1 timing**: Facts from message N are available starting from message N+1 (non-blocking)
 - **Soft limit of 15-20 facts**: If exceeding, Haiku consolidates/merges similar facts
+- **Global facts consolidation**: Session facts merged into user profile on Stage 1 completion
 
 ## Scope
 
-### In Scope
-- Extend `partner-session-classifier.ts` to extract notable facts alongside memory detection
-- Store facts in `UserVessel.notableFacts` (new String[] field)
+### In Scope (✅ Implemented)
+- Extend `partner-session-classifier.ts` to extract categorized notable facts alongside memory detection
+- Store facts in `UserVessel.notableFacts` (JSONB column with `CategorizedFact[]`)
 - Load facts via `context-assembler.ts` and include in `ContextBundle`
-- Format facts in `formatContextForPrompt()` for Sonnet
+- Format facts in `formatContextForPrompt()` for Sonnet (grouped by category)
 - Reduce conversation history from 20-30 messages to 8-10 messages
-- Facts persist for session duration only (within UserVessel)
+- Facts persist for session duration (within UserVessel)
+- **Global facts consolidation** - cross-session user profile in `User.globalFacts`
+- **Session-level embeddings** - triggered after classification
+- **Inner Thoughts support** - same system via `background-classifier.ts`
 
 ### Out of Scope
-- Cross-session fact persistence (future enhancement)
-- Fact categorization or structured data
 - Fact editing/removal UI
 - Blocking fact extraction (N+1 timing is acceptable)
 - Dynamic history reduction based on facts count
@@ -98,11 +111,35 @@ Currently, the AI needs extensive chat history (20-30 messages) to maintain cont
 
 ### Data Model
 
-**UserVessel** (existing model - add new field):
+**UserVessel** (existing model - updated field):
 ```prisma
 model UserVessel {
   // ... existing fields ...
-  notableFacts    String[]   @default([])  // Array of free-form fact strings
+  notableFacts    Json?    // JSONB: CategorizedFact[] - array of { category, fact }
+  contentEmbedding  Unsupported("vector(1024)")?  // Session-level embedding
+}
+```
+
+**User** (for global facts):
+```prisma
+model User {
+  // ... existing fields ...
+  globalFacts     Json?    // JSONB: GlobalFacts - consolidated user profile
+}
+```
+
+### Categorized Fact Format
+
+```typescript
+interface CategorizedFact {
+  category: string;  // People, Logistics, Conflict, Emotional, History
+  fact: string;      // 1 sentence max
+}
+
+interface GlobalFacts {
+  facts: CategorizedFact[];  // Max 50 facts
+  consolidatedAt: string;    // ISO timestamp
+  sessionCount: number;      // Sessions contributing
 }
 ```
 
@@ -111,7 +148,7 @@ model UserVessel {
 **Input to Haiku:**
 - User's latest message
 - Last 2-3 conversation exchanges (for context)
-- Current list of notable facts
+- Current list of notable facts (categorized)
 
 **Output from Haiku:**
 ```json
@@ -119,42 +156,62 @@ model UserVessel {
   "memoryIntent": { ... },
   "topicContext": "...",
   "notableFacts": [
-    "User's daughter Emma is 14",
-    "Partner works night shifts",
-    "Feeling unheard about childcare decisions"
+    { "category": "People", "fact": "User's daughter Emma is 14" },
+    { "category": "Logistics", "fact": "Partner works night shifts" },
+    { "category": "Emotional", "fact": "Feeling unheard about childcare decisions" }
   ]
 }
 ```
 
-**Fact types to extract:**
-- Emotional context (feelings, frustrations, fears, hopes)
-- Situational facts (events, circumstances, timeline)
-- People & relationships (names, roles, relationships mentioned)
+**Fact Categories:**
+- **People:** names, roles, relationships (e.g., "daughter Emma is 14")
+- **Logistics:** scheduling, location, practical circumstances
+- **Conflict:** specific disagreements, triggers, patterns
+- **Emotional:** feelings, frustrations, fears, hopes
+- **History:** past events, relationship timeline, backstory
 
 **Exclusions:**
 - Meta-commentary about the session/process
 - Questions to the AI
 - Session style preferences
 
-**Soft limit:** 15-20 facts. If exceeding, Haiku should consolidate/merge similar facts.
+**Soft limit:** 15-20 facts per session. If exceeding, Haiku should consolidate/merge similar facts.
 
 ### Prompt Formatting
 
-Facts appear in the Sonnet context as:
+**Session facts** appear as:
 ```
 NOTED FACTS FROM THIS SESSION:
+[People]
 - User's daughter Emma is 14
+- Partner is named Alex
+[Logistics]
 - Partner works night shifts
+[Emotional]
 - Feeling unheard about childcare decisions
+```
+
+**Global facts** appear at TOP of context:
+```
+ABOUT THIS USER (from previous sessions):
+[People]
+- Has partner named Alex
+- Daughter Emma is 14
+[History]
+- Together for 5 years
 ```
 
 ### Integration Points
 
-1. **partner-session-classifier.ts**: Add `notableFacts` extraction to existing Haiku call
-2. **UserVessel model**: Add `notableFacts` String[] field
-3. **context-assembler.ts**: Load facts from UserVessel, add to ContextBundle
-4. **formatContextForPrompt()**: Format facts block for Sonnet
-5. **memory-intent.ts**: Reduce `getTurnBufferSize()` to return 4-5 (8-10 messages)
+1. **partner-session-classifier.ts**: Extract `notableFacts` as categorized array
+2. **background-classifier.ts**: Same for Inner Thoughts sessions
+3. **UserVessel model**: `notableFacts` JSONB field (not String[])
+4. **User model**: `globalFacts` JSONB field for cross-session profile
+5. **context-assembler.ts**: Load facts from UserVessel + global facts from User
+6. **formatContextForPrompt()**: Format facts grouped by category
+7. **memory-intent.ts**: Buffer size already reduced to 4-5 turns
+8. **global-memory.ts**: Consolidate session facts into user profile
+9. **messages.ts**: Trigger global consolidation on Stage 1 completion
 
 ## Requirements
 

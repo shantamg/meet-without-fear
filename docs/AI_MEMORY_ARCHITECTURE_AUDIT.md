@@ -1,21 +1,23 @@
 # AI Memory & Context Architecture Audit
 
-**Date:** 2026-01-15 (Updated)
+**Date:** 2026-01-18 (Updated)
 **Scope:** Backend AI memory, context window, RAG, and summarization systems
 
 ---
 
 ## Executive Summary
 
-Your system has a **sophisticated multi-layered memory architecture** with:
+Your system has a **sophisticated multi-layered memory architecture** (Fact-Ledger Architecture) with:
 
 - ✅ **RAG system** using pgvector embeddings for semantic search
 - ✅ **Token budget management** to maximize context window usage
 - ✅ **Summarization** actively called for partner sessions (30+ messages)
 - ✅ **Stage-aware memory intent** system that adjusts retrieval depth
+- ✅ **Categorized facts extraction** - Haiku extracts facts with categories (People, Logistics, Conflict, Emotional, History)
+- ✅ **Global facts consolidation** - Cross-session user profile built on Stage 1 completion
 - ⚠️ **Minor Gap:** Prior themes from previous sessions not yet populated
 
-**Current State:** You use a **stage-aware sliding window** (6-20 turns) + **semantic retrieval** when references are detected + **rolling summarization** for long sessions (30+ messages). Summaries are generated and injected for both partner sessions and Inner Thoughts.
+**Current State:** You use a **stage-aware sliding window** (4-5 turns / 8-10 messages) + **categorized notable facts** (grouped by category for cleaner formatting) + **global facts** (user profile at top of context) + **semantic retrieval** when references are detected + **rolling summarization** for long sessions (30+ messages). Summaries are generated and injected for both partner sessions and Inner Thoughts.
 
 ---
 
@@ -25,11 +27,11 @@ Your system has a **sophisticated multi-layered memory architecture** with:
 
 **Primary Selection Point:** `backend/src/services/context-assembler.ts` (lines 230-269)
 
-- `buildConversationContext()` uses **stage-aware buffer sizes**:
-  - Stage 1: **6 turns** (12 messages)
+- `buildConversationContext()` uses **stage-aware buffer sizes** (reduced after notable facts implementation):
+  - Stage 1: **5 turns** (10 messages) - reduced from 6; facts capture emotional context
   - Stage 2: **4 turns** (8 messages)
   - Stage 3: **4 turns** (8 messages)
-  - Stage 4: **8 turns** (16 messages)
+  - Stage 4: **5 turns** (10 messages) - reduced from 8; facts provide relationship/situation context
 - Fetches `bufferSize * 2` messages (to account for user + AI pairs)
 - **Takes last N turns** from chronological order
 
@@ -44,11 +46,12 @@ Your system has a **sophisticated multi-layered memory architecture** with:
 
 **No** - it's more sophisticated:
 
-1. **Stage-based buffer sizes** (4-8 turns depending on stage)
+1. **Stage-based buffer sizes** (4-5 turns depending on stage)
 2. **Token budget protection** - last 10 turns are always included
 3. **Older messages can be included** if token budget allows
 4. **RAG retrieval** can pull older messages semantically (see section 2)
 5. **Summarization** condenses older content when sessions exceed 30 messages
+6. **Notable facts** provide emotional context, situational facts, and relationship info that would otherwise require more history
 
 ### Token Counting
 
@@ -183,6 +186,145 @@ Both types generate structured summaries with:
 
 ---
 
+## 3.5 Notable Facts Extraction (Fact-Ledger Architecture)
+
+### Notable Facts System: ✅ FULLY IMPLEMENTED
+
+**Purpose:** Extract and maintain a curated list of **categorized facts** about the user's situation, emotions, and circumstances. This reduces the need for extensive chat history in prompts.
+
+**Implementation:**
+- Partner Sessions: `backend/src/services/partner-session-classifier.ts`
+- Inner Thoughts: `backend/src/services/background-classifier.ts`
+
+**How It Works:**
+
+1. **Fire-and-forget extraction** - runs AFTER the AI response is sent (non-blocking)
+2. Uses **Haiku** to extract and maintain facts alongside memory detection
+3. Outputs the **complete updated facts list** each time (not just new facts)
+4. Stored as **categorized JSON** in `UserVessel.notableFacts` (JSONB column)
+
+**Categorized Fact Format:**
+```typescript
+interface CategorizedFact {
+  category: string;  // People, Logistics, Conflict, Emotional, History
+  fact: string;      // The fact text (1 sentence max)
+}
+```
+
+**Fact Categories:**
+- **People:** names, roles, relationships mentioned (e.g., "daughter Emma is 14")
+- **Logistics:** scheduling, location, practical circumstances
+- **Conflict:** specific disagreements, triggers, patterns
+- **Emotional:** feelings, frustrations, fears, hopes
+- **History:** past events, relationship timeline, backstory
+
+**Exclusions:**
+- Meta-commentary about the session/process
+- Questions to the AI
+- Session style preferences
+
+**Configuration:**
+- **Soft limit:** 15-20 facts per user per session
+- If exceeding, Haiku consolidates/merges similar facts
+- Facts normalized and validated (max 20 facts, 1-2 sentences each)
+
+**Where Facts Are Used:**
+
+1. **Loaded:** `context-assembler.ts` → `loadNotableFacts(sessionId, userId)`
+2. **Formatted:** `formatContextForPrompt()` outputs as "NOTED FACTS FROM THIS SESSION" grouped by category
+3. **Injected:** Included in the context bundle for Sonnet
+
+**Prompt Format (Categorized):**
+```
+NOTED FACTS FROM THIS SESSION:
+[People]
+- User's daughter Emma is 14
+- Partner is named Alex
+[Logistics]
+- Partner works night shifts
+[Emotional]
+- Feeling unheard about childcare decisions
+```
+
+**Benefits:**
+- Reduces chat history from 20-30 to 8-10 messages
+- Provides consistent context across messages
+- Categories help AI prioritize relevant information
+- Enables cross-session continuity via Global Facts
+
+---
+
+## 3.6 Global Facts System (Cross-Session Continuity)
+
+### Global Facts: ✅ FULLY IMPLEMENTED
+
+**Purpose:** Consolidate session-level facts into a persistent user profile that carries across all sessions. This provides cross-session continuity without requiring the AI to retrieve from past sessions.
+
+**Implementation:** `backend/src/services/global-memory.ts`
+
+**How It Works:**
+
+1. **Triggered on Stage 1 completion** - when user confirms "Feel Heard" and moves to Stage 2
+2. **Merges session facts into user profile** - combines current session facts with existing global facts
+3. **AI-assisted consolidation** - when facts exceed 50, Haiku merges/deduplicates
+4. Stored in **`User.globalFacts`** (JSONB column on User model)
+
+**Global Facts Schema:**
+```typescript
+interface GlobalFacts {
+  facts: CategorizedFact[];  // Max 50 facts (~500 tokens)
+  consolidatedAt: string;    // ISO timestamp
+  sessionCount: number;      // Sessions contributing facts
+}
+```
+
+**Consolidation Rules:**
+1. Keep the most important, lasting facts about the user
+2. Merge similar or duplicate facts into single entries
+3. Update outdated facts with newer information (newer takes precedence)
+4. Prioritize: People (names, relationships), Emotional patterns, Conflict patterns, Key events
+5. Remove session-specific details that won't be relevant in future sessions
+6. Use same categories: People, Logistics, Conflict, Emotional, History
+
+**Where Global Facts Are Used:**
+
+1. **Loaded:** `context-assembler.ts` → `loadGlobalFacts(userId)` (loaded in parallel with other context)
+2. **Formatted:** `formatContextForPrompt()` outputs as "ABOUT THIS USER (from previous sessions)" at **TOP** of context
+3. **Injected:** Included in context bundle for Sonnet
+
+**Prompt Format:**
+```
+ABOUT THIS USER (from previous sessions):
+[People]
+- Has a partner named Alex
+- Daughter Emma is 14
+[History]
+- Together for 5 years
+- Previous conflict about work-life balance
+[Emotional]
+- Tends to feel unheard during arguments
+```
+
+**Configuration:**
+- **Max facts:** 50 (~500 tokens)
+- **Simple merge:** If total facts ≤ 50, just concatenate without AI
+- **AI consolidation:** If > 50 facts, Haiku consolidates/deduplicates
+- **Cost tracking:** Uses `GLOBAL_MEMORY_CONSOLIDATION` call type
+
+**Trigger Point:**
+```typescript
+// In messages.ts confirmFeelHeard():
+consolidateGlobalFacts(user.id, sessionId, turnId).catch(...)
+```
+
+**Benefits:**
+- Cross-session continuity without retrieval overhead
+- User profile builds over time
+- AI has relationship context from first message of new session
+- Reduces need for cross-session semantic search
+
+---
+
 ## 4. The "Recall" Logic
 
 ### Memory Intent System: `backend/src/services/memory-intent.ts`
@@ -309,6 +451,11 @@ FROM USER'S PRIVATE REFLECTIONS: (if Inner Thoughts linked)
 
 USER MEMORIES (Always Honor These):
 - [preference] Never call me by my full name
+
+NOTED FACTS FROM THIS SESSION:
+- User's daughter Emma is 14
+- Partner works night shifts
+- Feeling unheard about childcare decisions
 ```
 
 ### Retrieved Context (from `context-retriever.ts:822-892`)
@@ -344,6 +491,7 @@ User: [message]
 5. **Data isolation** prevents partner message leakage
 6. **Summarization is active** - called after AI messages for long sessions
 7. **Summaries are used** - injected into context bundle for prompts
+8. **Notable facts extraction** - Haiku extracts and maintains facts per-user, reducing history needs
 
 ### ⚠️ Remaining Gaps
 
@@ -356,9 +504,10 @@ User: [message]
 
 **For Recent Memory (< 30 messages):**
 
-- ✅ Sliding window (6-16 messages based on stage)
+- ✅ Sliding window (8-10 messages / 4-5 turns based on stage)
 - ✅ Token budget protection (last 10 turns always included)
 - ✅ Semantic retrieval when references detected
+- ✅ Categorized notable facts provide emotional context, situational facts, and relationship info
 
 **For Long Sessions (> 30 messages):**
 
@@ -367,12 +516,14 @@ User: [message]
 - ✅ Summary injected into prompts with key themes, emotional journey
 - ✅ Semantic retrieval can still pull specific older messages
 - ✅ **Summary-aware history fetch** - raw history excludes messages covered by summary (prevents duplication)
+- ✅ Notable facts complement summaries with specific details
 
 **For Cross-Session Memory:**
 
 - ✅ Semantic search across all sessions
 - ✅ Stage-aware thresholds and limits
 - ✅ User preferences control cross-session recall
+- ✅ **Global Facts** - consolidated user profile injected at top of context
 - ⚠️ Prior themes not populated (would help continuity)
 
 ---
@@ -396,11 +547,14 @@ User: [message]
 
    **Fix:** Extract themes/needs from previous sessions' UserVessels and include in context bundle.
 
+   **Note:** Global facts now provide much of the cross-session continuity that prior themes would have provided, so this is lower priority.
+
 ### Future Enhancements
 
 1. **Thematic Memory:**
    - Extract recurring themes across sessions
    - Build a "relationship memory" that persists
+   - Note: Global facts partially address this by consolidating relationship information
 
 2. **Agreement Memory:**
    - Track all agreements/experiments across sessions
@@ -412,13 +566,20 @@ User: [message]
 
 Your architecture is **well-designed and fully operational** with:
 
-1. **Stage-aware sliding window** (4-8 turns based on stage)
+1. **Stage-aware sliding window** (4-5 turns / 8-10 messages based on stage)
 2. **Token budget protection** (last 10 turns never dropped)
 3. **Semantic retrieval** (when references detected)
 4. **Rolling summarization** (active for sessions > 30 messages)
 5. **Summary-aware history fetch** (prevents summary + raw history overlap)
+6. **Categorized notable facts** (People, Logistics, Conflict, Emotional, History - reduces history needs)
+7. **Global facts consolidation** (cross-session user profile built on Stage 1 completion)
 
-The system provides: **Recent full messages + Summarized older context + Semantically retrieved relevant content** = comprehensive memory without token bloat.
+The system provides: **Global Facts (user profile) + Recent full messages + Categorized session facts + Summarized older context + Semantically retrieved relevant content** = comprehensive memory without token bloat.
+
+**How the Fact-Ledger architecture works:**
+- **Session Level:** After each AI response, Haiku extracts categorized facts (15-20 max) stored in `UserVessel.notableFacts`
+- **Global Level:** When Stage 1 completes, session facts are consolidated into `User.globalFacts` (50 max)
+- **Context Injection:** Global facts appear at TOP of context ("ABOUT THIS USER"), session facts appear lower ("NOTED FACTS FROM THIS SESSION")
 
 **How summary-aware history works:** When a summary exists (sessions > 30 messages), the raw conversation history only fetches messages AFTER the summary's boundary timestamp (`newestMessageAt`). This prevents the "lazy eviction" problem where both summary AND overlapping raw messages were sent to the LLM.
 

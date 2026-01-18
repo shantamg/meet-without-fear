@@ -29,6 +29,13 @@ model User {
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
+  // === Global Facts ===
+  // Consolidated facts about the user across all sessions
+  // Format: [{ category: string, fact: string }]
+  // Categories: People, Logistics, Conflict, Emotional, History, etc.
+  // Max 50 facts, deduplicated and pruned during consolidation
+  globalFacts              Json?
+
   // Relationships
   relationships       RelationshipMember[]
   vessels             UserVessel[]
@@ -169,6 +176,11 @@ model InnerWorkSession {
   // Stores JSON: { text, keyThemes, emotionalJourney, unresolvedTopics, messageCount, generatedAt }
   conversationSummary String? @db.Text
 
+  // Session-level content embedding for semantic search
+  // Embeds theme + summary for session-level retrieval
+  // Replaces message-level embedding per fact-ledger architecture
+  contentEmbedding Unsupported("vector(1024)")?
+
   // Messages in this inner work session
   messages InnerWorkMessage[]
 
@@ -198,8 +210,8 @@ model InnerWorkMessage {
   content   String           @db.Text
   timestamp DateTime         @default(now())
 
-  // Embedding for semantic search and cross-session retrieval
-  embedding Unsupported("vector(1024)")?
+  // NOTE: Message-level embedding removed per fact-ledger architecture
+  // Session-level contentEmbedding on InnerWorkSession is used instead
 
   @@index([sessionId, timestamp])
 }
@@ -262,8 +274,10 @@ model UserVessel {
   // Stores JSON with: text, keyThemes, emotionalJourney, unresolvedTopics
   conversationSummary String? @db.Text
 
-  // Embedding for semantic search within user's own content
-  embedding Unsupported("vector(1024)")?
+  // Session-level content embedding for semantic search
+  // Embeds combined facts + summary for session-level retrieval
+  // Replaces message-level embedding per fact-ledger architecture
+  contentEmbedding Unsupported("vector(1024)")?
 
   // === Session Read State ===
   // When the user last viewed/opened this session's chat
@@ -273,9 +287,11 @@ model UserVessel {
   lastSeenChatItemId String?
 
   // === Notable Facts ===
-  // AI-extracted facts about the user's situation, emotions, and circumstances
+  // AI-extracted structured facts about the user's situation, emotions, and circumstances
+  // Format: [{ category: string, fact: string }]
+  // Categories: People, Logistics, Conflict, Emotional, History, etc.
   // Updated by Haiku after each message, used to reduce chat history in prompts
-  notableFacts String[] @default([])
+  notableFacts Json?
 
   @@unique([userId, sessionId])
   @@index([userId])
@@ -510,8 +526,8 @@ model Message {
   stage     Int
   timestamp DateTime    @default(now())
 
-  // Embedding for semantic search
-  embedding Unsupported("vector(1024)")?
+  // NOTE: Message-level embedding removed per fact-ledger architecture
+  // Session-level contentEmbedding on UserVessel is used instead
 
   // Extracted memory references
   extractedNeeds    String[]
@@ -1278,6 +1294,7 @@ enum BrainActivityCallType {
   WITNESSING_RESPONSE
   MEMORY_FORMATTING
   THEME_EXTRACTION
+  GLOBAL_MEMORY_CONSOLIDATION
 }
 
 enum ActivityType {

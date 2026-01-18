@@ -9,7 +9,7 @@
 import { prisma } from '../../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../ai';
 import { getPartnerUserId } from '../../utils/session';
-import { embedMessage } from '../embedding';
+import { embedSessionContent } from '../embedding';
 import { updateSessionSummary, getSessionSummary } from '../conversation-summarizer';
 import { publishUserEvent } from '../realtime';
 import { updateContext } from '../../lib/request-context';
@@ -264,20 +264,21 @@ export async function processSessionMessage(
     },
   });
 
-  // Embed messages for cross-session retrieval (non-blocking)
-  // Pass turnId so embedding cost is attributed to this user message
-  embedMessage(userMessage.id, turnId).catch((err) =>
-    console.warn('[SessionProcessor] Failed to embed user message:', err)
-  );
-  embedMessage(aiMessage.id, turnId).catch((err) =>
-    console.warn('[SessionProcessor] Failed to embed AI message:', err)
-  );
+  // Embed session content (facts + summary) for cross-session retrieval (non-blocking)
+  // Per fact-ledger architecture, we embed at session level, not message level
+  // This is triggered after summary updates below
+  // Note: embedSessionContent is called after updateSessionSummary completes
 
-  // Summarize older parts of the conversation (non-blocking)
-  // Pass turnId so summarization cost is attributed to this user message
-  updateSessionSummary(sessionId, userId, turnId).catch((err) =>
-    console.warn('[SessionProcessor] Failed to update session summary:', err)
-  );
+  // Summarize older parts of the conversation and then embed session content (non-blocking)
+  // Per fact-ledger architecture, embedding happens at session level after summary updates
+  updateSessionSummary(sessionId, userId, turnId)
+    .then(() => {
+      // After summary updates, re-embed session content (facts + summary)
+      return embedSessionContent(sessionId, userId, turnId);
+    })
+    .catch((err: unknown) =>
+      console.warn('[SessionProcessor] Failed to update session summary/embedding:', err)
+    );
 
   // NOTE: Memory detection is handled by ai-orchestrator.ts, not here.
   // The orchestrator runs detection + validation synchronously before generating the response.

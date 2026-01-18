@@ -20,10 +20,17 @@ import type { MemoryCategory } from '@meet-without-fear/shared';
 import { publishUserEvent } from './realtime';
 import { memoryService } from './memory-service';
 import { prisma } from '../lib/prisma';
+import { embedSessionContent } from './embedding';
 
 // ============================================================================
 // Types
 // ============================================================================
+
+/** A categorized fact from the fact-ledger */
+export interface CategorizedFact {
+  category: string;
+  fact: string;
+}
 
 export interface PartnerSessionClassifierResult {
   memoryIntent: {
@@ -36,8 +43,8 @@ export interface PartnerSessionClassifierResult {
     validationReason?: string;
   };
   topicContext?: string;
-  /** Notable facts about the user's situation, emotions, and circumstances */
-  notableFacts?: string[];
+  /** Notable facts about the user's situation, emotions, and circumstances (categorized) */
+  notableFacts?: CategorizedFact[];
 }
 
 export interface PartnerSessionClassifierInput {
@@ -53,7 +60,7 @@ export interface PartnerSessionClassifierInput {
   turnId: string;
   /** Partner's name for context */
   partnerName?: string;
-  /** Existing notable facts for this user (to update/consolidate) */
+  /** Existing notable facts for this user (to update/consolidate) - supports both old string[] and new CategorizedFact[] */
   existingFacts?: string[];
 }
 
@@ -123,12 +130,14 @@ Check if the memory is appropriate to save:
 - Is it something that should persist across sessions?
 
 TASK 3 - NOTABLE FACTS EXTRACTION:
-Maintain a curated list of facts about the user's situation. Output the COMPLETE updated list.
+Maintain a curated list of CATEGORIZED facts about the user's situation. Output the COMPLETE updated list.
 
-WHAT TO INCLUDE:
-- Emotional context: feelings, frustrations, fears, hopes
-- Situational facts: events, circumstances, timeline of conflict
-- People & relationships: names, roles, relationships mentioned (e.g., "daughter Emma is 14")
+CATEGORIES (use these exact names):
+- People: names, roles, relationships mentioned (e.g., "daughter Emma is 14")
+- Logistics: scheduling, location, practical circumstances
+- Conflict: specific disagreements, triggers, patterns
+- Emotional: feelings, frustrations, fears, hopes
+- History: past events, relationship timeline, backstory
 
 WHAT TO EXCLUDE:
 - Meta-commentary about the session/process
@@ -136,6 +145,7 @@ WHAT TO EXCLUDE:
 - Session style preferences
 
 RULES:
+- Each fact MUST have a category and fact text
 - Keep facts concise (1 sentence each)
 - Update/replace outdated facts with newer information
 - Soft limit: 15-20 facts. If exceeding, consolidate/merge similar facts
@@ -153,9 +163,16 @@ OUTPUT JSON only:
     "validationReason": "why invalid (only if detected=true and isValid=false)"
   },
   "topicContext": "brief description of what user is discussing",
-  "notableFacts": ["fact 1", "fact 2", "..."]
+  "notableFacts": [
+    { "category": "People", "fact": "daughter Emma is 14" },
+    { "category": "Emotional", "fact": "feeling overwhelmed by work demands" },
+    { "category": "Conflict", "fact": "partner wants more quality time together" }
+  ]
 }`;
 }
+
+/** Valid categories for notable facts */
+const VALID_FACT_CATEGORIES = ['People', 'Logistics', 'Conflict', 'Emotional', 'History'];
 
 /**
  * Normalize the classifier response
@@ -170,15 +187,26 @@ function normalizeResult(raw: unknown): PartnerSessionClassifierResult {
     ? (category.toUpperCase() as MemoryCategory)
     : undefined;
 
-  // Normalize notable facts
+  // Normalize notable facts to CategorizedFact[] format
   const rawFacts = result.notableFacts;
-  let notableFacts: string[] | undefined;
+  let notableFacts: CategorizedFact[] | undefined;
   if (Array.isArray(rawFacts)) {
-    // Filter to only valid non-empty strings, limit to 20 facts
     notableFacts = rawFacts
-      .filter((f): f is string => typeof f === 'string' && f.trim().length > 0)
-      .map((f) => f.trim())
-      .slice(0, 20);
+      .filter((f): f is { category: string; fact: string } => {
+        // Validate shape: must have category and fact strings
+        if (typeof f !== 'object' || f === null) return false;
+        const obj = f as Record<string, unknown>;
+        return typeof obj.category === 'string' && typeof obj.fact === 'string' &&
+               obj.category.trim().length > 0 && obj.fact.trim().length > 0;
+      })
+      .map((f) => ({
+        // Normalize category to title case if it's a known category
+        category: VALID_FACT_CATEGORIES.find(
+          (c) => c.toLowerCase() === f.category.toLowerCase()
+        ) || f.category.trim(),
+        fact: f.fact.trim(),
+      }))
+      .slice(0, 20); // Limit to 20 facts
   }
 
   return {
@@ -225,9 +253,10 @@ Output only valid JSON.`;
     const userPrompt = buildClassifierPrompt(input);
 
     // Use circuit breaker to prevent blocking
+    // Fallback returns undefined for facts (caller can preserve existing facts)
     const fallback: PartnerSessionClassifierResult = {
       memoryIntent: { detected: false, confidence: 'low' },
-      notableFacts: input.existingFacts, // Preserve existing facts on failure
+      notableFacts: undefined, // On failure, don't overwrite existing facts
     };
 
     const result = await withHaikuCircuitBreaker(
@@ -262,16 +291,30 @@ Output only valid JSON.`;
     // Save notable facts to UserVessel (fire-and-forget)
     if (normalized.notableFacts && normalized.notableFacts.length > 0) {
       try {
-        await prisma.userVessel.updateMany({
+        const updateResult = await prisma.userVessel.updateMany({
           where: {
             userId: input.userId,
             sessionId: input.sessionId,
           },
           data: {
-            notableFacts: normalized.notableFacts,
+            // Prisma expects InputJsonValue - cast through unknown to satisfy type checker
+            // The actual data is valid JSON: CategorizedFact[]
+            notableFacts: normalized.notableFacts as unknown as Parameters<
+              typeof prisma.userVessel.update
+            >['0']['data']['notableFacts'],
           },
         });
-        console.log(`${logPrefix} Saved ${normalized.notableFacts.length} notable facts to UserVessel`);
+        if (updateResult.count > 0) {
+          console.log(`${logPrefix} Saved ${normalized.notableFacts.length} notable facts to UserVessel (${updateResult.count} row(s) updated)`);
+
+          // Trigger session content embedding (fire-and-forget)
+          // Per fact-ledger architecture, we embed at session level after facts update
+          embedSessionContent(input.sessionId, input.userId, input.turnId).catch((err: unknown) =>
+            console.warn(`${logPrefix} Failed to embed session content:`, err)
+          );
+        } else {
+          console.warn(`${logPrefix} No UserVessel found to update for session=${input.sessionId}, user=${input.userId}. Facts not saved.`);
+        }
       } catch (err) {
         console.error(`${logPrefix} Failed to save notable facts:`, err);
       }

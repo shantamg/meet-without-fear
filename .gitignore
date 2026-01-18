@@ -103,6 +103,9 @@ hive-mind-prompt-*.txt
 mobile/android/
 mobile/ios/
 
+# Prompt debug logs (temp files for debugging LLM calls)
+backend/tmp/prompts/
+
 # Ralph session files
 .ralph_session
 .ralph_session_history

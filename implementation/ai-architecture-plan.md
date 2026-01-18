@@ -1,6 +1,27 @@
 # AI Architecture Implementation Plan
 
-## Audit: Planned vs Implemented
+> ⚠️ **HISTORICAL DOCUMENT - Last Updated: 2026-01-18**
+>
+> This was a planning document created before implementation. **Most items marked as "MISSING" below have since been implemented.** For the current state of the AI architecture, see:
+> - `docs/backend-prompting-architecture.md` - Comprehensive prompting architecture
+> - `docs/AI_MEMORY_ARCHITECTURE_AUDIT.md` - Memory and retrieval systems
+> - `docs/specs/notable-facts-extraction.md` - Notable facts specification
+>
+> **Implementation Status (as of 2026-01-18):**
+> - ✅ Two-model stratification (Haiku + Sonnet) - IMPLEMENTED
+> - ✅ Memory Intent Layer - IMPLEMENTED (`backend/src/services/memory-intent.ts`)
+> - ✅ Context Assembler - IMPLEMENTED (`backend/src/services/context-assembler.ts`)
+> - ✅ Context Retriever - IMPLEMENTED (`backend/src/services/context-retriever.ts`)
+> - ✅ Conversation Summarizer - IMPLEMENTED (`backend/src/services/conversation-summarizer.ts`)
+> - ✅ Notable Facts Extraction - IMPLEMENTED (`backend/src/services/partner-session-classifier.ts`)
+> - ✅ Stage-specific prompts - IMPLEMENTED (`backend/src/services/stage-prompts.ts`)
+> - ✅ Vector embeddings (pgvector) - IMPLEMENTED
+> - ✅ Emotional thread tracking - IMPLEMENTED
+> - ✅ UserVessel content storage - IMPLEMENTED and populated
+
+---
+
+## Original Audit: Planned vs Implemented (Historical)
 
 ### Model Stratification
 

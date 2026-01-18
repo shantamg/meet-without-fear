@@ -31,11 +31,12 @@ import {
 import { notifyPartner, publishSessionEvent, notifySessionMembers, publishMessageAIResponse, publishMessageError } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
-import { embedMessage } from '../services/embedding';
+import { embedSessionContent } from '../services/embedding';
 import { updateSessionSummary, getSessionSummary } from '../services/conversation-summarizer';
 import { runReconcilerForDirection, getSharedContextForGuesser } from '../services/reconciler';
 import { updateContext } from '../lib/request-context';
 import { runPartnerSessionClassifier } from '../services/partner-session-classifier';
+import { consolidateGlobalFacts } from '../services/global-memory';
 
 // ============================================================================
 // Helpers
@@ -455,7 +456,20 @@ async function processAIResponseInBackground(ctx: {
       },
       select: { notableFacts: true },
     });
-    const existingFacts = userVessel?.notableFacts ?? [];
+    // Extract fact strings from JSON structure (supports both old string[] and new CategorizedFact[])
+    const existingFacts: string[] = (() => {
+      if (!userVessel?.notableFacts) return [];
+      const facts = userVessel.notableFacts as unknown;
+      if (Array.isArray(facts)) {
+        // Check if it's CategorizedFact[] (has category and fact properties)
+        if (facts.length > 0 && typeof facts[0] === 'object' && 'fact' in facts[0]) {
+          return facts.map((f: { fact: string }) => f.fact);
+        }
+        // Old format: string[]
+        return facts.filter((f): f is string => typeof f === 'string');
+      }
+      return [];
+    })();
 
     // Generate turnId for this user action (includes userId to differentiate users)
     const turnId = `${sessionId}-${userId}-${userTurnCount}`;
@@ -594,6 +608,7 @@ async function processAIResponseInBackground(ctx: {
     // Start partner session classifier in parallel with orchestrator (fire-and-forget)
     // This consolidates memory intent detection + validation into one non-blocking Haiku call
     // It doesn't depend on orchestrator results, so we can run it in parallel
+    console.log(`[sendMessage:${requestId}] [BG] 🚀 Triggering background classification...`);
     runPartnerSessionClassifier({
       userMessage: content,
       conversationHistory: history.slice(-5).map((m) => ({
@@ -605,9 +620,16 @@ async function processAIResponseInBackground(ctx: {
       turnId,
       partnerName,
       existingFacts,
-    }).catch((err) =>
-      console.warn(`[sendMessage:${requestId}] [BG] Partner session classifier failed:`, err)
-    );
+    })
+      .then((result) => {
+        console.log(`[sendMessage:${requestId}] [BG] ✅ Classification finished:`, {
+          memoryDetected: result?.memoryIntent?.detected ?? false,
+          factsCount: result?.notableFacts?.length ?? 0,
+        });
+      })
+      .catch((err) => {
+        console.error(`[sendMessage:${requestId}] [BG] ❌ Classification failed:`, err);
+      });
 
     // Get AI response using full orchestration pipeline
     console.log(`[sendMessage:${requestId}] [BG] Calling orchestrator with ${history.length} messages...`);
@@ -706,18 +728,13 @@ async function processAIResponseInBackground(ctx: {
     // Broadcast text to Status Site
     brainService.broadcastMessage(aiMessage);
 
-    // Embed messages for cross-session retrieval (non-blocking)
-    embedMessage(userMessageId, turnId).catch((err) =>
-      console.warn(`[sendMessage:${requestId}] [BG] Failed to embed user message:`, err)
-    );
-    embedMessage(aiMessage.id, turnId).catch((err) =>
-      console.warn(`[sendMessage:${requestId}] [BG] Failed to embed AI message:`, err)
-    );
-
-    // Summarize older parts of the conversation (non-blocking)
-    updateSessionSummary(sessionId, userId, turnId).catch((err) =>
-      console.warn(`[sendMessage:${requestId}] [BG] Failed to update session summary:`, err)
-    );
+    // Summarize and embed session content for cross-session retrieval (non-blocking)
+    // Per fact-ledger architecture, we embed at session level after summary updates
+    updateSessionSummary(sessionId, userId, turnId)
+      .then(() => embedSessionContent(sessionId, userId, turnId))
+      .catch((err: unknown) =>
+        console.warn(`[sendMessage:${requestId}] [BG] Failed to update summary/embedding:`, err)
+      );
 
     // Partner session classifier is already running in parallel (started before orchestrator)
     // No need to wait for it - it's fire-and-forget
@@ -1048,10 +1065,10 @@ Respond in JSON format:
           },
         });
 
-        // Embed for cross-session retrieval (non-blocking)
-        // Use same turnId as the transition response for cost attribution
-        embedMessage(aiMessage.id, turnId).catch((err) =>
-          console.warn('[confirmFeelHeard] Failed to embed transition message:', err)
+        // Embed session content for cross-session retrieval (non-blocking)
+        // Per fact-ledger architecture, we embed at session level
+        embedSessionContent(sessionId, user.id, turnId).catch((err: unknown) =>
+          console.warn('[confirmFeelHeard] Failed to embed session content:', err)
         );
 
         transitionMessage = {
@@ -1092,6 +1109,12 @@ Respond in JSON format:
           completedBy: user.id,
         });
       }
+
+      // Consolidate global facts when Stage 1 completes (fire-and-forget)
+      // Per fact-ledger architecture, we merge session facts into user's global profile
+      consolidateGlobalFacts(user.id, sessionId, turnId).catch((err: unknown) =>
+        console.warn('[confirmFeelHeard] Failed to consolidate global facts:', err)
+      );
     }
 
     // If both partners are ready, publish advancement event
@@ -1565,10 +1588,10 @@ export async function getInitialMessage(
       },
     });
 
-    // Embed initial message for cross-session retrieval (non-blocking)
-    // Use same turnId as the welcome response for cost attribution
-    embedMessage(aiMessage.id, turnId).catch((err) =>
-      console.warn('[getInitialMessage] Failed to embed message:', err)
+    // Embed session content for cross-session retrieval (non-blocking)
+    // Per fact-ledger architecture, we embed at session level
+    embedSessionContent(sessionId, user.id, turnId).catch((err: unknown) =>
+      console.warn('[getInitialMessage] Failed to embed session content:', err)
     );
 
     console.log(`[getInitialMessage] Generated initial message for session ${sessionId}, stage ${currentStage}`);
@@ -2066,15 +2089,60 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
     // =========================================================================
     // Background tasks (non-blocking)
     // =========================================================================
-    embedMessage(userMessage.id, turnId).catch(err =>
-      console.warn(`[sendMessageStream:${requestId}] Failed to embed user message:`, err)
-    );
-    embedMessage(aiMessage.id, turnId).catch(err =>
-      console.warn(`[sendMessageStream:${requestId}] Failed to embed AI message:`, err)
-    );
-    updateSessionSummary(sessionId, user.id, turnId).catch(err =>
-      console.warn(`[sendMessageStream:${requestId}] Failed to update session summary:`, err)
-    );
+    // Summarize and embed session content for cross-session retrieval
+    // Per fact-ledger architecture, we embed at session level after summary updates
+    updateSessionSummary(sessionId, user.id, turnId)
+      .then(() => embedSessionContent(sessionId, user.id, turnId))
+      .catch((err: unknown) =>
+        console.warn(`[sendMessageStream:${requestId}] Failed to update summary/embedding:`, err)
+      );
+
+    // Run partner session classifier (fire-and-forget)
+    // This extracts notable facts and detects memory intents
+    console.log(`[sendMessageStream:${requestId}] 🚀 Triggering background classification...`);
+    (async () => {
+      try {
+        // Fetch existing facts for the classifier
+        const userVessel = await prisma.userVessel.findUnique({
+          where: { userId_sessionId: { userId: user.id, sessionId } },
+          select: { notableFacts: true },
+        });
+        // Extract fact strings from JSON structure (supports both old string[] and new CategorizedFact[])
+        const existingFacts: string[] = (() => {
+          if (!userVessel?.notableFacts) return [];
+          const facts = userVessel.notableFacts as unknown;
+          if (Array.isArray(facts)) {
+            // Check if it's CategorizedFact[] (has category and fact properties)
+            if (facts.length > 0 && typeof facts[0] === 'object' && 'fact' in facts[0]) {
+              return facts.map((f: { fact: string }) => f.fact);
+            }
+            // Old format: string[]
+            return facts.filter((f): f is string => typeof f === 'string');
+          }
+          return [];
+        })();
+
+        const result = await runPartnerSessionClassifier({
+          userMessage: content,
+          conversationHistory: history.slice(-5).map((m) => ({
+            role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+            content: m.content,
+          })),
+          sessionId,
+          userId: user.id,
+          turnId,
+          partnerName,
+          existingFacts,
+        });
+
+        console.log(`[sendMessageStream:${requestId}] ✅ Classification finished:`, {
+          memoryDetected: result?.memoryIntent?.detected ?? false,
+          factsCount: result?.notableFacts?.length ?? 0,
+        });
+      } catch (err) {
+        console.error(`[sendMessageStream:${requestId}] ❌ Classification failed:`, err);
+      }
+    })();
 
     // End response
     res.end();

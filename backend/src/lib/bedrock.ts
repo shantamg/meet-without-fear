@@ -22,6 +22,8 @@ import {
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import { brainService, BrainActivityCallType } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // AWS Bedrock Pricing (USD per 1,000 tokens) - Verified Jan 2026
 const PRICING = {
@@ -33,6 +35,91 @@ const PRICING = {
   'claude-3-5-haiku': { input: 0.001, output: 0.005 },
   'titan-embed': { input: 0.00002, output: 0.0 },
 } as const;
+
+// ============================================================================
+// Prompt Debug Logging
+// ============================================================================
+
+/**
+ * Directory for storing prompt debug logs.
+ * Files are saved to backend/tmp/prompts/ (gitignored).
+ */
+const PROMPT_LOG_DIR = path.join(__dirname, '../../tmp/prompts');
+
+/**
+ * Save a prompt to a temp file for debugging.
+ * Files are named with timestamp and call type identifier.
+ *
+ * @param params - Prompt details to log
+ * @returns The file path where the prompt was saved, or null if disabled/failed
+ */
+function logPromptToFile(params: {
+  callType?: BrainActivityCallType | null;
+  operation: string;
+  model: string;
+  systemPrompt: string;
+  messages: { role: string; content: string }[];
+  maxTokens?: number;
+  sessionId: string;
+  turnId?: string;
+}): string | null {
+  // Skip if env var is set to disable
+  if (process.env.DISABLE_PROMPT_LOGGING === 'true') {
+    return null;
+  }
+
+  console.log(`[Prompt Logger] Logging ${params.callType || params.operation} for model ${params.model}`);
+
+  try {
+    // Ensure directory exists
+    if (!fs.existsSync(PROMPT_LOG_DIR)) {
+      fs.mkdirSync(PROMPT_LOG_DIR, { recursive: true });
+    }
+
+    // Create timestamp for filename: YYYY-MM-DD_HH-MM-SS-mmm
+    const now = new Date();
+    const timestamp = now.toISOString()
+      .replace(/:/g, '-')
+      .replace(/\./g, '-')
+      .replace('T', '_')
+      .replace('Z', '');
+
+    // Use callType if available, otherwise operation name
+    const identifier = params.callType || params.operation || 'unknown';
+
+    // Sanitize identifier for filename
+    const safeIdentifier = String(identifier)
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .toLowerCase();
+
+    const filename = `${timestamp}_${safeIdentifier}.json`;
+    const filepath = path.join(PROMPT_LOG_DIR, filename);
+
+    // Build the log content with full prompt details
+    const logContent = {
+      timestamp: now.toISOString(),
+      callType: params.callType,
+      operation: params.operation,
+      model: params.model,
+      sessionId: params.sessionId,
+      turnId: params.turnId,
+      maxTokens: params.maxTokens,
+      systemPrompt: params.systemPrompt,
+      systemPromptLength: params.systemPrompt.length,
+      messages: params.messages,
+      totalMessageLength: params.messages.reduce((acc, m) => acc + m.content.length, 0),
+      combinedPromptLength: params.systemPrompt.length +
+        params.messages.reduce((acc, m) => acc + m.content.length, 0),
+    };
+
+    fs.writeFileSync(filepath, JSON.stringify(logContent, null, 2));
+    return filepath;
+  } catch (error) {
+    // Silent fail - don't let logging break the main flow
+    console.warn('[Bedrock] Failed to log prompt to file:', error);
+    return null;
+  }
+}
 
 // ============================================================================
 // Configuration - Two Model Stratification
@@ -201,6 +288,18 @@ export async function getCompletion(options: CompletionOptions): Promise<string 
 
   const { systemPrompt, messages, maxTokens = 2048, thinkingBudget } = options;
 
+  // Log prompt to file for debugging
+  logPromptToFile({
+    callType: options.callType,
+    operation: options.operation ?? 'converse',
+    model: BEDROCK_MODEL_ID,
+    systemPrompt,
+    messages,
+    maxTokens,
+    sessionId: options.sessionId,
+    turnId: options.turnId,
+  });
+
   const system: SystemContentBlock[] = [{ text: systemPrompt }];
   const inferenceConfig: InferenceConfiguration = { maxTokens };
 
@@ -261,6 +360,18 @@ export async function getModelCompletion(
   const modelId = model === 'haiku' ? BEDROCK_HAIKU_MODEL_ID : BEDROCK_SONNET_MODEL_ID;
   const operation = options.operation ?? `converse-${model}`;
   const startTime = Date.now();
+
+  // Log prompt to file for debugging
+  logPromptToFile({
+    callType: options.callType,
+    operation,
+    model: modelId,
+    systemPrompt,
+    messages,
+    maxTokens,
+    sessionId: options.sessionId,
+    turnId: options.turnId,
+  });
 
   const system: SystemContentBlock[] = [{ text: systemPrompt }];
   const inferenceConfig: InferenceConfiguration = { maxTokens };
@@ -552,6 +663,18 @@ export async function* getSonnetStreamingResponse(
 
   const { systemPrompt, messages, tools, maxTokens = 2048 } = options;
   const startTime = Date.now();
+
+  // Log prompt to file for debugging
+  logPromptToFile({
+    callType: options.callType,
+    operation: options.operation,
+    model: BEDROCK_SONNET_MODEL_ID,
+    systemPrompt,
+    messages,
+    maxTokens,
+    sessionId: options.sessionId,
+    turnId: options.turnId,
+  });
 
   const system: SystemContentBlock[] = [{ text: systemPrompt }];
   const inferenceConfig: InferenceConfiguration = { maxTokens };

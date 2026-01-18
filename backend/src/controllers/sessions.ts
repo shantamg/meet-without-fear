@@ -20,7 +20,7 @@ import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
-import { embedMessage } from '../services/embedding';
+import { embedSessionContent } from '../services/embedding';
 import { updateSessionSummary, getSessionSummary } from '../services/conversation-summarizer';
 import { updateContext } from '../lib/request-context';
 
@@ -1050,15 +1050,13 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
         },
       });
 
-      // Embed message for cross-session retrieval (non-blocking)
-      embedMessage(aiMessage.id, turnId).catch((err) =>
-        console.warn('[confirmInvitationMessage] Failed to embed message:', err)
-      );
-
-      // Summarize older parts of the conversation (non-blocking)
-      updateSessionSummary(sessionId, user.id, turnId).catch((err) =>
-        console.warn('[confirmInvitationMessage] Failed to update session summary:', err)
-      );
+      // Summarize and embed session content for cross-session retrieval (non-blocking)
+      // Per fact-ledger architecture, we embed at session level after summary updates
+      updateSessionSummary(sessionId, user.id, turnId)
+        .then(() => embedSessionContent(sessionId, user.id, turnId))
+        .catch((err: unknown) =>
+          console.warn('[confirmInvitationMessage] Failed to update summary/embedding:', err)
+        );
 
       transitionMessage = {
         id: aiMessage.id,

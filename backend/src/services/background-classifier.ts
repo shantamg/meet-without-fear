@@ -16,10 +16,17 @@ import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 import type { MemorySuggestion, MemoryCategory } from '@meet-without-fear/shared';
 import { prisma } from '../lib/prisma';
+import { embedInnerWorkSessionContent } from './embedding';
 
 // ============================================================================
 // Types
 // ============================================================================
+
+/** A categorized fact from the fact-ledger */
+export interface CategorizedFact {
+  category: string;
+  fact: string;
+}
 
 export interface BackgroundClassifierResult {
   memoryIntent: {
@@ -36,6 +43,8 @@ export interface BackgroundClassifierResult {
     topics?: string[];
   };
   summary?: string;
+  /** Notable facts about the user's situation, emotions, and circumstances (categorized) */
+  notableFacts?: CategorizedFact[];
 }
 
 export interface BackgroundClassifierInput {
@@ -45,12 +54,16 @@ export interface BackgroundClassifierInput {
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
   /** Session ID for logging */
   sessionId: string;
+  /** User ID for database updates */
+  userId: string;
   /** Turn ID for cost attribution */
   turnId: string;
   /** Current session title (if any) */
   currentTitle?: string;
   /** Current session summary (if any) */
   currentSummary?: string;
+  /** Existing notable facts (to update/consolidate) */
+  existingFacts?: string[];
 }
 
 // ============================================================================
@@ -70,11 +83,14 @@ const VALID_CATEGORIES: MemoryCategory[] = [
 // Classifier
 // ============================================================================
 
+/** Valid categories for notable facts */
+const VALID_FACT_CATEGORIES = ['People', 'Logistics', 'Conflict', 'Emotional', 'History'];
+
 /**
  * Build the unified classification prompt.
  */
 function buildClassifierPrompt(input: BackgroundClassifierInput): string {
-  const { userMessage, conversationHistory, currentTitle, currentSummary } = input;
+  const { userMessage, conversationHistory, currentTitle, currentSummary, existingFacts } = input;
 
   // Format conversation history
   const historyText = conversationHistory
@@ -82,12 +98,18 @@ function buildClassifierPrompt(input: BackgroundClassifierInput): string {
     .map((m) => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`)
     .join('\n');
 
+  // Format existing facts if any
+  const existingFactsText = existingFacts && existingFacts.length > 0
+    ? `CURRENT NOTABLE FACTS:\n${existingFacts.map((f, i) => `${i + 1}. ${f}`).join('\n')}`
+    : 'CURRENT NOTABLE FACTS: (none yet)';
+
   return `Analyze this Inner Thoughts conversation and provide:
 
 1. MEMORY INTENT: Only if user EXPLICITLY asks to remember something using words like "remember", "always", "from now on"
 2. THEMES: 2-3 key themes being explored
 3. SESSION METADATA: Title (if ${currentTitle ? 'needs update' : 'not yet set'}), mood, topics
 4. SUMMARY: Brief 1-2 sentence summary of the session focus
+5. NOTABLE FACTS: Categorized facts about the user's situation
 
 CONVERSATION:
 ${historyText}
@@ -98,10 +120,29 @@ User: ${userMessage}
 ${currentTitle ? `Current Title: ${currentTitle}` : ''}
 ${currentSummary ? `Current Summary: ${currentSummary}` : ''}
 
+${existingFactsText}
+
 MEMORY INTENT RULES - BE CONSERVATIVE:
 - ONLY detect if user uses explicit memory-request language: "remember", "always", "from now on", "going forward"
 - DO NOT flag normal sharing of information, feelings, or preferences
 - Categories: AI_NAME, LANGUAGE, COMMUNICATION, PERSONAL_INFO, RELATIONSHIP, PREFERENCE
+
+NOTABLE FACTS EXTRACTION:
+Maintain a curated list of CATEGORIZED facts about the user's situation. Output the COMPLETE updated list.
+
+CATEGORIES (use these exact names):
+- People: names, roles, relationships mentioned
+- Logistics: scheduling, location, practical circumstances
+- Conflict: specific disagreements, triggers, patterns
+- Emotional: feelings, frustrations, fears, hopes
+- History: past events, relationship timeline, backstory
+
+RULES:
+- Each fact MUST have a category and fact text
+- Keep facts concise (1 sentence each)
+- Update/replace outdated facts with newer information
+- Soft limit: 15-20 facts. If exceeding, consolidate/merge similar facts
+- Output the FULL list each time (not just new facts)
 
 OUTPUT JSON only:
 {
@@ -118,7 +159,11 @@ OUTPUT JSON only:
     "mood": "emotional tone (e.g., anxious, reflective, processing)",
     "topics": ["topic1", "topic2"]
   },
-  "summary": "Brief summary of what user is processing"
+  "summary": "Brief summary of what user is processing",
+  "notableFacts": [
+    { "category": "People", "fact": "..." },
+    { "category": "Emotional", "fact": "..." }
+  ]
 }`;
 }
 
@@ -134,6 +179,28 @@ function normalizeResult(raw: unknown): BackgroundClassifierResult {
   const normalizedCategory = category && VALID_CATEGORIES.includes(category.toUpperCase() as MemoryCategory)
     ? (category.toUpperCase() as MemoryCategory)
     : undefined;
+
+  // Normalize notable facts to CategorizedFact[] format
+  const rawFacts = result.notableFacts;
+  let notableFacts: CategorizedFact[] | undefined;
+  if (Array.isArray(rawFacts)) {
+    notableFacts = rawFacts
+      .filter((f): f is { category: string; fact: string } => {
+        // Validate shape: must have category and fact strings
+        if (typeof f !== 'object' || f === null) return false;
+        const obj = f as Record<string, unknown>;
+        return typeof obj.category === 'string' && typeof obj.fact === 'string' &&
+               obj.category.trim().length > 0 && obj.fact.trim().length > 0;
+      })
+      .map((f) => ({
+        // Normalize category to title case if it's a known category
+        category: VALID_FACT_CATEGORIES.find(
+          (c) => c.toLowerCase() === f.category.toLowerCase()
+        ) || f.category.trim(),
+        fact: f.fact.trim(),
+      }))
+      .slice(0, 20); // Limit to 20 facts
+  }
 
   return {
     memoryIntent: {
@@ -158,6 +225,7 @@ function normalizeResult(raw: unknown): BackgroundClassifierResult {
         : undefined,
     },
     summary: result.summary as string | undefined,
+    notableFacts,
   };
 }
 
@@ -174,17 +242,22 @@ export async function runBackgroundClassifier(
     console.log(`${logPrefix} Starting classification for session ${input.sessionId}`);
 
     const systemPrompt = `You are an AI assistant analyzing an Inner Thoughts (self-reflection) session.
-Your job is to extract themes, suggest session metadata, and detect ONLY explicit memory requests.
+Your job is to:
+1. Extract themes and suggest session metadata
+2. Detect ONLY explicit memory requests
+3. Extract notable facts about the user's situation and emotions
 Be conservative with memory detection - most messages are NOT memory requests.
 Output only valid JSON.`;
 
     const userPrompt = buildClassifierPrompt(input);
 
     // Use circuit breaker to prevent blocking
+    // Fallback returns undefined for facts (caller can preserve existing facts)
     const fallback: BackgroundClassifierResult = {
       memoryIntent: { detected: false, confidence: 'low' },
       themes: [],
       sessionMetadata: {},
+      notableFacts: undefined, // On failure, don't overwrite existing facts
     };
 
     const result = await withHaikuCircuitBreaker(
@@ -192,7 +265,7 @@ Output only valid JSON.`;
         return await getHaikuJson<Record<string, unknown>>({
           systemPrompt,
           messages: [{ role: 'user', content: userPrompt }],
-          maxTokens: 512,
+          maxTokens: 1024, // Increased to accommodate notable facts
           sessionId: input.sessionId,
           turnId: input.turnId,
           operation: 'background-classifier',
@@ -213,7 +286,14 @@ Output only valid JSON.`;
       memoryDetected: normalized.memoryIntent.detected,
       themes: normalized.themes,
       hasMetadata: Boolean(normalized.sessionMetadata.title),
+      factsCount: normalized.notableFacts?.length ?? 0,
     });
+
+    // Trigger session content embedding (fire-and-forget)
+    // Per fact-ledger architecture, we embed at session level after summary/facts update
+    embedInnerWorkSessionContent(input.sessionId, input.turnId).catch((err: unknown) =>
+      console.warn(`${logPrefix} Failed to embed session content:`, err)
+    );
 
     return normalized;
   } catch (error) {

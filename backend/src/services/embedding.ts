@@ -3,11 +3,15 @@
  *
  * Generates and stores embeddings for semantic search.
  * Uses Titan for embedding generation and pgvector for storage/querying.
+ *
+ * Architecture: Session-Level Embeddings (Fact-Ledger)
+ * - Session-level content embeddings replace message-level embeddings
+ * - Facts + summary are embedded at the session level for retrieval
+ * - Message-level embedding functions have been deprecated and removed
  */
 
 import { prisma } from '../lib/prisma';
-import { getEmbedding, EMBEDDING_DIMENSIONS } from '../lib/bedrock';
-import { Prisma } from '@prisma/client';
+import { getEmbedding } from '../lib/bedrock';
 
 // ============================================================================
 // Types
@@ -27,307 +31,19 @@ export interface SimilarSession {
   similarity: number;
 }
 
-export interface SimilarMessage {
-  messageId: string;
+/** A categorized fact from the fact-ledger */
+export interface CategorizedFact {
+  category: string;
+  fact: string;
+}
+
+/** Result from session content search */
+export interface SessionContentMatch {
   sessionId: string;
-  content: string;
+  vesselId: string;
   similarity: number;
-}
-
-// ============================================================================
-// Session Embeddings
-// ============================================================================
-
-/**
- * Generate a text summary for a session to embed.
- * Combines partner name, topic, and recent context.
- */
-function buildSessionEmbeddingText(session: SessionSummary): string {
-  const parts: string[] = [];
-
-  parts.push(`Session with ${session.partnerName}`);
-
-  if (session.topic) {
-    parts.push(`Topic: ${session.topic}`);
-  }
-
-  if (session.recentContext) {
-    parts.push(`Recent: ${session.recentContext}`);
-  }
-
-  parts.push(`Status: ${session.status}`);
-
-  return parts.join('. ');
-}
-
-/**
- * Generate and store embedding for a user's session vessel.
- * This embeds the session summary for semantic search.
- */
-export async function embedSessionVessel(
-  sessionId: string,
-  userId: string
-): Promise<boolean> {
-  console.log('[Embedding] Starting embedSessionVessel for session:', sessionId);
-
-  // Get session details
-  const session = await prisma.session.findUnique({
-    where: { id: sessionId },
-    include: {
-      relationship: {
-        include: {
-          members: { include: { user: true } },
-        },
-      },
-      userVessels: {
-        where: { userId },
-        include: {
-          documents: {
-            where: { type: 'INITIAL_CONTEXT' },
-            take: 1,
-          },
-        },
-      },
-      messages: {
-        where: { senderId: userId },
-        orderBy: { timestamp: 'desc' },
-        take: 3,
-        select: { content: true },
-      },
-    },
-  });
-
-  if (!session) {
-    console.warn(`[Embedding] Session ${sessionId} not found`);
-    return false;
-  }
-
-  const vessel = session.userVessels[0];
-  if (!vessel) {
-    console.warn(`[Embedding] No vessel found for user ${userId} in session ${sessionId}`);
-    return false;
-  }
-
-  // Build session summary
-  const partner = session.relationship.members.find((m) => m.userId !== userId);
-  const myMember = session.relationship.members.find((m) => m.userId === userId);
-  // Partner name: use partner's actual name if they've joined,
-  // otherwise use the nickname I gave them when creating the session
-  const partnerName =
-    partner?.user.firstName ||
-    partner?.user.name ||
-    partner?.nickname ||
-    myMember?.nickname ||
-    'Unknown';
-  const topic = vessel.documents[0]?.content;
-  const recentContext = session.messages.map((m) => m.content).join(' ');
-
-  const summary: SessionSummary = {
-    id: sessionId,
-    partnerName,
-    topic,
-    recentContext: recentContext.slice(0, 500), // Limit context length
-    status: session.status,
-  };
-
-  const embeddingText = buildSessionEmbeddingText(summary);
-
-  // Generate embedding
-  const embedding = await getEmbedding(embeddingText, { sessionId });
-  if (!embedding) {
-    console.warn(`[Embedding] Failed to generate embedding for session ${sessionId}`);
-    return false;
-  }
-
-  // Store embedding using raw SQL (Prisma doesn't support vector types directly)
-  await prisma.$executeRaw`
-    UPDATE "UserVessel"
-    SET embedding = ${vectorToSql(embedding)}::vector
-    WHERE id = ${vessel.id}
-  `;
-
-  console.log(`[Embedding] Embedded session vessel ${vessel.id}`);
-  return true;
-}
-
-// ============================================================================
-// Message Embeddings
-// ============================================================================
-
-/**
- * Generate and store embedding for a message.
- * @param messageId - The message to embed
- * @param turnId - The turn ID for cost attribution (from the user action that triggered this)
- */
-export async function embedMessage(messageId: string, turnId: string): Promise<boolean> {
-  const message = await prisma.message.findUnique({
-    where: { id: messageId },
-    select: { id: true, content: true, sessionId: true },
-  });
-
-  if (!message) {
-    console.warn(`[Embedding] Message ${messageId} not found`);
-    return false;
-  }
-
-  const embedding = await getEmbedding(message.content, { sessionId: message.sessionId, turnId });
-  if (!embedding) {
-    console.warn(`[Embedding] Failed to generate embedding for message ${messageId}`);
-    return false;
-  }
-
-  await prisma.$executeRaw`
-    UPDATE "Message"
-    SET embedding = ${vectorToSql(embedding)}::vector
-    WHERE id = ${messageId}
-  `;
-
-  return true;
-}
-
-/**
- * Embed multiple messages in batch.
- * @param messageIds - The messages to embed
- * @param turnId - The turn ID for cost attribution (from the user action that triggered this)
- */
-export async function embedMessages(messageIds: string[], turnId: string): Promise<number> {
-  let successCount = 0;
-
-  // Process in parallel with concurrency limit
-  const batchSize = 5;
-  for (let i = 0; i < messageIds.length; i += batchSize) {
-    const batch = messageIds.slice(i, i + batchSize);
-    const results = await Promise.all(batch.map((id) => embedMessage(id, turnId)));
-    successCount += results.filter(Boolean).length;
-  }
-
-  return successCount;
-}
-
-// ============================================================================
-// Semantic Search
-// ============================================================================
-
-/**
- * Find sessions similar to the given query text.
- * Searches across all of a user's session vessels.
- */
-export async function findSimilarSessions(
-  userId: string,
-  queryText: string,
-  limit: number = 5,
-  threshold: number = 0.7, // Cosine similarity threshold (0-1, higher = more similar)
-  turnId?: string
-): Promise<SimilarSession[]> {
-  console.log('[Embedding] findSimilarSessions - generating query embedding');
-  const queryEmbedding = await getEmbedding(queryText, { turnId });
-  if (!queryEmbedding) {
-    console.warn('[Embedding] Failed to generate query embedding (Bedrock not configured?)');
-    return [];
-  }
-  console.log('[Embedding] Query embedding generated, dimensions:', queryEmbedding.length);
-
-  // Query using cosine similarity
-  // Note: pgvector uses <=> for cosine distance (0 = identical, 2 = opposite)
-  // We convert to similarity: 1 - (distance / 2)
-  // The query handles both:
-  // 1. Partner has joined: use their actual name
-  // 2. Partner hasn't joined: use the nickname stored on the inviter's membership
-  const results = await prisma.$queryRaw<
-    Array<{ session_id: string; partner_name: string; distance: number }>
-  >`
-    SELECT
-      s.id as session_id,
-      COALESCE(partner_user.name, partner_member.nickname, my_member.nickname, 'Unknown') as partner_name,
-      uv.embedding <=> ${vectorToSql(queryEmbedding)}::vector as distance
-    FROM "UserVessel" uv
-    JOIN "Session" s ON uv."sessionId" = s.id
-    JOIN "Relationship" r ON s."relationshipId" = r.id
-    JOIN "RelationshipMember" my_member ON r.id = my_member."relationshipId" AND my_member."userId" = ${userId}
-    LEFT JOIN "RelationshipMember" partner_member ON r.id = partner_member."relationshipId" AND partner_member."userId" != ${userId}
-    LEFT JOIN "User" partner_user ON partner_member."userId" = partner_user.id
-    WHERE uv."userId" = ${userId}
-      AND uv.embedding IS NOT NULL
-      AND s.status NOT IN ('ABANDONED', 'RESOLVED')
-    ORDER BY distance ASC
-    LIMIT ${limit}
-  `;
-
-  // Convert distance to similarity and filter by threshold
-  return results
-    .map((r) => ({
-      sessionId: r.session_id,
-      partnerName: r.partner_name,
-      similarity: 1 - r.distance / 2, // Convert cosine distance to similarity
-    }))
-    .filter((r) => r.similarity >= threshold);
-}
-
-/**
- * Find messages similar to the given query text within a session.
- */
-export async function findSimilarMessages(
-  sessionId: string,
-  queryText: string,
-  limit: number = 5,
-  threshold: number = 0.6,
-  turnId?: string
-): Promise<SimilarMessage[]> {
-  const queryEmbedding = await getEmbedding(queryText, { sessionId, turnId });
-  if (!queryEmbedding) {
-    return [];
-  }
-
-  const results = await prisma.$queryRaw<
-    Array<{ id: string; session_id: string; content: string; distance: number }>
-  >`
-    SELECT
-      m.id,
-      m."sessionId" as session_id,
-      m.content,
-      m.embedding <=> ${vectorToSql(queryEmbedding)}::vector as distance
-    FROM "Message" m
-    WHERE m."sessionId" = ${sessionId}
-      AND m.embedding IS NOT NULL
-    ORDER BY distance ASC
-    LIMIT ${limit}
-  `;
-
-  return results
-    .map((r) => ({
-      messageId: r.id,
-      sessionId: r.session_id,
-      content: r.content,
-      similarity: 1 - r.distance / 2,
-    }))
-    .filter((r) => r.similarity >= threshold);
-}
-
-/**
- * Find sessions where the partner name or topic matches semantically.
- * Used by the chat router to find relevant sessions.
- */
-export async function findRelevantSessions(
-  userId: string,
-  userMessage: string,
-  limit: number = 3,
-  turnId?: string
-): Promise<SimilarSession[]> {
-  console.log('[Embedding] findRelevantSessions for:', userMessage.slice(0, 50));
-
-  // First try vector search
-  const vectorResults = await findSimilarSessions(userId, userMessage, limit, 0.5, turnId);
-
-  console.log('[Embedding] Vector search results:', vectorResults.length);
-
-  // If we have good matches, return them
-  if (vectorResults.length > 0) {
-    return vectorResults;
-  }
-
-  // Fallback: No embeddings available, return empty
-  // The chat router will use name-based matching from its session list
-  return [];
+  partnerName: string;
+  facts?: CategorizedFact[];
 }
 
 // ============================================================================
@@ -351,128 +67,350 @@ export async function isEmbeddingEnabled(): Promise<boolean> {
 }
 
 // ============================================================================
-// Inner Work Message Embeddings
+// Session Content Embeddings (NEW - Fact-Ledger Architecture)
 // ============================================================================
 
 /**
- * Generate and store embedding for an inner work message.
- * @param messageId - The message to embed
- * @param turnId - The turn ID for cost attribution (from the user action that triggered this)
+ * Build text to embed for session content.
+ * Combines facts and summary into a single embeddable document.
  */
-export async function embedInnerWorkMessage(messageId: string, turnId: string): Promise<boolean> {
-  const message = await prisma.innerWorkMessage.findUnique({
-    where: { id: messageId },
-    select: { id: true, content: true, sessionId: true },
+function buildSessionContentText(
+  facts: CategorizedFact[] | null,
+  summaryText: string | null,
+  partnerName: string
+): string {
+  const parts: string[] = [];
+
+  parts.push(`Session with ${partnerName}`);
+
+  // Add facts by category
+  if (facts && facts.length > 0) {
+    const factsByCategory: Record<string, string[]> = {};
+    for (const f of facts) {
+      if (!factsByCategory[f.category]) {
+        factsByCategory[f.category] = [];
+      }
+      factsByCategory[f.category].push(f.fact);
+    }
+
+    for (const [category, categoryFacts] of Object.entries(factsByCategory)) {
+      parts.push(`${category}: ${categoryFacts.join('; ')}`);
+    }
+  }
+
+  // Add summary
+  if (summaryText) {
+    parts.push(`Summary: ${summaryText}`);
+  }
+
+  return parts.join('\n');
+}
+
+/**
+ * Embed session content (facts + summary) for a UserVessel.
+ * Call this after facts or summary are updated.
+ *
+ * @param sessionId - The session to embed
+ * @param userId - The user whose vessel to embed
+ * @param turnId - Optional turn ID for cost attribution
+ */
+export async function embedSessionContent(
+  sessionId: string,
+  userId: string,
+  turnId?: string
+): Promise<boolean> {
+  console.log('[Embedding] Starting embedSessionContent for session:', sessionId);
+
+  // Get vessel with facts and summary
+  const vessel = await prisma.userVessel.findUnique({
+    where: {
+      userId_sessionId: { userId, sessionId },
+    },
+    select: {
+      id: true,
+      notableFacts: true,
+      conversationSummary: true,
+      session: {
+        include: {
+          relationship: {
+            include: {
+              members: { include: { user: true } },
+            },
+          },
+        },
+      },
+    },
   });
 
-  if (!message) {
-    console.warn(`[Embedding] Inner work message ${messageId} not found`);
+  if (!vessel) {
+    console.warn(`[Embedding] No vessel found for session ${sessionId}, user ${userId}`);
     return false;
   }
 
-  const embedding = await getEmbedding(message.content, { sessionId: message.sessionId, turnId });
+  // Get partner name
+  const partner = vessel.session.relationship.members.find((m) => m.userId !== userId);
+  const myMember = vessel.session.relationship.members.find((m) => m.userId === userId);
+  const partnerName =
+    partner?.user.firstName ||
+    partner?.user.name ||
+    partner?.nickname ||
+    myMember?.nickname ||
+    'Unknown';
+
+  // Parse facts (stored as JSON)
+  let facts: CategorizedFact[] | null = null;
+  if (vessel.notableFacts) {
+    try {
+      // notableFacts is Prisma JsonValue, cast through unknown
+      facts = vessel.notableFacts as unknown as CategorizedFact[];
+    } catch {
+      console.warn(`[Embedding] Failed to parse notableFacts for vessel ${vessel.id}`);
+    }
+  }
+
+  // Parse summary
+  let summaryText: string | null = null;
+  if (vessel.conversationSummary) {
+    try {
+      const summaryData = JSON.parse(vessel.conversationSummary as string);
+      summaryText = summaryData.text || null;
+    } catch {
+      // If not JSON, use as-is
+      summaryText = vessel.conversationSummary as string;
+    }
+  }
+
+  // Skip if no content to embed
+  if (!facts?.length && !summaryText) {
+    console.log(`[Embedding] No content to embed for session ${sessionId}`);
+    return false;
+  }
+
+  // Build embedding text
+  const embeddingText = buildSessionContentText(facts, summaryText, partnerName);
+
+  // Generate embedding
+  const embedding = await getEmbedding(embeddingText, { sessionId, turnId });
   if (!embedding) {
-    console.warn(`[Embedding] Failed to generate embedding for inner work message ${messageId}`);
+    console.warn(`[Embedding] Failed to generate embedding for session ${sessionId}`);
     return false;
   }
 
+  // Store embedding
   await prisma.$executeRaw`
-    UPDATE "InnerWorkMessage"
-    SET embedding = ${vectorToSql(embedding)}::vector
-    WHERE id = ${messageId}
+    UPDATE "UserVessel"
+    SET "contentEmbedding" = ${vectorToSql(embedding)}::vector
+    WHERE id = ${vessel.id}
   `;
 
+  console.log(`[Embedding] Embedded session content for vessel ${vessel.id}`);
   return true;
 }
 
 /**
- * Find inner work messages similar to the given query text.
- * Searches across all of a user's inner work sessions.
+ * Search session content across a user's sessions.
+ * Returns sessions with similar content based on facts + summary embeddings.
+ *
+ * @param userId - The user to search sessions for
+ * @param queryText - The query text to search
+ * @param limit - Maximum results to return
+ * @param threshold - Minimum similarity threshold (0-1)
+ * @param turnId - Optional turn ID for cost attribution
  */
-export async function findSimilarInnerWorkMessages(
+export async function searchSessionContent(
   userId: string,
   queryText: string,
   limit: number = 5,
-  threshold: number = 0.6,
-  sessionId?: string,
+  threshold: number = 0.5,
   turnId?: string
-): Promise<Array<{ messageId: string; sessionId: string; content: string; similarity: number }>> {
-  const queryEmbedding = await getEmbedding(queryText, { sessionId, turnId });
+): Promise<SessionContentMatch[]> {
+  console.log('[Embedding] searchSessionContent for:', queryText.slice(0, 50));
+
+  const queryEmbedding = await getEmbedding(queryText, { turnId });
   if (!queryEmbedding) {
+    console.warn('[Embedding] Failed to generate query embedding');
     return [];
   }
 
+  // Query using cosine similarity on contentEmbedding
   const results = await prisma.$queryRaw<
-    Array<{ id: string; session_id: string; content: string; distance: number }>
+    Array<{
+      session_id: string;
+      vessel_id: string;
+      partner_name: string;
+      notable_facts: unknown;
+      distance: number;
+    }>
   >`
     SELECT
-      m.id,
-      m."sessionId" as session_id,
-      m.content,
-      m.embedding <=> ${vectorToSql(queryEmbedding)}::vector as distance
-    FROM "InnerWorkMessage" m
-    JOIN "InnerWorkSession" s ON m."sessionId" = s.id
-    WHERE s."userId" = ${userId}
-      AND m.embedding IS NOT NULL
+      s.id as session_id,
+      uv.id as vessel_id,
+      COALESCE(partner_user.name, partner_member.nickname, my_member.nickname, 'Unknown') as partner_name,
+      uv."notableFacts" as notable_facts,
+      uv."contentEmbedding" <=> ${vectorToSql(queryEmbedding)}::vector as distance
+    FROM "UserVessel" uv
+    JOIN "Session" s ON uv."sessionId" = s.id
+    JOIN "Relationship" r ON s."relationshipId" = r.id
+    JOIN "RelationshipMember" my_member ON r.id = my_member."relationshipId" AND my_member."userId" = ${userId}
+    LEFT JOIN "RelationshipMember" partner_member ON r.id = partner_member."relationshipId" AND partner_member."userId" != ${userId}
+    LEFT JOIN "User" partner_user ON partner_member."userId" = partner_user.id
+    WHERE uv."userId" = ${userId}
+      AND uv."contentEmbedding" IS NOT NULL
+      AND s.status NOT IN ('ABANDONED', 'RESOLVED')
     ORDER BY distance ASC
     LIMIT ${limit}
   `;
 
+  // Convert distance to similarity and filter by threshold
   return results
-    .map((r) => ({
-      messageId: r.id,
-      sessionId: r.session_id,
-      content: r.content,
-      similarity: 1 - r.distance / 2,
-    }))
+    .map((r) => {
+      const similarity = 1 - r.distance / 2;
+      return {
+        sessionId: r.session_id,
+        vesselId: r.vessel_id,
+        partnerName: r.partner_name,
+        similarity,
+        facts: r.notable_facts as CategorizedFact[] | undefined,
+      };
+    })
     .filter((r) => r.similarity >= threshold);
 }
 
+// ============================================================================
+// Inner Work Session Content Embeddings
+// ============================================================================
+
 /**
- * Find inner thoughts messages with a boost for linked sessions.
- * When a partner session ID is provided, messages from Inner Thoughts
- * sessions linked to that partner session get a similarity boost.
+ * Embed Inner Work session content (theme + summary) for semantic search.
+ *
+ * @param sessionId - The Inner Work session to embed
+ * @param turnId - Optional turn ID for cost attribution
  */
-export async function findSimilarInnerThoughtsWithBoost(
+export async function embedInnerWorkSessionContent(
+  sessionId: string,
+  turnId?: string
+): Promise<boolean> {
+  console.log('[Embedding] Starting embedInnerWorkSessionContent for session:', sessionId);
+
+  const session = await prisma.innerWorkSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      theme: true,
+      summary: true,
+      conversationSummary: true,
+    },
+  });
+
+  if (!session) {
+    console.warn(`[Embedding] Inner work session ${sessionId} not found`);
+    return false;
+  }
+
+  // Build embedding text from theme and summaries
+  const parts: string[] = [];
+
+  if (session.theme) {
+    parts.push(`Theme: ${session.theme}`);
+  }
+
+  if (session.summary) {
+    parts.push(`Summary: ${session.summary}`);
+  }
+
+  // Parse conversation summary if available
+  if (session.conversationSummary) {
+    try {
+      const summaryData = JSON.parse(session.conversationSummary as string);
+      if (summaryData.text) {
+        parts.push(`Conversation: ${summaryData.text}`);
+      }
+      if (summaryData.keyThemes?.length) {
+        parts.push(`Themes: ${summaryData.keyThemes.join(', ')}`);
+      }
+    } catch {
+      // If not JSON, use as-is
+      parts.push(session.conversationSummary as string);
+    }
+  }
+
+  // Skip if no content to embed
+  if (parts.length === 0) {
+    console.log(`[Embedding] No content to embed for Inner Work session ${sessionId}`);
+    return false;
+  }
+
+  const embeddingText = parts.join('\n');
+
+  // Generate embedding
+  const embedding = await getEmbedding(embeddingText, { sessionId, turnId });
+  if (!embedding) {
+    console.warn(`[Embedding] Failed to generate embedding for Inner Work session ${sessionId}`);
+    return false;
+  }
+
+  // Store embedding
+  await prisma.$executeRaw`
+    UPDATE "InnerWorkSession"
+    SET "contentEmbedding" = ${vectorToSql(embedding)}::vector
+    WHERE id = ${sessionId}
+  `;
+
+  console.log(`[Embedding] Embedded Inner Work session content for ${sessionId}`);
+  return true;
+}
+
+/**
+ * Search Inner Work session content for a user.
+ * Returns sessions with similar theme/summary based on embeddings.
+ *
+ * @param userId - The user to search sessions for
+ * @param queryText - The query text to search
+ * @param linkedPartnerSessionId - Optional partner session ID for boost
+ * @param boostFactor - Similarity boost for linked sessions (default 1.3 = 30% boost)
+ * @param limit - Maximum results to return
+ * @param threshold - Minimum similarity threshold (0-1)
+ * @param turnId - Optional turn ID for cost attribution
+ */
+export async function searchInnerWorkSessionContent(
   userId: string,
   queryText: string,
-  linkedPartnerSessionId: string,
-  boostFactor: number = 1.3, // 30% boost for linked sessions
+  linkedPartnerSessionId?: string,
+  boostFactor: number = 1.3,
   limit: number = 5,
   threshold: number = 0.5,
   turnId?: string
 ): Promise<Array<{
-  messageId: string;
   sessionId: string;
-  content: string;
+  theme: string | null;
   similarity: number;
   isLinked: boolean;
 }>> {
-  const queryEmbedding = await getEmbedding(queryText, { sessionId: linkedPartnerSessionId, turnId });
+  console.log('[Embedding] searchInnerWorkSessionContent for:', queryText.slice(0, 50));
+
+  const queryEmbedding = await getEmbedding(queryText, { turnId });
   if (!queryEmbedding) {
+    console.warn('[Embedding] Failed to generate query embedding');
     return [];
   }
 
-  // Query all user's Inner Thoughts messages with their linked status
+  // Query using cosine similarity on contentEmbedding
   const results = await prisma.$queryRaw<
     Array<{
       id: string;
-      session_id: string;
-      content: string;
+      theme: string | null;
       distance: number;
       is_linked: boolean;
     }>
   >`
     SELECT
-      m.id,
-      m."sessionId" as session_id,
-      m.content,
-      m.embedding <=> ${vectorToSql(queryEmbedding)}::vector as distance,
-      (s."linkedPartnerSessionId" = ${linkedPartnerSessionId}) as is_linked
-    FROM "InnerWorkMessage" m
-    JOIN "InnerWorkSession" s ON m."sessionId" = s.id
+      s.id,
+      s.theme,
+      s."contentEmbedding" <=> ${vectorToSql(queryEmbedding)}::vector as distance,
+      ${linkedPartnerSessionId ? `(s."linkedPartnerSessionId" = ${linkedPartnerSessionId})` : 'false'} as is_linked
+    FROM "InnerWorkSession" s
     WHERE s."userId" = ${userId}
-      AND m.embedding IS NOT NULL
+      AND s."contentEmbedding" IS NOT NULL
     ORDER BY distance ASC
     LIMIT ${limit * 2}
   `;
@@ -484,9 +422,8 @@ export async function findSimilarInnerThoughtsWithBoost(
       // Apply boost for linked sessions
       const similarity = r.is_linked ? Math.min(baseSimilarity * boostFactor, 1) : baseSimilarity;
       return {
-        messageId: r.id,
-        sessionId: r.session_id,
-        content: r.content,
+        sessionId: r.id,
+        theme: r.theme,
         similarity,
         isLinked: r.is_linked,
       };
@@ -494,4 +431,106 @@ export async function findSimilarInnerThoughtsWithBoost(
     .filter((r) => r.similarity >= threshold)
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, limit);
+}
+
+// ============================================================================
+// Legacy Session Embeddings (for backward compatibility during migration)
+// ============================================================================
+
+/**
+ * Generate a text summary for a session to embed.
+ * Combines partner name, topic, and recent context.
+ * @deprecated Use embedSessionContent instead
+ */
+function buildSessionEmbeddingText(session: SessionSummary): string {
+  const parts: string[] = [];
+
+  parts.push(`Session with ${session.partnerName}`);
+
+  if (session.topic) {
+    parts.push(`Topic: ${session.topic}`);
+  }
+
+  if (session.recentContext) {
+    parts.push(`Recent: ${session.recentContext}`);
+  }
+
+  parts.push(`Status: ${session.status}`);
+
+  return parts.join('. ');
+}
+
+/**
+ * Find sessions similar to the given query text.
+ * Searches across all of a user's session vessels.
+ * @deprecated Use searchSessionContent instead
+ */
+export async function findSimilarSessions(
+  userId: string,
+  queryText: string,
+  limit: number = 5,
+  threshold: number = 0.7,
+  turnId?: string
+): Promise<SimilarSession[]> {
+  console.log('[Embedding] findSimilarSessions - generating query embedding');
+  const queryEmbedding = await getEmbedding(queryText, { turnId });
+  if (!queryEmbedding) {
+    console.warn('[Embedding] Failed to generate query embedding (Bedrock not configured?)');
+    return [];
+  }
+  console.log('[Embedding] Query embedding generated, dimensions:', queryEmbedding.length);
+
+  // Try new contentEmbedding first, fall back to legacy embedding
+  const results = await prisma.$queryRaw<
+    Array<{ session_id: string; partner_name: string; distance: number }>
+  >`
+    SELECT
+      s.id as session_id,
+      COALESCE(partner_user.name, partner_member.nickname, my_member.nickname, 'Unknown') as partner_name,
+      COALESCE(uv."contentEmbedding", uv.embedding) <=> ${vectorToSql(queryEmbedding)}::vector as distance
+    FROM "UserVessel" uv
+    JOIN "Session" s ON uv."sessionId" = s.id
+    JOIN "Relationship" r ON s."relationshipId" = r.id
+    JOIN "RelationshipMember" my_member ON r.id = my_member."relationshipId" AND my_member."userId" = ${userId}
+    LEFT JOIN "RelationshipMember" partner_member ON r.id = partner_member."relationshipId" AND partner_member."userId" != ${userId}
+    LEFT JOIN "User" partner_user ON partner_member."userId" = partner_user.id
+    WHERE uv."userId" = ${userId}
+      AND (uv."contentEmbedding" IS NOT NULL OR uv.embedding IS NOT NULL)
+      AND s.status NOT IN ('ABANDONED', 'RESOLVED')
+    ORDER BY distance ASC
+    LIMIT ${limit}
+  `;
+
+  return results
+    .map((r) => ({
+      sessionId: r.session_id,
+      partnerName: r.partner_name,
+      similarity: 1 - r.distance / 2,
+    }))
+    .filter((r) => r.similarity >= threshold);
+}
+
+/**
+ * Find sessions where the partner name or topic matches semantically.
+ * Used by the chat router to find relevant sessions.
+ * @deprecated Use searchSessionContent instead
+ */
+export async function findRelevantSessions(
+  userId: string,
+  userMessage: string,
+  limit: number = 3,
+  turnId?: string
+): Promise<SimilarSession[]> {
+  console.log('[Embedding] findRelevantSessions for:', userMessage.slice(0, 50));
+
+  // First try vector search
+  const vectorResults = await findSimilarSessions(userId, userMessage, limit, 0.5, turnId);
+
+  console.log('[Embedding] Vector search results:', vectorResults.length);
+
+  if (vectorResults.length > 0) {
+    return vectorResults;
+  }
+
+  return [];
 }

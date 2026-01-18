@@ -15,7 +15,7 @@ import {
   createStateStore,
 } from '../types';
 import { generateConversationalResponse } from '../response-generator';
-import { embedSessionVessel, embedMessages } from '../../embedding';
+import { embedSessionContent } from '../../embedding';
 import { updateSessionSummary } from '../../conversation-summarizer';
 import { convertPreSessionToSessionMessages } from '../../witnessing';
 import { createInvitationUrl } from '../../../utils/urls';
@@ -287,26 +287,14 @@ async function createSession(
     // Create turnId for this session creation action - used for cost attribution
     const turnId = `${session.id}-session-creation`;
 
-    // Generate embeddings for the session and messages (non-blocking)
-    const vesselToEmbed = session.userVessels.find((v) => v.userId === userId);
-    if (vesselToEmbed) {
-      // Run embedding generation in background - don't block session creation
-      embedSessionVessel(session.id, userId).catch((err) =>
-        console.warn('[SessionCreation] Failed to embed session vessel:', err)
+    // Summarize and embed session content (non-blocking)
+    // Per fact-ledger architecture, we embed at session level after summary updates
+    // This ensures the vessel summary exists immediately for sessions with imported history
+    updateSessionSummary(session.id, userId, turnId)
+      .then(() => embedSessionContent(session.id, userId, turnId))
+      .catch((err: unknown) =>
+        console.warn('[SessionCreation] Failed to update summary/embedding:', err)
       );
-      if (messageIds.length > 0) {
-        embedMessages(messageIds, turnId).catch((err) =>
-          console.warn('[SessionCreation] Failed to embed messages:', err)
-        );
-      }
-    }
-
-    // If a lot of history was imported, summarize it (non-blocking).
-    // Most sessions won't hit the summarization threshold here, but if they do,
-    // this ensures the vessel summary exists immediately.
-    updateSessionSummary(session.id, userId, turnId).catch((err) =>
-      console.warn('[SessionCreation] Failed to update session summary:', err)
-    );
 
     // Clear creation state
     creationState.delete(userId);

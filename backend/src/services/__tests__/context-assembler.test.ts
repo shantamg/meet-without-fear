@@ -41,20 +41,23 @@ describe('Context Assembler', () => {
     });
 
     describe('Notable Facts Formatting', () => {
-      it('formats notable facts with correct header', () => {
+      it('formats notable facts with categories', () => {
         const bundle = createMinimalBundle({
           notableFacts: [
-            'User has a daughter named Emma who is 14',
-            'Partner works night shifts',
-            'Feeling unheard about childcare decisions',
+            { category: 'People', fact: 'User has a daughter named Emma who is 14' },
+            { category: 'Logistics', fact: 'Partner works night shifts' },
+            { category: 'Emotional', fact: 'Feeling unheard about childcare decisions' },
           ],
         });
 
         const formatted = formatContextForPrompt(bundle);
 
         expect(formatted).toContain('NOTED FACTS FROM THIS SESSION:');
+        expect(formatted).toContain('[People]');
         expect(formatted).toContain('- User has a daughter named Emma who is 14');
+        expect(formatted).toContain('[Logistics]');
         expect(formatted).toContain('- Partner works night shifts');
+        expect(formatted).toContain('[Emotional]');
         expect(formatted).toContain('- Feeling unheard about childcare decisions');
       });
 
@@ -80,27 +83,33 @@ describe('Context Assembler', () => {
 
       it('formats single fact correctly', () => {
         const bundle = createMinimalBundle({
-          notableFacts: ['User feels overwhelmed'],
+          notableFacts: [{ category: 'Emotional', fact: 'User feels overwhelmed' }],
         });
 
         const formatted = formatContextForPrompt(bundle);
 
         expect(formatted).toContain('NOTED FACTS FROM THIS SESSION:');
+        expect(formatted).toContain('[Emotional]');
         expect(formatted).toContain('- User feels overwhelmed');
       });
 
-      it('preserves fact order', () => {
+      it('groups facts by category', () => {
         const bundle = createMinimalBundle({
-          notableFacts: ['First fact', 'Second fact', 'Third fact'],
+          notableFacts: [
+            { category: 'People', fact: 'First person fact' },
+            { category: 'Emotional', fact: 'Second emotional fact' },
+            { category: 'People', fact: 'Third person fact' },
+          ],
         });
 
         const formatted = formatContextForPrompt(bundle);
-        const lines = formatted.split('\n');
-        const factLines = lines.filter((line) => line.startsWith('- '));
 
-        expect(factLines[0]).toBe('- First fact');
-        expect(factLines[1]).toBe('- Second fact');
-        expect(factLines[2]).toBe('- Third fact');
+        // Both People facts should be under the same [People] header
+        expect(formatted).toContain('[People]');
+        expect(formatted).toContain('- First person fact');
+        expect(formatted).toContain('- Third person fact');
+        expect(formatted).toContain('[Emotional]');
+        expect(formatted).toContain('- Second emotional fact');
       });
     });
 
@@ -117,7 +126,10 @@ describe('Context Assembler', () => {
             global: [{ content: 'Call me Sam', category: 'PERSONAL_INFO' }],
             session: [],
           },
-          notableFacts: ['Has two kids', 'Works from home'],
+          notableFacts: [
+            { category: 'People', fact: 'Has two kids' },
+            { category: 'Logistics', fact: 'Works from home' },
+          ],
         });
 
         const formatted = formatContextForPrompt(bundle);
@@ -135,7 +147,7 @@ describe('Context Assembler', () => {
             global: [{ content: 'User memory here', category: 'PREFERENCE' }],
             session: [],
           },
-          notableFacts: ['Notable fact here'],
+          notableFacts: [{ category: 'Emotional', fact: 'Notable fact here' }],
         });
 
         const formatted = formatContextForPrompt(bundle);
@@ -145,6 +157,45 @@ describe('Context Assembler', () => {
         expect(memoriesIndex).toBeGreaterThan(-1);
         expect(factsIndex).toBeGreaterThan(-1);
         expect(factsIndex).toBeGreaterThan(memoriesIndex);
+      });
+    });
+
+    describe('Global Facts Formatting', () => {
+      it('formats global facts at top of context', () => {
+        const bundle = createMinimalBundle({
+          globalFacts: [
+            { category: 'People', fact: 'Has a partner named Alex' },
+            { category: 'History', fact: 'Together for 5 years' },
+          ],
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        expect(formatted).toContain('ABOUT THIS USER (from previous sessions):');
+        expect(formatted).toContain('[People]');
+        expect(formatted).toContain('- Has a partner named Alex');
+        expect(formatted).toContain('[History]');
+        expect(formatted).toContain('- Together for 5 years');
+      });
+
+      it('places global facts before emotional state', () => {
+        const bundle = createMinimalBundle({
+          globalFacts: [{ category: 'People', fact: 'Has a dog named Max' }],
+          emotionalThread: {
+            initialIntensity: 5,
+            currentIntensity: 7,
+            trend: 'escalating',
+            notableShifts: [],
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+        const globalIndex = formatted.indexOf('ABOUT THIS USER');
+        const emotionalIndex = formatted.indexOf('EMOTIONAL STATE');
+
+        expect(globalIndex).toBeGreaterThan(-1);
+        expect(emotionalIndex).toBeGreaterThan(-1);
+        expect(globalIndex).toBeLessThan(emotionalIndex);
       });
     });
   });

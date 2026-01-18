@@ -14,8 +14,9 @@ import {
   type RetrievalDepth,
   getTurnBufferSize,
 } from './memory-intent';
-import { findSimilarInnerThoughtsWithBoost } from './embedding';
+import { searchInnerWorkSessionContent } from './embedding';
 import { getSessionSummary } from './conversation-summarizer';
+import { loadGlobalFacts, type CategorizedFact as GlobalFact } from './global-memory';
 
 // ============================================================================
 // Types
@@ -103,6 +104,10 @@ export interface ContextBundle {
   // Prior session context (if depth allows)
   priorThemes?: PriorThemes;
 
+  // Global facts consolidated across all sessions for this user
+  // Injected at top of context per fact-ledger architecture
+  globalFacts?: GlobalFact[];
+
   // Session summary (for long sessions)
   sessionSummary?: SessionSummary;
 
@@ -114,7 +119,8 @@ export interface ContextBundle {
 
   // Notable facts extracted from the conversation
   // (emotional context, situational facts, people & relationships)
-  notableFacts?: string[];
+  // Stored as CategorizedFact[] - array of { category, fact } objects
+  notableFacts?: CategorizedFact[];
 
   // Stage-specific data
   stageContext: {
@@ -185,7 +191,7 @@ export async function assembleContextBundle(
   // Note: buildInnerThoughtsContext depends on conversationContext, so it runs after.
   const turnBufferSize = getTurnBufferSize(stage, intent.intent);
 
-  const [conversationContext, emotionalThread, priorThemes, sessionSummary, userMemories, notableFacts] = await Promise.all([
+  const [conversationContext, emotionalThread, priorThemes, sessionSummary, userMemories, notableFacts, globalFacts] = await Promise.all([
     buildConversationContext(sessionId, userId, turnBufferSize, depth),
     buildEmotionalThread(sessionId, userId, depth),
     (depth === 'full' || depth === 'light')
@@ -196,7 +202,12 @@ export async function assembleContextBundle(
       : Promise.resolve(undefined),
     buildUserMemoriesContext(userId, sessionId),
     loadNotableFacts(sessionId, userId),
+    // Load global facts (consolidated across all sessions) for cross-session continuity
+    loadGlobalFacts(userId),
   ]);
+
+  // Debug logging for notable facts
+  console.log(`[Context Assembler] assembleContextBundle: session=${sessionId}, notableFacts=${notableFacts ? `${notableFacts.length} facts` : 'undefined'}`);
 
   // Build Inner Thoughts context after we have conversation context (it needs the last user message)
   const finalInnerThoughts = (depth === 'full' || depth === 'light')
@@ -215,6 +226,7 @@ export async function assembleContextBundle(
     },
     emotionalThread,
     priorThemes,
+    globalFacts,
     sessionSummary,
     innerThoughtsContext: finalInnerThoughts,
     userMemories,
@@ -437,7 +449,10 @@ async function buildSessionSummary(
 
 /**
  * Build Inner Thoughts context - private reflections that may inform the partner session.
- * Messages from linked Inner Thoughts sessions get a similarity boost.
+ * Sessions linked to this partner session get a similarity boost.
+ *
+ * NOTE: Per fact-ledger architecture, we now search at session level (theme + summary)
+ * instead of message level. This provides better context with lower token cost.
  */
 async function buildInnerThoughtsContext(
   sessionId: string,
@@ -450,6 +465,11 @@ async function buildInnerThoughtsContext(
       userId,
       linkedPartnerSessionId: sessionId,
       status: 'ACTIVE',
+    },
+    select: {
+      id: true,
+      theme: true,
+      summary: true,
     },
   });
 
@@ -474,22 +494,39 @@ async function buildInnerThoughtsContext(
   }
 
   try {
-    // Search Inner Thoughts with boost for linked sessions
-    const results = await findSimilarInnerThoughtsWithBoost(
+    // Search Inner Work sessions with boost for linked sessions
+    // Per fact-ledger architecture, we search session-level content (theme + summary)
+    const results = await searchInnerWorkSessionContent(
       userId,
       lastUserMessage.content,
-      sessionId, // Partner session ID - messages from linked sessions get boost
+      sessionId, // Partner session ID - linked sessions get boost
       1.3, // 30% boost
       3, // Top 3 results
       0.5 // Threshold
     );
 
+    // For each matching session, get the summary to use as reflection content
+    const reflections = await Promise.all(
+      results.map(async (r) => {
+        // Get the session's summary/theme for content
+        const session = await prisma.innerWorkSession.findUnique({
+          where: { id: r.sessionId },
+          select: { theme: true, summary: true },
+        });
+
+        // Build reflection content from session summary
+        const content = session?.summary || session?.theme || 'Private reflection';
+
+        return {
+          content,
+          similarity: r.similarity,
+          isFromLinkedSession: r.isLinked,
+        };
+      })
+    );
+
     return {
-      relevantReflections: results.map((r) => ({
-        content: r.content,
-        similarity: r.similarity,
-        isFromLinkedSession: r.isLinked,
-      })),
+      relevantReflections: reflections,
       hasLinkedSession: !!linkedSession,
     };
   } catch (error) {
@@ -534,15 +571,23 @@ async function buildUserMemoriesContext(
   };
 }
 
+/** Categorized fact format */
+interface CategorizedFact {
+  category: string;
+  fact: string;
+}
+
 /**
  * Load notable facts from UserVessel
  * These are facts about the user's situation, emotions, and circumstances
  * extracted by Haiku during the conversation.
+ *
+ * Facts are stored as JSON: [{ category: string, fact: string }]
  */
 async function loadNotableFacts(
   sessionId: string,
   userId: string
-): Promise<string[] | undefined> {
+): Promise<CategorizedFact[] | undefined> {
   const vessel = await prisma.userVessel.findUnique({
     where: {
       userId_sessionId: { userId, sessionId },
@@ -550,13 +595,40 @@ async function loadNotableFacts(
     select: { notableFacts: true },
   });
 
-  // Return undefined if no facts exist (not an empty array)
-  // This prevents an empty "NOTED FACTS" block in the prompt
-  if (!vessel?.notableFacts || vessel.notableFacts.length === 0) {
+  // Debug logging to track notable facts loading
+  if (!vessel) {
+    console.log(`[Context Assembler] loadNotableFacts: No UserVessel found for session=${sessionId}, user=${userId}`);
     return undefined;
   }
 
-  return vessel.notableFacts;
+  const rawFacts = vessel.notableFacts;
+  if (!rawFacts) {
+    console.log(`[Context Assembler] loadNotableFacts: UserVessel exists but no facts for session=${sessionId}, user=${userId}`);
+    return undefined;
+  }
+
+  if (!Array.isArray(rawFacts)) {
+    console.warn(`[Context Assembler] loadNotableFacts: notableFacts is not an array for session=${sessionId}, user=${userId}`);
+    return undefined;
+  }
+
+  // Cast through unknown for JSON type safety
+  const facts = rawFacts as unknown;
+
+  // Validate and filter to CategorizedFact[]
+  const categorizedFacts: CategorizedFact[] = (facts as unknown[])
+    .filter((f): f is CategorizedFact => {
+      if (typeof f !== 'object' || f === null) return false;
+      const obj = f as Record<string, unknown>;
+      return typeof obj.category === 'string' && typeof obj.fact === 'string';
+    });
+
+  if (categorizedFacts.length === 0) {
+    return undefined;
+  }
+
+  console.log(`[Context Assembler] loadNotableFacts: Loaded ${categorizedFacts.length} facts for session=${sessionId}, user=${userId}:`, categorizedFacts.slice(0, 3));
+  return categorizedFacts;
 }
 
 /**
@@ -567,6 +639,26 @@ async function loadNotableFacts(
  */
 export function formatContextForPrompt(bundle: ContextBundle): string {
   const parts: string[] = [];
+
+  // Global facts (consolidated across all sessions) - injected at TOP per fact-ledger architecture
+  // These provide cross-session continuity and user profile context
+  if (bundle.globalFacts && bundle.globalFacts.length > 0) {
+    parts.push('ABOUT THIS USER (from previous sessions):');
+    // Group global facts by category for cleaner formatting
+    const byCategory = new Map<string, string[]>();
+    for (const fact of bundle.globalFacts) {
+      const existing = byCategory.get(fact.category) || [];
+      existing.push(fact.fact);
+      byCategory.set(fact.category, existing);
+    }
+    for (const [category, facts] of byCategory) {
+      parts.push(`[${category}]`);
+      for (const fact of facts) {
+        parts.push(`- ${fact}`);
+      }
+    }
+    parts.push('');
+  }
 
   // Emotional thread
   if (bundle.emotionalThread.currentIntensity !== null) {
@@ -626,14 +718,27 @@ export function formatContextForPrompt(bundle: ContextBundle): string {
     }
   }
 
-  // Notable facts from the conversation
+  // Notable facts from the conversation (categorized)
   // (emotional context, situational facts, people & relationships)
   if (bundle.notableFacts && bundle.notableFacts.length > 0) {
+    console.log(`[Context Assembler] formatContextForPrompt: Including ${bundle.notableFacts.length} notable facts in prompt`);
     parts.push('NOTED FACTS FROM THIS SESSION:');
+    // Group facts by category for cleaner formatting
+    const byCategory = new Map<string, string[]>();
     for (const fact of bundle.notableFacts) {
-      parts.push(`- ${fact}`);
+      const existing = byCategory.get(fact.category) || [];
+      existing.push(fact.fact);
+      byCategory.set(fact.category, existing);
+    }
+    for (const [category, facts] of byCategory) {
+      parts.push(`[${category}]`);
+      for (const fact of facts) {
+        parts.push(`- ${fact}`);
+      }
     }
     parts.push('');
+  } else {
+    console.log(`[Context Assembler] formatContextForPrompt: No notable facts to include (bundle.notableFacts=${bundle.notableFacts ? 'empty array' : 'undefined'})`);
   }
 
   return parts.join('\n');

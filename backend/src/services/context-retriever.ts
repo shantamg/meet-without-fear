@@ -13,19 +13,19 @@
  */
 
 import { prisma } from '../lib/prisma';
-import { getEmbedding, getHaikuJson } from '../lib/bedrock';
+import { getHaikuJson } from '../lib/bedrock';
 import { MemoryIntentResult } from './memory-intent';
 import { MemoryPreferencesDTO } from '@meet-without-fear/shared';
 import {
   getTimeContext,
-  formatMessageWithTimeContext,
   getRecencyGuidance,
   type TimeContext,
 } from '../utils/time-language';
 import { CONTEXT_LIMITS } from '../utils/token-budget';
-import { withHaikuCircuitBreaker, HAIKU_TIMEOUT_MS } from '../utils/circuit-breaker';
+import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 import { brainService } from '../services/brain-service';
 import { ActivityType, BrainActivityCallType } from '@prisma/client';
+import { searchSessionContent, searchInnerWorkSessionContent } from './embedding';
 
 // ============================================================================
 // Types
@@ -90,6 +90,9 @@ export interface RetrievalOptions {
 
   /** Current session ID (if in a session) */
   currentSessionId?: string;
+
+  /** Relationship ID for filtering cross-session search to same partner */
+  relationshipId?: string;
 
   /** Turn ID for grouping logs and cost attribution (format: `${sessionId}-${turnCount}`) - REQUIRED */
   turnId: string;
@@ -204,147 +207,59 @@ If no references, return empty arrays and needsRetrieval: false.`;
 // ============================================================================
 
 /**
- * Search for semantically similar messages across all user's sessions.
+ * Search for semantically similar session content across sessions.
+ * Uses session-level content embeddings (facts + summary) instead of message-level.
+ *
+ * @deprecated Internal use only - use searchSessionContent from embedding.ts directly
  */
-async function searchAcrossSessions(
+async function searchAcrossSessionsContent(
   userId: string,
-  queryEmbedding: number[],
-  excludeSessionId?: string,
+  queryText: string,
+  _relationshipId: string,
   limit: number = 5,
-  threshold: number = 0.5
+  threshold: number = 0.5,
+  turnId?: string
 ): Promise<RelevantMessage[]> {
-  const vectorSql = `[${queryEmbedding.join(',')}]`;
+  // Use session-level search
+  const sessionMatches = await searchSessionContent(userId, queryText, limit, threshold, turnId);
 
-  // Search messages across all user's sessions
-  // Build query based on whether we need to exclude a session
-  type MessageResult = {
-    id: string;
-    session_id: string;
-    content: string;
-    role: string;
-    timestamp: Date;
-    partner_name: string;
-    distance: number;
-  };
+  // Convert session matches to RelevantMessage format for backward compatibility
+  // Note: This is a lossy conversion - we no longer have individual messages
+  return sessionMatches.map((match) => {
+    // Format facts as content if available
+    const factsContent = match.facts && match.facts.length > 0
+      ? match.facts.map((f) => `[${f.category}] ${f.fact}`).join('; ')
+      : 'No facts available';
 
-  let results: MessageResult[];
-
-  // Data isolation: Only return user's own messages and AI responses TO them
-  if (excludeSessionId) {
-    results = await prisma.$queryRaw<MessageResult[]>`
-      SELECT
-        m.id,
-        m."sessionId" as session_id,
-        m.content,
-        m.role,
-        m.timestamp,
-        COALESCE(partner_user.name, partner_user."firstName", partner_member.nickname, my_member.nickname, 'Unknown') as partner_name,
-        m.embedding <=> ${vectorSql}::vector as distance
-      FROM "Message" m
-      JOIN "Session" s ON m."sessionId" = s.id
-      JOIN "Relationship" r ON s."relationshipId" = r.id
-      JOIN "RelationshipMember" my_member ON r.id = my_member."relationshipId" AND my_member."userId" = ${userId}
-      LEFT JOIN "RelationshipMember" partner_member ON r.id = partner_member."relationshipId" AND partner_member."userId" != ${userId}
-      LEFT JOIN "User" partner_user ON partner_member."userId" = partner_user.id
-      WHERE m.embedding IS NOT NULL
-        AND (m."senderId" = ${userId} OR (m.role = 'AI' AND m."forUserId" = ${userId}))
-        AND m."sessionId" != ${excludeSessionId}
-      ORDER BY distance ASC
-      LIMIT ${limit * 2}
-    `;
-  } else {
-    results = await prisma.$queryRaw<MessageResult[]>`
-      SELECT
-        m.id,
-        m."sessionId" as session_id,
-        m.content,
-        m.role,
-        m.timestamp,
-        COALESCE(partner_user.name, partner_user."firstName", partner_member.nickname, my_member.nickname, 'Unknown') as partner_name,
-        m.embedding <=> ${vectorSql}::vector as distance
-      FROM "Message" m
-      JOIN "Session" s ON m."sessionId" = s.id
-      JOIN "Relationship" r ON s."relationshipId" = r.id
-      JOIN "RelationshipMember" my_member ON r.id = my_member."relationshipId" AND my_member."userId" = ${userId}
-      LEFT JOIN "RelationshipMember" partner_member ON r.id = partner_member."relationshipId" AND partner_member."userId" != ${userId}
-      LEFT JOIN "User" partner_user ON partner_member."userId" = partner_user.id
-      WHERE m.embedding IS NOT NULL
-        AND (m."senderId" = ${userId} OR (m.role = 'AI' AND m."forUserId" = ${userId}))
-      ORDER BY distance ASC
-      LIMIT ${limit * 2}
-    `;
-  }
-
-  // Convert distance to similarity, add time context, and filter
-  return results
-    .map((r) => {
-      const timestamp = r.timestamp.toISOString();
-      return {
-        content: r.content,
-        sessionId: r.session_id,
-        partnerName: r.partner_name,
-        similarity: 1 - r.distance / 2,
-        timestamp,
-        role: r.role === 'USER' ? 'user' as const : 'assistant' as const,
-        timeContext: getTimeContext(timestamp),
-      };
-    })
-    .filter((r) => r.similarity >= threshold)
-    .slice(0, limit);
+    return {
+      content: factsContent,
+      sessionId: match.sessionId,
+      partnerName: match.partnerName,
+      similarity: match.similarity,
+      timestamp: new Date().toISOString(), // No specific timestamp for session-level
+      role: 'assistant' as const, // Facts are AI-extracted
+      timeContext: getTimeContext(new Date().toISOString()),
+      source: 'partner-session' as const,
+    };
+  });
 }
 
 /**
  * Search within a specific session.
- * Data isolation: Only returns user's own messages and AI responses to them.
+ * @deprecated Per fact-ledger architecture, within-session search is no longer used.
+ * Session content is retrieved via facts + summary, not individual message search.
+ * This function returns empty results - kept for backward compatibility.
  */
 async function searchWithinSession(
-  sessionId: string,
-  userId: string,
-  queryEmbedding: number[],
-  limit: number = 5,
-  threshold: number = 0.5
+  _sessionId: string,
+  _userId: string,
+  _queryEmbedding: number[],
+  _limit: number = 5,
+  _threshold: number = 0.5
 ): Promise<RelevantMessage[]> {
-  const vectorSql = `[${queryEmbedding.join(',')}]`;
-
-  // Data isolation: Only return user's own messages and AI responses TO them
-  const results = await prisma.$queryRaw<
-    Array<{
-      id: string;
-      content: string;
-      role: string;
-      timestamp: Date;
-      distance: number;
-    }>
-  >`
-    SELECT
-      m.id,
-      m.content,
-      m.role,
-      m.timestamp,
-      m.embedding <=> ${vectorSql}::vector as distance
-    FROM "Message" m
-    WHERE m."sessionId" = ${sessionId}
-      AND m.embedding IS NOT NULL
-      AND (m."senderId" = ${userId} OR (m.role = 'AI' AND m."forUserId" = ${userId}))
-    ORDER BY distance ASC
-    LIMIT ${limit * 2}
-  `;
-
-  return results
-    .map((r) => {
-      const timestamp = r.timestamp.toISOString();
-      return {
-        content: r.content,
-        sessionId,
-        partnerName: '', // Will be filled by caller if needed
-        similarity: 1 - r.distance / 2,
-        timestamp,
-        role: r.role === 'USER' ? 'user' as const : 'assistant' as const,
-        timeContext: getTimeContext(timestamp),
-      };
-    })
-    .filter((r) => r.similarity >= threshold)
-    .slice(0, limit);
+  // Per fact-ledger architecture, we no longer search within sessions at message level
+  // Session content (facts + summary) is available via assembleContextBundle
+  return [];
 }
 
 // ============================================================================
@@ -465,95 +380,40 @@ async function searchPreSessionMessages(
 // ============================================================================
 
 /**
- * Search for semantically similar messages from Inner Thoughts sessions.
- * Optionally boosts similarity for messages from sessions linked to a specific partner session.
+ * Search for semantically similar Inner Thoughts session content.
+ * Uses session-level content embeddings (theme + summary) instead of message-level.
  */
-async function searchInnerWorkMessages(
+async function searchInnerWorkSessionsContent(
   userId: string,
-  queryEmbedding: number[],
-  excludeSessionId?: string,
+  queryText: string,
   linkedPartnerSessionId?: string,
   boostFactor: number = 1.3,
   limit: number = 15,
-  threshold: number = 0.75
+  threshold: number = 0.75,
+  turnId?: string
 ): Promise<RelevantMessage[]> {
-  const vectorSql = `[${queryEmbedding.join(',')}]`;
+  // Use session-level search with linked session boosting
+  const sessionMatches = await searchInnerWorkSessionContent(
+    userId,
+    queryText,
+    linkedPartnerSessionId,
+    boostFactor,
+    limit,
+    threshold,
+    turnId
+  );
 
-  type InnerWorkMessageResult = {
-    id: string;
-    session_id: string;
-    content: string;
-    role: string;
-    timestamp: Date;
-    distance: number;
-    linked_partner_session_id: string | null;
-  };
-
-  let results: InnerWorkMessageResult[];
-
-  // Use different queries based on whether we need to exclude a session
-  if (excludeSessionId) {
-    results = await prisma.$queryRaw<InnerWorkMessageResult[]>`
-      SELECT
-        m.id,
-        m."sessionId" as session_id,
-        m.content,
-        m.role,
-        m.timestamp,
-        m.embedding <=> ${vectorSql}::vector as distance,
-        s."linkedPartnerSessionId" as linked_partner_session_id
-      FROM "InnerWorkMessage" m
-      JOIN "InnerWorkSession" s ON m."sessionId" = s.id
-      WHERE s."userId" = ${userId}
-        AND m.embedding IS NOT NULL
-        AND m."sessionId" != ${excludeSessionId}
-      ORDER BY distance ASC
-      LIMIT ${limit * 2}
-    `;
-  } else {
-    results = await prisma.$queryRaw<InnerWorkMessageResult[]>`
-      SELECT
-        m.id,
-        m."sessionId" as session_id,
-        m.content,
-        m.role,
-        m.timestamp,
-        m.embedding <=> ${vectorSql}::vector as distance,
-        s."linkedPartnerSessionId" as linked_partner_session_id
-      FROM "InnerWorkMessage" m
-      JOIN "InnerWorkSession" s ON m."sessionId" = s.id
-      WHERE s."userId" = ${userId}
-        AND m.embedding IS NOT NULL
-      ORDER BY distance ASC
-      LIMIT ${limit * 2}
-    `;
-  }
-
-  // Apply boost to linked sessions and convert to RelevantMessage format
-  return results
-    .map((r) => {
-      const baseSimilarity = 1 - r.distance / 2;
-      // Apply boost for linked sessions (capped at 1.0)
-      const isLinked = linkedPartnerSessionId && r.linked_partner_session_id === linkedPartnerSessionId;
-      const similarity = isLinked
-        ? Math.min(baseSimilarity * boostFactor, 1)
-        : baseSimilarity;
-      const timestamp = r.timestamp.toISOString();
-
-      return {
-        content: r.content,
-        sessionId: r.session_id,
-        partnerName: 'Your reflections', // Label for Inner Thoughts
-        similarity,
-        timestamp,
-        role: r.role === 'USER' ? 'user' as const : 'assistant' as const,
-        timeContext: getTimeContext(timestamp),
-        source: 'inner-thoughts' as const,
-      };
-    })
-    .filter((r) => r.similarity >= threshold)
-    .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, limit);
+  // Convert session matches to RelevantMessage format
+  return sessionMatches.map((match) => ({
+    content: match.theme || 'Inner reflection session',
+    sessionId: match.sessionId,
+    partnerName: 'Your reflections',
+    similarity: match.similarity,
+    timestamp: new Date().toISOString(),
+    role: 'assistant' as const,
+    timeContext: getTimeContext(new Date().toISOString()),
+    source: 'inner-thoughts' as const,
+  }));
 }
 
 // ============================================================================
@@ -569,6 +429,7 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
     userId,
     currentMessage,
     currentSessionId,
+    relationshipId: providedRelationshipId,
     turnId,
     maxCrossSessionMessages = 10,
     similarityThreshold = 0.5,
@@ -584,7 +445,19 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
 
   const startTime = Date.now();
 
-
+  // Get relationshipId - if not provided, look it up from the session
+  let relationshipId = providedRelationshipId;
+  if (!relationshipId && currentSessionId) {
+    try {
+      const session = await prisma.session.findUnique({
+        where: { id: currentSessionId },
+        select: { relationshipId: true },
+      });
+      relationshipId = session?.relationshipId;
+    } catch (error) {
+      console.warn('[ContextRetriever] Failed to fetch session relationship:', error);
+    }
+  }
 
   // Use memory intent to override thresholds and limits if provided
   const effectiveThreshold = memoryIntent?.threshold ?? similarityThreshold;
@@ -648,37 +521,34 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
       (effectiveUserPrefs?.crossSessionRecall ?? false);
 
     // Search using the generated queries
-    // For Inner Thoughts, we search both partner session Messages AND InnerWorkMessages
+    // Per fact-ledger architecture, we now search at session level (facts + summary)
     const searchPromises = referenceDetection.searchQueries.map(async (query) => {
-      // Generate embedding once per query - this fixes duplicates and ensures turnId is logged
-      const embedding = await getEmbedding(query, { sessionId: currentSessionId, turnId });
+      // Build search operations array
+      const searchOps: Promise<RelevantMessage[]>[] = [];
 
-      if (!embedding) {
-        return { query, crossSession: [], withinSession: [], innerThoughts: [] };
+      // Search partner session content (cross-session) - uses session-level embeddings
+      if (shouldSearchCrossSession && relationshipId) {
+        searchOps.push(
+          searchAcrossSessionsContent(userId, query, relationshipId, effectiveMaxCrossSession, effectiveThreshold, turnId)
+        );
+      } else {
+        searchOps.push(Promise.resolve([]));
       }
 
-      const searchOps: Promise<RelevantMessage[]>[] = [
-        // Search partner session Messages (cross-session)
-        shouldSearchCrossSession
-          ? searchAcrossSessions(userId, embedding, currentSessionId, effectiveMaxCrossSession, effectiveThreshold)
-          : Promise.resolve([]),
-        // Search within current session (if applicable)
-        currentSessionId
-          ? searchWithinSession(currentSessionId, userId, embedding, 5, effectiveThreshold)
-          : Promise.resolve([]),
-      ];
+      // Within-session search is deprecated - facts are available via assembleContextBundle
+      searchOps.push(Promise.resolve([]));
 
       // Add Inner Thoughts search if enabled
       if (includeInnerThoughts) {
         searchOps.push(
-          searchInnerWorkMessages(
+          searchInnerWorkSessionsContent(
             userId,
-            embedding,
-            excludeInnerThoughtsSessionId,
+            query,
             linkedPartnerSessionId,
             1.3, // boost factor for linked sessions
             15,  // limit
-            innerThoughtsThreshold
+            innerThoughtsThreshold,
+            turnId
           )
         );
       }

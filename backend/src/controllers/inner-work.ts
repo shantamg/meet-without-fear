@@ -44,7 +44,7 @@ import {
 import { getSonnetResponse, getHaikuJson, getCompletion, BrainActivityCallType } from '../lib/bedrock';
 import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildLinkedInnerThoughtsInitialMessagePrompt, buildInnerWorkSummaryPrompt, buildLinkedInnerThoughtsPrompt, LinkedPartnerSessionContext } from '../services/stage-prompts';
 import { extractJsonSafe } from '../utils/json-extractor';
-import { embedInnerWorkMessage } from '../services/embedding';
+import { embedInnerWorkSessionContent } from '../services/embedding';
 import {
   updateInnerThoughtsSummary,
   getInnerThoughtsSummary,
@@ -452,12 +452,10 @@ export const createInnerWorkSession = asyncHandler(
         },
       });
 
-      // Embed both messages (non-blocking)
-      Promise.all([
-        embedInnerWorkMessage(userMessage.id, turnId),
-        embedInnerWorkMessage(aiMessage.id, turnId),
-      ]).catch((err) =>
-        console.warn('[Inner Work] Failed to embed initial messages:', err)
+      // Embed session content (non-blocking)
+      // Per fact-ledger architecture, we embed at session level
+      embedInnerWorkSessionContent(session.id, turnId).catch((err: unknown) =>
+        console.warn('[Inner Work] Failed to embed session content:', err)
       );
 
       // Update session metadata (non-blocking)
@@ -531,9 +529,10 @@ export const createInnerWorkSession = asyncHandler(
       },
     });
 
-    // Embed the initial message (non-blocking)
-    embedInnerWorkMessage(aiMessage.id, turnId).catch((err) =>
-      console.warn('[Inner Work] Failed to embed initial message:', err)
+    // Embed session content (non-blocking)
+    // Per fact-ledger architecture, we embed at session level
+    embedInnerWorkSessionContent(session.id, turnId).catch((err: unknown) =>
+      console.warn('[Inner Work] Failed to embed session content:', err)
     );
 
     const response: ApiResponse<CreateInnerWorkSessionResponse> = {
@@ -838,26 +837,18 @@ export const sendInnerWorkMessage = asyncHandler(
       data: { updatedAt: new Date() },
     });
 
-    // Embed messages (non-blocking)
-    // Pass turnId for cost attribution
-    Promise.all([
-      embedInnerWorkMessage(userMessage.id, turnId),
-      embedInnerWorkMessage(aiMessage.id, turnId),
-    ]).catch((err) =>
-      console.warn('[Inner Work] Failed to embed messages:', err)
-    );
-
     // Update session metadata with Haiku (non-blocking, runs on every message)
-    updateSessionMetadata(sessionId, turnId).catch((err) =>
+    updateSessionMetadata(sessionId, turnId).catch((err: unknown) =>
       console.warn('[Inner Work] Failed to update metadata:', err)
     );
 
-    // Update conversation summary for long sessions (non-blocking)
-    // This balances recent messages with rolling summarization
-    // Pass turnId for cost attribution
-    updateInnerThoughtsSummary(sessionId, turnId).catch((err) =>
-      console.warn('[Inner Work] Failed to update conversation summary:', err)
-    );
+    // Update conversation summary and embed session content (non-blocking)
+    // Per fact-ledger architecture, we embed at session level after summary updates
+    updateInnerThoughtsSummary(sessionId, turnId)
+      .then(() => embedInnerWorkSessionContent(sessionId, turnId))
+      .catch((err: unknown) =>
+        console.warn('[Inner Work] Failed to update summary/embedding:', err)
+      );
 
     // Run memory detection on user message
     // For Inner Thoughts, we allow detection from turn 2+ (more relaxed than partner sessions)

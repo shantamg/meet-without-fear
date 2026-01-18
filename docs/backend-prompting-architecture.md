@@ -1,6 +1,6 @@
 # Backend Prompting Architecture Audit
 
-**Last Updated:** 2026-01-15
+**Last Updated:** 2026-01-18
 
 This document provides a comprehensive overview of how prompting works in the Meet Without Fear backend, including prompt construction, model usage, parallel vs sequential operations, and memory handling.
 
@@ -458,10 +458,15 @@ graph TD
    - Stage 3: Need mapping, no solutions
    - Stage 4: Strategic repair, experiments
 
-3. **Context Injection:**
+3. **Context Injection (Fact-Ledger Order):**
+   - **Global facts** (user profile from previous sessions - injected at TOP)
+   - Emotional state (intensity, trend)
    - Context bundle (conversation, emotional thread, prior themes)
-   - Retrieved context (cross-session, relevant history)
+   - Session summary (for long sessions)
+   - Inner Thoughts reflections (if linked)
    - User memories (preferences, names, communication style)
+   - **Categorized session facts** (People, Logistics, Conflict, Emotional, History)
+   - Retrieved context (cross-session, relevant history)
 
 4. **Dynamic Elements:**
    - Turn count
@@ -518,25 +523,90 @@ graph TD
     SEMANTIC --> MERGE
 ```
 
-#### 2. Memory Detection (Non-Blocking)
+#### 2. Background Classification (Non-Blocking) - Fact-Ledger Architecture
+
+The **Partner Session Classifier** consolidates multiple background Haiku operations into a single call for better latency, cost, and coherence:
 
 ```mermaid
 graph TD
-    START[Session Message Processed] --> SAVE[Save AI Response]
-    SAVE --> CHECK{Should Run<br/>Memory Detection?}
+    START[AI Response Saved] --> CLASSIFIER[runPartnerSessionClassifier<br/>Haiku call<br/>Non-blocking / fire-and-forget]
 
-    CHECK -->|Yes| DETECT[detectMemoryIntent<br/>Haiku call<br/>Non-blocking]
-    CHECK -->|No| SKIP[Skip Detection]
+    CLASSIFIER --> MEMORY[Memory Intent Detection<br/>Detect explicit "remember" requests]
+    CLASSIFIER --> FACTS[Categorized Facts Extraction<br/>Update facts by category]
+    CLASSIFIER --> TOPIC[Topic Context<br/>What user is discussing]
 
-    DETECT --> RETURN[Return Result<br/>User sees response<br/>immediately]
-    SKIP --> RETURN
+    MEMORY --> VALID{Memory Valid?}
+    VALID -->|Yes| PUBLISH[Create pending memory<br/>Publish via Ably]
+    VALID -->|No| LOG[Log rejection reason]
+
+    FACTS --> SAVE_FACTS[Save to UserVessel.notableFacts<br/>JSONB: CategorizedFact[]]
+
+    FACTS --> EMBED[embedSessionContent<br/>Session-level embedding]
+
+    PUBLISH --> RETURN[Return Result<br/>User sees response immediately]
+    LOG --> RETURN
+    SAVE_FACTS --> RETURN
+    EMBED --> RETURN
 ```
 
-**Memory Detection Conditions:**
+**What Gets Extracted:**
 
-- Runs **after** AI response is saved
+1. **Memory Intent:** Detects explicit "remember" requests (e.g., "remember this", "call me X")
+2. **Categorized Notable Facts:** Maintains a curated list of 15-20 facts with categories:
+   - **People:** names, roles, relationships (e.g., "daughter Emma is 14")
+   - **Logistics:** scheduling, location, practical circumstances
+   - **Conflict:** specific disagreements, triggers, patterns
+   - **Emotional:** feelings, frustrations, fears, hopes
+   - **History:** past events, relationship timeline, backstory
+3. **Topic Context:** Brief description of what user is discussing
+
+**Categorized Fact Format:**
+```typescript
+interface CategorizedFact {
+  category: string;  // People, Logistics, Conflict, Emotional, History
+  fact: string;      // 1 sentence max
+}
+```
+
+**Configuration:**
+
+- Runs **after** AI response is sent (fire-and-forget)
 - **Non-blocking** - doesn't delay user response
-- Only runs if: `turnCount >= 3`, `intensity <= 7`, `!isStageTransition`
+- Uses circuit breaker for Haiku failures (graceful fallback)
+- Facts limited to 20 max, consolidated if exceeding
+- Facts stored as **JSONB** (not String[])
+- **Session-level embedding** triggered after classification
+
+**Key Files:**
+- Partner Sessions: `backend/src/services/partner-session-classifier.ts`
+- Inner Thoughts: `backend/src/services/background-classifier.ts`
+
+#### 2b. Global Facts Consolidation (Stage Transition)
+
+When a user completes Stage 1 (confirms "Feel Heard"), session facts are consolidated into their global profile:
+
+```mermaid
+graph TD
+    START[User Confirms Feel Heard] --> CONSOLIDATE[consolidateGlobalFacts<br/>Fire-and-forget]
+
+    CONSOLIDATE --> LOAD_EXISTING[Load User.globalFacts]
+    CONSOLIDATE --> LOAD_SESSION[Load UserVessel.notableFacts]
+
+    LOAD_EXISTING --> CHECK{Total > 50?}
+    LOAD_SESSION --> CHECK
+
+    CHECK -->|No| SIMPLE_MERGE[Simple concatenation]
+    CHECK -->|Yes| HAIKU_MERGE[Haiku consolidation<br/>Deduplicate & prioritize]
+
+    SIMPLE_MERGE --> SAVE[Save to User.globalFacts]
+    HAIKU_MERGE --> SAVE
+```
+
+**Configuration:**
+- **Max global facts:** 50 (~500 tokens)
+- **Trigger:** Stage 1 → Stage 2 transition
+- **Cost tracking:** `GLOBAL_MEMORY_CONSOLIDATION` call type
+- **Key File:** `backend/src/services/global-memory.ts`
 
 #### 3. Message Embedding (Non-Blocking)
 
@@ -743,20 +813,22 @@ sequenceDiagram
 
 ## Model Usage Summary
 
-| Service                                 | Model              | Purpose                         | When                               |
-| --------------------------------------- | ------------------ | ------------------------------- | ---------------------------------- |
-| Memory Intent                           | None (rules-based) | Determine retrieval strategy    | Every message                      |
-| Context Retrieval - Reference Detection | Haiku              | Detect references to past       | Every message (parallel)           |
-| Context Retrieval - Semantic Search     | Titan              | Vector similarity search        | When references detected           |
-| Retrieval Planning                      | Haiku              | Plan structured queries         | When depth='full'                  |
-| Intent Detection                        | Haiku              | Classify user intent            | Pre-session messages               |
-| Memory Detection                        | Haiku              | Detect implicit memory requests | Conditional (turnCount >= 3, etc.) |
-| Conversation Summarization              | Haiku              | Summarize older messages        | When message count >= 30           |
-| Response Generation                     | Sonnet             | User-facing responses           | Every message                      |
-| Witnessing                              | Sonnet             | Pre-session witnessing          | Pre-session messages               |
-| Reconciler                              | Sonnet             | Analyze empathy gaps            | Post-Stage 2                       |
-| Needs Extraction                        | Sonnet             | Extract needs from conversation | Stage 3                            |
-| Common Ground                           | Sonnet             | Find common ground              | Stage 2+                           |
+| Service                                 | Model              | Purpose                            | When                               |
+| --------------------------------------- | ------------------ | ---------------------------------- | ---------------------------------- |
+| Memory Intent                           | None (rules-based) | Determine retrieval strategy       | Every message                      |
+| Context Retrieval - Reference Detection | Haiku              | Detect references to past          | Every message (parallel)           |
+| Context Retrieval - Semantic Search     | Titan              | Vector similarity search           | When references detected           |
+| Retrieval Planning                      | Haiku              | Plan structured queries            | When depth='full'                  |
+| Intent Detection                        | Haiku              | Classify user intent               | Pre-session messages               |
+| Background Classification               | Haiku              | Memory detection + categorized facts | After every AI response (fire-and-forget) |
+| Global Facts Consolidation              | Haiku              | Merge session facts into user profile | Stage 1 → Stage 2 transition       |
+| Session Embedding                       | Titan              | Embed session content              | After classification               |
+| Conversation Summarization              | Haiku              | Summarize older messages           | When message count >= 30           |
+| Response Generation                     | Sonnet             | User-facing responses              | Every message                      |
+| Witnessing                              | Sonnet             | Pre-session witnessing             | Pre-session messages               |
+| Reconciler                              | Sonnet             | Analyze empathy gaps               | Post-Stage 2                       |
+| Needs Extraction                        | Sonnet             | Extract needs from conversation    | Stage 3                            |
+| Common Ground                           | Sonnet             | Find common ground                 | Stage 2+                           |
 
 ---
 
@@ -785,7 +857,9 @@ sequenceDiagram
 
 ### Memory & Summarization
 
-- `backend/src/services/memory-detector.ts` - Detects implicit memory requests
+- `backend/src/services/partner-session-classifier.ts` - Background classification (memory + categorized facts) for partner sessions
+- `backend/src/services/background-classifier.ts` - Background classification for Inner Thoughts sessions
+- `backend/src/services/global-memory.ts` - Global facts consolidation (cross-session user profile)
 - `backend/src/controllers/memories.ts` - Memory CRUD operations
 - `backend/src/services/conversation-summarizer.ts` - Rolling conversation summarization
 - `backend/src/utils/token-budget.ts` - Token counting and budget management

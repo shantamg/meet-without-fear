@@ -32,7 +32,7 @@ jest.mock('../../utils/json-extractor', () => ({
 
 // Mock embedding service
 jest.mock('../../services/embedding', () => ({
-  embedMessage: jest.fn().mockResolvedValue(undefined),
+  embedSessionContent: jest.fn().mockResolvedValue(true),
 }));
 
 // Import controllers after mocks

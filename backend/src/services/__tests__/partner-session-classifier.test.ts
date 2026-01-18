@@ -5,6 +5,11 @@
  * in the consolidated background classifier.
  */
 
+// Mock embedding service first (before any imports)
+jest.mock('../embedding', () => ({
+  embedSessionContent: jest.fn().mockResolvedValue(true),
+}));
+
 // Mock circuit breaker to execute immediately without timeout
 jest.mock('../../utils/circuit-breaker', () => ({
   withHaikuCircuitBreaker: jest.fn().mockImplementation(async (fn) => fn()),
@@ -12,13 +17,19 @@ jest.mock('../../utils/circuit-breaker', () => ({
   HAIKU_TIMEOUT_MS: 20000,
 }));
 
-// Mock Bedrock for Haiku calls
+// Mock Bedrock for Haiku calls - now returns categorized facts
 jest.mock('../../lib/bedrock', () => ({
   getHaikuJson: jest.fn().mockResolvedValue({
     memoryIntent: { detected: false, confidence: 'low' },
     topicContext: 'discussing relationship',
-    notableFacts: ['User has a daughter named Emma', 'Partner works night shifts'],
+    notableFacts: [
+      { category: 'People', fact: 'User has a daughter named Emma' },
+      { category: 'Logistics', fact: 'Partner works night shifts' },
+    ],
   }),
+  BrainActivityCallType: {
+    PARTNER_SESSION_CLASSIFICATION: 'PARTNER_SESSION_CLASSIFICATION',
+  },
 }));
 
 // Mock Prisma
@@ -52,7 +63,7 @@ describe('Partner Session Classifier', () => {
   });
 
   describe('Notable Facts Extraction', () => {
-    it('extracts notable facts from Haiku response', async () => {
+    it('extracts categorized notable facts from Haiku response', async () => {
       const result = await runPartnerSessionClassifier({
         userMessage: 'My daughter Emma is struggling with school',
         conversationHistory: [],
@@ -64,12 +75,12 @@ describe('Partner Session Classifier', () => {
 
       expect(result).not.toBeNull();
       expect(result?.notableFacts).toEqual([
-        'User has a daughter named Emma',
-        'Partner works night shifts',
+        { category: 'People', fact: 'User has a daughter named Emma' },
+        { category: 'Logistics', fact: 'Partner works night shifts' },
       ]);
     });
 
-    it('saves notable facts to UserVessel', async () => {
+    it('saves categorized notable facts to UserVessel', async () => {
       await runPartnerSessionClassifier({
         userMessage: 'We have been married for 10 years',
         conversationHistory: [],
@@ -84,7 +95,10 @@ describe('Partner Session Classifier', () => {
           sessionId: 'session-123',
         },
         data: {
-          notableFacts: ['User has a daughter named Emma', 'Partner works night shifts'],
+          notableFacts: [
+            { category: 'People', fact: 'User has a daughter named Emma' },
+            { category: 'Logistics', fact: 'Partner works night shifts' },
+          ],
         },
       });
     });
@@ -109,7 +123,10 @@ describe('Partner Session Classifier', () => {
     });
 
     it('limits facts to 20 items', async () => {
-      const manyFacts = Array.from({ length: 25 }, (_, i) => `Fact ${i + 1}`);
+      const manyFacts = Array.from({ length: 25 }, (_, i) => ({
+        category: 'People',
+        fact: `Fact ${i + 1}`,
+      }));
       (getHaikuJson as jest.Mock).mockResolvedValueOnce({
         memoryIntent: { detected: false, confidence: 'low' },
         notableFacts: manyFacts,
@@ -126,10 +143,19 @@ describe('Partner Session Classifier', () => {
       expect(result?.notableFacts).toHaveLength(20);
     });
 
-    it('filters out empty and non-string facts', async () => {
+    it('filters out invalid facts (empty, wrong types, missing fields)', async () => {
       (getHaikuJson as jest.Mock).mockResolvedValueOnce({
         memoryIntent: { detected: false, confidence: 'low' },
-        notableFacts: ['Valid fact', '', '   ', null, 123, 'Another valid fact'],
+        notableFacts: [
+          { category: 'People', fact: 'Valid fact' },
+          { category: '', fact: 'Empty category' }, // Empty category - filtered
+          { category: 'Emotional', fact: '' }, // Empty fact - filtered
+          { category: 'History' }, // Missing fact - filtered
+          { fact: 'Missing category' }, // Missing category - filtered
+          null, // null - filtered
+          'string only', // Plain string - filtered
+          { category: 'Logistics', fact: 'Another valid fact' },
+        ],
       });
 
       const result = await runPartnerSessionClassifier({
@@ -140,10 +166,13 @@ describe('Partner Session Classifier', () => {
         turnId: 'turn-1',
       });
 
-      expect(result?.notableFacts).toEqual(['Valid fact', 'Another valid fact']);
+      expect(result?.notableFacts).toEqual([
+        { category: 'People', fact: 'Valid fact' },
+        { category: 'Logistics', fact: 'Another valid fact' },
+      ]);
     });
 
-    it('preserves existing facts on Haiku timeout', async () => {
+    it('returns undefined notableFacts on Haiku timeout (fallback)', async () => {
       const existingFacts = ['Preserved fact 1', 'Preserved fact 2'];
 
       // Simulate Haiku returning null (timeout)
@@ -158,8 +187,8 @@ describe('Partner Session Classifier', () => {
         existingFacts,
       });
 
-      // Should return existing facts as fallback
-      expect(result?.notableFacts).toEqual(existingFacts);
+      // On failure, notableFacts should be undefined (don't overwrite existing)
+      expect(result?.notableFacts).toBeUndefined();
     });
   });
 
@@ -256,7 +285,7 @@ describe('Partner Session Classifier', () => {
     it('handles missing memoryIntent in response', async () => {
       (getHaikuJson as jest.Mock).mockResolvedValueOnce({
         topicContext: 'some context',
-        notableFacts: ['A fact'],
+        notableFacts: [{ category: 'People', fact: 'A fact' }],
       });
 
       const result = await runPartnerSessionClassifier({

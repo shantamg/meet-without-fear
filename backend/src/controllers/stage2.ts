@@ -24,7 +24,7 @@ import { notifyPartner } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getSonnetResponse, BrainActivityCallType } from '../lib/bedrock';
 import { extractJsonFromResponse } from '../utils/json-extractor';
-import { embedMessage } from '../services/embedding';
+import { embedSessionContent } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
 import {
   runReconciler,
@@ -563,16 +563,13 @@ export async function consentToShare(
     // Update request context so all downstream code can access this turnId
     updateContext({ turnId, sessionId, userId: user.id });
 
-    // Embed for cross-session retrieval (non-blocking)
-    embedMessage(empathyMessage.id, turnId).catch((err) =>
-      console.warn('[consentToShare] Failed to embed empathy statement:', err)
-    );
-
-    // Summarize older parts of the conversation (non-blocking)
-    // Empathy statements are persisted as chat messages, so they should be included in the rolling summary.
-    updateSessionSummary(sessionId, user.id, turnId).catch((err) =>
-      console.warn('[consentToShare] Failed to update session summary:', err)
-    );
+    // Summarize and embed session content (non-blocking)
+    // Per fact-ledger architecture, we embed at session level after summary updates
+    updateSessionSummary(sessionId, user.id, turnId)
+      .then(() => embedSessionContent(sessionId, user.id, turnId))
+      .catch((err: unknown) =>
+        console.warn('[consentToShare] Failed to update summary/embedding:', err)
+      );
 
     // Check if partner has also consented (only if we have a partner)
     let partnerAttempt = null;
@@ -709,17 +706,13 @@ Respond in JSON format:
         },
       });
 
-      // Embed for cross-session retrieval (non-blocking)
-      // Use same turnId as the consent action for cost attribution
-      embedMessage(aiMessage.id, turnId).catch((err) =>
-        console.warn('[consentToShare] Failed to embed transition message:', err)
-      );
-
-      // Summarize older parts of the conversation (non-blocking)
-      // Use same turnId for all operations in this request
-      updateSessionSummary(sessionId, user.id, turnId).catch((err) =>
-        console.warn('[consentToShare] Failed to update session summary after transition:', err)
-      );
+      // Summarize and embed session content (non-blocking)
+      // Per fact-ledger architecture, we embed at session level after summary updates
+      updateSessionSummary(sessionId, user.id, turnId)
+        .then(() => embedSessionContent(sessionId, user.id, turnId))
+        .catch((err: unknown) =>
+          console.warn('[consentToShare] Failed to update summary/embedding after transition:', err)
+        );
 
       transitionMessage = {
         id: aiMessage.id,
@@ -1469,8 +1462,11 @@ Respond in JSON format:
       });
     }
 
-    // Embed message
-    embedMessage(message.id, turnId).catch(console.warn);
+    // Embed session content (non-blocking)
+    // Per fact-ledger architecture, we embed at session level
+    embedSessionContent(sessionId, userId, turnId).catch((err: unknown) =>
+      console.warn('[Stage2] Failed to embed session content:', err)
+    );
 
   } catch (error) {
     console.error('[triggerStage3Transition] Error:', error);
@@ -1929,8 +1925,8 @@ export async function resubmitEmpathy(
     updateContext({ turnId, sessionId, userId: user.id });
 
     // Embed for cross-session retrieval (non-blocking)
-    embedMessage(newMessage.id, turnId).catch((err) =>
-      console.warn('[resubmitEmpathy] Failed to embed revised empathy statement:', err)
+    embedSessionContent(sessionId, user.id, turnId).catch((err: unknown) =>
+      console.warn('[resubmitEmpathy] Failed to embed session content:', err)
     );
 
     // Run reconciler for just this direction
@@ -2006,8 +2002,8 @@ Respond in JSON format:
       });
 
       // Embed for cross-session retrieval (non-blocking)
-      embedMessage(aiMessage.id, turnId).catch((err) =>
-        console.warn('[resubmitEmpathy] Failed to embed transition message:', err)
+      embedSessionContent(sessionId, user.id, turnId).catch((err: unknown) =>
+        console.warn('[resubmitEmpathy] Failed to embed session content:', err)
       );
 
       // Summarize older parts of the conversation (non-blocking)
