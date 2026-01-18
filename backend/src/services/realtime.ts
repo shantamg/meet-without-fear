@@ -10,6 +10,9 @@ import {
   MessageAIResponsePayload,
   MessageErrorPayload,
   MessageDTO,
+  ChatItem,
+  ChatItemNewPayload,
+  ChatItemUpdatePayload,
 } from '@meet-without-fear/shared';
 
 /**
@@ -716,5 +719,81 @@ export async function publishMessageError(
   } catch (error) {
     console.error(`[Realtime] Failed to publish message.error to session ${sessionId}:`, error);
     // Don't throw - we don't want to lose error notifications due to Ably issues
+  }
+}
+
+// ============================================================================
+// ChatItem Events (New Unified Format)
+// ============================================================================
+
+/**
+ * Publish a new chat item via Ably.
+ * Used for all new timeline items: messages, indicators, empathy statements, etc.
+ *
+ * @param sessionId - The session ID
+ * @param forUserId - The user ID this item is for (for client-side filtering)
+ * @param item - The ChatItem to publish
+ */
+export async function publishChatItemNew(
+  sessionId: string,
+  forUserId: string | undefined,
+  item: ChatItem
+): Promise<void> {
+  const ably = getAbly();
+
+  const payload: ChatItemNewPayload = {
+    sessionId,
+    timestamp: Date.now(),
+    forUserId,
+    item,
+  };
+
+  try {
+    const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
+    await channel.publish('chat-item:new', payload);
+    console.log(`[Realtime] Published chat-item:new (${item.type}) to session ${sessionId}`);
+
+    // Notify session members for list updates
+    notifySessionMembers(sessionId).catch((err) =>
+      console.warn(`[Realtime] Failed to notify session members after chat-item:new:`, err)
+    );
+  } catch (error) {
+    console.error(`[Realtime] Failed to publish chat-item:new to session ${sessionId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Publish a chat item update via Ably.
+ * Used for partial updates like status changes, content streaming, etc.
+ *
+ * @param sessionId - The session ID
+ * @param forUserId - The user ID this update is for (for client-side filtering)
+ * @param itemId - The ID of the item to update
+ * @param changes - Partial changes to apply to the item
+ */
+export async function publishChatItemUpdate(
+  sessionId: string,
+  forUserId: string | undefined,
+  itemId: string,
+  changes: Partial<Omit<ChatItem, 'type' | 'id'>>
+): Promise<void> {
+  const ably = getAbly();
+
+  const payload: ChatItemUpdatePayload = {
+    sessionId,
+    timestamp: Date.now(),
+    forUserId,
+    id: itemId,
+    changes,
+  };
+
+  try {
+    const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
+    await channel.publish('chat-item:update', payload);
+    console.log(`[Realtime] Published chat-item:update for ${itemId} to session ${sessionId}`);
+  } catch (error) {
+    console.error(`[Realtime] Failed to publish chat-item:update to session ${sessionId}:`, error);
+    throw error;
   }
 }
