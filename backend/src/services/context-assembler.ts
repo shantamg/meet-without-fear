@@ -112,6 +112,10 @@ export interface ContextBundle {
   // User memories ("Things to Always Remember")
   userMemories?: UserMemoriesContext;
 
+  // Notable facts extracted from the conversation
+  // (emotional context, situational facts, people & relationships)
+  notableFacts?: string[];
+
   // Stage-specific data
   stageContext: {
     stage: number;
@@ -180,17 +184,18 @@ export async function assembleContextBundle(
   // All these operations are independent and can run simultaneously to reduce latency.
   // Note: buildInnerThoughtsContext depends on conversationContext, so it runs after.
   const turnBufferSize = getTurnBufferSize(stage, intent.intent);
-  
-  const [conversationContext, emotionalThread, priorThemes, sessionSummary, userMemories] = await Promise.all([
+
+  const [conversationContext, emotionalThread, priorThemes, sessionSummary, userMemories, notableFacts] = await Promise.all([
     buildConversationContext(sessionId, userId, turnBufferSize, depth),
     buildEmotionalThread(sessionId, userId, depth),
-    (depth === 'full' || depth === 'light') 
-      ? buildPriorThemes(sessionId, userId, session.relationshipId) 
+    (depth === 'full' || depth === 'light')
+      ? buildPriorThemes(sessionId, userId, session.relationshipId)
       : Promise.resolve(undefined),
-    (depth !== 'none') 
-      ? buildSessionSummary(sessionId, userId) 
+    (depth !== 'none')
+      ? buildSessionSummary(sessionId, userId)
       : Promise.resolve(undefined),
-    buildUserMemoriesContext(userId, sessionId)
+    buildUserMemoriesContext(userId, sessionId),
+    loadNotableFacts(sessionId, userId),
   ]);
 
   // Build Inner Thoughts context after we have conversation context (it needs the last user message)
@@ -213,6 +218,7 @@ export async function assembleContextBundle(
     sessionSummary,
     innerThoughtsContext: finalInnerThoughts,
     userMemories,
+    notableFacts,
     stageContext: {
       stage,
       gatesSatisfied,
@@ -529,6 +535,31 @@ async function buildUserMemoriesContext(
 }
 
 /**
+ * Load notable facts from UserVessel
+ * These are facts about the user's situation, emotions, and circumstances
+ * extracted by Haiku during the conversation.
+ */
+async function loadNotableFacts(
+  sessionId: string,
+  userId: string
+): Promise<string[] | undefined> {
+  const vessel = await prisma.userVessel.findUnique({
+    where: {
+      userId_sessionId: { userId, sessionId },
+    },
+    select: { notableFacts: true },
+  });
+
+  // Return undefined if no facts exist (not an empty array)
+  // This prevents an empty "NOTED FACTS" block in the prompt
+  if (!vessel?.notableFacts || vessel.notableFacts.length === 0) {
+    return undefined;
+  }
+
+  return vessel.notableFacts;
+}
+
+/**
  * Format context bundle for prompt injection.
  * Note: Recent conversation is NOT included here because it's already sent
  * as separate messages in the messages array. Including it here would duplicate
@@ -593,6 +624,16 @@ export function formatContextForPrompt(bundle: ContextBundle): string {
       }
       parts.push('');
     }
+  }
+
+  // Notable facts from the conversation
+  // (emotional context, situational facts, people & relationships)
+  if (bundle.notableFacts && bundle.notableFacts.length > 0) {
+    parts.push('NOTED FACTS FROM THIS SESSION:');
+    for (const fact of bundle.notableFacts) {
+      parts.push(`- ${fact}`);
+    }
+    parts.push('');
   }
 
   return parts.join('\n');
