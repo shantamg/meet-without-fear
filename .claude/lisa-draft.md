@@ -1,224 +1,147 @@
-# Specification Draft: create list of notable info for each user in a partner session so we can include that in every prompt and reduce the number of chat history we include
+# Lisa Draft: Fix the Status Site to be More Helpful
 
-*Interview in progress - Started: 2026-01-17*
+**Feature:** Improve the status dashboard (tools/status-dashboard)
+**Started:** 2026-01-18
 
-## Overview
-Create a "Notable Facts" system that runs alongside the existing Haiku analysis pipeline. For each user message, Haiku extracts/updates/removes structured facts about the user's situation, emotions, and circumstances. These facts persist across the session and reduce the need for extensive chat history in prompts.
+## Current State Understanding
 
-## Problem Statement
-Currently, the AI needs extensive chat history to maintain context about each user's situation. This is token-expensive and can lead to context window issues. By extracting and maintaining a curated list of "notable facts" about each user, we can:
-1. Reduce chat history tokens in prompts
-2. Provide more consistent context across messages
-3. Enable cross-session continuity (future enhancement)
+The status dashboard is a React/Vite app called "Neural Monitor" that:
+- Lists sessions from the backend `/api/brain/sessions` endpoint
+- Shows session details including brain activity, users, turns
+- Displays cost/token summaries
+- Uses Ably for real-time updates
+- Has split view for two-user sessions (initiator/invitee)
 
-## Key Design Decisions
-- **Extends existing partner-session-classifier.ts**: Add fact extraction to the fire-and-forget Haiku call that already runs after each response
-- **Facts are per-user within a session**: Each partner maintains their own facts list (stored in UserVessel)
-- **Append-only within session**: Facts accumulate, no updates/removes needed for short sessions
-- **Free-form text**: Simple strings, no categorization overhead
-- **Full list output each time**: Haiku outputs complete facts list to avoid drift
-- **Focus on feeling-heard context**: Facts especially important for validating the user's experience
-- **Exclusions**: No meta-info about the process/session style, only substantive user content
+### Current Pages:
+1. **Session Browser** (`/`) - Lists all sessions with pagination
+2. **Session Detail** (`/session/:sessionId`) - Shows activity for a specific session
 
-## Scope
-
-### In Scope
-- Extend `partner-session-classifier.ts` to extract notable facts alongside memory detection
-- Store facts in `UserVessel.notableFacts` (new JSON field)
-- Load facts via `context-assembler.ts` and include in `ContextBundle`
-- Format facts in `formatContextForPrompt()` for Sonnet
-- Reduce conversation history from 20-30 messages to 8-10 messages
-- Facts persist for session duration only (within UserVessel)
-
-### Out of Scope
-- Cross-session fact persistence (future enhancement)
-- Fact categorization or structured data
-- Fact editing/removal UI
-- Blocking fact extraction (N+1 timing is acceptable)
-- Dynamic history reduction based on facts count
-
-## User Stories
-
-<!--
-IMPORTANT: Each story must be small enough to complete in ONE focused coding session.
-If a story is too large, break it into smaller stories.
-
-Format each story with VERIFIABLE acceptance criteria:
-
-### US-1: [Story Title]
-**Description:** As a [user type], I want [action] so that [benefit].
-
-**Acceptance Criteria:**
-- [ ] [Specific, verifiable criterion - e.g., "API returns 200 for valid input"]
-- [ ] [Another verifiable criterion - e.g., "Error message displayed for invalid email"]
-- [ ] Typecheck/lint passes
-- [ ] [If UI] Verify in browser
-
-BAD criteria (too vague): "Works correctly", "Is fast", "Handles errors"
-GOOD criteria: "Response time < 200ms", "Returns 404 for missing resource", "Form shows inline validation"
--->
-
-[To be filled during interview]
-
-## Technical Design
-
-### Data Model
-
-**UserVessel** (existing model - add new field):
-```prisma
-model UserVessel {
-  // ... existing fields ...
-  notableFacts    String[]   @default([])  // Array of free-form fact strings
-}
-```
-
-### Haiku Extraction Prompt
-
-**Input to Haiku:**
-- User's latest message
-- Last 2-3 conversation exchanges (for context)
-- Current list of notable facts
-
-**Output from Haiku:**
-```json
-{
-  "memoryIntent": { ... },  // existing
-  "topicContext": "...",     // existing
-  "notableFacts": [          // NEW
-    "User's daughter Emma is 14",
-    "Partner works night shifts",
-    "Feeling unheard about childcare decisions",
-    ...
-  ]
-}
-```
-
-**Fact types to extract:**
-- Emotional context (feelings, frustrations, fears, hopes)
-- Situational facts (events, circumstances, timeline)
-- People & relationships (names, roles, relationships mentioned)
-
-**Exclusions:**
-- Meta-commentary about the session/process
-- Questions to the AI
-- Session style preferences
-
-**Soft limit:** 15-20 facts. If exceeding, Haiku should consolidate/merge similar facts.
-
-### API Endpoints
-No new endpoints - facts are internal to the AI context pipeline.
-
-### Integration Points
-
-1. **partner-session-classifier.ts**: Add `notableFacts` extraction to existing Haiku call
-2. **UserVessel model**: Add `notableFacts` String[] field
-3. **context-assembler.ts**: Load facts from UserVessel, add to ContextBundle
-4. **formatContextForPrompt()**: Format facts block for Sonnet
-5. **memory-intent.ts**: Reduce `getTurnBufferSize()` to return 8-10 messages
-
-## User Experience
-
-### User Flows
-This feature is invisible to users - it's an internal AI context optimization. Users will experience:
-- More consistent AI responses that remember details from earlier in conversation
-- Potentially faster responses (less context = faster processing)
-- No UI changes
-
-### Prompt Formatting
-Facts appear in the Sonnet context as:
-```
-NOTED FACTS FROM THIS SESSION:
-- User's daughter Emma is 14
-- Partner works night shifts
-- Feeling unheard about childcare decisions
-```
-
-### Edge Cases
-- **Empty facts list**: First message has no facts - acceptable (N+1 timing)
-- **Very short sessions**: May only accumulate 1-2 facts - that's fine
-- **Conflicting facts**: Haiku should prefer newer information when consolidating
-- **Partner-specific facts**: Each user's vessel stores their own facts - no cross-contamination
-
-## Requirements
-
-### Functional Requirements
-<!--
-Use FR-IDs for each requirement:
-- FR-1: [Requirement description]
-- FR-2: [Requirement description]
--->
-[To be filled during interview]
-
-### Non-Functional Requirements
-<!--
-Performance, security, scalability requirements:
-- NFR-1: [Requirement - e.g., "Response time < 500ms for 95th percentile"]
-- NFR-2: [Requirement - e.g., "Support 100 concurrent users"]
--->
-[To be filled during interview]
-
-## Implementation Phases
-
-<!-- Break work into 2-4 incremental milestones Ralph can complete one at a time -->
-
-### Phase 1: [Foundation/Setup]
-- [ ] [Task 1]
-- [ ] [Task 2]
-- **Verification:** `[command to verify phase 1]`
-
-### Phase 2: [Core Implementation]
-- [ ] [Task 1]
-- [ ] [Task 2]
-- **Verification:** `[command to verify phase 2]`
-
-### Phase 3: [Integration/Polish]
-- [ ] [Task 1]
-- [ ] [Task 2]
-- **Verification:** `[command to verify phase 3]`
-
-<!-- Add Phase 4 if needed for complex features -->
-
-## Definition of Done
-
-This feature is complete when:
-- [ ] All acceptance criteria in user stories pass
-- [ ] All implementation phases verified
-- [ ] Tests pass: `[verification command]`
-- [ ] Types/lint check: `[verification command]`
-- [ ] Build succeeds: `[verification command]`
-
-## Ralph Loop Command
-
-<!-- Generated at finalization with phases and escape hatch -->
-
-```bash
-/ralph-loop "Implement create list of notable info for each user in a partner session so we can include that in every prompt and reduce the number of chat history we include per spec at docs/specs/create-list-of-notable-info-for-each-user-in-a-partner-session-so-we-can-include-that-in-every-prompt-and-reduce-the-number-of-chat-history-we-include.md
-
-PHASES:
-1. [Phase 1 name]: [tasks] - verify with [command]
-2. [Phase 2 name]: [tasks] - verify with [command]
-3. [Phase 3 name]: [tasks] - verify with [command]
-
-VERIFICATION (run after each phase):
-- [test command]
-- [lint/typecheck command]
-- [build command]
-
-ESCAPE HATCH: After 20 iterations without progress:
-- Document what's blocking in the spec file under 'Implementation Notes'
-- List approaches attempted
-- Stop and ask for human guidance
-
-Output <promise>COMPLETE</promise> when all phases pass verification." --max-iterations 30 --completion-promise "COMPLETE"
-```
-
-## Open Questions
-[To be filled during interview]
-
-## Implementation Notes
-[To be filled during interview]
+### Current Data Displayed:
+- Session list with status, type, relationship members
+- Brain activity (AI calls) with cost/token info
+- Turn-based conversation view
+- Real-time connection status
 
 ---
-*Interview notes will be accumulated below as the interview progresses*
----
+
+## Interview Notes
+
+### Pain Point (2026-01-18)
+The current dashboard isn't showing the right information after migrating to tool calls and streaming:
+- Need to show the **analysis block** separately (what the AI "thought")
+- Need to show the **response text** (what the AI said to the user)
+- For **fire-and-forget Haiku calls**, need structured display of results
+- **Solution approach**: Type each LLM call based on the prompt/function used, then have type-specific frontend components for proper display
+
+### Core Insight
+Each LLM event should have a "type" that determines how it renders. The frontend should have a component per event type.
+
+### LLM Call Types Identified (from codebase analysis)
+
+| Call Type | Model | Purpose | Flow | Fire-and-Forget |
+|-----------|-------|---------|------|-----------------|
+| Orchestrated Response | Sonnet | Main conversation | Blocking | No |
+| Retrieval Planning | Haiku | Query planning | Blocking w/ fallback | No |
+| Intent Detection | Haiku | Message classification | Blocking | No |
+| Background Classification | Haiku | Inner Thoughts analysis | Background | Yes |
+| Partner Session Classification | Haiku | Memory + facts detection | Background | Yes |
+| Chat Router Response | Haiku | Fallback template responses | Blocking | No |
+| Reference Detection | Haiku | Past content references | Parallel | No |
+| People Extraction | Haiku | Entity extraction | Fire-and-forget | Yes |
+| Memory Detection | Haiku | Explicit memory requests | Fire-and-forget | Yes |
+| Memory Validation | Haiku | Memory appropriateness | Fire-and-forget | Yes |
+| Reconciler Analysis | Sonnet | Empathy gap analysis | Blocking | No |
+| Summarization | Haiku | Conversation summary | Parallel during context | No |
+| Needs Extraction | Sonnet | Psychological needs | Blocking (Stage 3) | No |
+| Witnessing Response | Sonnet | Pre-session listening | Blocking | No |
+| Memory Formatting | Haiku | Memory presentation | Fire-and-forget | Yes |
+| Theme Extraction | Haiku | Topic extraction | Parallel/blocking | No |
+
+#### Key Observations
+- **Two-Model Stratification**: Haiku for fast mechanics, Sonnet for empathetic user-facing responses
+- **Circuit Breaker Protection**: Haiku calls use `withHaikuCircuitBreaker` (2-second timeout)
+- **Fire-and-Forget Pattern**: Background tasks don't block user response
+- **Streaming Support**: Main orchestrator uses SSE with analysis blocks
+
+### Display Requirements
+
+**All 16 call types get dedicated display components**
+
+**Visual Distinction (Color Accent System):**
+- **Sonnet/user-facing calls**: Warm accent (amber/orange) - these are the ones that become user responses
+- **Haiku/background calls**: Cool accent (blue/purple) - these build metadata and don't face users
+
+**Orchestrated Response Display:**
+- Analysis block: Collapsed by default, show summary/preview, click to expand
+- Response text: Always visible below analysis
+
+**Fire-and-Forget Structured Outputs (Facts, Memories, Themes):**
+- Display as compact tags/chips for space-efficient quick scanning
+
+**Event Ordering:**
+- Chronological (all types interleaved by timestamp)
+- Color coding distinguishes types
+- No filtering controls needed
+
+**Real-time Updates:**
+- Keep current behavior (append to list, no special animation)
+
+### Backend Changes
+
+**Add `callType` enum field to BrainActivity table:**
+- Explicit enum populated at creation time
+- Enables cleaner queries and explicit typing
+- Migration required
+
+**Add `structuredOutput` jsonb field to BrainActivity table:**
+- Store parsed/structured results alongside raw response
+- Frontend doesn't need to parse - just render the structured data
+- Each call type has a different structure
+
+### Architecture Decisions
+
+**Frontend-only rendering logic:**
+- Backend provides `callType` + `structuredOutput`
+- Dashboard has dedicated component per call type in `src/components/events/`
+- Clean separation of concerns
+
+**Session Browser (list view):**
+- Keep current stats (cost/token summary)
+- No additional call type breakdown needed
+
+### Scope & Phasing
+
+**Scope:**
+- Dashboard only (tools/status-dashboard) - no mobile app changes
+- This is a developer/debug tool
+
+**Components:**
+- Dedicated component for ALL 16 call types (no generic fallback)
+- Consistent and future-proof
+
+**Phasing:**
+- Single implementation (one PR covering backend + frontend)
+
+### Naming Convention
+
+**Enum names: SCREAMING_CASE**
+
+```
+ORCHESTRATED_RESPONSE
+RETRIEVAL_PLANNING
+INTENT_DETECTION
+BACKGROUND_CLASSIFICATION
+PARTNER_SESSION_CLASSIFICATION
+CHAT_ROUTER_RESPONSE
+REFERENCE_DETECTION
+PEOPLE_EXTRACTION
+MEMORY_DETECTION
+MEMORY_VALIDATION
+RECONCILER_ANALYSIS
+SUMMARIZATION
+NEEDS_EXTRACTION
+WITNESSING_RESPONSE
+MEMORY_FORMATTING
+THEME_EXTRACTION
+```
 
