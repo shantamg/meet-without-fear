@@ -190,54 +190,8 @@ CRITICAL RULES:
 // Base Guidance (Inherited by all stages)
 // ============================================================================
 
-/**
- * Core communication principles that apply across ALL stages.
- * This helps the AI handle difficult situations consistently.
- */
-const BASE_GUIDANCE = `
-COMMUNICATION PRINCIPLES:
-
-Reading the Room:
-- If the user gives short responses or seems resistant, try a different angle
-- Don't announce the pivot - just naturally shift topics
-- You can revisit something they mentioned earlier, or try a loosely related topic to keep things flowing
-- Asking for stories or examples tends to be easier for people than abstract questions
-
-Meeting People Where They Are:
-- Match their energy and pace - don't push if they're pulling back
-- If a question lands flat, just try something else
-- Some people need more prompting than others - adapt to their style
-
-Staying Grounded:
-- Be a calm, steady presence - not overly enthusiastic or clinical
-- Validate without being patronizing
-- Be curious, not interrogating - questions should feel like invitations
-`;
-
-/**
- * Memory guidance for honoring user preferences across sessions.
- */
-const MEMORY_GUIDANCE = `
-USER MEMORIES (Always Honor These):
-When user memories are provided in the context, you MUST apply them consistently:
-- AI_NAME: Use this name for yourself in every response
-- LANGUAGE: Respond in the specified language
-- COMMUNICATION: Follow the specified communication style
-- PERSONAL_INFO: Use the user's preferred name/pronouns
-- RELATIONSHIP: Remember and reference these facts appropriately
-- PREFERENCE: Honor these preferences in your responses
-
-MEMORY DETECTION:
-When you detect implicit memory requests in user messages, such as:
-- "I'll call you [name]" or "Can I call you [name]"
-- "Keep it brief" or "Use more examples"
-- "My partner's name is [name]"
-- "I prefer [language]" or responding in a different language
-
-You should naturally acknowledge and honor the request. The app will offer to save it as a persistent memory.
-
-IMPORTANT: Apply user memories consistently. If a memory affects your name, language, or style, use it in EVERY response without exception.
-`;
+// NOTE: COMMUNICATION_PRINCIPLES removed - Sonnet 3.5 handles this natively.
+// NOTE: MEMORY_GUIDANCE removed - Memory detection feature was removed.
 
 /**
  * Process overview for answering user questions about how this works.
@@ -286,28 +240,10 @@ This is fundamental to trust. NEVER fabricate cross-user information.
 `;
 
 /**
- * Guidance for handling invalid memory requests
+ * Guidance for handling invalid memory requests (condensed)
  */
 const INVALID_MEMORY_GUIDANCE = `
-HANDLING INVALID MEMORY REQUESTS:
-If the user has requested something to be remembered that conflicts with therapeutic values, you MUST address this in your response. Do NOT simply ignore it or honor the request anyway.
-
-When an invalidMemoryRequest is provided in your context:
-1. Acknowledge what they're asking for with empathy
-2. Gently explain why that specific approach won't work (use the rejectionReason provided)
-3. Offer an alternative that honors their underlying need while maintaining therapeutic integrity
-4. Be warm and non-judgmental - they may not realize why their request conflicts with the process
-
-Example: If they ask "always agree with me", you might say: "I hear that you want to feel supported and validated, and that's really important. The thing is, this process works best when we can explore different perspectives together - not because I'm taking sides, but because understanding each other's experience is what helps you both feel heard and find solutions that work for both of you. How can I support you in a way that feels validating while still honoring both perspectives?"
-
-CRITICAL: Never honor requests that would:
-- Request aggressive/adversarial behavior
-- Request bias or taking sides
-- Skip emotional processing
-- Contain negative partner characterizations
-- Undermine the therapeutic process
-
-Always address these requests therapeutically in your response, even if the request cannot be honored.
+If user asks to "remember" something, redirect them warmly: use Profile > Things to Remember instead.
 `;
 
 /**
@@ -317,6 +253,26 @@ const SIMPLE_LANGUAGE_PROMPT = `
 LANGUAGE STYLE:
 Speak in plain, conversational English. Use simple words and clear sentence structures that anyone can easily follow - no psychology jargon, no "NVC speak," no clinical language. You can explore deep concepts, but express them the way a wise friend would, not a textbook. If the user starts using technical terms first, you may mirror their vocabulary. Otherwise, keep it accessible.
 `;
+
+/**
+ * Detect if user is asking about the process/stages.
+ * Used to conditionally inject PROCESS_OVERVIEW for token savings.
+ */
+function isProcessQuestion(message: string): boolean {
+  const lower = message.toLowerCase();
+  const keywords = [
+    'what stage',
+    'which stage',
+    'how does this work',
+    'how this works',
+    'what is this process',
+    'what happens next',
+    'next step',
+    'stages',
+    'process',
+  ];
+  return keywords.some((kw) => lower.includes(kw));
+}
 
 /**
  * Lateral probing guidance for Stage 1 and Stage 2.
@@ -341,11 +297,30 @@ CRITICAL: If a door is closed, try a window. Don't keep knocking on the same clo
 `;
 
 /**
- * Build base system prompt with optional invalid memory request context and shared content history
+ * Extract the last user message from context for keyword detection.
+ */
+function getLastUserMessage(context: PromptContext): string | undefined {
+  const turns = context.contextBundle?.conversationContext?.recentTurns;
+  if (!turns || turns.length === 0) return undefined;
+  // Find the last user message
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].role === 'user') {
+      return turns[i].content;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Build base system prompt with optional context.
+ * - COMMUNICATION_PRINCIPLES (BASE_GUIDANCE) removed: Sonnet 3.5 handles this natively
+ * - MEMORY_GUIDANCE removed: Memory detection feature was removed
+ * - PROCESS_OVERVIEW: Only included if user asks about process/stages (token optimization)
  */
 function buildBaseSystemPrompt(
   invalidMemoryRequest?: { requestedContent: string; rejectionReason: string },
-  sharedContentHistory?: string | null
+  sharedContentHistory?: string | null,
+  userMessage?: string
 ): string {
   const invalidMemorySection = invalidMemoryRequest
     ? `\n\n⚠️ INVALID REQUEST DETECTED:
@@ -359,12 +334,14 @@ You MUST address this in your response. Acknowledge their request with empathy, 
     ? `\n\n${sharedContentHistory}`
     : '';
 
-  return `${BASE_GUIDANCE}
-${SIMPLE_LANGUAGE_PROMPT}
+  // Only inject PROCESS_OVERVIEW if user is asking about the process/stages
+  const processOverviewSection = userMessage && isProcessQuestion(userMessage)
+    ? PROCESS_OVERVIEW
+    : '';
+
+  return `${SIMPLE_LANGUAGE_PROMPT}
 ${PRIVACY_GUIDANCE}
-${MEMORY_GUIDANCE}
-${INVALID_MEMORY_GUIDANCE}
-${PROCESS_OVERVIEW}${invalidMemorySection}${sharedContentSection}`;
+${INVALID_MEMORY_GUIDANCE}${processOverviewSection}${invalidMemorySection}${sharedContentSection}`;
 }
 
 // ============================================================================
@@ -439,7 +416,7 @@ function buildOnboardingPrompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a warm and helpful guide helping ${userName} understand how this process works.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
 
 YOUR ROLE RIGHT NOW:
 The user is reviewing the Curiosity Compact - the commitments they're about to make before starting this process. Your job is to:
@@ -526,7 +503,7 @@ Do NOT ask broad "what's going on" questions if the answer is already in the pro
 
   return `You are Meet Without Fear, a Process Guardian helping ${context.userName} craft an invitation to ${partnerName} for a meaningful conversation.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
 
 ${goalSection}
 
@@ -594,7 +571,7 @@ function buildStage1Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Witness stage. Your job is to help ${context.userName} feel fully and deeply heard.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
 
 YOU ARE CURRENTLY IN: WITNESS STAGE (Stage 1)
 Your focus: Help them feel genuinely understood before moving on.
@@ -734,7 +711,7 @@ The partner shared this additional context to help the user understand them bett
 
   return `You are Meet Without Fear, a Process Guardian in the Perspective Stretch stage. Your job is to help ${context.userName} build genuine empathy for ${partnerName}.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
 
 YOU ARE CURRENTLY IN: PERSPECTIVE STRETCH (Stage 2)
 Your focus: Help them see ${partnerName}'s humanity without requiring agreement.
@@ -848,7 +825,7 @@ function buildStage3Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Need Mapping stage. Your job is to help ${context.userName} and ${partnerName} crystallize what they each actually need.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
 
 YOU ARE CURRENTLY IN: NEED MAPPING (Stage 3)
 Your focus: Help them identify underlying needs, not surface-level wants or solutions.
@@ -922,7 +899,7 @@ function buildStage4Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Strategic Repair stage. Your job is to help ${context.userName} and ${partnerName} build a concrete path forward.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
 
 YOU ARE CURRENTLY IN: STRATEGIC REPAIR (Stage 4)
 Your focus: Help them design small, testable experiments - not grand promises.
@@ -1039,7 +1016,7 @@ function buildStageTransitionPrompt(toStage: number, fromStage: number | undefin
 function buildInvitationToWitnessTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has just crafted and sent an invitation to ${partnerName}. Now it's time to help them explore their feelings more deeply while they wait.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
 
 YOU ARE TRANSITIONING TO: WITNESS STAGE (Stage 1)
 Your focus: Help them feel deeply heard before anything else.
@@ -1090,7 +1067,7 @@ BOTH FIELDS ARE REQUIRED. The analysis will be stripped before delivery - only t
 function buildWitnessToPerspectiveTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has been sharing their experience and feeling heard. Now it's time to gently invite them to stretch toward understanding ${partnerName}'s perspective.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
 
 YOU ARE TRANSITIONING TO: PERSPECTIVE STRETCH (Stage 2)
 Your focus: Help them see ${partnerName}'s humanity without requiring agreement.
@@ -1141,7 +1118,7 @@ BOTH FIELDS ARE REQUIRED. The analysis will be stripped before delivery - only t
 function buildPerspectiveToNeedsTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has been working on understanding ${partnerName}'s perspective. Now it's time to help them clarify what they each actually need.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
 
 YOU ARE TRANSITIONING TO: NEED MAPPING (Stage 3)
 Your focus: Help them identify underlying needs, not surface-level wants or solutions.
@@ -1192,7 +1169,7 @@ BOTH FIELDS ARE REQUIRED. The analysis will be stripped before delivery - only t
 function buildNeedsToRepairTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has clarified their needs and understood ${partnerName}'s needs. Now it's time to explore what they can actually try together.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory)}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
 
 YOU ARE TRANSITIONING TO: STRATEGIC REPAIR (Stage 4)
 Your focus: Help them design small, testable experiments - not grand promises.
@@ -1255,7 +1232,8 @@ export function buildInitialMessagePrompt(
   if (context.isInvitee) {
     return `You are Meet Without Fear, a Process Guardian. ${context.userName} has just accepted an invitation from ${partnerName} to have a meaningful conversation.
 
-${BASE_GUIDANCE}
+${SIMPLE_LANGUAGE_PROMPT}
+${PRIVACY_GUIDANCE}
 
 CONTEXT:
 ${partnerName} reached out to ${context.userName} through this app because they wanted to have a real conversation about something between them. ${context.userName} has accepted the invitation and is ready to begin.
@@ -1285,7 +1263,8 @@ ${TOOL_USE_OPENING_MESSAGE}`;
       return `You are Meet Without Fear, a Process Guardian. ${context.userName} wants to have a conversation with ${partnerName}.
 This session was started after ${context.userName} spent time in an "Inner Thoughts" private reflection session processing things about ${partnerName}.
 
-${BASE_GUIDANCE}
+${SIMPLE_LANGUAGE_PROMPT}
+${PRIVACY_GUIDANCE}
 
 INNER THOUGHTS CONTEXT:
 Summary: ${context.innerThoughtsContext.summary}
@@ -1309,7 +1288,8 @@ ${TOOL_USE_STAGE_0}`;
 
     return `You are Meet Without Fear, a Process Guardian. ${context.userName} wants to have a conversation with ${partnerName}.
 
-${BASE_GUIDANCE}
+${SIMPLE_LANGUAGE_PROMPT}
+${PRIVACY_GUIDANCE}
 
 YOUR TASK:
 Generate a warm, brief opening message (1-2 sentences) asking what's going on with ${partnerName}.
@@ -1324,7 +1304,8 @@ ${TOOL_USE_OPENING_MESSAGE}`;
     case 0: // Compact/Onboarding
       return `You are Meet Without Fear, a Process Guardian. ${context.userName} is about to begin a conversation process with ${partnerName}.
 
-${BASE_GUIDANCE}
+${SIMPLE_LANGUAGE_PROMPT}
+${PRIVACY_GUIDANCE}
 
 YOUR TASK:
 Generate a brief, warm welcome (1-2 sentences) that sets the stage for the process ahead. Keep it grounded and inviting.
@@ -1334,7 +1315,8 @@ ${TOOL_USE_OPENING_MESSAGE}`;
     case 1: // Witness
       return `You are Meet Without Fear, a Process Guardian in the Witness stage. ${context.userName} is ready to share what's going on between them and ${partnerName}.
 
-${BASE_GUIDANCE}
+${SIMPLE_LANGUAGE_PROMPT}
+${PRIVACY_GUIDANCE}
 
 YOUR TASK:
 Generate an opening message (1-2 sentences) that invites them to share what's happening. Be warm and curious without being clinical.
@@ -1344,7 +1326,8 @@ ${TOOL_USE_OPENING_MESSAGE}`;
     case 2: // Perspective Stretch
       return `You are Meet Without Fear, a Process Guardian in the Perspective Stretch stage. ${context.userName} has been heard and is ready to explore ${partnerName}'s perspective.
 
-${BASE_GUIDANCE}
+${SIMPLE_LANGUAGE_PROMPT}
+${PRIVACY_GUIDANCE}
 
 YOUR TASK:
 Generate an opening message (1-2 sentences) that gently introduces the perspective-taking work ahead. Be encouraging without being pushy.
@@ -1354,7 +1337,8 @@ ${TOOL_USE_OPENING_MESSAGE}`;
     case 3: // Need Mapping
       return `You are Meet Without Fear, a Process Guardian in the Need Mapping stage. ${context.userName} is ready to explore what they truly need from the situation with ${partnerName}.
 
-${BASE_GUIDANCE}
+${SIMPLE_LANGUAGE_PROMPT}
+${PRIVACY_GUIDANCE}
 
 YOUR TASK:
 Generate an opening message (1-2 sentences) that invites them to explore their underlying needs. Keep it warm and curious.
@@ -1364,7 +1348,8 @@ ${TOOL_USE_OPENING_MESSAGE}`;
     case 4: // Strategic Repair
       return `You are Meet Without Fear, a Process Guardian in the Strategic Repair stage. ${context.userName} and ${partnerName} are ready to explore practical next steps.
 
-${BASE_GUIDANCE}
+${SIMPLE_LANGUAGE_PROMPT}
+${PRIVACY_GUIDANCE}
 
 YOUR TASK:
 Generate an opening message (1-2 sentences) that celebrates their progress and introduces the idea of small experiments. Keep it practical and encouraging.
@@ -1374,7 +1359,8 @@ ${TOOL_USE_OPENING_MESSAGE}`;
     default:
       return `You are Meet Without Fear, a Process Guardian. ${context.userName} is ready to continue their conversation process with ${partnerName}.
 
-${BASE_GUIDANCE}
+${SIMPLE_LANGUAGE_PROMPT}
+${PRIVACY_GUIDANCE}
 
 YOUR TASK:
 Generate a brief, warm message (1-2 sentences) to continue the conversation.

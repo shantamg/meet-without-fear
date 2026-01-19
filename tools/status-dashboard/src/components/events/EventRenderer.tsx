@@ -14,7 +14,6 @@ import { BackgroundClassificationEvent } from './BackgroundClassificationEvent';
 import { ChatRouterResponseEvent } from './ChatRouterResponseEvent';
 import { ReferenceDetectionEvent } from './ReferenceDetectionEvent';
 import { PeopleExtractionEvent } from './PeopleExtractionEvent';
-import { MemoryDetectionEvent } from './MemoryDetectionEvent';
 import { MemoryValidationEvent } from './MemoryValidationEvent';
 import { ReconcilerAnalysisEvent } from './ReconcilerAnalysisEvent';
 import { SummarizationEvent } from './SummarizationEvent';
@@ -41,7 +40,7 @@ const EVENT_COMPONENTS: Record<BrainActivityCallType, React.FC<{ activity: Brain
   CHAT_ROUTER_RESPONSE: ChatRouterResponseEvent,
   REFERENCE_DETECTION: ReferenceDetectionEvent,
   PEOPLE_EXTRACTION: PeopleExtractionEvent,
-  MEMORY_DETECTION: MemoryDetectionEvent,
+  MEMORY_DETECTION: GenericActivityEvent, // Deprecated - memory detection removed
   MEMORY_VALIDATION: MemoryValidationEvent,
   RECONCILER_ANALYSIS: ReconcilerAnalysisEvent,
   SUMMARIZATION: SummarizationEvent,

@@ -1,14 +1,12 @@
 /**
  * Partner Session Background Classifier
  *
- * Consolidates multiple background Haiku calls into a single call for better
- * latency, cost, and coherence. Runs AFTER the AI response is sent to the user.
+ * Extracts notable facts from partner session conversations.
+ * Runs AFTER the AI response is sent to the user.
  *
- * Consolidates:
- * - Memory intent detection (user wants to save a memory)
- * - Memory validation (is the memory appropriate to save)
+ * Extracts:
  * - Topic context extraction
- * - Notable facts extraction (facts about user's situation, emotions, circumstances)
+ * - Notable facts (facts about user's situation, emotions, circumstances)
  *
  * This mirrors the pattern from background-classifier.ts (for Inner Thoughts)
  * but is tailored for partner session context.
@@ -16,9 +14,6 @@
 
 import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
-import type { MemoryCategory } from '@meet-without-fear/shared';
-import { publishUserEvent } from './realtime';
-import { memoryService } from './memory-service';
 import { prisma } from '../lib/prisma';
 import { embedSessionContent } from './embedding';
 
@@ -33,15 +28,6 @@ export interface CategorizedFact {
 }
 
 export interface PartnerSessionClassifierResult {
-  memoryIntent: {
-    detected: boolean;
-    suggestedMemory?: string;
-    category?: MemoryCategory;
-    confidence: 'high' | 'medium' | 'low';
-    evidence?: string;
-    isValid?: boolean;
-    validationReason?: string;
-  };
   topicContext?: string;
   /** Notable facts about the user's situation, emotions, and circumstances (categorized) */
   notableFacts?: CategorizedFact[];
@@ -69,25 +55,11 @@ export interface PartnerSessionClassifierInput {
 }
 
 // ============================================================================
-// Constants
-// ============================================================================
-
-const VALID_CATEGORIES: MemoryCategory[] = [
-  'AI_NAME',
-  'LANGUAGE',
-  'COMMUNICATION',
-  'PERSONAL_INFO',
-  'RELATIONSHIP',
-  'PREFERENCE',
-];
-
-// ============================================================================
 // Classifier
 // ============================================================================
 
 /**
- * Build the unified classification prompt.
- * Combines memory detection, validation, and notable facts extraction in one call.
+ * Build the classification prompt for notable facts extraction.
  */
 function buildClassifierPrompt(input: PartnerSessionClassifierInput): string {
   const { userMessage, conversationHistory, partnerName, existingFacts, sonnetAnalysis, sonnetResponse } = input;
@@ -119,7 +91,7 @@ interpretation of the user's situation, which can help you extract accurate fact
 `
     : '';
 
-  return `Analyze this partner session conversation for memory intents and notable facts.
+  return `Extract notable facts from this partner session conversation.
 
 CONVERSATION CONTEXT:
 ${partnerContext}
@@ -132,22 +104,7 @@ User: ${userMessage}
 
 ${existingFactsText}
 ${sonnetAnalysisText}
-TASK 1 - MEMORY INTENT DETECTION:
-Only flag as detected=true if user EXPLICITLY asks to remember something using words like:
-- "remember", "always", "from now on", "going forward", "don't forget"
-- "I want you to know that...", "Keep in mind that..."
-
-DO NOT flag normal sharing, venting, or conversational statements.
-
-Categories: AI_NAME, LANGUAGE, COMMUNICATION, PERSONAL_INFO, RELATIONSHIP, PREFERENCE
-
-TASK 2 - MEMORY VALIDATION (only if detected=true):
-Check if the memory is appropriate to save:
-- Is it safe (no harmful content, no secrets, no personally identifying info about third parties)?
-- Is it therapeutically appropriate (not reinforcing negative patterns)?
-- Is it something that should persist across sessions?
-
-TASK 3 - NOTABLE FACTS EXTRACTION:
+YOUR TASK - NOTABLE FACTS EXTRACTION:
 Maintain a curated list of CATEGORIZED facts about the user's situation. Output the COMPLETE updated list.
 
 CATEGORIES (use these exact names):
@@ -161,6 +118,7 @@ WHAT TO EXCLUDE:
 - Meta-commentary about the session/process
 - Questions to the AI
 - Session style preferences
+- Requests to "remember" things (ignore these)
 
 RULES:
 - Each fact MUST have a category and fact text
@@ -171,15 +129,6 @@ RULES:
 
 OUTPUT JSON only:
 {
-  "memoryIntent": {
-    "detected": boolean,
-    "suggestedMemory": "what to remember (only if detected=true)",
-    "category": "CATEGORY (only if detected=true)",
-    "confidence": "high|medium|low",
-    "evidence": "quote from message (only if detected=true)",
-    "isValid": boolean (only if detected=true - result of validation),
-    "validationReason": "why invalid (only if detected=true and isValid=false)"
-  },
   "topicContext": "brief description of what user is discussing",
   "notableFacts": [
     { "category": "People", "fact": "daughter Emma is 14" },
@@ -197,13 +146,6 @@ const VALID_FACT_CATEGORIES = ['People', 'Logistics', 'Conflict', 'Emotional', '
  */
 function normalizeResult(raw: unknown): PartnerSessionClassifierResult {
   const result = raw as Record<string, unknown>;
-
-  // Normalize memory intent
-  const memoryIntent = result.memoryIntent as Record<string, unknown> | undefined;
-  const category = memoryIntent?.category as string | undefined;
-  const normalizedCategory = category && VALID_CATEGORIES.includes(category.toUpperCase() as MemoryCategory)
-    ? (category.toUpperCase() as MemoryCategory)
-    : undefined;
 
   // Normalize notable facts to CategorizedFact[] format
   const rawFacts = result.notableFacts;
@@ -228,28 +170,16 @@ function normalizeResult(raw: unknown): PartnerSessionClassifierResult {
   }
 
   return {
-    memoryIntent: {
-      detected: Boolean(memoryIntent?.detected),
-      suggestedMemory: memoryIntent?.suggestedMemory as string | undefined,
-      category: normalizedCategory,
-      confidence: (['high', 'medium', 'low'].includes(memoryIntent?.confidence as string)
-        ? memoryIntent?.confidence
-        : 'low') as 'high' | 'medium' | 'low',
-      evidence: memoryIntent?.evidence as string | undefined,
-      isValid: memoryIntent?.isValid as boolean | undefined,
-      validationReason: memoryIntent?.validationReason as string | undefined,
-    },
     topicContext: result.topicContext as string | undefined,
     notableFacts,
   };
 }
 
 /**
- * Run the consolidated background classifier for partner sessions.
+ * Run the background classifier for partner sessions.
  * This is a fire-and-forget function - errors are logged but not thrown.
  *
- * If a valid memory intent is detected, it creates a pending memory and
- * publishes the suggestion via Ably.
+ * Extracts notable facts about the user's situation and saves them to UserVessel.
  */
 export async function runPartnerSessionClassifier(
   input: PartnerSessionClassifierInput
@@ -260,12 +190,8 @@ export async function runPartnerSessionClassifier(
     console.log(`${logPrefix} Starting classification for session ${input.sessionId}`);
 
     const systemPrompt = `You are an AI assistant analyzing a partner session (couples/relationship conversation).
-Your job is to:
-1. Detect ONLY explicit memory requests and validate them if found
-2. Extract and maintain notable facts about the user's situation
-
-Be conservative with memory detection - most messages are NOT memory requests.
-For notable facts, focus on emotional context, situational facts, and people/relationships.
+Your job is to extract and maintain notable facts about the user's situation.
+Focus on emotional context, situational facts, and people/relationships.
 Output only valid JSON.`;
 
     const userPrompt = buildClassifierPrompt(input);
@@ -273,7 +199,6 @@ Output only valid JSON.`;
     // Use circuit breaker to prevent blocking
     // Fallback returns undefined for facts (caller can preserve existing facts)
     const fallback: PartnerSessionClassifierResult = {
-      memoryIntent: { detected: false, confidence: 'low' },
       notableFacts: undefined, // On failure, don't overwrite existing facts
     };
 
@@ -282,7 +207,7 @@ Output only valid JSON.`;
         return await getHaikuJson<Record<string, unknown>>({
           systemPrompt,
           messages: [{ role: 'user', content: userPrompt }],
-          maxTokens: 1024, // Increased to accommodate notable facts
+          maxTokens: 1024,
           sessionId: input.sessionId,
           turnId: input.turnId,
           operation: 'partner-session-classifier',
@@ -300,8 +225,6 @@ Output only valid JSON.`;
 
     const normalized = normalizeResult(result);
     console.log(`${logPrefix} Classification complete:`, {
-      memoryDetected: normalized.memoryIntent.detected,
-      memoryValid: normalized.memoryIntent.isValid,
       topicContext: normalized.topicContext?.substring(0, 50),
       factsCount: normalized.notableFacts?.length ?? 0,
     });
@@ -336,41 +259,6 @@ Output only valid JSON.`;
       } catch (err) {
         console.error(`${logPrefix} Failed to save notable facts:`, err);
       }
-    }
-
-    // If valid memory intent detected, create pending memory and publish via Ably
-    if (
-      normalized.memoryIntent.detected &&
-      normalized.memoryIntent.isValid &&
-      normalized.memoryIntent.suggestedMemory &&
-      normalized.memoryIntent.category
-    ) {
-      try {
-        const memory = await memoryService.createPendingMemory({
-          userId: input.userId,
-          content: normalized.memoryIntent.suggestedMemory,
-          category: normalized.memoryIntent.category,
-          suggestedBy: `AI Confidence: ${normalized.memoryIntent.confidence} | Evidence: ${normalized.memoryIntent.evidence}`,
-        });
-
-        await publishUserEvent(input.userId, 'memory.suggested', {
-          sessionId: input.sessionId,
-          suggestion: {
-            id: memory.id,
-            suggestedContent: normalized.memoryIntent.suggestedMemory,
-            category: normalized.memoryIntent.category,
-            confidence: normalized.memoryIntent.confidence,
-            evidence: normalized.memoryIntent.evidence,
-            validation: 'valid',
-          },
-        });
-
-        console.log(`${logPrefix} Memory suggestion published via Ably: ${memory.id}`);
-      } catch (err) {
-        console.error(`${logPrefix} Failed to create/publish memory suggestion:`, err);
-      }
-    } else if (normalized.memoryIntent.detected && !normalized.memoryIntent.isValid) {
-      console.log(`${logPrefix} Memory detected but invalid: ${normalized.memoryIntent.validationReason}`);
     }
 
     return normalized;

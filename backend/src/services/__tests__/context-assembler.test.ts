@@ -134,7 +134,7 @@ describe('Context Assembler', () => {
 
         const formatted = formatContextForPrompt(bundle);
 
-        expect(formatted).toContain('EMOTIONAL STATE:');
+        expect(formatted).toContain('[Intensity:'); // HUD format
         expect(formatted).toContain('USER MEMORIES');
         expect(formatted).toContain('NOTED FACTS FROM THIS SESSION:');
         expect(formatted).toContain('- Has two kids');
@@ -191,11 +191,69 @@ describe('Context Assembler', () => {
 
         const formatted = formatContextForPrompt(bundle);
         const globalIndex = formatted.indexOf('ABOUT THIS USER');
-        const emotionalIndex = formatted.indexOf('EMOTIONAL STATE');
+        const emotionalIndex = formatted.indexOf('[Intensity:'); // HUD format
 
         expect(globalIndex).toBeGreaterThan(-1);
         expect(emotionalIndex).toBeGreaterThan(-1);
         expect(globalIndex).toBeLessThan(emotionalIndex);
+      });
+    });
+
+    describe('Session Isolation', () => {
+      it('does not include global facts when undefined (session isolation)', () => {
+        // Per session isolation spec: globalFacts should be undefined until consent UI is built
+        const bundle = createMinimalBundle({
+          globalFacts: undefined,
+          // Session-specific facts should still work
+          notableFacts: [{ category: 'Emotional', fact: 'User is feeling stressed' }],
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        // Should NOT contain global facts section
+        expect(formatted).not.toContain('ABOUT THIS USER (from previous sessions)');
+
+        // Should still contain session-specific notable facts
+        expect(formatted).toContain('NOTED FACTS FROM THIS SESSION');
+        expect(formatted).toContain('User is feeling stressed');
+      });
+
+      it('verifies session isolation - no cross-session context in stage 1', () => {
+        // This test documents the expected behavior per the session isolation spec:
+        // Stage 1 sessions should be a "clean slate" with only:
+        // - Session-specific notable facts
+        // - User memories
+        // - Emotional thread
+        // But NOT:
+        // - Global facts from previous sessions
+        const bundle = createMinimalBundle({
+          globalFacts: undefined, // Disabled until consent UI
+          notableFacts: [{ category: 'People', fact: 'Partner is named Alex' }],
+          userMemories: {
+            global: [{ content: 'Prefers to be called Sam', category: 'PERSONAL_INFO' }],
+            session: [],
+          },
+          emotionalThread: {
+            initialIntensity: 5,
+            currentIntensity: 6,
+            trend: 'stable',
+            notableShifts: [],
+          },
+          stageContext: {
+            stage: 1,
+            gatesSatisfied: {},
+          },
+        });
+
+        const formatted = formatContextForPrompt(bundle);
+
+        // Allowed content for session isolation
+        expect(formatted).toContain('NOTED FACTS FROM THIS SESSION');
+        expect(formatted).toContain('USER MEMORIES');
+        expect(formatted).toContain('[Intensity:'); // HUD format
+
+        // Forbidden content (cross-session)
+        expect(formatted).not.toContain('ABOUT THIS USER (from previous sessions)');
       });
     });
   });

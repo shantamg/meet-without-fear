@@ -37,6 +37,8 @@ import { runReconcilerForDirection, getSharedContextForGuesser } from '../servic
 import { updateContext } from '../lib/request-context';
 import { runPartnerSessionClassifier } from '../services/partner-session-classifier';
 import { consolidateGlobalFacts } from '../services/global-memory';
+import { assembleContextBundle, formatContextForPrompt } from '../services/context-assembler';
+import type { MemoryIntentResult } from '../services/memory-intent';
 
 // ============================================================================
 // Helpers
@@ -638,8 +640,8 @@ async function processAIResponseInBackground(ctx: {
     })
       .then((result) => {
         console.log(`[sendMessage:${requestId}] [BG] ✅ Classification finished:`, {
-          memoryDetected: result?.memoryIntent?.detected ?? false,
           factsCount: result?.notableFacts?.length ?? 0,
+          topicContext: result?.topicContext?.substring(0, 50),
         });
       })
       .catch((err) => {
@@ -1807,54 +1809,59 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       partnerName = invitation?.name || undefined;
     }
 
-    // Build stage prompt
+    // Build stage prompt with full context assembly (includes notable facts)
     const userName = user.name || 'there';
     const isInvitationPhase = session.status === 'CREATED';
+
+    // Create intent for context assembly - use 'light' depth to load notable facts
+    const streamingIntent: MemoryIntentResult = {
+      intent: 'stage_enforcement',
+      depth: 'light', // Changed from 'minimal' to ensure notable facts are included
+      reason: 'Streaming response',
+      threshold: 0.60,
+      maxCrossSession: 0,
+      allowCrossSession: false,
+      surfaceStyle: 'silent',
+    };
+
+    // Assemble full context including notable facts from UserVessel
+    const contextBundle = await assembleContextBundle(
+      sessionId,
+      user.id,
+      currentStage,
+      streamingIntent
+    );
+
+    console.log(`[sendMessageStream:${requestId}] Context assembled: notableFacts=${contextBundle.notableFacts?.length ?? 0}`);
 
     const prompt = buildStagePrompt(currentStage, {
       userName,
       partnerName,
       turnCount: userTurnCount,
       emotionalIntensity: 5,
-      contextBundle: {
-        conversationContext: {
-          recentTurns: history.slice(-10).map(m => ({
-            role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
-            content: m.content,
-            timestamp: m.timestamp.toISOString(),
-          })),
-          turnCount: userTurnCount,
-          sessionDurationMinutes: Math.floor((Date.now() - session.createdAt.getTime()) / 60000),
-        },
-        emotionalThread: {
-          initialIntensity: null,
-          currentIntensity: null,
-          trend: 'unknown',
-          notableShifts: [],
-        },
-        stageContext: {
-          stage: currentStage,
-          gatesSatisfied: (progress?.gatesSatisfied as Record<string, unknown>) ?? {},
-        },
-        userName,
-        partnerName,
-        intent: {
-          intent: 'stage_enforcement' as const,
-          depth: 'minimal' as const,
-          reason: 'Streaming response',
-          threshold: 0.60,
-          maxCrossSession: 0,
-          allowCrossSession: false,
-          surfaceStyle: 'silent' as const,
-        },
-        assembledAt: new Date().toISOString(),
-      },
+      contextBundle,
     }, { isInvitationPhase });
 
     // Add tool use instruction to prompt
     const promptWithToolInstruction = `${prompt}
 
 IMPORTANT: After your text response, you MUST call the update_session_state tool to report session state. Include any relevant metadata for the current stage.`;
+
+    // Format context bundle and inject into last user message (includes notable facts)
+    const formattedContext = formatContextForPrompt(contextBundle);
+    console.log(`[sendMessageStream:${requestId}] Formatted context: ${formattedContext.length} chars`);
+
+    // Build messages with context injected into the last user message
+    const messagesWithContext = history.map((m, i) => {
+      const isLastUserMessage = i === history.length - 1 && m.role === 'USER';
+      const content = isLastUserMessage && formattedContext.trim()
+        ? `[Context for this turn:\n${formattedContext}]\n\n${m.content}`
+        : m.content;
+      return {
+        role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+        content,
+      };
+    });
 
     // =========================================================================
     // Stream AI response (with analysis block trap)
@@ -1872,10 +1879,7 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
     try {
       const streamGenerator = getSonnetStreamingResponse({
         systemPrompt: promptWithToolInstruction,
-        messages: history.map(m => ({
-          role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
-          content: m.content,
-        })),
+        messages: messagesWithContext,
         tools: getToolsForStage(currentStage),
         maxTokens: 2048,
         sessionId,
@@ -2134,8 +2138,8 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
         });
 
         console.log(`[sendMessageStream:${requestId}] ✅ Classification finished:`, {
-          memoryDetected: result?.memoryIntent?.detected ?? false,
           factsCount: result?.notableFacts?.length ?? 0,
+          topicContext: result?.topicContext?.substring(0, 50),
         });
       } catch (err) {
         console.error(`[sendMessageStream:${requestId}] ❌ Classification failed:`, err);

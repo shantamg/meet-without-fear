@@ -1,8 +1,7 @@
 /**
  * Partner Session Classifier Tests
  *
- * Tests for notable facts extraction and memory intent detection
- * in the consolidated background classifier.
+ * Tests for notable facts extraction in the background classifier.
  */
 
 // Mock embedding service first (before any imports)
@@ -17,10 +16,9 @@ jest.mock('../../utils/circuit-breaker', () => ({
   HAIKU_TIMEOUT_MS: 20000,
 }));
 
-// Mock Bedrock for Haiku calls - now returns categorized facts
+// Mock Bedrock for Haiku calls - returns categorized facts
 jest.mock('../../lib/bedrock', () => ({
   getHaikuJson: jest.fn().mockResolvedValue({
-    memoryIntent: { detected: false, confidence: 'low' },
     topicContext: 'discussing relationship',
     notableFacts: [
       { category: 'People', fact: 'User has a daughter named Emma' },
@@ -38,18 +36,6 @@ jest.mock('../../lib/prisma', () => ({
     userVessel: {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
-  },
-}));
-
-// Mock realtime publishing
-jest.mock('../realtime', () => ({
-  publishUserEvent: jest.fn().mockResolvedValue(undefined),
-}));
-
-// Mock memory service
-jest.mock('../memory-service', () => ({
-  memoryService: {
-    createPendingMemory: jest.fn().mockResolvedValue({ id: 'mem-123' }),
   },
 }));
 
@@ -165,7 +151,6 @@ describe('Partner Session Classifier', () => {
         fact: `Fact ${i + 1}`,
       }));
       (getHaikuJson as jest.Mock).mockResolvedValueOnce({
-        memoryIntent: { detected: false, confidence: 'low' },
         notableFacts: manyFacts,
       });
 
@@ -182,7 +167,6 @@ describe('Partner Session Classifier', () => {
 
     it('filters out invalid facts (empty, wrong types, missing fields)', async () => {
       (getHaikuJson as jest.Mock).mockResolvedValueOnce({
-        memoryIntent: { detected: false, confidence: 'low' },
         notableFacts: [
           { category: 'People', fact: 'Valid fact' },
           { category: '', fact: 'Empty category' }, // Empty category - filtered
@@ -227,80 +211,23 @@ describe('Partner Session Classifier', () => {
       // On failure, notableFacts should be undefined (don't overwrite existing)
       expect(result?.notableFacts).toBeUndefined();
     });
-  });
 
-  describe('Memory Intent Detection', () => {
-    it('detects explicit memory intent', async () => {
-      (getHaikuJson as jest.Mock).mockResolvedValueOnce({
-        memoryIntent: {
-          detected: true,
-          suggestedMemory: 'User prefers brief responses',
-          category: 'COMMUNICATION',
-          confidence: 'high',
-          evidence: 'Keep your responses short',
-          isValid: true,
-        },
-        topicContext: 'communication preferences',
-        notableFacts: [],
-      });
-
-      const result = await runPartnerSessionClassifier({
-        userMessage: 'Keep your responses short from now on',
+    it('does not include memory detection tasks in prompt', async () => {
+      await runPartnerSessionClassifier({
+        userMessage: 'Remember that I prefer short responses',
         conversationHistory: [],
         sessionId: 'session-123',
         userId: 'user-456',
         turnId: 'turn-1',
       });
 
-      expect(result?.memoryIntent.detected).toBe(true);
-      expect(result?.memoryIntent.suggestedMemory).toBe('User prefers brief responses');
-      expect(result?.memoryIntent.category).toBe('COMMUNICATION');
-    });
-
-    it('normalizes category to uppercase', async () => {
-      (getHaikuJson as jest.Mock).mockResolvedValueOnce({
-        memoryIntent: {
-          detected: true,
-          suggestedMemory: 'Partner name is Alex',
-          category: 'relationship', // lowercase
-          confidence: 'high',
-          isValid: true,
-        },
-        notableFacts: [],
-      });
-
-      const result = await runPartnerSessionClassifier({
-        userMessage: "My partner's name is Alex",
-        conversationHistory: [],
-        sessionId: 'session-123',
-        userId: 'user-456',
-        turnId: 'turn-1',
-      });
-
-      expect(result?.memoryIntent.category).toBe('RELATIONSHIP');
-    });
-
-    it('rejects invalid memory categories', async () => {
-      (getHaikuJson as jest.Mock).mockResolvedValueOnce({
-        memoryIntent: {
-          detected: true,
-          suggestedMemory: 'Something',
-          category: 'INVALID_CATEGORY',
-          confidence: 'high',
-          isValid: true,
-        },
-        notableFacts: [],
-      });
-
-      const result = await runPartnerSessionClassifier({
-        userMessage: 'Test message',
-        conversationHistory: [],
-        sessionId: 'session-123',
-        userId: 'user-456',
-        turnId: 'turn-1',
-      });
-
-      expect(result?.memoryIntent.category).toBeUndefined();
+      expect(getHaikuJson).toHaveBeenCalled();
+      const call = (getHaikuJson as jest.Mock).mock.calls[0][0];
+      // Memory detection tasks should NOT be in the prompt
+      expect(call.messages[0].content).not.toContain('MEMORY INTENT DETECTION');
+      expect(call.messages[0].content).not.toContain('MEMORY VALIDATION');
+      expect(call.messages[0].content).not.toContain('TASK 1');
+      expect(call.messages[0].content).not.toContain('TASK 2');
     });
   });
 
@@ -319,10 +246,9 @@ describe('Partner Session Classifier', () => {
       expect(result).toBeNull();
     });
 
-    it('handles missing memoryIntent in response', async () => {
+    it('handles response with only topic context (no facts)', async () => {
       (getHaikuJson as jest.Mock).mockResolvedValueOnce({
         topicContext: 'some context',
-        notableFacts: [{ category: 'People', fact: 'A fact' }],
       });
 
       const result = await runPartnerSessionClassifier({
@@ -334,8 +260,8 @@ describe('Partner Session Classifier', () => {
       });
 
       expect(result).not.toBeNull();
-      expect(result?.memoryIntent.detected).toBe(false);
-      expect(result?.memoryIntent.confidence).toBe('low');
+      expect(result?.topicContext).toBe('some context');
+      expect(result?.notableFacts).toBeUndefined();
     });
   });
 });

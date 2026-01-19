@@ -202,8 +202,9 @@ export async function assembleContextBundle(
       : Promise.resolve(undefined),
     buildUserMemoriesContext(userId, sessionId),
     loadNotableFacts(sessionId, userId),
-    // Load global facts (consolidated across all sessions) for cross-session continuity
-    loadGlobalFacts(userId),
+    // Global facts disabled until consent UI is implemented
+    // loadGlobalFacts(userId),
+    Promise.resolve(undefined),
   ]);
 
   // Debug logging for notable facts
@@ -660,16 +661,20 @@ export function formatContextForPrompt(bundle: ContextBundle): string {
     parts.push('');
   }
 
-  // Emotional thread
-  if (bundle.emotionalThread.currentIntensity !== null) {
-    parts.push(`EMOTIONAL STATE:`);
-    parts.push(`Current intensity: ${bundle.emotionalThread.currentIntensity}/10`);
-    parts.push(`Trend: ${bundle.emotionalThread.trend}`);
-    if (bundle.emotionalThread.notableShifts.length > 0) {
-      parts.push(`Notable shifts: ${bundle.emotionalThread.notableShifts.map(
-        (s) => `${s.from} → ${s.to}`
-      ).join(', ')}`);
-    }
+  // Emotional HUD (densified per prompt optimization spec)
+  // Format: [Intensity: X/10 (Stable|Changed) | Turn N]
+  {
+    const intensity = bundle.emotionalThread.currentIntensity;
+    const trend = bundle.emotionalThread.trend;
+    const turnCount = bundle.conversationContext.turnCount;
+
+    // Map trend to Stable/Changed
+    const trendLabel = trend === 'stable' ? 'Stable' : trend === 'unknown' ? 'Unknown' : 'Changed';
+
+    // Handle null intensity with "Unknown"
+    const intensityStr = intensity !== null ? `${intensity}/10` : 'Unknown';
+
+    parts.push(`[Intensity: ${intensityStr} (${trendLabel}) | Turn ${turnCount}]`);
     parts.push('');
   }
 
@@ -741,5 +746,13 @@ export function formatContextForPrompt(bundle: ContextBundle): string {
     console.log(`[Context Assembler] formatContextForPrompt: No notable facts to include (bundle.notableFacts=${bundle.notableFacts ? 'empty array' : 'undefined'})`);
   }
 
-  return parts.join('\n');
+  const result = parts.join('\n');
+
+  // Token logging: Log character count as proxy for tokens (~4 chars per token)
+  // This helps measure optimization savings
+  const charCount = result.length;
+  const estimatedTokens = Math.ceil(charCount / 4);
+  console.log(`[Token Log] Context assembled: chars=${charCount}, estimatedTokens=${estimatedTokens}, turnCount=${bundle.conversationContext.turnCount}`);
+
+  return result;
 }
