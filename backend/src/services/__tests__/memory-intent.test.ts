@@ -77,24 +77,30 @@ describe('Memory Intent', () => {
       expect(config.maxCrossSession).toBe(0);
     });
 
-    it('returns moderate config for Stage 2', () => {
+    it('returns session-isolated config for Stage 2 (cross-session disabled until consent UI)', () => {
       const config = getStageConfig(2, 5);
       expect(config.threshold).toBe(0.55);
-      expect(config.allowCrossSession).toBe(true);
+      // Cross-session disabled until consent UI is implemented
+      expect(config.allowCrossSession).toBe(false);
+      expect(config.maxCrossSession).toBe(0);
       expect(config.surfaceStyle).toBe('tentative');
     });
 
-    it('returns full config for Stage 3', () => {
+    it('returns session-isolated config for Stage 3 (cross-session disabled until consent UI)', () => {
       const config = getStageConfig(3, 5);
       expect(config.threshold).toBe(0.50);
-      expect(config.maxCrossSession).toBe(10);
+      // Cross-session disabled until consent UI is implemented
+      expect(config.maxCrossSession).toBe(0);
+      expect(config.allowCrossSession).toBe(false);
       expect(config.surfaceStyle).toBe('explicit');
     });
 
-    it('returns full config for Stage 4', () => {
+    it('returns session-isolated config for Stage 4 (cross-session disabled until consent UI)', () => {
       const config = getStageConfig(4, 5);
       expect(config.threshold).toBe(0.50);
-      expect(config.maxCrossSession).toBe(10);
+      // Cross-session disabled until consent UI is implemented
+      expect(config.maxCrossSession).toBe(0);
+      expect(config.allowCrossSession).toBe(false);
       expect(config.surfaceStyle).toBe('explicit');
     });
   });
@@ -185,6 +191,38 @@ describe('Memory Intent', () => {
 
       expect(result.intent).toBe('recall_commitment');
       expect(result.depth).toBe('full');
+    });
+  });
+
+  describe('Session Isolation', () => {
+    /**
+     * Per session isolation spec: Cross-session memory is disabled for ALL stages
+     * until consent UI is implemented. Each session is a "clean slate" where the AI
+     * only knows what the user shares in that specific session.
+     */
+
+    it('verifies allowCrossSession is false for ALL stages', () => {
+      // Stage 1
+      expect(getStageConfig(1, 5).allowCrossSession).toBe(false);
+      // Stage 2
+      expect(getStageConfig(2, 5).allowCrossSession).toBe(false);
+      // Stage 3
+      expect(getStageConfig(3, 5).allowCrossSession).toBe(false);
+      // Stage 4
+      expect(getStageConfig(4, 5).allowCrossSession).toBe(false);
+    });
+
+    it('verifies maxCrossSession is 0 or minimal for ALL stages', () => {
+      // Stage 1 (early turns)
+      expect(getStageConfig(1, 2).maxCrossSession).toBe(0);
+      // Stage 1 (later turns) - allowed 3 but cross-session is disabled anyway
+      expect(getStageConfig(1, 5).maxCrossSession).toBe(3);
+      // Stage 2 - was 5, now 0
+      expect(getStageConfig(2, 5).maxCrossSession).toBe(0);
+      // Stage 3 - was 10, now 0
+      expect(getStageConfig(3, 5).maxCrossSession).toBe(0);
+      // Stage 4 - was 10, now 0
+      expect(getStageConfig(4, 5).maxCrossSession).toBe(0);
     });
   });
 });

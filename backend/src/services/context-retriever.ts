@@ -510,15 +510,13 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
     // or we can allow the main retrieval activity to capturing this detail.
     // For now, removing the partial auditLog call to avoid clutter and relying on the final complete log.
 
-    // Determine if cross-session recall is allowed
-    // Cross-session is allowed if:
-    // 1. memoryIntent says allowCrossSession is true, OR
-    // 2. User explicitly referenced past content (needsRetrieval), OR
-    // 3. User has enabled crossSessionRecall in preferences
-    const shouldSearchCrossSession =
-      (memoryIntent?.allowCrossSession ?? true) ||
-      referenceDetection.needsRetrieval ||
-      (effectiveUserPrefs?.crossSessionRecall ?? false);
+    // Cross-session disabled until consent UI is implemented
+    // Previously this was:
+    // const shouldSearchCrossSession =
+    //   (memoryIntent?.allowCrossSession ?? true) ||
+    //   referenceDetection.needsRetrieval ||
+    //   (effectiveUserPrefs?.crossSessionRecall ?? false);
+    const shouldSearchCrossSession = false;
 
     // Search using the generated queries
     // Per fact-ledger architecture, we now search at session level (facts + summary)

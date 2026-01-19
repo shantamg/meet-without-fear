@@ -47,8 +47,8 @@ const PRICING = {
 const PROMPT_LOG_DIR = path.join(__dirname, '../../tmp/prompts');
 
 /**
- * Save a prompt to a temp file for debugging.
- * Files are named with timestamp and call type identifier.
+ * Save the final prompt to a text file for debugging.
+ * Shows exactly what gets sent to the model.
  *
  * @param params - Prompt details to log
  * @returns The file path where the prompt was saved, or null if disabled/failed
@@ -67,8 +67,6 @@ function logPromptToFile(params: {
   if (process.env.DISABLE_PROMPT_LOGGING === 'true') {
     return null;
   }
-
-  console.log(`[Prompt Logger] Logging ${params.callType || params.operation} for model ${params.model}`);
 
   try {
     // Ensure directory exists
@@ -92,32 +90,43 @@ function logPromptToFile(params: {
       .replace(/[^a-zA-Z0-9_-]/g, '_')
       .toLowerCase();
 
-    const filename = `${timestamp}_${safeIdentifier}.json`;
+    const filename = `${timestamp}_${safeIdentifier}.txt`;
     const filepath = path.join(PROMPT_LOG_DIR, filename);
 
-    // Build the log content with full prompt details
-    const logContent = {
-      timestamp: now.toISOString(),
-      callType: params.callType,
-      operation: params.operation,
-      model: params.model,
-      sessionId: params.sessionId,
-      turnId: params.turnId,
-      maxTokens: params.maxTokens,
-      systemPrompt: params.systemPrompt,
-      systemPromptLength: params.systemPrompt.length,
-      messages: params.messages,
-      totalMessageLength: params.messages.reduce((acc, m) => acc + m.content.length, 0),
-      combinedPromptLength: params.systemPrompt.length +
-        params.messages.reduce((acc, m) => acc + m.content.length, 0),
-    };
+    // Build plain text prompt (exactly what gets sent to the model)
+    let promptText = `[SYSTEM]\n${params.systemPrompt}\n`;
 
-    fs.writeFileSync(filepath, JSON.stringify(logContent, null, 2));
+    for (const msg of params.messages) {
+      const roleLabel = msg.role.toUpperCase();
+      promptText += `\n[${roleLabel}]\n${msg.content}\n`;
+    }
+
+    fs.writeFileSync(filepath, promptText);
     return filepath;
   } catch (error) {
     // Silent fail - don't let logging break the main flow
     console.warn('[Bedrock] Failed to log prompt to file:', error);
     return null;
+  }
+}
+
+/**
+ * Save the model's response to a text file.
+ * Uses the same prefix as the prompt file with _response suffix.
+ *
+ * @param promptFilepath - The filepath returned from logPromptToFile
+ * @param response - The model's response text
+ */
+function logResponseToFile(promptFilepath: string | null, response: string | null): void {
+  if (!promptFilepath || !response) return;
+  if (process.env.DISABLE_PROMPT_LOGGING === 'true') return;
+
+  try {
+    // Replace .txt with _response.txt
+    const responseFilepath = promptFilepath.replace(/\.txt$/, '_response.txt');
+    fs.writeFileSync(responseFilepath, response);
+  } catch (error) {
+    console.warn('[Bedrock] Failed to log response to file:', error);
   }
 }
 
@@ -289,7 +298,7 @@ export async function getCompletion(options: CompletionOptions): Promise<string 
   const { systemPrompt, messages, maxTokens = 2048, thinkingBudget } = options;
 
   // Log prompt to file for debugging
-  logPromptToFile({
+  const promptFilepath = logPromptToFile({
     callType: options.callType,
     operation: options.operation ?? 'converse',
     model: BEDROCK_MODEL_ID,
@@ -340,7 +349,9 @@ export async function getCompletion(options: CompletionOptions): Promise<string 
     return null;
   }
 
-  return textBlock.text ?? null;
+  const responseText = textBlock.text ?? null;
+  logResponseToFile(promptFilepath, responseText);
+  return responseText;
 }
 
 /**
@@ -362,7 +373,7 @@ export async function getModelCompletion(
   const startTime = Date.now();
 
   // Log prompt to file for debugging
-  logPromptToFile({
+  const promptFilepath = logPromptToFile({
     callType: options.callType,
     operation,
     model: modelId,
@@ -454,6 +465,7 @@ export async function getModelCompletion(
       return null;
     }
 
+    logResponseToFile(promptFilepath, responseText);
     return responseText;
   } catch (error) {
     console.error(`[Bedrock] Failed to get response from ${model}:`, error);
@@ -665,7 +677,7 @@ export async function* getSonnetStreamingResponse(
   const startTime = Date.now();
 
   // Log prompt to file for debugging
-  logPromptToFile({
+  const promptFilepath = logPromptToFile({
     callType: options.callType,
     operation: options.operation,
     model: BEDROCK_SONNET_MODEL_ID,
@@ -719,10 +731,11 @@ export async function* getSonnetStreamingResponse(
       throw new Error('No stream in Bedrock response');
     }
 
-    // Track accumulated content for tool use
+    // Track accumulated content for tool use and response logging
     let currentToolUseId: string | undefined;
     let currentToolName: string | undefined;
     let accumulatedToolInput = '';
+    let accumulatedResponseText = '';
     let inputTokens = 0;
     let outputTokens = 0;
 
@@ -730,6 +743,7 @@ export async function* getSonnetStreamingResponse(
     for await (const event of response.stream) {
       // Text delta
       if (event.contentBlockDelta?.delta?.text) {
+        accumulatedResponseText += event.contentBlockDelta.delta.text;
         yield { type: 'text', text: event.contentBlockDelta.delta.text };
       }
 
@@ -748,25 +762,24 @@ export async function* getSonnetStreamingResponse(
 
       // Content block stop - emit accumulated tool use
       if (event.contentBlockStop !== undefined && currentToolUseId && currentToolName) {
+        let parsedInput: Record<string, unknown> = {};
         try {
-          const parsedInput = accumulatedToolInput
+          parsedInput = accumulatedToolInput
             ? JSON.parse(accumulatedToolInput)
             : {};
-          yield {
-            type: 'tool_use',
-            toolUseId: currentToolUseId,
-            name: currentToolName,
-            input: parsedInput,
-          };
         } catch (parseError) {
           console.error('[Bedrock] Failed to parse tool input JSON:', parseError);
-          yield {
-            type: 'tool_use',
-            toolUseId: currentToolUseId,
-            name: currentToolName,
-            input: {},
-          };
         }
+
+        // Append tool call to response for logging
+        accumulatedResponseText += `\n\n[TOOL CALL: ${currentToolName}]\n${JSON.stringify(parsedInput, null, 2)}`;
+
+        yield {
+          type: 'tool_use',
+          toolUseId: currentToolUseId,
+          name: currentToolName,
+          input: parsedInput,
+        };
         currentToolUseId = undefined;
         currentToolName = undefined;
         accumulatedToolInput = '';
@@ -793,6 +806,9 @@ export async function* getSonnetStreamingResponse(
       durationMs,
       cost,
     });
+
+    // Log the accumulated response
+    logResponseToFile(promptFilepath, accumulatedResponseText);
 
     // Yield done event with usage
     yield { type: 'done', usage: { inputTokens, outputTokens } };

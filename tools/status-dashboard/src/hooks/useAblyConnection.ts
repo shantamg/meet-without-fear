@@ -33,7 +33,26 @@ export function useAblyConnection(options: UseAblyConnectionOptions = {}): UseAb
   const [status, setStatus] = useState<AblyConnectionStatus>('disconnected');
   const clientRef = useRef<Ably.Realtime | null>(null);
   const channelRef = useRef<Ably.RealtimeChannel | null>(null);
+  const sessionChannelRef = useRef<Ably.RealtimeChannel | null>(null);
   const subscriptionsRef = useRef<Map<string, EventCallback>>(new Map());
+
+  // Store callbacks in refs so they can be updated without reconnecting
+  const callbacksRef = useRef({
+    onSessionCreated: options.onSessionCreated,
+    onBrainActivity: options.onBrainActivity,
+    onNewMessage: options.onNewMessage,
+    onContextUpdated: options.onContextUpdated,
+  });
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    callbacksRef.current = {
+      onSessionCreated: options.onSessionCreated,
+      onBrainActivity: options.onBrainActivity,
+      onNewMessage: options.onNewMessage,
+      onContextUpdated: options.onContextUpdated,
+    };
+  }, [options.onSessionCreated, options.onBrainActivity, options.onNewMessage, options.onContextUpdated]);
 
   useEffect(() => {
     if (!ablyKey) {
@@ -53,34 +72,30 @@ export function useAblyConnection(options: UseAblyConnectionOptions = {}): UseAb
     client.connection.on('disconnected', () => setStatus('disconnected'));
     client.connection.on('failed', () => setStatus('error'));
 
-    // Set up initial subscriptions from options
-    if (options.onSessionCreated) {
-      ablyChannel.subscribe('session-created', () => options.onSessionCreated?.());
-    }
-    if (options.onBrainActivity) {
-      ablyChannel.subscribe('brain-activity', (msg) => options.onBrainActivity?.(msg.data));
-    }
-    if (options.onNewMessage) {
-      ablyChannel.subscribe('new-message', (msg) => options.onNewMessage?.(msg.data));
-    }
+    // Set up subscriptions that use refs (so callbacks can be updated)
+    ablyChannel.subscribe('session-created', () => callbacksRef.current.onSessionCreated?.());
+    ablyChannel.subscribe('brain-activity', (msg) => callbacksRef.current.onBrainActivity?.(msg.data));
+    ablyChannel.subscribe('new-message', (msg) => callbacksRef.current.onNewMessage?.(msg.data));
 
     // Session-specific channel subscriptions
-    let sessionChannel: Ably.RealtimeChannel | null = null;
     if (options.sessionId) {
       const sessionChannelName = `meetwithoutfear:session:${options.sessionId}`;
-      sessionChannel = client.channels.get(sessionChannelName);
+      const sessionChannel = client.channels.get(sessionChannelName);
+      sessionChannelRef.current = sessionChannel;
 
       // Subscribe to context.updated events
-      if (options.onContextUpdated) {
-        sessionChannel.subscribe('context.updated', (msg) => options.onContextUpdated?.(msg.data));
-      }
+      sessionChannel.subscribe('context.updated', (msg) => {
+        console.log('[useAblyConnection] context.updated event received:', msg.data);
+        callbacksRef.current.onContextUpdated?.(msg.data);
+      });
     }
 
     return () => {
       subscriptionsRef.current.clear();
       ablyChannel.unsubscribe();
-      if (sessionChannel) {
-        sessionChannel.unsubscribe();
+      if (sessionChannelRef.current) {
+        sessionChannelRef.current.unsubscribe();
+        sessionChannelRef.current = null;
       }
       client.close();
       clientRef.current = null;

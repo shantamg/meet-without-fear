@@ -297,6 +297,9 @@ export async function orchestrateResponse(
   // Step 5: Get response from Sonnet with token budget management
   const formattedContextBundle = formatContextForPrompt(contextBundle);
 
+  // Debug: Log formatted context length and snippet
+  console.log(`[AI Orchestrator] Formatted context: ${formattedContextBundle.length} chars, starts with: "${formattedContextBundle.slice(0, 100).replace(/\n/g, '\\n')}..."`);
+
   // Merge retrieved context with context bundle
   let fullContext = formattedContextBundle;
   if (retrievedContext) {
@@ -322,9 +325,8 @@ export async function orchestrateResponse(
     );
   }
 
-  // Log the context that will be inserted into the prompt
-  // Log the context that will be inserted into the prompt
-  // auditLog removed - context is part of the final prompt which is logged in LLM BrainActivity
+  // Debug: Log the context that will be injected
+  console.log(`[AI Orchestrator] Context for injection: ${budgetedContext.retrievedContext.length} chars, will inject: ${budgetedContext.retrievedContext.trim().length > 0}`);
 
   const messagesWithContext = buildMessagesWithContext(
     budgetedContext.conversationMessages,

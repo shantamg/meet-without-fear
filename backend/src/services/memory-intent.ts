@@ -142,24 +142,27 @@ export function getStageConfig(stage: number, turnCount: number): StageMemoryCon
         surfaceStyle: 'silent',
       };
     case 2:
+      // Cross-session disabled until consent UI is implemented
       return {
         threshold: 0.55,
-        maxCrossSession: 5,
-        allowCrossSession: true,
+        maxCrossSession: 0,  // was 5
+        allowCrossSession: false,  // was true
         surfaceStyle: 'tentative',
       };
     case 3:
+      // Cross-session disabled until consent UI is implemented
       return {
         threshold: 0.50,
-        maxCrossSession: 10,
-        allowCrossSession: true,
+        maxCrossSession: 0,  // was 10
+        allowCrossSession: false,  // was true
         surfaceStyle: 'explicit',
       };
     case 4:
+      // Cross-session disabled until consent UI is implemented
       return {
         threshold: 0.50,
-        maxCrossSession: 10,
-        allowCrossSession: true,
+        maxCrossSession: 0,  // was 10
+        allowCrossSession: false,  // was true
         surfaceStyle: 'explicit',
       };
     default:
