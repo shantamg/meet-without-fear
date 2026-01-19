@@ -882,6 +882,6 @@ The backend uses a **decision-first architecture** where:
 3. **Two-model stratification** optimizes cost and speed (Haiku for mechanics, Sonnet for empathy)
 4. **Universal context retrieval** ensures awareness on every message
 5. **Parallel operations** optimize performance (reference detection, history loading, semantic search)
-6. **Non-blocking operations** (memory detection, embeddings) don't delay responses
+6. **Non-blocking operations** (embeddings, fact extraction) don't delay responses
 
 The system is designed to be **therapeutically appropriate** - respecting emotional intensity, stage boundaries, and user preferences while maintaining full awareness of relevant history.
