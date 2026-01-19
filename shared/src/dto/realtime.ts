@@ -116,7 +116,9 @@ export type SessionEventType =
   | 'memory.suggested'
   // Fire-and-forget message events (new)
   | 'message.ai_response'
-  | 'message.error';
+  | 'message.error'
+  // Context assembly events (for Neural Monitor dashboard)
+  | 'context.updated';
 
 export interface SessionEventData {
   sessionId: string;
@@ -261,4 +263,20 @@ export interface MessageErrorPayload extends RealtimeEventBase {
   error: string;
   /** Whether the user can retry sending the message */
   canRetry: boolean;
+}
+
+// ============================================================================
+// Context Assembly Events (for Neural Monitor)
+// ============================================================================
+
+/**
+ * Payload for context.updated event.
+ * Sent when context has been assembled for a user in a session.
+ * Used by Neural Monitor dashboard to trigger context display refresh.
+ */
+export interface ContextUpdatedPayload extends RealtimeEventBase {
+  /** The user ID whose context was assembled */
+  userId: string;
+  /** When the context was assembled */
+  assembledAt: string;
 }

@@ -13,6 +13,7 @@ import {
   ChatItem,
   ChatItemNewPayload,
   ChatItemUpdatePayload,
+  ContextUpdatedPayload,
 } from '@meet-without-fear/shared';
 
 /**
@@ -795,5 +796,41 @@ export async function publishChatItemUpdate(
   } catch (error) {
     console.error(`[Realtime] Failed to publish chat-item:update to session ${sessionId}:`, error);
     throw error;
+  }
+}
+
+// ============================================================================
+// Context Assembly Events (for Neural Monitor Dashboard)
+// ============================================================================
+
+/**
+ * Publish a context.updated event when context has been assembled for a user.
+ * Used by the Neural Monitor dashboard to trigger context display refresh.
+ *
+ * @param sessionId - The session ID
+ * @param userId - The user ID whose context was assembled
+ * @param assembledAt - ISO timestamp when the context was assembled
+ */
+export async function publishContextUpdated(
+  sessionId: string,
+  userId: string,
+  assembledAt: string
+): Promise<void> {
+  const ably = getAbly();
+
+  const payload: ContextUpdatedPayload = {
+    sessionId,
+    timestamp: Date.now(),
+    userId,
+    assembledAt,
+  };
+
+  try {
+    const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
+    await channel.publish('context.updated', payload);
+    console.log(`[Realtime] Published context.updated for user ${userId} to session ${sessionId}`);
+  } catch (error) {
+    console.error(`[Realtime] Failed to publish context.updated to session ${sessionId}:`, error);
+    // Don't throw - this is a non-critical event for dashboard monitoring only
   }
 }

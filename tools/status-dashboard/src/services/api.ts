@@ -1,4 +1,4 @@
-import { Session, BrainActivity, SessionSummary } from '../types';
+import { Session, BrainActivity, SessionSummary, ContextResponse } from '../types';
 
 /**
  * API response wrapper type.
@@ -75,6 +75,22 @@ export const api = {
       messages: json.data.messages || [],
       summary: json.data.summary || { totalCost: 0, totalTokens: 0 },
     };
+  },
+
+  /**
+   * Fetches assembled context bundle for a session.
+   * Returns context for all users in the session.
+   */
+  async getSessionContext(sessionId: string): Promise<ContextResponse> {
+    const res = await fetch(`/api/brain/sessions/${sessionId}/context`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch context: ${res.statusText}`);
+    }
+    const json: ApiResponse<ContextResponse> = await res.json();
+    if (!json.success) {
+      throw new Error(json.error || 'Failed to load context');
+    }
+    return json.data;
   },
 };
 

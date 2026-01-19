@@ -605,32 +605,6 @@ async function processAIResponseInBackground(ctx: {
       isOnboarding,
     };
 
-    // Start partner session classifier in parallel with orchestrator (fire-and-forget)
-    // This consolidates memory intent detection + validation into one non-blocking Haiku call
-    // It doesn't depend on orchestrator results, so we can run it in parallel
-    console.log(`[sendMessage:${requestId}] [BG] 🚀 Triggering background classification...`);
-    runPartnerSessionClassifier({
-      userMessage: content,
-      conversationHistory: history.slice(-5).map((m) => ({
-        role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
-        content: m.content,
-      })),
-      sessionId,
-      userId,
-      turnId,
-      partnerName,
-      existingFacts,
-    })
-      .then((result) => {
-        console.log(`[sendMessage:${requestId}] [BG] ✅ Classification finished:`, {
-          memoryDetected: result?.memoryIntent?.detected ?? false,
-          factsCount: result?.notableFacts?.length ?? 0,
-        });
-      })
-      .catch((err) => {
-        console.error(`[sendMessage:${requestId}] [BG] ❌ Classification failed:`, err);
-      });
-
     // Get AI response using full orchestration pipeline
     console.log(`[sendMessage:${requestId}] [BG] Calling orchestrator with ${history.length} messages...`);
     const orchestratorStartTime = Date.now();
@@ -644,6 +618,33 @@ async function processAIResponseInBackground(ctx: {
     const orchestratorTime = Date.now() - orchestratorStartTime;
     console.log(`[sendMessage:${requestId}] [BG] ✅ Orchestrator completed in ${orchestratorTime}ms`);
     console.log(`[sendMessage:${requestId}] [BG] Orchestrator result: intent=${orchestratorResult.memoryIntent.intent}, mock=${orchestratorResult.usedMock}`);
+
+    // Run partner session classifier AFTER orchestrator (fire-and-forget)
+    // This allows us to pass Sonnet's analysis to inform fact extraction
+    console.log(`[sendMessage:${requestId}] [BG] 🚀 Triggering background classification (with Sonnet analysis)...`);
+    runPartnerSessionClassifier({
+      userMessage: content,
+      conversationHistory: history.slice(-5).map((m) => ({
+        role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+        content: m.content,
+      })),
+      sessionId,
+      userId,
+      turnId,
+      partnerName,
+      existingFacts,
+      sonnetAnalysis: orchestratorResult.analysis,
+      sonnetResponse: orchestratorResult.response,
+    })
+      .then((result) => {
+        console.log(`[sendMessage:${requestId}] [BG] ✅ Classification finished:`, {
+          memoryDetected: result?.memoryIntent?.detected ?? false,
+          factsCount: result?.notableFacts?.length ?? 0,
+        });
+      })
+      .catch((err) => {
+        console.error(`[sendMessage:${requestId}] [BG] ❌ Classification failed:`, err);
+      });
 
     // Stage 1: If AI recommends feel-heard check, persist to stage progress
     if (currentStage === 1 && orchestratorResult.offerFeelHeardCheck && progressId) {
@@ -735,9 +736,6 @@ async function processAIResponseInBackground(ctx: {
       .catch((err: unknown) =>
         console.warn(`[sendMessage:${requestId}] [BG] Failed to update summary/embedding:`, err)
       );
-
-    // Partner session classifier is already running in parallel (started before orchestrator)
-    // No need to wait for it - it's fire-and-forget
 
     // =========================================================================
     // PUBLISH AI RESPONSE VIA ABLY

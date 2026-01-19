@@ -8,9 +8,13 @@ type EventCallback = (data: any) => void;
 
 interface UseAblyConnectionOptions {
   channel?: string;
+  /** Session ID for subscribing to session-specific channels */
+  sessionId?: string;
   onSessionCreated?: () => void;
   onBrainActivity?: EventCallback;
   onNewMessage?: EventCallback;
+  /** Called when context.updated event is received on session channel */
+  onContextUpdated?: EventCallback;
 }
 
 interface UseAblyConnectionResult {
@@ -60,14 +64,29 @@ export function useAblyConnection(options: UseAblyConnectionOptions = {}): UseAb
       ablyChannel.subscribe('new-message', (msg) => options.onNewMessage?.(msg.data));
     }
 
+    // Session-specific channel subscriptions
+    let sessionChannel: Ably.RealtimeChannel | null = null;
+    if (options.sessionId) {
+      const sessionChannelName = `meetwithoutfear:session:${options.sessionId}`;
+      sessionChannel = client.channels.get(sessionChannelName);
+
+      // Subscribe to context.updated events
+      if (options.onContextUpdated) {
+        sessionChannel.subscribe('context.updated', (msg) => options.onContextUpdated?.(msg.data));
+      }
+    }
+
     return () => {
       subscriptionsRef.current.clear();
       ablyChannel.unsubscribe();
+      if (sessionChannel) {
+        sessionChannel.unsubscribe();
+      }
       client.close();
       clientRef.current = null;
       channelRef.current = null;
     };
-  }, [channel]); // Only reconnect if channel changes
+  }, [channel, options.sessionId]); // Reconnect if channel or sessionId changes
 
   const subscribe = useCallback((event: string, callback: EventCallback) => {
     if (channelRef.current) {

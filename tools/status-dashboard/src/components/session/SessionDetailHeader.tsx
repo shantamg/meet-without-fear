@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { AblyConnectionStatus } from '../../constants/ably';
 import { Session, SessionSummary } from '../../types/session';
 import { FormattedPrice } from './FormattedPrice';
@@ -22,11 +23,16 @@ export function SessionDetailHeader({ sessionId, connectionStatus, summary, sess
           {connectionStatus === 'connected' ? '● Live' : '○ Offline'}
         </span>
       </div>
-      <div className="total-cost">
-        Total Cost: <FormattedPrice value={summary?.totalCost} />
-        <span className="token-count" style={{ marginLeft: '8px' }}>
-          ({summary?.totalTokens?.toLocaleString()} tokens)
-        </span>
+      <div className="header-actions">
+        <Link to={`/session/${sessionId}/context`} className="view-context-btn">
+          View Context
+        </Link>
+        <div className="total-cost">
+          Total Cost: <FormattedPrice value={summary?.totalCost} />
+          <span className="token-count" style={{ marginLeft: '8px' }}>
+            ({summary?.totalTokens?.toLocaleString()} tokens)
+          </span>
+        </div>
       </div>
     </header>
   );

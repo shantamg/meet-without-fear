@@ -62,6 +62,10 @@ export interface PartnerSessionClassifierInput {
   partnerName?: string;
   /** Existing notable facts for this user (to update/consolidate) - supports both old string[] and new CategorizedFact[] */
   existingFacts?: string[];
+  /** Sonnet's analysis of the conversation (when available) */
+  sonnetAnalysis?: string;
+  /** Sonnet's response to the user (when available) */
+  sonnetResponse?: string;
 }
 
 // ============================================================================
@@ -86,7 +90,7 @@ const VALID_CATEGORIES: MemoryCategory[] = [
  * Combines memory detection, validation, and notable facts extraction in one call.
  */
 function buildClassifierPrompt(input: PartnerSessionClassifierInput): string {
-  const { userMessage, conversationHistory, partnerName, existingFacts } = input;
+  const { userMessage, conversationHistory, partnerName, existingFacts, sonnetAnalysis, sonnetResponse } = input;
 
   // Format conversation history
   const historyText = conversationHistory
@@ -101,6 +105,20 @@ function buildClassifierPrompt(input: PartnerSessionClassifierInput): string {
     ? `CURRENT NOTABLE FACTS:\n${existingFacts.map((f, i) => `${i + 1}. ${f}`).join('\n')}`
     : 'CURRENT NOTABLE FACTS: (none yet)';
 
+  // Format Sonnet's analysis if available (Phase 5 enhancement)
+  const sonnetAnalysisText = sonnetAnalysis || sonnetResponse
+    ? `
+SONNET'S ANALYSIS (use this to inform your fact extraction):
+${sonnetAnalysis || '(no analysis available)'}
+
+SONNET'S RESPONSE:
+${sonnetResponse || '(no response available)'}
+
+Use the analysis above to help identify facts. The analysis contains Sonnet's
+interpretation of the user's situation, which can help you extract accurate facts.
+`
+    : '';
+
   return `Analyze this partner session conversation for memory intents and notable facts.
 
 CONVERSATION CONTEXT:
@@ -113,7 +131,7 @@ CURRENT MESSAGE:
 User: ${userMessage}
 
 ${existingFactsText}
-
+${sonnetAnalysisText}
 TASK 1 - MEMORY INTENT DETECTION:
 Only flag as detected=true if user EXPLICITLY asks to remember something using words like:
 - "remember", "always", "from now on", "going forward", "don't forget"

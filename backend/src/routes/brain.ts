@@ -2,8 +2,27 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { errorResponse, successResponse } from '../utils/response';
+import { assembleContextBundle, type ContextBundle } from '../services/context-assembler';
+import { determineMemoryIntent } from '../services/memory-intent';
 
 const router = Router();
+
+// ============================================================================
+// Response Types
+// ============================================================================
+
+interface ContextUserData {
+  userId: string;
+  userName: string;
+  context: ContextBundle;
+}
+
+interface ContextResponse {
+  sessionId: string;
+  sessionType: 'partner' | 'inner_thoughts';
+  assembledAt: string;
+  users: ContextUserData[];
+}
 
 // Get all brain activities for a session
 router.get('/activity/:sessionId', async (req, res) => {
@@ -64,6 +83,174 @@ router.get('/activity/:sessionId', async (req, res) => {
   } catch (error) {
     console.error('[BrainRoutes] Failed to fetch activities:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch session activity', 500);
+  }
+});
+
+// Get assembled context bundle for a session
+// This endpoint assembles the full context bundle for each user in the session,
+// allowing the Neural Monitor dashboard to display exactly what context the AI receives.
+router.get('/sessions/:sessionId/context', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    // First try as partner session
+    const partnerSession = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        relationship: {
+          include: {
+            members: {
+              include: { user: true }
+            }
+          }
+        },
+        stageProgress: {
+          orderBy: { stage: 'desc' }
+        }
+      }
+    });
+
+    if (partnerSession) {
+      // Partner session - assemble context for all users
+      const users = partnerSession.relationship.members;
+      const now = new Date().toISOString();
+
+      // Get the current stage for each user (use their latest stage progress)
+      const contextResults = await Promise.all(
+        users.map(async (member) => {
+          const userProgress = partnerSession.stageProgress.find(
+            (p) => p.userId === member.userId
+          );
+          const stage = userProgress?.stage ?? 1;
+
+          try {
+            // Get emotional intensity from UserVessel
+            const vessel = await prisma.userVessel.findUnique({
+              where: { userId_sessionId: { userId: member.userId, sessionId } },
+              select: { id: true },
+            });
+
+            let emotionalIntensity = 5; // Default moderate intensity
+            if (vessel) {
+              const latestReading = await prisma.emotionalReading.findFirst({
+                where: { vesselId: vessel.id },
+                orderBy: { timestamp: 'desc' },
+                select: { intensity: true },
+              });
+              if (latestReading) {
+                emotionalIntensity = latestReading.intensity;
+              }
+            }
+
+            // Get turn count from messages
+            const turnCount = await prisma.message.count({
+              where: { sessionId, senderId: member.userId },
+            });
+
+            // Determine memory intent (required for context assembly)
+            const intent = determineMemoryIntent({
+              stage,
+              emotionalIntensity,
+              userMessage: '', // Empty - we're just assembling current context
+              turnCount,
+              isFirstTurnInSession: turnCount === 0,
+            });
+
+            // Assemble the context bundle
+            const context = await assembleContextBundle(
+              sessionId,
+              member.userId,
+              stage,
+              intent
+            );
+
+            return {
+              userId: member.userId,
+              userName: member.user.name || 'Unknown',
+              context,
+            };
+          } catch (error) {
+            console.error(`[BrainRoutes] Failed to assemble context for user ${member.userId}:`, error);
+            // Return placeholder for failed user
+            return {
+              userId: member.userId,
+              userName: member.user.name || 'Unknown',
+              context: null,
+            };
+          }
+        })
+      );
+
+      const response: ContextResponse = {
+        sessionId,
+        sessionType: 'partner',
+        assembledAt: now,
+        users: contextResults.filter((r): r is ContextUserData => r.context !== null),
+      };
+
+      return successResponse(res, response);
+    }
+
+    // Try as inner work session
+    const innerWorkSession = await prisma.innerWorkSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        user: true
+      }
+    });
+
+    if (innerWorkSession) {
+      // Inner work sessions don't use assembleContextBundle (different flow)
+      // Return a simplified response indicating this is an inner thoughts session
+      const response: ContextResponse = {
+        sessionId,
+        sessionType: 'inner_thoughts',
+        assembledAt: new Date().toISOString(),
+        users: [{
+          userId: innerWorkSession.userId,
+          userName: innerWorkSession.user.name || 'Unknown',
+          // For inner work sessions, create a minimal context bundle
+          // This could be enhanced later if needed
+          context: {
+            conversationContext: {
+              recentTurns: [],
+              turnCount: 0,
+              sessionDurationMinutes: 0,
+            },
+            emotionalThread: {
+              initialIntensity: null,
+              currentIntensity: null,
+              trend: 'unknown',
+              notableShifts: [],
+            },
+            stageContext: {
+              stage: 0,
+              gatesSatisfied: {},
+            },
+            userName: innerWorkSession.user.name || 'Unknown',
+            intent: {
+              intent: 'avoid_recall',
+              depth: 'none',
+              allowCrossSession: false,
+              surfaceStyle: 'silent',
+              reason: 'Inner work sessions have different context flow',
+              threshold: 0.5,
+              maxCrossSession: 0,
+            },
+            assembledAt: new Date().toISOString(),
+          },
+        }],
+      };
+
+      return successResponse(res, response);
+    }
+
+    // Session not found
+    return errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+
+  } catch (error) {
+    console.error('[BrainRoutes] Failed to fetch session context:', error);
+    return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch session context', 500);
   }
 });
 

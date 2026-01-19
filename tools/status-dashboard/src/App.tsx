@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import { SessionBrowser } from './components/browser';
 import SessionDetail from './components/session/SessionDetail';
+import { ContextPage } from './components/context';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
         <Routes>
           <Route path="/" element={<SessionBrowser />} />
           <Route path="/session/:sessionId" element={<SessionDetail />} />
+          <Route path="/session/:sessionId/context" element={<ContextPage />} />
         </Routes>
       </main>
     </div>

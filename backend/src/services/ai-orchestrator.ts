@@ -48,6 +48,7 @@ import {
   getRecommendedLimits,
 } from '../utils/token-budget';
 import { getSharedContentContext } from './shared-context';
+import { publishContextUpdated } from './realtime';
 // publishUserEvent and memoryService imports removed - handled in partner-session-classifier.ts
 
 // ============================================================================
@@ -106,6 +107,8 @@ export interface OrchestratorResult {
   invitationMessage?: string | null;
   /** For Stage 2: Proposed empathy statement summarizing user's understanding */
   proposedEmpathyStatement?: string | null;
+  /** Sonnet's internal analysis (for background classifier) */
+  analysis?: string;
 }
 
 // ============================================================================
@@ -203,6 +206,15 @@ export async function orchestrateResponse(
 
   const parallelTime = Date.now() - parallelStartTime;
   console.log(`[AI Orchestrator] Parallel pre-processing completed in ${parallelTime}ms`);
+
+  // Publish context.updated event for Neural Monitor dashboard (fire-and-forget)
+  publishContextUpdated(
+    context.sessionId,
+    context.userId,
+    contextBundle.assembledAt
+  ).catch((err) => {
+    console.warn('[AI Orchestrator] Failed to publish context.updated event:', err);
+  });
 
   // Memory detection and validation moved to fire-and-forget (partner-session-classifier.ts)
   // This reduces blocking latency for the user response
@@ -411,6 +423,7 @@ export async function orchestrateResponse(
     offerReadyToShare,
     invitationMessage,
     proposedEmpathyStatement,
+    analysis,
   };
 }
 

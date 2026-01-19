@@ -122,6 +122,43 @@ describe('Partner Session Classifier', () => {
       expect(call.messages[0].content).toContain('Has two children');
     });
 
+    it('passes Sonnet analysis to Haiku for better fact extraction', async () => {
+      const sonnetAnalysis = 'The user is expressing frustration about work-life balance';
+      const sonnetResponse = 'I hear that you\'re feeling overwhelmed by competing priorities...';
+
+      await runPartnerSessionClassifier({
+        userMessage: 'I just cant seem to balance everything',
+        conversationHistory: [],
+        sessionId: 'session-123',
+        userId: 'user-456',
+        turnId: 'turn-1',
+        sonnetAnalysis,
+        sonnetResponse,
+      });
+
+      // Verify getHaikuJson was called with a prompt containing Sonnet's analysis
+      expect(getHaikuJson).toHaveBeenCalled();
+      const call = (getHaikuJson as jest.Mock).mock.calls[0][0];
+      expect(call.messages[0].content).toContain("SONNET'S ANALYSIS");
+      expect(call.messages[0].content).toContain(sonnetAnalysis);
+      expect(call.messages[0].content).toContain("SONNET'S RESPONSE");
+      expect(call.messages[0].content).toContain(sonnetResponse);
+    });
+
+    it('does not include Sonnet section when analysis is not provided', async () => {
+      await runPartnerSessionClassifier({
+        userMessage: 'Just a regular message',
+        conversationHistory: [],
+        sessionId: 'session-123',
+        userId: 'user-456',
+        turnId: 'turn-1',
+      });
+
+      expect(getHaikuJson).toHaveBeenCalled();
+      const call = (getHaikuJson as jest.Mock).mock.calls[0][0];
+      expect(call.messages[0].content).not.toContain("SONNET'S ANALYSIS");
+    });
+
     it('limits facts to 20 items', async () => {
       const manyFacts = Array.from({ length: 25 }, (_, i) => ({
         category: 'People',
