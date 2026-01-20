@@ -248,25 +248,160 @@ All stages return structured JSON:
 
 ---
 
+## Unified Chat Router (`chat-router/`)
+
+The unified chat router handles all chat entry points with intent-based routing.
+
+### Intent Detection (`intent-detector.ts`)
+
+**Purpose:** Haiku-powered detection of user intent from natural language
+
+**Intents Detected:**
+- `CREATE_SESSION` - User wants to start a new partner session
+- `CONTINUE_CONVERSATION` - Continue existing session
+- `ASK_QUESTION` - General question about the app
+- `START_INNER_THOUGHTS` - Begin solo reflection
+- `UNKNOWN` - Fallback for unclear intent
+
+**Model:** Haiku (fast, sub-100ms)
+
+### Response Generator (`response-generator.ts`)
+
+**Purpose:** Generate conversational responses with templates and AI fallback
+
+**Response Types:**
+- Template-based responses for common intents
+- AI-generated responses for complex/unclear requests
+- Maintains conversational tone across all interactions
+
+### Conversation Handler (`handlers/conversation.ts`)
+
+**Purpose:** Handle messages in active sessions
+
+**Flow:**
+1. Detect if user is in active session
+2. Route to appropriate stage handler
+3. Maintain session context across turns
+
+---
+
+## Memory Services
+
+### Memory Detection (`memory-detector.ts`)
+
+**Purpose:** Detect when users want to save something to memory
+
+**Used In:** Inner Thoughts (solo reflection) sessions
+
+**Detection Types:**
+- Explicit: "Remember that...", "Don't forget..."
+- Implicit: Important relationship insights worth preserving
+
+**Model:** Haiku
+
+### Memory Validation (`memory-validator.ts`)
+
+**Purpose:** Validate memory content against therapeutic guidelines
+
+**Validation Rules:**
+- No harmful content
+- Appropriate for long-term storage
+- Therapeutically beneficial
+
+### Memory Formatting (`memory-formatter.ts`)
+
+**Purpose:** AI-assisted memory formatting and categorization
+
+**Features:**
+- Categorizes memories by type
+- Formats for clarity and consistency
+- Suggests improvements
+
+**Model:** Haiku
+
+### Global Memory (`global-memory.ts`)
+
+**Purpose:** Consolidate session facts into global user profile
+
+**Status:** ⚠️ PARTIALLY DISABLED
+
+- Consolidation runs after Stage 1 completion
+- Context injection disabled pending consent UI implementation
+- Facts stored but not surfaced to AI responses
+
+---
+
+## Pre-Session Services
+
+### Witnessing Service (`witnessing.ts`)
+
+**Purpose:** Stage 1-style witnessing for pre-session conversations
+
+**Use Case:** When user vents before creating a formal session
+
+**Features:**
+- Deep listening responses
+- No problem-solving
+- Reflection and validation
+- Smooth transition to session creation
+
+---
+
+## Cross-Feature Intelligence
+
+### People Extractor (`people-extractor.ts`)
+
+**Purpose:** Extract and track people mentions from content
+
+**Features:**
+- Identifies people mentioned in conversations
+- Tracks relationships across sessions
+- Enables cross-feature context (e.g., "your partner Alex")
+
+---
+
 ## Prompt File Locations
 
 Key prompt files that construct AI responses:
 
 ```
 backend/src/services/
-├── stage-prompts.ts          # Main stage prompts (2,211 lines)
-├── needs-prompts.ts          # Needs assessment prompts
-├── ai-orchestrator.ts        # Response orchestration
-├── context-assembler.ts      # Context bundle construction
-├── context-retriever.ts      # Retrieval with reference detection
-├── memory-intent.ts          # Memory intent determination
-├── retrieval-planner.ts      # Retrieval query planning
-├── reconciler.ts             # Empathy reconciliation prompts
-├── conversation-summarizer.ts # Summarization prompts
-├── background-classifier.ts  # Background classification prompts
+├── stage-prompts.ts              # Main stage prompts (2,211 lines)
+├── needs-prompts.ts              # Needs assessment prompts
+├── ai-orchestrator.ts            # Response orchestration
+├── context-assembler.ts          # Context bundle construction
+├── context-retriever.ts          # Retrieval with reference detection
+├── memory-intent.ts              # Memory intent determination
+├── retrieval-planner.ts          # Retrieval query planning
+├── reconciler.ts                 # Empathy reconciliation prompts
+├── conversation-summarizer.ts    # Summarization prompts
+├── background-classifier.ts      # Background classification prompts
 ├── partner-session-classifier.ts # Partner session classification
-└── surfacing-policy.ts       # Pattern surfacing decisions
+├── surfacing-policy.ts           # Pattern surfacing decisions
+│
+├── chat-router/                  # Unified chat entry point
+│   ├── index.ts                  # Main router orchestration
+│   ├── intent-detector.ts        # Haiku-powered intent detection
+│   ├── response-generator.ts     # Conversational response generation
+│   └── handlers/
+│       └── conversation.ts       # Active session message handling
+│
+├── memory-detector.ts            # Inner Thoughts memory detection
+├── memory-validator.ts           # Memory content validation
+├── memory-formatter.ts           # AI-assisted memory formatting
+├── global-memory.ts              # Global fact consolidation (partial)
+│
+├── witnessing.ts                 # Pre-session witnessing service
+├── people-extractor.ts           # Cross-feature people tracking
+└── embedding.ts                  # Embedding generation (Titan)
+
+backend/src/lib/
+└── bedrock.ts                    # AWS Bedrock client + prompt logging
 ```
+
+### Unused Files (Not Currently Integrated)
+
+- **`cross-feature-context.ts`** - Cross-feature intelligence service that aggregates data from Needs, Gratitude, Meditation, and Conflict features. Detects contradictions (e.g., high need score but negative behavior patterns), correlations (e.g., meditation frequency vs conflict occurrence), and gaps (e.g., partner in conflict but no gratitude expressed). Provides `formatCrossFeatureContextForPrompt()` for AI prompt injection. **Currently not imported or called anywhere** - built for future integration.
 
 ---
 
@@ -319,12 +454,47 @@ User Message
 
 ## One-Liner: Concat All Prompt Files
 
+**All prompt files (comprehensive):**
 ```bash
-cat backend/src/services/stage-prompts.ts backend/src/services/needs-prompts.ts backend/src/services/ai-orchestrator.ts backend/src/services/context-assembler.ts backend/src/services/context-retriever.ts backend/src/services/memory-intent.ts backend/src/services/retrieval-planner.ts backend/src/services/reconciler.ts backend/src/services/conversation-summarizer.ts backend/src/services/background-classifier.ts backend/src/services/partner-session-classifier.ts backend/src/services/surfacing-policy.ts | pbcopy
+cat backend/src/services/stage-prompts.ts \
+    backend/src/services/needs-prompts.ts \
+    backend/src/services/ai-orchestrator.ts \
+    backend/src/services/context-assembler.ts \
+    backend/src/services/context-retriever.ts \
+    backend/src/services/memory-intent.ts \
+    backend/src/services/retrieval-planner.ts \
+    backend/src/services/reconciler.ts \
+    backend/src/services/conversation-summarizer.ts \
+    backend/src/services/background-classifier.ts \
+    backend/src/services/partner-session-classifier.ts \
+    backend/src/services/surfacing-policy.ts \
+    backend/src/services/chat-router/index.ts \
+    backend/src/services/chat-router/intent-detector.ts \
+    backend/src/services/chat-router/response-generator.ts \
+    backend/src/services/chat-router/handlers/conversation.ts \
+    backend/src/services/memory-detector.ts \
+    backend/src/services/memory-validator.ts \
+    backend/src/services/memory-formatter.ts \
+    backend/src/services/global-memory.ts \
+    backend/src/services/witnessing.ts \
+    backend/src/services/people-extractor.ts | pbcopy
 ```
 
-Or for just the prompt-defining files (smaller):
-
+**Core prompt files only (smaller):**
 ```bash
-cat backend/src/services/stage-prompts.ts backend/src/services/needs-prompts.ts backend/src/services/reconciler.ts backend/src/services/conversation-summarizer.ts backend/src/services/background-classifier.ts | pbcopy
+cat backend/src/services/stage-prompts.ts \
+    backend/src/services/needs-prompts.ts \
+    backend/src/services/reconciler.ts \
+    backend/src/services/conversation-summarizer.ts \
+    backend/src/services/background-classifier.ts \
+    backend/src/services/chat-router/intent-detector.ts \
+    backend/src/services/memory-detector.ts | pbcopy
 ```
+
+---
+
+## Audit Metadata
+
+**Last Updated:** 2025-01-19
+**Files Verified:** All imports traced to active routes/controllers
+**Dead Code Identified:** `cross-feature-context.ts` (unused)

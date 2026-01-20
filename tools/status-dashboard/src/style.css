@@ -2490,9 +2490,14 @@ body {
   color: var(--text-secondary);
 }
 
-.message-content {
+/* Scoped message content styles for recent messages section */
+.recent-messages .message-content {
   white-space: pre-wrap;
   word-break: break-word;
+  font-size: 0.75em;
+  line-height: 1.4;
+  color: var(--text-primary);
+  font-weight: 400;
 }
 
 /* Notable Facts Section */

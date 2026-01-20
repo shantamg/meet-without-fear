@@ -1,4 +1,3 @@
-import React from 'react';
 import { ContextBundle } from '../../types';
 import { RecentMessagesSection } from './RecentMessagesSection';
 import { NotableFactsSection } from './NotableFactsSection';
@@ -19,7 +18,7 @@ interface ContextColumnProps {
  * ContextColumn displays all context sections for a single user.
  * Used in the side-by-side layout for partner sessions.
  */
-export function ContextColumn({ userId, userName, context }: ContextColumnProps) {
+export function ContextColumn({ userName, context }: ContextColumnProps) {
   return (
     <div className="context-column">
       <div className="context-column-header">
@@ -31,12 +30,6 @@ export function ContextColumn({ userId, userName, context }: ContextColumnProps)
       </div>
 
       <div className="context-sections">
-        <RecentMessagesSection
-          recentTurns={context.conversationContext.recentTurns}
-          turnCount={context.conversationContext.turnCount}
-          sessionDurationMinutes={context.conversationContext.sessionDurationMinutes}
-        />
-
         <NotableFactsSection facts={context.notableFacts} />
 
         <EmotionalThreadSection emotionalThread={context.emotionalThread} />
@@ -50,6 +43,12 @@ export function ContextColumn({ userId, userName, context }: ContextColumnProps)
         <PriorThemesSection priorThemes={context.priorThemes} />
 
         <GlobalFactsSection globalFacts={context.globalFacts} />
+
+        <RecentMessagesSection
+          recentTurns={context.conversationContext.recentTurns}
+          turnCount={context.conversationContext.turnCount}
+          sessionDurationMinutes={context.conversationContext.sessionDurationMinutes}
+        />
       </div>
     </div>
   );
