@@ -16,7 +16,7 @@ import {
   GetMessagesResponse,
   Stage,
 } from '@meet-without-fear/shared';
-import { messageKeys, sessionKeys, stageKeys } from './queryKeys';
+import { messageKeys, sessionKeys, stageKeys, timelineKeys } from './queryKeys';
 
 // ============================================================================
 // Types
@@ -146,6 +146,10 @@ export function useStreamingMessage(
 
   // Ref to track if text_complete was received (for complete event fallback)
   const textCompleteReceivedRef = useRef<boolean>(false);
+
+  // Ref for 15-second fallback timer to handle stuck connections
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const FALLBACK_TIMEOUT = 15000; // 15 seconds
 
   /**
    * Add a message to the cache
@@ -396,6 +400,22 @@ export function useStreamingMessage(
 
         eventSourceRef.current = es;
 
+        // Start 15-second fallback timer for stuck connections
+        // If streaming doesn't complete in time, poll for latest state
+        if (fallbackTimerRef.current) {
+          clearTimeout(fallbackTimerRef.current);
+        }
+        fallbackTimerRef.current = setTimeout(() => {
+          // Only trigger if EventSource is still active (connection still open)
+          // The timer is cleared on complete/error, so reaching here means we're stuck
+          if (eventSourceRef.current) {
+            console.warn('[useStreamingMessage] 15s timeout - triggering fallback poll');
+            // Invalidate queries to fetch latest state from server
+            queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
+            queryClient.invalidateQueries({ queryKey: timelineKeys.infinite(sessionId) });
+          }
+        }, FALLBACK_TIMEOUT);
+
         // Create placeholder AI message once streaming starts
         let placeholderCreated = false;
         const createPlaceholder = () => {
@@ -518,6 +538,12 @@ export function useStreamingMessage(
           console.log(`[useStreamingMessage] [TIMING] text_complete received at ${receiveTime}`);
           if (!event.data) return;
 
+          // Clear fallback timer since streaming completed successfully
+          if (fallbackTimerRef.current) {
+            clearTimeout(fallbackTimerRef.current);
+            fallbackTimerRef.current = null;
+          }
+
           // Clear any pending throttled update
           if (pendingUpdateRef.current) {
             clearTimeout(pendingUpdateRef.current);
@@ -605,6 +631,12 @@ export function useStreamingMessage(
         // react-native-sse error events have: ErrorEvent (message, xhrState, xhrStatus),
         // TimeoutEvent (type only), or ExceptionEvent (message, error)
         es.addEventListener('error', (event) => {
+          // Clear fallback timer since we're handling error
+          if (fallbackTimerRef.current) {
+            clearTimeout(fallbackTimerRef.current);
+            fallbackTimerRef.current = null;
+          }
+
           // Clear any pending throttled update
           if (pendingUpdateRef.current) {
             clearTimeout(pendingUpdateRef.current);
@@ -639,6 +671,12 @@ export function useStreamingMessage(
    * Cancel the current stream
    */
   const cancel = useCallback(() => {
+    // Clear fallback timer
+    if (fallbackTimerRef.current) {
+      clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+
     // Clear any pending throttled update
     if (pendingUpdateRef.current) {
       clearTimeout(pendingUpdateRef.current);

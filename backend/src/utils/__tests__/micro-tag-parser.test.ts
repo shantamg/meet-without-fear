@@ -152,5 +152,34 @@ Response`;
       const result = parseMicroTagResponse(raw);
       expect(result.dispatchTag).toBe('EXPLAIN_PROCESS');
     });
+
+    it('trims leading newlines after thinking block removal', () => {
+      // This is the real-world format: thinking block followed by newlines then response
+      const raw = `<thinking>
+Mode: WITNESS
+Intensity: 7
+FeelHeardCheck: N
+Strategy: Validate their feelings
+</thinking>
+
+I hear how difficult this has been for you.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      // Response should NOT start with newline
+      expect(result.response).not.toMatch(/^\n/);
+      expect(result.response).toBe('I hear how difficult this has been for you.');
+    });
+
+    it('trims multiple leading newlines after tag removal', () => {
+      const raw = `<thinking>Analysis</thinking>
+
+
+
+Response after multiple newlines.`;
+
+      const result = parseMicroTagResponse(raw);
+      expect(result.response).toBe('Response after multiple newlines.');
+    });
   });
 });

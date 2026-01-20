@@ -203,6 +203,25 @@ export async function processSessionMessage(
     (Date.now() - session.createdAt.getTime()) / 60000
   );
 
+  // Get latest emotional reading for this user in this session
+  // This enables threshold-based mode-locking (>= 8 stays in WITNESS mode)
+  const vessel = await prisma.userVessel.findUnique({
+    where: { userId_sessionId: { userId, sessionId } },
+    select: { id: true },
+  });
+
+  let emotionalIntensity = 5; // Default if no reading
+  if (vessel) {
+    const latestReading = await prisma.emotionalReading.findFirst({
+      where: { vesselId: vessel.id },
+      orderBy: { timestamp: 'desc' },
+      select: { intensity: true },
+    });
+    if (latestReading) {
+      emotionalIntensity = latestReading.intensity;
+    }
+  }
+
   // Determine if we're in invitation phase
   // Invitation phase: Stage 0 (or 1 if auto-advanced), session CREATED, invitation message not confirmed
   const invitation = session.invitations[0];
@@ -225,7 +244,7 @@ export async function processSessionMessage(
     partnerName,
     stage: currentStage,
     turnCount: userTurnCount,
-    emotionalIntensity: 5, // TODO: Get from emotional barometer
+    emotionalIntensity,
     sessionDurationMinutes,
     isFirstTurnInSession: userTurnCount === 1,
     isInvitationPhase,

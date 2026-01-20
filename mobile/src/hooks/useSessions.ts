@@ -420,7 +420,7 @@ export function useUpdateInvitationMessage(
         { message }
       );
     },
-    onSuccess: (data, { sessionId }) => {
+    onSuccess: (_data, { sessionId }) => {
       queryClient.invalidateQueries({
         queryKey: sessionKeys.sessionInvitation(sessionId),
       });
@@ -587,22 +587,53 @@ export function useConfirmInvitationMessage(
 
     // =========================================================================
     // SUCCESS: Replace optimistic data with real response
+    // Using setQueryData instead of invalidateQueries for invitation/state to prevent
+    // race conditions that can overwrite optimistic messageConfirmedAt before
+    // the server response settles (fix for disappearing indicator bug)
     // =========================================================================
     onSuccess: (data, { sessionId }) => {
-      queryClient.invalidateQueries({
-        queryKey: sessionKeys.sessionInvitation(sessionId),
-      });
-      // Also invalidate session detail to reflect the status change
+      // Update invitation cache with server response (preserves messageConfirmedAt)
+      queryClient.setQueryData<SessionInvitationResponse>(
+        sessionKeys.sessionInvitation(sessionId),
+        (old) => {
+          if (!old) return { invitation: data.invitation as SessionInvitationResponse['invitation'] };
+          return {
+            ...old,
+            invitation: {
+              ...old.invitation,
+              ...data.invitation,
+            },
+          };
+        }
+      );
+
+      // Update session state, merging invitation data (avoids race conditions)
+      queryClient.setQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            invitation: old.invitation ? {
+              ...old.invitation,
+              messageConfirmed: data.invitation.messageConfirmed,
+              messageConfirmedAt: data.invitation.messageConfirmedAt || old.invitation.messageConfirmedAt,
+            } : old.invitation,
+            // Update stage if advanced
+            progress: data.advancedToStage !== undefined
+              ? { ...old.progress, currentStage: data.advancedToStage }
+              : old.progress,
+          };
+        }
+      );
+
+      // Only invalidate detail and progress (less critical, won't affect indicator)
+      // These are background refreshes that won't race with the optimistic indicator
       queryClient.invalidateQueries({
         queryKey: sessionKeys.detail(sessionId),
       });
-      // Invalidate stage progress since backend advances to Stage 1
       queryClient.invalidateQueries({
         queryKey: stageKeys.progress(sessionId),
-      });
-      // Invalidate consolidated session state (used by useUnifiedSession for initial load)
-      queryClient.invalidateQueries({
-        queryKey: sessionKeys.state(sessionId),
       });
       // NOTE: We do NOT invalidate messages queries here!
       // Instead, we add the transition message directly to the cache below.
