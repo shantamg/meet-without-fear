@@ -24,9 +24,9 @@ export const streamTTS = async (req: Request, res: Response): Promise<void | Res
     let modelId = model || 'tts-1';
     const speechSpeed = typeof speed === 'string' ? parseFloat(speed) : (speed || 1.0);
 
-    // Sanitize model - if it's a legacy ElevenLabs model or invalid, fallback to tts-1
+    // Validate model - only allow OpenAI TTS models
     if (modelId !== 'tts-1' && modelId !== 'tts-1-hd') {
-      console.warn(`[TTS] Invalid/Legacy model '${modelId}' requested. Falling back to 'tts-1'.`);
+      console.warn(`[TTS] Invalid model '${modelId}' requested. Falling back to 'tts-1'.`);
       modelId = 'tts-1';
     }
 
