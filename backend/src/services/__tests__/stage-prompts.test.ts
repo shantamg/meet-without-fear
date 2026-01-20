@@ -318,4 +318,51 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('EXAMPLES OF NATURAL INTEGRATION');
     });
   });
+
+  describe('Response Protocol (Semantic Router)', () => {
+    it('Stage 1 protocol includes FeelHeardCheck flag instruction', () => {
+      const context = createContext();
+      const prompt = buildStagePrompt(1, context);
+
+      expect(prompt).toContain('<thinking>');
+      // The flag instruction is in format "FeelHeardCheck: [Y if ready..., N otherwise]"
+      expect(prompt).toContain('FeelHeardCheck:');
+      expect(prompt).toMatch(/FeelHeardCheck.*Y.*N/s);
+    });
+
+    it('Stage 2 protocol includes ReadyShare flag instruction', () => {
+      const context = createContext();
+      const prompt = buildStagePrompt(2, context);
+
+      expect(prompt).toContain('<thinking>');
+      // The flag instruction is in format "ReadyShare: [Y if ready..., N otherwise]"
+      expect(prompt).toContain('ReadyShare:');
+      expect(prompt).toMatch(/ReadyShare.*Y.*N/s);
+    });
+
+    it('Stage 0 protocol includes draft tag instruction', () => {
+      const context = createContext();
+      const options: BuildStagePromptOptions = { isInvitationPhase: true };
+      const prompt = buildStagePrompt(0, context, options);
+
+      expect(prompt).toContain('<draft>');
+    });
+
+    it('protocol includes dispatch tag instruction', () => {
+      const context = createContext();
+      const prompt = buildStagePrompt(1, context);
+
+      expect(prompt).toContain('<dispatch>');
+      expect(prompt).toContain('EXPLAIN_PROCESS');
+    });
+
+    it('does NOT include old tool call instructions', () => {
+      const context = createContext();
+      const prompt = buildStagePrompt(1, context);
+
+      // Should not have tool call instructions
+      expect(prompt).not.toContain('update_session_state');
+      expect(prompt).not.toContain('THIRD: Call');
+    });
+  });
 });

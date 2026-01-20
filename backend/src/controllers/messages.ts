@@ -11,17 +11,11 @@ import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
-import { getSonnetResponse, getSonnetStreamingResponse, type StreamEvent, BrainActivityCallType } from '../lib/bedrock';
+import { getSonnetResponse, getSonnetStreamingResponse, BrainActivityCallType } from '../lib/bedrock';
 import { brainService } from '../services/brain-service';
 import { buildInitialMessagePrompt, buildStagePrompt } from '../services/stage-prompts';
-import { extractJsonFromResponse } from '../utils/json-extractor';
-import {
-  SESSION_STATE_TOOL,
-  SESSION_STATE_TOOL_NAME,
-  parseSessionStateToolInput,
-  getToolsForStage,
-  type SessionStateToolInput,
-} from '../services/stage-tools';
+import { parseMicroTagResponse } from '../utils/micro-tag-parser';
+import { type SessionStateToolInput } from '../services/stage-tools';
 import {
   sendMessageRequestSchema,
   feelHeardRequestSchema,
@@ -1021,12 +1015,12 @@ IMPORTANT GUIDANCE:
 Example (if user had shared feeling unheard and dismissed):
 "I hear how painful it's been to feel dismissed, like your concerns aren't being taken seriously. I'm wondering - have you ever thought about what ${partner} might be experiencing when those moments happen? What do you imagine might be going on for them?"
 
-Respond in JSON format:
-\`\`\`json
-{
-  "response": "Your personalized transition message that references their specific sharing"
-}
-\`\`\``;
+RESPONSE FORMAT:
+<thinking>
+Brief internal analysis of what ${userName} shared
+</thinking>
+
+Your personalized transition message here (just the text, no tags around it).`;
 
         const aiResponse = await getSonnetResponse({
           systemPrompt: transitionPrompt,
@@ -1040,14 +1034,9 @@ Respond in JSON format:
 
         let transitionContent: string;
         if (aiResponse) {
-          try {
-            const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
-            transitionContent = typeof parsed.response === 'string'
-              ? parsed.response
-              : `You've done important work sharing and being heard. When you're ready, I'm curious - have you ever wondered what ${partnerName || 'your partner'} might be experiencing in all this?`;
-          } catch {
-            transitionContent = `You've done important work sharing and being heard. When you're ready, I'm curious - have you ever wondered what ${partnerName || 'your partner'} might be experiencing in all this?`;
-          }
+          // Parse the semantic tag response (micro-tag format)
+          const parsed = parseMicroTagResponse(aiResponse);
+          transitionContent = parsed.response.trim() || `You've done important work sharing and being heard. When you're ready, I'm curious - have you ever wondered what ${partnerName || 'your partner'} might be experiencing in all this?`;
         } else {
           transitionContent = `You've done important work sharing and being heard. When you're ready, I'm curious - have you ever wondered what ${partnerName || 'your partner'} might be experiencing in all this?`;
         }
@@ -1546,14 +1535,13 @@ export async function getInitialMessage(
       });
 
       if (aiResponse) {
-        // Parse the JSON response
-        const parsed = extractJsonFromResponse(aiResponse) as Record<string, any>;
-        responseContent = typeof parsed.response === 'string'
-          ? parsed.response
-          : getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
+        // Parse the semantic tag response (micro-tag format)
+        const parsed = parseMicroTagResponse(aiResponse);
+        responseContent = parsed.response.trim() || getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
 
-        if (isInvitationPhase && typeof parsed.invitationMessage === 'string') {
-          extractedInvitationMessage = parsed.invitationMessage;
+        // Draft is used for invitation message in stage 0
+        if (isInvitationPhase && parsed.draft) {
+          extractedInvitationMessage = parsed.draft;
         }
       } else {
         // Fallback if AI unavailable
@@ -1842,10 +1830,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       contextBundle,
     }, { isInvitationPhase });
 
-    // Add tool use instruction to prompt
-    const promptWithToolInstruction = `${prompt}
-
-IMPORTANT: After your text response, you MUST call the update_session_state tool to report session state. Include any relevant metadata for the current stage.`;
+    // Prompt already includes semantic tag format instructions via buildResponseProtocol()
+    // No tool use instruction needed - we parse <thinking>, <draft>, <dispatch> tags instead
 
     // Format context bundle and inject into last user message (includes notable facts)
     const formattedContext = formatContextForPrompt(contextBundle);
@@ -1870,17 +1856,20 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
     let metadata: SessionStateToolInput = {};
     let streamError: Error | null = null;
 
-    // Analysis trap state - Claude outputs <analysis>...</analysis> first, which we hide
-    let isInsideAnalysis = true;
-    let analysisBuffer = '';
-    let analysisContent = ''; // Store hidden analysis for logging
-    let needsTrimStart = false; // Trim leading whitespace from first visible chunk after analysis
+    // Tag trap state - Claude outputs <thinking>...</thinking> first, which we hide
+    // After thinking, there may be <draft>...</draft> or <dispatch>...</dispatch> that we also hide
+    let isInsideThinking = true;
+    let isTrappingTags = false; // After thinking, buffer to check for <draft>/<dispatch>
+    let thinkingBuffer = '';
+    let tagTrapBuffer = ''; // Buffer for checking draft/dispatch tags after thinking
+    let thinkingContent = ''; // Store hidden thinking for logging
+    let draftContent = ''; // Store draft content for metadata
 
     try {
       const streamGenerator = getSonnetStreamingResponse({
-        systemPrompt: promptWithToolInstruction,
+        systemPrompt: prompt,
         messages: messagesWithContext,
-        tools: getToolsForStage(currentStage),
+        // No tools needed - using semantic tag format (<thinking>, <draft>, <dispatch>)
         maxTokens: 2048,
         sessionId,
         turnId,
@@ -1890,101 +1879,200 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
 
       const streamStartTime = Date.now();
       let firstChunkTime: number | null = null;
-      let toolUseTime: number | null = null;
       let lastChunkTime: number | null = null;
-      let analysisEndTime: number | null = null;
+      let thinkingEndTime: number | null = null;
+
+      /**
+       * Helper to strip tags and send clean text to client
+       * NOTE: Do NOT trim here - it removes spaces between words when streaming chunks
+       */
+      const sendCleanText = (text: string) => {
+        if (!text || clientDisconnected) return;
+
+        // Strip any remaining tags that might have slipped through
+        // Do NOT use .trim() - it breaks word spacing between chunks
+        const cleanText = text
+          .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+          .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
+
+        if (cleanText.length > 0) {
+          if (!firstChunkTime) firstChunkTime = Date.now();
+          accumulatedText += cleanText;
+          sendSSE(res, { event: 'chunk', data: { text: cleanText } });
+        }
+      };
+
+      /**
+       * Process the tag trap buffer - extract draft/dispatch and return clean response text
+       */
+      const processTagTrapBuffer = (buffer: string): string => {
+        // Extract draft content if present
+        const draftMatch = buffer.match(/<draft>([\s\S]*?)<\/draft>/i);
+        if (draftMatch) {
+          draftContent = draftMatch[1].trim();
+          console.log(`[sendMessageStream:${requestId}] [HIDDEN DRAFT]:`, draftContent.substring(0, 100) + (draftContent.length > 100 ? '...' : ''));
+        }
+
+        // Extract dispatch tag if present (we log but don't act on it in streaming)
+        const dispatchMatch = buffer.match(/<dispatch>([\s\S]*?)<\/dispatch>/i);
+        if (dispatchMatch) {
+          console.log(`[sendMessageStream:${requestId}] [DISPATCH TAG]:`, dispatchMatch[1]);
+        }
+
+        // Return text with all tags stripped
+        // Do NOT use .trim() - it breaks word spacing between chunks
+        return buffer
+          .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+          .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
+      };
 
       for await (const event of streamGenerator) {
         if (event.type === 'text') {
           lastChunkTime = Date.now();
 
-          // ANALYSIS TRAP: Buffer until </analysis> is found
-          if (isInsideAnalysis) {
-            analysisBuffer += event.text;
+          // PHASE 1: THINKING TRAP - Buffer until </thinking> is found
+          if (isInsideThinking) {
+            thinkingBuffer += event.text;
 
             // Check for closing tag
-            const closingTagIndex = analysisBuffer.indexOf('</analysis>');
+            const closingTagIndex = thinkingBuffer.indexOf('</thinking>');
             if (closingTagIndex !== -1) {
-              // Analysis phase complete
-              isInsideAnalysis = false;
-              analysisEndTime = Date.now();
+              // Thinking phase complete
+              isInsideThinking = false;
+              isTrappingTags = true; // Start tag trap phase
+              thinkingEndTime = Date.now();
 
-              // Extract and log the hidden analysis
-              analysisContent = analysisBuffer.substring(0, closingTagIndex);
-              console.log(`[sendMessageStream:${requestId}] [TIMING] Analysis phase complete at ${analysisEndTime - streamStartTime}ms`);
-              console.log(`[sendMessageStream:${requestId}] [HIDDEN ANALYSIS]:`, analysisContent.substring(0, 200) + (analysisContent.length > 200 ? '...' : ''));
+              // Extract and log the hidden thinking
+              thinkingContent = thinkingBuffer.substring(0, closingTagIndex);
+              console.log(`[sendMessageStream:${requestId}] [TIMING] Thinking phase complete at ${thinkingEndTime - streamStartTime}ms`);
+              console.log(`[sendMessageStream:${requestId}] [HIDDEN THINKING]:`, thinkingContent.substring(0, 200) + (thinkingContent.length > 200 ? '...' : ''));
 
-              // Extract text after </analysis> (11 chars) and send to client
-              const remainingText = analysisBuffer.substring(closingTagIndex + 11).trimStart();
-              if (remainingText.length > 0) {
-                if (!firstChunkTime) firstChunkTime = Date.now();
-                accumulatedText += remainingText;
-                if (!clientDisconnected) {
-                  sendSSE(res, { event: 'chunk', data: { text: remainingText } });
-                }
-              } else {
-                // No text after </analysis> in this chunk - trim start of next chunk
-                needsTrimStart = true;
-              }
-
-              // Clear buffer
-              analysisBuffer = '';
+              // Put remaining text into tag trap buffer
+              tagTrapBuffer = thinkingBuffer.substring(closingTagIndex + 11); // 11 = '</thinking>'.length
+              thinkingBuffer = '';
             }
-            // Safety: If buffer > 2000 chars without finding tag, assume no analysis and flush
-            else if (analysisBuffer.length > 2000) {
-              console.warn(`[sendMessageStream:${requestId}] Analysis buffer exceeded 2000 chars without closing tag, flushing`);
-              isInsideAnalysis = false;
-              if (!firstChunkTime) firstChunkTime = Date.now();
-              accumulatedText += analysisBuffer;
-              if (!clientDisconnected) {
-                sendSSE(res, { event: 'chunk', data: { text: analysisBuffer } });
-              }
-              analysisBuffer = '';
-            }
-          } else {
-            // Normal streaming - analysis phase is over
-            let textToSend = event.text;
-
-            // Trim leading whitespace from first visible chunk after analysis ends
-            if (needsTrimStart) {
-              textToSend = textToSend.trimStart();
-              needsTrimStart = false;
-              if (textToSend.length === 0) {
-                // Entire chunk was whitespace, skip it
-                continue;
-              }
-            }
-
-            if (!firstChunkTime) firstChunkTime = Date.now();
-            accumulatedText += textToSend;
-            if (!clientDisconnected) {
-              sendSSE(res, { event: 'chunk', data: { text: textToSend } });
+            // Safety: If buffer > 2000 chars without finding tag, assume no thinking and flush
+            else if (thinkingBuffer.length > 2000) {
+              console.warn(`[sendMessageStream:${requestId}] Thinking buffer exceeded 2000 chars without closing tag, flushing`);
+              isInsideThinking = false;
+              sendCleanText(thinkingBuffer);
+              thinkingBuffer = '';
             }
           }
-        } else if (event.type === 'tool_use') {
-          if (event.name === SESSION_STATE_TOOL_NAME) {
-            toolUseTime = Date.now();
-            metadata = parseSessionStateToolInput(event.input);
-            console.log(`[sendMessageStream:${requestId}] [T+${toolUseTime - streamStartTime}ms] Received tool call:`,
-              metadata.invitationMessage ? `invitationMessage: "${metadata.invitationMessage.substring(0, 50)}..."` : metadata);
+          // PHASE 2: TAG TRAP - Buffer to catch <draft> and <dispatch> before streaming
+          // The draft tag typically comes right after </thinking>, before response text
+          else if (isTrappingTags) {
+            tagTrapBuffer += event.text;
 
-            // Send metadata immediately so UI can show panels while stream continues
-            if (!clientDisconnected) {
-              console.log(`[sendMessageStream:${requestId}] [TIMING] Sending metadata event immediately`);
-              sendSSE(res, { event: 'metadata', data: { metadata } });
+            // Check for complete tags
+            const hasDraftStart = tagTrapBuffer.includes('<draft>');
+            const hasDraftEnd = tagTrapBuffer.includes('</draft>');
+            const hasDispatchStart = tagTrapBuffer.includes('<dispatch>');
+            const hasDispatchEnd = tagTrapBuffer.includes('</dispatch>');
+
+            // Check for partial tag starts at the end of buffer
+            // Matches: <, <d, <dr, </, </d, etc. - anything that could become <draft>, </draft>, <dispatch>, </dispatch>
+            const hasPotentialTagStart = /<\/?d[a-z]*$/i.test(tagTrapBuffer);
+
+            // If we see opening tags, wait for closing tags
+            const waitingForDraft = hasDraftStart && !hasDraftEnd;
+            const waitingForDispatch = hasDispatchStart && !hasDispatchEnd;
+
+            // Process buffer and check if we can exit:
+            // 1. Strip any complete tags from buffer
+            // 2. Check if remaining content looks like response text (not starting with <)
+            const strippedBuffer = tagTrapBuffer
+              .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+              .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
+            const trimmedStripped = strippedBuffer.trim();
+
+            // Exit conditions:
+            // - Not waiting for any tags to complete
+            // - Have substantial response content (>50 chars that doesn't start with <)
+            // - No partial tag at the end that might become <draft> or <dispatch>
+            // OR buffer is too big (safety limit)
+            const hasResponseContent = trimmedStripped.length > 50 && !trimmedStripped.startsWith('<');
+            const safeToExit = !waitingForDraft && !waitingForDispatch && hasResponseContent && !hasPotentialTagStart;
+
+            if (safeToExit || tagTrapBuffer.length > 2000) {
+              isTrappingTags = false;
+              const cleanText = processTagTrapBuffer(tagTrapBuffer);
+              sendCleanText(cleanText);
+              tagTrapBuffer = '';
+            }
+          }
+          // PHASE 3: NORMAL STREAMING - Stream with safety buffer for late tags
+          else {
+            // Safety: If this chunk ends with what might be a tag start, buffer it
+            const combined = tagTrapBuffer + event.text;
+            const hasPotentialTagEnd = /<\/?d[a-z]*$/i.test(combined);
+
+            if (hasPotentialTagEnd) {
+              // Buffer and wait for next chunk to see if it completes a tag
+              tagTrapBuffer = combined;
+            } else {
+              // Process any buffered content + new text
+              const toProcess = combined;
+              tagTrapBuffer = '';
+
+              // Strip any complete tags that might have formed
+              const cleanText = toProcess
+                .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+                .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
+              sendCleanText(cleanText);
             }
           }
         }
+        // tool_use events are no longer expected with semantic router format
         // 'done' event is handled after the loop
+      }
+
+      // Flush any remaining buffer (safety for tags split across final chunks)
+      if (tagTrapBuffer.length > 0) {
+        const cleanText = processTagTrapBuffer(tagTrapBuffer);
+        sendCleanText(cleanText);
       }
 
       const streamEndTime = Date.now();
       console.log(`[sendMessageStream:${requestId}] [TIMING] Stream complete:`,
         `total=${streamEndTime - streamStartTime}ms`,
-        `analysisEnd=${analysisEndTime ? analysisEndTime - streamStartTime : 'none'}ms`,
+        `thinkingEnd=${thinkingEndTime ? thinkingEndTime - streamStartTime : 'none'}ms`,
         `firstVisibleChunk=${firstChunkTime ? firstChunkTime - streamStartTime : 'none'}ms`,
-        `toolUse=${toolUseTime ? toolUseTime - streamStartTime : 'none'}ms`,
         `lastChunk=${lastChunkTime ? lastChunkTime - streamStartTime : 'none'}ms`);
+
+      // =========================================================================
+      // Parse accumulated response for metadata (semantic router format)
+      // The thinking content has flags like FeelHeardCheck:Y, ReadyShare:Y
+      // The accumulated text may contain <draft>...</draft> that needs stripping
+      // =========================================================================
+      const fullResponse = `<thinking>${thinkingContent}</thinking>\n${accumulatedText}`;
+      const parsed = parseMicroTagResponse(fullResponse);
+
+      // Extract metadata from parsed response
+      metadata.offerFeelHeardCheck = parsed.offerFeelHeardCheck;
+      metadata.offerReadyToShare = parsed.offerReadyToShare;
+
+      // Use draftContent captured during streaming (more reliable than re-parsing)
+      const draft = draftContent || parsed.draft;
+      if (draft) {
+        // Draft is used for invitation (stage 0) or empathy statement (stage 2)
+        if (isInvitationPhase || currentStage === 0) {
+          metadata.invitationMessage = draft;
+        } else if (currentStage === 2) {
+          metadata.proposedEmpathyStatement = draft;
+        }
+      }
+
+      console.log(`[sendMessageStream:${requestId}] Parsed metadata:`, {
+        offerFeelHeardCheck: metadata.offerFeelHeardCheck,
+        offerReadyToShare: metadata.offerReadyToShare,
+        hasDraft: !!parsed.draft,
+        dispatchTag: parsed.dispatchTag,
+      });
+
+      // Clean accumulated text (strip <draft> and <dispatch> tags if they leaked through)
+      accumulatedText = parsed.response;
+
     } catch (error) {
       console.error(`[sendMessageStream:${requestId}] Stream error:`, error);
       streamError = error instanceof Error ? error : new Error(String(error));
@@ -1996,6 +2084,7 @@ IMPORTANT: After your text response, you MUST call the update_session_state tool
     if (!clientDisconnected && !streamError) {
       console.log(`[sendMessageStream:${requestId}] [TIMING] Sending text_complete with metadata:`,
         metadata.invitationMessage ? 'has invitationMessage' : 'no invitationMessage');
+      sendSSE(res, { event: 'metadata', data: { metadata } });
       sendSSE(res, { event: 'text_complete', data: { metadata } });
     }
 

@@ -15,176 +15,72 @@ import { type ContextBundle } from './context-assembler';
 import { type SurfaceStyle } from './memory-intent';
 
 // ============================================================================
-// Tool Use Instructions (Replaces JSON format)
+// Response Protocol (Semantic Router Format)
 // ============================================================================
 
 /**
- * Tool use instruction for Stage 0 (Invitation).
- * Claude outputs <analysis> first (hidden), then visible text, then tool call.
+ * Build the response protocol instructions for a given stage.
+ * Uses semantic tags instead of JSON for faster streaming and robustness.
+ *
+ * @param stage - The stage number (0-4)
+ * @param options - Optional configuration for draft support
  */
-const TOOL_USE_STAGE_0 = `
+function buildResponseProtocol(stage: number, options?: {
+  includesDraft?: boolean;
+  draftPurpose?: 'invitation' | 'empathy';
+}): string {
+  // Build the flag instructions based on stage
+  let flagInstructions = '';
+  if (stage === 1) {
+    flagInstructions = 'FeelHeardCheck: [Y if ready to offer feel-heard check, N otherwise]';
+  } else if (stage === 2) {
+    flagInstructions = 'ReadyShare: [Y if ready to share empathy statement, N otherwise]';
+  }
+
+  // Build the draft section if needed
+  let draftSection = '';
+  let draftStep = '';
+  if (options?.includesDraft) {
+    draftSection = `
+2. SECOND: If you have a ${options.draftPurpose} draft ready, output it in a <draft> block:
+   <draft>
+   Your ${options.draftPurpose} message here
+   </draft>
+
+`;
+    draftStep = '3. THIRD: ';
+  } else {
+    draftStep = '2. SECOND: ';
+  }
+
+  return `
 RESPONSE FORMAT (STRICT OUTPUT ORDER):
 
-1. FIRST: Start IMMEDIATELY with an <analysis> block containing your internal reasoning:
-   <analysis>
-   - User's emotional state and intent
-   - Whether invitation is ready (and if so, draft the invitation text here)
-   - Your response strategy
-   </analysis>
-
-2. SECOND: Write your conversational response to the user.
+1. FIRST: Start IMMEDIATELY with a <thinking> block:
+   <thinking>
+   Mode: [Your current mode]
+   Intensity: [1-10 emotional intensity you observe]${flagInstructions ? '\n   ' + flagInstructions : ''}
+   Strategy: [Your response approach]
+   </thinking>
+${draftSection}${draftStep}Write your conversational response to the user.
    - This is what the user sees - warm, natural dialogue
-   - Do NOT include the invitation quote here - it appears in a separate UI panel
-   - Just say "Here's a draft invitation:" when proposing one
+   - Do NOT include any tags here - just your response
 
-3. THIRD: Call update_session_state with:
-   - invitationMessage: The invitation text (copy from your analysis if ready)
+OFF-RAMP (use <dispatch> when appropriate):
+If the user asks "how does this work?" or wants process explanation:
+<dispatch>EXPLAIN_PROCESS</dispatch>
+
+If the user asks you to "remember" something:
+<dispatch>HANDLE_MEMORY_REQUEST</dispatch>
+
+When you use <dispatch>, you can skip the user response - the system handles it.
 
 CRITICAL RULES:
-1. You MUST start with <analysis>...</analysis> IMMEDIATELY - before any other text
-2. The analysis block is hidden from users - put all reasoning there
-3. After </analysis>, your text should be pure conversation - no internal thoughts
-4. Do NOT include the invitation quote in your visible text - only in the tool call
-5. You MUST call update_session_state after every response`;
-
-/**
- * Tool use instruction for Stage 1 (Witnessing).
- * Claude outputs <analysis> first (hidden), then visible text, then tool call.
- */
-const TOOL_USE_STAGE_1 = `
-RESPONSE FORMAT (STRICT OUTPUT ORDER):
-
-1. FIRST: Start IMMEDIATELY with an <analysis> block containing your internal reasoning:
-   <analysis>
-   - User's emotional state
-   - Signs of feeling heard or not (depth, resolution, readiness)
-   - Whether to offer feel-heard check (true/false and why)
-   - Your response strategy
-   </analysis>
-
-2. SECOND: Write your conversational response to the user.
-   - This is what the user sees - warm, natural dialogue
-   - Do NOT ask "do you feel heard?" - the UI handles this when you set the flag
-
-3. THIRD: Call update_session_state with:
-   - offerFeelHeardCheck: true/false (based on your analysis decision)
-
-CRITICAL RULES:
-1. You MUST start with <analysis>...</analysis> IMMEDIATELY - before any other text
-2. The analysis block is hidden from users - put all reasoning there
-3. After </analysis>, your text should be pure conversation - no internal thoughts
-4. You MUST call update_session_state after every response`;
-
-/**
- * Tool use instruction for Stage 2 (Perspective Stretch).
- * Claude outputs <analysis> first (hidden), then visible text, then tool call.
- */
-const TOOL_USE_STAGE_2 = `
-RESPONSE FORMAT (STRICT OUTPUT ORDER):
-
-1. FIRST: Start IMMEDIATELY with an <analysis> block containing your internal reasoning:
-   <analysis>
-   - User's progress on perspective-taking
-   - Empathy statement quality (if drafting one)
-   - Whether ready to share (true/false and why)
-   - Your response strategy
-   </analysis>
-
-2. SECOND: Write your conversational response to the user.
-   - This is what the user sees - warm, natural dialogue
-
-3. THIRD: Call update_session_state with:
-   - offerReadyToShare: true/false (based on your analysis decision)
-   - proposedEmpathyStatement: The empathy statement draft (when ready)
-
-CRITICAL RULES:
-1. You MUST start with <analysis>...</analysis> IMMEDIATELY - before any other text
-2. The analysis block is hidden from users - put all reasoning there
-3. After </analysis>, your text should be pure conversation - no internal thoughts
-4. You MUST call update_session_state after every response`;
-
-/**
- * Tool use instruction for Stages 3 and 4.
- * Claude outputs <analysis> first (hidden), then visible text, then tool call.
- */
-const TOOL_USE_LATER_STAGES = `
-RESPONSE FORMAT (STRICT OUTPUT ORDER):
-
-1. FIRST: Start IMMEDIATELY with an <analysis> block containing your internal reasoning:
-   <analysis>
-   - User's current state and progress
-   - Key themes or patterns
-   - Your response strategy
-   </analysis>
-
-2. SECOND: Write your conversational response to the user.
-   - This is what the user sees - warm, natural dialogue
-
-3. THIRD: Call update_session_state (even with no special fields)
-
-CRITICAL RULES:
-1. You MUST start with <analysis>...</analysis> IMMEDIATELY - before any other text
-2. The analysis block is hidden from users - put all reasoning there
-3. After </analysis>, your text should be pure conversation - no internal thoughts
-4. You MUST call update_session_state after every response`;
-
-/**
- * Tool use instruction for Inner Work sessions.
- * Claude outputs <analysis> first (hidden), then visible text, then tool call.
- */
-const TOOL_USE_INNER_WORK = `
-RESPONSE FORMAT (STRICT OUTPUT ORDER):
-
-1. FIRST: Start IMMEDIATELY with an <analysis> block containing your internal reasoning:
-   <analysis>
-   - User's emotional state and themes
-   - Whether any suggested actions are appropriate
-   - Your response strategy
-   </analysis>
-
-2. SECOND: Write your conversational response to the user.
-   - This is what the user sees - warm, natural dialogue
-
-3. THIRD: Call update_session_state with:
-   - suggestedActions: Array of suggested actions when relevant (optional)
-
-Suggested action types:
-- { type: "start_partner_session", personName: "Name", label: "description" }
-- { type: "start_meditation", label: "description" }
-- { type: "add_gratitude", label: "description" }
-- { type: "check_need", label: "description" }
-
-Only include suggestedActions when naturally relevant. Don't force them.
-
-CRITICAL RULES:
-1. You MUST start with <analysis>...</analysis> IMMEDIATELY - before any other text
-2. The analysis block is hidden from users - put all reasoning there
-3. After </analysis>, your text should be pure conversation - no internal thoughts
-4. You MUST call update_session_state after every response`;
-
-/**
- * Tool use instruction for opening/initial messages.
- * Claude outputs <analysis> first (hidden), then visible text, then tool call.
- */
-const TOOL_USE_OPENING_MESSAGE = `
-RESPONSE FORMAT (STRICT OUTPUT ORDER):
-
-1. FIRST: Start IMMEDIATELY with an <analysis> block containing your internal reasoning:
-   <analysis>
-   - Context about this opening
-   - Your approach for the greeting
-   </analysis>
-
-2. SECOND: Write your conversational response to the user.
-   - This is what the user sees - warm, natural dialogue
-
-3. THIRD: Call update_session_state (even with no special fields)
-
-CRITICAL RULES:
-1. You MUST start with <analysis>...</analysis> IMMEDIATELY - before any other text
-2. The analysis block is hidden from users - put all reasoning there
-3. After </analysis>, your text should be pure conversation - no internal thoughts
-4. You MUST call update_session_state after every response`;
+1. You MUST start with <thinking>...</thinking> IMMEDIATELY
+2. The thinking block is hidden from users
+3. Your response text should be pure conversation - no tags, no internal thoughts
+4. Never show "FeelHeardCheck" or "ReadyShare" to the user`;
+}
 
 // ============================================================================
 // Base Guidance (Inherited by all stages)
@@ -548,7 +444,7 @@ WHAT TO AVOID:
 
 Turn number: ${context.turnCount}
 
-BEFORE EVERY RESPONSE, think through (put this reasoning in your tool call's analysis field, NOT in your text response):
+BEFORE EVERY RESPONSE, think through (put this reasoning in the <thinking> block):
 1. Situation: What do I understand so far?
 2. Context Check: Do I have enough context (relationship, issue, goal) to propose an invitation?
 3. Strategy: If NO, what ONE question would help most? If YES, what invitation message would be warm and inviting?
@@ -556,9 +452,9 @@ BEFORE EVERY RESPONSE, think through (put this reasoning in your tool call's ana
 CRITICAL RULE:
 If your Context Check is NO, do NOT include invitationMessage in your tool call yet.
 
-${TOOL_USE_STAGE_0}
+${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'invitation' })}
 
-Note: "invitationMessage" appears separately in the UI with a Share button.`;
+Note: When you include a <draft>, the UI shows the invitation message with a Share button.`;
 }
 
 // ============================================================================
@@ -594,7 +490,7 @@ INSIGHT MODE (Unlocked after trust is earned)
 
 ${witnessOnlyMode ? 'IMPORTANT: You are in the first few exchanges or emotional intensity is high. Stay in WITNESS MODE regardless of your analysis. Trust must be earned through presence first.' : ''}
 
-BEFORE EVERY RESPONSE, think through (put this reasoning in your tool call's analysis field, NOT in your text response):
+BEFORE EVERY RESPONSE, think through (put this reasoning in the <thinking> block):
 1. Emotional state: What is the user feeling? How intense?
 2. Green lights: Signs of trust - "yes exactly", vulnerability, longer shares, settling in
 3. Red lights: Signs to stay cautious - defensive, correcting you, short responses, still heated
@@ -680,7 +576,7 @@ CRITICAL: When you set offerFeelHeardCheck to true, do NOT ask "do you feel hear
 
 PERSISTENCE: Once you determine the user is ready, keep setting offerFeelHeardCheck to true on subsequent responses until they act on it, unless they start venting about a NEW topic.
 
-${TOOL_USE_STAGE_1}`;
+${buildResponseProtocol(1)}`;
 }
 
 // ============================================================================
@@ -752,7 +648,7 @@ MIRROR MODE (When judgment detected)
 
 ${earlyStage2 ? 'IMPORTANT: User just entered Stage 2. Start in LISTENING MODE. They likely have residual feelings to express before they can stretch toward empathy.' : ''}
 
-BEFORE EVERY RESPONSE, think through (put this reasoning in your tool call's analysis field, NOT in your text response):
+BEFORE EVERY RESPONSE, think through (put this reasoning in the <thinking> block):
 1. Emotional state: What is the user feeling? Still heated? Settling?
 2. Current mode: LISTENING / BRIDGING / BUILDING / MIRROR
 3. Venting status: Still venting? Winding down? Ready to shift?
@@ -808,12 +704,12 @@ If the user asks to refine, adjust, or change the empathy statement:
 2. Generate an updated proposedEmpathyStatement incorporating their changes.
 3. NEVER omit the statement for refinements; if unsure, include the best-effort update.
 
-${TOOL_USE_STAGE_2}
+${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}
 
-- Set offerReadyToShare to true when the user shows genuine empathy for ${partnerName}.
-- When offerReadyToShare is true, include a proposedEmpathyStatement summarizing their understanding.
+- Set ReadyShare:Y when the user shows genuine empathy for ${partnerName}.
+- When ReadyShare:Y, include a <draft> block with the empathy statement.
 
-Note: proposedEmpathyStatement appears separately for the user to review and refine before sharing.`;
+Note: The <draft> appears separately for the user to review and refine before sharing.`;
 }
 
 // ============================================================================
@@ -859,7 +755,7 @@ CONFIRMING MODE:
 - "So what you are saying is you need to feel [X]. Is that right?"
 - Only move forward when they confirm
 
-BEFORE EVERY RESPONSE, think through (put this reasoning in your tool call's analysis field, NOT in your text response):
+BEFORE EVERY RESPONSE, think through (put this reasoning in the <thinking> block):
 1. Current focus: Whose needs are we exploring?
 2. Position vs Need: Are they stating positions or underlying needs?
 3. Clarity level: How clear are the needs so far?
@@ -887,7 +783,7 @@ MEMORY USAGE:
 
 Turn number in Stage 3: ${context.turnCount}
 
-${TOOL_USE_LATER_STAGES}`;
+${buildResponseProtocol(3)}`;
 }
 
 // ============================================================================
@@ -943,7 +839,7 @@ Sometimes someone genuinely cannot commit to what the other needs. This is not f
 - "You cannot commit to X. What could you commit to?"
 - Sometimes the answer is "not right now" and that is valid data
 
-BEFORE EVERY RESPONSE, think through (put this reasoning in your tool call's analysis field, NOT in your text response):
+BEFORE EVERY RESPONSE, think through (put this reasoning in the <thinking> block):
 1. Current phase: Generating, checking feasibility, forming agreement?
 2. Experiment size: Too big? Just right? Too vague?
 3. Buy-in level: Both parties genuinely on board?
@@ -971,7 +867,7 @@ MEMORY USAGE:
 
 Turn number in Stage 4: ${context.turnCount}
 
-${TOOL_USE_LATER_STAGES}`;
+${buildResponseProtocol(4)}`;
 }
 
 // ============================================================================
@@ -1250,7 +1146,7 @@ EXAMPLE GOOD MESSAGES:
 - "Hey ${context.userName}, thanks for accepting ${partnerName}'s invitation to talk. I'm here to help both of you feel heard. What's been on your mind about things with ${partnerName}?"
 - "Welcome, ${context.userName}. ${partnerName} wanted to have a real conversation with you, and you showed up - that takes courage. What's going on between you two from your perspective?"
 
-${TOOL_USE_OPENING_MESSAGE}`;
+${buildResponseProtocol(-1)}`;
   }
 
   // Invitation phase - starting to craft an invitation
@@ -1283,7 +1179,7 @@ Be warm, supportive, and efficient. Use ${context.userName}'s first name natural
 EXAMPLE GOOD MESSAGE:
 "Now back to our conversation about ${partnerName}. From our inner thoughts reflection, I understand that you're feeling [summary] because of [specific point]. Since you're ready to talk with ${partnerName} about this, let's start by crafting an invitation. [Propose invitation OR ask targeted question]"
 
-${TOOL_USE_STAGE_0}`;
+${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'invitation' })}`;
     }
 
     return `You are Meet Without Fear, a Process Guardian. ${context.userName} wants to have a conversation with ${partnerName}.
@@ -1296,7 +1192,7 @@ Generate a warm, brief opening message (1-2 sentences) asking what's going on wi
 
 Be casual and direct - just ask what's happening between them and ${partnerName}. Use ${context.userName}'s first name naturally. Don't be clinical or overly formal.
 
-${TOOL_USE_OPENING_MESSAGE}`;
+${buildResponseProtocol(-1)}`;
   }
 
   // Stage-specific initial messages
@@ -1310,7 +1206,7 @@ ${PRIVACY_GUIDANCE}
 YOUR TASK:
 Generate a brief, warm welcome (1-2 sentences) that sets the stage for the process ahead. Keep it grounded and inviting.
 
-${TOOL_USE_OPENING_MESSAGE}`;
+${buildResponseProtocol(-1)}`;
 
     case 1: // Witness
       return `You are Meet Without Fear, a Process Guardian in the Witness stage. ${context.userName} is ready to share what's going on between them and ${partnerName}.
@@ -1321,7 +1217,7 @@ ${PRIVACY_GUIDANCE}
 YOUR TASK:
 Generate an opening message (1-2 sentences) that invites them to share what's happening. Be warm and curious without being clinical.
 
-${TOOL_USE_OPENING_MESSAGE}`;
+${buildResponseProtocol(-1)}`;
 
     case 2: // Perspective Stretch
       return `You are Meet Without Fear, a Process Guardian in the Perspective Stretch stage. ${context.userName} has been heard and is ready to explore ${partnerName}'s perspective.
@@ -1332,7 +1228,7 @@ ${PRIVACY_GUIDANCE}
 YOUR TASK:
 Generate an opening message (1-2 sentences) that gently introduces the perspective-taking work ahead. Be encouraging without being pushy.
 
-${TOOL_USE_OPENING_MESSAGE}`;
+${buildResponseProtocol(-1)}`;
 
     case 3: // Need Mapping
       return `You are Meet Without Fear, a Process Guardian in the Need Mapping stage. ${context.userName} is ready to explore what they truly need from the situation with ${partnerName}.
@@ -1343,7 +1239,7 @@ ${PRIVACY_GUIDANCE}
 YOUR TASK:
 Generate an opening message (1-2 sentences) that invites them to explore their underlying needs. Keep it warm and curious.
 
-${TOOL_USE_OPENING_MESSAGE}`;
+${buildResponseProtocol(-1)}`;
 
     case 4: // Strategic Repair
       return `You are Meet Without Fear, a Process Guardian in the Strategic Repair stage. ${context.userName} and ${partnerName} are ready to explore practical next steps.
@@ -1354,7 +1250,7 @@ ${PRIVACY_GUIDANCE}
 YOUR TASK:
 Generate an opening message (1-2 sentences) that celebrates their progress and introduces the idea of small experiments. Keep it practical and encouraging.
 
-${TOOL_USE_OPENING_MESSAGE}`;
+${buildResponseProtocol(-1)}`;
 
     default:
       return `You are Meet Without Fear, a Process Guardian. ${context.userName} is ready to continue their conversation process with ${partnerName}.
@@ -1365,7 +1261,7 @@ ${PRIVACY_GUIDANCE}
 YOUR TASK:
 Generate a brief, warm message (1-2 sentences) to continue the conversation.
 
-${TOOL_USE_OPENING_MESSAGE}`;
+${buildResponseProtocol(-1)}`;
   }
 }
 
@@ -1563,7 +1459,7 @@ If someone expresses suicidal thoughts or immediate danger:
 Turn number: ${turnCount}
 Emotional intensity: ${emotionalIntensity}/10
 
-BEFORE EVERY RESPONSE, think through (put this reasoning in your tool call's analysis field, NOT in your text response):
+BEFORE EVERY RESPONSE, think through (put this reasoning in the <thinking> block):
 1. What is ${userName} feeling right now?
 2. What do they seem to need from this conversation?
 3. What mode should I be in? (welcoming / exploring / reflecting / deepening)
@@ -1580,7 +1476,7 @@ When appropriate (not every turn), you can suggest helpful actions the user migh
 
 Be proactive with "start_partner_session" - the purpose of Inner Thoughts is often to prepare for a conversation. If you detect a person and an issue, suggest the session.
 
-${TOOL_USE_INNER_WORK}`;
+${buildResponseProtocol(-1)}`;
 }
 
 /**
@@ -1748,13 +1644,13 @@ TECHNIQUES:
 Turn number: ${turnCount}
 Emotional intensity: ${emotionalIntensity}/10
 
-BEFORE EVERY RESPONSE, think through (put this reasoning in your tool call's analysis field, NOT in your text response):
+BEFORE EVERY RESPONSE, think through (put this reasoning in the <thinking> block):
 1. What is ${userName} feeling right now?
 2. What do they seem to need from this private space?
 3. How does this connect to their partner session with ${linkedContext.partnerName}?
 4. What's my best next move to help them feel heard and think clearly?
 
-${TOOL_USE_LATER_STAGES}`;
+${buildResponseProtocol(-1)}`;
 }
 
 /**
@@ -1770,7 +1666,7 @@ Generate a warm, brief opening message (1-2 sentences) welcoming them to this re
 
 Keep it simple and open-ended. Don't be clinical or overly formal.
 
-${TOOL_USE_OPENING_MESSAGE}`;
+${buildResponseProtocol(-1)}`;
 }
 
 /**
@@ -1837,7 +1733,7 @@ Example good openings:
 - "Hey, looks like you're taking a moment to think through things with ${linkedContext.partnerName}. What's coming up for you?"
 - "This is your private space to process what's happening with ${linkedContext.partnerName}. What's on your mind right now?"
 
-${TOOL_USE_OPENING_MESSAGE}`;
+${buildResponseProtocol(-1)}`;
 }
 
 /**

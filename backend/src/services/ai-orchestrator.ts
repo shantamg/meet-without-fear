@@ -35,7 +35,8 @@ import {
 } from './context-retriever';
 import { brainService } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
-import { extractJsonFromResponse } from '../utils/json-extractor';
+import { parseMicroTagResponse } from '../utils/micro-tag-parser';
+import { handleDispatch } from './dispatch-handler';
 import {
   decideSurfacing,
   userAskedForPattern,
@@ -342,9 +343,7 @@ export async function orchestrateResponse(
   let proposedEmpathyStatement: string | null = null;
   let analysis: string | undefined;
 
-  // Determine if we should expect structured JSON output
-  // All stages use structured JSON format in their prompts
-  const expectsStructuredOutput = true;
+  // All stages now use semantic tag format (micro-tags: <thinking>, <draft>, <dispatch>)
 
   // Time to First Byte (Sonnet response generation)
   const sonnetStartTime = Date.now();
@@ -368,32 +367,55 @@ export async function orchestrateResponse(
     console.log(`[AI Orchestrator] Sonnet response generated in ${sonnetTime}ms [Time to First Byte]`);
 
     if (sonnetResponse) {
-      if (expectsStructuredOutput) {
-        // Debug: log raw response for Stage 2
-        if (context.stage === 2) {
-          console.log(`[AI Orchestrator] Stage 2 raw response: ${sonnetResponse.substring(0, 500)}...`);
-        }
+      // Debug: log raw response for Stage 2
+      if (context.stage === 2) {
+        console.log(`[AI Orchestrator] Stage 2 raw response: ${sonnetResponse.substring(0, 500)}...`);
+      }
 
-        // Parse structured JSON response
-        const parsed = parseStructuredResponse(sonnetResponse);
-        response = parsed.response;
-        offerFeelHeardCheck = parsed.offerFeelHeardCheck ?? false;
-        offerReadyToShare = parsed.offerReadyToShare ?? false;
-        invitationMessage = parsed.invitationMessage ?? null;
-        proposedEmpathyStatement = parsed.proposedEmpathyStatement ?? null;
-        analysis = parsed.analysis;
+      // Parse semantic tag response (micro-tag format)
+      const parsed = parseMicroTagResponse(sonnetResponse);
 
-        // Debug logging for Stage 2 readiness signal
-        if (context.stage === 2) {
-          console.log(`[AI Orchestrator] Stage 2 - Turn ${context.turnCount}, offerReadyToShare: ${offerReadyToShare}, proposedEmpathyStatement: ${proposedEmpathyStatement ? 'present' : 'null'}`);
-        }
+      // Check for dispatch (off-ramp)
+      if (parsed.dispatchTag) {
+        console.log(`[AI Orchestrator] Dispatch triggered: ${parsed.dispatchTag}`);
+        const dispatchedResponse = await handleDispatch(parsed.dispatchTag);
 
-        if (parsed.analysis) {
-          console.log(`[AI Orchestrator] Analysis: ${parsed.analysis.substring(0, 100)}...`);
-        }
-      } else {
-        // Strip analysis tags for non-structured stages
-        response = stripAnalysisTags(sonnetResponse);
+        return {
+          response: dispatchedResponse,
+          memoryIntent,
+          contextBundle,
+          retrievalPlan,
+          retrievedContext,
+          usedMock: false,
+          offerFeelHeardCheck: false,
+          offerReadyToShare: false,
+          invitationMessage: null,
+          proposedEmpathyStatement: null,
+          analysis: `DISPATCHED: ${parsed.dispatchTag} | Original thinking: ${parsed.thinking}`,
+        };
+      }
+
+      // Normal response flow
+      response = parsed.response;
+      offerFeelHeardCheck = parsed.offerFeelHeardCheck;
+      offerReadyToShare = parsed.offerReadyToShare;
+
+      // Draft is used for both invitation (Stage 0) and empathy (Stage 2)
+      if (context.isInvitationPhase || context.stage === 0) {
+        invitationMessage = parsed.draft;
+      } else if (context.stage === 2) {
+        proposedEmpathyStatement = parsed.draft;
+      }
+
+      analysis = parsed.thinking;
+
+      // Debug logging for Stage 2 readiness signal
+      if (context.stage === 2) {
+        console.log(`[AI Orchestrator] Stage 2 - Turn ${context.turnCount}, offerReadyToShare: ${offerReadyToShare}, proposedEmpathyStatement: ${proposedEmpathyStatement ? 'present' : 'null'}`);
+      }
+
+      if (parsed.thinking) {
+        console.log(`[AI Orchestrator] Thinking: ${parsed.thinking.substring(0, 100)}...`);
       }
     } else {
       response = getMockResponse(context);
@@ -465,112 +487,7 @@ function buildMessagesWithContext(
   return messages;
 }
 
-/**
- * Strip <analysis> tags from AI response.
- */
-function stripAnalysisTags(response: string): string {
-  const stripped = response.replace(/<analysis>[\s\S]*?<\/analysis>/gi, '').trim();
-  return stripped || response;
-}
-
-/**
- * Parsed structured response from AI (for Stage 0, Stage 1, and Stage 2)
- */
-interface ParsedStructuredResponse {
-  response: string;
-  offerFeelHeardCheck?: boolean;
-  offerReadyToShare?: boolean;
-  invitationMessage?: string | null;
-  proposedEmpathyStatement?: string | null;
-  analysis?: string;
-}
-
-/**
- * Parse structured JSON response from AI.
- * Handles Stage 0 (invitation), Stage 1 (witness with offerFeelHeardCheck), and Stage 2 (perspective with offerReadyToShare).
- * Uses the robust extractJsonFromResponse utility.
- */
-function parseStructuredResponse(rawResponse: string): ParsedStructuredResponse {
-  // Extract external <analysis> tags first (as they are outside the JSON)
-  const analysisMatch = rawResponse.match(/<analysis>([\s\S]*?)<\/analysis>/i);
-  const externalAnalysis = analysisMatch ? analysisMatch[1].trim() : undefined;
-
-  try {
-    const parsed = extractJsonFromResponse(rawResponse) as Record<string, unknown>;
-
-    // Validate we have a response field
-    if (typeof parsed.response !== 'string') {
-      console.warn('[AI Orchestrator] Parsed JSON missing response field, attempting direct extraction');
-      const fallback = extractResponseFallback(rawResponse);
-      return { ...fallback, analysis: externalAnalysis };
-    }
-
-    return {
-      response: parsed.response.trim(),
-      offerFeelHeardCheck: typeof parsed.offerFeelHeardCheck === 'boolean' ? parsed.offerFeelHeardCheck : false,
-      offerReadyToShare: typeof parsed.offerReadyToShare === 'boolean' ? parsed.offerReadyToShare : false,
-      invitationMessage: typeof parsed.invitationMessage === 'string' && parsed.invitationMessage !== 'null'
-        ? parsed.invitationMessage.trim()
-        : null,
-      proposedEmpathyStatement: typeof parsed.proposedEmpathyStatement === 'string' && parsed.proposedEmpathyStatement !== 'null'
-        ? parsed.proposedEmpathyStatement.trim()
-        : null,
-      analysis: typeof parsed.analysis === 'string' ? parsed.analysis : externalAnalysis,
-    };
-  } catch (error) {
-    // Fallback: try direct extraction methods
-    console.log('[AI Orchestrator] JSON extraction failed, trying fallback:', error);
-    const fallback = extractResponseFallback(rawResponse);
-    return { ...fallback, analysis: externalAnalysis };
-  }
-}
-
-/**
- * Fallback extraction when normal JSON parsing fails.
- * Tries multiple strategies to avoid returning raw JSON to the user.
- */
-function extractResponseFallback(rawResponse: string): ParsedStructuredResponse {
-  // Strategy 1: Try to find "response": "..." pattern directly using regex
-  // This handles cases where the JSON structure is broken but the response field exists
-  const responseMatch = rawResponse.match(/"response"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-  if (responseMatch) {
-    // Unescape the extracted string and trim whitespace
-    const extracted = responseMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\').trim();
-    console.log('[AI Orchestrator] Extracted response via regex fallback');
-    return {
-      response: extracted,
-      offerFeelHeardCheck: false,
-      offerReadyToShare: false,
-      invitationMessage: null,
-      proposedEmpathyStatement: null,
-    };
-  }
-
-  // Strategy 2: Strip analysis tags and check if result looks like JSON
-  const strippedResponse = stripAnalysisTags(rawResponse);
-
-  // If the stripped response looks like JSON, use a generic fallback
-  // This prevents raw JSON from being shown to the user
-  if (strippedResponse.trim().startsWith('{') || strippedResponse.trim().startsWith('[')) {
-    console.warn('[AI Orchestrator] Response looks like JSON after fallback, using generic message');
-    return {
-      response: "I understand. Can you tell me more about what you're experiencing?",
-      offerFeelHeardCheck: false,
-      offerReadyToShare: false,
-      invitationMessage: null,
-      proposedEmpathyStatement: null,
-    };
-  }
-
-  // Strategy 3: The stripped response is plain text, use it
-  return {
-    response: strippedResponse,
-    offerFeelHeardCheck: false,
-    offerReadyToShare: false,
-    invitationMessage: null,
-    proposedEmpathyStatement: null,
-  };
-}
+// Legacy JSON parsing functions removed - now using micro-tag parser (parseMicroTagResponse)
 
 /**
  * Get a mock response for development without API key.
