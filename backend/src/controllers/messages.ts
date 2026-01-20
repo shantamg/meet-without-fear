@@ -708,54 +708,148 @@ async function processAIResponseInBackground(ctx: {
       }
     }
 
-    // Save AI response (trim whitespace that Claude sometimes adds)
-    console.log(`[sendMessage:${requestId}] [BG] Creating AI message in database...`);
-    const aiMessage = await prisma.message.create({
-      data: {
+    // =========================================================================
+    // TWO-MESSAGE DISPATCH FLOW
+    // When dispatch is triggered with an initial response, we send two messages:
+    // 1. First message (AI's acknowledgment) with expectingMore: true
+    // 2. Second message (dispatched response) with expectingMore: false
+    // =========================================================================
+    const hasTwoMessageFlow = orchestratorResult.initialResponse && orchestratorResult.dispatchedResponse;
+
+    if (hasTwoMessageFlow) {
+      // Extract values (we know they exist when hasTwoMessageFlow is true)
+      const initialResponseContent = orchestratorResult.initialResponse!;
+      const dispatchedResponseContent = orchestratorResult.dispatchedResponse!;
+
+      console.log(`[sendMessage:${requestId}] [BG] Two-message dispatch flow detected for tag: ${orchestratorResult.dispatchTag}`);
+
+      // FIRST MESSAGE: AI's acknowledgment
+      console.log(`[sendMessage:${requestId}] [BG] Creating first AI message (acknowledgment)...`);
+      const firstAiMessage = await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          forUserId: userId,
+          role: 'AI',
+          content: initialResponseContent.trim(),
+          stage: currentStage,
+        },
+      });
+      console.log(`[sendMessage:${requestId}] [BG] ✅ First AI message created: ID=${firstAiMessage.id}`);
+      brainService.broadcastMessage(firstAiMessage);
+
+      // Publish first message with expectingMore: true
+      await publishMessageAIResponse(
         sessionId,
-        senderId: null,
-        forUserId: userId,
-        role: 'AI',
-        content: aiResponseContent.trim(),
-        stage: currentStage,
-      },
-    });
-    console.log(`[sendMessage:${requestId}] [BG] ✅ AI message created: ID=${aiMessage.id}`);
-
-    // Broadcast text to Status Site
-    brainService.broadcastMessage(aiMessage);
-
-    // Summarize and embed session content for cross-session retrieval (non-blocking)
-    // Per fact-ledger architecture, we embed at session level after summary updates
-    updateSessionSummary(sessionId, userId, turnId)
-      .then(() => embedSessionContent(sessionId, userId, turnId))
-      .catch((err: unknown) =>
-        console.warn(`[sendMessage:${requestId}] [BG] Failed to update summary/embedding:`, err)
+        userId,
+        {
+          id: firstAiMessage.id,
+          sessionId: firstAiMessage.sessionId,
+          senderId: firstAiMessage.senderId,
+          role: MessageRole.AI,
+          content: firstAiMessage.content,
+          stage: firstAiMessage.stage,
+          timestamp: firstAiMessage.timestamp.toISOString(),
+        },
+        {
+          expectingMore: true,
+        }
       );
+      console.log(`[sendMessage:${requestId}] [BG] First message published with expectingMore: true`);
 
-    // =========================================================================
-    // PUBLISH AI RESPONSE VIA ABLY
-    // =========================================================================
-    console.log(`[sendMessage:${requestId}] [BG] Publishing AI response via Ably...`);
-    await publishMessageAIResponse(
-      sessionId,
-      userId,
-      {
-        id: aiMessage.id,
-        sessionId: aiMessage.sessionId,
-        senderId: aiMessage.senderId,
-        role: MessageRole.AI,
-        content: aiMessage.content,
-        stage: aiMessage.stage,
-        timestamp: aiMessage.timestamp.toISOString(),
-      },
-      {
-        offerFeelHeardCheck: orchestratorResult.offerFeelHeardCheck,
-        invitationMessage: extractedInvitationMessage,
-        offerReadyToShare: orchestratorResult.offerReadyToShare,
-        proposedEmpathyStatement: orchestratorResult.proposedEmpathyStatement ?? null,
-      }
-    );
+      // SECOND MESSAGE: Dispatched response
+      console.log(`[sendMessage:${requestId}] [BG] Creating second AI message (dispatched response)...`);
+      const secondAiMessage = await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          forUserId: userId,
+          role: 'AI',
+          content: dispatchedResponseContent.trim(),
+          stage: currentStage,
+        },
+      });
+      console.log(`[sendMessage:${requestId}] [BG] ✅ Second AI message created: ID=${secondAiMessage.id}`);
+      brainService.broadcastMessage(secondAiMessage);
+
+      // Publish second message with expectingMore: false
+      await publishMessageAIResponse(
+        sessionId,
+        userId,
+        {
+          id: secondAiMessage.id,
+          sessionId: secondAiMessage.sessionId,
+          senderId: secondAiMessage.senderId,
+          role: MessageRole.AI,
+          content: secondAiMessage.content,
+          stage: secondAiMessage.stage,
+          timestamp: secondAiMessage.timestamp.toISOString(),
+        },
+        {
+          expectingMore: false,
+        }
+      );
+      console.log(`[sendMessage:${requestId}] [BG] Second message published with expectingMore: false`);
+
+      // Summarize and embed after both messages
+      updateSessionSummary(sessionId, userId, turnId)
+        .then(() => embedSessionContent(sessionId, userId, turnId))
+        .catch((err: unknown) =>
+          console.warn(`[sendMessage:${requestId}] [BG] Failed to update summary/embedding:`, err)
+        );
+    } else {
+      // =========================================================================
+      // SINGLE MESSAGE FLOW (standard path)
+      // =========================================================================
+      // Save AI response (trim whitespace that Claude sometimes adds)
+      console.log(`[sendMessage:${requestId}] [BG] Creating AI message in database...`);
+      const aiMessage = await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          forUserId: userId,
+          role: 'AI',
+          content: aiResponseContent.trim(),
+          stage: currentStage,
+        },
+      });
+      console.log(`[sendMessage:${requestId}] [BG] ✅ AI message created: ID=${aiMessage.id}`);
+
+      // Broadcast text to Status Site
+      brainService.broadcastMessage(aiMessage);
+
+      // Summarize and embed session content for cross-session retrieval (non-blocking)
+      // Per fact-ledger architecture, we embed at session level after summary updates
+      updateSessionSummary(sessionId, userId, turnId)
+        .then(() => embedSessionContent(sessionId, userId, turnId))
+        .catch((err: unknown) =>
+          console.warn(`[sendMessage:${requestId}] [BG] Failed to update summary/embedding:`, err)
+        );
+
+      // =========================================================================
+      // PUBLISH AI RESPONSE VIA ABLY
+      // =========================================================================
+      console.log(`[sendMessage:${requestId}] [BG] Publishing AI response via Ably...`);
+      await publishMessageAIResponse(
+        sessionId,
+        userId,
+        {
+          id: aiMessage.id,
+          sessionId: aiMessage.sessionId,
+          senderId: aiMessage.senderId,
+          role: MessageRole.AI,
+          content: aiMessage.content,
+          stage: aiMessage.stage,
+          timestamp: aiMessage.timestamp.toISOString(),
+        },
+        {
+          offerFeelHeardCheck: orchestratorResult.offerFeelHeardCheck,
+          invitationMessage: extractedInvitationMessage,
+          offerReadyToShare: orchestratorResult.offerReadyToShare,
+          proposedEmpathyStatement: orchestratorResult.proposedEmpathyStatement ?? null,
+        }
+      );
+    }
 
     const totalBackgroundTime = Date.now() - backgroundStartTime;
     console.log(`[sendMessage:${requestId}] ========== BACKGROUND AI PROCESSING COMPLETE ==========`);
@@ -1884,16 +1978,22 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
       /**
        * Helper to strip tags and send clean text to client
-       * NOTE: Do NOT trim here - it removes spaces between words when streaming chunks
+       * NOTE: Do NOT use .trim() on every chunk - it removes spaces between words when streaming
+       * BUT we DO trimStart() on the FIRST chunk to remove leading newlines after </thinking>
        */
       const sendCleanText = (text: string) => {
         if (!text || clientDisconnected) return;
 
         // Strip any remaining tags that might have slipped through
-        // Do NOT use .trim() - it breaks word spacing between chunks
-        const cleanText = text
+        let cleanText = text
           .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
           .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
+
+        // Trim LEADING whitespace only on the FIRST chunk (after </thinking> tag removal)
+        // This removes newlines at the start without breaking word spacing in subsequent chunks
+        if (!firstChunkTime && cleanText.length > 0) {
+          cleanText = cleanText.trimStart();
+        }
 
         if (cleanText.length > 0) {
           if (!firstChunkTime) firstChunkTime = Date.now();
@@ -2079,9 +2179,49 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     }
 
     // =========================================================================
+    // Handle stream error: Delete user message, send Ably error, no DB save
+    // User can retry fresh (avoids duplicate messages on retry)
+    // =========================================================================
+    if (streamError) {
+      console.error(`[sendMessageStream:${requestId}] Stream failed, cleaning up user message`);
+
+      // Delete user message so retry creates fresh conversation turn
+      await prisma.message.delete({ where: { id: userMessage.id } }).catch((deleteErr) => {
+        console.warn(`[sendMessageStream:${requestId}] Failed to delete user message on error:`, deleteErr);
+      });
+
+      // Publish error via Ably so frontend can update UI (mark message as failed)
+      await publishMessageError(
+        sessionId,
+        user.id,
+        userMessage.id, // ID for frontend to identify which optimistic message failed
+        'Sorry, I had trouble generating a response. Please try again.',
+        true // canRetry
+      ).catch((ablyErr) => {
+        console.warn(`[sendMessageStream:${requestId}] Failed to publish error via Ably:`, ablyErr);
+      });
+
+      // Send SSE error event if client still connected
+      if (!clientDisconnected) {
+        sendSSE(res, {
+          event: 'error',
+          data: {
+            message: 'An error occurred while generating the response.',
+            retryable: true,
+          },
+        });
+      }
+
+      // End response and return early - do NOT save fallback AI message
+      res.end();
+      console.log(`[sendMessageStream:${requestId}] ========== SSE STREAM ENDED (ERROR) ==========`);
+      return;
+    }
+
+    // =========================================================================
     // Signal that text streaming is complete (before DB saves for faster UX)
     // =========================================================================
-    if (!clientDisconnected && !streamError) {
+    if (!clientDisconnected) {
       console.log(`[sendMessageStream:${requestId}] [TIMING] Sending text_complete with metadata:`,
         metadata.invitationMessage ? 'has invitationMessage' : 'no invitationMessage');
       sendSSE(res, { event: 'metadata', data: { metadata } });
@@ -2089,7 +2229,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     }
 
     // =========================================================================
-    // Save AI message (even if client disconnected or error occurred)
+    // Save AI message (only if streaming succeeded)
     // Trim whitespace that Claude sometimes adds
     // =========================================================================
     const aiMessage = await prisma.message.create({
@@ -2098,7 +2238,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         senderId: null,
         forUserId: user.id,
         role: 'AI',
-        content: (accumulatedText || 'I apologize, but I encountered an issue generating a response. Please try again.').trim(),
+        content: accumulatedText.trim(),
         stage: currentStage,
       },
     });
@@ -2155,26 +2295,16 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     }
 
     // =========================================================================
-    // Send final event or error
+    // Send complete event (streamError case is handled above with early return)
     // =========================================================================
     if (!clientDisconnected) {
-      if (streamError) {
-        sendSSE(res, {
-          event: 'error',
-          data: {
-            message: 'An error occurred while generating the response.',
-            retryable: true,
-          },
-        });
-      } else {
-        sendSSE(res, {
-          event: 'complete',
-          data: {
-            messageId: aiMessage.id,
-            metadata,
-          },
-        });
-      }
+      sendSSE(res, {
+        event: 'complete',
+        data: {
+          messageId: aiMessage.id,
+          metadata,
+        },
+      });
     }
 
     // =========================================================================

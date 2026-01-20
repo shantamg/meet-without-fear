@@ -248,6 +248,8 @@ export interface MessageAIResponsePayload extends RealtimeEventBase {
   offerReadyToShare?: boolean;
   /** Stage 2: Proposed empathy statement */
   proposedEmpathyStatement?: string | null;
+  /** True if more messages are coming (e.g., dispatch two-message flow) */
+  expectingMore?: boolean;
 }
 
 /**

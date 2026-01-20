@@ -657,6 +657,7 @@ export async function publishMessageAIResponse(
     invitationMessage?: string | null;
     offerReadyToShare?: boolean;
     proposedEmpathyStatement?: string | null;
+    expectingMore?: boolean;
   }
 ): Promise<void> {
   const ably = getAbly();

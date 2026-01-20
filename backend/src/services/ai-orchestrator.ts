@@ -110,6 +110,12 @@ export interface OrchestratorResult {
   proposedEmpathyStatement?: string | null;
   /** Sonnet's internal analysis (for background classifier) */
   analysis?: string;
+  /** When dispatch is triggered with an initial response, this contains the AI's acknowledgment */
+  initialResponse?: string;
+  /** When dispatch is triggered, this contains the dispatched response */
+  dispatchedResponse?: string;
+  /** The dispatch tag that was triggered (e.g., 'EXPLAIN_PROCESS') */
+  dispatchTag?: string;
 }
 
 // ============================================================================
@@ -380,6 +386,29 @@ export async function orchestrateResponse(
         console.log(`[AI Orchestrator] Dispatch triggered: ${parsed.dispatchTag}`);
         const dispatchedResponse = await handleDispatch(parsed.dispatchTag);
 
+        // If AI provided an initial response along with dispatch, return both
+        // This enables two-message flow: acknowledgment first, then detailed response
+        if (parsed.response && parsed.response.trim()) {
+          console.log(`[AI Orchestrator] Two-message dispatch flow: initial="${parsed.response.substring(0, 50)}..."`);
+          return {
+            response: parsed.response, // First message (AI's acknowledgment)
+            memoryIntent,
+            contextBundle,
+            retrievalPlan,
+            retrievedContext,
+            usedMock: false,
+            offerFeelHeardCheck: false,
+            offerReadyToShare: false,
+            invitationMessage: null,
+            proposedEmpathyStatement: null,
+            analysis: `DISPATCHED: ${parsed.dispatchTag} | Original thinking: ${parsed.thinking}`,
+            initialResponse: parsed.response, // Explicit initial response
+            dispatchedResponse, // Second message (handler response)
+            dispatchTag: parsed.dispatchTag,
+          };
+        }
+
+        // No initial response - just return the dispatched response (backward compat)
         return {
           response: dispatchedResponse,
           memoryIntent,
@@ -392,6 +421,8 @@ export async function orchestrateResponse(
           invitationMessage: null,
           proposedEmpathyStatement: null,
           analysis: `DISPATCHED: ${parsed.dispatchTag} | Original thinking: ${parsed.thinking}`,
+          dispatchedResponse,
+          dispatchTag: parsed.dispatchTag,
         };
       }
 

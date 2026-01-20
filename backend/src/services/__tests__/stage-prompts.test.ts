@@ -62,7 +62,7 @@ describe('Stage Prompts Service', () => {
       const prompt = buildStagePrompt(3, context);
 
       expect(prompt).toContain('Need Mapping');
-      expect(prompt).toContain('CRYSTALLIZING NEEDS');
+      expect(prompt).toContain('Crystallize needs first');
     });
 
     it('returns Stage 4 prompt for stage 4', () => {
@@ -170,7 +170,7 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Bob');
     });
 
-    it('transition prompts include JSON output format', () => {
+    it('transition prompts use micro-tag format', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = {
         isStageTransition: true,
@@ -178,9 +178,10 @@ describe('Stage Prompts Service', () => {
       };
       const prompt = buildStagePrompt(1, context, options);
 
-      // Transition prompts use JSON format for consistency
-      expect(prompt).toContain('json');
-      expect(prompt).toContain('response');
+      // Transition prompts use micro-tag format with <thinking> tags
+      expect(prompt).toContain('<thinking>');
+      expect(prompt).toContain('</thinking>');
+      expect(prompt).toContain('RESPONSE FORMAT');
     });
 
     it('transition prompts do not explicitly name stages', () => {
@@ -230,8 +231,8 @@ describe('Stage Prompts Service', () => {
       const prompt = buildStagePrompt(2, context, options);
 
       // Should be regular perspective prompt, not transition
-      expect(prompt).toContain('LISTENING MODE');
-      expect(prompt).toContain('BRIDGING MODE');
+      expect(prompt).toContain('LISTENING:');
+      expect(prompt).toContain('BRIDGING:');
     });
   });
 
