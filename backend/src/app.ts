@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import routes from './routes';
 import { requestContextMiddleware } from './middleware/request-context';
+import { errorHandler, notFoundHandler } from './middleware/errors';
 
 const app = express();
 
@@ -50,20 +51,9 @@ app.use('/api/v1', routes);
 app.use('/api', routes);
 
 // 404 handler
-app.use((_req, res) => {
-  res.status(404).json({
-    success: false,
-    error: { code: 'NOT_FOUND', message: 'Endpoint not found' },
-  });
-});
+app.use(notFoundHandler);
 
-// Error handler
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({
-    success: false,
-    error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
-  });
-});
+// Error handler - handles AppError, ZodError, and unknown errors consistently
+app.use(errorHandler);
 
 export default app;
