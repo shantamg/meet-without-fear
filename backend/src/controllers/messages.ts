@@ -33,6 +33,7 @@ import { runPartnerSessionClassifier } from '../services/partner-session-classif
 import { consolidateGlobalFacts } from '../services/global-memory';
 import { assembleContextBundle, formatContextForPrompt } from '../services/context-assembler';
 import type { MemoryIntentResult } from '../services/memory-intent';
+import { handleDispatch } from '../services/dispatch-handler';
 
 // ============================================================================
 // Helpers
@@ -2172,6 +2173,30 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
       // Clean accumulated text (strip <draft> and <dispatch> tags if they leaked through)
       accumulatedText = parsed.response;
+
+      // =========================================================================
+      // DISPATCH HANDLING: If dispatch tag detected, get and stream dispatched response
+      // =========================================================================
+      if (parsed.dispatchTag) {
+        console.log(`[sendMessageStream:${requestId}] Dispatch detected: ${parsed.dispatchTag}`);
+        const dispatchedResponse = await handleDispatch(parsed.dispatchTag);
+
+        // If AI provided an acknowledgment message, it's already in accumulatedText
+        // Stream the dispatched response as a continuation
+        if (accumulatedText.trim()) {
+          // Two-part response: AI acknowledgment already streamed, now send dispatch content
+          console.log(`[sendMessageStream:${requestId}] Two-part dispatch: acknowledgment="${accumulatedText.substring(0, 50)}..."`);
+          // Send a separator and the dispatched response
+          sendSSE(res, { event: 'chunk', data: { text: '\n\n' } });
+          sendSSE(res, { event: 'chunk', data: { text: dispatchedResponse } });
+          accumulatedText = accumulatedText.trim() + '\n\n' + dispatchedResponse;
+        } else {
+          // No acknowledgment - just use the dispatched response
+          console.log(`[sendMessageStream:${requestId}] Single dispatch response (no acknowledgment)`);
+          sendSSE(res, { event: 'chunk', data: { text: dispatchedResponse } });
+          accumulatedText = dispatchedResponse;
+        }
+      }
 
     } catch (error) {
       console.error(`[sendMessageStream:${requestId}] Stream error:`, error);
