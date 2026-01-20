@@ -159,9 +159,12 @@ jest.mock('../../hooks/useMessages', () => ({
     data: { messages: [], hasMore: false },
     isLoading: false,
   }),
-  useSendMessage: () => ({
-    mutate: mockSendMessage,
-    isPending: false,
+}));
+
+jest.mock('../../hooks/useStreamingMessage', () => ({
+  useStreamingMessage: () => ({
+    sendMessage: mockSendMessage,
+    isSending: false,
   }),
 }));
 

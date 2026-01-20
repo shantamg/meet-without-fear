@@ -183,13 +183,12 @@ jest.mock('../../hooks/useMessages', () => ({
     data: mockMessagesData,
     isLoading: false,
   }),
-  useSendMessage: () => ({
-    mutate: jest.fn(),
-    isPending: false,
-  }),
-  useOptimisticMessage: () => ({
-    addOptimisticMessage: jest.fn(() => 'temp-id'),
-    removeOptimisticMessage: jest.fn(),
+}));
+
+jest.mock('../../hooks/useStreamingMessage', () => ({
+  useStreamingMessage: () => ({
+    sendMessage: jest.fn(),
+    isSending: false,
   }),
 }));
 

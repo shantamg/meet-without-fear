@@ -1,20 +1,14 @@
 import { Request, Response } from 'express';
 import {
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   sendMessage,
   confirmFeelHeard,
   getConversationHistory,
 } from '../../controllers/messages';
 import { prisma } from '../../lib/prisma';
-import * as aiService from '../../services/ai';
 
 // Mock Prisma
 jest.mock('../../lib/prisma');
-
-
-// Mock AI service
-jest.mock('../../services/ai', () => ({
-  getOrchestratedResponse: jest.fn(),
-}));
 
 // Mock realtime service
 jest.mock('../../services/realtime', () => ({
@@ -111,202 +105,17 @@ function createMockResponse(): {
 
 describe('Messages API (Fire-and-Forget)', () => {
   const mockUser = { id: 'user-1', email: 'test@example.com', name: 'Test User' };
-  const mockPartner = { id: 'user-2', email: 'partner@example.com', name: 'Partner User' };
   const mockSessionId = 'session-123';
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('POST /sessions/:id/messages (sendMessage - Fire-and-Forget)', () => {
-    it('creates user message and returns immediately (AI response via Ably)', async () => {
-      const mockStageProgress = {
-        id: 'progress-1',
-        sessionId: mockSessionId,
-        userId: mockUser.id,
-        stage: 1,
-        status: 'IN_PROGRESS',
-        gatesSatisfied: {},
-      };
+  describe('POST /sessions/:id/messages (sendMessage - DEPRECATED)', () => {
+    // The fire-and-forget endpoint has been deprecated in favor of SSE streaming.
+    // All message sending should now use POST /sessions/:id/messages/stream.
 
-      const mockUserMessage = {
-        id: 'msg-1',
-        sessionId: mockSessionId,
-        senderId: mockUser.id,
-        role: 'USER',
-        content: 'I feel frustrated when...',
-        stage: 1,
-        timestamp: new Date(),
-      };
-
-      const mockSession = {
-        id: mockSessionId,
-        status: 'ACTIVE',
-        relationshipId: 'rel-1',
-        createdAt: new Date(),
-        relationship: {
-          members: [{ userId: mockUser.id, user: { name: 'Test User' } }],
-        },
-        stageProgress: [mockStageProgress],
-      };
-
-      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession);
-      (prisma.session.findUnique as jest.Mock).mockResolvedValue(mockSession);
-      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
-      (prisma.message.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.message.create as jest.Mock).mockResolvedValue(mockUserMessage);
-      (prisma.relationshipMember.findMany as jest.Mock).mockResolvedValue([
-        { userId: mockUser.id },
-      ]);
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
-      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
-      (prisma.emotionalReading.findMany as jest.Mock).mockResolvedValue([]);
-
-      // Mock AI orchestrator for background processing
-      (aiService.getOrchestratedResponse as jest.Mock).mockResolvedValue({
-        response: 'Thank you for sharing how you feel.',
-        memoryIntent: { intent: 'none' },
-        usedMock: false,
-        offerFeelHeardCheck: false,
-        invitationMessage: null,
-        offerReadyToShare: false,
-        proposedEmpathyStatement: null,
-        memorySuggestion: null,
-      });
-
-      const req = createMockRequest({
-        user: mockUser,
-        params: { id: mockSessionId },
-        body: { content: 'I feel frustrated when...' },
-      });
-      const { res, statusMock, jsonMock } = createMockResponse();
-
-      await sendMessage(req as Request, res as Response);
-
-      // Fire-and-forget: Returns immediately with user message only
-      expect(statusMock).toHaveBeenCalledWith(200);
-      expect(jsonMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: true,
-          data: expect.objectContaining({
-            userMessage: expect.objectContaining({
-              id: 'msg-1',
-              content: 'I feel frustrated when...',
-            }),
-            // AI response is null for fire-and-forget - it arrives via Ably
-            aiResponse: null,
-          }),
-        })
-      );
-
-      // Note: AI processing happens in background and publishes to Ably
-      // The test doesn't wait for background processing
-    });
-
-    it('requires authentication', async () => {
-      const req = createMockRequest({
-        params: { id: mockSessionId },
-        body: { content: 'Test message' },
-      });
-      const { res, statusMock, jsonMock } = createMockResponse();
-
-      await sendMessage(req as Request, res as Response);
-
-      expect(statusMock).toHaveBeenCalledWith(401);
-      expect(jsonMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: false,
-          error: expect.objectContaining({ code: 'UNAUTHORIZED' }),
-        })
-      );
-    });
-
-    it('validates message content is present', async () => {
-      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
-        id: mockSessionId,
-        status: 'ACTIVE',
-        relationship: {
-          members: [{ userId: mockUser.id }],
-        },
-      });
-
-      const req = createMockRequest({
-        user: mockUser,
-        params: { id: mockSessionId },
-        body: { content: '' },
-      });
-      const { res, statusMock, jsonMock } = createMockResponse();
-
-      await sendMessage(req as Request, res as Response);
-
-      expect(statusMock).toHaveBeenCalledWith(400);
-      expect(jsonMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: false,
-          error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
-        })
-      );
-    });
-
-    it('allows onboarding messages when user in stage 0 without compact signed', async () => {
-      // Updated: Stage 0 messaging is now allowed for onboarding chat
-      const mockStageProgress = {
-        id: 'progress-1',
-        sessionId: mockSessionId,
-        userId: mockUser.id,
-        stage: 0, // Still in stage 0
-        status: 'IN_PROGRESS',
-        gatesSatisfied: {}, // Compact not signed
-      };
-
-      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
-        id: mockSessionId,
-        status: 'ACTIVE',
-        relationship: {
-          members: [{ userId: mockUser.id }, { userId: mockPartner.id }],
-        },
-      });
-
-      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
-
-      // Mock message creation for the allowed case
-      const mockUserMessage = {
-        id: 'user-msg-1',
-        sessionId: mockSessionId,
-        senderId: mockUser.id,
-        role: 'USER',
-        content: 'Test message',
-        stage: 0,
-        timestamp: new Date(),
-      };
-      (prisma.message.create as jest.Mock).mockResolvedValue(mockUserMessage);
-      (prisma.message.findMany as jest.Mock).mockResolvedValue([mockUserMessage]);
-
-      // Mock AI response (with full structure expected by controller)
-      (aiService.getOrchestratedResponse as jest.Mock).mockResolvedValue({
-        response: 'AI onboarding response',
-        isTransitionMessage: false,
-        gatesProgressed: [],
-        memoryIntent: { intent: 'none', depth: 'none' },
-        usedMock: false,
-        offerFeelHeardCheck: false,
-      });
-
-      // Mock invitation for session context
-      (prisma.invitation.findFirst as jest.Mock).mockResolvedValue(null);
-
-      // Mock relationship member lookup (for partner name)
-      (prisma.relationshipMember.findMany as jest.Mock).mockResolvedValue([
-        { userId: mockUser.id, nickname: null, user: { firstName: 'Test' } },
-        { userId: mockPartner.id, nickname: null, user: { firstName: 'Partner' } },
-      ]);
-
-      // Mock user vessel
-      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue(null);
-
-      // Mock emotional readings
-      (prisma.emotionalReading.findMany as jest.Mock).mockResolvedValue([]);
-
+    it('returns 410 Gone with deprecation message', async () => {
       const req = createMockRequest({
         user: mockUser,
         params: { id: mockSessionId },
@@ -316,91 +125,13 @@ describe('Messages API (Fire-and-Forget)', () => {
 
       await sendMessage(req as Request, res as Response);
 
-      // Onboarding messages are now allowed
-      expect(statusMock).toHaveBeenCalledWith(200);
-    });
-
-    it('rejects messages when session is not active', async () => {
-      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
-        id: mockSessionId,
-        status: 'PAUSED',
-        relationship: {
-          members: [{ userId: mockUser.id }],
-        },
-      });
-
-      const req = createMockRequest({
-        user: mockUser,
-        params: { id: mockSessionId },
-        body: { content: 'Test message' },
-      });
-      const { res, statusMock, jsonMock } = createMockResponse();
-
-      await sendMessage(req as Request, res as Response);
-
-      expect(statusMock).toHaveBeenCalledWith(400);
+      expect(statusMock).toHaveBeenCalledWith(410);
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           error: expect.objectContaining({
-            code: 'SESSION_NOT_ACTIVE',
-          }),
-        })
-      );
-    });
-
-    it('returns 404 when session not found', async () => {
-      (prisma.session.findFirst as jest.Mock).mockResolvedValue(null);
-
-      const req = createMockRequest({
-        user: mockUser,
-        params: { id: 'non-existent' },
-        body: { content: 'Test message' },
-      });
-      const { res, statusMock, jsonMock } = createMockResponse();
-
-      await sendMessage(req as Request, res as Response);
-
-      expect(statusMock).toHaveBeenCalledWith(404);
-      expect(jsonMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: false,
-          error: expect.objectContaining({ code: 'NOT_FOUND' }),
-        })
-      );
-    });
-
-    it('rejects messages when user is in invalid stage (stage 5+)', async () => {
-      // Updated: Stage 0-4 messaging is now allowed, but stage 5+ should be blocked
-      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
-        id: mockSessionId,
-        status: 'ACTIVE',
-        relationship: {
-          members: [{ userId: mockUser.id }],
-        },
-      });
-
-      // User progress shows stage 5 (invalid - beyond allowed stages)
-      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
-        stage: 5,
-        status: 'IN_PROGRESS',
-      });
-
-      const req = createMockRequest({
-        user: mockUser,
-        params: { id: mockSessionId },
-        body: { content: 'Trying to send in invalid stage' },
-      });
-      const { res, statusMock, jsonMock } = createMockResponse();
-
-      await sendMessage(req as Request, res as Response);
-
-      expect(statusMock).toHaveBeenCalledWith(400);
-      expect(jsonMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: false,
-          error: expect.objectContaining({
-            code: 'VALIDATION_ERROR',
+            code: 'ENDPOINT_DEPRECATED',
+            message: expect.stringContaining('deprecated'),
           }),
         })
       );
@@ -633,7 +364,7 @@ describe('Messages API (Fire-and-Forget)', () => {
         params: { id: mockSessionId },
         body: { confirmed: true, feedback: 'The AI was very helpful' },
       });
-      const { res, statusMock, jsonMock } = createMockResponse();
+      const { res, statusMock } = createMockResponse();
 
       await confirmFeelHeard(req as Request, res as Response);
 

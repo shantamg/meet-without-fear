@@ -19,11 +19,8 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { useSession } from '../hooks/useSessions';
-import {
-  useMessages,
-  useSendMessage,
-  useOptimisticMessage,
-} from '../hooks/useMessages';
+import { useMessages } from '../hooks/useMessages';
+import { useStreamingMessage } from '../hooks/useStreamingMessage';
 import {
   useProgress,
   useNeeds,
@@ -36,7 +33,7 @@ import { ChatInterface } from '../components/ChatInterface';
 import { NeedsSection } from '../components/NeedsSection';
 import { CommonGroundCard } from '../components/CommonGroundCard';
 import { WaitingRoom } from '../components/WaitingRoom';
-import { Stage, MessageRole, IdentifiedNeedDTO, CommonGroundDTO } from '@meet-without-fear/shared';
+import { Stage, IdentifiedNeedDTO, CommonGroundDTO } from '@meet-without-fear/shared';
 
 // ============================================================================
 // Soft, Calming Color Palette for Need Mapping
@@ -530,8 +527,7 @@ export function NeedMappingScreen() {
     { sessionId: sessionId!, stage: Stage.NEED_MAPPING },
     { enabled: !!sessionId }
   );
-  const { mutate: sendMessage, isPending: isSending } = useSendMessage();
-  const { addOptimisticMessage, removeOptimisticMessage } = useOptimisticMessage();
+  const { sendMessage, isSending } = useStreamingMessage();
 
   // Needs data
   const { data: needsData, isLoading: loadingNeeds } = useNeeds(sessionId);
@@ -571,23 +567,9 @@ export function NeedMappingScreen() {
   const handleSendMessage = useCallback(
     (content: string) => {
       if (!sessionId) return;
-
-      const optimisticId = addOptimisticMessage(sessionId, {
-        content,
-        role: MessageRole.USER,
-        stage: Stage.NEED_MAPPING,
-      });
-
-      sendMessage(
-        { sessionId, content },
-        {
-          onError: () => {
-            removeOptimisticMessage(sessionId, optimisticId);
-          },
-        }
-      );
+      sendMessage({ sessionId, content, currentStage: Stage.NEED_MAPPING });
     },
-    [sessionId, sendMessage, addOptimisticMessage, removeOptimisticMessage]
+    [sessionId, sendMessage]
   );
 
   // Handle confirming all needs

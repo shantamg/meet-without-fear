@@ -31,7 +31,8 @@ import {
   useValidateEmpathy,
   useSkipRefinement,
 } from '../hooks/useStages';
-import { useMessages, useSendMessage } from '../hooks/useMessages';
+import { useMessages } from '../hooks/useMessages';
+import { useStreamingMessage } from '../hooks/useStreamingMessage';
 import { useCreateInnerThoughtsSession, useLinkedInnerThoughts } from '../hooks/useInnerThoughts';
 import { ChatInterface } from '../components/ChatInterface';
 import { ChatHeader } from '../components/ChatHeader';
@@ -105,7 +106,7 @@ export function PerspectiveStretchScreen() {
   const messages = messagesData?.messages ?? [];
 
   // Mutation hooks
-  const { mutate: sendMessage, isPending: isSending } = useSendMessage();
+  const { sendMessage, isSending } = useStreamingMessage();
   const { mutate: saveDraft } = useSaveEmpathyDraft();
   const { mutate: consentToShare } = useConsentToShareEmpathy();
   const { mutate: validateEmpathy } = useValidateEmpathy();
@@ -260,7 +261,7 @@ export function PerspectiveStretchScreen() {
   // Handle message sending
   const handleSendMessage = (content: string) => {
     if (!sessionId) return;
-    sendMessage({ sessionId, content });
+    sendMessage({ sessionId, content, currentStage: Stage.PERSPECTIVE_STRETCH });
   };
 
   // Handle revision submission (used for future partner feedback feature)

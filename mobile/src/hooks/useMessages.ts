@@ -26,6 +26,10 @@ import {
   CompleteExerciseRequest,
   CompleteExerciseResponse,
   Stage,
+  TimelineResponse,
+  ChatItem,
+  ChatItemType,
+  UserMessageStatus,
 } from '@meet-without-fear/shared';
 
 // Import query keys from centralized file to avoid circular dependencies
@@ -33,6 +37,7 @@ import {
   sessionKeys,
   stageKeys,
   messageKeys,
+  timelineKeys,
 } from './queryKeys';
 
 // Re-export for backwards compatibility
@@ -181,20 +186,22 @@ interface SendMessageContext {
 }
 
 /**
- * Send a message in a session.
+ * @deprecated Use useStreamingMessage instead. The fire-and-forget endpoint
+ * (POST /sessions/:id/messages) has been deprecated and returns HTTP 410 Gone.
+ * All message sending should now use SSE streaming via POST /sessions/:id/messages/stream.
  *
- * Cache-First Architecture:
- * - onMutate: Immediately adds user message to cache with temp ID and status: 'sending'
- * - onSuccess: Replaces optimistic message with real one from server
- * - onError: Rolls back to previous cache state
+ * This hook is kept for backwards compatibility but will be removed in a future version.
  *
- * Fire-and-forget pattern:
- * - Returns immediately with user message only
- * - AI response arrives asynchronously via Ably (message.ai_response event)
- * - Use useAIMessageHandler to add AI responses to the cache
+ * Migration guide:
+ * ```typescript
+ * // Before:
+ * const { mutate: sendMessage, isPending: isSending } = useSendMessage();
+ * sendMessage({ sessionId, content, currentStage: Stage.WITNESS });
  *
- * UI derives "waiting for AI" state from the last message being from USER role,
- * eliminating the need for a separate waitingForAIResponse boolean.
+ * // After:
+ * const { sendMessage, isSending } = useStreamingMessage();
+ * sendMessage({ sessionId, content, currentStage: Stage.WITNESS });
+ * ```
  */
 export function useSendMessage(
   options?: Omit<
@@ -312,7 +319,7 @@ export function useSendMessage(
     // =========================================================================
     // SUCCESS: Replace optimistic message with real one
     // =========================================================================
-    onSuccess: (data, { sessionId }, context) => {
+    onSuccess: (data, { sessionId }, _context) => {
       const stage = data.userMessage.stage;
 
       // Fire-and-forget: Only add user message to cache immediately
@@ -434,8 +441,13 @@ export function useSendMessage(
 // ============================================================================
 
 /**
- * Hook to add AI messages from Ably events to the React Query cache.
- * Used for fire-and-forget message pattern where AI response arrives via Ably.
+ * @deprecated This hook was used for the fire-and-forget pattern which is now deprecated.
+ * With SSE streaming, AI responses arrive on the same connection and are handled by
+ * useStreamingMessage. This hook is kept for backwards compatibility but the
+ * `addAIMessage` function will no longer receive messages since the fire-and-forget
+ * endpoint returns HTTP 410 Gone.
+ *
+ * The `handleAIMessageError` function may still be useful for edge cases.
  */
 export function useAIMessageHandler() {
   const queryClient = useQueryClient();
@@ -514,10 +526,40 @@ export function useAIMessageHandler() {
     /**
      * Handle AI message error from Ably.
      * Called when message.error event is received.
-     * Returns error info for the UI to handle.
+     * Marks the user message as failed in the timeline cache so retry button shows.
      */
     handleAIMessageError: (sessionId: string, userMessageId: string, errorMessage: string, canRetry: boolean) => {
       console.error(`[useAIMessageHandler] AI message error for session ${sessionId}:`, errorMessage);
+
+      // Mark the user message as failed in the timeline cache
+      // The userMessageId might be an optimistic ID (optimistic-*) or a real ID
+      queryClient.setQueryData<InfiniteData<TimelineResponse, string | undefined>>(
+        timelineKeys.infinite(sessionId),
+        (oldData): InfiniteData<TimelineResponse, string | undefined> | undefined => {
+          if (!oldData) return oldData;
+
+          // Find and update the user message to ERROR status
+          const newPages = oldData.pages.map((page) => ({
+            ...page,
+            items: page.items.map((item): ChatItem => {
+              // Match by ID (handles both optimistic and real IDs)
+              if (item.id === userMessageId && item.type === ChatItemType.USER_MESSAGE) {
+                return {
+                  ...item,
+                  status: UserMessageStatus.ERROR,
+                  canRetry,
+                };
+              }
+              return item;
+            }),
+          }));
+
+          return { ...oldData, pages: newPages };
+        }
+      );
+
+      console.log(`[useAIMessageHandler] Marked message ${userMessageId} as failed in timeline cache`);
+
       // Return error info so the component can display appropriate UI
       return {
         sessionId,
