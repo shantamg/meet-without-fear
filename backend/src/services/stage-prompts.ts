@@ -67,7 +67,7 @@ ${draftSection}${draftStep}Write your conversational response to the user.
    - Do NOT include any tags here - just your response
 
 OFF-RAMP (use <dispatch> when appropriate):
-If the user asks "how does this work?" or wants process explanation:
+If the user asks "how does this work?", wants process explanation, or asks about contacting/connecting with the other person directly:
 <thinking>
 Mode: DISPATCH
 Strategy: Handing off to process explainer
