@@ -16,7 +16,7 @@ import {
   GetMessagesResponse,
   Stage,
 } from '@meet-without-fear/shared';
-import { messageKeys, sessionKeys, stageKeys, timelineKeys } from './queryKeys';
+import { messageKeys, sessionKeys, timelineKeys } from './queryKeys';
 
 // ============================================================================
 // Types
@@ -329,10 +329,15 @@ export function useStreamingMessage(
         );
       }
 
-      // Invalidate related queries to ensure fresh data
-      queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      // NOTE: We intentionally do NOT invalidate queries here.
+      // Invalidating sessionKeys.state or other queries during streaming causes race conditions:
+      // - Optimistic updates (e.g., invitation.messageConfirmedAt) get overwritten
+      // - UI elements (indicators, messages) briefly disappear during refetch
+      // - The cache-first pattern is violated, causing visual glitches
+      //
+      // Instead, all necessary updates are done via setQueryData above.
+      // If fresh data is needed, the mutation's onSuccess handler should handle it,
+      // or the component can trigger a refetch on mount.
 
       // Call the onMetadata callback if provided
       onMetadata?.(sessionId, metadata);
