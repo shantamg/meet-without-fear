@@ -33,7 +33,7 @@ import { runPartnerSessionClassifier } from '../services/partner-session-classif
 import { consolidateGlobalFacts } from '../services/global-memory';
 import { assembleContextBundle, formatContextForPrompt } from '../services/context-assembler';
 import type { MemoryIntentResult } from '../services/memory-intent';
-import { handleDispatch } from '../services/dispatch-handler';
+import { handleDispatch, type DispatchContext } from '../services/dispatch-handler';
 
 // ============================================================================
 // Helpers
@@ -328,42 +328,20 @@ export async function confirmFeelHeard(
           },
         });
 
-        // Format conversation for context
+        // Format conversation for context, including the "felt heard" event marker
         const conversationContext = conversationHistory
           .map((m) => `${m.role === 'USER' ? 'User' : 'AI'}: ${m.content}`)
-          .join('\n\n');
+          .join('\n\n') + '\n\n[User confirmed feeling heard]';
 
-        // Build a context-aware transition prompt for Stage 1 → Stage 2
+        // Build a simple transition prompt - trust Sonnet with the context
         const userName = user.name || 'The user';
         const partner = partnerName || 'their partner';
-        const transitionPrompt = `You are Meet Without Fear, a Process Guardian. ${userName} has been sharing their experience and has confirmed they feel fully heard. Now you'll help ${userName} build empathy by imagining ${partner}'s experience.
+        const transitionPrompt = `You are a warm, emotionally attuned guide helping ${userName} work through a relationship challenge with ${partner}.
 
-HERE IS THE CONVERSATION FROM STAGE 1 (what ${userName} shared while feeling heard):
----
+CONVERSATION SO FAR:
 ${conversationContext}
----
 
-Based on this specific conversation, generate a brief, warm transition message (2-3 sentences) that:
-1. References something SPECIFIC that ${userName} shared (an emotion, situation, or concern they mentioned)
-2. Acknowledges their experience in a way that shows you remember what they said
-3. Naturally bridges to wondering about ${partner}'s perspective with an open question
-
-IMPORTANT GUIDANCE:
-- Your transition should feel like a continuation of THIS conversation, not a generic script
-- Reference actual themes, emotions, or situations ${userName} mentioned
-- The transition should feel seamless - like a natural next thought in the conversation
-- Avoid generic phrases like "you've shared so much" - be specific to what they actually shared
-- Keep the same warm, conversational tone from the witnessing phase
-
-Example (if user had shared feeling unheard and dismissed):
-"I hear how painful it's been to feel dismissed, like your concerns aren't being taken seriously. I'm wondering - have you ever thought about what ${partner} might be experiencing when those moments happen? What do you imagine might be going on for them?"
-
-RESPONSE FORMAT:
-<thinking>
-Brief internal analysis of what ${userName} shared
-</thinking>
-
-Your personalized transition message here (just the text, no tags around it).`;
+Continue naturally from here. ${userName} just confirmed feeling heard - acknowledge this moment warmly, then gently invite them to consider ${partner}'s perspective when they're ready. Keep it brief (2-3 sentences) and conversational.`;
 
         const aiResponse = await getSonnetResponse({
           systemPrompt: transitionPrompt,
@@ -1180,9 +1158,15 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     const formattedContext = formatContextForPrompt(contextBundle);
     console.log(`[sendMessageStream:${requestId}] Formatted context: ${formattedContext.length} chars`);
 
+    // Filter out empty messages to prevent Bedrock ValidationException
+    const validHistory = history.filter(m => m.content && m.content.trim().length > 0);
+    if (validHistory.length !== history.length) {
+      console.warn(`[sendMessageStream:${requestId}] Filtered out ${history.length - validHistory.length} empty message(s) from history`);
+    }
+
     // Build messages with context injected into the last user message
-    const messagesWithContext = history.map((m, i) => {
-      const isLastUserMessage = i === history.length - 1 && m.role === 'USER';
+    const messagesWithContext = validHistory.map((m, i) => {
+      const isLastUserMessage = i === validHistory.length - 1 && m.role === 'USER';
       const content = isLastUserMessage && formattedContext.trim()
         ? `[Context for this turn:\n${formattedContext}]\n\n${m.content}`
         : m.content;
@@ -1207,6 +1191,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     let tagTrapBuffer = ''; // Buffer for checking draft/dispatch tags after thinking
     let thinkingContent = ''; // Store hidden thinking for logging
     let draftContent = ''; // Store draft content for metadata
+    let dispatchTagContent = ''; // Store dispatch tag content for handling
+    let isDispatchMessage = false; // Track if this is a dispatch response (skip processing)
 
     try {
       const streamGenerator = getSonnetStreamingResponse({
@@ -1262,10 +1248,11 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           console.log(`[sendMessageStream:${requestId}] [HIDDEN DRAFT]:`, draftContent.substring(0, 100) + (draftContent.length > 100 ? '...' : ''));
         }
 
-        // Extract dispatch tag if present (we log but don't act on it in streaming)
+        // Extract dispatch tag if present - store for handling after streaming
         const dispatchMatch = buffer.match(/<dispatch>([\s\S]*?)<\/dispatch>/i);
         if (dispatchMatch) {
-          console.log(`[sendMessageStream:${requestId}] [DISPATCH TAG]:`, dispatchMatch[1]);
+          dispatchTagContent = dispatchMatch[1].trim();
+          console.log(`[sendMessageStream:${requestId}] [DISPATCH TAG]:`, dispatchTagContent);
         }
 
         // Return text with all tags stripped
@@ -1352,12 +1339,15 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           }
           // PHASE 3: NORMAL STREAMING - Stream with safety buffer for late tags
           else {
-            // Safety: If this chunk ends with what might be a tag start, buffer it
             const combined = tagTrapBuffer + event.text;
-            const hasPotentialTagEnd = /<\/?d[a-z]*$/i.test(combined);
 
-            if (hasPotentialTagEnd) {
-              // Buffer and wait for next chunk to see if it completes a tag
+            // Check if we have unclosed tags that need buffering
+            const hasUnclosedDispatch = combined.includes('<dispatch>') && !combined.includes('</dispatch>');
+            const hasUnclosedDraft = combined.includes('<draft>') && !combined.includes('</draft>');
+            const hasPotentialTagStart = /<\/?d[a-z]*$/i.test(combined);
+
+            if (hasUnclosedDispatch || hasUnclosedDraft || hasPotentialTagStart) {
+              // Buffer and wait for closing tag
               tagTrapBuffer = combined;
             } else {
               // Process any buffered content + new text
@@ -1374,6 +1364,24 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         }
         // tool_use events are no longer expected with semantic router format
         // 'done' event is handled after the loop
+      }
+
+      // =========================================================================
+      // SAFETY FLUSH: Handle AI responses that don't follow expected format
+      // If stream ends while still waiting for </thinking>, the AI likely skipped
+      // the thinking block entirely (e.g., dispatch-only response). Flush the
+      // thinkingBuffer as visible content so dispatch tags can be parsed.
+      // =========================================================================
+      if (isInsideThinking && thinkingBuffer.length > 0) {
+        console.warn(`[sendMessageStream:${requestId}] Stream ended while still in thinking trap. Buffer has ${thinkingBuffer.length} chars. Flushing as visible content.`);
+        // The buffer might contain <dispatch>...</dispatch> without a thinking block
+        // Process it through the tag processor to extract dispatch tags
+        const cleanText = processTagTrapBuffer(thinkingBuffer);
+        sendCleanText(cleanText);
+        // Store the raw buffer as "thinking" for downstream parsing to find dispatch tags
+        thinkingContent = thinkingBuffer;
+        thinkingBuffer = '';
+        isInsideThinking = false;
       }
 
       // Flush any remaining buffer (safety for tags split across final chunks)
@@ -1416,7 +1424,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         offerFeelHeardCheck: metadata.offerFeelHeardCheck,
         offerReadyToShare: metadata.offerReadyToShare,
         hasDraft: !!parsed.draft,
-        dispatchTag: parsed.dispatchTag,
+        dispatchTag: dispatchTagContent || parsed.dispatchTag,
       });
 
       // Clean accumulated text (strip <draft> and <dispatch> tags if they leaked through)
@@ -1424,26 +1432,34 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
       // =========================================================================
       // DISPATCH HANDLING: If dispatch tag detected, get and stream dispatched response
+      // Dispatch messages are system responses - skip classifier/embeddings
+      // Use dispatchTagContent captured during streaming (more reliable than re-parsing)
       // =========================================================================
-      if (parsed.dispatchTag) {
-        console.log(`[sendMessageStream:${requestId}] Dispatch detected: ${parsed.dispatchTag}`);
-        const dispatchedResponse = await handleDispatch(parsed.dispatchTag);
+      const dispatchTag = dispatchTagContent || parsed.dispatchTag;
+      if (dispatchTag) {
+        console.log(`[sendMessageStream:${requestId}] Dispatch detected: ${dispatchTag}`);
+        isDispatchMessage = true;
 
-        // If AI provided an acknowledgment message, it's already in accumulatedText
-        // Stream the dispatched response as a continuation
-        if (accumulatedText.trim()) {
-          // Two-part response: AI acknowledgment already streamed, now send dispatch content
-          console.log(`[sendMessageStream:${requestId}] Two-part dispatch: acknowledgment="${accumulatedText.substring(0, 50)}..."`);
-          // Send a separator and the dispatched response
-          sendSSE(res, { event: 'chunk', data: { text: '\n\n' } });
-          sendSSE(res, { event: 'chunk', data: { text: dispatchedResponse } });
-          accumulatedText = accumulatedText.trim() + '\n\n' + dispatchedResponse;
-        } else {
-          // No acknowledgment - just use the dispatched response
-          console.log(`[sendMessageStream:${requestId}] Single dispatch response (no acknowledgment)`);
-          sendSSE(res, { event: 'chunk', data: { text: dispatchedResponse } });
-          accumulatedText = dispatchedResponse;
-        }
+        // Build dispatch context with conversation history
+        const dispatchContext: DispatchContext = {
+          userMessage: content,
+          conversationHistory: history.map((m) => ({
+            role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+            content: m.content,
+          })),
+          userName,
+          partnerName,
+          sessionId,
+          turnId,
+        };
+
+        const dispatchedResponse = await handleDispatch(dispatchTag, dispatchContext);
+
+        // Use ONLY the dispatch response - ignore any acknowledgment text the AI may have sent
+        // (The prompt instructs AI to not send visible text, but in case it does, we ignore it)
+        console.log(`[sendMessageStream:${requestId}] Dispatch response only (ignoring any streamed acknowledgment)`);
+        sendSSE(res, { event: 'chunk', data: { text: dispatchedResponse } });
+        accumulatedText = dispatchedResponse;
       }
 
     } catch (error) {
@@ -1582,61 +1598,66 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
     // =========================================================================
     // Background tasks (non-blocking)
+    // Skip for dispatch messages - they're system responses, not user conversation
     // =========================================================================
-    // Summarize and embed session content for cross-session retrieval
-    // Per fact-ledger architecture, we embed at session level after summary updates
-    updateSessionSummary(sessionId, user.id, turnId)
-      .then(() => embedSessionContent(sessionId, user.id, turnId))
-      .catch((err: unknown) =>
-        console.warn(`[sendMessageStream:${requestId}] Failed to update summary/embedding:`, err)
-      );
+    if (isDispatchMessage) {
+      console.log(`[sendMessageStream:${requestId}] Skipping background tasks for dispatch message`);
+    } else {
+      // Summarize and embed session content for cross-session retrieval
+      // Per fact-ledger architecture, we embed at session level after summary updates
+      updateSessionSummary(sessionId, user.id, turnId)
+        .then(() => embedSessionContent(sessionId, user.id, turnId))
+        .catch((err: unknown) =>
+          console.warn(`[sendMessageStream:${requestId}] Failed to update summary/embedding:`, err)
+        );
 
-    // Run partner session classifier (fire-and-forget)
-    // This extracts notable facts and detects memory intents
-    console.log(`[sendMessageStream:${requestId}] 🚀 Triggering background classification...`);
-    (async () => {
-      try {
-        // Fetch existing facts for the classifier
-        const userVessel = await prisma.userVessel.findUnique({
-          where: { userId_sessionId: { userId: user.id, sessionId } },
-          select: { notableFacts: true },
-        });
-        // Extract fact strings from JSON structure (supports both old string[] and new CategorizedFact[])
-        const existingFacts: string[] = (() => {
-          if (!userVessel?.notableFacts) return [];
-          const facts = userVessel.notableFacts as unknown;
-          if (Array.isArray(facts)) {
-            // Check if it's CategorizedFact[] (has category and fact properties)
-            if (facts.length > 0 && typeof facts[0] === 'object' && 'fact' in facts[0]) {
-              return facts.map((f: { fact: string }) => f.fact);
+      // Run partner session classifier (fire-and-forget)
+      // This extracts notable facts and detects memory intents
+      console.log(`[sendMessageStream:${requestId}] 🚀 Triggering background classification...`);
+      (async () => {
+        try {
+          // Fetch existing facts for the classifier
+          const userVessel = await prisma.userVessel.findUnique({
+            where: { userId_sessionId: { userId: user.id, sessionId } },
+            select: { notableFacts: true },
+          });
+          // Extract fact strings from JSON structure (supports both old string[] and new CategorizedFact[])
+          const existingFacts: string[] = (() => {
+            if (!userVessel?.notableFacts) return [];
+            const facts = userVessel.notableFacts as unknown;
+            if (Array.isArray(facts)) {
+              // Check if it's CategorizedFact[] (has category and fact properties)
+              if (facts.length > 0 && typeof facts[0] === 'object' && 'fact' in facts[0]) {
+                return facts.map((f: { fact: string }) => f.fact);
+              }
+              // Old format: string[]
+              return facts.filter((f): f is string => typeof f === 'string');
             }
-            // Old format: string[]
-            return facts.filter((f): f is string => typeof f === 'string');
-          }
-          return [];
-        })();
+            return [];
+          })();
 
-        const result = await runPartnerSessionClassifier({
-          userMessage: content,
-          conversationHistory: history.slice(-5).map((m) => ({
-            role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
-            content: m.content,
-          })),
-          sessionId,
-          userId: user.id,
-          turnId,
-          partnerName,
-          existingFacts,
-        });
+          const result = await runPartnerSessionClassifier({
+            userMessage: content,
+            conversationHistory: history.slice(-5).map((m) => ({
+              role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+              content: m.content,
+            })),
+            sessionId,
+            userId: user.id,
+            turnId,
+            partnerName,
+            existingFacts,
+          });
 
-        console.log(`[sendMessageStream:${requestId}] ✅ Classification finished:`, {
-          factsCount: result?.notableFacts?.length ?? 0,
-          topicContext: result?.topicContext?.substring(0, 50),
-        });
-      } catch (err) {
-        console.error(`[sendMessageStream:${requestId}] ❌ Classification failed:`, err);
-      }
-    })();
+          console.log(`[sendMessageStream:${requestId}] ✅ Classification finished:`, {
+            factsCount: result?.notableFacts?.length ?? 0,
+            topicContext: result?.topicContext?.substring(0, 50),
+          });
+        } catch (err) {
+          console.error(`[sendMessageStream:${requestId}] ❌ Classification failed:`, err);
+        }
+      })();
+    }
 
     // End response
     res.end();

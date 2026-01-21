@@ -9,7 +9,26 @@
  */
 
 import { parseMicroTagResponse } from '../../utils/micro-tag-parser';
-import { handleDispatch } from '../dispatch-handler';
+import { handleDispatch, type DispatchContext } from '../dispatch-handler';
+
+// Mock the bedrock module to avoid actual API calls in dispatch handler
+jest.mock('../../lib/bedrock', () => ({
+  getSonnetResponse: jest.fn().mockResolvedValue(
+    'In the Witness Stage you get to be fully heard. Then Perspective Stretch helps you understand your partner. Need Mapping identifies what you both really need. Finally, Strategic Repair helps you find solutions.'
+  ),
+  BrainActivityCallType: {
+    ORCHESTRATED_RESPONSE: 'ORCHESTRATED_RESPONSE',
+  },
+}));
+
+// Mock context for dispatch calls
+const mockDispatchContext: DispatchContext = {
+  userMessage: 'How does this process work?',
+  conversationHistory: [],
+  userName: 'Test User',
+  sessionId: 'test-session',
+  turnId: 'test-turn',
+};
 
 describe('Semantic Router Integration', () => {
   describe('Stage 1 Flow', () => {
@@ -142,11 +161,10 @@ User asking how this works
 
       expect(parsed.dispatchTag).toBe('EXPLAIN_PROCESS');
 
-      const dispatchedResponse = await handleDispatch(parsed.dispatchTag!);
-      expect(dispatchedResponse).toContain('Witness Stage');
-      expect(dispatchedResponse).toContain('Perspective Stretch');
-      expect(dispatchedResponse).toContain('Need Mapping');
-      expect(dispatchedResponse).toContain('Strategic Repair');
+      const dispatchedResponse = await handleDispatch(parsed.dispatchTag!, mockDispatchContext);
+      // AI response should explain the stages
+      expect(dispatchedResponse).toBeTruthy();
+      expect(dispatchedResponse.length).toBeGreaterThan(50);
     });
 
     it('handles HANDLE_MEMORY_REQUEST dispatch', async () => {
@@ -160,7 +178,7 @@ User wants me to remember something
 
       expect(parsed.dispatchTag).toBe('HANDLE_MEMORY_REQUEST');
 
-      const dispatchedResponse = await handleDispatch(parsed.dispatchTag!);
+      const dispatchedResponse = await handleDispatch(parsed.dispatchTag!, mockDispatchContext);
       expect(dispatchedResponse).toContain('Profile');
       expect(dispatchedResponse).toContain('Things to Remember');
     });

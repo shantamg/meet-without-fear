@@ -608,11 +608,19 @@ export function useConfirmInvitationMessage(
       );
 
       // Update session state, merging invitation data (avoids race conditions)
+      console.log('[confirmInvitation:onSuccess] Updating session state with:', {
+        messageConfirmed: data.invitation.messageConfirmed,
+        messageConfirmedAt: data.invitation.messageConfirmedAt,
+        advancedToStage: data.advancedToStage,
+      });
       queryClient.setQueryData<SessionStateResponse>(
         sessionKeys.state(sessionId),
         (old) => {
-          if (!old) return old;
-          return {
+          if (!old) {
+            console.warn('[confirmInvitation:onSuccess] No existing session state to update');
+            return old;
+          }
+          const newState = {
             ...old,
             invitation: old.invitation ? {
               ...old.invitation,
@@ -624,6 +632,13 @@ export function useConfirmInvitationMessage(
               ? { ...old.progress, currentStage: data.advancedToStage }
               : old.progress,
           };
+          console.log('[confirmInvitation:onSuccess] Session state updated:', {
+            oldConfirmedAt: old.invitation?.messageConfirmedAt,
+            newConfirmedAt: newState.invitation?.messageConfirmedAt,
+            oldStage: old.progress?.myProgress?.stage,
+            newStage: newState.progress?.myProgress?.stage,
+          });
+          return newState;
         }
       );
 
@@ -664,11 +679,22 @@ export function useConfirmInvitationMessage(
         );
 
         // Also add to the infinite query cache (what useUnifiedSession uses)
+        console.log('[confirmInvitation:onSuccess] Adding transition message to infinite cache:', {
+          messageId: transitionMsg.id,
+          sessionId,
+          queryKey: messageKeys.infinite(sessionId),
+        });
         queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
           messageKeys.infinite(sessionId),
           (old) => {
+            console.log('[confirmInvitation:onSuccess] Updating infinite cache. Old data:', {
+              hasOld: !!old,
+              pageCount: old?.pages?.length ?? 0,
+              firstPageMessageCount: old?.pages?.[0]?.messages?.length ?? 0,
+            });
             if (!old || old.pages.length === 0) {
               // Create initial structure for infinite query
+              console.log('[confirmInvitation:onSuccess] No existing cache, creating new structure');
               return {
                 pages: [{ messages: [transitionMsg], hasMore: false }],
                 pageParams: [undefined],
@@ -677,12 +703,16 @@ export function useConfirmInvitationMessage(
             // Append to the first page (newest messages)
             const firstPage = old.pages[0];
             const exists = firstPage.messages.some(m => m.id === transitionMsg.id);
-            if (exists) return old;
+            if (exists) {
+              console.log('[confirmInvitation:onSuccess] Message already exists in cache, skipping');
+              return old;
+            }
             const updatedPages = [...old.pages];
             updatedPages[0] = {
               ...firstPage,
               messages: [...firstPage.messages, transitionMsg],
             };
+            console.log('[confirmInvitation:onSuccess] Added message to cache. New first page message count:', updatedPages[0].messages.length);
             return { ...old, pages: updatedPages };
           }
         );

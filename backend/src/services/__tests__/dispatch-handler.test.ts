@@ -1,32 +1,74 @@
-import { handleDispatch, DispatchTag } from '../dispatch-handler';
+import { handleDispatch, type DispatchContext } from '../dispatch-handler';
+
+// Mock the bedrock module to avoid actual API calls
+jest.mock('../../lib/bedrock', () => ({
+  getSonnetResponse: jest.fn().mockResolvedValue(
+    'Sure, let me explain what happens next in the process.'
+  ),
+  BrainActivityCallType: {
+    ORCHESTRATED_RESPONSE: 'ORCHESTRATED_RESPONSE',
+  },
+}));
 
 describe('dispatch-handler', () => {
-  describe('handleDispatch', () => {
-    it('returns process explanation for EXPLAIN_PROCESS', async () => {
-      const result = await handleDispatch('EXPLAIN_PROCESS');
+  const mockContext: DispatchContext = {
+    userMessage: 'How does this process work?',
+    conversationHistory: [
+      { role: 'assistant', content: 'Hi there, how can I help?' },
+    ],
+    userName: 'Test User',
+    partnerName: 'Partner',
+    sessionId: 'test-session-123',
+    turnId: 'test-turn-123',
+  };
 
-      expect(result).toContain('stages');
-      expect(result).toContain('Witness');
-      expect(result).toContain('Perspective');
+  describe('handleDispatch', () => {
+    it('returns AI response for EXPLAIN_PROCESS', async () => {
+      const result = await handleDispatch('EXPLAIN_PROCESS', mockContext);
+
+      // Should call the AI and return a response
+      expect(result).toBeTruthy();
+      expect(result.length).toBeGreaterThan(10);
     });
 
     it('returns memory guidance for HANDLE_MEMORY_REQUEST', async () => {
-      const result = await handleDispatch('HANDLE_MEMORY_REQUEST');
+      const result = await handleDispatch('HANDLE_MEMORY_REQUEST', mockContext);
 
       expect(result).toContain('Profile');
       expect(result).toContain('Things to Remember');
     });
 
     it('returns generic message for unknown dispatch tag', async () => {
-      const result = await handleDispatch('UNKNOWN_TAG');
+      const result = await handleDispatch('UNKNOWN_TAG', mockContext);
 
       expect(result).toBeTruthy();
       expect(result.length).toBeGreaterThan(10);
     });
 
-    it('handles null/empty dispatch tag gracefully', async () => {
-      const result = await handleDispatch('');
+    it('handles empty dispatch tag gracefully', async () => {
+      const result = await handleDispatch('', mockContext);
       expect(result).toBeTruthy();
+    });
+
+    it('passes conversation history to AI for context-aware responses', async () => {
+      const { getSonnetResponse } = require('../../lib/bedrock');
+
+      const contextWithHistory: DispatchContext = {
+        ...mockContext,
+        userMessage: 'Yeah what happens next?',
+        conversationHistory: [
+          { role: 'assistant', content: 'The basic idea is simple...' },
+          { role: 'user', content: 'How does this process work?' },
+          { role: 'assistant', content: 'We help you feel heard first...' },
+        ],
+      };
+
+      await handleDispatch('EXPLAIN_PROCESS', contextWithHistory);
+
+      // Verify the AI was called with conversation history
+      expect(getSonnetResponse).toHaveBeenCalled();
+      const callArgs = getSonnetResponse.mock.calls[getSonnetResponse.mock.calls.length - 1][0];
+      expect(callArgs.messages.length).toBeGreaterThan(1);
     });
   });
 });

@@ -70,7 +70,7 @@ function buildClassifierPrompt(input: PartnerSessionClassifierInput): string {
     .map((m) => `${m.role === 'user' ? 'User' : 'AI'}: ${m.content}`)
     .join('\n');
 
-  const partnerContext = partnerName ? `Partner name: ${partnerName}` : '';
+  const personContext = partnerName ? `Person discussed: ${partnerName}` : '';
 
   // Format existing facts if any
   const existingFactsText = existingFacts && existingFacts.length > 0
@@ -91,10 +91,10 @@ interpretation of the user's situation, which can help you extract accurate fact
 `
     : '';
 
-  return `Extract notable facts from this partner session conversation.
+  return `Extract notable facts from this conversation.
 
 CONVERSATION CONTEXT:
-${partnerContext}
+${personContext}
 
 RECENT MESSAGES:
 ${historyText}
@@ -108,7 +108,7 @@ YOUR TASK - NOTABLE FACTS EXTRACTION:
 Maintain a curated list of CATEGORIZED facts about the user's situation. Output the COMPLETE updated list.
 
 CATEGORIES (use these exact names):
-- People: names, roles, relationships mentioned (e.g., "daughter Emma is 14")
+- People: names and ONLY explicitly stated roles/relationships (e.g., "daughter Emma is 14", "Darryl is a person the user wants to discuss")
 - Logistics: scheduling, location, practical circumstances
 - Conflict: specific disagreements, triggers, patterns
 - Emotional: feelings, frustrations, fears, hopes
@@ -119,6 +119,12 @@ WHAT TO EXCLUDE:
 - Questions to the AI
 - Session style preferences
 - Requests to "remember" things (ignore these)
+
+CRITICAL - NEVER ASSUME:
+- Do NOT assume the relationship type between the user and the person discussed
+- The other person could be a friend, coworker, family member, roommate, romantic partner, or anyone else
+- Only record relationships the user EXPLICITLY states (e.g., "my partner", "my mom", "my coworker")
+- If the user hasn't stated the relationship, use neutral language like "Darryl is a person the user is discussing" or simply record the name
 
 RULES:
 - Each fact MUST have a category and fact text
@@ -133,7 +139,7 @@ OUTPUT JSON only:
   "notableFacts": [
     { "category": "People", "fact": "daughter Emma is 14" },
     { "category": "Emotional", "fact": "feeling overwhelmed by work demands" },
-    { "category": "Conflict", "fact": "partner wants more quality time together" }
+    { "category": "People", "fact": "Alex is a person the user wants to discuss (relationship not specified)" }
   ]
 }`;
 }
@@ -189,9 +195,10 @@ export async function runPartnerSessionClassifier(
   try {
     console.log(`${logPrefix} Starting classification for session ${input.sessionId}`);
 
-    const systemPrompt = `You are an AI assistant analyzing a partner session (couples/relationship conversation).
+    const systemPrompt = `You are an AI assistant analyzing a conversation about interpersonal dynamics.
 Your job is to extract and maintain notable facts about the user's situation.
-Focus on emotional context, situational facts, and people/relationships.
+Focus on emotional context, situational facts, and people involved.
+IMPORTANT: Never assume relationship types - only record what the user explicitly states.
 Output only valid JSON.`;
 
     const userPrompt = buildClassifierPrompt(input);

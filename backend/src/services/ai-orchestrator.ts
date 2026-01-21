@@ -36,7 +36,7 @@ import {
 import { brainService } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
 import { parseMicroTagResponse } from '../utils/micro-tag-parser';
-import { handleDispatch } from './dispatch-handler';
+import { handleDispatch, type DispatchContext } from './dispatch-handler';
 import {
   decideSurfacing,
   userAskedForPattern,
@@ -384,7 +384,18 @@ export async function orchestrateResponse(
       // Check for dispatch (off-ramp)
       if (parsed.dispatchTag) {
         console.log(`[AI Orchestrator] Dispatch triggered: ${parsed.dispatchTag}`);
-        const dispatchedResponse = await handleDispatch(parsed.dispatchTag);
+
+        // Build dispatch context for conversation-aware handling
+        const dispatchContext: DispatchContext = {
+          userMessage: context.userMessage,
+          conversationHistory: context.conversationHistory,
+          userName: context.userName,
+          partnerName: context.partnerName,
+          sessionId: context.sessionId,
+          turnId: context.turnId,
+        };
+
+        const dispatchedResponse = await handleDispatch(parsed.dispatchTag, dispatchContext);
 
         // If AI provided an initial response along with dispatch, return both
         // This enables two-message flow: acknowledgment first, then detailed response
