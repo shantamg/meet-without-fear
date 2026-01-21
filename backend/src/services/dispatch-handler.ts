@@ -35,27 +35,35 @@ export interface DispatchContext {
  */
 const PROCESS_EXPLAINER_PROMPT = `You are a warm, knowledgeable guide helping someone understand how this relationship conversation process works.
 
-THE PROCESS (reference naturally, don't read verbatim):
+THE PROCESS:
 
-**Stage 1 - WITNESS (Feel Heard)**
-Each person gets dedicated time to share what's on their mind while the AI listens deeply, reflects back feelings, and helps them feel truly understood. No fixing, no advice - just witnessing. This continues until they confirm they feel heard.
+**Getting Started**
+First, you craft a brief invitation message and share a link with the other person. When they accept, they join the conversation and go through the same process on their side.
 
-**Stage 2 - PERSPECTIVE STRETCH**
-Once someone feels heard, they're gently invited to consider their partner's perspective. Not to agree with it, but to understand what the other person might be feeling or experiencing. The AI helps craft an empathy statement.
+**Stage 1 - Feel Heard**
+Each person gets private time to share what's on their mind. I listen deeply, reflect back feelings, and help you feel truly understood. No fixing or advice - just witnessing. This continues until you confirm you feel heard.
 
-**Stage 3 - NEED MAPPING**
-Both people's underlying needs get identified - things like safety, respect, connection, autonomy. This moves beyond positions ("you always...") to what's really driving the conflict.
+**Stage 2 - Perspective Stretch**
+You imagine what the other person might be experiencing - not to agree, but to understand. You craft an empathy statement, which gets shared with them (with your consent). They do the same for you.
 
-**Stage 4 - STRATEGIC REPAIR**
-Together, small testable experiments are designed. Not grand solutions, but specific things to try that address the identified needs. These can be adjusted based on what works.
+**Stage 3 - Need Mapping**
+We identify what you each truly need underneath the conflict - things like safety, respect, connection, autonomy. This moves beyond positions to underlying needs.
+
+**Stage 4 - Strategic Repair**
+Together, you design small testable experiments - specific things to try that address both people's needs. Not grand promises, but steps you can adjust based on what works.
+
+HOW COMMUNICATION WORKS:
+- Both people participate in the process
+- You share things with each other at certain points (always with consent)
+- I guide each person's journey and facilitate the sharing
+- The process is private and structured - you're not chatting directly
 
 CONVERSATION STYLE:
 - Be warm, conversational, and encouraging
 - Answer questions naturally - don't lecture
-- If they ask "what's next?", explain the upcoming stage
-- If they want to continue the main conversation, acknowledge and let them know you're ready
 - Keep responses concise (2-4 sentences usually)
 - Match their energy - if they're brief, be brief
+- If they want to continue the main conversation, let them know you're ready
 
 Remember: You're having a conversation about the process, not delivering a presentation.`;
 
@@ -89,7 +97,7 @@ Is there something specific you'd like to note down?`;
  * Handle process explanation with full AI conversation capability.
  */
 async function handleProcessExplanation(context: DispatchContext): Promise<string> {
-  const { userMessage, conversationHistory, userName, sessionId, turnId } = context;
+  const { userMessage, conversationHistory, sessionId, turnId } = context;
 
   try {
     // Build messages for the AI - include recent conversation for context
@@ -124,18 +132,24 @@ async function handleProcessExplanation(context: DispatchContext): Promise<strin
  * Fallback response if AI call fails.
  */
 function getFallbackProcessResponse(userMessage: string): string {
-  // Check if they're asking about next steps
   const lowerMessage = userMessage.toLowerCase();
+
+  // Check if they're asking about talking to/connecting with the other person
+  if (lowerMessage.includes('talk to') || lowerMessage.includes('connect') || lowerMessage.includes('when do i')) {
+    return `You'll invite them to join by sharing a link. Once they accept, they go through the same process on their side. At certain points - like empathy statements - you'll share things with each other (always with your consent).
+
+Ready to continue?`;
+  }
+
+  // Check if they're asking about next steps
   if (lowerMessage.includes('next') || lowerMessage.includes('then') || lowerMessage.includes('after')) {
-    return `After you feel fully heard, we'll gently explore what your partner might be experiencing. Not to agree with them, but to understand. Then we'll look at what you both really need underneath it all, and find small ways to start repairing things together.
+    return `After you feel fully heard, you'll craft an empathy statement imagining their perspective - that gets shared with them. Then we identify underlying needs for both of you, and design small experiments to try together.
 
 Ready to continue where we were?`;
   }
 
   // Default overview
-  return `The basic idea is simple: we start by helping each of you feel truly heard, then work toward understanding each other better.
+  return `The process has four stages: first each person gets to feel truly heard, then you craft empathy statements that get shared with each other, then we identify underlying needs, and finally you design small experiments to try together.
 
-Right now we're in the first part—just sharing and listening. No fixing, no problem-solving yet. That comes later, once you both feel understood.
-
-Would you like me to walk you through what happens next, or shall we continue where we were?`;
+Would you like me to explain more, or shall we continue?`;
 }
