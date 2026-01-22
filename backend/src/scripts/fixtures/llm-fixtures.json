@@ -1,0 +1,130 @@
+[
+  {
+    "id": "accusation-heavy-start",
+    "stage": 1,
+    "userName": "Alex",
+    "partnerName": "Jordan",
+    "emotionalIntensity": 8,
+    "summary": {
+      "currentFocus": "Alex feels dismissed and angry about repeated interruptions and missed plans.",
+      "keyThemes": ["feeling unheard", "broken promises"],
+      "emotionalJourney": "Started furious, shifted to hurt and exhaustion.",
+      "userStatedGoals": ["figure out how to be taken seriously"],
+      "agreedFacts": [],
+      "userNeeds": ["respect", "follow-through"],
+      "partnerNeeds": [],
+      "openQuestions": ["What does being taken seriously look like day to day?"],
+      "agreements": []
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "You never listen. You just talk over me and then act like I'm dramatic."
+      },
+      {
+        "role": "assistant",
+        "content": "It sounds like you're feeling dismissed and fed up with being interrupted."
+      },
+      {
+        "role": "user",
+        "content": "Exactly. It's like my needs don't matter and I'm tired of repeating myself."
+      }
+    ]
+  },
+  {
+    "id": "misunderstanding-repair",
+    "stage": 2,
+    "userName": "Priya",
+    "partnerName": "Sam",
+    "emotionalIntensity": 6,
+    "summary": {
+      "currentFocus": "Priya wants to understand why Sam withdrew after the argument about finances.",
+      "keyThemes": ["miscommunication", "withdrawal"],
+      "emotionalJourney": "Moved from confusion to curiosity.",
+      "userStatedGoals": ["repair the misread intent"],
+      "agreedFacts": ["The argument was about spending"],
+      "userNeeds": ["clarity", "reassurance"],
+      "partnerNeeds": ["feeling safe"],
+      "openQuestions": ["What fear might have driven Sam to withdraw?"],
+      "agreements": []
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "I thought we were aligned on the budget, then they went silent."
+      },
+      {
+        "role": "assistant",
+        "content": "That silence felt confusing, like the ground shifted."
+      },
+      {
+        "role": "user",
+        "content": "Yeah. I want to see what might be underneath it instead of assuming they don't care."
+      }
+    ]
+  },
+  {
+    "id": "consent-mediated-sharing",
+    "stage": 2,
+    "userName": "Maria",
+    "partnerName": "Lee",
+    "emotionalIntensity": 7,
+    "summary": {
+      "currentFocus": "Maria wants to share the impact of repeated cancellations without escalating.",
+      "keyThemes": ["reliability", "hurt"],
+      "emotionalJourney": "From sharp frustration to a desire to be understood.",
+      "userStatedGoals": ["share impact without blame"],
+      "agreedFacts": ["Plans were cancelled twice last month"],
+      "userNeeds": ["consideration", "predictability"],
+      "partnerNeeds": [],
+      "openQuestions": ["What do I want Lee to understand about the impact?"],
+      "agreements": []
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "I want to tell Lee how it felt when they cancelled twice."
+      },
+      {
+        "role": "assistant",
+        "content": "You're trying to share the impact without turning it into a fight."
+      },
+      {
+        "role": "user",
+        "content": "Right, I want it to land as \"this hurt\" not \"you're awful\"."
+      }
+    ]
+  },
+  {
+    "id": "win-win-negotiation",
+    "stage": 4,
+    "userName": "Dev",
+    "partnerName": "Noah",
+    "emotionalIntensity": 5,
+    "summary": {
+      "currentFocus": "Dev and Noah want a small experiment for balancing chores and downtime.",
+      "keyThemes": ["fairness", "rest"],
+      "emotionalJourney": "From frustration to cautious optimism.",
+      "userStatedGoals": ["agree on a testable plan"],
+      "agreedFacts": ["Both are stretched on weeknights"],
+      "userNeeds": ["shared responsibility", "rest"],
+      "partnerNeeds": ["predictability"],
+      "openQuestions": ["What check-in cadence feels fair?"],
+      "agreements": ["Try a rotating schedule for one week"]
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "We both want a fair chore plan, but it falls apart midweek."
+      },
+      {
+        "role": "assistant",
+        "content": "You want something small and testable rather than a big promise."
+      },
+      {
+        "role": "user",
+        "content": "Yes. What's a realistic experiment for this week?"
+      }
+    ]
+  }
+]

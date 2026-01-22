@@ -22,7 +22,7 @@ import {
 } from '@meet-without-fear/shared';
 import { notifyPartner } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
-import { getSonnetResponse, BrainActivityCallType } from '../lib/bedrock';
+import { getModelCompletion, BrainActivityCallType } from '../lib/bedrock';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import { embedSessionContent } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';
@@ -38,6 +38,7 @@ import {
 import { isSessionCreator } from '../utils/session';
 import { publishSessionEvent } from '../services/realtime';
 import { updateContext } from '../lib/request-context';
+import { routeModel, scoreAmbiguity } from '../services/model-router';
 
 // ============================================================================
 // Types
@@ -1298,12 +1299,19 @@ Respond in JSON format:
 }
 \`\`\``;
 
-    const aiResponse = await getSonnetResponse({
+    const routingDecision = routeModel({
+      requestType: 'rewrite',
+      conflictIntensity: 4,
+      ambiguityScore: scoreAmbiguity(message),
+      messageLength: message.length,
+    });
+
+    const aiResponse = await getModelCompletion(routingDecision.model, {
       systemPrompt,
       messages: [{ role: 'user', content: 'Help me refine this.' }],
       maxTokens: 512,
       sessionId,
-      operation: 'feedback-refinement',
+      operation: `feedback-refinement-${routingDecision.model}`,
       turnId,
       callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
     });

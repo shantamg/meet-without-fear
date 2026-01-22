@@ -52,12 +52,9 @@ describe('Context Assembler', () => {
 
         const formatted = formatContextForPrompt(bundle);
 
-        expect(formatted).toContain('NOTED FACTS FROM THIS SESSION:');
-        expect(formatted).toContain('[People]');
+        expect(formatted).toContain('--- Notable facts ---');
         expect(formatted).toContain('- User has a daughter named Emma who is 14');
-        expect(formatted).toContain('[Logistics]');
         expect(formatted).toContain('- Partner works night shifts');
-        expect(formatted).toContain('[Emotional]');
         expect(formatted).toContain('- Feeling unheard about childcare decisions');
       });
 
@@ -68,7 +65,7 @@ describe('Context Assembler', () => {
 
         const formatted = formatContextForPrompt(bundle);
 
-        expect(formatted).not.toContain('NOTED FACTS FROM THIS SESSION');
+        expect(formatted).not.toContain('--- Notable facts ---');
       });
 
       it('does not include facts block when facts array is empty', () => {
@@ -78,7 +75,7 @@ describe('Context Assembler', () => {
 
         const formatted = formatContextForPrompt(bundle);
 
-        expect(formatted).not.toContain('NOTED FACTS FROM THIS SESSION');
+        expect(formatted).not.toContain('--- Notable facts ---');
       });
 
       it('formats single fact correctly', () => {
@@ -88,8 +85,7 @@ describe('Context Assembler', () => {
 
         const formatted = formatContextForPrompt(bundle);
 
-        expect(formatted).toContain('NOTED FACTS FROM THIS SESSION:');
-        expect(formatted).toContain('[Emotional]');
+        expect(formatted).toContain('--- Notable facts ---');
         expect(formatted).toContain('- User feels overwhelmed');
       });
 
@@ -104,11 +100,8 @@ describe('Context Assembler', () => {
 
         const formatted = formatContextForPrompt(bundle);
 
-        // Both People facts should be under the same [People] header
-        expect(formatted).toContain('[People]');
         expect(formatted).toContain('- First person fact');
         expect(formatted).toContain('- Third person fact');
-        expect(formatted).toContain('[Emotional]');
         expect(formatted).toContain('- Second emotional fact');
       });
     });
@@ -134,9 +127,9 @@ describe('Context Assembler', () => {
 
         const formatted = formatContextForPrompt(bundle);
 
-        expect(formatted).toContain('[Intensity:'); // HUD format
-        expect(formatted).toContain('USER MEMORIES');
-        expect(formatted).toContain('NOTED FACTS FROM THIS SESSION:');
+        expect(formatted).toContain('Intensity:'); // HUD format
+        expect(formatted).toContain('--- User preferences to honor ---');
+        expect(formatted).toContain('--- Notable facts ---');
         expect(formatted).toContain('- Has two kids');
         expect(formatted).toContain('- Works from home');
       });
@@ -151,8 +144,8 @@ describe('Context Assembler', () => {
         });
 
         const formatted = formatContextForPrompt(bundle);
-        const memoriesIndex = formatted.indexOf('USER MEMORIES');
-        const factsIndex = formatted.indexOf('NOTED FACTS FROM THIS SESSION');
+        const memoriesIndex = formatted.indexOf('--- User preferences to honor ---');
+        const factsIndex = formatted.indexOf('--- Notable facts ---');
 
         expect(memoriesIndex).toBeGreaterThan(-1);
         expect(factsIndex).toBeGreaterThan(-1);
@@ -161,7 +154,7 @@ describe('Context Assembler', () => {
     });
 
     describe('Global Facts Formatting', () => {
-      it('formats global facts at top of context', () => {
+      it('does not include global facts in compact context', () => {
         const bundle = createMinimalBundle({
           globalFacts: [
             { category: 'People', fact: 'Has a partner named Alex' },
@@ -171,31 +164,8 @@ describe('Context Assembler', () => {
 
         const formatted = formatContextForPrompt(bundle);
 
-        expect(formatted).toContain('ABOUT THIS USER (from previous sessions):');
-        expect(formatted).toContain('[People]');
-        expect(formatted).toContain('- Has a partner named Alex');
-        expect(formatted).toContain('[History]');
-        expect(formatted).toContain('- Together for 5 years');
-      });
-
-      it('places global facts before emotional state', () => {
-        const bundle = createMinimalBundle({
-          globalFacts: [{ category: 'People', fact: 'Has a dog named Max' }],
-          emotionalThread: {
-            initialIntensity: 5,
-            currentIntensity: 7,
-            trend: 'escalating',
-            notableShifts: [],
-          },
-        });
-
-        const formatted = formatContextForPrompt(bundle);
-        const globalIndex = formatted.indexOf('ABOUT THIS USER');
-        const emotionalIndex = formatted.indexOf('[Intensity:'); // HUD format
-
-        expect(globalIndex).toBeGreaterThan(-1);
-        expect(emotionalIndex).toBeGreaterThan(-1);
-        expect(globalIndex).toBeLessThan(emotionalIndex);
+        expect(formatted).not.toContain('ABOUT THIS USER');
+        expect(formatted).not.toContain('Has a partner named Alex');
       });
     });
 
@@ -214,7 +184,7 @@ describe('Context Assembler', () => {
         expect(formatted).not.toContain('ABOUT THIS USER (from previous sessions)');
 
         // Should still contain session-specific notable facts
-        expect(formatted).toContain('NOTED FACTS FROM THIS SESSION');
+        expect(formatted).toContain('--- Notable facts ---');
         expect(formatted).toContain('User is feeling stressed');
       });
 
@@ -248,9 +218,9 @@ describe('Context Assembler', () => {
         const formatted = formatContextForPrompt(bundle);
 
         // Allowed content for session isolation
-        expect(formatted).toContain('NOTED FACTS FROM THIS SESSION');
-        expect(formatted).toContain('USER MEMORIES');
-        expect(formatted).toContain('[Intensity:'); // HUD format
+        expect(formatted).toContain('--- Notable facts ---');
+        expect(formatted).toContain('--- User preferences to honor ---');
+        expect(formatted).toContain('Intensity:'); // HUD format
 
         // Forbidden content (cross-session)
         expect(formatted).not.toContain('ABOUT THIS USER (from previous sessions)');

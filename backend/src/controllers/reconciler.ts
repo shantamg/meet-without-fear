@@ -29,6 +29,8 @@ import {
 } from '../services/reconciler';
 import { successResponse, errorResponse } from '../utils/response';
 import { notifyPartner } from '../services/realtime';
+import { routeModel, scoreAmbiguity } from '../services/model-router';
+import { suggestSendableRewrite } from '../services/attacking-language';
 
 // ============================================================================
 // Helpers
@@ -608,8 +610,15 @@ export async function generateShareDraftHandler(
       .join('\n\n');
 
     // Generate the draft using AI
-    const { getSonnetResponse, BrainActivityCallType } = await import('../lib/bedrock');
+    const { getModelCompletion, BrainActivityCallType } = await import('../lib/bedrock');
     const turnId = `${sessionId}-share-draft-${Date.now()}`;
+
+    const routingDecision = routeModel({
+      requestType: 'draft',
+      conflictIntensity: 4,
+      ambiguityScore: scoreAmbiguity(suggestedShareFocus),
+      messageLength: suggestedShareFocus.length,
+    });
 
     const prompt = `You are helping ${user.name} prepare something to share with ${guesserName} to help them understand ${user.name}'s perspective better.
 
@@ -629,13 +638,13 @@ Generate a brief, personal message (1-3 sentences) that ${user.name} could share
 
 Respond with ONLY the message text, no additional formatting or explanation.`;
 
-    const draftContent = await getSonnetResponse({
+    const draftContent = await getModelCompletion(routingDecision.model, {
       systemPrompt: prompt,
       messages: [{ role: 'user', content: 'Generate the share message.' }],
       maxTokens: 512,
       sessionId,
       turnId,
-      operation: 'share-draft-generation',
+      operation: `share-draft-generation-${routingDecision.model}`,
       callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
     });
 
@@ -643,6 +652,14 @@ Respond with ONLY the message text, no additional formatting or explanation.`;
       errorResponse(res, 'INTERNAL_ERROR', 'Failed to generate draft', 500);
       return;
     }
+
+    const rewriteResult = await suggestSendableRewrite({
+      text: draftContent.trim(),
+      sessionId,
+      turnId,
+      requesterName: user.name || 'User',
+      targetName: guesserName || 'partner',
+    });
 
     // Update the share offer with the generated draft
     await prisma.reconcilerShareOffer.update({
@@ -692,6 +709,8 @@ Respond with ONLY the message text, no additional formatting or explanation.`;
       messageId: aiMessage.id,
       guesserName,
       suggestedShareFocus,
+      rewriteSuggestions: rewriteResult?.needsRewrite ? rewriteResult.variants : [],
+      rewriteNote: rewriteResult?.needsRewrite ? rewriteResult.note : null,
     });
   } catch (error) {
     console.error('[generateShareDraftHandler] Error:', error);

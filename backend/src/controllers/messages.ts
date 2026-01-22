@@ -34,6 +34,9 @@ import { consolidateGlobalFacts } from '../services/global-memory';
 import { assembleContextBundle, formatContextForPrompt } from '../services/context-assembler';
 import type { MemoryIntentResult } from '../services/memory-intent';
 import { handleDispatch, type DispatchContext } from '../services/dispatch-handler';
+import { getMilestoneContext, getSharedContentContext } from '../services/shared-context';
+import { CONTEXT_WINDOW, trimConversationHistory } from '../utils/token-budget';
+import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from '../services/llm-telemetry';
 
 // ============================================================================
 // Helpers
@@ -1082,8 +1085,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     });
 
     // =========================================================================
-    // Get conversation history for context
+    // Get conversation history for context (summary-aware)
     // =========================================================================
+    const existingSummary = await getSessionSummary(sessionId, user.id);
+    const summaryBoundary = existingSummary?.summary.newestMessageAt;
+    const historyLimit = summaryBoundary ? 30 : 20;
+
     const historyDesc = await prisma.message.findMany({
       where: {
         sessionId,
@@ -1091,9 +1098,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           { senderId: user.id, forUserId: null },
           { forUserId: user.id },
         ],
+        ...(summaryBoundary ? { timestamp: { gt: summaryBoundary } } : {}),
       },
       orderBy: { timestamp: 'desc' },
-      take: 20,
+      take: historyLimit,
     });
     const history = historyDesc.slice().reverse();
 
@@ -1144,12 +1152,22 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     };
 
     // Assemble full context including notable facts from UserVessel
-    const contextBundle = await assembleContextBundle(
-      sessionId,
-      user.id,
-      currentStage,
-      streamingIntent
-    );
+    const [contextBundle, sharedContentHistory, milestoneContext] = await Promise.all([
+      assembleContextBundle(
+        sessionId,
+        user.id,
+        currentStage,
+        streamingIntent
+      ),
+      getSharedContentContext(sessionId, user.id).catch((err: Error) => {
+        console.warn(`[sendMessageStream:${requestId}] Shared content context fetch failed:`, err);
+        return null;
+      }),
+      getMilestoneContext(sessionId, user.id).catch((err: Error) => {
+        console.warn(`[sendMessageStream:${requestId}] Milestone context fetch failed:`, err);
+        return null;
+      }),
+    ]);
 
     console.log(`[sendMessageStream:${requestId}] Context assembled: notableFacts=${contextBundle.notableFacts?.length ?? 0}`);
 
@@ -1159,32 +1177,57 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       turnCount: userTurnCount,
       emotionalIntensity: 5,
       contextBundle,
+      sharedContentHistory,
+      milestoneContext,
     }, { isInvitationPhase });
 
     // Prompt already includes semantic tag format instructions via buildResponseProtocol()
     // No tool use instruction needed - we parse <thinking>, <draft>, <dispatch> tags instead
 
     // Format context bundle and inject into last user message (includes notable facts)
-    const formattedContext = formatContextForPrompt(contextBundle);
+    const formattedContext = formatContextForPrompt(contextBundle, {
+      sharedContentHistory,
+      milestoneContext,
+    });
     console.log(`[sendMessageStream:${requestId}] Formatted context: ${formattedContext.length} chars`);
 
     // Filter out empty messages to prevent Bedrock ValidationException
-    const validHistory = history.filter(m => m.content && m.content.trim().length > 0);
+    const validHistory = history.filter((m) => m.content && m.content.trim().length > 0);
     if (validHistory.length !== history.length) {
       console.warn(`[sendMessageStream:${requestId}] Filtered out ${history.length - validHistory.length} empty message(s) from history`);
     }
 
+    const summaryExists = Boolean(summaryBoundary);
+    const { trimmed: trimmedHistory, truncated } = trimConversationHistory(
+      validHistory.map((m) => ({
+        role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+        content: m.content,
+      })),
+      summaryExists ? CONTEXT_WINDOW.recentTurnsWithSummary : CONTEXT_WINDOW.recentTurnsWithoutSummary
+    );
+
+    if (truncated > 0) {
+      console.log(`[sendMessageStream:${requestId}] Trimmed ${truncated} old messages (summaryExists=${summaryExists})`);
+    }
+
     // Build messages with context injected into the last user message
-    const messagesWithContext = validHistory.map((m, i) => {
-      const isLastUserMessage = i === validHistory.length - 1 && m.role === 'USER';
+    const messagesWithContext = trimmedHistory.map((m, i) => {
+      const isLastUserMessage = i === trimmedHistory.length - 1 && m.role === 'user';
       const content = isLastUserMessage && formattedContext.trim()
-        ? `[Context for this turn:\n${formattedContext}]\n\n${m.content}`
+        ? `Context:\n${formattedContext}\n\nUser message: ${m.content}`
         : m.content;
       return {
-        role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+        role: m.role,
         content,
       };
     });
+
+    recordContextSizes(turnId, estimateContextSizes({
+      pinned: prompt,
+      summary: formattedContext,
+      recentMessages: trimmedHistory,
+      rag: '',
+    }));
 
     // =========================================================================
     // Stream AI response (with analysis block trap)
@@ -1209,7 +1252,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         systemPrompt: prompt,
         messages: messagesWithContext,
         // No tools needed - using semantic tag format (<thinking>, <draft>, <dispatch>)
-        maxTokens: 2048,
+        maxTokens: 1536,
         sessionId,
         turnId,
         operation: 'streaming-response',
@@ -1474,6 +1517,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         sendSSE(res, { event: 'chunk', data: { text: dispatchedResponse } });
         accumulatedText = dispatchedResponse;
       }
+
+      finalizeTurnMetrics(turnId);
 
     } catch (error) {
       console.error(`[sendMessageStream:${requestId}] Stream error:`, error);

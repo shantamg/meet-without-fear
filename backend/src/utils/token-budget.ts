@@ -28,7 +28,7 @@ export const MODEL_LIMITS = {
   outputReservation: 4_000,
 
   /** Target max for context injection */
-  contextBudget: 100_000,
+  contextBudget: 40_000,
 };
 
 /**
@@ -37,7 +37,7 @@ export const MODEL_LIMITS = {
  */
 export const CONTEXT_LIMITS = {
   /** Maximum recent conversation messages to include */
-  maxConversationMessages: 50,
+  maxConversationMessages: 24,
 
   /** Maximum characters per conversation message */
   maxMessageLength: 2_000,
@@ -50,6 +50,11 @@ export const CONTEXT_LIMITS = {
 
   /** Maximum pre-session messages */
   maxPreSessionMessages: 10,
+};
+
+export const CONTEXT_WINDOW = {
+  recentTurnsWithSummary: 8,
+  recentTurnsWithoutSummary: 12,
 };
 
 // ============================================================================
@@ -79,6 +84,26 @@ export function estimateMessagesTokens(
     tokens += estimateTokens(msg.content);
   }
   return tokens;
+}
+
+/**
+ * Trim conversation history to the most recent N turns.
+ */
+export function trimConversationHistory<T extends { role: 'user' | 'assistant'; content: string }>(
+  messages: T[],
+  maxTurns: number
+): { trimmed: T[]; truncated: number } {
+  if (messages.length === 0 || maxTurns <= 0) {
+    return { trimmed: [], truncated: messages.length };
+  }
+
+  const maxMessages = maxTurns * 2;
+  if (messages.length <= maxMessages) {
+    return { trimmed: messages, truncated: 0 };
+  }
+
+  const trimmed = messages.slice(-maxMessages);
+  return { trimmed, truncated: messages.length - trimmed.length };
 }
 
 // ============================================================================
@@ -182,7 +207,7 @@ export function buildBudgetedContext<T extends { role: 'user' | 'assistant'; con
   const availableForContext = maxTotalTokens - systemTokens - MODEL_LIMITS.outputReservation;
 
   // STRICT HIERARCHY: Protect last 10 turns (20 messages) at all costs
-  const PROTECTED_TURNS = 10;
+  const PROTECTED_TURNS = 6;
   const PROTECTED_MESSAGES = PROTECTED_TURNS * 2; // user + assistant pairs
   
   // Split conversation into protected (last 10 turns) and evictable (older)
