@@ -1119,7 +1119,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         select: { name: true },
       });
       partnerName = partner?.name || undefined;
-    } else if (session.status === 'CREATED') {
+    } else if (session.status === 'CREATED' || session.status === 'INVITED') {
+      // Partner hasn't joined yet - get name from invitation
       const invitation = await prisma.invitation.findFirst({
         where: { sessionId, invitedById: user.id },
         select: { name: true },
@@ -1449,7 +1450,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         console.log(`[sendMessageStream:${requestId}] Dispatch detected: ${dispatchTag}`);
         isDispatchMessage = true;
 
-        // Build dispatch context with conversation history
+        // Build dispatch context with conversation history and session state
         const dispatchContext: DispatchContext = {
           userMessage: content,
           conversationHistory: history.map((m) => ({
@@ -1460,6 +1461,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           partnerName,
           sessionId,
           turnId,
+          currentStage,
+          invitationSent: session.status !== 'CREATED', // INVITED or ACTIVE means sent
+          partnerJoined: session.status === 'ACTIVE',
         };
 
         const dispatchedResponse = await handleDispatch(dispatchTag, dispatchContext);

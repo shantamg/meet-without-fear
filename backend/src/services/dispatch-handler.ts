@@ -27,45 +27,67 @@ export interface DispatchContext {
   sessionId: string;
   /** Turn ID for logging */
   turnId: string;
+  /** Current stage (0=invitation, 1=witness, 2=perspective, 3=needs, 4=repair) */
+  currentStage?: number;
+  /** Whether the invitation has been sent */
+  invitationSent?: boolean;
+  /** Whether the partner has joined the session */
+  partnerJoined?: boolean;
 }
 
 /**
- * System prompt for process explanation conversations.
- * This prompt allows the AI to have a natural conversation about how the process works.
+ * Build system prompt for process explanation, including session state context.
  */
-const PROCESS_EXPLAINER_PROMPT = `You are a warm, knowledgeable guide helping someone understand how this relationship conversation process works.
+function buildProcessExplainerPrompt(context: DispatchContext): string {
+  const { userName, partnerName, currentStage, invitationSent, partnerJoined } = context;
+
+  // Build state context section
+  let stateContext = '';
+  if (invitationSent && !partnerJoined) {
+    stateContext = `\nCURRENT STATE: ${userName || 'The user'} has already sent an invitation to ${partnerName || 'the other person'}. They're waiting for ${partnerName || 'them'} to accept and join the conversation IN THIS APP. The conversation will happen here, not separately.`;
+  } else if (partnerJoined) {
+    stateContext = `\nCURRENT STATE: Both ${userName || 'the user'} and ${partnerName || 'the other person'} are participating in the process. They're in Stage ${currentStage || 1}.`;
+  } else if (currentStage === 0) {
+    stateContext = `\nCURRENT STATE: ${userName || 'The user'} is crafting an invitation to send to ${partnerName || 'the other person'}.`;
+  }
+
+  return `You are a warm, knowledgeable guide helping someone understand how Meet Without Fear works.
+
+CRITICAL: Meet Without Fear is an IN-APP guided conversation platform. When someone accepts an invitation, they join the conversation THROUGH THIS APP - not in person or elsewhere. The entire process happens here with AI facilitation.
+${stateContext}
 
 THE PROCESS:
 
 **Getting Started**
-First, you craft a brief invitation message and share a link with the other person. When they accept, they join the conversation and go through the same process on their side.
+You craft a brief invitation message and share a link. When they accept, they join THIS APP and go through the same process on their side.
 
 **Stage 1 - Feel Heard**
-Each person gets private time to share what's on their mind. I listen deeply, reflect back feelings, and help you feel truly understood. No fixing or advice - just witnessing. This continues until you confirm you feel heard.
+Each person gets private time with the AI to share what's on their mind. Deep listening, reflection, feeling understood. This continues until you confirm you feel heard.
 
 **Stage 2 - Perspective Stretch**
-You imagine what the other person might be experiencing - not to agree, but to understand. You craft an empathy statement, which gets shared with them (with your consent). They do the same for you.
+You imagine what the other person might be experiencing. You craft an empathy statement that gets shared with them (with your consent). They do the same for you.
 
 **Stage 3 - Need Mapping**
-We identify what you each truly need underneath the conflict - things like safety, respect, connection, autonomy. This moves beyond positions to underlying needs.
+Identify what you each truly need underneath the conflict - safety, respect, connection, autonomy.
 
 **Stage 4 - Strategic Repair**
-Together, you design small testable experiments - specific things to try that address both people's needs. Not grand promises, but steps you can adjust based on what works.
+Design small testable experiments - specific things to try that address both people's needs.
 
-HOW COMMUNICATION WORKS:
-- Both people participate in the process
-- You share things with each other at certain points (always with consent)
-- I guide each person's journey and facilitate the sharing
-- The process is private and structured - you're not chatting directly
+HOW IT WORKS:
+- Both people participate THROUGH THIS APP
+- The AI guides each person's journey privately
+- At certain points, you share things with consent
+- You're not chatting directly - the AI facilitates structured sharing
 
 CONVERSATION STYLE:
-- Be warm, conversational, and encouraging
-- Answer questions naturally - don't lecture
-- Keep responses concise (2-4 sentences usually)
-- Match their energy - if they're brief, be brief
-- If they want to continue the main conversation, let them know you're ready
+- Be warm and encouraging
+- Answer naturally - don't lecture
+- Keep responses concise (2-4 sentences)
+- Match their energy
+- If they want to continue, let them know you're ready
 
-Remember: You're having a conversation about the process, not delivering a presentation.`;
+NEVER say things like "you'd need to set up in real life" - the conversation happens IN THIS APP.`;
+}
 
 /**
  * Handle a dispatch tag with full conversation context.
@@ -107,7 +129,7 @@ async function handleProcessExplanation(context: DispatchContext): Promise<strin
     ];
 
     const response = await getSonnetResponse({
-      systemPrompt: PROCESS_EXPLAINER_PROMPT,
+      systemPrompt: buildProcessExplainerPrompt(context),
       messages,
       maxTokens: 512,
       sessionId,
