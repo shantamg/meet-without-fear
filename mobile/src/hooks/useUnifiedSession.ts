@@ -322,7 +322,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Streaming message hook with callbacks for metadata handling
   const handleStreamMetadata = useCallback(
     (_sessionId: string, metadata: StreamMetadata) => {
-      console.log(`[useUnifiedSession] [TIMING] handleStreamMetadata called at ${Date.now()}`);
       // Update feel-heard check recommendation from AI
       if (metadata.offerFeelHeardCheck === true) {
         setStreamTriggeredFeelHeard(true);
@@ -475,18 +474,16 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
   // Derive showFeelHeardConfirmation from gates + stream trigger + dismissal state
   // This ensures proper restoration from backend AND handles stream-triggered state
-  const showFeelHeardConfirmation = useMemo(() => {
-    const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
-    const gateOffered = !!gates?.feelHeardCheckOffered;
-    const gateConfirmed = !!gates?.feelHeardConfirmed;
-
-    return (
-      (gateOffered || streamTriggeredFeelHeard) &&
-      !gateConfirmed &&
-      !hasDismissedFeelHeard &&
-      !state.hasConfirmedHeard
-    );
-  }, [myProgress?.gatesSatisfied, streamTriggeredFeelHeard, hasDismissedFeelHeard, state.hasConfirmedHeard]);
+  // NOTE: Using simple derived expression (not useMemo) to match invitation pattern for reliable updates
+  const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
+  const gateOffered = !!gates?.feelHeardCheckOffered;
+  const gateConfirmed = !!gates?.feelHeardConfirmed;
+  const showFeelHeardConfirmation = (
+    (gateOffered || streamTriggeredFeelHeard) &&
+    !gateConfirmed &&
+    !hasDismissedFeelHeard &&
+    !state.hasConfirmedHeard
+  );
 
   // Needs confirmation state
   const needs = useMemo(() => needsData?.needs ?? [], [needsData?.needs]);

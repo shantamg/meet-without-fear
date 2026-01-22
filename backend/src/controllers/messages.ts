@@ -1520,8 +1520,6 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     // Signal that text streaming is complete (before DB saves for faster UX)
     // =========================================================================
     if (!clientDisconnected) {
-      console.log(`[sendMessageStream:${requestId}] [TIMING] Sending text_complete with metadata:`,
-        metadata.invitationMessage ? 'has invitationMessage' : 'no invitationMessage');
       sendSSE(res, { event: 'metadata', data: { metadata } });
       sendSSE(res, { event: 'text_complete', data: { metadata } });
     }
