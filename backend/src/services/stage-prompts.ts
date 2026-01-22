@@ -148,12 +148,13 @@ If intensity is high (8+), stay in witness mode and slow down.
 `;
 
 const STAGE1_QUESTION_TEMPLATES = `
-If you need a question, choose ONE of these (keep it simple):
+If a simple question helps, you can use or adapt one of these examples:
 - "What happened?"
 - "What did that cost you?"
 - "What did you feel in that moment?"
 - "What mattered most to you there?"
 - "What do you wish they understood?"
+Keep it natural and in the user's voice; you can ask a different question if it fits better.
 `;
 
 /**
