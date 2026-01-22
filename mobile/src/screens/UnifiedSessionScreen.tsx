@@ -184,7 +184,7 @@ export function UnifiedSessionScreen({
 
     // Feel heard confirmation
     showFeelHeardConfirmation,
-    setAiRecommendsFeelHeardCheck,
+    setStreamTriggeredFeelHeard,
 
     // Actions
     sendMessage,
@@ -305,7 +305,7 @@ export function UnifiedSessionScreen({
       // Only set to true - once AI recommends feel-heard check, keep it sticky
       // until user confirms or dismisses (prevents flashing card on/off)
       if (payload.offerFeelHeardCheck === true) {
-        setAiRecommendsFeelHeardCheck(true);
+        setStreamTriggeredFeelHeard(true);
       }
       // Update ready-to-share recommendation from AI (Stage 2)
       // Only set to true - once AI recommends ready-to-share, keep it sticky

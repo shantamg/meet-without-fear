@@ -221,8 +221,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // This captures the proposed statement when AI determines user is ready to share
   const [liveProposedEmpathyStatement, setLiveProposedEmpathyStatement] = useState<string | null>(null);
 
-  // Track AI recommendation for feel-heard check
-  const [aiRecommendsFeelHeardCheck, setAiRecommendsFeelHeardCheck] = useState(false);
+  // Track if stream triggered feel-heard check (only set in handleStreamMetadata)
+  const [streamTriggeredFeelHeard, setStreamTriggeredFeelHeard] = useState(false);
+
+  // Track if user has dismissed the feel-heard confirmation
+  const [hasDismissedFeelHeard, setHasDismissedFeelHeard] = useState(false);
 
   // Track AI recommendation for ready-to-share empathy (Stage 2)
   const [aiRecommendsReadyToShare, setAiRecommendsReadyToShare] = useState(false);
@@ -322,7 +325,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
       console.log(`[useUnifiedSession] [TIMING] handleStreamMetadata called at ${Date.now()}`);
       // Update feel-heard check recommendation from AI
       if (metadata.offerFeelHeardCheck === true) {
-        setAiRecommendsFeelHeardCheck(true);
+        setStreamTriggeredFeelHeard(true);
       }
       // Update ready-to-share recommendation from AI (Stage 2)
       if (metadata.offerReadyToShare === true) {
@@ -342,7 +345,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
         saveDraft({ sessionId, content: metadata.proposedEmpathyStatement, readyToShare: false });
       }
     },
-    [sessionId, saveDraft, setAiRecommendsFeelHeardCheck, setAiRecommendsReadyToShare,
+    [sessionId, saveDraft, setStreamTriggeredFeelHeard, setAiRecommendsReadyToShare,
      setLiveInvitationMessage, setLiveProposedEmpathyStatement]
   );
 
@@ -470,9 +473,20 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Count user messages for barometer trigger
   const userMessageCount = messages.filter((m) => m.role === MessageRole.USER).length;
 
-  // Show feel-heard UI when AI sets offerFeelHeardCheck: true in JSON response
-  // Once true, stays true until user confirms or dismisses (sticky state)
-  const showFeelHeardConfirmation = aiRecommendsFeelHeardCheck;
+  // Derive showFeelHeardConfirmation from gates + stream trigger + dismissal state
+  // This ensures proper restoration from backend AND handles stream-triggered state
+  const showFeelHeardConfirmation = useMemo(() => {
+    const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
+    const gateOffered = !!gates?.feelHeardCheckOffered;
+    const gateConfirmed = !!gates?.feelHeardConfirmed;
+
+    return (
+      (gateOffered || streamTriggeredFeelHeard) &&
+      !gateConfirmed &&
+      !hasDismissedFeelHeard &&
+      !state.hasConfirmedHeard
+    );
+  }, [myProgress?.gatesSatisfied, streamTriggeredFeelHeard, hasDismissedFeelHeard, state.hasConfirmedHeard]);
 
   // Needs confirmation state
   const needs = useMemo(() => needsData?.needs ?? [], [needsData?.needs]);
@@ -639,20 +653,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
     }
   }, [empathyDraftData?.draft?.content, empathyDraftData?.draft?.readyToShare, empathyDraftData?.alreadyConsented]);
 
-  // -------------------------------------------------------------------------
-  // Initialize Feel-Heard Check State from Backend
-  // -------------------------------------------------------------------------
-  // When loading a session where AI has already recommended feel-heard check,
-  // restore the local state so the confirmation prompt appears
-  useEffect(() => {
-    if (currentStage === Stage.WITNESS && progressData?.myProgress?.gatesSatisfied) {
-      const gates = progressData.myProgress.gatesSatisfied as Record<string, unknown>;
-      // Check if feelHeardCheckOffered is set (Stage 1 specific gate)
-      if (gates.feelHeardCheckOffered === true && !gates.feelHeardConfirmed) {
-        setAiRecommendsFeelHeardCheck(true);
-      }
-    }
-  }, [currentStage, progressData?.myProgress?.gatesSatisfied]);
+  // NOTE: Feel-Heard Check State is now derived via useMemo (showFeelHeardConfirmation)
+  // instead of syncing from backend. This eliminates race conditions and restoration bugs.
 
   // -------------------------------------------------------------------------
   // Initial Message Effect
@@ -891,10 +893,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
         console.warn('[handleConfirmFeelHeard] Already confirming, ignoring duplicate call');
         return;
       }
-      // Mark as confirmed to prevent looping
+      // Mark as confirmed to prevent looping (this will hide the confirmation via useMemo)
       dispatch({ type: 'SET_HAS_CONFIRMED_HEARD', payload: true });
-      // Reset the AI recommendation state (cleanup)
-      setAiRecommendsFeelHeardCheck(false);
       confirmHeard(
         { sessionId, confirmed: true },
         {
@@ -909,9 +909,9 @@ export function useUnifiedSession(sessionId: string | undefined) {
   );
 
   // Dismiss feel-heard card without confirming (user clicks "Not yet")
-  // Resets the AI recommendation so it can be offered again later
+  // Sets dismissal state which hides the confirmation via useMemo derivation
   const handleDismissFeelHeard = useCallback(() => {
-    setAiRecommendsFeelHeardCheck(false);
+    setHasDismissedFeelHeard(true);
   }, []);
 
   // Dismiss ready-to-share prompt (user clicks "Not yet")
@@ -1239,7 +1239,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
     setLiveProposedEmpathyStatement,
     aiRecommendsReadyToShare,
     setAiRecommendsReadyToShare,
-    setAiRecommendsFeelHeardCheck,
+    setStreamTriggeredFeelHeard,
+    setHasDismissedFeelHeard,
     needsData,
     needs,
     allNeedsConfirmed,
