@@ -171,14 +171,88 @@ export interface PartnerSessionClassifierInput {
 }
 
 // ============================================================================
+// Short ID Mapping (for token efficiency)
+// ============================================================================
+
+/** Bidirectional mapping between short IDs and full UUIDs */
+export interface IdMapping {
+  shortToFull: Map<string, string>;
+  fullToShort: Map<string, string>;
+}
+
+/**
+ * Generate a random 5-character alphanumeric short ID.
+ * Uses base36 (0-9, a-z) for visually distinct, non-sequential IDs.
+ * Non-sequential IDs prevent LLM pattern completion (e.g., inventing "ad0003" after "ac0002").
+ * @internal Exported for testing
+ */
+export function generateRandomShortId(): string {
+  return Math.random().toString(36).substring(2, 7);
+}
+
+/**
+ * Create bidirectional mapping from full UUIDs to random short IDs.
+ * This reduces token overhead in prompts and improves Haiku accuracy.
+ * Random IDs force the model to copy exact strings rather than auto-complete patterns.
+ * @internal Exported for testing
+ */
+export function createIdMapping(facts: CategorizedFactWithId[]): IdMapping {
+  const shortToFull = new Map<string, string>();
+  const fullToShort = new Map<string, string>();
+  const usedIds = new Set<string>();
+
+  facts.forEach((fact) => {
+    let shortId = generateRandomShortId();
+
+    // Collision check (statistically unlikely for ~20 items, but safe)
+    while (usedIds.has(shortId)) {
+      shortId = generateRandomShortId();
+    }
+
+    usedIds.add(shortId);
+    shortToFull.set(shortId, fact.id);
+    fullToShort.set(fact.id, shortId);
+  });
+
+  return { shortToFull, fullToShort };
+}
+
+/**
+ * Resolve short IDs back to full UUIDs in the LLM response.
+ * @internal Exported for testing
+ */
+export function resolveShortIds(
+  factUpdates: FactUpdatePayload,
+  mapping: IdMapping
+): FactUpdatePayload {
+  const { shortToFull } = mapping;
+
+  return {
+    upsert: factUpdates.upsert.map((item) => {
+      if (item.id && shortToFull.has(item.id)) {
+        return { ...item, id: shortToFull.get(item.id)! };
+      }
+      return item;
+    }),
+    delete: factUpdates.delete.map((id) => shortToFull.get(id) || id),
+  };
+}
+
+// ============================================================================
 // Classifier
 // ============================================================================
+
+interface BuildPromptResult {
+  prompt: string;
+  idMapping: IdMapping | null;
+}
 
 /**
  * Build the classification prompt for notable facts extraction.
  * Supports both legacy format (existingFacts as strings) and new diff-based format (existingFactsWithIds).
+ * Returns the prompt and an ID mapping for resolving short IDs back to full UUIDs.
  */
-function buildClassifierPrompt(input: PartnerSessionClassifierInput): string {
+function buildClassifierPrompt(input: PartnerSessionClassifierInput): BuildPromptResult {
   const {
     userMessage,
     conversationHistory,
@@ -200,12 +274,16 @@ function buildClassifierPrompt(input: PartnerSessionClassifierInput): string {
   // Determine if we're using new diff-based format or legacy format
   const useDiffFormat = existingFactsWithIds && existingFactsWithIds.length > 0;
 
+  // Create ID mapping for token efficiency (only for diff-based format)
+  let idMapping: IdMapping | null = null;
+
   // Format existing facts based on format
   let existingFactsText: string;
   if (useDiffFormat) {
-    // New format: include IDs for diff-based updates
+    // New format: use short IDs for token efficiency and better Haiku accuracy
+    idMapping = createIdMapping(existingFactsWithIds);
     existingFactsText = `CURRENT NOTABLE FACTS (with IDs for reference):
-${existingFactsWithIds.map((f) => `- [${f.id}] ${f.category}: ${f.fact}`).join('\n')}`;
+${existingFactsWithIds.map((f) => `- [${idMapping!.fullToShort.get(f.id)}] ${f.category}: ${f.fact}`).join('\n')}`;
   } else if (existingFacts && existingFacts.length > 0) {
     // Legacy format: plain strings
     existingFactsText = `CURRENT NOTABLE FACTS:\n${existingFacts.map((f, i) => `${i + 1}. ${f}`).join('\n')}`;
@@ -229,7 +307,7 @@ interpretation of the user's situation, which can help you extract accurate fact
 
   // Use diff-based output format when we have facts with IDs
   if (useDiffFormat) {
-    return `Update the notable facts for this conversation using DIFF-BASED updates.
+    const prompt = `Update the notable facts for this conversation using DIFF-BASED updates.
 
 CONVERSATION CONTEXT:
 ${personContext}
@@ -264,8 +342,8 @@ CRITICAL - NEVER ASSUME:
 
 RULES FOR DIFF-BASED UPDATES:
 - To ADD a new fact: include it in "upsert" WITHOUT an id field
-- To UPDATE an existing fact: include it in "upsert" WITH the same id, new category/fact text
-- To DELETE an outdated fact: include its id in the "delete" array
+- To UPDATE an existing fact: Copy the exact 5-character ID (e.g., k9x2m) into the id field with new category/fact text
+- To DELETE an outdated fact: Copy the exact ID into the "delete" array
 - Facts NOT mentioned in upsert or delete are AUTOMATICALLY PRESERVED (no action needed)
 - Keep facts concise (1 sentence each)
 - Soft limit: 15-20 total facts. If nearing limit, delete less important facts.
@@ -274,18 +352,19 @@ OUTPUT JSON only:
 {
   "topicContext": "brief description of what user is discussing",
   "upsert": [
-    { "id": "existing-id-to-update", "category": "People", "fact": "updated fact text" },
+    { "id": "k9x2m", "category": "People", "fact": "updated fact text" },
     { "category": "Emotional", "fact": "brand new fact without id" }
   ],
-  "delete": ["id-of-fact-to-remove", "another-id-to-remove"]
+  "delete": ["p4r9s", "m2n8z"]
 }
 
 IMPORTANT: Only include facts that are NEW or CHANGED. Do NOT repeat unchanged facts.
 If nothing needs to change, return empty arrays: { "topicContext": "...", "upsert": [], "delete": [] }`;
+    return { prompt, idMapping };
   }
 
   // Legacy format: full list replacement (backward compatibility)
-  return `Extract notable facts from this conversation.
+  const prompt = `Extract notable facts from this conversation.
 
 CONVERSATION CONTEXT:
 ${personContext}
@@ -336,6 +415,7 @@ OUTPUT JSON only:
     { "category": "People", "fact": "Alex is a person the user wants to discuss (relationship not specified)" }
   ]
 }`;
+  return { prompt, idMapping: null };
 }
 
 /** Valid categories for notable facts */
@@ -434,7 +514,7 @@ Focus on emotional context, situational facts, and people involved.
 IMPORTANT: Never assume relationship types - only record what the user explicitly states.
 Output only valid JSON.`;
 
-    const userPrompt = buildClassifierPrompt(input);
+    const { prompt: userPrompt, idMapping } = buildClassifierPrompt(input);
 
     // Use circuit breaker to prevent blocking
     // Fallback returns undefined for facts (caller can preserve existing facts)
@@ -463,7 +543,15 @@ Output only valid JSON.`;
       return fallback;
     }
 
-    const normalized = normalizeResult(result);
+    let normalized = normalizeResult(result);
+
+    // Resolve short IDs back to full UUIDs if we used diff-based format with ID mapping
+    if (idMapping && normalized.usedDiffFormat && normalized.factUpdates) {
+      normalized = {
+        ...normalized,
+        factUpdates: resolveShortIds(normalized.factUpdates, idMapping),
+      };
+    }
 
     // Determine the final facts to save based on format used
     let factsToSave: CategorizedFactWithId[] | CategorizedFact[] | undefined;

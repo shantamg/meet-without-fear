@@ -43,11 +43,158 @@ import {
   runPartnerSessionClassifier,
   applyFactUpdates,
   ensureFactIds,
+  generateRandomShortId,
+  createIdMapping,
+  resolveShortIds,
   CategorizedFactWithId,
   FactUpdatePayload,
+  IdMapping,
 } from '../partner-session-classifier';
 import { getHaikuJson } from '../../lib/bedrock';
 import { prisma } from '../../lib/prisma';
+
+// ============================================================================
+// Short ID Mapping Tests
+// ============================================================================
+
+describe('Short ID Mapping', () => {
+  describe('generateRandomShortId', () => {
+    it('generates 5-character alphanumeric IDs', () => {
+      const id = generateRandomShortId();
+      expect(id).toHaveLength(5);
+      expect(id).toMatch(/^[a-z0-9]+$/);
+    });
+
+    it('generates different IDs on each call', () => {
+      const ids = new Set<string>();
+      for (let i = 0; i < 100; i++) {
+        ids.add(generateRandomShortId());
+      }
+      // With random generation, we expect high uniqueness
+      expect(ids.size).toBeGreaterThan(95);
+    });
+  });
+
+  describe('createIdMapping', () => {
+    it('creates bidirectional mapping from facts to random short IDs', () => {
+      const facts: CategorizedFactWithId[] = [
+        { id: 'uuid-111-aaa', category: 'People', fact: 'Fact 1' },
+        { id: 'uuid-222-bbb', category: 'Logistics', fact: 'Fact 2' },
+      ];
+
+      const mapping = createIdMapping(facts);
+
+      // Verify mapping size
+      expect(mapping.shortToFull.size).toBe(2);
+      expect(mapping.fullToShort.size).toBe(2);
+
+      // Verify bidirectional consistency
+      const shortId1 = mapping.fullToShort.get('uuid-111-aaa')!;
+      const shortId2 = mapping.fullToShort.get('uuid-222-bbb')!;
+      expect(mapping.shortToFull.get(shortId1)).toBe('uuid-111-aaa');
+      expect(mapping.shortToFull.get(shortId2)).toBe('uuid-222-bbb');
+
+      // Verify short IDs are 5 chars
+      expect(shortId1).toHaveLength(5);
+      expect(shortId2).toHaveLength(5);
+
+      // Verify short IDs are unique
+      expect(shortId1).not.toBe(shortId2);
+    });
+
+    it('handles empty facts array', () => {
+      const mapping = createIdMapping([]);
+      expect(mapping.shortToFull.size).toBe(0);
+      expect(mapping.fullToShort.size).toBe(0);
+    });
+
+    it('generates unique IDs even with many facts', () => {
+      const facts: CategorizedFactWithId[] = Array.from({ length: 20 }, (_, i) => ({
+        id: `uuid-${i}`,
+        category: 'People',
+        fact: `Fact ${i}`,
+      }));
+
+      const mapping = createIdMapping(facts);
+
+      // All 20 should have unique short IDs
+      expect(mapping.shortToFull.size).toBe(20);
+      expect(mapping.fullToShort.size).toBe(20);
+    });
+  });
+
+  describe('resolveShortIds', () => {
+    it('resolves short IDs back to full UUIDs in upsert array', () => {
+      const mapping: IdMapping = {
+        shortToFull: new Map([
+          ['aa0000', 'full-uuid-1'],
+          ['ab0001', 'full-uuid-2'],
+        ]),
+        fullToShort: new Map([
+          ['full-uuid-1', 'aa0000'],
+          ['full-uuid-2', 'ab0001'],
+        ]),
+      };
+
+      const factUpdates: FactUpdatePayload = {
+        upsert: [
+          { id: 'aa0000', category: 'People', fact: 'Updated fact' },
+          { category: 'Emotional', fact: 'New fact without ID' },
+        ],
+        delete: [],
+      };
+
+      const resolved = resolveShortIds(factUpdates, mapping);
+
+      expect(resolved.upsert[0].id).toBe('full-uuid-1');
+      expect(resolved.upsert[1].id).toBeUndefined();
+    });
+
+    it('resolves short IDs in delete array', () => {
+      const mapping: IdMapping = {
+        shortToFull: new Map([
+          ['aa0000', 'full-uuid-1'],
+          ['ab0001', 'full-uuid-2'],
+          ['ac0002', 'full-uuid-3'],
+        ]),
+        fullToShort: new Map(),
+      };
+
+      const factUpdates: FactUpdatePayload = {
+        upsert: [],
+        delete: ['ab0001', 'ac0002'],
+      };
+
+      const resolved = resolveShortIds(factUpdates, mapping);
+
+      expect(resolved.delete).toEqual(['full-uuid-2', 'full-uuid-3']);
+    });
+
+    it('preserves IDs that are not in the mapping', () => {
+      const mapping: IdMapping = {
+        shortToFull: new Map([['aa0000', 'full-uuid-1']]),
+        fullToShort: new Map(),
+      };
+
+      const factUpdates: FactUpdatePayload = {
+        upsert: [
+          { id: 'unknown-id', category: 'People', fact: 'Some fact' },
+        ],
+        delete: ['unknown-delete-id'],
+      };
+
+      const resolved = resolveShortIds(factUpdates, mapping);
+
+      // Unknown IDs are preserved as-is
+      expect(resolved.upsert[0].id).toBe('unknown-id');
+      expect(resolved.delete[0]).toBe('unknown-delete-id');
+    });
+  });
+});
+
+// ============================================================================
+// Partner Session Classifier Tests
+// ============================================================================
 
 describe('Partner Session Classifier', () => {
   beforeEach(() => {
@@ -503,18 +650,16 @@ describe('Diff-Based Classifier Integration', () => {
     jest.clearAllMocks();
   });
 
-  it('includes fact IDs in prompt when existing facts have IDs', async () => {
+  it('includes random short IDs (not full UUIDs) in prompt when existing facts have IDs', async () => {
     const existingFactsWithIds: CategorizedFactWithId[] = [
       { id: 'fact-abc-123', category: 'People', fact: 'User has a daughter' },
       { id: 'fact-def-456', category: 'Logistics', fact: 'Lives in NYC' },
     ];
 
-    // Mock response in new format
+    // Mock response - we'll extract the actual short IDs from the prompt
     (getHaikuJson as jest.Mock).mockResolvedValueOnce({
       topicContext: 'discussing family',
-      upsert: [
-        { id: 'fact-abc-123', category: 'People', fact: 'User has a daughter named Emma' },
-      ],
+      upsert: [],
       delete: [],
     });
 
@@ -527,29 +672,63 @@ describe('Diff-Based Classifier Integration', () => {
       existingFactsWithIds,
     });
 
-    // Verify the prompt includes fact IDs
+    // Verify the prompt uses short IDs (not full UUIDs) for token efficiency
     const call = (getHaikuJson as jest.Mock).mock.calls[0][0];
-    expect(call.messages[0].content).toContain('fact-abc-123');
-    expect(call.messages[0].content).toContain('fact-def-456');
-    expect(call.messages[0].content).toContain('upsert');
-    expect(call.messages[0].content).toContain('delete');
+    const promptContent = call.messages[0].content;
+
+    // Full UUIDs should NOT be in the prompt
+    expect(promptContent).not.toContain('fact-abc-123');
+    expect(promptContent).not.toContain('fact-def-456');
+
+    // Short IDs (5 char alphanumeric) should be present
+    // Pattern: [xxxxx] where x is alphanumeric
+    const shortIdPattern = /\[([a-z0-9]{5})\]/g;
+    const matches = promptContent.match(shortIdPattern);
+    expect(matches).toHaveLength(2); // Two facts = two short IDs
+
+    // Verify structural elements
+    expect(promptContent).toContain('upsert');
+    expect(promptContent).toContain('delete');
+    expect(promptContent).toContain('Copy the exact 5-character ID');
   });
 
-  it('uses diff-based reconciliation instead of full replacement', async () => {
+  it('uses diff-based reconciliation with short ID mapping', async () => {
     const existingFactsWithIds: CategorizedFactWithId[] = [
       { id: 'fact-1', category: 'People', fact: 'User has a daughter' },
       { id: 'fact-2', category: 'Logistics', fact: 'Lives in NYC' },
       { id: 'fact-3', category: 'Emotional', fact: 'Feeling stressed' },
     ];
 
-    // LLM returns diff: update one fact, delete one, add one new
-    (getHaikuJson as jest.Mock).mockResolvedValueOnce({
-      topicContext: 'discussing family stress',
-      upsert: [
-        { id: 'fact-1', category: 'People', fact: 'User has a daughter named Emma who is 14' },
-        { category: 'History', fact: 'Been married for 10 years' }, // New fact, no ID
-      ],
-      delete: ['fact-3'], // Delete the stressed fact
+    // First, we need to capture the short IDs that will be generated
+    // We do this by spying on the call and extracting from the prompt
+    let capturedShortIds: { [fullId: string]: string } = {};
+
+    (getHaikuJson as jest.Mock).mockImplementationOnce((args) => {
+      // Extract short IDs from the prompt
+      const prompt = args.messages[0].content;
+      const lines = prompt.split('\n').filter((l: string) => l.includes('[') && l.includes(']'));
+      lines.forEach((line: string) => {
+        const match = line.match(/\[([a-z0-9]{5})\]\s*(\w+):/);
+        if (match) {
+          // Map category to find full ID
+          const shortId = match[1];
+          const category = match[2];
+          const fact = existingFactsWithIds.find(f => f.category === category);
+          if (fact) {
+            capturedShortIds[fact.id] = shortId;
+          }
+        }
+      });
+
+      // Return diff using the captured short IDs
+      return Promise.resolve({
+        topicContext: 'discussing family stress',
+        upsert: [
+          { id: capturedShortIds['fact-1'], category: 'People', fact: 'User has a daughter named Emma who is 14' },
+          { category: 'History', fact: 'Been married for 10 years' }, // New fact, no ID
+        ],
+        delete: [capturedShortIds['fact-3']], // Delete fact-3 using its short ID
+      });
     });
 
     await runPartnerSessionClassifier({
@@ -561,13 +740,14 @@ describe('Diff-Based Classifier Integration', () => {
       existingFactsWithIds,
     });
 
-    // Verify the saved facts are correctly reconciled
+    // Verify the saved facts are correctly reconciled with full UUIDs preserved
     expect(prisma.userVessel.updateMany).toHaveBeenCalled();
     const updateCall = (prisma.userVessel.updateMany as jest.Mock).mock.calls[0][0];
     const savedFacts = updateCall.data.notableFacts as CategorizedFactWithId[];
 
     // fact-1 updated, fact-2 preserved, fact-3 deleted, new fact added
     expect(savedFacts).toHaveLength(3);
+    // Verify full UUID is preserved after short ID resolution
     expect(savedFacts.find((f: CategorizedFactWithId) => f.id === 'fact-1')?.fact).toBe(
       'User has a daughter named Emma who is 14'
     );
