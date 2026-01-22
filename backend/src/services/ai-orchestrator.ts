@@ -48,7 +48,7 @@ import {
   estimateTokens,
   getRecommendedLimits,
 } from '../utils/token-budget';
-import { getSharedContentContext } from './shared-context';
+import { getSharedContentContext, getMilestoneContext } from './shared-context';
 import { publishContextUpdated } from './realtime';
 // publishUserEvent and memoryService imports removed - handled in partner-session-classifier.ts
 
@@ -183,7 +183,7 @@ export async function orchestrateResponse(
   console.log(`[AI Orchestrator] Starting parallel pre-processing (Intent: ${memoryIntent.intent})...`);
   const parallelStartTime = Date.now();
 
-  const [userPrefs, contextBundle, retrievedContext, sharedContentHistory] = await Promise.all([
+  const [userPrefs, contextBundle, retrievedContext, sharedContentHistory, milestoneContext] = await Promise.all([
     getUserMemoryPreferences(context.userId),
     assembleContextBundle(
       context.sessionId,
@@ -207,6 +207,10 @@ export async function orchestrateResponse(
     }),
     getSharedContentContext(context.sessionId, context.userId).catch((err: Error) => {
       console.warn('[AI Orchestrator] Shared content context fetch failed:', err);
+      return null;
+    }),
+    getMilestoneContext(context.sessionId, context.userId).catch((err: Error) => {
+      console.warn('[AI Orchestrator] Milestone context fetch failed:', err);
       return null;
     })
   ]);
@@ -289,6 +293,7 @@ export async function orchestrateResponse(
       // invalidMemoryRequest moved to fire-and-forget - not available at prompt-build time
       invalidMemoryRequest: undefined,
       sharedContentHistory,
+      milestoneContext,
     },
     {
       isInvitationPhase: context.isInvitationPhase,

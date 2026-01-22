@@ -6,7 +6,129 @@
  */
 
 import prisma from '../lib/prisma';
-import { EmpathyStatus, SharedContentDeliveryStatus } from '@prisma/client';
+import { EmpathyStatus, SharedContentDeliveryStatus, InvitationStatus } from '@prisma/client';
+
+/**
+ * Gates stored in StageProgress.gatesSatisfied for Stage 0
+ */
+interface Stage0Gates {
+  compactSigned?: boolean;
+  signedAt?: string;
+}
+
+/**
+ * Gates stored in StageProgress.gatesSatisfied for Stage 1
+ */
+interface Stage1Gates {
+  feelHeardConfirmed?: boolean;
+  feelHeardConfirmedAt?: string;
+}
+
+/**
+ * Get formatted milestone context for a user in a session.
+ * These are the "lines" shown on the user's screen (Invitation Sent, Feel Heard, etc.)
+ *
+ * @param sessionId - The session ID
+ * @param userId - The current user's ID
+ * @returns Formatted string for injection into AI prompts, or null if no milestones
+ */
+export async function getMilestoneContext(
+  sessionId: string,
+  userId: string
+): Promise<string | null> {
+  const milestones: { label: string; timestamp: Date }[] = [];
+
+  // 1. Get invitation data
+  const invitation = await prisma.invitation.findFirst({
+    where: { sessionId },
+    select: {
+      invitedById: true,
+      messageConfirmedAt: true,
+      acceptedAt: true,
+      status: true,
+    },
+  });
+
+  if (invitation) {
+    const isInviter = invitation.invitedById === userId;
+
+    // Invitation Sent (for inviter)
+    if (isInviter && invitation.messageConfirmedAt) {
+      milestones.push({
+        label: 'Invitation sent',
+        timestamp: invitation.messageConfirmedAt,
+      });
+    }
+
+    // Invitation Accepted (for invitee, or when partner accepted for inviter)
+    if (invitation.acceptedAt && invitation.status === InvitationStatus.ACCEPTED) {
+      milestones.push({
+        label: isInviter ? 'Partner accepted invitation' : 'You accepted the invitation',
+        timestamp: invitation.acceptedAt,
+      });
+    }
+  }
+
+  // 2. Get Stage 0 progress for compact signed milestone
+  const stage0Progress = await prisma.stageProgress.findFirst({
+    where: {
+      sessionId,
+      userId,
+      stage: 0,
+    },
+    select: {
+      gatesSatisfied: true,
+    },
+  });
+
+  if (stage0Progress?.gatesSatisfied) {
+    const gates = stage0Progress.gatesSatisfied as Stage0Gates;
+    if (gates.compactSigned && gates.signedAt) {
+      milestones.push({
+        label: 'You signed the curiosity compact',
+        timestamp: new Date(gates.signedAt),
+      });
+    }
+  }
+
+  // 3. Get Stage 1 progress for feel-heard milestone
+  const stage1Progress = await prisma.stageProgress.findFirst({
+    where: {
+      sessionId,
+      userId,
+      stage: 1,
+    },
+    select: {
+      gatesSatisfied: true,
+      completedAt: true,
+    },
+  });
+
+  if (stage1Progress?.gatesSatisfied) {
+    const gates = stage1Progress.gatesSatisfied as Stage1Gates;
+    if (gates.feelHeardConfirmed && gates.feelHeardConfirmedAt) {
+      milestones.push({
+        label: 'You confirmed feeling heard',
+        timestamp: new Date(gates.feelHeardConfirmedAt),
+      });
+    }
+  }
+
+  if (milestones.length === 0) {
+    return null;
+  }
+
+  // Sort by timestamp
+  milestones.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+  // Format as simple list
+  const lines = ['## Process milestones:'];
+  for (const m of milestones) {
+    lines.push(`- ${m.label}`);
+  }
+
+  return lines.join('\n');
+}
 
 /**
  * Shared content item for formatting

@@ -234,7 +234,8 @@ function getLastUserMessage(context: PromptContext): string | undefined {
 function buildBaseSystemPrompt(
   invalidMemoryRequest?: { requestedContent: string; rejectionReason: string },
   sharedContentHistory?: string | null,
-  userMessage?: string
+  userMessage?: string,
+  milestoneContext?: string | null
 ): string {
   const invalidMemorySection = invalidMemoryRequest
     ? `\n\n⚠️ INVALID REQUEST DETECTED:
@@ -248,6 +249,10 @@ You MUST address this in your response. Acknowledge their request with empathy, 
     ? `\n\n${sharedContentHistory}`
     : '';
 
+  const milestoneSection = milestoneContext
+    ? `\n\n${milestoneContext}`
+    : '';
+
   // Only inject PROCESS_OVERVIEW if user is asking about the process/stages
   const processOverviewSection = userMessage && isProcessQuestion(userMessage)
     ? PROCESS_OVERVIEW
@@ -255,7 +260,7 @@ You MUST address this in your response. Acknowledge their request with empathy, 
 
   return `${SIMPLE_LANGUAGE_PROMPT}
 ${PRIVACY_GUIDANCE}
-${INVALID_MEMORY_GUIDANCE}${processOverviewSection}${invalidMemorySection}${sharedContentSection}`;
+${INVALID_MEMORY_GUIDANCE}${processOverviewSection}${invalidMemorySection}${sharedContentSection}${milestoneSection}`;
 }
 
 // ============================================================================
@@ -300,6 +305,8 @@ export interface PromptContext {
   };
   /** Formatted shared content history (from getSharedContentContext) */
   sharedContentHistory?: string | null;
+  /** Formatted milestone context (from getMilestoneContext) */
+  milestoneContext?: string | null;
 }
 
 /** Simplified context for initial message generation (no context bundle needed) */
@@ -330,7 +337,7 @@ function buildOnboardingPrompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a warm and helpful guide helping ${userName} understand how this process works.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 ${ONBOARDING_TONE}
 
 YOUR ROLE: Help them understand the Curiosity Compact commitments. Answer questions about the process. Don't dive into processing yet - that starts after they sign.
@@ -397,7 +404,7 @@ Do NOT ask broad "what's going on" questions if the answer is already in the pro
 
   return `You are Meet Without Fear, a Process Guardian helping ${context.userName} craft an invitation to ${partnerName} for a meaningful conversation.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 
 ${goalSection}
 
@@ -465,7 +472,7 @@ function buildStage1Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Witness stage. Your job is to help ${context.userName} feel fully and deeply heard.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 
 YOU ARE CURRENTLY IN: WITNESS STAGE (Stage 1)
 Your focus: Help them feel genuinely understood before moving on.
@@ -528,7 +535,7 @@ The partner shared this additional context to help the user understand them bett
 
   return `You are Meet Without Fear, a Process Guardian in the Perspective Stretch stage. Your job is to help ${context.userName} build genuine empathy for ${partnerName}.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 
 YOU ARE CURRENTLY IN: PERSPECTIVE STRETCH (Stage 2)
 Your focus: Help them see ${partnerName}'s humanity without requiring agreement.
@@ -574,7 +581,7 @@ function buildStage3Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Need Mapping stage. Your job is to help ${context.userName} and ${partnerName} crystallize what they each actually need.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 
 YOU ARE CURRENTLY IN: NEED MAPPING (Stage 3)
 Your focus: Help them identify underlying needs, not surface-level wants or solutions.
@@ -644,7 +651,7 @@ function buildStage4Prompt(context: PromptContext): string {
 
   return `You are Meet Without Fear, a Process Guardian in the Strategic Repair stage. Your job is to help ${context.userName} and ${partnerName} build a concrete path forward.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 
 YOU ARE CURRENTLY IN: STRATEGIC REPAIR (Stage 4)
 Your focus: Help them design small, testable experiments - not grand promises.
@@ -761,7 +768,7 @@ function buildStageTransitionPrompt(toStage: number, fromStage: number | undefin
 function buildInvitationToWitnessTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has just crafted and sent an invitation to ${partnerName}. Now it's time to help them explore their feelings more deeply while they wait.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 
 YOU ARE TRANSITIONING TO: WITNESS STAGE (Stage 1)
 Your focus: Help them feel deeply heard before anything else.
@@ -805,7 +812,7 @@ Do NOT include any other tags - just your <thinking> block followed by your warm
 function buildWitnessToPerspectiveTransition(context: PromptContext, partnerName: string): string {
   return `You are a warm, emotionally attuned guide. ${context.userName} just confirmed feeling heard after sharing their experience. Continue naturally - acknowledge this moment, then gently invite them to consider ${partnerName}'s perspective when ready.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 
 Keep it brief (2-3 sentences) and conversational. Don't start with "I notice..." - just continue the conversation warmly.
 
@@ -824,7 +831,7 @@ Your warm, conversational response.`;
 function buildPerspectiveToNeedsTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has been working on understanding ${partnerName}'s perspective. Now it's time to help them clarify what they each actually need.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 
 YOU ARE TRANSITIONING TO: NEED MAPPING (Stage 3)
 Your focus: Help them identify underlying needs, not surface-level wants or solutions.
@@ -870,7 +877,7 @@ Do NOT include any other tags - just your <thinking> block followed by your warm
 function buildNeedsToRepairTransition(context: PromptContext, partnerName: string): string {
   return `You are Meet Without Fear, a Process Guardian. ${context.userName} has clarified their needs and understood ${partnerName}'s needs. Now it's time to explore what they can actually try together.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context))}
+${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 
 YOU ARE TRANSITIONING TO: STRATEGIC REPAIR (Stage 4)
 Your focus: Help them design small, testable experiments - not grand promises.
