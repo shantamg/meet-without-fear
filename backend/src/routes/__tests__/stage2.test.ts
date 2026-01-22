@@ -23,6 +23,9 @@ jest.mock('../../services/realtime');
 // Mock bedrock
 jest.mock('../../lib/bedrock', () => ({
   getSonnetResponse: jest.fn().mockResolvedValue('{"response": "Test transition"}'),
+  BrainActivityCallType: {
+    ORCHESTRATED_RESPONSE: 'ORCHESTRATED_RESPONSE',
+  },
 }));
 
 // Mock json-extractor
