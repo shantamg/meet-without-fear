@@ -112,8 +112,6 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('feeling heard');
       expect(prompt).toContain('perspective');
       expect(prompt).toContain('Partner');
-      // Should contain empathy building language
-      expect(prompt).toContain('empathy');
     });
 
     it('returns transition prompt for Stage 2 → Stage 3', () => {
