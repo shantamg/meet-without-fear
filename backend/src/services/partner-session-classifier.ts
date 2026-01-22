@@ -12,6 +12,7 @@
  * but is tailored for partner session context.
  */
 
+import { randomUUID } from 'crypto';
 import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 import { prisma } from '../lib/prisma';
@@ -27,10 +28,123 @@ export interface CategorizedFact {
   fact: string;
 }
 
+/** A categorized fact with a stable unique ID for diff-based updates */
+export interface CategorizedFactWithId extends CategorizedFact {
+  id: string;
+}
+
+/** LLM output format for diff-based fact updates */
+export interface FactUpdatePayload {
+  /** Facts to add (no ID) or update (with ID) */
+  upsert: Array<CategorizedFact & { id?: string }>;
+  /** IDs of facts to remove */
+  delete: string[];
+}
+
+// ============================================================================
+// Diff-Based Fact Reconciliation
+// ============================================================================
+
+/** Maximum number of facts to store per session */
+const MAX_FACTS_LIMIT = 20;
+
+/**
+ * Ensure all facts have stable unique IDs.
+ * Legacy facts from DB (without IDs) get UUIDs assigned.
+ * Facts that already have IDs are preserved.
+ */
+export function ensureFactIds(
+  facts: CategorizedFactWithId[] | CategorizedFact[] | null | undefined
+): CategorizedFactWithId[] {
+  if (!facts || !Array.isArray(facts)) {
+    return [];
+  }
+
+  return facts.map((fact) => {
+    const factWithId = fact as CategorizedFactWithId;
+    if (factWithId.id) {
+      return factWithId;
+    }
+    return {
+      ...fact,
+      id: randomUUID(),
+    };
+  });
+}
+
+/**
+ * Apply diff-based updates to the existing facts.
+ *
+ * This function implements a deterministic reconciliation that:
+ * 1. Creates a map of existing facts by ID
+ * 2. Removes facts whose IDs are in the `delete` array
+ * 3. Updates existing facts when upsert contains matching ID
+ * 4. Adds new facts (generates UUID for ID-less items)
+ * 5. Enforces the soft limit of 20 facts
+ *
+ * @param currentFacts - Current facts with IDs from the database
+ * @param llmOutput - The LLM's diff payload with upsert/delete arrays
+ * @returns Merged facts array ready to save to DB
+ */
+export function applyFactUpdates(
+  currentFacts: CategorizedFactWithId[],
+  llmOutput: FactUpdatePayload | null | undefined
+): CategorizedFactWithId[] {
+  // If no LLM output, preserve existing facts
+  if (!llmOutput) {
+    return currentFacts;
+  }
+
+  const { upsert = [], delete: deleteIds = [] } = llmOutput;
+
+  // Create a map of current facts by ID for O(1) lookups
+  const factMap = new Map<string, CategorizedFactWithId>();
+  for (const fact of currentFacts) {
+    factMap.set(fact.id, fact);
+  }
+
+  // Step 1: Remove facts marked for deletion
+  for (const idToDelete of deleteIds) {
+    factMap.delete(idToDelete);
+  }
+
+  // Step 2: Process upserts (updates and additions)
+  for (const upsertItem of upsert) {
+    // Validate the item has non-empty category and fact
+    if (!upsertItem.category?.trim() || !upsertItem.fact?.trim()) {
+      continue; // Skip invalid items
+    }
+
+    const normalizedItem: CategorizedFactWithId = {
+      id: upsertItem.id || randomUUID(),
+      category: upsertItem.category.trim(),
+      fact: upsertItem.fact.trim(),
+    };
+
+    // If has ID, this is an update (overwrites existing) or add with specific ID
+    // If no ID was provided, a new UUID was generated, so it's an addition
+    factMap.set(normalizedItem.id, normalizedItem);
+  }
+
+  // Step 3: Convert map back to array and enforce limit
+  const result = Array.from(factMap.values());
+
+  // Enforce soft limit (keep first MAX_FACTS_LIMIT facts)
+  if (result.length > MAX_FACTS_LIMIT) {
+    return result.slice(0, MAX_FACTS_LIMIT);
+  }
+
+  return result;
+}
+
 export interface PartnerSessionClassifierResult {
   topicContext?: string;
   /** Notable facts about the user's situation, emotions, and circumstances (categorized) */
   notableFacts?: CategorizedFact[];
+  /** Diff-based update payload (when using new format) */
+  factUpdates?: FactUpdatePayload;
+  /** Whether the response used the new diff-based format */
+  usedDiffFormat?: boolean;
 }
 
 export interface PartnerSessionClassifierInput {
@@ -46,8 +160,10 @@ export interface PartnerSessionClassifierInput {
   turnId: string;
   /** Partner's name for context */
   partnerName?: string;
-  /** Existing notable facts for this user (to update/consolidate) - supports both old string[] and new CategorizedFact[] */
+  /** @deprecated Use existingFactsWithIds for diff-based updates */
   existingFacts?: string[];
+  /** Existing notable facts WITH stable IDs for diff-based updates */
+  existingFactsWithIds?: CategorizedFactWithId[];
   /** Sonnet's analysis of the conversation (when available) */
   sonnetAnalysis?: string;
   /** Sonnet's response to the user (when available) */
@@ -60,9 +176,18 @@ export interface PartnerSessionClassifierInput {
 
 /**
  * Build the classification prompt for notable facts extraction.
+ * Supports both legacy format (existingFacts as strings) and new diff-based format (existingFactsWithIds).
  */
 function buildClassifierPrompt(input: PartnerSessionClassifierInput): string {
-  const { userMessage, conversationHistory, partnerName, existingFacts, sonnetAnalysis, sonnetResponse } = input;
+  const {
+    userMessage,
+    conversationHistory,
+    partnerName,
+    existingFacts,
+    existingFactsWithIds,
+    sonnetAnalysis,
+    sonnetResponse,
+  } = input;
 
   // Format conversation history
   const historyText = conversationHistory
@@ -72,10 +197,21 @@ function buildClassifierPrompt(input: PartnerSessionClassifierInput): string {
 
   const personContext = partnerName ? `Person discussed: ${partnerName}` : '';
 
-  // Format existing facts if any
-  const existingFactsText = existingFacts && existingFacts.length > 0
-    ? `CURRENT NOTABLE FACTS:\n${existingFacts.map((f, i) => `${i + 1}. ${f}`).join('\n')}`
-    : 'CURRENT NOTABLE FACTS: (none yet)';
+  // Determine if we're using new diff-based format or legacy format
+  const useDiffFormat = existingFactsWithIds && existingFactsWithIds.length > 0;
+
+  // Format existing facts based on format
+  let existingFactsText: string;
+  if (useDiffFormat) {
+    // New format: include IDs for diff-based updates
+    existingFactsText = `CURRENT NOTABLE FACTS (with IDs for reference):
+${existingFactsWithIds.map((f) => `- [${f.id}] ${f.category}: ${f.fact}`).join('\n')}`;
+  } else if (existingFacts && existingFacts.length > 0) {
+    // Legacy format: plain strings
+    existingFactsText = `CURRENT NOTABLE FACTS:\n${existingFacts.map((f, i) => `${i + 1}. ${f}`).join('\n')}`;
+  } else {
+    existingFactsText = 'CURRENT NOTABLE FACTS: (none yet)';
+  }
 
   // Format Sonnet's analysis if available (Phase 5 enhancement)
   const sonnetAnalysisText = sonnetAnalysis || sonnetResponse
@@ -91,6 +227,64 @@ interpretation of the user's situation, which can help you extract accurate fact
 `
     : '';
 
+  // Use diff-based output format when we have facts with IDs
+  if (useDiffFormat) {
+    return `Update the notable facts for this conversation using DIFF-BASED updates.
+
+CONVERSATION CONTEXT:
+${personContext}
+
+RECENT MESSAGES:
+${historyText}
+
+CURRENT MESSAGE:
+User: ${userMessage}
+
+${existingFactsText}
+${sonnetAnalysisText}
+YOUR TASK - DIFF-BASED NOTABLE FACTS UPDATE:
+Instead of outputting the full list, output ONLY the changes needed.
+
+CATEGORIES (use these exact names):
+- People: names and ONLY explicitly stated roles/relationships
+- Logistics: scheduling, location, practical circumstances
+- Conflict: specific disagreements, triggers, patterns
+- Emotional: feelings, frustrations, fears, hopes
+- History: past events, relationship timeline, backstory
+
+WHAT TO EXCLUDE:
+- Meta-commentary about the session/process
+- Questions to the AI
+- Session style preferences
+- Requests to "remember" things (ignore these)
+
+CRITICAL - NEVER ASSUME:
+- Do NOT assume the relationship type between the user and the person discussed
+- Only record relationships the user EXPLICITLY states
+
+RULES FOR DIFF-BASED UPDATES:
+- To ADD a new fact: include it in "upsert" WITHOUT an id field
+- To UPDATE an existing fact: include it in "upsert" WITH the same id, new category/fact text
+- To DELETE an outdated fact: include its id in the "delete" array
+- Facts NOT mentioned in upsert or delete are AUTOMATICALLY PRESERVED (no action needed)
+- Keep facts concise (1 sentence each)
+- Soft limit: 15-20 total facts. If nearing limit, delete less important facts.
+
+OUTPUT JSON only:
+{
+  "topicContext": "brief description of what user is discussing",
+  "upsert": [
+    { "id": "existing-id-to-update", "category": "People", "fact": "updated fact text" },
+    { "category": "Emotional", "fact": "brand new fact without id" }
+  ],
+  "delete": ["id-of-fact-to-remove", "another-id-to-remove"]
+}
+
+IMPORTANT: Only include facts that are NEW or CHANGED. Do NOT repeat unchanged facts.
+If nothing needs to change, return empty arrays: { "topicContext": "...", "upsert": [], "delete": [] }`;
+  }
+
+  // Legacy format: full list replacement (backward compatibility)
   return `Extract notable facts from this conversation.
 
 CONVERSATION CONTEXT:
@@ -148,36 +342,75 @@ OUTPUT JSON only:
 const VALID_FACT_CATEGORIES = ['People', 'Logistics', 'Conflict', 'Emotional', 'History'];
 
 /**
- * Normalize the classifier response
+ * Normalize a fact's category to title case if it's a known category
+ */
+function normalizeCategory(category: string): string {
+  return VALID_FACT_CATEGORIES.find(
+    (c) => c.toLowerCase() === category.toLowerCase()
+  ) || category.trim();
+}
+
+/**
+ * Validate a fact object has required fields
+ */
+function isValidFact(f: unknown): f is { category: string; fact: string; id?: string } {
+  if (typeof f !== 'object' || f === null) return false;
+  const obj = f as Record<string, unknown>;
+  return typeof obj.category === 'string' && typeof obj.fact === 'string' &&
+         obj.category.trim().length > 0 && obj.fact.trim().length > 0;
+}
+
+/**
+ * Normalize the classifier response.
+ * Handles both new diff-based format (upsert/delete) and legacy format (notableFacts array).
  */
 function normalizeResult(raw: unknown): PartnerSessionClassifierResult {
   const result = raw as Record<string, unknown>;
+  const topicContext = result.topicContext as string | undefined;
 
-  // Normalize notable facts to CategorizedFact[] format
+  // Check if response uses new diff-based format
+  const hasUpsert = Array.isArray(result.upsert);
+  const hasDelete = Array.isArray(result.delete);
+  const usedDiffFormat = hasUpsert || hasDelete;
+
+  if (usedDiffFormat) {
+    // New diff-based format
+    const upsert = (result.upsert as unknown[] || [])
+      .filter(isValidFact)
+      .map((f) => ({
+        ...(f.id ? { id: f.id } : {}),
+        category: normalizeCategory(f.category),
+        fact: f.fact.trim(),
+      }));
+
+    const deleteIds = (result.delete as unknown[] || [])
+      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      .map((id) => id.trim());
+
+    return {
+      topicContext,
+      factUpdates: { upsert, delete: deleteIds },
+      usedDiffFormat: true,
+    };
+  }
+
+  // Legacy format: full list replacement
   const rawFacts = result.notableFacts;
   let notableFacts: CategorizedFact[] | undefined;
   if (Array.isArray(rawFacts)) {
     notableFacts = rawFacts
-      .filter((f): f is { category: string; fact: string } => {
-        // Validate shape: must have category and fact strings
-        if (typeof f !== 'object' || f === null) return false;
-        const obj = f as Record<string, unknown>;
-        return typeof obj.category === 'string' && typeof obj.fact === 'string' &&
-               obj.category.trim().length > 0 && obj.fact.trim().length > 0;
-      })
+      .filter(isValidFact)
       .map((f) => ({
-        // Normalize category to title case if it's a known category
-        category: VALID_FACT_CATEGORIES.find(
-          (c) => c.toLowerCase() === f.category.toLowerCase()
-        ) || f.category.trim(),
+        category: normalizeCategory(f.category),
         fact: f.fact.trim(),
       }))
       .slice(0, 20); // Limit to 20 facts
   }
 
   return {
-    topicContext: result.topicContext as string | undefined,
+    topicContext,
     notableFacts,
+    usedDiffFormat: false,
   };
 }
 
@@ -231,13 +464,32 @@ Output only valid JSON.`;
     }
 
     const normalized = normalizeResult(result);
-    console.log(`${logPrefix} Classification complete:`, {
-      topicContext: normalized.topicContext?.substring(0, 50),
-      factsCount: normalized.notableFacts?.length ?? 0,
-    });
+
+    // Determine the final facts to save based on format used
+    let factsToSave: CategorizedFactWithId[] | CategorizedFact[] | undefined;
+
+    if (normalized.usedDiffFormat && normalized.factUpdates) {
+      // New diff-based format: apply reconciliation
+      const existingFactsWithIds = input.existingFactsWithIds || [];
+      factsToSave = applyFactUpdates(existingFactsWithIds, normalized.factUpdates);
+      console.log(`${logPrefix} Diff-based classification complete:`, {
+        topicContext: normalized.topicContext?.substring(0, 50),
+        upsertCount: normalized.factUpdates.upsert.length,
+        deleteCount: normalized.factUpdates.delete.length,
+        resultingFactsCount: factsToSave.length,
+      });
+    } else if (normalized.notableFacts && normalized.notableFacts.length > 0) {
+      // Legacy format: full replacement (backward compatibility)
+      // Assign IDs to facts for future diff-based updates
+      factsToSave = ensureFactIds(normalized.notableFacts);
+      console.log(`${logPrefix} Legacy classification complete:`, {
+        topicContext: normalized.topicContext?.substring(0, 50),
+        factsCount: factsToSave.length,
+      });
+    }
 
     // Save notable facts to UserVessel (fire-and-forget)
-    if (normalized.notableFacts && normalized.notableFacts.length > 0) {
+    if (factsToSave && factsToSave.length > 0) {
       try {
         const updateResult = await prisma.userVessel.updateMany({
           where: {
@@ -246,14 +498,14 @@ Output only valid JSON.`;
           },
           data: {
             // Prisma expects InputJsonValue - cast through unknown to satisfy type checker
-            // The actual data is valid JSON: CategorizedFact[]
-            notableFacts: normalized.notableFacts as unknown as Parameters<
+            // The actual data is valid JSON: CategorizedFactWithId[]
+            notableFacts: factsToSave as unknown as Parameters<
               typeof prisma.userVessel.update
             >['0']['data']['notableFacts'],
           },
         });
         if (updateResult.count > 0) {
-          console.log(`${logPrefix} Saved ${normalized.notableFacts.length} notable facts to UserVessel (${updateResult.count} row(s) updated)`);
+          console.log(`${logPrefix} Saved ${factsToSave.length} notable facts to UserVessel (${updateResult.count} row(s) updated)`);
 
           // Trigger session content embedding (fire-and-forget)
           // Per fact-ledger architecture, we embed at session level after facts update
@@ -266,9 +518,19 @@ Output only valid JSON.`;
       } catch (err) {
         console.error(`${logPrefix} Failed to save notable facts:`, err);
       }
+    } else if (normalized.usedDiffFormat && factsToSave?.length === 0) {
+      // Diff format with no changes - still a valid response, preserve existing
+      console.log(`${logPrefix} Diff-based update with no changes, preserving existing facts`);
     }
 
-    return normalized;
+    // For API compatibility, also return notableFacts in the result
+    // Convert back to the legacy format if we used diff format
+    const resultNotableFacts = factsToSave?.map(({ category, fact }) => ({ category, fact }));
+
+    return {
+      ...normalized,
+      notableFacts: resultNotableFacts,
+    };
   } catch (error) {
     console.error(`${logPrefix} Classification failed:`, error);
     return null;

@@ -29,7 +29,7 @@ import { embedSessionContent } from '../services/embedding';
 import { updateSessionSummary, getSessionSummary } from '../services/conversation-summarizer';
 import { runReconcilerForDirection, getSharedContextForGuesser } from '../services/reconciler';
 import { updateContext } from '../lib/request-context';
-import { runPartnerSessionClassifier } from '../services/partner-session-classifier';
+import { runPartnerSessionClassifier, ensureFactIds, CategorizedFactWithId } from '../services/partner-session-classifier';
 import { consolidateGlobalFacts } from '../services/global-memory';
 import { assembleContextBundle, formatContextForPrompt } from '../services/context-assembler';
 import type { MemoryIntentResult } from '../services/memory-intent';
@@ -1097,7 +1097,16 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     });
     const history = historyDesc.slice().reverse();
 
-    const userTurnCount = history.filter((m) => m.role === 'USER').length;
+    // Count ALL user messages for this session (not just from the limited history window)
+    // This prevents turn IDs from getting stuck when conversation exceeds 20 messages
+    const userTurnCount = await prisma.message.count({
+      where: {
+        sessionId,
+        role: 'USER',
+        senderId: user.id,
+        forUserId: null,
+      },
+    });
     const turnId = `${sessionId}-${user.id}-${userTurnCount}`;
     updateContext({ turnId, sessionId, userId: user.id });
 
@@ -1621,17 +1630,23 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             where: { userId_sessionId: { userId: user.id, sessionId } },
             select: { notableFacts: true },
           });
-          // Extract fact strings from JSON structure (supports both old string[] and new CategorizedFact[])
-          const existingFacts: string[] = (() => {
+          // Extract existing facts with IDs for diff-based updates
+          // Legacy facts (without IDs) get UUIDs assigned via ensureFactIds
+          const existingFactsWithIds: CategorizedFactWithId[] = (() => {
             if (!userVessel?.notableFacts) return [];
             const facts = userVessel.notableFacts as unknown;
             if (Array.isArray(facts)) {
-              // Check if it's CategorizedFact[] (has category and fact properties)
+              // Check if it's CategorizedFact[] or CategorizedFactWithId[] format
               if (facts.length > 0 && typeof facts[0] === 'object' && 'fact' in facts[0]) {
-                return facts.map((f: { fact: string }) => f.fact);
+                // New format with category/fact (may or may not have IDs)
+                return ensureFactIds(facts as CategorizedFactWithId[]);
               }
-              // Old format: string[]
-              return facts.filter((f): f is string => typeof f === 'string');
+              // Old format: string[] - convert to CategorizedFactWithId
+              return ensureFactIds(
+                facts
+                  .filter((f): f is string => typeof f === 'string')
+                  .map((f) => ({ category: 'Unknown', fact: f }))
+              );
             }
             return [];
           })();
@@ -1646,7 +1661,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             userId: user.id,
             turnId,
             partnerName,
-            existingFacts,
+            existingFactsWithIds,
           });
 
           console.log(`[sendMessageStream:${requestId}] ✅ Classification finished:`, {
