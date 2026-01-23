@@ -165,7 +165,7 @@ export async function signCompact(req: Request, res: Response): Promise<void> {
     const partnerSigned = partner?.gatesSatisfied?.compactSigned ?? false;
     const canAdvance = partnerSigned;
 
-    // If both have signed, ensure session is ACTIVE
+    // If both have signed, ensure session is ACTIVE and advance to Stage 1
     // This handles edge cases where invitation acceptance didn't update status
     if (partnerSigned) {
       const session = await prisma.session.findUnique({
@@ -179,6 +179,45 @@ export async function signCompact(req: Request, res: Response): Promise<void> {
         });
         console.log(`[signCompact] Updated session ${sessionId} status to ACTIVE (both signed)`);
       }
+
+      // Auto-advance this user from Stage 0 to Stage 1
+      // Mark Stage 0 as completed
+      await prisma.stageProgress.updateMany({
+        where: {
+          sessionId,
+          userId: user.id,
+          stage: 0,
+          status: 'IN_PROGRESS',
+        },
+        data: {
+          status: 'COMPLETED',
+          completedAt: new Date(),
+        },
+      });
+
+      // Create Stage 1 progress
+      await prisma.stageProgress.upsert({
+        where: {
+          sessionId_userId_stage: {
+            sessionId,
+            userId: user.id,
+            stage: 1,
+          },
+        },
+        update: {
+          status: 'IN_PROGRESS',
+          startedAt: new Date(),
+        },
+        create: {
+          sessionId,
+          userId: user.id,
+          stage: 1,
+          status: 'IN_PROGRESS',
+          startedAt: new Date(),
+          gatesSatisfied: {},
+        },
+      });
+      console.log(`[signCompact] Advanced user ${user.id} to Stage 1`);
     }
 
     // Check if there's an invitation to determine if we should notify the inviter

@@ -8,6 +8,8 @@
  * - Everything else is the user-facing response
  */
 
+import { extractJsonFromResponse } from './json-extractor';
+
 export interface ParsedMicroTagResponse {
   /** The user-facing response text (all tags stripped) */
   response: string;
@@ -47,6 +49,27 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
   // 3. Extract flags from thinking string (no JSON needed!)
   const offerFeelHeardCheck = /FeelHeardCheck:\s*Y/i.test(thinking);
   const offerReadyToShare = /ReadyShare:\s*Y/i.test(thinking);
+
+  // 4. Compatibility fallback: JSON output
+  if (!thinking && !draft && responseText.startsWith('{')) {
+    try {
+      const parsed = extractJsonFromResponse(responseText) as Record<string, unknown>;
+      const response = typeof parsed.response === 'string' ? parsed.response : responseText;
+      const invitation = typeof parsed.invitationMessage === 'string' ? parsed.invitationMessage : null;
+      const empathy = typeof parsed.proposedEmpathyStatement === 'string' ? parsed.proposedEmpathyStatement : null;
+      responseText = response;
+      return {
+        response: responseText,
+        thinking: '',
+        draft: invitation || empathy,
+        dispatchTag: null,
+        offerFeelHeardCheck,
+        offerReadyToShare,
+      };
+    } catch {
+      // Fall through to raw responseText
+    }
+  }
 
   return {
     response: responseText,

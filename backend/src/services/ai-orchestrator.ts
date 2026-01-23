@@ -13,7 +13,7 @@
  * 4. Generate response using Sonnet
  */
 
-import { getSonnetResponse, BrainActivityCallType } from '../lib/bedrock';
+import { getModelCompletion, BrainActivityCallType } from '../lib/bedrock';
 import { prisma } from '../lib/prisma';
 import {
   determineMemoryIntent,
@@ -45,11 +45,13 @@ import {
 import { DEFAULT_MEMORY_PREFERENCES, type MemoryPreferencesDTO } from '@meet-without-fear/shared';
 import {
   buildBudgetedContext,
-  estimateTokens,
-  getRecommendedLimits,
+  CONTEXT_WINDOW,
+  trimConversationHistory,
 } from '../utils/token-budget';
 import { getSharedContentContext, getMilestoneContext } from './shared-context';
 import { publishContextUpdated } from './realtime';
+import { routeModel, scoreAmbiguity } from './model-router';
+import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from './llm-telemetry';
 // publishUserEvent and memoryService imports removed - handled in partner-session-classifier.ts
 
 // ============================================================================
@@ -100,6 +102,10 @@ export interface OrchestratorResult {
   retrievalPlan?: RetrievalPlan;
   retrievedContext?: RetrievedContext;
   usedMock: boolean;
+  /** Model actually used for the response */
+  modelUsed?: string;
+  /** Routing decision metadata */
+  routingDecision?: { model: string; score: number; reasons: string[] };
   /** For Stage 1: AI determined user is ready for feel-heard check */
   offerFeelHeardCheck?: boolean;
   /** For Stage 2: AI determined user is ready to share empathy attempt */
@@ -252,7 +258,15 @@ export async function orchestrateResponse(
 
   // Step 3: Plan retrieval (for full depth, use Haiku)
   let retrievalPlan: RetrievalPlan | undefined;
-  if (memoryIntent.depth === 'full') {
+  const shouldPlanRetrieval = memoryIntent.depth === 'full'
+    && !!retrievedContext
+    && (
+      retrievedContext.detectedReferences.length > 0
+      || retrievedContext.relevantFromOtherSessions.length > 0
+      || retrievedContext.relevantFromCurrentSession.length > 0
+    );
+
+  if (shouldPlanRetrieval) {
     try {
       retrievalPlan = await planRetrieval(
         context.stage,
@@ -307,7 +321,10 @@ export async function orchestrateResponse(
   /* auditLog removed - prompt will be captured in the LLM BrainActivity */
 
   // Step 5: Get response from Sonnet with token budget management
-  const formattedContextBundle = formatContextForPrompt(contextBundle);
+  const formattedContextBundle = formatContextForPrompt(contextBundle, {
+    sharedContentHistory,
+    milestoneContext,
+  });
 
   // Debug: Log formatted context length and snippet
   console.log(`[AI Orchestrator] Formatted context: ${formattedContextBundle.length} chars, starts with: "${formattedContextBundle.slice(0, 100).replace(/\n/g, '\\n')}..."`);
@@ -325,9 +342,19 @@ export async function orchestrateResponse(
   }
 
   // Apply token budget management to avoid exceeding context limits
+  const summaryExists = Boolean(contextBundle.sessionSummary?.currentFocus);
+  const { trimmed: trimmedHistory, truncated } = trimConversationHistory(
+    context.conversationHistory,
+    summaryExists ? CONTEXT_WINDOW.recentTurnsWithSummary : CONTEXT_WINDOW.recentTurnsWithoutSummary
+  );
+
+  if (truncated > 0) {
+    console.log(`[AI Orchestrator] Trimmed ${truncated} old messages (summaryExists=${summaryExists})`);
+  }
+
   const budgetedContext = buildBudgetedContext(
     systemPrompt,
-    context.conversationHistory,
+    trimmedHistory,
     fullContext
   );
 
@@ -346,6 +373,30 @@ export async function orchestrateResponse(
     budgetedContext.retrievedContext
   );
 
+  const summaryText = contextBundle.sessionSummary
+    ? [
+        contextBundle.sessionSummary.currentFocus,
+        contextBundle.sessionSummary.keyThemes?.length
+          ? `Themes: ${contextBundle.sessionSummary.keyThemes.join(', ')}`
+          : '',
+        contextBundle.sessionSummary.userNeeds?.length
+          ? `Needs: ${contextBundle.sessionSummary.userNeeds.join('; ')}`
+          : '',
+        contextBundle.sessionSummary.partnerNeeds?.length
+          ? `Partner needs: ${contextBundle.sessionSummary.partnerNeeds.join('; ')}`
+          : '',
+      ]
+        .filter((line) => line.trim().length > 0)
+        .join('\n')
+    : '';
+
+  recordContextSizes(context.turnId, estimateContextSizes({
+    pinned: systemPrompt,
+    summary: summaryText,
+    recentMessages: budgetedContext.conversationMessages,
+    rag: budgetedContext.retrievedContext,
+  }));
+
   let response: string;
   let usedMock = false;
   let offerFeelHeardCheck = false;
@@ -356,35 +407,43 @@ export async function orchestrateResponse(
 
   // All stages now use semantic tag format (micro-tags: <thinking>, <draft>, <dispatch>)
 
-  // Time to First Byte (Sonnet response generation)
-  const sonnetStartTime = Date.now();
-  let sonnetResponse: string | null = null;
+  const routingDecision = routeModel({
+    requestType: context.isInvitationPhase || context.stage === 0 ? 'draft' : 'mediate',
+    conflictIntensity: context.emotionalIntensity,
+    ambiguityScore: scoreAmbiguity(context.userMessage),
+    messageLength: context.userMessage.length,
+  });
+  console.log(`[AI Orchestrator] Routing decision: model=${routingDecision.model}, score=${routingDecision.score}, reasons=${routingDecision.reasons.join(',')}`);
+
+  // Time to First Byte (response generation)
+  const responseStartTime = Date.now();
+  let modelResponse: string | null = null;
 
   try {
     // Note: Extended thinking is not supported by Claude 3.5 Sonnet v2 on Bedrock
     // Disabling thinkingBudget for now to ensure real AI responses
-    sonnetResponse = await getSonnetResponse({
+    modelResponse = await getModelCompletion(routingDecision.model, {
       systemPrompt,
       messages: messagesWithContext,
-      maxTokens: 4096,
+      maxTokens: routingDecision.model === 'haiku' ? 1536 : 2048,
       sessionId: context.sessionId,
-      operation: 'orchestrator-response',
+      operation: `orchestrator-response-${routingDecision.model}`,
       turnId,
       callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
       // thinkingBudget: 1024, // Disabled - not supported on Bedrock Sonnet v2
     });
 
-    const sonnetTime = Date.now() - sonnetStartTime;
-    console.log(`[AI Orchestrator] Sonnet response generated in ${sonnetTime}ms [Time to First Byte]`);
+    const responseTime = Date.now() - responseStartTime;
+    console.log(`[AI Orchestrator] Response generated in ${responseTime}ms [Time to First Byte]`);
 
-    if (sonnetResponse) {
+    if (modelResponse) {
       // Debug: log raw response for Stage 2
       if (context.stage === 2) {
-        console.log(`[AI Orchestrator] Stage 2 raw response: ${sonnetResponse.substring(0, 500)}...`);
+        console.log(`[AI Orchestrator] Stage 2 raw response: ${modelResponse.substring(0, 500)}...`);
       }
 
       // Parse semantic tag response (micro-tag format)
-      const parsed = parseMicroTagResponse(sonnetResponse);
+      const parsed = parseMicroTagResponse(modelResponse);
 
       // Check for dispatch (off-ramp)
       if (parsed.dispatchTag) {
@@ -406,6 +465,7 @@ export async function orchestrateResponse(
         // This enables two-message flow: acknowledgment first, then detailed response
         if (parsed.response && parsed.response.trim()) {
           console.log(`[AI Orchestrator] Two-message dispatch flow: initial="${parsed.response.substring(0, 50)}..."`);
+          finalizeTurnMetrics(context.turnId);
           return {
             response: parsed.response, // First message (AI's acknowledgment)
             memoryIntent,
@@ -421,10 +481,13 @@ export async function orchestrateResponse(
             initialResponse: parsed.response, // Explicit initial response
             dispatchedResponse, // Second message (handler response)
             dispatchTag: parsed.dispatchTag,
+            modelUsed: routingDecision.model,
+            routingDecision,
           };
         }
 
         // No initial response - just return the dispatched response (backward compat)
+        finalizeTurnMetrics(context.turnId);
         return {
           response: dispatchedResponse,
           memoryIntent,
@@ -439,6 +502,8 @@ export async function orchestrateResponse(
           analysis: `DISPATCHED: ${parsed.dispatchTag} | Original thinking: ${parsed.thinking}`,
           dispatchedResponse,
           dispatchTag: parsed.dispatchTag,
+          modelUsed: routingDecision.model,
+          routingDecision,
         };
       }
 
@@ -469,14 +534,14 @@ export async function orchestrateResponse(
       usedMock = true;
     }
   } catch (error) {
-    console.error('[AI Orchestrator] Sonnet response failed:', error);
-    console.error('[AI Orchestrator] Sonnet response failed:', error);
+    console.error('[AI Orchestrator] Response generation failed:', error);
     response = getMockResponse(context);
     usedMock = true;
   }
 
   const totalDuration = Date.now() - startTime;
   console.log(`[AI Orchestrator] Total: ${totalDuration}ms | Decision: ${decisionTime}ms | Mock: ${usedMock}`);
+  finalizeTurnMetrics(context.turnId);
 
   // Log latency breakdown for monitoring
   if (totalDuration > 3000) {
@@ -495,6 +560,8 @@ export async function orchestrateResponse(
     invitationMessage,
     proposedEmpathyStatement,
     analysis,
+    modelUsed: routingDecision.model,
+    routingDecision,
   };
 }
 
@@ -522,7 +589,7 @@ function buildMessagesWithContext(
   if (formattedContext.trim()) {
     messages.push({
       role: 'user',
-      content: `[Context for this turn:\n${formattedContext}]\n\n${currentMessage}`,
+      content: `Context:\n${formattedContext}\n\nUser message: ${currentMessage}`,
     });
   } else {
     messages.push({

@@ -690,6 +690,8 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
  */
 export function formatRetrievedContext(context: RetrievedContext): string {
   const sections: string[] = [];
+  const truncate = (text: string, maxChars: number = 500) =>
+    text.length > maxChars ? `${text.slice(0, maxChars - 20)}…[truncated]` : text;
 
   // Add recency guidance at the top if we have retrieved content
   if (context.recencyGuidance && (
@@ -703,7 +705,7 @@ export function formatRetrievedContext(context: RetrievedContext): string {
   if (context.preSessionMessages.length > 0) {
     sections.push('\n[Earlier in this conversation]');
     for (const msg of context.preSessionMessages.slice(-CONTEXT_LIMITS.maxPreSessionMessages)) {
-      sections.push(`${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`);
+      sections.push(`${msg.role === 'user' ? 'User' : 'Assistant'}: ${truncate(msg.content)}`);
     }
   }
 
@@ -733,7 +735,7 @@ export function formatRetrievedContext(context: RetrievedContext): string {
           sections.push(`[${msg.partnerName}]`);
         }
       }
-      sections.push(`${msg.role === 'user' ? 'User' : 'AI'}: ${msg.content}`);
+      sections.push(`${msg.role === 'user' ? 'User' : 'AI'}: ${truncate(msg.content)}`);
     }
   }
 
@@ -745,7 +747,7 @@ export function formatRetrievedContext(context: RetrievedContext): string {
       if (timePhrase && msg.timeContext?.useRememberingLanguage) {
         sections.push(`[${timePhrase}]`);
       }
-      sections.push(`${msg.role === 'user' ? 'User' : 'AI'}: ${msg.content}`);
+      sections.push(`${msg.role === 'user' ? 'User' : 'AI'}: ${truncate(msg.content)}`);
     }
   }
 
@@ -793,4 +795,3 @@ export function buildMessagesWithFullContext(
 
   return messages;
 }
-

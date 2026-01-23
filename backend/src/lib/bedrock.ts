@@ -22,6 +22,7 @@ import {
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import { brainService, BrainActivityCallType } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
+import { recordLlmCall } from '../services/llm-telemetry';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -461,6 +462,14 @@ export async function getModelCompletion(
       cost
     });
 
+    recordLlmCall(options.turnId, {
+      model: modelId,
+      operation,
+      inputTokens,
+      outputTokens,
+      durationMs,
+    });
+
     if (!responseText) {
       return null;
     }
@@ -805,6 +814,14 @@ export async function* getSonnetStreamingResponse(
       tokenCountOutput: outputTokens,
       durationMs,
       cost,
+    });
+
+    recordLlmCall(options.turnId, {
+      model: BEDROCK_SONNET_MODEL_ID,
+      operation: options.operation,
+      inputTokens,
+      outputTokens,
+      durationMs,
     });
 
     // Log the accumulated response

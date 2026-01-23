@@ -45,6 +45,11 @@ export interface SummarizationResult {
   keyThemes: string[];
   emotionalJourney: string;
   unresolvedTopics: string[];
+  agreedFacts?: string[];
+  userNeeds?: string[];
+  partnerNeeds?: string[];
+  openQuestions?: string[];
+  agreements?: string[];
 }
 
 // ============================================================================
@@ -66,6 +71,9 @@ export const SUMMARIZATION_CONFIG = {
 
   /** How often to re-summarize (every N new messages after initial summary) */
   resummaryInterval: 20,
+
+  /** Summarize early if total tokens exceed this threshold */
+  tokenThreshold: 3500,
 };
 
 // ============================================================================
@@ -102,17 +110,21 @@ STAGE CONTEXT: ${stageContext}
 OUTPUT FORMAT (JSON):
 {
   "summary": "2-3 paragraph narrative summary capturing the emotional journey and key points discussed",
-  "keyThemes": ["theme1", "theme2", ...],
+  "keyThemes": ["theme1", "theme2"],
   "emotionalJourney": "One sentence describing how the user's emotional state evolved",
-  "unresolvedTopics": ["topic1", "topic2", ...]
+  "unresolvedTopics": ["topic1", "topic2"],
+  "agreedFacts": ["facts both parties agree on (if any)"],
+  "userNeeds": ["needs the user stated or implied"],
+  "partnerNeeds": ["needs the partner stated or implied"],
+  "openQuestions": ["open questions to revisit"],
+  "agreements": ["explicit agreements or experiments (if any)"]
 }
 
 GUIDELINES:
-- Capture the emotional tone, not just facts
-- Note any patterns or recurring concerns
-- Identify what seems unresolved or needs follow-up
-- Write the summary as if briefing a therapist who will continue the session
-- Keep the summary under 500 words`;
+- Capture emotional tone and key facts.
+- Keep language compact and concrete.
+- Do not invent consent state or partner data unless it was explicitly shared.
+- Keep the summary under 500 words.`;
 
   const userPrompt = `Summarize this conversation between ${userName} and Meet Without Fear:
 
@@ -155,21 +167,31 @@ function getStageContext(stage: number): string {
 /**
  * Check if a session needs summarization based on message count.
  */
-export function needsSummarization(messageCount: number, existingSummary?: string): boolean {
-  if (messageCount < SUMMARIZATION_CONFIG.minMessagesForSummary) {
+export function needsSummarization(
+  messageCount: number,
+  existingSummary?: string,
+  totalTokens?: number
+): boolean {
+  if (messageCount < SUMMARIZATION_CONFIG.minMessagesForSummary && !totalTokens) {
     return false;
   }
 
   // If no summary exists yet, we need one
   if (!existingSummary) {
-    return true;
+    return messageCount >= SUMMARIZATION_CONFIG.minMessagesForSummary
+      || (totalTokens ?? 0) >= SUMMARIZATION_CONFIG.tokenThreshold;
   }
 
   // Check if we've accumulated enough new messages since last summary
   // This would require tracking when the summary was made
   // For simplicity, we re-summarize every resummaryInterval messages beyond the threshold
-  const messagesOverThreshold = messageCount - SUMMARIZATION_CONFIG.minMessagesForSummary;
-  return messagesOverThreshold % SUMMARIZATION_CONFIG.resummaryInterval === 0;
+  const messagesOverThreshold = Math.max(
+    messageCount - SUMMARIZATION_CONFIG.minMessagesForSummary,
+    0
+  );
+  const shouldResummarizeByCount = messagesOverThreshold % SUMMARIZATION_CONFIG.resummaryInterval === 0;
+  const shouldResummarizeByTokens = (totalTokens ?? 0) >= SUMMARIZATION_CONFIG.tokenThreshold;
+  return shouldResummarizeByCount || shouldResummarizeByTokens;
 }
 
 /**
@@ -224,7 +246,11 @@ export async function updateSessionSummary(
 
     // Check if we actually need to summarize
     const existingSummary = vessel.conversationSummary as string | null;
-    if (!needsSummarization(messageCount, existingSummary ?? undefined)) {
+    const totalTokens = session.messages.reduce(
+      (sum, msg) => sum + estimateTokens(msg.content),
+      0
+    );
+    if (!needsSummarization(messageCount, existingSummary ?? undefined, totalTokens)) {
       return null;
     }
 
@@ -285,6 +311,11 @@ export async function updateSessionSummary(
           keyThemes: summaryResult.keyThemes,
           emotionalJourney: summaryResult.emotionalJourney,
           unresolvedTopics: summaryResult.unresolvedTopics,
+          agreedFacts: summaryResult.agreedFacts ?? [],
+          userNeeds: summaryResult.userNeeds ?? [],
+          partnerNeeds: summaryResult.partnerNeeds ?? [],
+          openQuestions: summaryResult.openQuestions ?? [],
+          agreements: summaryResult.agreements ?? [],
         }),
       },
     });
@@ -315,6 +346,11 @@ export async function getSessionSummary(
   keyThemes: string[];
   emotionalJourney: string;
   unresolvedTopics: string[];
+  agreedFacts: string[];
+  userNeeds: string[];
+  partnerNeeds: string[];
+  openQuestions: string[];
+  agreements: string[];
 } | null> {
   const vessel = await prisma.userVessel.findUnique({
     where: {
@@ -341,6 +377,11 @@ export async function getSessionSummary(
       keyThemes: parsed.keyThemes || [],
       emotionalJourney: parsed.emotionalJourney || '',
       unresolvedTopics: parsed.unresolvedTopics || [],
+      agreedFacts: parsed.agreedFacts || [],
+      userNeeds: parsed.userNeeds || [],
+      partnerNeeds: parsed.partnerNeeds || [],
+      openQuestions: parsed.openQuestions || [],
+      agreements: parsed.agreements || [],
     };
   } catch {
     return null;
@@ -356,26 +397,50 @@ export function formatSummaryForPrompt(
     keyThemes: string[];
     emotionalJourney: string;
     unresolvedTopics: string[];
+    agreedFacts?: string[];
+    userNeeds?: string[];
+    partnerNeeds?: string[];
+    openQuestions?: string[];
+    agreements?: string[];
   }
 ): string {
   const parts: string[] = [];
 
-  parts.push('[CONVERSATION SUMMARY - Earlier messages condensed]');
+  parts.push('[ROLLING SUMMARY]');
   parts.push(summaryData.summary.text);
 
-  if (summaryData.keyThemes.length > 0) {
-    parts.push(`\nKey themes: ${summaryData.keyThemes.join(', ')}`);
+  if (summaryData.keyThemes?.length) {
+    parts.push(`Key themes: ${summaryData.keyThemes.join(', ')}`);
   }
 
   if (summaryData.emotionalJourney) {
     parts.push(`Emotional journey: ${summaryData.emotionalJourney}`);
   }
 
-  if (summaryData.unresolvedTopics.length > 0) {
-    parts.push(`Topics that may need follow-up: ${summaryData.unresolvedTopics.join(', ')}`);
+  if (summaryData.agreedFacts?.length) {
+    parts.push(`Agreed facts: ${summaryData.agreedFacts.join('; ')}`);
   }
 
-  parts.push(`\n[Summary covers ${summaryData.summary.messageCount} earlier messages]`);
+  if (summaryData.userNeeds?.length || summaryData.partnerNeeds?.length) {
+    const userNeeds = summaryData.userNeeds?.length ? summaryData.userNeeds.join('; ') : 'Not yet named';
+    const partnerNeeds = summaryData.partnerNeeds?.length ? summaryData.partnerNeeds.join('; ') : 'Not yet named';
+    parts.push(`Needs: User → ${userNeeds}. Partner → ${partnerNeeds}.`);
+  }
+
+  if (summaryData.agreements?.length) {
+    parts.push(`Agreements/experiments: ${summaryData.agreements.join('; ')}`);
+  }
+
+  if (summaryData.openQuestions?.length || summaryData.unresolvedTopics?.length) {
+    const openQuestions = summaryData.openQuestions?.length
+      ? summaryData.openQuestions.join('; ')
+      : summaryData.unresolvedTopics?.join('; ') ?? '';
+    if (openQuestions) {
+      parts.push(`Open questions: ${openQuestions}`);
+    }
+  }
+
+  parts.push(`[Summary covers ${summaryData.summary.messageCount} earlier messages]`);
 
   return parts.join('\n');
 }

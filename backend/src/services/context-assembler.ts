@@ -54,6 +54,11 @@ export interface SessionSummary {
   emotionalJourney: string;
   currentFocus: string;
   userStatedGoals: string[];
+  agreedFacts?: string[];
+  userNeeds?: string[];
+  partnerNeeds?: string[];
+  openQuestions?: string[];
+  agreements?: string[];
 }
 
 /**
@@ -445,6 +450,11 @@ async function buildSessionSummary(
     // These are "unresolved topics" (follow-ups) rather than literal goals, but they serve
     // the same purpose for continuity and future prompt grounding.
     userStatedGoals: summaryData.unresolvedTopics ?? [],
+    agreedFacts: summaryData.agreedFacts ?? [],
+    userNeeds: summaryData.userNeeds ?? [],
+    partnerNeeds: summaryData.partnerNeeds ?? [],
+    openQuestions: summaryData.openQuestions ?? [],
+    agreements: summaryData.agreements ?? [],
   };
 }
 
@@ -632,127 +642,8 @@ async function loadNotableFacts(
   return categorizedFacts;
 }
 
-/**
- * Format context bundle for prompt injection.
- * Note: Recent conversation is NOT included here because it's already sent
- * as separate messages in the messages array. Including it here would duplicate
- * the conversation and waste tokens.
- */
-export function formatContextForPrompt(bundle: ContextBundle): string {
-  const parts: string[] = [];
-
-  // Global facts (consolidated across all sessions) - injected at TOP per fact-ledger architecture
-  // These provide cross-session continuity and user profile context
-  if (bundle.globalFacts && bundle.globalFacts.length > 0) {
-    parts.push('ABOUT THIS USER (from previous sessions):');
-    // Group global facts by category for cleaner formatting
-    const byCategory = new Map<string, string[]>();
-    for (const fact of bundle.globalFacts) {
-      const existing = byCategory.get(fact.category) || [];
-      existing.push(fact.fact);
-      byCategory.set(fact.category, existing);
-    }
-    for (const [category, facts] of byCategory) {
-      parts.push(`[${category}]`);
-      for (const fact of facts) {
-        parts.push(`- ${fact}`);
-      }
-    }
-    parts.push('');
-  }
-
-  // Emotional HUD (densified per prompt optimization spec)
-  // Format: [Intensity: X/10 (Stable|Changed) | Turn N]
-  {
-    const intensity = bundle.emotionalThread.currentIntensity;
-    const trend = bundle.emotionalThread.trend;
-    const turnCount = bundle.conversationContext.turnCount;
-
-    // Map trend to Stable/Changed
-    const trendLabel = trend === 'stable' ? 'Stable' : trend === 'unknown' ? 'Unknown' : 'Changed';
-
-    // Handle null intensity with "Unknown"
-    const intensityStr = intensity !== null ? `${intensity}/10` : 'Unknown';
-
-    parts.push(`[Intensity: ${intensityStr} (${trendLabel}) | Turn ${turnCount}]`);
-    parts.push('');
-  }
-
-  // Prior themes
-  if (bundle.priorThemes && bundle.priorThemes.themes.length > 0) {
-    parts.push(`FROM PRIOR SESSIONS (use for continuity only):`);
-    parts.push(bundle.priorThemes.themes.join(', '));
-    parts.push('');
-  }
-
-  // Session summary
-  if (bundle.sessionSummary) {
-    parts.push(`SESSION SUMMARY:`);
-    parts.push(`Key themes: ${bundle.sessionSummary.keyThemes.join(', ')}`);
-    parts.push(`Current focus: ${bundle.sessionSummary.currentFocus}`);
-    if (bundle.sessionSummary.emotionalJourney) {
-      parts.push(`Emotional journey: ${bundle.sessionSummary.emotionalJourney}`);
-    }
-    if (bundle.sessionSummary.userStatedGoals && bundle.sessionSummary.userStatedGoals.length > 0) {
-      parts.push(`Topics that may need follow-up: ${bundle.sessionSummary.userStatedGoals.join(', ')}`);
-    }
-    parts.push('');
-  }
-
-  // Inner Thoughts context (private reflections)
-  if (bundle.innerThoughtsContext && bundle.innerThoughtsContext.relevantReflections.length > 0) {
-    parts.push(`FROM ${bundle.userName.toUpperCase()}'S PRIVATE REFLECTIONS:`);
-    parts.push(`(These are from their Inner Thoughts - private processing they've done.`);
-    parts.push(`Reference gently, don't quote directly, and respect their privacy.)`);
-    for (const reflection of bundle.innerThoughtsContext.relevantReflections) {
-      const marker = reflection.isFromLinkedSession ? '[linked to this session]' : '';
-      parts.push(`- "${reflection.content}" ${marker}`);
-    }
-    parts.push('');
-  }
-
-  // User memories (things to always remember)
-  if (bundle.userMemories) {
-    const allMemories = [...bundle.userMemories.global, ...bundle.userMemories.session];
-    if (allMemories.length > 0) {
-      parts.push('USER MEMORIES (Always Honor These):');
-      for (const memory of allMemories) {
-        parts.push(`- [${memory.category}] ${memory.content}`);
-      }
-      parts.push('');
-    }
-  }
-
-  // Notable facts from the conversation (categorized)
-  // (emotional context, situational facts, people & relationships)
-  if (bundle.notableFacts && bundle.notableFacts.length > 0) {
-    console.log(`[Context Assembler] formatContextForPrompt: Including ${bundle.notableFacts.length} notable facts in prompt`);
-    parts.push('NOTED FACTS FROM THIS SESSION:');
-    // Group facts by category for cleaner formatting
-    const byCategory = new Map<string, string[]>();
-    for (const fact of bundle.notableFacts) {
-      const existing = byCategory.get(fact.category) || [];
-      existing.push(fact.fact);
-      byCategory.set(fact.category, existing);
-    }
-    for (const [category, facts] of byCategory) {
-      parts.push(`[${category}]`);
-      for (const fact of facts) {
-        parts.push(`- ${fact}`);
-      }
-    }
-    parts.push('');
-  } else {
-    console.log(`[Context Assembler] formatContextForPrompt: No notable facts to include (bundle.notableFacts=${bundle.notableFacts ? 'empty array' : 'undefined'})`);
-  }
-
-  const result = parts.join('\n');
-
-  // Token logging: Log character count as proxy for tokens (~4 chars per token)
-  // This helps measure optimization savings
-  const charCount = result.length;
-  const estimatedTokens = Math.ceil(charCount / 4);
-  console.log(`[Token Log] Context assembled: chars=${charCount}, estimatedTokens=${estimatedTokens}, turnCount=${bundle.conversationContext.turnCount}`);
-
-  return result;
-}
+export {
+  formatContextForPrompt,
+  formatContextForPromptLegacy,
+  type ContextFormattingOptions,
+} from './context-formatters';
