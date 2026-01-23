@@ -296,13 +296,29 @@ export function useStreamingMessage(
   const handleMetadata = useCallback(
     (sessionId: string, metadata: StreamMetadata) => {
       // Update session state cache for feel-heard check
+      // Must update nested path: progress.myProgress.gatesSatisfied.feelHeardCheckOffered
       if (metadata.offerFeelHeardCheck) {
         queryClient.setQueryData(
           sessionKeys.state(sessionId),
-          (old: Record<string, unknown> | undefined) => ({
-            ...old,
-            showFeelHeardCheck: true,
-          })
+          (old: Record<string, unknown> | undefined) => {
+            if (!old) return old;
+            const progress = old.progress as Record<string, unknown> | undefined;
+            const myProgress = progress?.myProgress as Record<string, unknown> | undefined;
+            const gates = (myProgress?.gatesSatisfied as Record<string, unknown>) ?? {};
+            return {
+              ...old,
+              progress: {
+                ...progress,
+                myProgress: {
+                  ...myProgress,
+                  gatesSatisfied: {
+                    ...gates,
+                    feelHeardCheckOffered: true,
+                  },
+                },
+              },
+            };
+          }
         );
       }
 
