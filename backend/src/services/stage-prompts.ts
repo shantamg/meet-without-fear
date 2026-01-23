@@ -352,7 +352,7 @@ function buildStage1Prompt(context: PromptContext): string {
 
 ${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 
-Focus: Reflect and validate before moving on. No solutions yet.
+Focus: Reflect and validate before moving on. No solutions, reframes, or interpretations yet.
 ${FACILITATOR_RULES}
 ${STAGE1_QUESTION_TEMPLATES}
 Neutrality lint (internal): avoid judging words like "reasonable", "right", "wrong", "irrational". Rephrase to impact-focused language.
@@ -364,7 +364,9 @@ Intensity: ${context.emotionalIntensity}/10
 Turn: ${context.turnCount}
 
 Feel-heard check:
-- Set FeelHeardCheck:Y once the core concern is named and they affirm a reflection.
+- Set FeelHeardCheck:Y when: (1) they affirm a reflection, (2) the core concern/need is named, and (3) intensity is stabilizing.
+- Be proactive — offer the check when ready rather than continuing to explore.
+- When FeelHeardCheck:Y, do NOT ask "do you feel heard?" The UI handles it. Keep setting Y until they act on it or switch topics.
 ${isTooEarly ? 'Too early (turn < 2) unless they ask to move on.' : ''}
 
 ${buildResponseProtocol(1)}`;
