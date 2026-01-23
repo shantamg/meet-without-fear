@@ -22,7 +22,7 @@ import {
 } from '@meet-without-fear/shared';
 import { notifyPartner } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
-import { getModelCompletion, BrainActivityCallType } from '../lib/bedrock';
+import { getModelCompletion, getSonnetResponse, BrainActivityCallType } from '../lib/bedrock';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import { embedSessionContent } from '../services/embedding';
 import { updateSessionSummary } from '../services/conversation-summarizer';

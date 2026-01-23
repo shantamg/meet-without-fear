@@ -44,9 +44,9 @@ describe('Stage Prompts Service', () => {
       const context = createContext();
       const prompt = buildStagePrompt(1, context);
 
-      expect(prompt).toContain('Process Guardian');
       expect(prompt).toContain('Witness');
       expect(prompt).toContain('Test User');
+      expect(prompt).toContain('feel fully heard');
     });
 
     it('returns Stage 2 prompt for stage 2', () => {
@@ -62,7 +62,7 @@ describe('Stage Prompts Service', () => {
       const prompt = buildStagePrompt(3, context);
 
       expect(prompt).toContain('Need Mapping');
-      expect(prompt).toContain('Crystallize needs first');
+      expect(prompt).toContain('underlying needs');
     });
 
     it('returns Stage 4 prompt for stage 4', () => {
@@ -93,8 +93,8 @@ describe('Stage Prompts Service', () => {
       const prompt = buildStagePrompt(1, context, options);
 
       // Should contain transition-specific content
-      expect(prompt).toContain('just crafted and sent an invitation');
-      expect(prompt).toContain('explore their feelings more deeply');
+      expect(prompt).toContain('just sent an invitation');
+      expect(prompt).toContain('invite them to share');
       expect(prompt).toContain('Partner');
       // Should NOT explicitly name stages
       expect(prompt).not.toContain('"Stage 1"');
@@ -110,7 +110,7 @@ describe('Stage Prompts Service', () => {
       const prompt = buildStagePrompt(2, context, options);
 
       expect(prompt).toContain('feeling heard');
-      expect(prompt).toContain('perspective');
+      expect(prompt).toContain('curiosity');
       expect(prompt).toContain('Partner');
     });
 
@@ -122,7 +122,7 @@ describe('Stage Prompts Service', () => {
       };
       const prompt = buildStagePrompt(3, context, options);
 
-      expect(prompt).toContain('perspective');
+      expect(prompt).toContain('empathy');
       expect(prompt).toContain('need');
       expect(prompt).toContain('Partner');
     });
@@ -179,7 +179,7 @@ describe('Stage Prompts Service', () => {
       // Transition prompts use micro-tag format with <thinking> tags
       expect(prompt).toContain('<thinking>');
       expect(prompt).toContain('</thinking>');
-      expect(prompt).toContain('RESPONSE FORMAT');
+      expect(prompt).toContain('OUTPUT FORMAT');
     });
 
     it('transition prompts do not explicitly name stages', () => {
@@ -217,8 +217,8 @@ describe('Stage Prompts Service', () => {
       const prompt = buildStagePrompt(1, context, options);
 
       // Should be regular witness prompt, not transition
-      expect(prompt).toContain('WITNESS MODE');
-      expect(prompt).toContain('INSIGHT MODE');
+      expect(prompt).toContain('Witness stage');
+      expect(prompt).toContain('Reflect and validate');
     });
 
     it('uses regular Stage 2 prompt when not transitioning', () => {
