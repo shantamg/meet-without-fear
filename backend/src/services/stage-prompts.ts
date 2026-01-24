@@ -425,7 +425,7 @@ Turn: ${context.turnCount}
 READY TO SHARE (ReadyShare:Y):
 ${tooEarlyForDraft ? `TOO EARLY (Turn < 4): Build empathy first through conversation.` : `Set ReadyShare:Y when they can articulate ${partnerName}'s feelings/fears without blame - genuine perspective-taking, not just agreement to try.`}
 
-When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> capturing what ${context.userName} imagines ${partnerName} is feeling.
+When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> capturing what ${context.userName} imagines ${partnerName} is feeling. Write it as ${context.userName} speaking directly TO ${partnerName} (e.g., "I imagine you might be feeling...").
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 }

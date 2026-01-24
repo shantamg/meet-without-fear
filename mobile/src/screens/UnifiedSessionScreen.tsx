@@ -35,10 +35,10 @@ import { CompactAgreementBar } from '../components/CompactAgreementBar';
 import { InvitationShareButton } from '../components/InvitationShareButton';
 import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
-import { ShareSuggestionDrawer } from '../components/ShareSuggestionDrawer';
-import { ShareTopicPanel } from '../components/ShareTopicPanel';
-import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
+// SegmentedControl removed - tabs are now integrated in SessionChatHeader
+import { PartnerChatTab } from '../components/PartnerChatTab';
+import { PartnerEventModal, PartnerEventType } from '../components/PartnerEventModal';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { useChatUIState } from '../hooks/useChatUIState';
@@ -47,6 +47,7 @@ import { useAuth, useUpdateMood } from '../hooks/useAuth';
 import { useRealtime, useUserSessionUpdates } from '../hooks/useRealtime';
 import { stageKeys, messageKeys } from '../hooks/queryKeys';
 import { useAIMessageHandler } from '../hooks/useMessages';
+import { useSharingStatus } from '../hooks/useSharingStatus';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { createStyles } from '../theme/styled';
 import { WaitingBanner } from '../components/WaitingBanner';
@@ -59,11 +60,6 @@ import {
   trackStageStarted,
   trackStageCompleted,
   trackCommonGroundFound,
-  trackShareTopicShown,
-  trackShareTopicAccepted,
-  trackShareTopicDeclined,
-  trackShareTopicDismissed,
-  trackShareDraftSent,
 } from '../services/analytics';
 
 // ============================================================================
@@ -73,7 +69,6 @@ import {
 interface UnifiedSessionScreenProps {
   sessionId: string;
   onNavigateBack?: () => void;
-  onNavigateToInnerThoughts?: (linkedSessionId?: string) => void;
   onStageComplete?: (stage: Stage) => void;
 }
 
@@ -107,13 +102,15 @@ function getBriefStatus(status?: SessionStatus, isInviter?: boolean): string | u
 export function UnifiedSessionScreen({
   sessionId,
   onNavigateBack,
-  onNavigateToInnerThoughts,
   onStageComplete,
 }: UnifiedSessionScreenProps) {
   const styles = useStyles();
   const { user, updateUser } = useAuth();
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
+
+  // Sharing status for header button
+  const sharingStatus = useSharingStatus(sessionId);
 
   // Real-time presence tracking
 
@@ -283,11 +280,55 @@ export function UnifiedSessionScreen({
 
       if (event === 'empathy.revealed') {
         // Empathy was revealed directly (OFFER_OPTIONAL with good alignment)
-        // The guesser needs to immediately refetch status to get the updated REVEALED status
-        // which triggers 'partner-considering-perspective' waiting status
+        // Both users receive this event, but only the SUBJECT (non-guesser) should see validation_needed modal
         console.log('[UnifiedSessionScreen] Empathy revealed, refetching empathy status cache');
         queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
         queryClient.refetchQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
+        // Show validation_needed modal only if we're the SUBJECT (not the guesser)
+        // The guesser's empathy was revealed to us, so we need to validate it
+        if (data.guesserUserId && data.guesserUserId !== user?.id) {
+          showPartnerEventModal('validation_needed');
+        } else {
+          console.log('[UnifiedSessionScreen] We are the guesser, skipping validation_needed modal');
+        }
+      }
+
+      if (event === 'empathy.status_updated') {
+        // Status changed - refetch cache
+        console.log('[UnifiedSessionScreen] Empathy status updated, refetching status');
+        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+        // Only show empathy_validated modal if our empathy was validated
+        // (status is VALIDATED and forUserId matches current user)
+        if (data.status === 'VALIDATED' && data.forUserId === user?.id) {
+          showPartnerEventModal('empathy_validated');
+        } else {
+          console.log('[UnifiedSessionScreen] Status update not for validation or not for us, skipping modal');
+        }
+      }
+
+      if (event === 'empathy.context_shared') {
+        // Partner shared context - refetch and notify
+        console.log('[UnifiedSessionScreen] Partner shared context, refetching status');
+        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+        // Only show modal to the intended recipient (the guesser who should see the context)
+        if (data.forUserId === user?.id) {
+          showPartnerEventModal('context_shared');
+        } else {
+          console.log('[UnifiedSessionScreen] Context shared not for us, skipping modal');
+        }
+      }
+
+      if (event === 'empathy.share_suggestion') {
+        // New share suggestion from reconciler - refetch and notify
+        // Only show modal if the event is for the current user (the subject who should share)
+        console.log('[UnifiedSessionScreen] Share suggestion received, refetching status');
+        queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
+        // Check if this event is for us - only show modal to the subject
+        if (data.forUserId === user?.id) {
+          showPartnerEventModal('share_suggestion');
+        } else {
+          console.log('[UnifiedSessionScreen] Share suggestion not for us, skipping modal');
+        }
       }
     },
     // Fire-and-forget pattern: AI responses arrive via Ably
@@ -396,26 +437,33 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   const [showEmpathyDrawer, setShowEmpathyDrawer] = useState(false);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
-  const [showShareSuggestionDrawer, setShowShareSuggestionDrawer] = useState(false);
-  const [showShareTopicDrawer, setShowShareTopicDrawer] = useState(false);
   const [showAccuracyFeedbackDrawer, setShowAccuracyFeedbackDrawer] = useState(false);
+
+  // -------------------------------------------------------------------------
+  // Tab State for AI/Partner Tabs
+  // -------------------------------------------------------------------------
+  const [activeTab, setActiveTab] = useState<'ai' | 'partner'>('ai');
+
+  // Partner event modal state - shows when new Partner tab events occur
+  const [partnerEventModalVisible, setPartnerEventModalVisible] = useState(false);
+  const [partnerEventType, setPartnerEventType] = useState<PartnerEventType | null>(null);
+  const [partnerEventPreview, setPartnerEventPreview] = useState<string | undefined>();
+
+  // Handler for showing partner event modal
+  const showPartnerEventModal = useCallback((eventType: PartnerEventType, preview?: string) => {
+    setPartnerEventType(eventType);
+    setPartnerEventPreview(preview);
+    setPartnerEventModalVisible(true);
+  }, []);
+
+  const handleViewPartnerTab = useCallback(() => {
+    setPartnerEventModalVisible(false);
+    setActiveTab('partner');
+  }, []);
 
   // Local latch to prevent panel flashing during server refetches
   // Once user clicks Share, this stays true even if server data temporarily reverts
   const [hasSharedEmpathyLocal, setHasSharedEmpathyLocal] = useState(false);
-
-  // Local latch for share suggestion - once user responds, hide panel immediately
-  // This prevents the "Help X understand" button from flashing during API call
-  const [hasRespondedToShareOfferLocal, setHasRespondedToShareOfferLocal] = useState(false);
-
-  // -------------------------------------------------------------------------
-  // Share Offer Modal State Machine (Phase 5 - Modal Action Prompts)
-  // -------------------------------------------------------------------------
-  // States: NO_OFFER → OFFERED → DISMISSED → OFFERED (after 5 messages or stage change)
-  // Track when user dismisses without accepting/declining, and message count since dismiss
-  const [shareOfferDismissed, setShareOfferDismissed] = useState(false);
-  const [messageCountAtDismiss, setMessageCountAtDismiss] = useState(0);
-  const MESSAGE_THRESHOLD_FOR_REOFFER = 5;
 
   // Local latch for invitation confirmation - once user confirms, hide panel immediately
   // This prevents the invitation panel from flashing when AI response triggers a cache refetch
@@ -463,7 +511,6 @@ export function UnifiedSessionScreen({
   const {
     shouldShowWaitingBanner,
     shouldHideInput: derivedShouldHideInput,
-    shouldShowInnerThoughts: derivedShouldShowInnerThoughts,
     isInOnboardingUnsigned,
     panels: {
       showInvitationPanel: shouldShowInvitationPanel,
@@ -513,7 +560,9 @@ export function UnifiedSessionScreen({
     hasLiveProposedEmpathyStatement: !!liveProposedEmpathyStatement,
     hasSharedEmpathyLocal,
     shareOfferData: shareOfferData ?? undefined,
-    hasRespondedToShareOfferLocal,
+    // Share suggestions are now handled via the Sharing Status screen (header button)
+    // Always true to hide the inline panel
+    hasRespondedToShareOfferLocal: true,
     partnerEmpathyValidated: partnerEmpathyData?.validated ?? false,
     allNeedsConfirmed,
     commonGroundCount: commonGround?.length ?? 0,
@@ -661,97 +710,13 @@ export function UnifiedSessionScreen({
     }).start();
   }, [readyToShowShareSuggestion, shareSuggestionAnim]);
 
-  // Track share topic shown analytics event
-  const hasTrackedShareTopicShown = useRef(false);
-  useEffect(() => {
-    if (
-      shouldShowShareSuggestion &&
-      shareOfferData?.hasSuggestion &&
-      shareOfferData?.suggestion?.suggestedShareFocus &&
-      !hasRespondedToShareOfferLocal &&
-      !hasTrackedShareTopicShown.current
-    ) {
-      const action = shareOfferData.suggestion.action === 'OFFER_SHARING' ? 'OFFER_SHARING' : 'OFFER_OPTIONAL';
-      trackShareTopicShown(sessionId, action);
-      hasTrackedShareTopicShown.current = true;
-    }
-    // Reset when share offer is responded to (for potential future offers in same session)
-    if (hasRespondedToShareOfferLocal) {
-      hasTrackedShareTopicShown.current = false;
-    }
-  }, [shouldShowShareSuggestion, shareOfferData, hasRespondedToShareOfferLocal, sessionId]);
+  // Share topic analytics tracking has moved to the Sharing Status screen
 
   // -------------------------------------------------------------------------
-  // Phase 5: Auto-show Share Suggestion Modal
+  // Phase 5: Share Suggestion Flow (Moved to dedicated Sharing Status screen)
   // -------------------------------------------------------------------------
-  // Automatically show the ShareSuggestionDrawer (modal) when:
-  // 1. There's a share offer available (hasSuggestion)
-  // 2. User hasn't responded yet (accept/decline)
-  // 3. User hasn't dismissed OR enough messages have passed since dismiss
-  // 4. Not currently in typewriter animation
-  const userMessageCount = useMemo(() =>
-    messages.filter((m) => m.role === 'USER').length,
-    [messages]
-  );
-
-  useEffect(() => {
-    // Check if we should show the modal
-    const hasOffer = shareOfferData?.hasSuggestion &&
-      shareOfferData?.suggestion?.suggestedContent &&
-      !hasRespondedToShareOfferLocal;
-
-    if (!hasOffer || isTypewriterAnimating) {
-      return;
-    }
-
-    // If not dismissed, auto-show the modal
-    if (!shareOfferDismissed) {
-      setShowShareSuggestionDrawer(true);
-      return;
-    }
-
-    // If dismissed, check if enough messages have passed for re-offer
-    const messagesSinceDismiss = userMessageCount - messageCountAtDismiss;
-    if (messagesSinceDismiss >= MESSAGE_THRESHOLD_FOR_REOFFER) {
-      // Reset dismiss state and show modal
-      setShareOfferDismissed(false);
-      setShowShareSuggestionDrawer(true);
-    }
-  }, [
-    shareOfferData?.hasSuggestion,
-    shareOfferData?.suggestion?.suggestedContent,
-    hasRespondedToShareOfferLocal,
-    isTypewriterAnimating,
-    shareOfferDismissed,
-    userMessageCount,
-    messageCountAtDismiss,
-    MESSAGE_THRESHOLD_FOR_REOFFER,
-  ]);
-
-  // Re-offer on stage transition
-  const previousStageRef = useRef<Stage | undefined>(currentStage);
-  useEffect(() => {
-    if (previousStageRef.current !== currentStage) {
-      // Stage changed - reset dismiss state so modal can show again
-      if (shareOfferDismissed && shareOfferData?.hasSuggestion && !hasRespondedToShareOfferLocal) {
-        setShareOfferDismissed(false);
-        setShowShareSuggestionDrawer(true);
-      }
-      previousStageRef.current = currentStage;
-    }
-  }, [currentStage, shareOfferDismissed, shareOfferData?.hasSuggestion, hasRespondedToShareOfferLocal]);
-
-  // Handler for modal dismiss (X button or backdrop tap)
-  const handleDismissShareModal = useCallback(() => {
-    setShowShareSuggestionDrawer(false);
-    setShareOfferDismissed(true);
-    setMessageCountAtDismiss(userMessageCount);
-    // Track analytics
-    if (sessionId && shareOfferData?.suggestion?.action) {
-      const action = shareOfferData.suggestion.action === 'OFFER_SHARING' ? 'OFFER_SHARING' : 'OFFER_OPTIONAL';
-      trackShareTopicDismissed(sessionId, action);
-    }
-  }, [userMessageCount, sessionId, shareOfferData?.suggestion?.action]);
+  // Share suggestions are now accessed via the header button and displayed
+  // in the Sharing Status screen at /session/[id]/sharing-status
 
   // Animate accuracy feedback panel - synced with mount condition
   useEffect(() => {
@@ -825,12 +790,6 @@ export function UnifiedSessionScreen({
     return currentStage;
   }, [currentStage, compactData?.mySigned]);
 
-  // -------------------------------------------------------------------------
-  // Inner Thoughts Button Visibility (derived from useChatUIState above)
-  // -------------------------------------------------------------------------
-  // The base visibility is derived from useChatUIState (derivedShouldShowInnerThoughts).
-  // We combine it with whether the navigation callback is available.
-  const shouldShowInnerThoughts = !!onNavigateToInnerThoughts && derivedShouldShowInnerThoughts;
 
   // -------------------------------------------------------------------------
   // Prepare Messages for Display
@@ -1353,8 +1312,6 @@ export function UnifiedSessionScreen({
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
           onBackPress={onNavigateBack}
-          onInnerThoughtsPress={onNavigateToInnerThoughts ? () => onNavigateToInnerThoughts() : undefined}
-          showInnerThoughtsButton={shouldShowInnerThoughts}
           testID="session-chat-header"
         />
         <StrategyRanking
@@ -1381,15 +1338,40 @@ export function UnifiedSessionScreen({
         briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
         hideOnlineStatus={isInvitationPhase}
         onBackPress={onNavigateBack}
-        onInnerThoughtsPress={onNavigateToInnerThoughts ? () => onNavigateToInnerThoughts() : undefined}
-        showInnerThoughtsButton={shouldShowInnerThoughts}
         onBriefStatusPress={
           session?.status === SessionStatus.INVITED && invitation?.isInviter
             ? () => setShowRefineDrawer(true)
             : undefined
         }
+        tabs={!isInOnboardingUnsigned ? {
+          activeTab,
+          onTabChange: setActiveTab,
+          showPartnerBadge: sharingStatus.pendingActionsCount > 0,
+        } : undefined}
         testID="session-chat-header"
       />
+      {/* Tab content - AI chat or Partner tab */}
+      {activeTab === 'partner' && !isInOnboardingUnsigned ? (
+        <PartnerChatTab
+          sessionId={sessionId}
+          partnerName={partnerName}
+          myEmpathyAttempt={sharingStatus.myAttempt}
+          partnerEmpathyAttempt={sharingStatus.partnerAttempt}
+          sharedContextReceived={sharingStatus.sharedContext}
+          shareSuggestion={sharingStatus.shareOffer}
+          partnerEmpathyNeedsValidation={sharingStatus.needsToValidatePartner}
+          onValidateAccurate={() => handleValidatePartnerEmpathy(true)}
+          onValidatePartial={() => handleValidatePartnerEmpathy(false, 'Some parts are accurate')}
+          onValidateInaccurate={() => handleValidatePartnerEmpathy(false, 'This does not capture my perspective')}
+          onShareSuggestionAccept={() => handleRespondToShareOffer('accept')}
+          onShareSuggestionDecline={() => handleRespondToShareOffer('decline')}
+          onShareSuggestionEdit={() => {
+            // For editing, switch to AI tab where user can refine
+            setActiveTab('ai');
+          }}
+          testID="partner-chat-tab"
+        />
+      ) : (
       <View style={styles.content}>
         <ChatInterface
           sessionId={sessionId}
@@ -1430,6 +1412,8 @@ export function UnifiedSessionScreen({
           // Uses captured value from before session was marked viewed, so new messages
           // arriving while viewing don't trigger a separator
           lastSeenChatItemId={lastSeenChatItemIdForSeparator}
+          // Navigate to Partner tab when "Context shared" indicator is tapped
+          onContextSharedPress={() => setActiveTab('partner')}
           // Show compact as custom empty state during onboarding when not signed
           customEmptyState={
             isInOnboardingUnsigned ? compactEmptyStateElement : undefined
@@ -1519,36 +1503,7 @@ export function UnifiedSessionScreen({
                       </View>
                     </Animated.View>
                   )
-                  // Show share topic panel when reconciler generated a suggestion (Phase 1 of two-phase flow)
-                  // Tapping this opens ShareTopicDrawer where user can accept or decline
-                  // Stable Mounting: Mount based on data (shouldShowShareSuggestion), animate visibility with typewriter guard
-                  : shouldShowShareSuggestion
-                    ? () => (
-                      <Animated.View
-                        style={{
-                          opacity: shareSuggestionAnim,
-                          maxHeight: shareSuggestionAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0, 100],
-                          }),
-                          transform: [{
-                            translateY: shareSuggestionAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [20, 0],
-                            }),
-                          }],
-                          overflow: 'hidden',
-                        }}
-                        pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
-                      >
-                        <ShareTopicPanel
-                          visible={true}
-                          onPress={() => setShowShareTopicDrawer(true)}
-                          action={shareOfferData?.suggestion?.action === 'OFFER_SHARING' ? 'OFFER_SHARING' : 'OFFER_OPTIONAL'}
-                          partnerName={shareOfferData?.suggestion?.guesserName || 'your partner'}
-                        />
-                      </Animated.View>
-                    )
+                  // Share topic panel has been moved to the Sharing Status screen (header button)
                   // Show accuracy feedback trigger when partner's empathy is ready for validation
                   // Stable Mounting: Mount based on data (shouldShowAccuracyFeedback), animate visibility with typewriter guard
                   : shouldShowAccuracyFeedback
@@ -1660,8 +1615,6 @@ export function UnifiedSessionScreen({
                           status={waitingStatus}
                           partnerName={partnerName || 'your partner'}
                           animationValue={waitingBannerAnim}
-                          onKeepChatting={onNavigateToInnerThoughts ? () => onNavigateToInnerThoughts(sessionId) : undefined}
-                          onInnerThoughts={onNavigateToInnerThoughts ? () => onNavigateToInnerThoughts(sessionId) : undefined}
                           testID="waiting-banner"
                         />
                       )
@@ -1695,6 +1648,18 @@ export function UnifiedSessionScreen({
           />
         )}
       </View>
+      )}
+
+      {/* Partner Event Modal - notifies when new content arrives on Partner tab */}
+      <PartnerEventModal
+        visible={partnerEventModalVisible}
+        eventType={partnerEventType}
+        partnerName={partnerName}
+        contentPreview={partnerEventPreview}
+        onViewPartnerTab={handleViewPartnerTab}
+        onDismiss={() => setPartnerEventModalVisible(false)}
+        testID="partner-event-modal"
+      />
 
       {/* Overlays */}
       {renderOverlay()}
@@ -1826,69 +1791,7 @@ export function UnifiedSessionScreen({
         />
       )}
 
-      {/* Share Topic Drawer - Phase 1 of two-phase share flow (shows topic, asks accept/decline) */}
-      {shareOfferData?.hasSuggestion && shareOfferData.suggestion && shareOfferData.suggestion.suggestedShareFocus && !hasRespondedToShareOfferLocal && (
-        <ShareTopicDrawer
-          visible={showShareTopicDrawer}
-          guesserName={shareOfferData.suggestion.guesserName}
-          suggestedShareFocus={shareOfferData.suggestion.suggestedShareFocus}
-          action={shareOfferData.suggestion.action === 'OFFER_SHARING' ? 'OFFER_SHARING' : 'OFFER_OPTIONAL'}
-          onAccept={() => {
-            // Track analytics - user accepted the topic suggestion
-            const action = shareOfferData.suggestion?.action === 'OFFER_SHARING' ? 'OFFER_SHARING' : 'OFFER_OPTIONAL';
-            trackShareTopicAccepted(sessionId, action);
-
-            // Close topic drawer and open suggestion drawer with existing suggestedContent
-            // No need to regenerate - suggestedContent was already created by the reconciler
-            setShowShareTopicDrawer(false);
-            setShowShareSuggestionDrawer(true);
-          }}
-          onDecline={() => {
-            // Track analytics - user declined the topic suggestion
-            const action = shareOfferData.suggestion?.action === 'OFFER_SHARING' ? 'OFFER_SHARING' : 'OFFER_OPTIONAL';
-            trackShareTopicDeclined(sessionId, action);
-
-            // User declined - mark as responded and proceed
-            setHasRespondedToShareOfferLocal(true);
-            handleRespondToShareOffer('decline');
-            setShowShareTopicDrawer(false);
-          }}
-          onClose={() => setShowShareTopicDrawer(false)}
-        />
-      )}
-
-      {/* Share Suggestion Drawer - Phase 2 of two-phase share flow (shows draft, allows share/edit/decline) */}
-      {shareOfferData?.hasSuggestion && shareOfferData.suggestion && !hasRespondedToShareOfferLocal && (
-        <ShareSuggestionDrawer
-          visible={showShareSuggestionDrawer}
-          suggestedContent={shareOfferData.suggestion.suggestedContent}
-          partnerName={shareOfferData.suggestion.guesserName}
-          onShare={() => {
-            // Track analytics - user shared the draft
-            const action = shareOfferData.suggestion?.action === 'OFFER_SHARING' ? 'OFFER_SHARING' : 'OFFER_OPTIONAL';
-            // was_edited is false here because sharing directly from drawer means they accepted as-is
-            // (if they edited via refinement, that goes through chat and a new draft is generated)
-            trackShareDraftSent(sessionId, action, false);
-
-            // Set local latch immediately to hide panel during API call
-            setHasRespondedToShareOfferLocal(true);
-            handleRespondToShareOffer('accept', shareOfferData.suggestion?.suggestedContent);
-            setShowShareSuggestionDrawer(false);
-          }}
-          onDecline={() => {
-            // Set local latch immediately to hide panel during API call
-            setHasRespondedToShareOfferLocal(true);
-            handleRespondToShareOffer('decline');
-            setShowShareSuggestionDrawer(false);
-          }}
-          onSendRefinement={(message) => {
-            // Send as a chat message to refine the suggestion
-            sendMessage(message);
-            setShowShareSuggestionDrawer(false);
-          }}
-          onClose={handleDismissShareModal}
-        />
-      )}
+      {/* Share functionality is now shown in the Partner tab */}
 
       {/* Accuracy Feedback Drawer - for validating partner's empathy statement */}
       {partnerEmpathyData?.attempt?.content && (

@@ -734,7 +734,7 @@ ${witnessingContent.userMessages}
 ---
 
 Generate a brief, specific suggestion for what ${subject.name} could share to help ${guesser.name} understand better. The suggestion should:
-1. Be 1-3 sentences that ${subject.name} might actually say
+1. Be 1-3 sentences that ${subject.name} would say directly TO ${guesser.name}
 2. Draw from what they actually shared (don't invent new content)
 3. Address the most important gap in understanding
 4. Feel natural and not forced
@@ -1484,7 +1484,7 @@ Here is what ${userName} actually shared about their experience:
 ${witnessingContent.userMessages}
 ---
 
-Your job is to CRAFT a feelings-focused message that ${userName} could share. This is NOT about extracting quotes - you must transform their raw expression into something that:
+Your job is to CRAFT a feelings-focused message that ${userName} would say directly TO ${partnerName}. This is NOT about extracting quotes - you must transform their raw expression into something that:
 
 1. FOCUSES ON FEELINGS AND NEEDS
    - Transform complaints into expressions of underlying feelings
@@ -2047,8 +2047,10 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
 
   for (const attempt of attempts) {
     // Notify the guesser that their empathy was revealed to their partner
+    // Include guesserUserId so mobile can filter - only the SUBJECT (non-guesser) should see validation_needed modal
     await notifyPartner(sessionId, attempt.sourceUserId!, 'empathy.revealed', {
       direction: 'outgoing',
+      guesserUserId: attempt.sourceUserId,
     });
   }
 

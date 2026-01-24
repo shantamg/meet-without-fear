@@ -1103,6 +1103,17 @@ export async function validateEmpathy(
         validated,
         completedBy: user.id,
       });
+
+      // If validated, also send empathy.status_updated with validation info
+      // so the partner (whose empathy was validated) can see the modal
+      if (validated) {
+        await notifyPartner(sessionId, partnerId, 'empathy.status_updated', {
+          status: 'VALIDATED',
+          // Include forUserId so mobile can filter - only the guesser whose empathy was validated should see modal
+          forUserId: partnerId,
+          validatedBy: user.id,
+        });
+      }
     }
 
     // Determine whether partner has validated my empathy attempt

@@ -140,6 +140,8 @@ interface ChatInterfaceProps {
   partnerName?: string;
   /** ID of the last chat item the user has seen - used to show "New messages" separator */
   lastSeenChatItemId?: string | null;
+  /** Callback when "Context shared" indicator is tapped - navigates to Sharing Status */
+  onContextSharedPress?: () => void;
 }
 
 // ============================================================================
@@ -177,6 +179,7 @@ export function ChatInterface({
   skipInitialHistory = false,
   partnerName,
   lastSeenChatItemId,
+  onContextSharedPress,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -467,7 +470,15 @@ export function ChatInterface({
 
     // 2. Render Indicators
     if (isIndicator(item)) {
-      return <ChatIndicator type={item.indicatorType} timestamp={item.timestamp} />;
+      // Context-shared indicators are tappable to navigate to Sharing Status
+      const onPress = item.indicatorType === 'context-shared' ? onContextSharedPress : undefined;
+      return (
+        <ChatIndicator
+          type={item.indicatorType}
+          timestamp={item.timestamp}
+          onPress={onPress}
+        />
+      );
     }
 
     // 4. Render Messages

@@ -1,0 +1,217 @@
+/**
+ * useSharingStatus Hook
+ *
+ * Composite hook that composes existing hooks to provide all sharing-related data
+ * for the Sharing Status screen and header badge.
+ */
+
+import { useMemo } from 'react';
+import { useEmpathyStatus, useShareOffer, usePartnerEmpathy } from './useStages';
+import {
+  EmpathyExchangeStatusResponse,
+  GetShareSuggestionResponse,
+  EmpathyStatus,
+  EmpathyAttemptDTO,
+} from '@meet-without-fear/shared';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface SharedContextHistoryItem {
+  id: string;
+  type: 'empathy_attempt' | 'shared_context' | 'validation';
+  direction: 'sent' | 'received';
+  content: string;
+  timestamp: string;
+  /** Additional metadata */
+  metadata?: {
+    status?: EmpathyStatus;
+    validated?: boolean;
+  };
+}
+
+export interface SharingStatusData {
+  /** My empathy attempt toward partner */
+  myAttempt: EmpathyAttemptDTO | null;
+  /** Partner's empathy attempt toward me */
+  partnerAttempt: EmpathyAttemptDTO | null;
+  /** Whether reconciler is currently analyzing */
+  isAnalyzing: boolean;
+  /** Pending share suggestion from reconciler */
+  shareOffer: GetShareSuggestionResponse['suggestion'];
+  /** Whether there is a pending share suggestion */
+  hasSuggestion: boolean;
+  /** Count of all pending actions (for badge) */
+  pendingActionsCount: number;
+  /** Chronological list of shared items */
+  sharedContextHistory: SharedContextHistoryItem[];
+  /** Whether to show the sharing button in header */
+  shouldShowButton: boolean;
+  /** Whether partner has completed Stage 1 */
+  partnerCompletedStage1: boolean;
+  /** Partner's validation status of my attempt (if applicable) */
+  partnerValidated: boolean;
+  /** My validation status of partner's attempt */
+  myValidation: {
+    validated: boolean;
+    validatedAt: string | null;
+  };
+  /** Shared context from subject (if I'm the guesser) */
+  sharedContext: EmpathyExchangeStatusResponse['sharedContext'];
+  /** Whether there is new shared context to view */
+  hasNewSharedContext: boolean;
+  /** Whether I need to validate partner's empathy */
+  needsToValidatePartner: boolean;
+  /** Loading states */
+  isLoading: boolean;
+  isError: boolean;
+}
+
+// ============================================================================
+// Hook
+// ============================================================================
+
+export function useSharingStatus(sessionId: string | undefined): SharingStatusData {
+  // Compose existing hooks
+  const empathyStatusQuery = useEmpathyStatus(sessionId);
+  const shareOfferQuery = useShareOffer(sessionId);
+  const partnerEmpathyQuery = usePartnerEmpathy(sessionId);
+
+  const empathyStatus = empathyStatusQuery.data;
+  const shareOfferData = shareOfferQuery.data;
+  const partnerEmpathyData = partnerEmpathyQuery.data;
+
+  // Build shared context history
+  const sharedContextHistory = useMemo<SharedContextHistoryItem[]>(() => {
+    const items: SharedContextHistoryItem[] = [];
+
+    // Add my empathy attempt - show all attempts, not just revealed ones
+    if (empathyStatus?.myAttempt) {
+      items.push({
+        id: empathyStatus.myAttempt.id,
+        type: 'empathy_attempt',
+        direction: 'sent',
+        content: empathyStatus.myAttempt.content,
+        timestamp: empathyStatus.myAttempt.sharedAt,
+        metadata: {
+          status: empathyStatus.myAttempt.status,
+        },
+      });
+    }
+
+    // Add partner's empathy attempt - show if revealed or validated
+    if (
+      empathyStatus?.partnerAttempt &&
+      (empathyStatus.partnerAttempt.status === 'REVEALED' ||
+        empathyStatus.partnerAttempt.status === 'VALIDATED')
+    ) {
+      items.push({
+        id: empathyStatus.partnerAttempt.id,
+        type: 'empathy_attempt',
+        direction: 'received',
+        content: empathyStatus.partnerAttempt.content,
+        timestamp: empathyStatus.partnerAttempt.revealedAt || empathyStatus.partnerAttempt.sharedAt,
+        metadata: {
+          status: empathyStatus.partnerAttempt.status,
+        },
+      });
+    }
+
+    // Add shared context if received (I'm the guesser)
+    if (empathyStatus?.sharedContext) {
+      items.push({
+        id: `shared-context-${empathyStatus.sharedContext.sharedAt}`,
+        type: 'shared_context',
+        direction: 'received',
+        content: empathyStatus.sharedContext.content,
+        timestamp: empathyStatus.sharedContext.sharedAt,
+      });
+    }
+
+    // Sort by timestamp (newest first for display)
+    return items.sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }, [empathyStatus, shareOfferData]);
+
+  // Calculate pending actions count
+  const pendingActionsCount = useMemo(() => {
+    let count = 0;
+
+    // Share suggestion pending
+    if (shareOfferData?.hasSuggestion) {
+      count += 1;
+    }
+
+    // Partner's empathy needs validation (revealed but not validated)
+    if (
+      partnerEmpathyData?.attempt &&
+      partnerEmpathyData.partnerStatus === 'REVEALED' &&
+      !partnerEmpathyData.validated
+    ) {
+      count += 1;
+    }
+
+    // New shared context to view
+    if (empathyStatus?.hasNewSharedContext) {
+      count += 1;
+    }
+
+    return count;
+  }, [shareOfferData, partnerEmpathyData, empathyStatus]);
+
+  // Determine if button should show
+  const shouldShowButton = useMemo(() => {
+    // Show if any pending actions exist
+    if (pendingActionsCount > 0) return true;
+
+    // Show if there's any empathy activity to view
+    if (empathyStatus?.myAttempt || empathyStatus?.partnerAttempt) return true;
+
+    // Show if reconciler is analyzing
+    if (empathyStatus?.analyzing) return true;
+
+    return false;
+  }, [pendingActionsCount, empathyStatus]);
+
+  // Check if user needs to validate partner's empathy
+  const needsToValidatePartner = useMemo(() => {
+    return (
+      partnerEmpathyData?.attempt !== null &&
+      partnerEmpathyData?.partnerStatus === 'REVEALED' &&
+      !partnerEmpathyData?.validated
+    );
+  }, [partnerEmpathyData]);
+
+  return {
+    myAttempt: empathyStatus?.myAttempt ?? null,
+    partnerAttempt: empathyStatus?.partnerAttempt ?? null,
+    isAnalyzing: empathyStatus?.analyzing ?? false,
+    shareOffer: shareOfferData?.suggestion ?? null,
+    hasSuggestion: shareOfferData?.hasSuggestion ?? false,
+    pendingActionsCount,
+    sharedContextHistory,
+    shouldShowButton,
+    partnerCompletedStage1: empathyStatus?.partnerCompletedStage1 ?? false,
+    /** Whether my empathy attempt was validated by partner (derived from status) */
+    partnerValidated: empathyStatus?.myAttempt?.status === 'VALIDATED',
+    myValidation: {
+      validated: partnerEmpathyData?.validated ?? false,
+      validatedAt: partnerEmpathyData?.validatedAt ?? null,
+    },
+    sharedContext: empathyStatus?.sharedContext ?? null,
+    hasNewSharedContext: empathyStatus?.hasNewSharedContext ?? false,
+    needsToValidatePartner,
+    isLoading:
+      empathyStatusQuery.isLoading ||
+      shareOfferQuery.isLoading ||
+      partnerEmpathyQuery.isLoading,
+    isError:
+      empathyStatusQuery.isError ||
+      shareOfferQuery.isError ||
+      partnerEmpathyQuery.isError,
+  };
+}
+
+export default useSharingStatus;

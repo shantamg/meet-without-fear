@@ -474,6 +474,8 @@ Continue naturally from here. ${userName} just confirmed feeling heard - acknowl
               if (result.empathyStatus === 'AWAITING_SHARING' && result.shareOffer) {
                 console.log(`[confirmFeelHeard] Significant gaps found - notifying subject ${user.id} of share suggestion`);
                 await notifyPartner(sessionId, user.id, 'empathy.share_suggestion', {
+                  // Include forUserId so mobile can filter - only the subject should see the modal
+                  forUserId: user.id,
                   guesserName: session.relationship.members.find(m => m.userId === partnerId)
                     ? 'your partner'
                     : 'your partner',

@@ -2,7 +2,7 @@
  * SessionChatHeader Component
  *
  * A minimal, chat-centric header for session screens.
- * Layout: [Back Arrow] - [Centered Partner Name + Status] - [Inner Thoughts Button + Brief Status]
+ * Layout: [Back Arrow] - [Centered Partner Name + Status] - [Sharing Button + Brief Status]
  * No spinners - just clean, simple status display.
  * Designed to feel like a messaging app rather than a dashboard.
  */
@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { ArrowLeft, Layers } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -38,14 +38,19 @@ export interface SessionChatHeaderProps {
   hideOnlineStatus?: boolean;
   /** Callback when back button is pressed */
   onBackPress?: () => void;
-  /** Callback when Inner Thoughts button is pressed */
-  onInnerThoughtsPress?: () => void;
-  /** Show the Inner Thoughts button */
-  showInnerThoughtsButton?: boolean;
   /** Optional callback when header center is pressed (e.g., to show session info) */
   onPress?: () => void;
   /** Optional callback when brief status is pressed (e.g., to show invitation options) */
   onBriefStatusPress?: () => void;
+  /** Tab configuration - when provided, shows tabs in header */
+  tabs?: {
+    /** Currently selected tab key */
+    activeTab: 'ai' | 'partner';
+    /** Callback when tab is selected */
+    onTabChange: (tab: 'ai' | 'partner') => void;
+    /** Whether to show badge on partner tab */
+    showPartnerBadge?: boolean;
+  };
   /** Custom container style */
   style?: ViewStyle;
   /** Test ID for testing */
@@ -91,10 +96,9 @@ export function SessionChatHeader({
   briefStatus,
   hideOnlineStatus = false,
   onBackPress,
-  onInnerThoughtsPress,
-  showInnerThoughtsButton = false,
   onPress,
   onBriefStatusPress,
+  tabs,
   style,
   testID = 'session-chat-header',
 }: SessionChatHeaderProps) {
@@ -115,9 +119,52 @@ export function SessionChatHeader({
   };
 
   const displayName = partnerName || 'Meet Without Fear';
+  const shortPartnerName = partnerName && partnerName.length > 10
+    ? partnerName.substring(0, 10) + '...'
+    : partnerName;
 
-  // Center content (partner name + status)
-  const centerContent = (
+  // Center content - either tabs or partner name + status
+  const centerContent = tabs ? (
+    // Tabbed layout: AI | Partner Name
+    <View style={styles.tabContainer}>
+      <TouchableOpacity
+        style={[
+          styles.tab,
+          tabs.activeTab === 'ai' && styles.tabActive,
+        ]}
+        onPress={() => tabs.onTabChange('ai')}
+        testID={`${testID}-tab-ai`}
+      >
+        <Text style={[
+          styles.tabText,
+          tabs.activeTab === 'ai' && styles.tabTextActive,
+        ]}>
+          AI
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.tab,
+          tabs.activeTab === 'partner' && styles.tabActive,
+        ]}
+        onPress={() => tabs.onTabChange('partner')}
+        testID={`${testID}-tab-partner`}
+      >
+        <View style={styles.tabContent}>
+          <Text style={[
+            styles.tabText,
+            tabs.activeTab === 'partner' && styles.tabTextActive,
+          ]}>
+            {shortPartnerName || 'Partner'}
+          </Text>
+          {tabs.showPartnerBadge && (
+            <View style={styles.tabBadge} testID={`${testID}-partner-badge`} />
+          )}
+        </View>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    // Default layout: partner name + status
     <View style={styles.centerSection}>
       <Text
         style={styles.partnerName}
@@ -173,19 +220,8 @@ export function SessionChatHeader({
         centerContent
       )}
 
-      {/* Right section: Inner Thoughts button + Brief status */}
+      {/* Right section: Brief status */}
       <View style={styles.rightSection}>
-        {showInnerThoughtsButton && onInnerThoughtsPress && (
-          <TouchableOpacity
-            style={styles.innerThoughtsButton}
-            onPress={onInnerThoughtsPress}
-            accessibilityRole="button"
-            accessibilityLabel="Open Inner Thoughts"
-            testID={`${testID}-inner-thoughts-button`}
-          >
-            <Layers color={colors.brandBlue} size={20} />
-          </TouchableOpacity>
-        )}
         {briefStatus && (
           onBriefStatusPress ? (
             <TouchableOpacity
@@ -214,7 +250,7 @@ export function SessionChatHeader({
           )
         )}
         {/* Spacer if no right content to balance the layout */}
-        {!showInnerThoughtsButton && !briefStatus && (
+        {!briefStatus && (
           <View style={styles.rightSpacer} />
         )}
       </View>
@@ -268,9 +304,6 @@ const useStyles = () =>
     rightSpacer: {
       width: 32,
     },
-    innerThoughtsButton: {
-      padding: t.spacing.xs,
-    },
     partnerName: {
       fontSize: t.typography.fontSize.lg,
       fontWeight: '600',
@@ -315,6 +348,43 @@ const useStyles = () =>
       fontSize: 14,
       color: t.colors.textMuted,
       fontWeight: '600',
+    },
+    // Tab styles for inline header tabs
+    tabContainer: {
+      flexDirection: 'row',
+      backgroundColor: t.colors.bgTertiary,
+      borderRadius: 8,
+      padding: 2,
+    },
+    tab: {
+      paddingVertical: 6,
+      paddingHorizontal: 16,
+      borderRadius: 6,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    tabActive: {
+      backgroundColor: t.colors.bgPrimary,
+    },
+    tabText: {
+      fontSize: t.typography.fontSize.sm,
+      fontWeight: '500',
+      color: t.colors.textSecondary,
+    },
+    tabTextActive: {
+      color: t.colors.textPrimary,
+      fontWeight: '600',
+    },
+    tabContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    tabBadge: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: t.colors.accent,
     },
   }));
 

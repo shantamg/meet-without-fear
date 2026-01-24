@@ -23,6 +23,22 @@ export default function SessionLayout() {
           title: 'Session',
         }}
       />
+      <Stack.Screen
+        name="sharing-status"
+        options={{
+          title: 'Sharing Status',
+          headerShown: true,
+          headerStyle: {
+            backgroundColor: colors.bgSecondary,
+          },
+          headerTintColor: colors.textPrimary,
+          headerTitleStyle: {
+            fontWeight: '600',
+          },
+          headerBackTitle: 'Chat',
+          presentation: 'card',
+        }}
+      />
     </Stack>
   );
 }

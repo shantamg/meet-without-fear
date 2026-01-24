@@ -19,6 +19,8 @@ export const EmpathyStatus = {
   REFINING: 'REFINING',
   /** Significant gaps detected, guesser should refine (legacy - use AWAITING_SHARING) */
   NEEDS_WORK: 'NEEDS_WORK',
+  /** Reconciler complete, waiting for partner to also complete Stage 2 before revealing */
+  READY: 'READY',
   /** Recipient can now see statement */
   REVEALED: 'REVEALED',
   /** Recipient has validated accuracy */

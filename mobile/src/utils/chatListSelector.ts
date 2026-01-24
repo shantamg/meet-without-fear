@@ -170,6 +170,9 @@ export function deriveIndicators(data: SessionIndicatorData): IndicatorItem[] {
  * The indicators are inserted at their appropriate positions based on timestamps,
  * so they appear in chronological order with the messages.
  *
+ * SHARED_CONTEXT messages are converted to collapsed 'context-shared' indicators
+ * that link to the Sharing Status screen.
+ *
  * @param messages - Array of chat messages from React Query cache
  * @param sessionData - Session data for deriving indicators
  * @returns Combined array of messages and indicators, sorted by timestamp (newest first)
@@ -181,8 +184,30 @@ export function interleaveIndicators(
   // Derive indicators from session data
   const indicators = deriveIndicators(sessionData);
 
-  // Combine messages and indicators
-  const combined: (CacheMessage | IndicatorItem)[] = [...messages, ...indicators];
+  // Filter out SHARED_CONTEXT messages and convert them to collapsed indicators
+  const filteredMessages: CacheMessage[] = [];
+  const sharedContextIndicators: IndicatorItem[] = [];
+
+  for (const message of messages) {
+    if (message.role === MessageRole.SHARED_CONTEXT) {
+      // Convert SHARED_CONTEXT to collapsed indicator
+      sharedContextIndicators.push({
+        type: 'indicator',
+        indicatorType: 'context-shared',
+        id: `context-shared-${message.id}`,
+        timestamp: message.timestamp,
+      });
+    } else {
+      filteredMessages.push(message);
+    }
+  }
+
+  // Combine filtered messages, derived indicators, and shared context indicators
+  const combined: (CacheMessage | IndicatorItem)[] = [
+    ...filteredMessages,
+    ...indicators,
+    ...sharedContextIndicators,
+  ];
 
   // Sort by timestamp (newest first for inverted FlatList)
   combined.sort((a, b) => {

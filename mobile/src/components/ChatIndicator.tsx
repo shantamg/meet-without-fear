@@ -5,26 +5,35 @@
  * Used for things like "Invitation Sent" markers.
  */
 
-import { View, Text } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { createStyles } from '../theme/styled';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type ChatIndicatorType = 'invitation-sent' | 'invitation-accepted' | 'stage-transition' | 'session-start' | 'feel-heard' | 'compact-signed';
+export type ChatIndicatorType =
+  | 'invitation-sent'
+  | 'invitation-accepted'
+  | 'stage-transition'
+  | 'session-start'
+  | 'feel-heard'
+  | 'compact-signed'
+  | 'context-shared';
 
 interface ChatIndicatorProps {
   type: ChatIndicatorType;
   timestamp?: string;
   testID?: string;
+  /** If provided, makes the indicator tappable */
+  onPress?: () => void;
 }
 
 // ============================================================================
 // Component
 // ============================================================================
 
-export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
+export function ChatIndicator({ type, timestamp, testID, onPress }: ChatIndicatorProps) {
   const styles = useStyles();
 
   const getIndicatorText = (): string => {
@@ -41,6 +50,8 @@ export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
         return 'Felt Heard';
       case 'compact-signed':
         return 'Compact Signed';
+      case 'context-shared':
+        return 'Context shared ›';
       default:
         return '';
     }
@@ -55,6 +66,8 @@ export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
         return styles.feelHeardLine;
       case 'compact-signed':
         return styles.compactSignedLine;
+      case 'context-shared':
+        return styles.contextSharedLine;
       default:
         return styles.defaultLine;
     }
@@ -69,18 +82,37 @@ export function ChatIndicator({ type, timestamp, testID }: ChatIndicatorProps) {
         return styles.feelHeardText;
       case 'compact-signed':
         return styles.compactSignedText;
+      case 'context-shared':
+        return styles.contextSharedText;
       default:
         return styles.defaultText;
     }
   };
 
+  const content = (
+    <View style={styles.lineContainer}>
+      <View style={[styles.line, getLineStyle()]} />
+      <Text style={[styles.text, getTextStyle()]}>{getIndicatorText()}</Text>
+      <View style={[styles.line, getLineStyle()]} />
+    </View>
+  );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity
+        style={styles.container}
+        testID={testID || `chat-indicator-${type}`}
+        onPress={onPress}
+        activeOpacity={0.7}
+      >
+        {content}
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <View style={styles.container} testID={testID || `chat-indicator-${type}`}>
-      <View style={styles.lineContainer}>
-        <View style={[styles.line, getLineStyle()]} />
-        <Text style={[styles.text, getTextStyle()]}>{getIndicatorText()}</Text>
-        <View style={[styles.line, getLineStyle()]} />
-      </View>
+      {content}
     </View>
   );
 }
@@ -133,6 +165,13 @@ const useStyles = () =>
     },
     compactSignedText: {
       color: 'rgba(59, 130, 246, 0.9)',
+    },
+    // Context shared: purple/accent tint for shared content
+    contextSharedLine: {
+      backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    },
+    contextSharedText: {
+      color: 'rgba(139, 92, 246, 0.9)',
     },
     defaultLine: {
       backgroundColor: t.colors.border,

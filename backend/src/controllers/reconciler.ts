@@ -392,6 +392,8 @@ export async function respondToShareOfferHandler(
           stage: 2,
           sharedBy: user.id,
           content: result.sharedContent,
+          // Include forUserId so mobile can filter - only the guesser should see the modal
+          forUserId: partnerId,
         });
       }
     }
