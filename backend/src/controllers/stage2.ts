@@ -53,6 +53,55 @@ interface SessionWithRelationship {
 }
 
 // ============================================================================
+// Helper: Check if context has already been shared for a direction
+// ============================================================================
+
+/**
+ * Check if SHARED_CONTEXT has already been sent from subject to guesser.
+ *
+ * This prevents the reconciler loop where:
+ * 1. Reconciler finds gaps → sets status to AWAITING_SHARING
+ * 2. User shares context → SHARED_CONTEXT message created
+ * 3. User resubmits empathy → ReconcilerResult deleted (cascades to ReconcilerShareOffer)
+ * 4. Reconciler runs again → finds same gaps → sets AWAITING_SHARING again
+ * 5. Loop repeats indefinitely
+ *
+ * By checking for existing SHARED_CONTEXT messages, we can skip the sharing step
+ * if context has already been shared for this direction.
+ *
+ * @param sessionId - The session ID
+ * @param guesserId - The guesser (person whose empathy has gaps)
+ * @param subjectId - The subject (person who should share context)
+ * @returns true if context has already been shared for this direction
+ */
+async function hasContextAlreadyBeenShared(
+  sessionId: string,
+  guesserId: string,
+  subjectId: string
+): Promise<boolean> {
+  // SHARED_CONTEXT messages have:
+  // - senderId = subject (person who shared)
+  // - forUserId = guesser (person who receives the context)
+  const existingSharedContext = await prisma.message.findFirst({
+    where: {
+      sessionId,
+      role: 'SHARED_CONTEXT',
+      senderId: subjectId,
+      forUserId: guesserId,
+    },
+  });
+
+  if (existingSharedContext) {
+    console.log(
+      `[hasContextAlreadyBeenShared] Context already shared from ${subjectId} to ${guesserId} at ${existingSharedContext.timestamp.toISOString()}`
+    );
+    return true;
+  }
+
+  return false;
+}
+
+// ============================================================================
 // Helper: Trigger Reconciler and Update Statuses
 // ============================================================================
 
@@ -103,8 +152,22 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         result.aUnderstandingB.gaps.severity === 'significant' ||
         result.aUnderstandingB.recommendation.action === 'OFFER_SHARING';
 
-      // Use READY instead of REVEALED - will reveal when both are ready
-      statusA = hasSignificantGapsA ? EmpathyStatus.AWAITING_SHARING : EmpathyStatus.READY;
+      // Check if B has already shared context with A to prevent infinite loop
+      // When A has gaps guessing B, B (subject) should share with A (guesser)
+      const contextAlreadySharedToA = hasSignificantGapsA
+        ? await hasContextAlreadyBeenShared(sessionId, userAId, userBId)
+        : false;
+
+      // If context was already shared, treat as READY (skip sharing step)
+      // Otherwise, use AWAITING_SHARING if gaps exist
+      if (contextAlreadySharedToA) {
+        console.log(
+          `[triggerReconcilerAndUpdateStatuses] Context already shared B→A, skipping AWAITING_SHARING for User A`
+        );
+        statusA = EmpathyStatus.READY;
+      } else {
+        statusA = hasSignificantGapsA ? EmpathyStatus.AWAITING_SHARING : EmpathyStatus.READY;
+      }
 
       await prisma.empathyAttempt.updateMany({
         where: { sessionId, sourceUserId: userAId },
@@ -118,8 +181,8 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         `(alignment: ${result.aUnderstandingB.alignment.score}%, gaps: ${result.aUnderstandingB.gaps.severity})`
       );
 
-      // Bug 2 fix: Generate share suggestion proactively if AWAITING_SHARING
-      if (hasSignificantGapsA) {
+      // Only generate share suggestion if AWAITING_SHARING and context not already shared
+      if (statusA === EmpathyStatus.AWAITING_SHARING) {
         generateShareSuggestionForDirection(sessionId, userAId, userBId).catch((err) =>
           console.warn('[triggerReconcilerAndUpdateStatuses] Failed to generate share suggestion for A→B:', err)
         );
@@ -132,8 +195,22 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         result.bUnderstandingA.gaps.severity === 'significant' ||
         result.bUnderstandingA.recommendation.action === 'OFFER_SHARING';
 
-      // Use READY instead of REVEALED - will reveal when both are ready
-      statusB = hasSignificantGapsB ? EmpathyStatus.AWAITING_SHARING : EmpathyStatus.READY;
+      // Check if A has already shared context with B to prevent infinite loop
+      // When B has gaps guessing A, A (subject) should share with B (guesser)
+      const contextAlreadySharedToB = hasSignificantGapsB
+        ? await hasContextAlreadyBeenShared(sessionId, userBId, userAId)
+        : false;
+
+      // If context was already shared, treat as READY (skip sharing step)
+      // Otherwise, use AWAITING_SHARING if gaps exist
+      if (contextAlreadySharedToB) {
+        console.log(
+          `[triggerReconcilerAndUpdateStatuses] Context already shared A→B, skipping AWAITING_SHARING for User B`
+        );
+        statusB = EmpathyStatus.READY;
+      } else {
+        statusB = hasSignificantGapsB ? EmpathyStatus.AWAITING_SHARING : EmpathyStatus.READY;
+      }
 
       await prisma.empathyAttempt.updateMany({
         where: { sessionId, sourceUserId: userBId },
@@ -147,8 +224,8 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         `(alignment: ${result.bUnderstandingA.alignment.score}%, gaps: ${result.bUnderstandingA.gaps.severity})`
       );
 
-      // Bug 2 fix: Generate share suggestion proactively if AWAITING_SHARING
-      if (hasSignificantGapsB) {
+      // Only generate share suggestion if AWAITING_SHARING and context not already shared
+      if (statusB === EmpathyStatus.AWAITING_SHARING) {
         generateShareSuggestionForDirection(sessionId, userBId, userAId).catch((err) =>
           console.warn('[triggerReconcilerAndUpdateStatuses] Failed to generate share suggestion for B→A:', err)
         );
@@ -2087,8 +2164,23 @@ async function triggerReconcilerForUser(
       reconcilerResult.gaps.severity === 'significant' ||
       reconcilerResult.recommendation.action === 'OFFER_SHARING';
 
-    // Use READY instead of REVEALED - will reveal when both are ready
-    const newStatus = hasSignificantGaps ? 'AWAITING_SHARING' : 'READY';
+    // Check if context has already been shared to prevent infinite loop
+    // When guesser has gaps, subject should share context with guesser
+    const contextAlreadyShared = hasSignificantGaps
+      ? await hasContextAlreadyBeenShared(sessionId, guesserId, subjectId)
+      : false;
+
+    // If context was already shared, treat as READY (skip sharing step)
+    // Otherwise, use AWAITING_SHARING if gaps exist
+    let newStatus: EmpathyStatus;
+    if (contextAlreadyShared) {
+      console.log(
+        `[triggerReconcilerForUser] Context already shared ${subjectId}→${guesserId}, skipping AWAITING_SHARING`
+      );
+      newStatus = EmpathyStatus.READY;
+    } else {
+      newStatus = hasSignificantGaps ? EmpathyStatus.AWAITING_SHARING : EmpathyStatus.READY;
+    }
 
     await prisma.empathyAttempt.updateMany({
       where: { sessionId, sourceUserId: guesserId },
