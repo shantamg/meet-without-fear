@@ -1058,6 +1058,13 @@ export async function respondToShareSuggestion(
   const subjectName = shareOffer.result.subjectName;
   const guesserName = shareOffer.result.guesserName;
 
+  // Use explicit timestamps with guaranteed ordering (1ms apart) to ensure correct sort order
+  // This prevents race conditions where rapidly created messages get same/wrong timestamps
+  const baseTime = Date.now();
+  const introTimestamp = new Date(baseTime);
+  const sharedContextTimestamp = new Date(baseTime + 1);
+  const reflectionTimestamp = new Date(baseTime + 2);
+
   // Create AI message BEFORE the shared context (introduces what's coming) - US-7: Shared Content Label
   const introMessage = `${subjectName} hasn't seen your empathy statement yet because the reconciler suggested they share more. This is what they shared:`;
 
@@ -1069,6 +1076,7 @@ export async function respondToShareSuggestion(
       role: 'AI',
       content: introMessage,
       stage: 2,
+      timestamp: introTimestamp,
     },
   });
 
@@ -1081,6 +1089,7 @@ export async function respondToShareSuggestion(
       role: MessageRole.SHARED_CONTEXT,
       content: sharedContent,
       stage: 2,
+      timestamp: sharedContextTimestamp,
     },
   });
 
@@ -1095,10 +1104,15 @@ export async function respondToShareSuggestion(
       role: 'AI',
       content: reflectionPromptMessage,
       stage: 2,
+      timestamp: reflectionTimestamp,
     },
   });
 
   console.log(`[Reconciler] Created intro, shared context, and reflection messages for guesser ${shareOffer.result.guesserId}`);
+
+  // Timestamps for subject's messages (continue from guesser messages, 1ms apart)
+  const subjectSharedTimestamp = new Date(baseTime + 3);
+  const subjectAckTimestamp = new Date(baseTime + 4);
 
   // Create message for subject showing what they shared (appears in their own chat)
   const sharedMessage = await prisma.message.create({
@@ -1109,6 +1123,7 @@ export async function respondToShareSuggestion(
       role: MessageRole.EMPATHY_STATEMENT, // Reuse empathy statement styling for "what you shared"
       content: sharedContent,
       stage: 2,
+      timestamp: subjectSharedTimestamp,
     },
   });
 
@@ -1138,6 +1153,7 @@ export async function respondToShareSuggestion(
       role: 'AI',
       content: subjectAckMessage,
       stage: subjectCurrentStage,
+      timestamp: subjectAckTimestamp,
     },
   });
 
@@ -1227,6 +1243,7 @@ export async function getSharedContentDeliveryStatus(
   hasSharedContent: boolean;
   deliveryStatus: 'pending' | 'delivered' | 'seen' | null;
   sharedAt: string | null;
+  sharedContent: string | null;
 }> {
   // Find the share offer to get the guesser ID
   const shareOffer = await prisma.reconcilerShareOffer.findFirst({
@@ -1241,7 +1258,7 @@ export async function getSharedContentDeliveryStatus(
   });
 
   if (!shareOffer || !shareOffer.sharedContent || !shareOffer.sharedAt) {
-    return { hasSharedContent: false, deliveryStatus: null, sharedAt: null };
+    return { hasSharedContent: false, deliveryStatus: null, sharedAt: null, sharedContent: null };
   }
 
   const guesserId = shareOffer.result.guesserId;
@@ -1271,6 +1288,7 @@ export async function getSharedContentDeliveryStatus(
     hasSharedContent: true,
     deliveryStatus,
     sharedAt: sharedAt.toISOString(),
+    sharedContent: shareOffer.sharedContent,
   };
 }
 
