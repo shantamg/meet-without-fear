@@ -73,6 +73,13 @@ export interface ChatIndicatorItem {
   indicatorType: ChatIndicatorType;
   id: string;
   timestamp?: string;
+  /** Optional metadata for dynamic indicator text */
+  metadata?: {
+    /** Whether this content is from the current user (vs partner) */
+    isFromMe?: boolean;
+    /** Partner's display name (for "Context from {name}" text) */
+    partnerName?: string;
+  };
 }
 
 export interface CustomEmptyStateItem {
@@ -140,8 +147,10 @@ interface ChatInterfaceProps {
   partnerName?: string;
   /** ID of the last chat item the user has seen - used to show "New messages" separator */
   lastSeenChatItemId?: string | null;
-  /** Callback when "Context shared" indicator is tapped - navigates to Sharing Status */
-  onContextSharedPress?: () => void;
+  /** Callback when "Context shared" indicator is tapped - navigates to Sharing Status
+   * @param timestamp - The timestamp of the shared context (for scrolling to it)
+   */
+  onContextSharedPress?: (timestamp?: string) => void;
 }
 
 // ============================================================================
@@ -225,9 +234,18 @@ export function ChatInterface({
     items.sort((a, b) => {
       const aTime = 'timestamp' in a && a.timestamp ? new Date(a.timestamp).getTime() : 0;
       const bTime = 'timestamp' in b && b.timestamp ? new Date(b.timestamp).getTime() : 0;
-      // Primary sort: Time (newest first)
-      if (bTime !== aTime) return bTime - aTime;
-      // Secondary sort: ID (stable tie-breaker)
+      // Primary sort: Time (newest first) - with 1 second tolerance for items created in sequence
+      const timeDiff = bTime - aTime;
+      if (Math.abs(timeDiff) > 1000) return timeDiff;
+
+      // For items within 1 second: indicators should appear ABOVE messages at the same time
+      // (older position = higher index in the sorted array)
+      const aIsIndicator = isIndicator(a);
+      const bIsIndicator = isIndicator(b);
+      if (aIsIndicator && !bIsIndicator) return 1; // a (indicator) comes after b (message) in array = appears higher
+      if (bIsIndicator && !aIsIndicator) return -1; // b (indicator) comes after a (message) in array = appears higher
+
+      // Fallback: ID comparison for stability
       return b.id.localeCompare(a.id);
     });
 
@@ -470,13 +488,17 @@ export function ChatInterface({
 
     // 2. Render Indicators
     if (isIndicator(item)) {
-      // Context-shared indicators are tappable to navigate to Sharing Status
-      const onPress = item.indicatorType === 'context-shared' ? onContextSharedPress : undefined;
+      // Context-shared and empathy-shared indicators are tappable to navigate to Partner tab
+      const isSharedContent = item.indicatorType === 'context-shared' || item.indicatorType === 'empathy-shared';
+      const onPress = isSharedContent && onContextSharedPress
+        ? () => onContextSharedPress(item.timestamp)
+        : undefined;
       return (
         <ChatIndicator
           type={item.indicatorType}
           timestamp={item.timestamp}
           onPress={onPress}
+          metadata={item.metadata}
         />
       );
     }

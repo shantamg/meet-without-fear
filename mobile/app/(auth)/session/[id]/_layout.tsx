@@ -39,6 +39,13 @@ export default function SessionLayout() {
           presentation: 'card',
         }}
       />
+      <Stack.Screen
+        name="share"
+        options={{
+          headerShown: false,
+          animation: 'slide_from_right',
+        }}
+      />
     </Stack>
   );
 }

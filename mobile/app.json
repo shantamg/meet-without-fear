@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.galuten.meetwithoutfear",
-      "buildNumber": "26",
+      "buildNumber": "28",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "This app needs access to your microphone to record audio sessions."
@@ -35,7 +35,7 @@
       },
       "icon": "./assets/images/icon.png",
       "package": "com.meetwithoutfear.app",
-      "versionCode": 25,
+      "versionCode": 27,
       "permissions": [
         "RECORD_AUDIO"
       ]

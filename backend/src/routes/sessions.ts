@@ -27,6 +27,7 @@ import {
   updateInvitationMessage,
   confirmInvitationMessage,
   markSessionViewed,
+  markShareTabViewed,
   getUnreadSessionCount,
 } from '../controllers/sessions';
 import { getSessionState } from '../controllers/session-state';
@@ -135,5 +136,12 @@ router.get('/sessions/:id/inner-thoughts', requireAuth, getLinkedInnerThoughts);
  * @access Private - requires authentication and session access
  */
 router.post('/sessions/:id/viewed', requireAuth, requireSessionAccess, asyncHandler(markSessionViewed));
+
+/**
+ * @route POST /api/v1/sessions/:id/share-tab-viewed
+ * @description Mark Share tab as viewed (for "seen" delivery status of shared content)
+ * @access Private - requires authentication and session access
+ */
+router.post('/sessions/:id/share-tab-viewed', requireAuth, requireSessionAccess, asyncHandler(markShareTabViewed));
 
 export default router;

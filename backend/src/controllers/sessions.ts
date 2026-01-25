@@ -1151,6 +1151,61 @@ export async function markSessionViewed(req: Request, res: Response): Promise<vo
 }
 
 /**
+ * Mark the Share/Partner tab as viewed
+ * POST /sessions/:id/viewed-share-tab
+ *
+ * Updates the lastViewedShareTabAt timestamp for the user's session vessel.
+ * This is used to determine "seen" status for shared content (empathy, context).
+ * Content is only marked as "seen" when the user actually views the Share tab.
+ */
+export async function markShareTabViewed(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, ErrorCode.UNAUTHORIZED, 'Authentication required', 401);
+      return;
+    }
+
+    const sessionId = req.params.id;
+    const now = new Date();
+
+    // Update or create UserVessel with share tab view time
+    const userVessel = await prisma.userVessel.upsert({
+      where: {
+        userId_sessionId: {
+          userId: user.id,
+          sessionId,
+        },
+      },
+      update: {
+        lastViewedShareTabAt: now,
+      },
+      create: {
+        userId: user.id,
+        sessionId,
+        lastViewedShareTabAt: now,
+      },
+    });
+
+    // Notify partner that this user viewed the Share tab (for delivery status updates)
+    // Fire-and-forget - don't block the response
+    publishSessionEvent(sessionId, 'partner.share_tab_viewed', {
+      viewedAt: now.toISOString(),
+    }, user.id).catch((err) => {
+      console.error('[markShareTabViewed] Failed to publish share_tab_viewed event:', err);
+    });
+
+    successResponse(res, {
+      success: true,
+      lastViewedShareTabAt: userVessel.lastViewedShareTabAt?.toISOString() ?? now.toISOString(),
+    });
+  } catch (error) {
+    console.error('[markShareTabViewed] Error:', error);
+    errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to mark share tab as viewed', 500);
+  }
+}
+
+/**
  * Get count of sessions with unread content
  * GET /sessions/unread-count
  *

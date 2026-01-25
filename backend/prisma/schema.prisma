@@ -285,6 +285,9 @@ model UserVessel {
   lastViewedAt DateTime?
   // The ID of the last chat item the user saw (for "new messages" line placement)
   lastSeenChatItemId String?
+  // When the user last viewed the Share/Partner tab
+  // Used to determine "seen" status for shared content (empathy, context)
+  lastViewedShareTabAt DateTime?
 
   // === Notable Facts ===
   // AI-extracted structured facts about the user's situation, emotions, and circumstances

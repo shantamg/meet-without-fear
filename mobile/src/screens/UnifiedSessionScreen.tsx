@@ -10,6 +10,7 @@ import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem } from '../components/ChatInterface';
@@ -37,7 +38,7 @@ import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
-import { PartnerChatTab } from '../components/PartnerChatTab';
+// PartnerChatTab moved to separate Share screen route
 import { PartnerEventModal, PartnerEventType } from '../components/PartnerEventModal';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
@@ -105,6 +106,7 @@ export function UnifiedSessionScreen({
   onStageComplete,
 }: UnifiedSessionScreenProps) {
   const styles = useStyles();
+  const router = useRouter();
   const { user, updateUser } = useAuth();
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
@@ -268,6 +270,12 @@ export function UnifiedSessionScreen({
       if (event === 'partner.session_viewed') {
         // Partner viewed the session - update delivery status (pending → seen)
         console.log('[UnifiedSessionScreen] Partner viewed session, refetching empathy status cache');
+        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+      }
+
+      if (event === 'partner.share_tab_viewed') {
+        // Partner viewed the Share tab - update delivery status (pending → seen) for shared content
+        console.log('[UnifiedSessionScreen] Partner viewed Share tab, refetching empathy status cache');
         queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
 
@@ -440,9 +448,15 @@ export function UnifiedSessionScreen({
   const [showAccuracyFeedbackDrawer, setShowAccuracyFeedbackDrawer] = useState(false);
 
   // -------------------------------------------------------------------------
-  // Tab State for AI/Partner Tabs
+  // Navigation to Share screen
   // -------------------------------------------------------------------------
-  const [activeTab, setActiveTab] = useState<'ai' | 'partner'>('ai');
+  const navigateToShare = useCallback((highlightTimestamp?: string) => {
+    if (highlightTimestamp) {
+      router.push(`/session/${sessionId}/share?highlight=${encodeURIComponent(highlightTimestamp)}`);
+    } else {
+      router.push(`/session/${sessionId}/share`);
+    }
+  }, [router, sessionId]);
 
   // Partner event modal state - shows when new Partner tab events occur
   const [partnerEventModalVisible, setPartnerEventModalVisible] = useState(false);
@@ -458,8 +472,8 @@ export function UnifiedSessionScreen({
 
   const handleViewPartnerTab = useCallback(() => {
     setPartnerEventModalVisible(false);
-    setActiveTab('partner');
-  }, []);
+    navigateToShare();
+  }, [navigateToShare]);
 
   // Local latch to prevent panel flashing during server refetches
   // Once user clicks Share, this stays true even if server data temporarily reverts
@@ -751,6 +765,8 @@ export function UnifiedSessionScreen({
     const sessionData: SessionIndicatorData = {
       isInviter,
       sessionStatus: session?.status,
+      currentUserId: user?.id,
+      partnerName: partnerName || 'Partner',
       invitation: invitation ? {
         messageConfirmedAt: invitation.messageConfirmedAt,
         acceptedAt: invitation.acceptedAt,
@@ -772,13 +788,35 @@ export function UnifiedSessionScreen({
     const derivedIndicators = deriveIndicators(sessionData);
 
     // Convert to ChatIndicatorItem format (add 'type' field)
-    return derivedIndicators.map((indicator) => ({
+    const baseIndicators = derivedIndicators.map((indicator) => ({
       type: 'indicator' as const,
       indicatorType: indicator.indicatorType,
       id: indicator.id,
       timestamp: indicator.timestamp,
+      metadata: indicator.metadata,
     }));
-  }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard]);
+
+    // Add indicators for SHARED_CONTEXT and EMPATHY_STATEMENT messages
+    // Both types link to the Partner tab where full content is shown
+    const sharedContentIndicators = messages
+      .filter((m) => m.role === MessageRole.SHARED_CONTEXT || m.role === MessageRole.EMPATHY_STATEMENT)
+      .map((m) => {
+        // Determine if this is from the current user or partner
+        const isFromMe = user?.id ? m.senderId === user.id : true;
+        return {
+          type: 'indicator' as const,
+          indicatorType: m.role === MessageRole.EMPATHY_STATEMENT ? 'empathy-shared' as const : 'context-shared' as const,
+          id: `shared-${m.id}`,
+          timestamp: m.timestamp,
+          metadata: {
+            isFromMe,
+            partnerName: partnerName || 'Partner',
+          },
+        };
+      });
+
+    return [...baseIndicators, ...sharedContentIndicators];
+  }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName]);
 
   // -------------------------------------------------------------------------
   // Effective Stage (accounts for compact signed but stage not yet updated)
@@ -856,19 +894,14 @@ export function UnifiedSessionScreen({
           sharedContentDeliveryStatus: 'pending' as const,
         };
       }
-      // For SHARED_CONTEXT messages (shared context shown to guesser),
-      // attach delivery status from empathyStatusData
-      if (
-        message.role === MessageRole.SHARED_CONTEXT &&
-        empathyStatusData?.sharedContentDeliveryStatus
-      ) {
-        return {
-          ...message,
-          sharedContentDeliveryStatus: empathyStatusData.sharedContentDeliveryStatus,
-        };
-      }
       return message;
-    });
+    })
+    // Filter out SHARED_CONTEXT and EMPATHY_STATEMENT messages - they'll be shown as tappable indicators
+    // that navigate to the Partner tab when tapped
+    .filter((message) =>
+      message.role !== MessageRole.SHARED_CONTEXT &&
+      message.role !== MessageRole.EMPATHY_STATEMENT
+    );
   }, [messages, empathyStatusData?.myAttempt?.content, empathyStatusData?.myAttempt?.deliveryStatus, empathyStatusData?.sharedContentDeliveryStatus]);
 
   // -------------------------------------------------------------------------
@@ -1344,34 +1377,18 @@ export function UnifiedSessionScreen({
             : undefined
         }
         tabs={!isInOnboardingUnsigned ? {
-          activeTab,
-          onTabChange: setActiveTab,
+          activeTab: 'ai', // Always 'ai' on this screen since Share is a separate route
+          onTabChange: (tab) => {
+            if (tab === 'partner') {
+              navigateToShare();
+            }
+          },
           showPartnerBadge: sharingStatus.pendingActionsCount > 0,
         } : undefined}
         testID="session-chat-header"
       />
-      {/* Tab content - AI chat or Partner tab */}
-      {activeTab === 'partner' && !isInOnboardingUnsigned ? (
-        <PartnerChatTab
-          sessionId={sessionId}
-          partnerName={partnerName}
-          myEmpathyAttempt={sharingStatus.myAttempt}
-          partnerEmpathyAttempt={sharingStatus.partnerAttempt}
-          sharedContextReceived={sharingStatus.sharedContext}
-          shareSuggestion={sharingStatus.shareOffer}
-          partnerEmpathyNeedsValidation={sharingStatus.needsToValidatePartner}
-          onValidateAccurate={() => handleValidatePartnerEmpathy(true)}
-          onValidatePartial={() => handleValidatePartnerEmpathy(false, 'Some parts are accurate')}
-          onValidateInaccurate={() => handleValidatePartnerEmpathy(false, 'This does not capture my perspective')}
-          onShareSuggestionAccept={() => handleRespondToShareOffer('accept')}
-          onShareSuggestionDecline={() => handleRespondToShareOffer('decline')}
-          onShareSuggestionEdit={() => {
-            // For editing, switch to AI tab where user can refine
-            setActiveTab('ai');
-          }}
-          testID="partner-chat-tab"
-        />
-      ) : (
+      {/* Chat content - Share is now a separate route */}
+      {(
       <View style={styles.content}>
         <ChatInterface
           sessionId={sessionId}
@@ -1412,8 +1429,10 @@ export function UnifiedSessionScreen({
           // Uses captured value from before session was marked viewed, so new messages
           // arriving while viewing don't trigger a separator
           lastSeenChatItemId={lastSeenChatItemIdForSeparator}
-          // Navigate to Partner tab when "Context shared" indicator is tapped
-          onContextSharedPress={() => setActiveTab('partner')}
+          // Navigate to Share screen when "Context shared" or "Empathy shared" indicator is tapped
+          onContextSharedPress={(timestamp) => {
+            navigateToShare(timestamp ?? undefined);
+          }}
           // Show compact as custom empty state during onboarding when not signed
           customEmptyState={
             isInOnboardingUnsigned ? compactEmptyStateElement : undefined

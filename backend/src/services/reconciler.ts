@@ -1264,7 +1264,9 @@ export async function getSharedContentDeliveryStatus(
   const guesserId = shareOffer.result.guesserId;
   const sharedAt = shareOffer.sharedAt;
 
-  // Check if the guesser has viewed the session after the content was shared
+  // Check if the guesser has viewed the Share/Partner tab after the content was shared
+  // We use lastViewedShareTabAt (not lastViewedAt) so content is only "seen" when
+  // the user actually views the Partner tab, not just the AI chat
   const guesserVessel = await prisma.userVessel.findUnique({
     where: {
       userId_sessionId: {
@@ -1273,14 +1275,14 @@ export async function getSharedContentDeliveryStatus(
       },
     },
     select: {
-      lastViewedAt: true,
+      lastViewedShareTabAt: true,
     },
   });
 
   let deliveryStatus: 'pending' | 'delivered' | 'seen' = 'delivered';
 
-  if (guesserVessel?.lastViewedAt && guesserVessel.lastViewedAt >= sharedAt) {
-    // Guesser has viewed the session after the content was shared
+  if (guesserVessel?.lastViewedShareTabAt && guesserVessel.lastViewedShareTabAt >= sharedAt) {
+    // Guesser has viewed the Share tab after the content was shared
     deliveryStatus = 'seen';
   }
 

@@ -39,6 +39,13 @@ export interface IndicatorItem {
   indicatorType: ChatIndicatorType;
   id: string;
   timestamp: string;
+  /** Optional metadata for dynamic indicator text */
+  metadata?: {
+    /** Whether this content is from the current user (vs partner) */
+    isFromMe?: boolean;
+    /** Partner's display name (for "Context from {name}" text) */
+    partnerName?: string;
+  };
 }
 
 /**
@@ -51,6 +58,12 @@ export interface SessionIndicatorData {
 
   /** Session status */
   sessionStatus?: SessionStatus;
+
+  /** Current user's ID (for determining message ownership) */
+  currentUserId?: string;
+
+  /** Partner's display name (for "Context from {name}" text) */
+  partnerName?: string;
 
   /** Invitation data from cache */
   invitation?: {
@@ -190,12 +203,19 @@ export function interleaveIndicators(
 
   for (const message of messages) {
     if (message.role === MessageRole.SHARED_CONTEXT) {
+      // Determine if this is from the current user or partner
+      const isFromMe = sessionData.currentUserId ? message.senderId === sessionData.currentUserId : true;
+
       // Convert SHARED_CONTEXT to collapsed indicator
       sharedContextIndicators.push({
         type: 'indicator',
         indicatorType: 'context-shared',
         id: `context-shared-${message.id}`,
         timestamp: message.timestamp,
+        metadata: {
+          isFromMe,
+          partnerName: sessionData.partnerName,
+        },
       });
     } else {
       filteredMessages.push(message);

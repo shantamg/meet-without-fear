@@ -965,3 +965,33 @@ export function useMarkSessionViewed(sessionId: string | undefined) {
     },
   });
 }
+
+interface MarkShareTabViewedResponse {
+  success: boolean;
+  lastViewedShareTabAt: string;
+}
+
+/**
+ * Mark the Share tab as viewed by the current user.
+ *
+ * This updates the lastViewedShareTabAt timestamp for the user's session vessel.
+ * Used to determine "seen" delivery status for shared content (empathy, context).
+ * Content is only marked as "seen" when the user actually views the Share tab,
+ * not just when they're on the AI chat tab.
+ *
+ * @param sessionId - The session ID
+ */
+export function useMarkShareTabViewed(sessionId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!sessionId) throw new Error('Session ID is required');
+      return post<MarkShareTabViewedResponse>(`/sessions/${sessionId}/share-tab-viewed`, {});
+    },
+    onSuccess: () => {
+      // Invalidate empathy status to update delivery statuses
+      queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId || '') });
+    },
+  });
+}

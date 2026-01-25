@@ -42,13 +42,13 @@ export interface SessionChatHeaderProps {
   onPress?: () => void;
   /** Optional callback when brief status is pressed (e.g., to show invitation options) */
   onBriefStatusPress?: () => void;
-  /** Tab configuration - when provided, shows tabs in header */
+  /** Tab configuration - when provided, enables navigation between Chat and Share views */
   tabs?: {
     /** Currently selected tab key */
     activeTab: 'ai' | 'partner';
     /** Callback when tab is selected */
     onTabChange: (tab: 'ai' | 'partner') => void;
-    /** Whether to show badge on partner tab */
+    /** Whether to show badge on share button */
     showPartnerBadge?: boolean;
   };
   /** Custom container style */
@@ -119,52 +119,9 @@ export function SessionChatHeader({
   };
 
   const displayName = partnerName || 'Meet Without Fear';
-  const shortPartnerName = partnerName && partnerName.length > 10
-    ? partnerName.substring(0, 10) + '...'
-    : partnerName;
 
-  // Center content - either tabs or partner name + status
-  const centerContent = tabs ? (
-    // Tabbed layout: AI | Partner Name
-    <View style={styles.tabContainer}>
-      <TouchableOpacity
-        style={[
-          styles.tab,
-          tabs.activeTab === 'ai' && styles.tabActive,
-        ]}
-        onPress={() => tabs.onTabChange('ai')}
-        testID={`${testID}-tab-ai`}
-      >
-        <Text style={[
-          styles.tabText,
-          tabs.activeTab === 'ai' && styles.tabTextActive,
-        ]}>
-          AI
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[
-          styles.tab,
-          tabs.activeTab === 'partner' && styles.tabActive,
-        ]}
-        onPress={() => tabs.onTabChange('partner')}
-        testID={`${testID}-tab-partner`}
-      >
-        <View style={styles.tabContent}>
-          <Text style={[
-            styles.tabText,
-            tabs.activeTab === 'partner' && styles.tabTextActive,
-          ]}>
-            {shortPartnerName || 'Partner'}
-          </Text>
-          {tabs.showPartnerBadge && (
-            <View style={styles.tabBadge} testID={`${testID}-partner-badge`} />
-          )}
-        </View>
-      </TouchableOpacity>
-    </View>
-  ) : (
-    // Default layout: partner name + status
+  // Center content - always partner name + status (whether tabs or not)
+  const centerContent = (
     <View style={styles.centerSection}>
       <Text
         style={styles.partnerName}
@@ -189,9 +146,21 @@ export function SessionChatHeader({
 
   return (
     <View style={[styles.container, style]} testID={testID}>
-      {/* Left section: Back button */}
+      {/* Left section: Back button or "← Chat" when on Share view */}
       <View style={styles.leftSection}>
-        {onBackPress ? (
+        {tabs && tabs.activeTab === 'partner' ? (
+          // On Share view: show "← Chat" button
+          <TouchableOpacity
+            style={styles.navButton}
+            onPress={() => tabs.onTabChange('ai')}
+            accessibilityRole="button"
+            accessibilityLabel="Go back to chat"
+            testID={`${testID}-back-to-chat`}
+          >
+            <ArrowLeft color={colors.textPrimary} size={18} />
+            <Text style={styles.navButtonText}>Chat</Text>
+          </TouchableOpacity>
+        ) : onBackPress ? (
           <TouchableOpacity
             style={styles.backButton}
             onPress={onBackPress}
@@ -220,9 +189,24 @@ export function SessionChatHeader({
         centerContent
       )}
 
-      {/* Right section: Brief status */}
+      {/* Right section: "Share →" button when on Chat, or empty when on Share */}
       <View style={styles.rightSection}>
-        {briefStatus && (
+        {tabs && tabs.activeTab === 'ai' ? (
+          // On Chat view: show "Share →" button
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={() => tabs.onTabChange('partner')}
+            accessibilityRole="button"
+            accessibilityLabel="Go to share"
+            testID={`${testID}-go-to-share`}
+          >
+            <Text style={styles.shareButtonText}>Share</Text>
+            {tabs.showPartnerBadge && (
+              <View style={styles.shareBadge} testID={`${testID}-share-badge`} />
+            )}
+            <Text style={styles.shareButtonArrow}>→</Text>
+          </TouchableOpacity>
+        ) : briefStatus && !tabs ? (
           onBriefStatusPress ? (
             <TouchableOpacity
               style={styles.briefStatusPill}
@@ -248,9 +232,7 @@ export function SessionChatHeader({
               {briefStatus}
             </Text>
           )
-        )}
-        {/* Spacer if no right content to balance the layout */}
-        {!briefStatus && (
+        ) : (
           <View style={styles.rightSpacer} />
         )}
       </View>
@@ -275,7 +257,7 @@ const useStyles = () =>
       minHeight: 56,
     },
     leftSection: {
-      width: 44,
+      minWidth: 44,
       alignItems: 'flex-start',
     },
     backButton: {
@@ -303,6 +285,43 @@ const useStyles = () =>
     },
     rightSpacer: {
       width: 32,
+    },
+    // Navigation button styles ("← Chat" and "Share →")
+    navButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingVertical: t.spacing.xs,
+      paddingHorizontal: t.spacing.xs,
+    },
+    navButtonText: {
+      fontSize: t.typography.fontSize.base,
+      fontWeight: '500',
+      color: t.colors.textPrimary,
+    },
+    shareButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingVertical: t.spacing.xs,
+      paddingHorizontal: t.spacing.sm,
+      backgroundColor: t.colors.bgTertiary,
+      borderRadius: 16,
+    },
+    shareButtonText: {
+      fontSize: t.typography.fontSize.sm,
+      fontWeight: '500',
+      color: t.colors.textPrimary,
+    },
+    shareButtonArrow: {
+      fontSize: 14,
+      color: t.colors.textPrimary,
+    },
+    shareBadge: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: t.colors.accent,
     },
     partnerName: {
       fontSize: t.typography.fontSize.lg,
@@ -348,43 +367,6 @@ const useStyles = () =>
       fontSize: 14,
       color: t.colors.textMuted,
       fontWeight: '600',
-    },
-    // Tab styles for inline header tabs
-    tabContainer: {
-      flexDirection: 'row',
-      backgroundColor: t.colors.bgTertiary,
-      borderRadius: 8,
-      padding: 2,
-    },
-    tab: {
-      paddingVertical: 6,
-      paddingHorizontal: 16,
-      borderRadius: 6,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    tabActive: {
-      backgroundColor: t.colors.bgPrimary,
-    },
-    tabText: {
-      fontSize: t.typography.fontSize.sm,
-      fontWeight: '500',
-      color: t.colors.textSecondary,
-    },
-    tabTextActive: {
-      color: t.colors.textPrimary,
-      fontWeight: '600',
-    },
-    tabContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    tabBadge: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: t.colors.accent,
     },
   }));
 
