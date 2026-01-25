@@ -1142,6 +1142,20 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     const userName = user.name || 'there';
     const isInvitationPhase = session.status === 'CREATED';
 
+    // Detect invitation refinement request (e.g., "Refine invitation: make it warmer")
+    const isRefiningInvitation = content.toLowerCase().startsWith('refine invitation:');
+    let currentInvitationMessage: string | null = null;
+
+    if (isRefiningInvitation) {
+      // Fetch current invitation message for context
+      const invitation = await prisma.invitation.findFirst({
+        where: { sessionId, invitedById: user.id },
+        select: { invitationMessage: true },
+      });
+      currentInvitationMessage = invitation?.invitationMessage ?? null;
+      console.log(`[sendMessageStream:${requestId}] Refining invitation, current: "${currentInvitationMessage}"`);
+    }
+
     // Create intent for context assembly - use 'light' depth to load notable facts
     const streamingIntent: MemoryIntentResult = {
       intent: 'stage_enforcement',
@@ -1181,7 +1195,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       contextBundle,
       sharedContentHistory,
       milestoneContext,
-    }, { isInvitationPhase });
+      invitationMessage: currentInvitationMessage,
+    }, { isInvitationPhase, isRefiningInvitation });
 
     // Prompt already includes semantic tag format instructions via buildResponseProtocol()
     // No tool use instruction needed - we parse <thinking>, <draft>, <dispatch> tags instead
@@ -1467,8 +1482,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       // Use draftContent captured during streaming (more reliable than re-parsing)
       const draft = draftContent || parsed.draft;
       if (draft) {
-        // Draft is used for invitation (stage 0) or empathy statement (stage 2)
-        if (isInvitationPhase || currentStage === 0) {
+        // Draft is used for invitation (stage 0 or refinement) or empathy statement (stage 2)
+        if (isInvitationPhase || isRefiningInvitation || currentStage === 0) {
           metadata.invitationMessage = draft;
         } else if (currentStage === 2) {
           metadata.proposedEmpathyStatement = draft;
@@ -1610,15 +1625,17 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       });
     }
 
-    // Save invitation message
-    if (isInvitationPhase && metadata.invitationMessage) {
+    // Save invitation message (during initial crafting or refinement)
+    if ((isInvitationPhase || isRefiningInvitation) && metadata.invitationMessage) {
       await prisma.invitation.updateMany({
         where: { sessionId, invitedById: user.id },
         data: {
           invitationMessage: metadata.invitationMessage,
-          messageConfirmed: false,
+          // Don't reset messageConfirmed during refinement - user may have already confirmed
+          ...(isInvitationPhase ? { messageConfirmed: false } : {}),
         },
       });
+      console.log(`[sendMessageStream:${requestId}] Saved invitation message: "${metadata.invitationMessage}"`);
     }
 
     // Save empathy draft

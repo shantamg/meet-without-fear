@@ -16,16 +16,18 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
-import { SessionStatus, MessageRole, EmpathyStatus } from '@meet-without-fear/shared';
+import { MessageRole, EmpathyStatus } from '@meet-without-fear/shared';
 
 import { SessionChatHeader } from '@/src/components/SessionChatHeader';
 import { PartnerChatTab, EmpathyAttemptWithHistory } from '@/src/components/PartnerChatTab';
 import { ViewEmpathyStatementDrawer } from '@/src/components/ViewEmpathyStatementDrawer';
+import { RefineInvitationDrawer } from '@/src/components/RefineInvitationDrawer';
 import { useSharingStatus } from '@/src/hooks/useSharingStatus';
 import { useSessionState, useMarkShareTabViewed } from '@/src/hooks/useSessions';
 import { useRespondToShareOffer, useResubmitEmpathy } from '@/src/hooks/useStages';
 import { useSendMessage, useInfiniteMessages } from '@/src/hooks/useMessages';
 import { useAuth } from '@/src/hooks/useAuth';
+import { createInvitationLink } from '@/src/hooks/useInvitation';
 import { colors } from '@/src/theme';
 
 export default function ShareScreen() {
@@ -122,8 +124,21 @@ export default function ShareScreen() {
   const { mutate: resubmitEmpathy } = useResubmitEmpathy();
   const { mutate: sendMessage } = useSendMessage();
 
-  // Local state for empathy refinement drawer
+  // Local state for drawers
   const [showEmpathyDrawer, setShowEmpathyDrawer] = useState(false);
+  const [showRefineDrawer, setShowRefineDrawer] = useState(false);
+  const [isRefiningInvitation, setIsRefiningInvitation] = useState(false);
+
+  // Invitation URL for sharing
+  const invitationUrl = useMemo(() => {
+    if (invitation?.id) {
+      return createInvitationLink(invitation.id);
+    }
+    return '';
+  }, [invitation?.id]);
+
+  // Get invitation message
+  const invitationMessage = invitation?.invitationMessage;
 
   // Mark Share tab as viewed on mount - this triggers "seen" delivery status for shared content
   const hasMarkedViewed = useRef(false);
@@ -148,8 +163,27 @@ export default function ShareScreen() {
   };
 
   const handleInvitationPress = () => {
-    // Go back to chat - the refine drawer can be triggered there
-    router.back();
+    // Open the refine invitation drawer
+    setShowRefineDrawer(true);
+  };
+
+  const handleSendInvitationRefinement = (message: string) => {
+    if (!sessionId) return;
+
+    // Set loading state
+    setIsRefiningInvitation(true);
+
+    // Send refinement message - backend will detect "Refine invitation:" prefix
+    // and use the invitation prompt context
+    const refinementMessage = `Refine invitation: ${message}`;
+    sendMessage({ sessionId, content: refinementMessage });
+
+    // The invitation will be updated via the backend when the AI responds.
+    // After a delay, clear the loading state. The invitation message will update
+    // from React Query cache when session state is invalidated.
+    setTimeout(() => {
+      setIsRefiningInvitation(false);
+    }, 5000);
   };
 
   if (!sessionId) {
@@ -208,7 +242,7 @@ export default function ShareScreen() {
             // Open the empathy drawer directly on this screen
             setShowEmpathyDrawer(true);
           }}
-          hasActiveInvitation={session?.status === SessionStatus.INVITED && invitation?.isInviter}
+          hasActiveInvitation={invitation?.isInviter && !invitation?.acceptedAt}
           onInvitationPress={handleInvitationPress}
           highlightTimestamp={highlightTimestamp}
           onHighlightComplete={() => {
@@ -258,6 +292,21 @@ export default function ShareScreen() {
           />
         );
       })()}
+
+      {/* Refine Invitation Drawer */}
+      {invitationMessage && invitationUrl && (
+        <RefineInvitationDrawer
+          visible={showRefineDrawer}
+          invitationMessage={invitationMessage}
+          invitationUrl={invitationUrl}
+          partnerName={partnerName}
+          senderName={user?.name || user?.firstName || undefined}
+          isRefining={isRefiningInvitation}
+          onSendRefinement={handleSendInvitationRefinement}
+          onShareSuccess={() => setShowRefineDrawer(false)}
+          onClose={() => setShowRefineDrawer(false)}
+        />
+      )}
     </>
   );
 }

@@ -353,6 +353,7 @@ function buildStage1Prompt(context: PromptContext): string {
 ${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
 
 Focus: Reflect and validate before moving on. No solutions, reframes, or interpretations yet.
+FORBIDDEN in Stage 1: "next step", "what might help", "what you could try", "moving forward", "first small step" — these belong in later stages.
 ${FACILITATOR_RULES}
 ${STAGE1_QUESTION_TEMPLATES}
 Neutrality lint (internal): avoid judging words like "reasonable", "right", "wrong", "irrational". Rephrase to impact-focused language.
@@ -367,6 +368,7 @@ Feel-heard check:
 - Set FeelHeardCheck:Y when: (1) they affirm a reflection, (2) the core concern/need is named, and (3) intensity is stabilizing.
 - Be proactive — offer the check when ready rather than continuing to explore.
 - When FeelHeardCheck:Y, do NOT ask "do you feel heard?" The UI handles it. Keep setting Y until they act on it or switch topics.
+- IMPORTANT: Even when FeelHeardCheck:Y, stay in pure witness mode — continue reflecting and validating. Do NOT pivot to action, steps, or solutions.
 ${isTooEarly ? 'Too early (turn < 2) unless they ask to move on.' : ''}
 
 ${buildResponseProtocol(1)}`;

@@ -350,7 +350,14 @@ export function ChatInterface({
     if (!shouldSkip) {
       // Mark ALL current messages as known on initial load
       // New messages arriving AFTER this point will animate (not in this set)
-      messages.forEach(m => knownMessageIdsRef.current.add(m.id));
+      messages.forEach(m => {
+        knownMessageIdsRef.current.add(m.id);
+        // Also mark AI messages in persistent cache to survive component remounts
+        // (e.g., navigating to Share screen and back)
+        if (sessionId && m.role !== MessageRole.USER) {
+          markAnimatedInCache(sessionId, m.id);
+        }
+      });
       // Capture timestamp for race condition handling
       if (initialLoadCompletedAtRef.current === null) {
         initialLoadCompletedAtRef.current = new Date().toISOString();
@@ -370,6 +377,10 @@ export function ChatInterface({
       // Use <= to catch messages created at the same millisecond as initial load
       if (m.timestamp && m.timestamp <= initialLoadCompletedAtRef.current!) {
         knownMessageIdsRef.current.add(m.id);
+        // Also mark AI messages in persistent cache to survive component remounts
+        if (sessionId && m.role !== MessageRole.USER) {
+          markAnimatedInCache(sessionId, m.id);
+        }
       }
     });
   }
@@ -400,9 +411,15 @@ export function ChatInterface({
   useEffect(() => {
     if (isLoadingHistoryRef.current) {
       // Mark all current messages as known (they're being loaded from history)
-      messages.forEach(m => knownMessageIdsRef.current.add(m.id));
+      messages.forEach(m => {
+        knownMessageIdsRef.current.add(m.id);
+        // Also mark AI messages in persistent cache to survive component remounts
+        if (sessionId && m.role !== MessageRole.USER) {
+          markAnimatedInCache(sessionId, m.id);
+        }
+      });
     }
-  }, [messages]);
+  }, [messages, sessionId]);
 
   // Auto-speech: speak new AI messages when enabled
   // Uses the same "new message" logic as typewriter (checks knownMessageIdsRef)

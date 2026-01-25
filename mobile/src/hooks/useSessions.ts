@@ -21,6 +21,7 @@ import {
   CreateSessionRequest,
   CreateSessionResponse,
   SessionStatus,
+  StageStatus,
   PaginatedResponse,
   AcceptInvitationResponse,
   DeclineInvitationResponse,
@@ -620,17 +621,44 @@ export function useConfirmInvitationMessage(
             console.warn('[confirmInvitation:onSuccess] No existing session state to update');
             return old;
           }
-          const newState = {
+          // Build the new state, updating stage if advanced
+          const newInvitation = old.invitation ? {
+            ...old.invitation,
+            messageConfirmed: data.invitation.messageConfirmed,
+            messageConfirmedAt: data.invitation.messageConfirmedAt || old.invitation.messageConfirmedAt,
+          } : old.invitation;
+
+          // Update progress.myProgress.stage if advanced
+          const newProgress = data.advancedToStage !== undefined
+            ? {
+                ...old.progress,
+                myProgress: {
+                  ...old.progress.myProgress,
+                  stage: data.advancedToStage,
+                  status: 'IN_PROGRESS', // Stage advances to in-progress
+                },
+              }
+            : old.progress;
+
+          // Update session.currentStage and session.myProgress for consistency
+          const newSession = data.advancedToStage !== undefined
+            ? {
+                ...old.session,
+                currentStage: data.advancedToStage,
+                stageStatus: StageStatus.IN_PROGRESS,
+                myProgress: {
+                  ...old.session.myProgress,
+                  stage: data.advancedToStage,
+                  status: StageStatus.IN_PROGRESS,
+                },
+              }
+            : old.session;
+
+          const newState: SessionStateResponse = {
             ...old,
-            invitation: old.invitation ? {
-              ...old.invitation,
-              messageConfirmed: data.invitation.messageConfirmed,
-              messageConfirmedAt: data.invitation.messageConfirmedAt || old.invitation.messageConfirmedAt,
-            } : old.invitation,
-            // Update stage if advanced
-            progress: data.advancedToStage !== undefined
-              ? { ...old.progress, currentStage: data.advancedToStage }
-              : old.progress,
+            invitation: newInvitation,
+            progress: newProgress,
+            session: newSession,
           };
           console.log('[confirmInvitation:onSuccess] Session state updated:', {
             oldConfirmedAt: old.invitation?.messageConfirmedAt,

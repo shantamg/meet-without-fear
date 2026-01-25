@@ -34,7 +34,6 @@ import { AgreementCard } from '../components/AgreementCard';
 import { CompactChatItem } from '../components/CompactChatItem';
 import { CompactAgreementBar } from '../components/CompactAgreementBar';
 import { InvitationShareButton } from '../components/InvitationShareButton';
-import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
@@ -286,6 +285,13 @@ export function UnifiedSessionScreen({
         queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
+      if (event === 'partner.empathy_shared') {
+        // Partner shared their empathy statement - refetch messages so the indicator appears
+        console.log('[UnifiedSessionScreen] Partner shared empathy, refetching messages and empathy status');
+        queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+      }
+
       if (event === 'empathy.revealed') {
         // Empathy was revealed directly (OFFER_OPTIONAL with good alignment)
         // Both users receive this event, but only the SUBJECT (non-guesser) should see validation_needed modal
@@ -419,11 +425,6 @@ export function UnifiedSessionScreen({
     trackMessageSent(sessionId, message.length);
     sendMessage(message);
   }, [sessionId, sendMessage]);
-
-  // -------------------------------------------------------------------------
-  // Local State for Refine Invitation Drawer
-  // -------------------------------------------------------------------------
-  const [showRefineDrawer, setShowRefineDrawer] = useState(false);
 
   // Track when user is refining the invitation (after initial send, from Stage 1)
   // FIX: Initialize based on data so it persists on reload/navigation
@@ -1373,7 +1374,7 @@ export function UnifiedSessionScreen({
         onBackPress={onNavigateBack}
         onBriefStatusPress={
           session?.status === SessionStatus.INVITED && invitation?.isInviter
-            ? () => setShowRefineDrawer(true)
+            ? navigateToShare  // Navigate to Share screen where invitation drawer is
             : undefined
         }
         tabs={!isInOnboardingUnsigned ? {
@@ -1727,32 +1728,6 @@ export function UnifiedSessionScreen({
           </View>
         </View>
       </Modal>
-
-      {/* Refine Invitation Drawer */}
-      {invitationMessage && invitationUrl && (
-        <RefineInvitationDrawer
-          visible={showRefineDrawer}
-          invitationMessage={invitationMessage}
-          invitationUrl={invitationUrl}
-          partnerName={partnerName}
-          senderName={user?.name || user?.firstName || undefined}
-          onRefine={() => {
-            // Close the drawer and enter refinement mode
-            setShowRefineDrawer(false);
-            setIsRefiningInvitation(true);
-            // Send auto-message to refine
-            sendMessage("I'd like to refine the invitation message.");
-          }}
-          onShareSuccess={() => {
-            setShowRefineDrawer(false);
-            // Local latch: Immediately hide panel, survives cache race conditions
-            setHasConfirmedInvitationLocal(true);
-            // Cache-First: useConfirmInvitationMessage.onMutate sets invitation.messageConfirmed optimistically
-            handleConfirmInvitationMessage(invitationMessage);
-          }}
-          onClose={() => setShowRefineDrawer(false)}
-        />
-      )}
 
       {/* View Empathy Statement Drawer - for viewing full statement */}
       {(liveProposedEmpathyStatement || empathyDraftData?.draft?.content || empathyStatusData?.myAttempt?.content) && (
