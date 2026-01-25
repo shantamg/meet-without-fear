@@ -858,10 +858,15 @@ export function useConsentToShareEmpathy(
             awaitingSharing: false,
             hasNewSharedContext: false,
             sharedContext: old?.sharedContext ?? null,
+            mySharedContext: old?.mySharedContext ?? null,
             refinementHint: old?.refinementHint ?? null,
             readyForStage3: false,
             messageCountSinceSharedContext: old?.messageCountSinceSharedContext ?? 0,
             sharedContentDeliveryStatus: 'sending', // Show sending status on message
+            myReconcilerResult: old?.myReconcilerResult ?? null, // Preserve existing reconciler result
+            partnerHasSubmittedEmpathy: old?.partnerHasSubmittedEmpathy ?? false,
+            partnerEmpathyHeldStatus: old?.partnerEmpathyHeldStatus ?? null,
+            partnerEmpathySubmittedAt: old?.partnerEmpathySubmittedAt ?? null,
           })
         );
 

@@ -14,9 +14,9 @@ import {
   StyleSheet,
   ViewStyle,
 } from 'react-native';
-import { Check, Clock, Eye, AlertCircle, MessageCircle, Send } from 'lucide-react-native';
+import { Check, Clock, Eye, AlertCircle, MessageCircle, Send, CheckCheck } from 'lucide-react-native';
 import { colors } from '../theme';
-import { EmpathyStatus } from '@meet-without-fear/shared';
+import { EmpathyStatus, SharedContentDeliveryStatus } from '@meet-without-fear/shared';
 
 // ============================================================================
 // Types
@@ -38,6 +38,8 @@ export interface PartnerContentCardProps {
   partnerName: string;
   /** Status for empathy attempts */
   status?: EmpathyStatus;
+  /** Delivery status for shared content */
+  deliveryStatus?: SharedContentDeliveryStatus | null;
   /** Whether this is a pending action (e.g., needs validation) */
   isPending?: boolean;
   /** Timestamp of the content */
@@ -52,6 +54,8 @@ export interface PartnerContentCardProps {
   onShare?: () => void;
   onDecline?: () => void;
   onEdit?: () => void;
+  /** Refine callback for empathy drafts that need refinement */
+  onRefine?: () => void;
   /** Custom container style */
   style?: ViewStyle;
   /** Test ID */
@@ -72,7 +76,7 @@ function getMyEmpathyStatus(status: EmpathyStatus | undefined, partnerName: stri
   switch (status) {
     case 'HELD':
       return {
-        text: `Your empathy draft is saved. It will be reviewed once ${partnerName} finishes reflecting.`,
+        text: `Not delivered yet. Saved and waiting to be reviewed once ${partnerName} finishes reflecting.`,
         icon: <Clock color={colors.textMuted} size={14} />,
         color: colors.textMuted,
       };
@@ -84,13 +88,13 @@ function getMyEmpathyStatus(status: EmpathyStatus | undefined, partnerName: stri
       };
     case 'AWAITING_SHARING':
       return {
-        text: `${partnerName} has been asked to share more context to help you understand.`,
+        text: `Not delivered yet. The system found gaps in your understanding, so ${partnerName} has been asked to share more context first.`,
         icon: <AlertCircle color={colors.warning} size={14} />,
         color: colors.warning,
       };
     case 'REFINING':
       return {
-        text: `${partnerName} shared some context. You can refine your empathy draft in the AI chat.`,
+        text: 'New context available. You can refine your understanding.',
         icon: <MessageCircle color={colors.brandBlue} size={14} />,
         color: colors.brandBlue,
       };
@@ -153,6 +157,60 @@ function getPartnerEmpathyStatus(status: EmpathyStatus | undefined, partnerName:
 }
 
 // ============================================================================
+// Delivery Status Helpers
+// ============================================================================
+
+function getDeliveryStatusIcon(status: SharedContentDeliveryStatus): React.ReactNode {
+  switch (status) {
+    case 'sending':
+      return <Clock color={colors.textMuted} size={12} />;
+    case 'pending':
+      return <Clock color={colors.warning} size={12} />;
+    case 'delivered':
+      return <CheckCheck color={colors.textMuted} size={12} />;
+    case 'seen':
+      return <CheckCheck color={colors.success} size={12} />;
+    case 'superseded':
+      return <AlertCircle color={colors.textMuted} size={12} />;
+    default:
+      return null;
+  }
+}
+
+function getDeliveryStatusText(status: SharedContentDeliveryStatus): string {
+  switch (status) {
+    case 'sending':
+      return 'Sending...';
+    case 'pending':
+      return 'Not delivered yet';
+    case 'delivered':
+      return 'Delivered';
+    case 'seen':
+      return 'Seen';
+    case 'superseded':
+      return 'Updated below';
+    default:
+      return '';
+  }
+}
+
+// ============================================================================
+// Helper: Check if empathy is undelivered
+// ============================================================================
+
+function isUndelivered(status?: EmpathyStatus, deliveryStatus?: SharedContentDeliveryStatus | null): boolean {
+  // Undelivered if status is HELD, ANALYZING, AWAITING_SHARING, or REFINING
+  if (status === 'HELD' || status === 'ANALYZING' || status === 'AWAITING_SHARING' || status === 'REFINING') {
+    return true;
+  }
+  // Also undelivered if delivery status is pending, sending, or superseded
+  if (deliveryStatus === 'pending' || deliveryStatus === 'sending' || deliveryStatus === 'superseded') {
+    return true;
+  }
+  return false;
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -161,6 +219,7 @@ export function PartnerContentCard({
   content,
   partnerName,
   status,
+  deliveryStatus,
   isPending = false,
   timestamp,
   onPress,
@@ -170,15 +229,23 @@ export function PartnerContentCard({
   onShare,
   onDecline,
   onEdit,
+  onRefine,
   style,
   testID = 'partner-content-card',
 }: PartnerContentCardProps) {
   // Determine if this is my content (right aligned) or partner's (left aligned)
   const isMine = type === 'my_empathy' || type === 'shared_context_sent' || type === 'share_suggestion';
 
+  // Check if the content is undelivered (should be dimmed and italic)
+  const showAsUndelivered = type === 'my_empathy' && isUndelivered(status, deliveryStatus);
+
+  // Check if this attempt is superseded (replaced by a newer revision)
+  const isSuperseded = deliveryStatus === 'superseded';
+
   // Get status config based on type
+  // For superseded attempts, don't show detailed status - "Updated below" is sufficient
   let statusConfig: StatusConfig | null = null;
-  if (type === 'my_empathy') {
+  if (type === 'my_empathy' && !isSuperseded) {
     statusConfig = getMyEmpathyStatus(status, partnerName);
   } else if (type === 'partner_empathy') {
     statusConfig = getPartnerEmpathyStatus(status, partnerName, isPending);
@@ -208,6 +275,13 @@ export function PartnerContentCard({
   // Determine if share suggestion buttons should show
   const showShareSuggestionActions = type === 'share_suggestion' && onShare;
 
+  // Determine if refine button should show (for my empathy drafts that can be refined)
+  // Don't show refine for superseded attempts (they've been replaced)
+  const showRefineAction = type === 'my_empathy' &&
+    (status === 'REFINING' || status === 'AWAITING_SHARING') &&
+    !isSuperseded &&
+    onRefine;
+
   const CardWrapper = onPress && !showValidation && !showShareSuggestionActions ? TouchableOpacity : View;
 
   return (
@@ -224,13 +298,26 @@ export function PartnerContentCard({
           styles.card,
           isMine ? styles.cardMine : styles.cardPartner,
           isPending && styles.cardPending,
+          showAsUndelivered && styles.cardUndelivered,
         ]}
         onPress={onPress}
         activeOpacity={0.7}
         testID={`${testID}-card`}
       >
         {/* Content */}
-        <Text style={styles.content}>"{content}"</Text>
+        <Text style={[styles.content, showAsUndelivered && styles.contentUndelivered]}>
+          {content}
+        </Text>
+
+        {/* Delivery status for my content */}
+        {isMine && deliveryStatus && (
+          <View style={styles.deliveryStatusRow}>
+            {getDeliveryStatusIcon(deliveryStatus)}
+            <Text style={styles.deliveryStatusText}>
+              {getDeliveryStatusText(deliveryStatus)}
+            </Text>
+          </View>
+        )}
 
         {/* Status */}
         {statusConfig && statusConfig.text && (
@@ -239,6 +326,21 @@ export function PartnerContentCard({
             <Text style={[styles.statusText, { color: statusConfig.color }]}>
               {statusConfig.text}
             </Text>
+          </View>
+        )}
+
+        {/* Refine button for empathy drafts that can be refined */}
+        {showRefineAction && (
+          <View style={styles.refineButtonContainer}>
+            <TouchableOpacity
+              style={styles.refineButton}
+              onPress={onRefine}
+              activeOpacity={0.7}
+              testID={`${testID}-refine`}
+            >
+              <MessageCircle color={colors.brandBlue} size={16} />
+              <Text style={styles.refineButtonText}>Refine</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -342,11 +444,28 @@ const styles = StyleSheet.create({
     borderColor: colors.accent,
     borderWidth: 2,
   },
+  cardUndelivered: {
+    borderStyle: 'dashed',
+  },
   content: {
     fontSize: 15,
     lineHeight: 22,
     color: colors.textPrimary,
+  },
+  contentUndelivered: {
     fontStyle: 'italic',
+    color: colors.textSecondary,
+  },
+  deliveryStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginTop: 6,
+  },
+  deliveryStatusText: {
+    fontSize: 11,
+    color: colors.textMuted,
   },
   statusContainer: {
     flexDirection: 'row',
@@ -449,6 +568,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: 'white',
+  },
+  refineButtonContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  refineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.brandBlue,
+  },
+  refineButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.brandBlue,
   },
 });
 

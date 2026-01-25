@@ -12,6 +12,7 @@ import {
   GetShareSuggestionResponse,
   EmpathyStatus,
   EmpathyAttemptDTO,
+  ReconcilerResultSummary,
 } from '@meet-without-fear/shared';
 
 // ============================================================================
@@ -59,10 +60,20 @@ export interface SharingStatusData {
   };
   /** Shared context from subject (if I'm the guesser) */
   sharedContext: EmpathyExchangeStatusResponse['sharedContext'];
+  /** Content I shared (if I'm the subject) */
+  mySharedContext: EmpathyExchangeStatusResponse['mySharedContext'];
   /** Whether there is new shared context to view */
   hasNewSharedContext: boolean;
   /** Whether I need to validate partner's empathy */
   needsToValidatePartner: boolean;
+  /** Reconciler result for my empathy attempt (if reconciler has run) */
+  myReconcilerResult: ReconcilerResultSummary | null;
+  /** Whether partner has submitted an empathy attempt (even if not revealed to me yet) */
+  partnerHasSubmittedEmpathy: boolean;
+  /** Partner's empathy attempt status (even if not revealed) - allows showing "held by reconciler" */
+  partnerEmpathyHeldStatus: EmpathyStatus | null;
+  /** When partner submitted their empathy attempt (for chronological ordering) */
+  partnerEmpathySubmittedAt: string | null;
   /** Loading states */
   isLoading: boolean;
   isError: boolean;
@@ -121,11 +132,22 @@ export function useSharingStatus(sessionId: string | undefined): SharingStatusDa
     // Add shared context if received (I'm the guesser)
     if (empathyStatus?.sharedContext) {
       items.push({
-        id: `shared-context-${empathyStatus.sharedContext.sharedAt}`,
+        id: `shared-context-received-${empathyStatus.sharedContext.sharedAt}`,
         type: 'shared_context',
         direction: 'received',
         content: empathyStatus.sharedContext.content,
         timestamp: empathyStatus.sharedContext.sharedAt,
+      });
+    }
+
+    // Add shared context I sent (I'm the subject)
+    if (empathyStatus?.mySharedContext) {
+      items.push({
+        id: `shared-context-sent-${empathyStatus.mySharedContext.sharedAt}`,
+        type: 'shared_context',
+        direction: 'sent',
+        content: empathyStatus.mySharedContext.content,
+        timestamp: empathyStatus.mySharedContext.sharedAt,
       });
     }
 
@@ -201,8 +223,13 @@ export function useSharingStatus(sessionId: string | undefined): SharingStatusDa
       validatedAt: partnerEmpathyData?.validatedAt ?? null,
     },
     sharedContext: empathyStatus?.sharedContext ?? null,
+    mySharedContext: empathyStatus?.mySharedContext ?? null,
     hasNewSharedContext: empathyStatus?.hasNewSharedContext ?? false,
     needsToValidatePartner,
+    myReconcilerResult: empathyStatus?.myReconcilerResult ?? null,
+    partnerHasSubmittedEmpathy: empathyStatus?.partnerHasSubmittedEmpathy ?? false,
+    partnerEmpathyHeldStatus: empathyStatus?.partnerEmpathyHeldStatus ?? null,
+    partnerEmpathySubmittedAt: empathyStatus?.partnerEmpathySubmittedAt ?? null,
     isLoading:
       empathyStatusQuery.isLoading ||
       shareOfferQuery.isLoading ||

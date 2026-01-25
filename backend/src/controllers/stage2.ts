@@ -1702,11 +1702,50 @@ export async function getEmpathyExchangeStatus(
       }
     }
 
-    // Get delivery status of any shared content (for subject - the person who shared)
+    // Get delivery status and content of any shared content (for subject - the person who shared)
     const deliveryStatusResult = await getSharedContentDeliveryStatus(sessionId, user.id);
     const sharedContentDeliveryStatus = deliveryStatusResult.hasSharedContent
       ? deliveryStatusResult.deliveryStatus
       : null;
+    // Content the user shared (for subject to see in Partner tab)
+    const mySharedContext = deliveryStatusResult.hasSharedContent && deliveryStatusResult.sharedContent
+      ? {
+        content: deliveryStatusResult.sharedContent,
+        sharedAt: deliveryStatusResult.sharedAt!,
+        deliveryStatus: deliveryStatusResult.deliveryStatus,
+      }
+      : null;
+
+    // Get reconciler result for my empathy attempt (if reconciler has run)
+    let myReconcilerResult: {
+      gapSeverity: 'none' | 'minor' | 'moderate' | 'significant';
+      action: 'PROCEED' | 'OFFER_OPTIONAL' | 'OFFER_SHARING';
+      analyzedAt: string;
+      gapSummary: string | null;
+    } | null = null;
+    if (myAttempt) {
+      const reconcilerResultForMe = await prisma.reconcilerResult.findFirst({
+        where: {
+          sessionId,
+          guesserId: user.id,
+        },
+        select: {
+          gapSeverity: true,
+          recommendedAction: true,
+          createdAt: true,
+          gapSummary: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (reconcilerResultForMe) {
+        myReconcilerResult = {
+          gapSeverity: reconcilerResultForMe.gapSeverity as 'none' | 'minor' | 'moderate' | 'significant',
+          action: reconcilerResultForMe.recommendedAction as 'PROCEED' | 'OFFER_OPTIONAL' | 'OFFER_SHARING',
+          analyzedAt: reconcilerResultForMe.createdAt.toISOString(),
+          gapSummary: reconcilerResultForMe.gapSummary,
+        };
+      }
+    }
 
     // Derive delivery status from empathy attempt status
     // - pending: not yet revealed to partner (HELD, ANALYZING, AWAITING_SHARING, REFINING, NEEDS_WORK)
@@ -1759,6 +1798,16 @@ export async function getEmpathyExchangeStatus(
       messageCountSinceSharedContext,
       // Delivery status of shared content (for subject who shared): pending, delivered, or seen
       sharedContentDeliveryStatus,
+      // Content the user shared (for subject to see in Partner tab)
+      mySharedContext,
+      // Reconciler result for my empathy attempt (if reconciler has run)
+      myReconcilerResult,
+      // Whether partner has submitted an empathy attempt (even if not revealed to me yet)
+      partnerHasSubmittedEmpathy: !!partnerAttempt,
+      // Partner's empathy attempt status (even if not revealed) - allows showing "held by reconciler"
+      partnerEmpathyHeldStatus: partnerAttempt?.status ?? null,
+      // When partner submitted their empathy (for chronological ordering)
+      partnerEmpathySubmittedAt: partnerAttempt?.sharedAt?.toISOString() ?? null,
     });
   } catch (error) {
     console.error('[getEmpathyExchangeStatus] Error:', error);

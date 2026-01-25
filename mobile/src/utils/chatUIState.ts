@@ -187,6 +187,10 @@ function computeShowInvitationPanel(inputs: ChatUIStateInputs): boolean {
 
 /**
  * Determines if empathy statement panel should show.
+ *
+ * The panel shows "Review what you'll share" for initial empathy drafts.
+ * When refining (received shared context from partner), the user should use
+ * the Refine button on the Share screen instead - no panel shown in AI chat.
  */
 function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
   const {
@@ -195,14 +199,16 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
     empathyAlreadyConsented,
     hasSharedEmpathyLocal,
     isRefiningEmpathy,
-    messageCountSinceSharedContext,
-    myAttemptContent,
   } = inputs;
 
   const currentStage = myStage ?? Stage.ONBOARDING;
 
+  // When refining, don't show the panel - user should use Refine button on Share screen
+  if (isRefiningEmpathy) {
+    return false;
+  }
+
   // Local latch: Once user clicks Share, never show panel again (prevents flash during refetch)
-  // When entering refining mode, the latch is reset externally so panel can show again
   if (hasSharedEmpathyLocal) {
     return false;
   }
@@ -212,23 +218,13 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  // If already consented and not refining, don't show
-  if (empathyAlreadyConsented && !isRefiningEmpathy) {
+  // If already consented, don't show
+  if (empathyAlreadyConsented) {
     return false;
   }
 
-  // When refining (received shared context from partner), require at least 1 message
-  // before showing the "Revisit what you'll share" button.
-  // EXCEPTION: If AI just returned a proposedEmpathyStatement (hasEmpathyContent from live state),
-  // show the panel immediately - the AI response proves user already sent a message,
-  // even if empathyStatusData.messageCountSinceSharedContext hasn't refetched yet.
-  if (isRefiningEmpathy && messageCountSinceSharedContext < 1 && !hasEmpathyContent) {
-    return false;
-  }
-
-  // Must have content to show (from AI, draft, or refining)
-  const hasContent = hasEmpathyContent || (isRefiningEmpathy && myAttemptContent);
-  return hasContent;
+  // Must have content to show (from AI or draft)
+  return hasEmpathyContent;
 }
 
 /**

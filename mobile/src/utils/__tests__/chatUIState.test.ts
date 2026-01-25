@@ -389,7 +389,9 @@ describe('Empathy Panel Visibility', () => {
     expect(result.panels.showEmpathyPanel).toBe(false);
   });
 
-  it('shows in refining mode with at least 1 message sent', () => {
+  it('does not show in refining mode - user should use Refine button on Share screen', () => {
+    // When refining, the empathy panel should NOT show in AI chat.
+    // Users should use the Refine button on the Share screen instead.
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -401,7 +403,7 @@ describe('Empathy Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showEmpathyPanel).toBe(true);
+    expect(result.panels.showEmpathyPanel).toBe(false);
   });
 
   it('does not show in refining mode before user sends message', () => {
@@ -419,10 +421,10 @@ describe('Empathy Panel Visibility', () => {
     expect(result.panels.showEmpathyPanel).toBe(false);
   });
 
-  it('shows in refining mode when AI returns proposedEmpathyStatement even with stale messageCount', () => {
-    // When AI returns a proposedEmpathyStatement, the panel should show immediately
-    // even if empathyStatusData.messageCountSinceSharedContext hasn't refetched yet.
-    // The AI response proves the user already sent a message.
+  it('does not show in refining mode even when AI returns proposedEmpathyStatement', () => {
+    // When refining, the empathy panel should NOT show in AI chat.
+    // Users should use the Refine button on the Share screen instead,
+    // even if AI has returned a proposed empathy statement.
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -434,7 +436,7 @@ describe('Empathy Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showEmpathyPanel).toBe(true);
+    expect(result.panels.showEmpathyPanel).toBe(false);
   });
 });
 

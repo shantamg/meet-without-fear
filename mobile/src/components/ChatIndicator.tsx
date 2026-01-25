@@ -19,7 +19,12 @@ export type ChatIndicatorType =
   | 'session-start'
   | 'feel-heard'
   | 'compact-signed'
-  | 'context-shared';
+  | 'context-shared'
+  | 'empathy-shared'
+  | 'reconciler-analyzing'
+  | 'reconciler-gaps-found'
+  | 'reconciler-ready'
+  | 'partner-empathy-held';
 
 interface ChatIndicatorProps {
   type: ChatIndicatorType;
@@ -27,13 +32,20 @@ interface ChatIndicatorProps {
   testID?: string;
   /** If provided, makes the indicator tappable */
   onPress?: () => void;
+  /** Optional metadata for dynamic indicator text */
+  metadata?: {
+    /** Whether this content is from the current user (vs partner) */
+    isFromMe?: boolean;
+    /** Partner's display name (for "Context from {name}" text) */
+    partnerName?: string;
+  };
 }
 
 // ============================================================================
 // Component
 // ============================================================================
 
-export function ChatIndicator({ type, timestamp, testID, onPress }: ChatIndicatorProps) {
+export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: ChatIndicatorProps) {
   const styles = useStyles();
 
   const getIndicatorText = (): string => {
@@ -51,11 +63,33 @@ export function ChatIndicator({ type, timestamp, testID, onPress }: ChatIndicato
       case 'compact-signed':
         return 'Compact Signed';
       case 'context-shared':
-        return 'Context shared ›';
+        // Show "Context from {name}" when it's from partner, otherwise "Context shared"
+        if (metadata?.isFromMe === false && metadata?.partnerName) {
+          return `Context from ${metadata.partnerName}`;
+        }
+        return 'Context shared';
+      case 'empathy-shared':
+        // Show "Empathy from {name}" when it's from partner, otherwise "Empathy shared"
+        if (metadata?.isFromMe === false && metadata?.partnerName) {
+          return `Empathy from ${metadata.partnerName}`;
+        }
+        return 'Empathy shared';
+      case 'reconciler-analyzing':
+        return 'Analyzing understanding...';
+      case 'reconciler-gaps-found':
+        return 'Gaps detected - awaiting context';
+      case 'reconciler-ready':
+        return 'Understanding verified ✓';
+      case 'partner-empathy-held':
+        const name = metadata?.partnerName || 'Partner';
+        return `${name} shared empathy • Awaiting review`;
       default:
         return '';
     }
   };
+
+  // Whether this indicator links to another page (shows arrow)
+  const hasArrow = type === 'context-shared' || type === 'empathy-shared';
 
   const getLineStyle = () => {
     switch (type) {
@@ -67,7 +101,16 @@ export function ChatIndicator({ type, timestamp, testID, onPress }: ChatIndicato
       case 'compact-signed':
         return styles.compactSignedLine;
       case 'context-shared':
+      case 'empathy-shared':
         return styles.contextSharedLine;
+      case 'reconciler-analyzing':
+        return styles.reconcilerAnalyzingLine;
+      case 'reconciler-gaps-found':
+        return styles.reconcilerGapsLine;
+      case 'reconciler-ready':
+        return styles.reconcilerReadyLine;
+      case 'partner-empathy-held':
+        return styles.partnerEmpathyHeldLine;
       default:
         return styles.defaultLine;
     }
@@ -83,7 +126,16 @@ export function ChatIndicator({ type, timestamp, testID, onPress }: ChatIndicato
       case 'compact-signed':
         return styles.compactSignedText;
       case 'context-shared':
+      case 'empathy-shared':
         return styles.contextSharedText;
+      case 'reconciler-analyzing':
+        return styles.reconcilerAnalyzingText;
+      case 'reconciler-gaps-found':
+        return styles.reconcilerGapsText;
+      case 'reconciler-ready':
+        return styles.reconcilerReadyText;
+      case 'partner-empathy-held':
+        return styles.partnerEmpathyHeldText;
       default:
         return styles.defaultText;
     }
@@ -92,7 +144,12 @@ export function ChatIndicator({ type, timestamp, testID, onPress }: ChatIndicato
   const content = (
     <View style={styles.lineContainer}>
       <View style={[styles.line, getLineStyle()]} />
-      <Text style={[styles.text, getTextStyle()]}>{getIndicatorText()}</Text>
+      <View style={styles.textContainer}>
+        <Text style={[styles.text, getTextStyle()]}>{getIndicatorText()}</Text>
+        {hasArrow && (
+          <Text style={[styles.arrow, getTextStyle()]}>→</Text>
+        )}
+      </View>
       <View style={[styles.line, getLineStyle()]} />
     </View>
   );
@@ -138,12 +195,21 @@ const useStyles = () =>
       height: 1,
       backgroundColor: t.colors.border,
     },
+    textContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
     text: {
       fontSize: t.typography.fontSize.sm,
       fontFamily: t.typography.fontFamily.regular,
       color: t.colors.textMuted,
       textTransform: 'uppercase',
       letterSpacing: 1,
+    },
+    arrow: {
+      fontSize: 16,
+      fontWeight: '600',
     },
     // Invitation sent: yellow/amber tint - separate line and text styles
     invitationSentLine: {
@@ -178,5 +244,33 @@ const useStyles = () =>
     },
     defaultText: {
       color: t.colors.textMuted,
+    },
+    // Reconciler analyzing: blue tint for in-progress
+    reconcilerAnalyzingLine: {
+      backgroundColor: 'rgba(59, 130, 246, 0.3)',
+    },
+    reconcilerAnalyzingText: {
+      color: 'rgba(59, 130, 246, 0.9)',
+    },
+    // Reconciler gaps found: orange/warning tint
+    reconcilerGapsLine: {
+      backgroundColor: 'rgba(245, 158, 11, 0.3)',
+    },
+    reconcilerGapsText: {
+      color: 'rgba(245, 158, 11, 0.9)',
+    },
+    // Reconciler ready: green/success tint
+    reconcilerReadyLine: {
+      backgroundColor: 'rgba(34, 197, 94, 0.3)',
+    },
+    reconcilerReadyText: {
+      color: 'rgba(34, 197, 94, 0.9)',
+    },
+    // Partner empathy held: blue/info tint
+    partnerEmpathyHeldLine: {
+      backgroundColor: 'rgba(59, 130, 246, 0.3)',
+    },
+    partnerEmpathyHeldText: {
+      color: 'rgba(59, 130, 246, 0.9)',
     },
   }));

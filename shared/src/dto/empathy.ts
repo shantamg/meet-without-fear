@@ -220,6 +220,18 @@ export interface ResubmitEmpathyResponse {
 // Empathy Exchange Status (for UI state management)
 // ============================================================================
 
+/** Reconciler result summary for display */
+export interface ReconcilerResultSummary {
+  /** Gap severity: none, minor, moderate, significant */
+  gapSeverity: 'none' | 'minor' | 'moderate' | 'significant';
+  /** Action taken: PROCEED, OFFER_OPTIONAL, OFFER_SHARING */
+  action: 'PROCEED' | 'OFFER_OPTIONAL' | 'OFFER_SHARING';
+  /** When the reconciler analyzed this */
+  analyzedAt: string;
+  /** Brief summary of gaps (if any) */
+  gapSummary: string | null;
+}
+
 export interface EmpathyExchangeStatusResponse {
   /** Current user's empathy attempt toward partner */
   myAttempt: EmpathyAttemptDTO | null;
@@ -250,6 +262,20 @@ export interface EmpathyExchangeStatusResponse {
   messageCountSinceSharedContext: number;
   /** Delivery status of shared content (for subject who shared): pending, delivered, or seen */
   sharedContentDeliveryStatus: SharedContentDeliveryStatus | null;
+  /** Content the user shared (for subject to see in Partner tab) */
+  mySharedContext: {
+    content: string;
+    sharedAt: string;
+    deliveryStatus: SharedContentDeliveryStatus | null;
+  } | null;
+  /** Reconciler result for my empathy attempt (if reconciler has run) */
+  myReconcilerResult: ReconcilerResultSummary | null;
+  /** Whether partner has submitted an empathy attempt (even if not revealed to me yet) */
+  partnerHasSubmittedEmpathy: boolean;
+  /** Partner's empathy attempt status (even if not revealed) - allows showing "held by reconciler" */
+  partnerEmpathyHeldStatus: EmpathyStatus | null;
+  /** When partner submitted their empathy attempt (for chronological ordering, even if not revealed) */
+  partnerEmpathySubmittedAt: string | null;
 }
 
 // ============================================================================
