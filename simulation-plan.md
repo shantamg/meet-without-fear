@@ -18,28 +18,52 @@
 - **Engineering overhead:** Building and maintaining auto-fix automation is costly, and the risk of unsafe changes is high.
 
 **Overall Score: 4/10**
-- Good ambition but too complex and fragile for initial implementation. It couples e2e testing with automated code changes, which is not realistic without strong guardrails.
+- Good ambition but too complex and fragile for initial implementation. It couples e2e testing with automated code changes, which is not realistic without strong guardrails. It also doesn’t directly target the current blocker (mobile UI workflow gaps).
 
 ---
 
 ## Improved Plan (Safer, Faster, and More Maintainable)
 
 ### Goals
-1. **Reliable simulation coverage** for 20 scenarios.
-2. **Deterministic test data** and stable infrastructure.
-3. **High-signal failures** with actionable diagnostics.
-4. **Human-in-the-loop fixes** rather than auto-patching production code.
+1. **Unblock manual QA quickly** for mobile workflows by providing ready-to-load database states.
+2. **Reliable backend flow checks** for 20 scenarios (as a guardrail, not a replacement for UI testing).
+3. **Deterministic test data** and stable infrastructure.
+4. **High-signal failures** with actionable diagnostics.
+5. **Human-in-the-loop fixes** rather than auto-patching production code.
 
 ### Strategy
-**Split the problem into two phases:**
-1. **Simulation execution & diagnostics**
-2. **Fix workflow automation (without auto-writing code)**
+**Split the problem into three tracks, aligned to current blockers:**
+1. **Saved database states for manual mobile testing** (fastest path to unblock UI/debugging).
+2. **Deterministic backend simulations** (coverage + regression protection).
+3. **Fix workflow automation (without auto-writing code)** (optional, light-weight).
 
-This gives dependable coverage while still streamlining bug resolution.
+This prioritizes immediate value while preserving a path to broader automation.
 
 ---
 
-## Phase 1: Deterministic Simulation Execution
+## Track 1: Saved Database States for Manual Mobile Testing
+
+### Why this matters now
+- The main blockers are in the mobile UI flow. Having one-command, prebuilt DB states lets you jump to a specific session stage and debug the exact UI behavior quickly.
+- This provides higher day-to-day value than full end-to-end automation at this phase.
+
+### Implementation outline
+- Add a `scripts/db-state/` directory:
+  - `seed-scenarios.ts`: creates 20 scenarios with deterministic IDs.
+  - `snapshot.ts`: exports DB state (SQL or JSON).
+  - `restore.ts`: restores a snapshot into the test DB.
+- Store snapshots by scenario and stage:
+  - `snapshots/scenario-01/INTRODUCTION.sql`
+  - `snapshots/scenario-01/SHARING.sql`
+  - ...
+- Add CLI helpers:
+  - `npm run db:restore -- --scenario=scenario-01 --stage=SHARING`
+  - `npm run db:seed`
+- Document how to hook the mobile app to the test DB and jump directly to a stage.
+
+---
+
+## Track 2: Deterministic Simulation Execution
 
 ### 1) Test Harness & Environment
 - **Use a dedicated test environment** with seeded data and isolated DB.
@@ -79,7 +103,7 @@ This gives dependable coverage while still streamlining bug resolution.
 
 ---
 
-## Phase 2: Fix Workflow Automation (Human-in-the-Loop)
+## Track 3: Fix Workflow Automation (Human-in-the-Loop)
 
 ### 1) Automated Issue Creation (No Auto-Fix)
 - When a scenario fails, automatically:
@@ -99,25 +123,31 @@ This gives dependable coverage while still streamlining bug resolution.
 
 ## Implementation Plan
 
-### Step 1: Foundations
+### Step 1: Saved DB States (Immediate Value)
+- Add `scripts/db-state/` with seed/restore/snapshot utilities.
+- Create 20 scenarios with deterministic IDs.
+- Capture snapshots for each workflow stage (or at least key stages: INTRODUCTION, SHARING, AGREEMENT, RESOLUTION).
+- Document a short mobile QA loop: restore → run app → debug UI → iterate.
+
+### Step 2: Foundations for Simulations
 - Add a `tests/simulations` folder with:
   - `helpers/` (api client, auth mock, pubsub mock, db utilities)
   - `scenarios/` (20 deterministic fixtures)
   - `runner/` (runner + orchestrator)
   - `reports/` (JSON + markdown output)
 
-### Step 2: Environment Control
+### Step 3: Environment Control
 - Add `scripts/setup-test-env.ts` to:
   - start backend
   - apply migrations to test DB
   - verify health
 - Add `scripts/teardown-test-env.ts` to stop server and clean resources.
 
-### Step 3: Mocking External Services
+### Step 4: Mocking External Services
 - Create adapters to swap real vs mock services via environment variables.
 - Default to mock in CI; allow real integrations in a separate nightly run.
 
-### Step 4: Simulation Runner
+### Step 5: Simulation Runner
 - Build a runner that:
   - authenticates users (mock)
   - creates sessions
@@ -126,11 +156,11 @@ This gives dependable coverage while still streamlining bug resolution.
   - asserts final state
 - Ensure every step writes structured logs.
 
-### Step 5: Reporting & Diagnostics
+### Step 6: Reporting & Diagnostics
 - Store per-scenario JSON artifacts and a summary report.
 - Include failure classification and reproduction steps.
 
-### Step 6: CI Integration
+### Step 7: CI Integration
 - Add npm scripts:
   - `test:simulations` (default mock)
   - `test:simulations:real` (nightly, live services)
@@ -139,6 +169,7 @@ This gives dependable coverage while still streamlining bug resolution.
 ---
 
 ## Expected Benefits
+- **Faster UI debugging:** One-command DB restores to jump into any scenario stage.
 - **Reliability:** Mocks reduce flakiness from external systems.
 - **Speed:** Parallel execution and no auto-fix loop.
 - **Safety:** No risky automatic code changes.
@@ -148,6 +179,7 @@ This gives dependable coverage while still streamlining bug resolution.
 ---
 
 ## Success Metrics
+- Saved DB states can be restored in under 1 minute for any scenario/stage.
 - 95%+ scenario pass rate in CI with mock services.
 - Full suite completes within 10–15 minutes.
 - Clear per-scenario logs and diagnostic artifacts.
@@ -156,8 +188,15 @@ This gives dependable coverage while still streamlining bug resolution.
 ---
 
 ## Deliverables
-1. Deterministic simulation runner and 20 scenarios.
-2. Mocked services for auth, realtime, and email.
-3. Report artifacts for each run.
-4. CI job for mock runs and optional nightly real integrations.
-5. Documentation on running and interpreting simulations.
+1. DB seed/restore/snapshot tooling with per-scenario stage snapshots.
+2. Deterministic simulation runner and 20 scenarios.
+3. Mocked services for auth, realtime, and email.
+4. Report artifacts for each run.
+5. CI job for mock runs and optional nightly real integrations.
+6. Documentation on running and interpreting simulations.
+
+---
+
+## Notes on MCP vs Existing Architecture
+- The plan above **does not require an MCP server**. Existing memory/knowledge architecture can support the same improvements (relationship tracking, notable facts, milestones, etc.) without extra infrastructure.
+- MCP could be revisited later if there is a clear integration need, but it is not a prerequisite for the simulation or database-state workflows described here.
