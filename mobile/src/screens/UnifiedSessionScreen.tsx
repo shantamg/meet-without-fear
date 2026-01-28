@@ -254,83 +254,96 @@ export function UnifiedSessionScreen({
         return;
       }
 
-      // Handle reconciler events - use refetchQueries for immediate update (not just invalidate)
-      // invalidateQueries only marks as stale; refetchQueries triggers immediate fetch
-      if (event === 'empathy.share_suggestion') {
-        // Subject received a share suggestion - immediately refetch share offer data
-        console.log('[UnifiedSessionScreen] Share suggestion received, refetching shareOffer cache');
+      // Handle reconciler events - use setQueryData with data included in events (no extra HTTP round-trips)
+      if (event === 'empathy.share_suggestion' && data.forUserId === user?.id) {
+        // Subject received a share suggestion - update cache directly
+        console.log('[UnifiedSessionScreen] Share suggestion received, updating cache');
+        queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
-        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
-        // Show modal only if for current user (the subject who should share)
-        if (data.forUserId === user?.id) {
-          showPartnerEventModal('share_suggestion');
-        }
+        showPartnerEventModal('share_suggestion');
       }
 
-      if (event === 'empathy.context_shared') {
-        // Guesser received shared context from partner
-        console.log('[UnifiedSessionScreen] Context shared, refetching empathy and message caches');
-        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+      if (event === 'empathy.context_shared' && data.forUserId === user?.id) {
+        // Guesser received shared context from partner - update cache directly
+        console.log('[UnifiedSessionScreen] Context shared, updating cache');
+        queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
-        // Refetch infinite messages query so new SHARED_CONTEXT message appears
+        // Refetch messages so new SHARED_CONTEXT message appears
         queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
-        // Mark session as viewed since user is actively viewing - this updates lastViewedAt
-        // so the partner (subject) sees "seen" status in real-time
+        // Mark session as viewed so partner sees "seen" status
         markSessionViewed({});
-        // Show modal only to the intended recipient (the guesser)
-        if (data.forUserId === user?.id) {
-          showPartnerEventModal('context_shared');
+        showPartnerEventModal('context_shared');
+      }
+
+      if (event === 'partner.session_viewed' && data.empathyStatuses && user?.id) {
+        // Partner viewed the session - update delivery status
+        console.log('[UnifiedSessionScreen] Partner viewed session, updating cache');
+        const statuses = data.empathyStatuses as Record<string, unknown>;
+        if (statuses[user.id]) {
+          queryClient.setQueryData(stageKeys.empathyStatus(sessionId), statuses[user.id]);
         }
       }
 
-      if (event === 'partner.session_viewed') {
-        // Partner viewed the session - update delivery status (pending → seen)
-        console.log('[UnifiedSessionScreen] Partner viewed session, refetching empathy status cache');
-        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
-      }
-
-      if (event === 'partner.share_tab_viewed') {
-        // Partner viewed the Share tab - update delivery status (pending → seen) for shared content
-        console.log('[UnifiedSessionScreen] Partner viewed Share tab, refetching empathy status cache');
-        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+      if (event === 'partner.share_tab_viewed' && data.empathyStatuses && user?.id) {
+        // Partner viewed the Share tab - update delivery status
+        console.log('[UnifiedSessionScreen] Partner viewed Share tab, updating cache');
+        const statuses = data.empathyStatuses as Record<string, unknown>;
+        if (statuses[user.id]) {
+          queryClient.setQueryData(stageKeys.empathyStatus(sessionId), statuses[user.id]);
+        }
       }
 
       if (event === 'partner.stage_completed') {
-        // Partner completed a stage - immediately refetch status
-        console.log('[UnifiedSessionScreen] Partner completed stage, refetching status caches');
-        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+        // Partner completed a stage - update caches
+        console.log('[UnifiedSessionScreen] Partner completed stage');
+        if (data.empathyStatus) {
+          queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
+        }
         queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
       if (event === 'partner.empathy_shared') {
-        // Partner shared their empathy statement - refetch messages so the indicator appears
-        console.log('[UnifiedSessionScreen] Partner shared empathy, refetching messages and empathy status');
+        // Partner shared their empathy statement
+        console.log('[UnifiedSessionScreen] Partner shared empathy');
+        if (data.empathyStatus) {
+          queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
+        }
         queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
-        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
 
-      if (event === 'empathy.revealed') {
-        // Empathy was revealed directly (OFFER_OPTIONAL with good alignment)
-        // Both users receive this event, but only the SUBJECT (non-guesser) should see validation_needed modal
-        console.log('[UnifiedSessionScreen] Empathy revealed, refetching empathy status cache');
-        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+      if (event === 'empathy.revealed' && data.forUserId === user?.id) {
+        // Empathy was revealed - update cache directly
+        console.log('[UnifiedSessionScreen] Empathy revealed, updating cache');
+        queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         queryClient.refetchQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
         // Show validation_needed modal only if we're the SUBJECT (not the guesser)
-        // The guesser's empathy was revealed to us, so we need to validate it
         if (data.guesserUserId && data.guesserUserId !== user?.id) {
           showPartnerEventModal('validation_needed');
         }
       }
 
       if (event === 'empathy.status_updated') {
-        // Status changed - refetch cache
-        console.log('[UnifiedSessionScreen] Empathy status updated, refetching status');
-        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
-        // Only show empathy_validated modal if our empathy was validated
-        // (status is VALIDATED and forUserId matches current user)
+        // Status changed - update cache directly
+        console.log('[UnifiedSessionScreen] Empathy status updated');
+        // Check for individual status (forUserId + empathyStatus) or broadcast (empathyStatuses)
+        if (data.empathyStatus && data.forUserId === user?.id) {
+          queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
+        } else if (data.empathyStatuses && user?.id) {
+          const empathyStatuses = data.empathyStatuses as Record<string, unknown>;
+          if (empathyStatuses[user.id]) {
+            queryClient.setQueryData(stageKeys.empathyStatus(sessionId), empathyStatuses[user.id]);
+          }
+        }
+        // Show empathy_validated modal if our empathy was validated
         if (data.status === 'VALIDATED' && data.forUserId === user?.id) {
           showPartnerEventModal('empathy_validated');
         }
+      }
+
+      if (event === 'empathy.refining' && data.forUserId === user?.id) {
+        // Guesser received notification that subject shared context - update cache directly
+        console.log('[UnifiedSessionScreen] Empathy refining, updating cache');
+        queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
       }
     },
     // Fire-and-forget pattern: AI responses arrive via Ably

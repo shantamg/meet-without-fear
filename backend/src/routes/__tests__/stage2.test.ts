@@ -39,6 +39,21 @@ jest.mock('../../services/embedding', () => ({
   embedSessionContent: jest.fn().mockResolvedValue(true),
 }));
 
+// Mock empathy-status service (used for Ably events with full data)
+jest.mock('../../services/empathy-status', () => ({
+  buildEmpathyExchangeStatus: jest.fn().mockResolvedValue({
+    myAttempt: { id: 'mock-attempt', status: 'VALIDATED' },
+    partnerAttempt: null,
+    analyzing: false,
+    readyForStage3: false,
+    partnerCompletedStage1: true,
+  }),
+  buildEmpathyExchangeStatusForBothUsers: jest.fn().mockResolvedValue({
+    'user-1': { myAttempt: { status: 'VALIDATED' }, partnerAttempt: null },
+    'partner-1': { myAttempt: { status: 'VALIDATED' }, partnerAttempt: null },
+  }),
+}));
+
 // Import controllers after mocks
 import {
   saveDraft,

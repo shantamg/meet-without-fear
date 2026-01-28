@@ -1132,12 +1132,19 @@ export async function markSessionViewed(req: Request, res: Response): Promise<vo
     });
 
     // Notify partner that this user viewed the session (for delivery status updates)
-    // Fire-and-forget - don't block the response
-    publishSessionEvent(sessionId, 'partner.session_viewed', {
-      viewedAt: now.toISOString(),
-    }, user.id).catch((err) => {
-      console.error('[markSessionViewed] Failed to publish session_viewed event:', err);
-    });
+    // Fire-and-forget - don't block the response. Include empathy status for cache update.
+    (async () => {
+      try {
+        const { buildEmpathyExchangeStatusForBothUsers } = await import('../services/empathy-status');
+        const allStatuses = await buildEmpathyExchangeStatusForBothUsers(sessionId);
+        await publishSessionEvent(sessionId, 'partner.session_viewed', {
+          viewedAt: now.toISOString(),
+          empathyStatuses: allStatuses,
+        }, user.id);
+      } catch (err) {
+        console.error('[markSessionViewed] Failed to publish session_viewed event:', err);
+      }
+    })();
 
     successResponse(res, {
       success: true,
@@ -1188,12 +1195,19 @@ export async function markShareTabViewed(req: Request, res: Response): Promise<v
     });
 
     // Notify partner that this user viewed the Share tab (for delivery status updates)
-    // Fire-and-forget - don't block the response
-    publishSessionEvent(sessionId, 'partner.share_tab_viewed', {
-      viewedAt: now.toISOString(),
-    }, user.id).catch((err) => {
-      console.error('[markShareTabViewed] Failed to publish share_tab_viewed event:', err);
-    });
+    // Fire-and-forget - don't block the response. Include empathy status for cache update.
+    (async () => {
+      try {
+        const { buildEmpathyExchangeStatusForBothUsers } = await import('../services/empathy-status');
+        const allStatuses = await buildEmpathyExchangeStatusForBothUsers(sessionId);
+        await publishSessionEvent(sessionId, 'partner.share_tab_viewed', {
+          viewedAt: now.toISOString(),
+          empathyStatuses: allStatuses,
+        }, user.id);
+      } catch (err) {
+        console.error('[markShareTabViewed] Failed to publish share_tab_viewed event:', err);
+      }
+    })();
 
     successResponse(res, {
       success: true,

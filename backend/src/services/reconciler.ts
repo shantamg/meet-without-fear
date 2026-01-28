@@ -680,11 +680,16 @@ export async function runReconcilerForDirection(
   });
 
   // Notify the guesser that the subject is considering a share suggestion (US-5)
+  // Include full empathy status to avoid extra HTTP round-trip
   const { notifyPartner } = await import('./realtime');
+  const { buildEmpathyExchangeStatus } = await import('./empathy-status');
+  const guesserEmpathyStatus = await buildEmpathyExchangeStatus(sessionId, guesserId);
   await notifyPartner(sessionId, guesserId, 'empathy.status_updated', {
     sessionId,
     timestamp: Date.now(),
     status: 'AWAITING_SHARING',
+    forUserId: guesserId,
+    empathyStatus: guesserEmpathyStatus,
     subjectName: subjectInfo.name,
     message: `${subjectInfo.name} is considering a suggestion to share more`,
   }).catch((err) => {
@@ -2063,14 +2068,20 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
   });
 
   // Notify both users that empathy has been revealed
+  // Include full empathy status for each user to avoid extra HTTP round-trips
   const { notifyPartner } = await import('./realtime');
+  const { buildEmpathyExchangeStatusForBothUsers } = await import('./empathy-status');
+  const allStatuses = await buildEmpathyExchangeStatusForBothUsers(sessionId);
 
   for (const attempt of attempts) {
+    const userId = attempt.sourceUserId!;
     // Notify the guesser that their empathy was revealed to their partner
     // Include guesserUserId so mobile can filter - only the SUBJECT (non-guesser) should see validation_needed modal
-    await notifyPartner(sessionId, attempt.sourceUserId!, 'empathy.revealed', {
+    await notifyPartner(sessionId, userId, 'empathy.revealed', {
       direction: 'outgoing',
-      guesserUserId: attempt.sourceUserId,
+      guesserUserId: userId,
+      forUserId: userId,
+      empathyStatus: allStatuses[userId],
     });
   }
 

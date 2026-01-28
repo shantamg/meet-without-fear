@@ -63,6 +63,32 @@ jest.mock('../../utils/json-extractor', () => ({
   }),
 }));
 
+// Mock empathy-status service (used for Ably events with full data)
+jest.mock('../../services/empathy-status', () => ({
+  buildEmpathyExchangeStatus: jest.fn().mockResolvedValue({
+    myAttempt: { id: 'mock-attempt', status: 'VALIDATED', content: 'I think they felt...', sharedAt: new Date().toISOString(), sourceUserId: '', consentRecordId: '', revealedAt: null, revisionCount: undefined, deliveryStatus: 'pending' },
+    partnerAttempt: null,
+    analyzing: false,
+    awaitingSharing: false,
+    hasNewSharedContext: false,
+    sharedContext: null,
+    refinementHint: null,
+    readyForStage3: false,
+    messageCountSinceSharedContext: 0,
+    sharedContentDeliveryStatus: null,
+    mySharedContext: null,
+    myReconcilerResult: null,
+    partnerHasSubmittedEmpathy: true,
+    partnerEmpathyHeldStatus: null,
+    partnerEmpathySubmittedAt: new Date().toISOString(),
+    partnerCompletedStage1: false,
+  }),
+  buildEmpathyExchangeStatusForBothUsers: jest.fn().mockResolvedValue({
+    'user-1': { myAttempt: { status: 'VALIDATED' }, partnerAttempt: null },
+    'partner-1': { myAttempt: { status: 'VALIDATED' }, partnerAttempt: null },
+  }),
+}));
+
 // Import controllers after mocks
 import {
   runReconcilerHandler,
@@ -494,7 +520,12 @@ describe('Reconciler API', () => {
         'session-123',
         'user-1',
         'partner.additional_context_shared',
-        expect.any(Object)
+        expect.objectContaining({
+          stage: 2,
+          forUserId: 'user-1',
+          empathyStatus: expect.any(Object),
+        }),
+        expect.objectContaining({ excludeUserId: 'partner-1' })
       );
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({

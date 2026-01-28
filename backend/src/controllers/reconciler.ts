@@ -388,12 +388,17 @@ export async function respondToShareOfferHandler(
           ? 'empathy.context_shared'
           : 'partner.additional_context_shared';
 
+        // Include full empathy status to avoid extra HTTP round-trip
+        const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
+        const partnerEmpathyStatus = await buildEmpathyExchangeStatus(sessionId, partnerId);
+
         await notifyPartner(sessionId, partnerId, eventName, {
           stage: 2,
           sharedBy: user.id,
           content: result.sharedContent,
           // Include forUserId so mobile can filter - only the guesser should see the modal
           forUserId: partnerId,
+          empathyStatus: partnerEmpathyStatus,
           // Include triggeredByUserId so frontend can filter out events triggered by self
           triggeredByUserId: user.id,
         }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions

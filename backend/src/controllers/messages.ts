@@ -472,8 +472,11 @@ Continue naturally from here. ${userName} just confirmed feeling heard - acknowl
 
               // If there's a share suggestion, notify the current user (subject)
               // Note: We DON'T exclude the user here because they ARE the intended recipient
+              // Include full empathy status to avoid extra HTTP round-trip
               if (result.empathyStatus === 'AWAITING_SHARING' && result.shareOffer) {
                 console.log(`[confirmFeelHeard] Significant gaps found - notifying subject ${user.id} of share suggestion`);
+                const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
+                const empathyStatus = await buildEmpathyExchangeStatus(sessionId, user.id);
                 await notifyPartner(sessionId, user.id, 'empathy.share_suggestion', {
                   // Include forUserId so mobile can filter - only the subject should see the modal
                   forUserId: user.id,
@@ -482,6 +485,7 @@ Continue naturally from here. ${userName} just confirmed feeling heard - acknowl
                     : 'your partner',
                   suggestedContent: result.shareOffer.suggestedContent,
                   suggestedReason: (result.shareOffer as any).reason || (result.shareOffer as any).suggestedReason,
+                  empathyStatus,
                   // Include triggeredByUserId for event tracing
                   triggeredByUserId: user.id,
                 });

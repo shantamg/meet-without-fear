@@ -234,14 +234,18 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
 
     // Bug 1 fix: Notify both clients that empathy statuses have been updated
     // This allows the UI to immediately show share suggestions or reveal empathy
+    // Include full empathy status for both users to avoid extra HTTP round-trips
+    const { buildEmpathyExchangeStatusForBothUsers } = await import('../services/empathy-status');
+    const allStatuses = await buildEmpathyExchangeStatusForBothUsers(sessionId);
     await publishSessionEvent(sessionId, 'empathy.status_updated', {
       stage: 2,
       statuses: {
         [userAId]: statusA,
         [userBId]: statusB,
       },
+      empathyStatuses: allStatuses,
     });
-    console.log(`[triggerReconcilerAndUpdateStatuses] Published empathy.status_updated event`);
+    console.log(`[triggerReconcilerAndUpdateStatuses] Published empathy.status_updated event with full status data`);
 
     // Check if both are now READY and reveal both simultaneously
     const { checkAndRevealBothIfReady } = await import('../services/reconciler');
@@ -686,11 +690,14 @@ export async function consentToShare(
       }
     }
 
-    // Notify partner via real-time
+    // Notify partner via real-time - include full empathy status
     if (partnerId) {
+      const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
+      const partnerEmpathyStatus = await buildEmpathyExchangeStatus(sessionId, partnerId);
       await notifyPartner(sessionId, partnerId, 'partner.empathy_shared', {
         stage: 2,
         sharedBy: user.id,
+        empathyStatus: partnerEmpathyStatus,
       });
     }
 
@@ -1096,12 +1103,15 @@ export async function validateEmpathy(
       },
     });
 
-    // Notify partner via realtime
+    // Notify partner via realtime - include empathy status for cache update
     if (partnerId) {
+      const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
+      const partnerEmpathyStatus = await buildEmpathyExchangeStatus(sessionId, partnerId);
       await notifyPartner(sessionId, partnerId, 'partner.stage_completed', {
         stage: 2,
         validated,
         completedBy: user.id,
+        empathyStatus: partnerEmpathyStatus,
         // Include triggeredByUserId so frontend can filter out events triggered by self
         triggeredByUserId: user.id,
       }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions
@@ -1113,6 +1123,7 @@ export async function validateEmpathy(
           status: 'VALIDATED',
           // Include forUserId so mobile can filter - only the guesser whose empathy was validated should see modal
           forUserId: partnerId,
+          empathyStatus: partnerEmpathyStatus,
           validatedBy: user.id,
           // Include triggeredByUserId so frontend can filter out events triggered by self
           triggeredByUserId: user.id,
@@ -1595,225 +1606,11 @@ export async function getEmpathyExchangeStatus(
 
     const { id: sessionId } = req.params;
 
-    // Check session exists and user has access
-    const session = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        relationship: {
-          members: {
-            some: { userId: user.id },
-          },
-        },
-      },
-      include: {
-        relationship: {
-          include: {
-            members: true,
-          },
-        },
-      },
-    });
+    // Use the shared service function to build the status
+    const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
+    const status = await buildEmpathyExchangeStatus(sessionId, user.id);
 
-    if (!session) {
-      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
-      return;
-    }
-
-    // Get partner ID
-    const partnerId = getPartnerUserIdFromSession(session, user.id);
-
-    // Get both empathy attempts
-    const [myAttempt, partnerAttempt] = await Promise.all([
-      prisma.empathyAttempt.findFirst({
-        where: { sessionId, sourceUserId: user.id },
-      }),
-      prisma.empathyAttempt.findFirst({
-        where: { sessionId, sourceUserId: partnerId ?? undefined },
-      }),
-    ]);
-
-    // Check if both have consented
-    const bothConsented = !!(myAttempt && partnerAttempt);
-
-    // Check if MY attempt is being analyzed (not partner's)
-    // Subject shouldn't see "analyzing" while working on their empathy draft
-    const analyzing = myAttempt?.status === 'ANALYZING';
-
-    // Get refinement hint if my attempt needs work
-    let refinementHint = null;
-    if (myAttempt?.status === 'NEEDS_WORK') {
-      // Get the reconciler result for my direction
-      const reconcilerResult = await prisma.reconcilerResult.findFirst({
-        where: {
-          sessionId,
-          guesserId: user.id,
-        },
-        select: {
-          areaHint: true,
-          guidanceType: true,
-          promptSeed: true,
-        },
-      });
-
-      if (reconcilerResult) {
-        refinementHint = {
-          areaHint: reconcilerResult.areaHint,
-          guidanceType: reconcilerResult.guidanceType,
-          promptSeed: reconcilerResult.promptSeed,
-        };
-      }
-    }
-
-    // Check if ready for Stage 3
-    const readyForStage3 =
-      myAttempt?.status === 'VALIDATED' && partnerAttempt?.status === 'VALIDATED';
-
-    // New asymmetric flow fields
-    // Check if partner has completed Stage 1 (for triggering reconciler)
-    let partnerStage1Completed = false;
-    if (partnerId) {
-      partnerStage1Completed = await hasPartnerCompletedStage1(sessionId, partnerId);
-    }
-
-    // Check if user is awaiting sharing (subject waiting to respond to share suggestion)
-    const awaitingSharing = myAttempt?.status === 'AWAITING_SHARING';
-
-    // Check if user has new shared context (guesser should refine)
-    // This is "new" if the status is REFINING, meaning context was shared but user hasn't resubmitted yet
-    const hasNewSharedContext = myAttempt?.status === 'REFINING';
-
-    // Always fetch shared context if it exists for this direction
-    // This allows the user to see what was shared even after they resubmit
-    // (the context remains relevant for understanding the refinement)
-    let sharedContext: { content: string; sharedAt: string } | null = null;
-    let messageCountSinceSharedContext = 0;
-    const contextResult = await getSharedContextForGuesser(sessionId, user.id);
-    if (contextResult.hasSharedContext && contextResult.content && contextResult.sharedAt) {
-      sharedContext = {
-        content: contextResult.content,
-        sharedAt: contextResult.sharedAt,
-      };
-
-      // Count user messages sent after the shared context was received
-      const sharedAtDate = new Date(contextResult.sharedAt);
-      const messagesAfterContext = await prisma.message.count({
-        where: {
-          sessionId,
-          senderId: user.id,
-          role: 'USER',
-          timestamp: { gt: sharedAtDate },
-        },
-      });
-      messageCountSinceSharedContext = messagesAfterContext;
-    }
-
-    // Get delivery status and content of any shared content (for subject - the person who shared)
-    const deliveryStatusResult = await getSharedContentDeliveryStatus(sessionId, user.id);
-    const sharedContentDeliveryStatus = deliveryStatusResult.hasSharedContent
-      ? deliveryStatusResult.deliveryStatus
-      : null;
-    // Content the user shared (for subject to see in Partner tab)
-    const mySharedContext = deliveryStatusResult.hasSharedContent && deliveryStatusResult.sharedContent
-      ? {
-        content: deliveryStatusResult.sharedContent,
-        sharedAt: deliveryStatusResult.sharedAt!,
-        deliveryStatus: deliveryStatusResult.deliveryStatus,
-      }
-      : null;
-
-    // Get reconciler result for my empathy attempt (if reconciler has run)
-    let myReconcilerResult: {
-      gapSeverity: 'none' | 'minor' | 'moderate' | 'significant';
-      action: 'PROCEED' | 'OFFER_OPTIONAL' | 'OFFER_SHARING';
-      analyzedAt: string;
-      gapSummary: string | null;
-    } | null = null;
-    if (myAttempt) {
-      const reconcilerResultForMe = await prisma.reconcilerResult.findFirst({
-        where: {
-          sessionId,
-          guesserId: user.id,
-        },
-        select: {
-          gapSeverity: true,
-          recommendedAction: true,
-          createdAt: true,
-          gapSummary: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-      if (reconcilerResultForMe) {
-        myReconcilerResult = {
-          gapSeverity: reconcilerResultForMe.gapSeverity as 'none' | 'minor' | 'moderate' | 'significant',
-          action: reconcilerResultForMe.recommendedAction as 'PROCEED' | 'OFFER_OPTIONAL' | 'OFFER_SHARING',
-          analyzedAt: reconcilerResultForMe.createdAt.toISOString(),
-          gapSummary: reconcilerResultForMe.gapSummary,
-        };
-      }
-    }
-
-    // Derive delivery status from empathy attempt status
-    // - pending: not yet revealed to partner (HELD, ANALYZING, AWAITING_SHARING, REFINING, NEEDS_WORK)
-    // - delivered: revealed to partner (REVEALED)
-    // - seen: partner has validated (VALIDATED)
-    const getEmpathyDeliveryStatus = (status: string): 'pending' | 'delivered' | 'seen' => {
-      if (status === 'VALIDATED') return 'seen';
-      if (status === 'REVEALED') return 'delivered';
-      return 'pending';
-    };
-
-    successResponse(res, {
-      myAttempt: myAttempt
-        ? {
-          id: myAttempt.id,
-          sourceUserId: myAttempt.sourceUserId ?? '',
-          content: myAttempt.content,
-          sharedAt: myAttempt.sharedAt.toISOString(),
-          consentRecordId: myAttempt.consentRecordId ?? '',
-          status: myAttempt.status,
-          revealedAt: myAttempt.revealedAt?.toISOString() ?? null,
-          revisionCount: myAttempt.revisionCount,
-          // Delivery status derived from attempt status: pending (not revealed), delivered (revealed), seen (validated)
-          deliveryStatus: getEmpathyDeliveryStatus(myAttempt.status),
-        }
-        : null,
-      partnerAttempt: partnerAttempt &&
-        (partnerAttempt.status === 'REVEALED' || partnerAttempt.status === 'VALIDATED')
-        ? {
-          id: partnerAttempt.id,
-          sourceUserId: partnerAttempt.sourceUserId ?? '',
-          content: partnerAttempt.content,
-          sharedAt: partnerAttempt.sharedAt.toISOString(),
-          consentRecordId: partnerAttempt.consentRecordId ?? '',
-          status: partnerAttempt.status,
-          revealedAt: partnerAttempt.revealedAt?.toISOString() ?? null,
-          revisionCount: partnerAttempt.revisionCount,
-        }
-        : null,
-      bothConsented,
-      analyzing,
-      refinementHint,
-      readyForStage3,
-      // New asymmetric flow fields
-      partnerCompletedStage1: partnerStage1Completed,
-      awaitingSharing,
-      hasNewSharedContext,
-      sharedContext,
-      // Number of messages user has sent since receiving shared context (for delaying refinement UI)
-      messageCountSinceSharedContext,
-      // Delivery status of shared content (for subject who shared): pending, delivered, or seen
-      sharedContentDeliveryStatus,
-      // Content the user shared (for subject to see in Partner tab)
-      mySharedContext,
-      // Reconciler result for my empathy attempt (if reconciler has run)
-      myReconcilerResult,
-      // Whether partner has submitted an empathy attempt (even if not revealed to me yet)
-      partnerHasSubmittedEmpathy: !!partnerAttempt,
-      // Partner's empathy attempt status (even if not revealed) - allows showing "held by reconciler"
-      partnerEmpathyHeldStatus: partnerAttempt?.status ?? null,
-      // When partner submitted their empathy (for chronological ordering)
-      partnerEmpathySubmittedAt: partnerAttempt?.sharedAt?.toISOString() ?? null,
-    });
+    successResponse(res, status);
   } catch (error) {
     console.error('[getEmpathyExchangeStatus] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get empathy exchange status', 500);
@@ -2424,14 +2221,19 @@ export async function respondToShareSuggestion(
     }
 
     // If accepted or refined, notify partner (guesser) that they have new context
+    // Include full empathy status to avoid extra HTTP round-trip
     if ((action === 'accept' || action === 'refine') && partnerId) {
+      const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
+      const guesserEmpathyStatus = await buildEmpathyExchangeStatus(sessionId, partnerId);
       // Publish realtime event to notify guesser
       await publishSessionEvent(sessionId, 'empathy.refining', {
         guesserId: partnerId,
+        forUserId: partnerId,
+        empathyStatus: guesserEmpathyStatus,
         hasNewContext: true,
       });
 
-      console.log(`[respondToShareSuggestion] Notified guesser ${partnerId} of new shared context`);
+      console.log(`[respondToShareSuggestion] Notified guesser ${partnerId} of new shared context with full status data`);
     }
 
     successResponse(res, {
