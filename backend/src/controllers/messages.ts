@@ -471,6 +471,7 @@ Continue naturally from here. ${userName} just confirmed feeling heard - acknowl
               console.log(`[confirmFeelHeard] Reconciler completed: status=${result.empathyStatus}, hasSuggestion=${!!result.shareOffer}`);
 
               // If there's a share suggestion, notify the current user (subject)
+              // Note: We DON'T exclude the user here because they ARE the intended recipient
               if (result.empathyStatus === 'AWAITING_SHARING' && result.shareOffer) {
                 console.log(`[confirmFeelHeard] Significant gaps found - notifying subject ${user.id} of share suggestion`);
                 await notifyPartner(sessionId, user.id, 'empathy.share_suggestion', {
@@ -481,6 +482,8 @@ Continue naturally from here. ${userName} just confirmed feeling heard - acknowl
                     : 'your partner',
                   suggestedContent: result.shareOffer.suggestedContent,
                   suggestedReason: (result.shareOffer as any).reason || (result.shareOffer as any).suggestedReason,
+                  // Include triggeredByUserId for event tracing
+                  triggeredByUserId: user.id,
                 });
               }
 

@@ -526,17 +526,21 @@ export async function publishSessionResolved(
  * @param partnerId - The partner's user ID
  * @param event - The event type
  * @param data - The event data payload
+ * @param options - Optional configuration
+ * @param options.excludeUserId - User ID to exclude from receiving the Ably event (typically the actor)
  */
 export async function notifyPartner(
   sessionId: string,
   partnerId: string,
   event: SessionEvent,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  options?: { excludeUserId?: string }
 ): Promise<void> {
   // Always publish to session channel (for clients viewing the session)
   // This also calls notifySessionMembers which updates session.updatedAt
   // and publishes to all members' user channels
-  await publishSessionEvent(sessionId, event, data);
+  // Optionally exclude the actor from receiving their own event to prevent race conditions
+  await publishSessionEvent(sessionId, event, data, options?.excludeUserId);
 
   // If partner is not in the session, also send push notification
   const partnerPresent = await isUserPresent(sessionId, partnerId);

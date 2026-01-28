@@ -1102,7 +1102,9 @@ export async function validateEmpathy(
         stage: 2,
         validated,
         completedBy: user.id,
-      });
+        // Include triggeredByUserId so frontend can filter out events triggered by self
+        triggeredByUserId: user.id,
+      }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions
 
       // If validated, also send empathy.status_updated with validation info
       // so the partner (whose empathy was validated) can see the modal
@@ -1112,7 +1114,9 @@ export async function validateEmpathy(
           // Include forUserId so mobile can filter - only the guesser whose empathy was validated should see modal
           forUserId: partnerId,
           validatedBy: user.id,
-        });
+          // Include triggeredByUserId so frontend can filter out events triggered by self
+          triggeredByUserId: user.id,
+        }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions
       }
     }
 
@@ -1675,31 +1679,32 @@ export async function getEmpathyExchangeStatus(
     const awaitingSharing = myAttempt?.status === 'AWAITING_SHARING';
 
     // Check if user has new shared context (guesser should refine)
+    // This is "new" if the status is REFINING, meaning context was shared but user hasn't resubmitted yet
     const hasNewSharedContext = myAttempt?.status === 'REFINING';
 
-    // Get shared context if status is REFINING
+    // Always fetch shared context if it exists for this direction
+    // This allows the user to see what was shared even after they resubmit
+    // (the context remains relevant for understanding the refinement)
     let sharedContext: { content: string; sharedAt: string } | null = null;
     let messageCountSinceSharedContext = 0;
-    if (hasNewSharedContext) {
-      const contextResult = await getSharedContextForGuesser(sessionId, user.id);
-      if (contextResult.hasSharedContext && contextResult.content && contextResult.sharedAt) {
-        sharedContext = {
-          content: contextResult.content,
-          sharedAt: contextResult.sharedAt,
-        };
+    const contextResult = await getSharedContextForGuesser(sessionId, user.id);
+    if (contextResult.hasSharedContext && contextResult.content && contextResult.sharedAt) {
+      sharedContext = {
+        content: contextResult.content,
+        sharedAt: contextResult.sharedAt,
+      };
 
-        // Count user messages sent after the shared context was received
-        const sharedAtDate = new Date(contextResult.sharedAt);
-        const messagesAfterContext = await prisma.message.count({
-          where: {
-            sessionId,
-            senderId: user.id,
-            role: 'USER',
-            timestamp: { gt: sharedAtDate },
-          },
-        });
-        messageCountSinceSharedContext = messagesAfterContext;
-      }
+      // Count user messages sent after the shared context was received
+      const sharedAtDate = new Date(contextResult.sharedAt);
+      const messagesAfterContext = await prisma.message.count({
+        where: {
+          sessionId,
+          senderId: user.id,
+          role: 'USER',
+          timestamp: { gt: sharedAtDate },
+        },
+      });
+      messageCountSinceSharedContext = messagesAfterContext;
     }
 
     // Get delivery status and content of any shared content (for subject - the person who shared)
@@ -2198,64 +2203,63 @@ Respond in JSON format:
 }
 
 /**
- * Helper: Run reconciler for a single user's direction after resubmit
+ * Helper: Run reconciler for a single user's direction after resubmit.
+ *
+ * IMPORTANT: Uses runReconcilerForDirection (asymmetric flow) instead of runReconciler,
+ * because at this point only the guesser may have shared their empathy statement.
+ * The symmetric runReconciler requires BOTH users to have shared, which blocks this flow.
  */
 async function triggerReconcilerForUser(
   sessionId: string,
   guesserId: string,
   subjectId: string
 ): Promise<void> {
+  const { runReconcilerForDirection, checkAndRevealBothIfReady } = await import('../services/reconciler');
 
   try {
-    // Run reconciler for just this direction
-    const result = await runReconciler(sessionId, guesserId);
+    console.log(`[triggerReconcilerForUser] Running reconciler for direction: guesser=${guesserId} → subject=${subjectId}`);
 
-    if (!result.aUnderstandingB && !result.bUnderstandingA) {
-      console.warn('[triggerReconcilerForUser] No result returned');
+    // Use runReconcilerForDirection for asymmetric flow (only guesser has shared empathy)
+    const result = await runReconcilerForDirection(sessionId, guesserId, subjectId);
+
+    if (!result.result) {
+      console.warn('[triggerReconcilerForUser] No reconciler result returned');
       return;
     }
 
-    // Get the result for this direction
-    const reconcilerResult = result.aUnderstandingB ?? result.bUnderstandingA;
-    if (!reconcilerResult) return;
+    const reconcilerResult = result.result;
 
-    // Determine new status based on recommendation
+    // The runReconcilerForDirection already updates empathy status based on gaps.
+    // For re-analysis after shared context, we may need different handling.
+
+    // Check if context has already been shared to prevent infinite loop
     const hasSignificantGaps =
       reconcilerResult.gaps.severity === 'significant' ||
       reconcilerResult.recommendation.action === 'OFFER_SHARING';
 
-    // Check if context has already been shared to prevent infinite loop
-    // When guesser has gaps, subject should share context with guesser
     const contextAlreadyShared = hasSignificantGaps
       ? await hasContextAlreadyBeenShared(sessionId, guesserId, subjectId)
       : false;
 
-    // If context was already shared, treat as READY (skip sharing step)
-    // Otherwise, use AWAITING_SHARING if gaps exist
-    let newStatus: EmpathyStatus;
-    if (contextAlreadyShared) {
+    // If context was already shared and gaps still exist, mark as READY
+    // (we don't ask for more sharing after they've already shared)
+    if (contextAlreadyShared && result.empathyStatus === 'AWAITING_SHARING') {
       console.log(
-        `[triggerReconcilerForUser] Context already shared ${subjectId}→${guesserId}, skipping AWAITING_SHARING`
+        `[triggerReconcilerForUser] Context already shared ${subjectId}→${guesserId}, overriding to READY`
       );
-      newStatus = EmpathyStatus.READY;
-    } else {
-      newStatus = hasSignificantGaps ? EmpathyStatus.AWAITING_SHARING : EmpathyStatus.READY;
+      await prisma.empathyAttempt.updateMany({
+        where: { sessionId, sourceUserId: guesserId },
+        data: { status: EmpathyStatus.READY },
+      });
     }
 
-    await prisma.empathyAttempt.updateMany({
-      where: { sessionId, sourceUserId: guesserId },
-      data: {
-        status: newStatus,
-      },
-    });
-
     console.log(
-      `[triggerReconcilerForUser] Updated status to ${newStatus} ` +
-      `(alignment: ${reconcilerResult.alignment.score}%, gaps: ${reconcilerResult.gaps.severity})`
+      `[triggerReconcilerForUser] Reconciler complete: ` +
+      `alignment=${reconcilerResult.alignment.score}%, gaps=${reconcilerResult.gaps.severity}, ` +
+      `empathyStatus=${result.empathyStatus}`
     );
 
     // Check if both are now READY and reveal both simultaneously
-    const { checkAndRevealBothIfReady } = await import('../services/reconciler');
     await checkAndRevealBothIfReady(sessionId);
   } catch (error) {
     console.error('[triggerReconcilerForUser] Error:', error);

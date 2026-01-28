@@ -394,7 +394,9 @@ export async function respondToShareOfferHandler(
           content: result.sharedContent,
           // Include forUserId so mobile can filter - only the guesser should see the modal
           forUserId: partnerId,
-        });
+          // Include triggeredByUserId so frontend can filter out events triggered by self
+          triggeredByUserId: user.id,
+        }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions
       }
     }
 

@@ -245,6 +245,15 @@ export function UnifiedSessionScreen({
     onSessionEvent: (event, data) => {
       console.log('[UnifiedSessionScreen] Received realtime event:', event);
 
+      // Skip events triggered by self to prevent race conditions with optimistic updates
+      // The backend now includes triggeredByUserId in events, and also uses excludeUserId
+      // to prevent sending to the actor. This is a defense-in-depth check.
+      const triggeredBySelf = data.triggeredByUserId === user?.id;
+      if (triggeredBySelf) {
+        console.log('[UnifiedSessionScreen] Skipping event triggered by self:', event);
+        return;
+      }
+
       // Handle reconciler events - use refetchQueries for immediate update (not just invalidate)
       // invalidateQueries only marks as stale; refetchQueries triggers immediate fetch
       if (event === 'empathy.share_suggestion') {
@@ -252,10 +261,14 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Share suggestion received, refetching shareOffer cache');
         queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
         queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+        // Show modal only if for current user (the subject who should share)
+        if (data.forUserId === user?.id) {
+          showPartnerEventModal('share_suggestion');
+        }
       }
 
       if (event === 'empathy.context_shared') {
-        // Guesser received shared context - immediately refetch empathy status and messages
+        // Guesser received shared context from partner
         console.log('[UnifiedSessionScreen] Context shared, refetching empathy and message caches');
         queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
         queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
@@ -264,6 +277,10 @@ export function UnifiedSessionScreen({
         // Mark session as viewed since user is actively viewing - this updates lastViewedAt
         // so the partner (subject) sees "seen" status in real-time
         markSessionViewed({});
+        // Show modal only to the intended recipient (the guesser)
+        if (data.forUserId === user?.id) {
+          showPartnerEventModal('context_shared');
+        }
       }
 
       if (event === 'partner.session_viewed') {
@@ -302,8 +319,6 @@ export function UnifiedSessionScreen({
         // The guesser's empathy was revealed to us, so we need to validate it
         if (data.guesserUserId && data.guesserUserId !== user?.id) {
           showPartnerEventModal('validation_needed');
-        } else {
-          console.log('[UnifiedSessionScreen] We are the guesser, skipping validation_needed modal');
         }
       }
 
@@ -315,33 +330,6 @@ export function UnifiedSessionScreen({
         // (status is VALIDATED and forUserId matches current user)
         if (data.status === 'VALIDATED' && data.forUserId === user?.id) {
           showPartnerEventModal('empathy_validated');
-        } else {
-          console.log('[UnifiedSessionScreen] Status update not for validation or not for us, skipping modal');
-        }
-      }
-
-      if (event === 'empathy.context_shared') {
-        // Partner shared context - refetch and notify
-        console.log('[UnifiedSessionScreen] Partner shared context, refetching status');
-        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
-        // Only show modal to the intended recipient (the guesser who should see the context)
-        if (data.forUserId === user?.id) {
-          showPartnerEventModal('context_shared');
-        } else {
-          console.log('[UnifiedSessionScreen] Context shared not for us, skipping modal');
-        }
-      }
-
-      if (event === 'empathy.share_suggestion') {
-        // New share suggestion from reconciler - refetch and notify
-        // Only show modal if the event is for the current user (the subject who should share)
-        console.log('[UnifiedSessionScreen] Share suggestion received, refetching status');
-        queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
-        // Check if this event is for us - only show modal to the subject
-        if (data.forUserId === user?.id) {
-          showPartnerEventModal('share_suggestion');
-        } else {
-          console.log('[UnifiedSessionScreen] Share suggestion not for us, skipping modal');
         }
       }
     },

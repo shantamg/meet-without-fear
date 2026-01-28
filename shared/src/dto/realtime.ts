@@ -281,3 +281,98 @@ export interface ContextUpdatedPayload extends RealtimeEventBase {
   /** When the context was assembled */
   assembledAt: string;
 }
+
+// ============================================================================
+// Empathy Events (Data-With-Events Pattern)
+// ============================================================================
+
+import type {
+  EmpathyExchangeStatusResponse,
+  GetShareSuggestionResponse,
+  EmpathyAttemptDTO,
+} from './empathy';
+
+/**
+ * Payload for empathy.status_updated event.
+ * Contains the full empathy exchange status for the recipient to update their cache.
+ */
+export interface EmpathyStatusUpdatedPayload extends RealtimeEventBase {
+  /** The user ID this update is for (recipient should check this matches their ID) */
+  forUserId: string;
+  /** The user ID who triggered this update (for filtering) */
+  triggeredByUserId?: string;
+  /** Full empathy exchange status for the recipient */
+  empathyStatus: EmpathyExchangeStatusResponse;
+  /** Human-readable status message */
+  message?: string;
+  /** The status that triggered this event */
+  status?: string;
+}
+
+/**
+ * Payload for empathy.share_suggestion event.
+ * Contains the full share suggestion for the subject.
+ */
+export interface EmpathyShareSuggestionPayload extends RealtimeEventBase {
+  /** The user ID this suggestion is for (the subject who should share) */
+  forUserId: string;
+  /** Full share suggestion data */
+  shareOffer: GetShareSuggestionResponse;
+  /** Updated empathy status for the subject */
+  empathyStatus: EmpathyExchangeStatusResponse;
+}
+
+/**
+ * Payload for empathy.context_shared event.
+ * Contains the updated status for the guesser after subject shared context.
+ */
+export interface EmpathyContextSharedPayload extends RealtimeEventBase {
+  /** The user ID this update is for (the guesser who receives the context) */
+  forUserId: string;
+  /** The user ID who shared the context (for filtering on frontend) */
+  sharedByUserId: string;
+  /** Updated empathy status for the guesser */
+  empathyStatus: EmpathyExchangeStatusResponse;
+  /** The shared content (for display) */
+  sharedContent?: string;
+  /** The shared message details (for cache update) */
+  sharedMessage?: {
+    id: string;
+    content: string;
+    timestamp: string;
+    stage: number;
+  };
+}
+
+/**
+ * Payload for empathy.revealed event.
+ * Contains the partner's empathy attempt for the subject to validate.
+ */
+export interface EmpathyRevealedPayload extends RealtimeEventBase {
+  /** The user ID this is for (the subject who should see the empathy) */
+  forUserId: string;
+  /** The guesser's user ID (who wrote the empathy statement) */
+  guesserUserId: string;
+  /** The revealed empathy attempt */
+  partnerEmpathy: EmpathyAttemptDTO;
+  /** Updated empathy status */
+  empathyStatus: EmpathyExchangeStatusResponse;
+}
+
+/**
+ * Payload for partner.empathy_shared event.
+ * Contains the empathy statement message for display.
+ */
+export interface PartnerEmpathySharedPayload extends RealtimeEventBase {
+  /** The user ID who shared their empathy */
+  sharedByUserId: string;
+  /** Updated empathy status for recipient */
+  empathyStatus: EmpathyExchangeStatusResponse;
+  /** The empathy statement as a message for chat display */
+  empathyMessage?: {
+    id: string;
+    content: string;
+    timestamp: string;
+    stage: number;
+  };
+}
