@@ -711,6 +711,10 @@ export function useUserSessionUpdates(
       console.log('[UserSessionUpdates] Refetching queries...');
 
       // Use refetchQueries to force immediate refetch (not just mark stale)
+      // NOTE: We intentionally do NOT refetch sessionKeys.state here!
+      // Session state is updated by mutation onSuccess handlers, and refetching
+      // from Ably events can race with optimistic updates, overwriting them with
+      // stale server data (fix for disappearing indicator bug).
       queryClient.refetchQueries({ queryKey: sessionKeys.lists() })
         .then(() => console.log('[UserSessionUpdates] Lists refetch complete'))
         .catch((err) => console.warn('[UserSessionUpdates] Lists refetch failed:', err));
@@ -718,13 +722,6 @@ export function useUserSessionUpdates(
       queryClient.refetchQueries({ queryKey: sessionKeys.unreadCount() })
         .then(() => console.log('[UserSessionUpdates] Unread count refetch complete'))
         .catch((err) => console.warn('[UserSessionUpdates] Unread count refetch failed:', err));
-
-      // If event includes a sessionId, also refetch that specific session's state
-      if (_data.sessionId) {
-        queryClient.refetchQueries({ queryKey: sessionKeys.state(_data.sessionId) })
-          .then(() => console.log('[UserSessionUpdates] Session state refetch complete'))
-          .catch((err) => console.warn('[UserSessionUpdates] Session state refetch failed:', err));
-      }
     },
     [queryClient]
   );

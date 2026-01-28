@@ -592,7 +592,7 @@ export function useConfirmInvitationMessage(
     // race conditions that can overwrite optimistic messageConfirmedAt before
     // the server response settles (fix for disappearing indicator bug)
     // =========================================================================
-    onSuccess: (data, { sessionId }) => {
+    onSuccess: (data, { sessionId }, context) => {
       // Update invitation cache with server response (preserves messageConfirmedAt)
       queryClient.setQueryData<SessionInvitationResponse>(
         sessionKeys.sessionInvitation(sessionId),
@@ -609,66 +609,73 @@ export function useConfirmInvitationMessage(
       );
 
       // Update session state, merging invitation data (avoids race conditions)
-      console.log('[confirmInvitation:onSuccess] Updating session state with:', {
-        messageConfirmed: data.invitation.messageConfirmed,
-        messageConfirmedAt: data.invitation.messageConfirmedAt,
-        advancedToStage: data.advancedToStage,
-      });
-      queryClient.setQueryData<SessionStateResponse>(
-        sessionKeys.state(sessionId),
-        (old) => {
-          if (!old) {
-            console.warn('[confirmInvitation:onSuccess] No existing session state to update');
-            return old;
-          }
-          // Build the new state, updating stage if advanced
-          const newInvitation = old.invitation ? {
-            ...old.invitation,
-            messageConfirmed: data.invitation.messageConfirmed,
-            messageConfirmedAt: data.invitation.messageConfirmedAt || old.invitation.messageConfirmedAt,
-          } : old.invitation;
+      // IMPORTANT: Get current state FIRST, then decide whether to update.
+      // Using setQueryData with an updater that returns undefined would clear the cache!
+      let existingState = queryClient.getQueryData<SessionStateResponse>(sessionKeys.state(sessionId));
 
-          // Update progress.myProgress.stage if advanced
-          const newProgress = data.advancedToStage !== undefined
-            ? {
-                ...old.progress,
-                myProgress: {
-                  ...old.progress.myProgress,
-                  stage: data.advancedToStage,
-                  status: 'IN_PROGRESS', // Stage advances to in-progress
-                },
-              }
-            : old.progress;
+      // If cache was cleared, use context from onMutate as fallback
+      // This preserves the optimistic update even when something else cleared the cache
+      if (!existingState && context?.previousSessionState) {
+        // The context.previousSessionState is from BEFORE onMutate's optimistic update
+        // We need to apply the optimistic changes + server response
+        existingState = {
+          ...context.previousSessionState,
+          invitation: context.previousSessionState.invitation ? {
+            ...context.previousSessionState.invitation,
+            messageConfirmed: true,
+            messageConfirmedAt: data.invitation.messageConfirmedAt || context.optimisticTimestamp,
+          } : context.previousSessionState.invitation,
+        };
+      }
 
-          // Update session.currentStage and session.myProgress for consistency
-          const newSession = data.advancedToStage !== undefined
-            ? {
-                ...old.session,
-                currentStage: data.advancedToStage,
-                stageStatus: StageStatus.IN_PROGRESS,
-                myProgress: {
-                  ...old.session.myProgress,
-                  stage: data.advancedToStage,
-                  status: StageStatus.IN_PROGRESS,
-                },
-              }
-            : old.session;
+      if (!existingState) {
+        // No cache and no context - this shouldn't happen but handle gracefully
+        console.error('[confirmInvitation:onSuccess] No existing session state AND no context - forcing refetch');
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      } else {
+        // Build the new state, updating stage if advanced
+        const newInvitation = existingState.invitation ? {
+          ...existingState.invitation,
+          messageConfirmed: data.invitation.messageConfirmed,
+          messageConfirmedAt: data.invitation.messageConfirmedAt || existingState.invitation.messageConfirmedAt,
+        } : existingState.invitation;
 
-          const newState: SessionStateResponse = {
-            ...old,
-            invitation: newInvitation,
-            progress: newProgress,
-            session: newSession,
-          };
-          console.log('[confirmInvitation:onSuccess] Session state updated:', {
-            oldConfirmedAt: old.invitation?.messageConfirmedAt,
-            newConfirmedAt: newState.invitation?.messageConfirmedAt,
-            oldStage: old.progress?.myProgress?.stage,
-            newStage: newState.progress?.myProgress?.stage,
-          });
-          return newState;
-        }
-      );
+        // Update progress.myProgress.stage if advanced
+        const newProgress = data.advancedToStage !== undefined
+          ? {
+              ...existingState.progress,
+              myProgress: {
+                ...existingState.progress.myProgress,
+                stage: data.advancedToStage,
+                status: 'IN_PROGRESS', // Stage advances to in-progress
+              },
+            }
+          : existingState.progress;
+
+        // Update session.currentStage and session.myProgress for consistency
+        const newSession = data.advancedToStage !== undefined
+          ? {
+              ...existingState.session,
+              currentStage: data.advancedToStage,
+              stageStatus: StageStatus.IN_PROGRESS,
+              myProgress: {
+                ...existingState.session.myProgress,
+                stage: data.advancedToStage,
+                status: StageStatus.IN_PROGRESS,
+              },
+            }
+          : existingState.session;
+
+        const newState: SessionStateResponse = {
+          ...existingState,
+          invitation: newInvitation,
+          progress: newProgress,
+          session: newSession,
+        };
+
+        // Set the new state directly (not using updater to avoid undefined issues)
+        queryClient.setQueryData(sessionKeys.state(sessionId), newState);
+      }
 
       // Only invalidate detail and progress (less critical, won't affect indicator)
       // These are background refreshes that won't race with the optimistic indicator
@@ -678,6 +685,7 @@ export function useConfirmInvitationMessage(
       queryClient.invalidateQueries({
         queryKey: stageKeys.progress(sessionId),
       });
+
       // NOTE: We do NOT invalidate messages queries here!
       // Instead, we add the transition message directly to the cache below.
       // This prevents refetching all messages and avoids re-animation issues.
@@ -707,22 +715,11 @@ export function useConfirmInvitationMessage(
         );
 
         // Also add to the infinite query cache (what useUnifiedSession uses)
-        console.log('[confirmInvitation:onSuccess] Adding transition message to infinite cache:', {
-          messageId: transitionMsg.id,
-          sessionId,
-          queryKey: messageKeys.infinite(sessionId),
-        });
         queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
           messageKeys.infinite(sessionId),
           (old) => {
-            console.log('[confirmInvitation:onSuccess] Updating infinite cache. Old data:', {
-              hasOld: !!old,
-              pageCount: old?.pages?.length ?? 0,
-              firstPageMessageCount: old?.pages?.[0]?.messages?.length ?? 0,
-            });
             if (!old || old.pages.length === 0) {
               // Create initial structure for infinite query
-              console.log('[confirmInvitation:onSuccess] No existing cache, creating new structure');
               return {
                 pages: [{ messages: [transitionMsg], hasMore: false }],
                 pageParams: [undefined],
@@ -732,7 +729,6 @@ export function useConfirmInvitationMessage(
             const firstPage = old.pages[0];
             const exists = firstPage.messages.some(m => m.id === transitionMsg.id);
             if (exists) {
-              console.log('[confirmInvitation:onSuccess] Message already exists in cache, skipping');
               return old;
             }
             const updatedPages = [...old.pages];
@@ -740,7 +736,6 @@ export function useConfirmInvitationMessage(
               ...firstPage,
               messages: [...firstPage.messages, transitionMsg],
             };
-            console.log('[confirmInvitation:onSuccess] Added message to cache. New first page message count:', updatedPages[0].messages.length);
             return { ...old, pages: updatedPages };
           }
         );
@@ -785,6 +780,16 @@ export function useConfirmInvitationMessage(
           }
         );
       }
+
+      // FINAL DEBUG: Log cache state at the very end of onSuccess
+      const finalState = queryClient.getQueryData<SessionStateResponse>(sessionKeys.state(sessionId));
+      console.log('[confirmInvitation:onSuccess] === COMPLETED SUCCESS HANDLER ===');
+      console.log('[confirmInvitation:onSuccess] FINAL cache state:', {
+        hasState: !!finalState,
+        hasInvitation: !!finalState?.invitation,
+        messageConfirmedAt: finalState?.invitation?.messageConfirmedAt,
+        stage: finalState?.progress?.myProgress?.stage,
+      });
     },
 
     // =========================================================================
@@ -983,13 +988,27 @@ export function useMarkSessionViewed(sessionId: string | undefined) {
         lastSeenChatItemId,
       });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Invalidate sessions list to update hasUnread flags
       queryClient.invalidateQueries({ queryKey: sessionKeys.lists() });
       // Invalidate unread count for tab badge
       queryClient.invalidateQueries({ queryKey: sessionKeys.unreadCount() });
-      // Invalidate session state to update lastSeenChatItemId for "new messages" separator
-      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId || '') });
+      // Update session state directly instead of invalidating to avoid race conditions
+      // with other mutations (like confirmInvitation) that use optimistic updates.
+      // Only update lastSeenChatItemId which is what markViewed actually changes.
+      queryClient.setQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId || ''),
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            session: {
+              ...old.session,
+              lastSeenChatItemId: data.lastSeenChatItemId,
+            },
+          };
+        }
+      );
     },
   });
 }
