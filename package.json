@@ -41,7 +41,8 @@
     "website:deploy": "cd website && vercel --prod",
     "dev:status": "cd tools/status-dashboard && npm run dev",
     "e2e": "npm --workspace e2e run e2e",
-    "e2e:headed": "npm --workspace e2e run e2e:headed"
+    "e2e:headed": "npm --workspace e2e run e2e:headed",
+    "e2e:ui": "npm --workspace e2e run e2e:ui"
   },
   "devDependencies": {
     "better-sqlite3": "^12.5.0",
