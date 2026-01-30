@@ -17,7 +17,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
-    baseURL: 'http://localhost:8081',
+    baseURL: 'http://localhost:8082',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     viewport: { width: 375, height: 667 },
@@ -26,9 +26,9 @@ export default defineConfig({
   webServer: [
     {
       command: 'npm run dev:api',
-      url: 'http://localhost:3000/health',
+      url: 'http://localhost:3002/health',
       reuseExistingServer: !process.env.CI,
-      cwd: '..',
+      cwd: path.resolve(__dirname, '..'),
       timeout: 60000,
       env: {
         E2E_AUTH_BYPASS: 'true',
@@ -37,10 +37,14 @@ export default defineConfig({
       },
     },
     {
-      command: 'cd ../mobile && EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8081',
-      url: 'http://localhost:8081',
+      command: 'npx expo start --web --port 8082',
+      url: 'http://localhost:8082',
       reuseExistingServer: !process.env.CI,
+      cwd: path.resolve(__dirname, '../mobile'),
       timeout: 120000,
+      env: {
+        EXPO_PUBLIC_API_URL: 'http://localhost:3002',
+      },
     },
   ],
   globalSetup: require.resolve('./global-setup'),

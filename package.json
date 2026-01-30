@@ -30,8 +30,8 @@
     "migrate": "./scripts/migrate-all.sh",
     "prisma": "npm exec --workspace backend prisma",
     "db:reset": "npm run prisma -- migrate reset",
-    "kill:api": "lsof -ti:3000 | xargs kill -9 2>/dev/null || echo 'No process found on port 3000'",
-    "kill:mobile": "lsof -ti:8081 | xargs kill -9 2>/dev/null || echo 'No process found on port 8081'",
+    "kill:api": "lsof -ti:3002 | xargs kill -9 2>/dev/null || echo 'No process found on port 3002'",
+    "kill:mobile": "lsof -ti:8082 | xargs kill -9 2>/dev/null || echo 'No process found on port 8082'",
     "docs:dev": "npm --workspace docs-site run start",
     "docs:build": "npm --workspace docs-site run build",
     "docs:deploy": "npm --workspace docs-site run vercel:deploy",
@@ -42,7 +42,8 @@
     "dev:status": "cd tools/status-dashboard && npm run dev",
     "e2e": "npm --workspace e2e run e2e",
     "e2e:headed": "npm --workspace e2e run e2e:headed",
-    "e2e:ui": "npm --workspace e2e run e2e:ui"
+    "e2e:ui": "npm --workspace e2e run e2e:ui",
+    "e2e:report": "npm --workspace e2e run e2e:report"
   },
   "devDependencies": {
     "better-sqlite3": "^12.5.0",
