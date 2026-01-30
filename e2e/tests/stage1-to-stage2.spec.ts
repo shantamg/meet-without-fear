@@ -13,8 +13,8 @@
 import { test, expect } from '@playwright/test';
 import { cleanupE2EData, getE2EHeaders } from '../helpers';
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
-const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8081';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3002';
+const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
 
 test.describe('Stage 1 to Stage 2 Transition', () => {
   const userA = {
