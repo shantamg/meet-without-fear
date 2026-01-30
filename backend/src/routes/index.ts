@@ -19,6 +19,7 @@ import stage2Routes from './stage2';
 import stage3Routes from './stage3';
 import stage4Routes from './stage4';
 import ttsRoutes from './tts';
+import e2eRoutes from './e2e';
 
 const router = Router();
 
@@ -45,6 +46,7 @@ router.use(stage2Routes);
 router.use(reconcilerRoutes); // Post-Stage 2 empathy gap analysis
 router.use(stage3Routes);
 router.use(stage4Routes);
+router.use('/e2e', e2eRoutes); // E2E testing helpers (only when E2E_AUTH_BYPASS=true)
 
 // Health check endpoint
 router.get('/health', (_, res) => {

@@ -9,7 +9,8 @@
     "shared",
     "docs-site",
     "website",
-    "tools/status-dashboard"
+    "tools/status-dashboard",
+    "e2e"
   ],
   "scripts": {
     "deploy:mobile:ios": "node scripts/update-build-number.js && cd mobile && EXPO_NO_CAPABILITY_SYNC=1 eas build --platform ios --profile production --auto-submit",
@@ -38,7 +39,9 @@
     "dev:website": "npm --workspace website run dev",
     "website:build": "npm --workspace website run build",
     "website:deploy": "cd website && vercel --prod",
-    "dev:status": "cd tools/status-dashboard && npm run dev"
+    "dev:status": "cd tools/status-dashboard && npm run dev",
+    "e2e": "npm --workspace e2e run e2e",
+    "e2e:headed": "npm --workspace e2e run e2e:headed"
   },
   "devDependencies": {
     "better-sqlite3": "^12.5.0",

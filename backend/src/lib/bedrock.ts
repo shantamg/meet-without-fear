@@ -38,6 +38,18 @@ const PRICING = {
 } as const;
 
 // ============================================================================
+// Mock LLM Toggle (E2E Testing)
+// ============================================================================
+
+/**
+ * Check if mock LLM mode is enabled (for E2E testing).
+ * When enabled, getModelCompletion returns null, triggering mock response path.
+ */
+export function isMockLLMEnabled(): boolean {
+  return process.env.MOCK_LLM === 'true';
+}
+
+// ============================================================================
 // Prompt Debug Logging
 // ============================================================================
 
@@ -291,6 +303,12 @@ function recordUsage(params: {
  * Returns the text response or null if client not configured.
  */
 export async function getCompletion(options: CompletionOptions): Promise<string | null> {
+  // E2E Mock Mode: Return null immediately to trigger mock response path
+  if (isMockLLMEnabled()) {
+    console.log('[Bedrock] MOCK_LLM enabled, skipping completion call');
+    return null;
+  }
+
   const client = getBedrockClient();
   if (!client) {
     return null;
@@ -363,6 +381,12 @@ export async function getModelCompletion(
   model: ModelType,
   options: CompletionOptions
 ): Promise<string | null> {
+  // E2E Mock Mode: Return null immediately to trigger mock response path
+  if (isMockLLMEnabled()) {
+    console.log(`[Bedrock] MOCK_LLM enabled, skipping ${model} call`);
+    return null;
+  }
+
   const client = getBedrockClient();
   if (!client) {
     return null;

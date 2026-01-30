@@ -1,0 +1,53 @@
+name: "Invitation Flow - User A Only"
+description: "User A creates session, signs compact, chats to invitation draft, marks sent"
+
+seed:
+  users:
+    - id: "user-a"
+      email: "user-a@e2e.test"
+      clerkId: "e2e_clerk_user_a"
+      name: "Alice Test"
+
+storyline:
+  user-a:
+    - user: "I want to have a conversation with my partner about our communication issues."
+      ai: |
+        <thinking>
+        Mode: ONBOARDING
+        Intensity: 3
+        FeelHeardCheck: N
+        ReadyShare: N
+        Strategy: Gather context about the situation
+        </thinking>
+
+        I'm glad you're taking this step. Communication challenges can feel overwhelming, but the fact that you're here shows you care about making things better. Can you tell me a bit more about what's been happening between you two?
+
+    - user: "We've been arguing a lot lately about small things, but it feels like there's something bigger underneath."
+      ai: |
+        <thinking>
+        Mode: ONBOARDING
+        Intensity: 4
+        FeelHeardCheck: N
+        ReadyShare: N
+        Strategy: Validate and prepare invitation draft
+        </thinking>
+
+        That awareness shows real insight - often the small arguments are symptoms of deeper unaddressed needs or feelings. It takes courage to look beneath the surface.
+
+        <draft>
+        Hey, I've been thinking about us and how we've been communicating lately. I found this app called Meet Without Fear that might help us understand each other better. It's not about being right or wrong - it's about really hearing each other. Would you be open to trying it with me?
+        </draft>
+
+        Here's a draft message you could send to invite your partner. Feel free to adjust it to sound like you. When you're ready, you can send it and let me know.
+
+postInvitationSent:
+  - user: null
+    ai: |
+      <thinking>
+      Mode: WITNESS
+      Intensity: 2
+      FeelHeardCheck: N
+      Strategy: Prepare for witnessing while waiting
+      </thinking>
+
+      That took courage to reach out. While you wait for them to respond, I'm curious - what's been weighing on you most in this relationship? Sometimes it helps to start processing your own feelings before the conversation begins.

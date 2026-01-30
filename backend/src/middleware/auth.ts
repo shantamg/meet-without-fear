@@ -68,6 +68,32 @@ async function verifyClerkToken(req: Request): Promise<string | null> {
 }
 
 /**
+ * E2E auth bypass handler
+ * When E2E_AUTH_BYPASS=true, accepts x-e2e-user-id and x-e2e-user-email headers
+ */
+async function handleE2EAuthBypass(req: Request): Promise<boolean> {
+  if (process.env.E2E_AUTH_BYPASS !== 'true') {
+    return false;
+  }
+
+  const e2eUserId = req.headers['x-e2e-user-id'] as string | undefined;
+  const e2eEmail = req.headers['x-e2e-user-email'] as string | undefined;
+
+  if (!e2eUserId || !e2eEmail) {
+    return false;
+  }
+
+  const user = await prisma.user.upsert({
+    where: { email: e2eEmail },
+    create: { id: e2eUserId, email: e2eEmail, clerkId: `e2e_${e2eUserId}` },
+    update: {},
+  });
+
+  req.user = user;
+  return true;
+}
+
+/**
  * Clerk authentication handler
  */
 async function handleClerkAuth(
@@ -76,6 +102,13 @@ async function handleClerkAuth(
   next: NextFunction,
   required: boolean
 ): Promise<void> {
+  // Check for E2E auth bypass first
+  const e2eBypassed = await handleE2EAuthBypass(req);
+  if (e2eBypassed) {
+    next();
+    return;
+  }
+
   // Check Clerk is configured
   if (!process.env.CLERK_SECRET_KEY) {
     const response: ApiResponse<never> = {

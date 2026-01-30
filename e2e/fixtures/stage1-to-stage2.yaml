@@ -1,0 +1,72 @@
+name: "Stage 1 to Stage 2 Transition"
+description: "User completes witnessing in Stage 1, triggers feel-heard check, transitions to Stage 2"
+
+seed:
+  users:
+    - id: "user-a"
+      email: "user-a@e2e.test"
+      clerkId: "e2e_clerk_user_a"
+      name: "Alice Test"
+
+storyline:
+  user-a:
+    - user: "I feel like my partner never listens to me. Every time I try to share something important, they're distracted or dismissive."
+      ai: |
+        <thinking>
+        Mode: WITNESS
+        Intensity: 5
+        FeelHeardCheck: N
+        Strategy: Validate feelings and explore deeper
+        </thinking>
+
+        I hear the frustration in what you're sharing. Feeling unheard, especially by someone you care about, can be deeply painful. Can you tell me about a specific moment when this happened recently?
+
+    - user: "Last week I tried to tell them about something stressful at work, and they just kept scrolling on their phone. I felt invisible."
+      ai: |
+        <thinking>
+        Mode: WITNESS
+        Intensity: 6
+        FeelHeardCheck: N
+        Strategy: Reflect the emotional experience
+        </thinking>
+
+        Invisible - that's such a powerful word. When the person who's supposed to be closest to us can't seem to see us, it cuts deep. What did that moment feel like in your body? Sometimes naming where we feel things helps us understand ourselves better.
+
+    - user: "My chest got tight. I just wanted to shut down and walk away. But I stayed, feeling angry and hurt."
+      ai: |
+        <thinking>
+        Mode: WITNESS
+        Intensity: 7
+        FeelHeardCheck: N
+        Strategy: Honor the staying while witnessing the pain
+        </thinking>
+
+        You stayed even when every part of you wanted to leave. That takes real strength. The tightness in your chest, the anger, the hurt - all of those make complete sense. You were reaching out for connection and hit a wall.
+
+    - user: "Yes, exactly. I just want them to care about what I'm going through."
+      ai: |
+        <thinking>
+        Mode: WITNESS
+        Intensity: 6
+        FeelHeardCheck: Y
+        Strategy: Acknowledge and check if ready to move forward
+        </thinking>
+
+        What you want is so fundamental - to be cared about, to matter. That's not asking for too much. That's asking for the basic building block of any relationship.
+
+        Before we continue, I want to check in with you. Do you feel heard right now in this conversation? Take a moment to notice how it feels to have your experience acknowledged.
+
+postFeelHeard:
+  - user: null
+    ai: |
+      <thinking>
+      Mode: PERSPECTIVE
+      Intensity: 4
+      FeelHeardCheck: N
+      ReadyShare: N
+      Strategy: Transition to Stage 2
+      </thinking>
+
+      Thank you for sharing so openly. Now that you've had space to express your experience, I'm wondering if you'd be willing to explore something with me.
+
+      Sometimes when we feel unheard, there's something happening on the other side too - not to excuse it, just to understand. Would you be open to thinking about what might be going on for your partner?

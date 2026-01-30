@@ -249,4 +249,124 @@ describe('Auth Middleware', () => {
       expect(() => getUser(req as Request)).toThrow('No authenticated user');
     });
   });
+
+  describe('E2E Auth Bypass', () => {
+    beforeEach(() => {
+      process.env.E2E_AUTH_BYPASS = 'true';
+    });
+
+    afterEach(() => {
+      delete process.env.E2E_AUTH_BYPASS;
+    });
+
+    it('authenticates user with e2e headers when bypass enabled', async () => {
+      const e2eUser = {
+        id: 'e2e-user-123',
+        clerkId: 'e2e_e2e-user-123',
+        email: 'test@e2e.test',
+        name: null,
+        firstName: null,
+        lastName: null,
+        pushToken: null,
+        biometricEnabled: false,
+        biometricEnrolledAt: null,
+        lastMoodIntensity: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      (prisma.user.upsert as jest.Mock).mockResolvedValue(e2eUser);
+
+      const req = createMockRequest({
+        headers: {
+          'x-e2e-user-id': 'e2e-user-123',
+          'x-e2e-user-email': 'test@e2e.test',
+        },
+      });
+      const { res, statusMock } = createMockResponse();
+      const next = jest.fn();
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect(prisma.user.upsert).toHaveBeenCalledWith({
+        where: { email: 'test@e2e.test' },
+        create: { id: 'e2e-user-123', email: 'test@e2e.test', clerkId: 'e2e_e2e-user-123' },
+        update: {},
+      });
+      expect(next).toHaveBeenCalled();
+      expect(statusMock).not.toHaveBeenCalled();
+      expect(req.user).toEqual(e2eUser);
+    });
+
+    it('returns 401 when e2e headers missing and bypass enabled', async () => {
+      const req = createMockRequest({ headers: {} });
+      const { res, statusMock, jsonMock } = createMockResponse();
+      const next = jest.fn();
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect(statusMock).toHaveBeenCalledWith(401);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'UNAUTHORIZED',
+          }),
+        })
+      );
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('bypasses e2e auth when E2E_AUTH_BYPASS is not true', async () => {
+      process.env.E2E_AUTH_BYPASS = 'false';
+
+      const req = createMockRequest({
+        headers: {
+          'x-e2e-user-id': 'e2e-user-123',
+          'x-e2e-user-email': 'test@e2e.test',
+        },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+      const next = jest.fn();
+
+      await requireAuth(req as Request, res as Response, next);
+
+      // Without valid Clerk token, should fail
+      expect(statusMock).toHaveBeenCalledWith(401);
+    });
+
+    it('uses e2e auth even when Clerk header is present', async () => {
+      const e2eUser = {
+        id: 'e2e-user-123',
+        clerkId: 'e2e_e2e-user-123',
+        email: 'test@e2e.test',
+        name: null,
+        firstName: null,
+        lastName: null,
+        pushToken: null,
+        biometricEnabled: false,
+        biometricEnrolledAt: null,
+        lastMoodIntensity: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      (prisma.user.upsert as jest.Mock).mockResolvedValue(e2eUser);
+
+      const req = createMockRequest({
+        headers: {
+          'x-e2e-user-id': 'e2e-user-123',
+          'x-e2e-user-email': 'test@e2e.test',
+          authorization: 'Bearer some-clerk-token',
+        },
+      });
+      const { res, statusMock } = createMockResponse();
+      const next = jest.fn();
+
+      await requireAuth(req as Request, res as Response, next);
+
+      // E2E bypass should take precedence, Clerk verification should not be called
+      expect(mockVerifyToken).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalled();
+      expect(req.user).toEqual(e2eUser);
+    });
+  });
 });

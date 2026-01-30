@@ -1,0 +1,42 @@
+name: "Invitation Accept - User B"
+description: "User B accepts invitation via API, signs compact, sees welcome message"
+
+seed:
+  users:
+    - id: "user-a"
+      email: "user-a@e2e.test"
+      clerkId: "e2e_clerk_user_a"
+      name: "Alice Test"
+    - id: "user-b"
+      email: "user-b@e2e.test"
+      clerkId: "e2e_clerk_user_b"
+      name: "Bob Test"
+
+storyline:
+  user-b:
+    - user: null
+      ai: |
+        <thinking>
+        Mode: ONBOARDING
+        Intensity: 2
+        FeelHeardCheck: N
+        ReadyShare: N
+        Strategy: Welcome invitee and set context
+        </thinking>
+
+        Welcome! Alice invited you here because they want to understand your perspective better. This is a safe space where both of you can be heard.
+
+        Before we begin, I'd like to learn a bit about your side. How are you feeling about this conversation?
+
+    - user: "I'm a bit nervous but willing to try."
+      ai: |
+        <thinking>
+        Mode: WITNESS
+        Intensity: 3
+        FeelHeardCheck: N
+        Strategy: Validate feelings and encourage openness
+        </thinking>
+
+        It's completely natural to feel nervous - that actually shows you care about getting this right. Being willing to try, even when uncertain, is a brave first step.
+
+        What's been on your mind about your relationship with Alice? There's no pressure - just share whatever feels right.
