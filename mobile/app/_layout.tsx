@@ -15,6 +15,7 @@ import { QueryProvider } from '@/src/providers/QueryProvider';
 import { setTokenProvider } from '@/src/lib/api';
 import { ToastProvider } from '@/src/contexts/ToastContext';
 import { MixpanelInitializer } from '@/src/components/MixpanelInitializer';
+import { E2EAuthProvider, isE2EMode } from '@/src/providers/E2EAuthProvider';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -58,26 +59,25 @@ function ClerkAuthSetup() {
 }
 
 /**
- * Root layout component
+ * Common app shell - UI container shared between Clerk and E2E modes
  */
-export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({});
-
-  // Keep showing splash screen until fonts are loaded
-  if (!fontsLoaded && !fontError) {
-    return null;
-  }
-
+function AppShell() {
   return (
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-      <ClerkLoaded>
-        <HideSplashOnReady />
-        <ClerkAuthSetup />
-        <QueryProvider>
-          <AuthProviderWrapper />
-        </QueryProvider>
-      </ClerkLoaded>
-    </ClerkProvider>
+    <GestureHandlerRootView style={styles.container}>
+      <SafeAreaProvider>
+        <SessionDrawerProvider>
+          <ToastProvider>
+            <MixpanelInitializer />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(public)" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+            </Stack>
+            <StatusBar style="light" />
+          </ToastProvider>
+        </SessionDrawerProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -89,23 +89,46 @@ function AuthProviderWrapper() {
   const auth = useAuthProvider();
 
   return (
-    <GestureHandlerRootView style={styles.container}>
-      <SafeAreaProvider>
-        <AuthContext.Provider value={auth}>
-          <SessionDrawerProvider>
-            <ToastProvider>
-              <MixpanelInitializer />
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(public)" />
-                <Stack.Screen name="(auth)" />
-                <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-              </Stack>
-              <StatusBar style="light" />
-            </ToastProvider>
-          </SessionDrawerProvider>
-        </AuthContext.Provider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <AuthContext.Provider value={auth}>
+      <AppShell />
+    </AuthContext.Provider>
+  );
+}
+
+/**
+ * Root layout component
+ */
+export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({});
+
+  // Keep showing splash screen until fonts are loaded
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
+  // E2E mode: bypass Clerk entirely
+  if (isE2EMode()) {
+    return (
+      <QueryProvider>
+        <E2EAuthProvider>
+          <HideSplashOnReady />
+          <AppShell />
+        </E2EAuthProvider>
+      </QueryProvider>
+    );
+  }
+
+  // Normal mode: use Clerk
+  return (
+    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
+      <ClerkLoaded>
+        <HideSplashOnReady />
+        <ClerkAuthSetup />
+        <QueryProvider>
+          <AuthProviderWrapper />
+        </QueryProvider>
+      </ClerkLoaded>
+    </ClerkProvider>
   );
 }
 

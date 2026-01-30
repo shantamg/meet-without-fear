@@ -32,12 +32,13 @@ export default defineConfig({
       timeout: 60000,
     },
     {
-      command: 'cd ../mobile && EXPO_PUBLIC_API_URL=http://localhost:3002 npx expo start --web --port 8082',
+      command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3002 npx expo start --web --port 8082',
       url: 'http://localhost:8082',
       reuseExistingServer: !process.env.CI,
       timeout: 120000,
     },
   ],
-  globalSetup: require.resolve('./global-setup'),
+  // Global setup disabled - run migrations manually before tests if needed
+  // globalSetup: require.resolve('./global-setup'),
   outputDir: 'test-results/',
 });
