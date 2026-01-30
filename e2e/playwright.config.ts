@@ -1,4 +1,9 @@
 import { defineConfig } from '@playwright/test';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Load test environment variables
+dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 
 export default defineConfig({
   testDir: './tests',
@@ -10,7 +15,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 1,
-  reporter: 'html',
+  reporter: [['html', { open: 'never' }], ['list']],
   use: {
     baseURL: 'http://localhost:8081',
     screenshot: 'only-on-failure',
@@ -18,4 +23,26 @@ export default defineConfig({
     viewport: { width: 375, height: 667 },
     trace: 'on-first-retry',
   },
+  webServer: [
+    {
+      command: 'npm run dev:api',
+      url: 'http://localhost:3000/health',
+      reuseExistingServer: !process.env.CI,
+      cwd: '..',
+      timeout: 60000,
+      env: {
+        E2E_AUTH_BYPASS: 'true',
+        MOCK_LLM: 'true',
+        E2E_FIXTURES_PATH: path.resolve(__dirname, 'fixtures'),
+      },
+    },
+    {
+      command: 'cd ../mobile && EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8081',
+      url: 'http://localhost:8081',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120000,
+    },
+  ],
+  globalSetup: require.resolve('./global-setup'),
+  outputDir: 'test-results/',
 });
