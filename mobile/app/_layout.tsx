@@ -6,13 +6,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
-import { ClerkProvider, ClerkLoaded, useAuth as useClerkAuth } from '@clerk/clerk-expo';
-import { tokenCache } from '@clerk/clerk-expo/token-cache';
 
-import { AuthContext, useAuthProvider } from '@/src/hooks/useAuth';
 import { SessionDrawerProvider } from '@/src/hooks/useSessionDrawer';
 import { QueryProvider } from '@/src/providers/QueryProvider';
-import { setTokenProvider } from '@/src/lib/api';
 import { ToastProvider } from '@/src/contexts/ToastContext';
 import { MixpanelInitializer } from '@/src/components/MixpanelInitializer';
 import { E2EAuthProvider, isE2EMode } from '@/src/providers/E2EAuthProvider';
@@ -20,19 +16,8 @@ import { E2EAuthProvider, isE2EMode } from '@/src/providers/E2EAuthProvider';
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
-// Clerk publishable key
-const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || '';
-
-// Log Clerk key status for debugging (first 10 chars only for security)
-if (__DEV__) {
-  console.log('[Clerk] Key present:', !!CLERK_PUBLISHABLE_KEY);
-  console.log('[Clerk] Key prefix:', CLERK_PUBLISHABLE_KEY.substring(0, 10));
-} else if (!CLERK_PUBLISHABLE_KEY) {
-  console.error('[Clerk] CRITICAL: No publishable key in production build!');
-}
-
 /**
- * Component to hide splash screen once Clerk is loaded
+ * Component to hide splash screen once ready
  */
 function HideSplashOnReady() {
   useEffect(() => {
@@ -42,32 +27,15 @@ function HideSplashOnReady() {
 }
 
 /**
- * Clerk auth setup - just configures API client token provider
- */
-function ClerkAuthSetup() {
-  const { getToken, signOut } = useClerkAuth();
-
-  useEffect(() => {
-    // Tell the API client how to get tokens from Clerk
-    setTokenProvider({
-      getToken: async (options) => getToken({ skipCache: options?.forceRefresh }),
-      signOut,
-    });
-  }, [getToken, signOut]);
-
-  return null;
-}
-
-/**
  * Common app shell - UI container shared between Clerk and E2E modes
  */
-function AppShell() {
+function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
   return (
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaProvider>
         <SessionDrawerProvider>
           <ToastProvider>
-            <MixpanelInitializer />
+            {includeMixpanel && <MixpanelInitializer />}
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(public)" />
               <Stack.Screen name="(auth)" />
@@ -78,20 +46,6 @@ function AppShell() {
         </SessionDrawerProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
-  );
-}
-
-/**
- * Auth provider wrapper - must be inside ClerkLoaded so useAuthProvider can use Clerk hooks
- * Must also be inside QueryProvider so useAuthProvider can clear cache on sign out
- */
-function AuthProviderWrapper() {
-  const auth = useAuthProvider();
-
-  return (
-    <AuthContext.Provider value={auth}>
-      <AppShell />
-    </AuthContext.Provider>
   );
 }
 
@@ -112,23 +66,23 @@ export default function RootLayout() {
       <QueryProvider>
         <E2EAuthProvider>
           <HideSplashOnReady />
-          <AppShell />
+          <AppShell includeMixpanel={false} />
         </E2EAuthProvider>
       </QueryProvider>
     );
   }
 
-  // Normal mode: use Clerk
+  // Normal mode: use Clerk (imported dynamically to avoid loading in E2E mode)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { ClerkAuthFlow } = require('@/src/providers/ClerkAuthFlow');
+
   return (
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-      <ClerkLoaded>
-        <HideSplashOnReady />
-        <ClerkAuthSetup />
-        <QueryProvider>
-          <AuthProviderWrapper />
-        </QueryProvider>
-      </ClerkLoaded>
-    </ClerkProvider>
+    <ClerkAuthFlow
+      publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || ''}
+      onReady={() => SplashScreen.hideAsync()}
+    >
+      <AppShell />
+    </ClerkAuthFlow>
   );
 }
 

@@ -7,7 +7,7 @@
  */
 
 import React, { ReactNode, useCallback, useState } from 'react';
-import { AuthContext, User, AuthContextValue } from '../hooks/useAuth';
+import { AuthContext, User, AuthContextValue } from '../hooks/useAuthTypes';
 import { setTokenProvider } from '../lib/api';
 
 // E2E test user - matches what the backend E2E auth bypass expects

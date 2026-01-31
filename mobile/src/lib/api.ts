@@ -66,6 +66,13 @@ export async function getAuthToken(): Promise<string | null> {
 }
 
 /**
+ * Check if E2E mode is active (using E2E headers instead of bearer token).
+ */
+export function isE2EAuthMode(): boolean {
+  return !!tokenProvider?.e2eHeaders;
+}
+
+/**
  * Sign out the user when auth is invalid.
  * Called when we get an unrecoverable 401.
  */

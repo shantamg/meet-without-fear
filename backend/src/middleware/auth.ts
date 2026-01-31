@@ -83,10 +83,11 @@ async function handleE2EAuthBypass(req: Request): Promise<boolean> {
     return false;
   }
 
+  // Use ID as the unique key since E2E tests use consistent user IDs
   const user = await prisma.user.upsert({
-    where: { email: e2eEmail },
+    where: { id: e2eUserId },
     create: { id: e2eUserId, email: e2eEmail, clerkId: `e2e_${e2eUserId}` },
-    update: {},
+    update: { email: e2eEmail }, // Update email in case it changed
   });
 
   req.user = user;

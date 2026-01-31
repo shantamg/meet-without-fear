@@ -68,15 +68,28 @@ export const updatePushTokenResponseSchema = z.object({
 // ============================================================================
 
 export const ablyTokenResponseSchema = z.object({
-  tokenRequest: z.object({
-    keyName: z.string(),
-    ttl: z.number(),
-    timestamp: z.number(),
-    capability: z.string(),
-    clientId: z.string(),
-    nonce: z.string(),
-    mac: z.string(),
-  }),
+  // Preferred: actual token (JWT) - avoids extra round-trip to Ably servers
+  token: z
+    .object({
+      token: z.string(),
+      issued: z.number(),
+      expires: z.number(),
+      capability: z.string(),
+      clientId: z.string(),
+    })
+    .optional(),
+  // Legacy: tokenRequest for backwards compatibility
+  tokenRequest: z
+    .object({
+      keyName: z.string(),
+      ttl: z.number(),
+      timestamp: z.number(),
+      capability: z.string(),
+      clientId: z.string(),
+      nonce: z.string(),
+      mac: z.string(),
+    })
+    .optional(),
 });
 
 export type AblyTokenResponseInput = z.infer<typeof ablyTokenResponseSchema>;

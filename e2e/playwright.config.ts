@@ -22,6 +22,9 @@ export default defineConfig({
     video: 'retain-on-failure',
     viewport: { width: 375, height: 667 },
     trace: 'on-first-retry',
+    launchOptions: {
+      args: ['--window-size=375,667'],
+    },
   },
   webServer: [
     {

@@ -660,6 +660,8 @@ interface UseUserSessionUpdatesConfig {
   }) => void;
   /** Whether to disable automatic query refetching on events */
   disableRefetch?: boolean;
+  /** Whether to enable the subscription (default: true) */
+  enabled?: boolean;
 }
 
 /**
@@ -730,7 +732,8 @@ export function useUserSessionUpdates(
   );
 
   useEffect(() => {
-    if (!user?.id) return;
+    // Skip if disabled or no user
+    if (optionsRef.current?.enabled === false || !user?.id) return;
 
     let isCleanedUp = false;
     let channel: Ably.RealtimeChannel | null = null;

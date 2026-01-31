@@ -25,11 +25,8 @@ test.describe('Invitation Accept - User B', () => {
   };
 
   test.beforeEach(async () => {
-    try {
-      await cleanupE2EData();
-    } catch (error) {
-      console.log('Cleanup failed:', error);
-    }
+    // Clean up any existing E2E test data (errors are non-fatal)
+    await cleanupE2EData().catch(() => {});
   });
 
   test('creates invitation as User A via API', async ({ request }) => {

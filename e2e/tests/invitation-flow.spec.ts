@@ -20,15 +20,22 @@ test.describe('Invitation Flow - User A', () => {
   };
 
   test.beforeEach(async () => {
-    // Clean up any existing E2E test data
-    try {
-      await cleanupE2EData();
-    } catch (error) {
-      console.log('Cleanup failed (server may not be running yet):', error);
-    }
+    // Clean up any existing E2E test data (errors are non-fatal)
+    await cleanupE2EData().catch(() => {});
   });
 
   test('loads home screen with welcome content', async ({ page }) => {
+    // Capture console errors
+    const consoleErrors: string[] = [];
+    page.on('console', msg => {
+      if (msg.type() === 'error') {
+        consoleErrors.push(msg.text());
+      }
+    });
+    page.on('pageerror', err => {
+      consoleErrors.push(`Page error: ${err.message}`);
+    });
+
     // Set E2E auth headers via page context
     await page.setExtraHTTPHeaders(getE2EHeaders(userA.email, userA.id));
 
@@ -38,8 +45,23 @@ test.describe('Invitation Flow - User A', () => {
     // Wait for app to load
     await page.waitForLoadState('networkidle');
 
+    // Give React a moment to render
+    await page.waitForTimeout(2000);
+
+    // Take screenshot for debugging
+    await page.screenshot({ path: 'test-results/home-screen.png' });
+
+    // Log any console errors
+    if (consoleErrors.length > 0) {
+      console.log('Console errors:', consoleErrors);
+    }
+
     // Verify basic app elements are visible
     await expect(page.locator('body')).toBeVisible();
+
+    // Look for actual app content - "Hi" greeting or "Loading"
+    const hasContent = await page.locator('text=/Hi|Loading|New Session|Inner Work/i').count();
+    console.log('Found content elements:', hasContent);
 
     // The app should not show any error text
     const hasError = await page.locator('text=/error|crash|failed/i').count();

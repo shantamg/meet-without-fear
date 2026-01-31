@@ -1,33 +1,53 @@
 /**
  * Homepage Smoke Test
  *
- * Verifies that the app loads correctly.
+ * Verifies that the app loads correctly and shows actual content.
  */
 
 import { test, expect } from '@playwright/test';
 
 test.describe('Homepage', () => {
-  test('loads and shows welcome content', async ({ page }) => {
+  test('loads and shows actual app content (not just loading)', async ({ page }) => {
+    // Capture console for debugging
+    const consoleLogs: string[] = [];
+    page.on('console', (msg) => {
+      consoleLogs.push(`[${msg.type()}] ${msg.text()}`);
+    });
+
     // Navigate to the app
     await page.goto('/');
 
-    // Wait for the app to load - look for common app elements
-    // The exact text will depend on what the app shows on load
-    // For now, we just verify the page loads without error
-    await expect(page).toHaveTitle(/.*/); // Any title is fine
+    // Take initial screenshot
+    await page.screenshot({ path: 'test-results/homepage-initial.png' });
 
-    // Check that we got a valid page (not an error page)
-    // The Expo app should show some UI content
-    const body = page.locator('body');
-    await expect(body).toBeVisible();
+    // Wait for the loading spinner to disappear
+    // The app shows "Loading..." text while loading
+    try {
+      await page.waitForFunction(
+        () => !document.body.innerText.includes('Loading...'),
+        { timeout: 15000 }
+      );
+    } catch {
+      // Take screenshot if still loading
+      await page.screenshot({ path: 'test-results/homepage-stuck-loading.png' });
+      console.log('Console logs:', consoleLogs.slice(-20));
+      throw new Error('App stuck on loading screen');
+    }
 
-    // Check there's no React error boundary or crash message
-    const errorMessage = page.getByText(/error|crash|failed/i);
-    // This should have 0 matches in a healthy app
-    await expect(errorMessage).toHaveCount(0).catch(() => {
-      // If there's an error message, the test should still pass if the app loaded
-      // We just want to confirm the app renders something
-    });
+    // Take screenshot after loading complete
+    await page.screenshot({ path: 'test-results/homepage-loaded.png' });
+
+    // Now check for actual content
+    // E2E mode should show authenticated home screen with "Hi" greeting
+    // OR the welcome screen with "Meet Without Fear" if not redirecting properly
+    const hasGreeting = await page.getByText(/^Hi\s/i).isVisible().catch(() => false);
+    const hasWelcome = await page.getByText('Meet Without Fear').isVisible().catch(() => false);
+    const hasGetStarted = await page.getByText('Get Started').isVisible().catch(() => false);
+
+    console.log(`Content check: greeting=${hasGreeting}, welcome=${hasWelcome}, getStarted=${hasGetStarted}`);
+
+    // Should have either the auth home screen or the welcome screen
+    expect(hasGreeting || hasWelcome || hasGetStarted).toBe(true);
   });
 
   test('loads within 10 seconds', async ({ page }) => {
@@ -35,7 +55,7 @@ test.describe('Homepage', () => {
 
     await page.goto('/');
 
-    // Wait for any content to appear
+    // Wait for actual content (not just DOM loaded)
     await page.waitForLoadState('domcontentloaded');
 
     const loadTime = Date.now() - startTime;

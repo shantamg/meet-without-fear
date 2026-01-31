@@ -2,6 +2,7 @@ import { Stack, Redirect } from 'expo-router';
 import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 import { colors } from '@/theme';
 import { useUserSessionUpdates } from '@/src/hooks/useRealtime';
+import { isE2EMode } from '@/src/providers/E2EAuthProvider';
 
 /**
  * Auth group layout
@@ -14,7 +15,8 @@ export default function AuthLayout() {
 
   // Subscribe to user-level session updates for real-time list refreshes
   // This is placed here (not in individual screens) to ensure only ONE Ably connection
-  useUserSessionUpdates();
+  // Skip in E2E mode to avoid token/capability cache issues with the user notification channel
+  useUserSessionUpdates({ enabled: !isE2EMode() });
 
   // Wait for Clerk to initialize
   if (!isLoaded) {

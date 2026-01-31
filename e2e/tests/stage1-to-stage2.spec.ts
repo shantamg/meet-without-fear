@@ -20,11 +20,8 @@ test.describe('Session State and Navigation', () => {
   };
 
   test.beforeEach(async () => {
-    try {
-      await cleanupE2EData();
-    } catch (error) {
-      console.log('Cleanup failed:', error);
-    }
+    // Clean up any existing E2E test data (errors are non-fatal)
+    await cleanupE2EData().catch(() => {});
   });
 
   test('loads app successfully', async ({ page }) => {
