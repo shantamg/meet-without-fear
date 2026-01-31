@@ -23,6 +23,7 @@ import { extractJsonFromResponse } from '../utils/json-extractor';
 import { brainService, BrainActivityCallType } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
 import { recordLlmCall } from '../services/llm-telemetry';
+import { getFixtureResponseByIndex } from './e2e-fixtures';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -682,6 +683,8 @@ export interface SonnetStreamingOptions {
   turnId: string;
   /** Call type for dashboard display categorization */
   callType?: BrainActivityCallType;
+  /** Response index for mock mode - used to select which fixture response to return */
+  mockResponseIndex?: number;
 }
 
 /**
@@ -699,6 +702,31 @@ export interface SonnetStreamingOptions {
 export async function* getSonnetStreamingResponse(
   options: SonnetStreamingOptions
 ): AsyncGenerator<StreamEvent, void, unknown> {
+  // E2E Mock Mode: Yield fixture response as text events
+  if (isMockLLMEnabled()) {
+    const fixtureId = process.env.E2E_FIXTURE_ID;
+    if (fixtureId && options.mockResponseIndex !== undefined) {
+      try {
+        console.log(`[Bedrock] MOCK_LLM enabled, loading fixture ${fixtureId} index ${options.mockResponseIndex}`);
+        const mockResponse = getFixtureResponseByIndex(fixtureId, options.mockResponseIndex);
+        console.log(`[Bedrock] Yielding mock response: "${mockResponse.substring(0, 80)}..."`);
+
+        // Yield the mock response as a text event (just like streaming would)
+        // The thinking trap in sendMessageStream will process it normally
+        yield { type: 'text', text: mockResponse };
+        yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 } };
+        return;
+      } catch (error) {
+        console.error('[Bedrock] Failed to load fixture response:', error);
+        // Fall through to return empty response
+      }
+    } else {
+      console.log('[Bedrock] MOCK_LLM enabled but no fixture configured, returning empty');
+    }
+    yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 } };
+    return;
+  }
+
   const client = getBedrockClient();
   if (!client) {
     // If client not configured, yield a done event with no usage

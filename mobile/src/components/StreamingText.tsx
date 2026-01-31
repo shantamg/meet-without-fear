@@ -1,5 +1,6 @@
 import { useEffect, useRef, memo } from 'react';
 import { Text, Animated, StyleProp, TextStyle } from 'react-native';
+import { isE2EMode } from '../providers/E2EAuthProvider';
 
 // ============================================================================
 // Types
@@ -29,6 +30,8 @@ interface StreamingTextProps {
  *
  * Much simpler than TypewriterText - no word-by-word delays.
  * The streaming itself provides the "appearing" effect.
+ *
+ * In E2E mode, animations are skipped for faster, more reliable tests.
  */
 export const StreamingText = memo(function StreamingText({
   text,
@@ -49,7 +52,11 @@ export const StreamingText = memo(function StreamingText({
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
+  // Animation effect - only runs when not in E2E mode
   useEffect(() => {
+    // Skip animation logic in E2E mode
+    if (isE2EMode()) return;
+
     const prevText = prevTextRef.current;
     prevTextRef.current = text;
 
@@ -74,16 +81,23 @@ export const StreamingText = memo(function StreamingText({
     }
   }, [text, fadeDuration, fadeAnim]);
 
-  // Notify completion when we have text and aren't animating
+  // Notify completion
   useEffect(() => {
     if (text.length > 0) {
-      // Call onComplete after a short delay to account for final fade
+      // In E2E mode, call onComplete immediately
+      // In normal mode, add delay to account for final fade
+      const delay = isE2EMode() ? 0 : fadeDuration + 50;
       const timer = setTimeout(() => {
         onCompleteRef.current?.();
-      }, fadeDuration + 50);
+      }, delay);
       return () => clearTimeout(timer);
     }
   }, [text, fadeDuration]);
+
+  // In E2E mode, render plain text without animation
+  if (isE2EMode()) {
+    return <Text style={style}>{text}</Text>;
+  }
 
   // Split text into "shown" (old) and "new" portions
   const shownLength = shownLengthRef.current;

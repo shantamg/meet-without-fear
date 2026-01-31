@@ -73,6 +73,14 @@ export function isE2EAuthMode(): boolean {
 }
 
 /**
+ * Get E2E auth headers if in E2E mode.
+ * Returns undefined if not in E2E mode.
+ */
+export function getE2EAuthHeaders(): Record<string, string> | undefined {
+  return tokenProvider?.e2eHeaders;
+}
+
+/**
  * Sign out the user when auth is invalid.
  * Called when we get an unrecoverable 401.
  */

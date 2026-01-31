@@ -4,14 +4,18 @@
  * Bypasses Clerk authentication for E2E testing.
  * When EXPO_PUBLIC_E2E_MODE is set, this provider mocks the auth context
  * to simulate a logged-in user without requiring Clerk.
+ *
+ * The provider reads E2E user info from URL parameters set by Playwright,
+ * then fetches the full user profile from the backend.
  */
 
-import React, { ReactNode, useCallback, useState } from 'react';
+import React, { ReactNode, useCallback, useState, useEffect } from 'react';
+import { Platform } from 'react-native';
 import { AuthContext, User, AuthContextValue } from '../hooks/useAuthTypes';
-import { setTokenProvider } from '../lib/api';
+import { setTokenProvider, get } from '../lib/api';
 
-// E2E test user - matches what the backend E2E auth bypass expects
-const E2E_USER: User = {
+// Default E2E test user - used if no URL params provided
+const DEFAULT_E2E_USER: User = {
   id: 'e2e-test-user',
   email: 'e2e-test@e2e.test',
   name: 'E2E Test User',
@@ -22,20 +26,50 @@ const E2E_USER: User = {
   createdAt: new Date().toISOString(),
 };
 
+/**
+ * Parse E2E user info from URL hash params (set by Playwright via page.goto with hash)
+ * Format: #e2e-user-id=xxx&e2e-user-email=xxx
+ */
+function getE2EUserFromURL(): { id: string; email: string } | null {
+  if (Platform.OS !== 'web') return null;
+
+  try {
+    // Check URL search params (Playwright can set these)
+    const urlParams = new URLSearchParams(window.location.search);
+    const userId = urlParams.get('e2e-user-id');
+    const userEmail = urlParams.get('e2e-user-email');
+
+    if (userId && userEmail) {
+      return { id: userId, email: userEmail };
+    }
+  } catch {
+    // Ignore - not in web environment
+  }
+
+  return null;
+}
+
 interface E2EAuthProviderProps {
   children: ReactNode;
 }
 
 /**
  * Mock auth provider for E2E testing.
- * Simulates a logged-in user and configures the API client
- * to use E2E auth bypass headers.
+ * Fetches the real user from backend to ensure correct user IDs.
  */
 export function E2EAuthProvider({ children }: E2EAuthProviderProps) {
-  const [user, setUser] = useState<User | null>(E2E_USER);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Configure API client to use E2E headers instead of Clerk tokens
-  React.useEffect(() => {
+  // Get E2E user info from URL params or use default
+  const e2eUserInfo = getE2EUserFromURL() || {
+    id: DEFAULT_E2E_USER.id,
+    email: DEFAULT_E2E_USER.email,
+  };
+
+  // Configure API client and fetch user profile
+  useEffect(() => {
+    // Configure API client to use E2E headers
     setTokenProvider({
       getToken: async () => null, // No token needed - backend uses E2E headers
       signOut: async () => {
@@ -43,11 +77,32 @@ export function E2EAuthProvider({ children }: E2EAuthProviderProps) {
       },
       // Custom headers for E2E auth bypass
       e2eHeaders: {
-        'x-e2e-user-id': E2E_USER.id,
-        'x-e2e-user-email': E2E_USER.email,
+        'x-e2e-user-id': e2eUserInfo.id,
+        'x-e2e-user-email': e2eUserInfo.email,
       },
     });
-  }, []);
+
+    // Fetch user profile from backend to get real user data
+    const fetchUser = async () => {
+      try {
+        const userData = await get<User>('/auth/me');
+        console.log('[E2EAuthProvider] Fetched user from backend:', userData.id);
+        setUser(userData);
+      } catch (error) {
+        console.warn('[E2EAuthProvider] Failed to fetch user, using default:', error);
+        // Fall back to default user but with correct ID from params
+        setUser({
+          ...DEFAULT_E2E_USER,
+          id: e2eUserInfo.id,
+          email: e2eUserInfo.email,
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUser();
+  }, [e2eUserInfo.id, e2eUserInfo.email]);
 
   const signOut = useCallback(async () => {
     setUser(null);
@@ -63,7 +118,7 @@ export function E2EAuthProvider({ children }: E2EAuthProviderProps) {
 
   const authValue: AuthContextValue = {
     user,
-    isLoading: false,
+    isLoading,
     isAuthenticated: !!user,
     signOut,
     getToken,

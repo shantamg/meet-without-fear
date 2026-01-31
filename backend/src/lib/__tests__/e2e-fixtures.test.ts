@@ -5,7 +5,7 @@
  */
 
 import path from 'path';
-import { loadFixture, getFixtureResponse, clearFixtureCache } from '../e2e-fixtures';
+import { loadFixture, getFixtureResponse, getFixtureResponseByIndex, clearFixtureCache } from '../e2e-fixtures';
 
 describe('E2E Fixture Loader', () => {
   const originalEnv = process.env.E2E_FIXTURES_PATH;
@@ -48,9 +48,9 @@ describe('E2E Fixture Loader', () => {
       const fixture = loadFixture('test-fixture');
 
       expect(fixture.storyline).toBeDefined();
-      expect(fixture.storyline['user-a']).toHaveLength(2);
-      expect(fixture.storyline['user-a'][0].user).toBe('Hello');
-      expect(fixture.storyline['user-a'][0].ai).toContain('thinking');
+      expect(fixture.storyline!['user-a']).toHaveLength(2);
+      expect(fixture.storyline!['user-a'][0].user).toBe('Hello');
+      expect(fixture.storyline!['user-a'][0].ai).toContain('thinking');
     });
 
     it('throws error when fixture not found', () => {
@@ -104,6 +104,58 @@ describe('E2E Fixture Loader', () => {
       expect(() => getFixtureResponse(fixture, 'user-a', 99)).toThrow(
         'Response index 99 out of bounds for user user-a (has 2 responses)'
       );
+    });
+  });
+
+  describe('getFixtureResponseByIndex', () => {
+    beforeEach(() => {
+      clearFixtureCache();
+    });
+
+    it('returns AI response for given index using legacy storyline format', () => {
+      const response = getFixtureResponseByIndex('test-fixture', 0);
+
+      expect(response).toContain('thinking');
+      expect(response).toContain("Hi there! How can I help you today?");
+    });
+
+    it('returns next response when index increments', () => {
+      const response = getFixtureResponseByIndex('test-fixture', 1);
+
+      expect(response).toContain("I'm doing well");
+    });
+
+    it('throws error when fixture not found', () => {
+      expect(() => getFixtureResponseByIndex('non-existent', 0)).toThrow(
+        'Fixture not found: non-existent'
+      );
+    });
+
+    it('throws error when index out of bounds', () => {
+      expect(() => getFixtureResponseByIndex('test-fixture', 99)).toThrow(
+        'Response index 99 out of bounds for fixture test-fixture (has 2 responses)'
+      );
+    });
+
+    it('throws error when index is negative', () => {
+      expect(() => getFixtureResponseByIndex('test-fixture', -1)).toThrow(
+        'Response index -1 out of bounds for fixture test-fixture (has 2 responses)'
+      );
+    });
+
+    it('loads fixture with flat-array responses format', () => {
+      // This test uses the flat-array-fixture.yaml
+      const response = getFixtureResponseByIndex('flat-array-fixture', 0);
+
+      expect(response).toContain('Welcome to the session');
+    });
+
+    it('returns correct response from flat-array at different indices', () => {
+      const response0 = getFixtureResponseByIndex('flat-array-fixture', 0);
+      const response1 = getFixtureResponseByIndex('flat-array-fixture', 1);
+
+      expect(response0).toContain('Welcome to the session');
+      expect(response1).toContain('<draft>');
     });
   });
 });

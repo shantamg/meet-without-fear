@@ -30,6 +30,7 @@ export function ReadyToShareConfirmation({
       style={styles.button}
       onPress={onViewFull}
       activeOpacity={0.7}
+      testID="ready-to-share-button"
     >
       <MessageCircle color={colors.brandBlue} size={18} />
       <Text style={styles.buttonText}>Review what you'll share</Text>

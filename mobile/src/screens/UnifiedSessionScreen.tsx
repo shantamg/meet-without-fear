@@ -1594,7 +1594,7 @@ export function UnifiedSessionScreen({
                        Move the styles that contain padding/bg/borders HERE. 
                        This ensures they don't take up space when the parent height is 0.
                     */}
-                        <View style={styles.invitationDraftContainer}>
+                        <View style={styles.invitationDraftContainer} testID="invitation-draft-panel">
                           <Text style={styles.invitationDraftMessage}>
                             "{invitationMessage}"
                           </Text>

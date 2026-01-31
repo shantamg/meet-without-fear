@@ -879,13 +879,15 @@ export async function getPartnerEmpathy(
     // Get partner's user ID from session data
     const partnerId = getPartnerUserIdFromSession(session, user.id);
 
-    // Get partner's empathy attempt
-    const partnerAttempt = await prisma.empathyAttempt.findFirst({
-      where: {
-        sessionId,
-        sourceUserId: partnerId ?? undefined,
-      },
-    });
+    // Get partner's empathy attempt (only if we have a partner)
+    const partnerAttempt = partnerId
+      ? await prisma.empathyAttempt.findFirst({
+          where: {
+            sessionId,
+            sourceUserId: partnerId,
+          },
+        })
+      : null;
 
     // Only reveal partner's attempt if status is REVEALED or VALIDATED
     // This is the key change from the reconciler flow design
@@ -1029,13 +1031,15 @@ export async function validateEmpathy(
     // Get partner ID from session data
     const partnerId = getPartnerUserIdFromSession(session, user.id);
 
-    // Get partner's empathy attempt
-    const partnerAttempt = await prisma.empathyAttempt.findFirst({
-      where: {
-        sessionId,
-        sourceUserId: partnerId ?? undefined,
-      },
-    });
+    // Get partner's empathy attempt (only if we have a partner)
+    const partnerAttempt = partnerId
+      ? await prisma.empathyAttempt.findFirst({
+          where: {
+            sessionId,
+            sourceUserId: partnerId,
+          },
+        })
+      : null;
 
     if (!partnerAttempt) {
       errorResponse(res, 'NOT_FOUND', 'Partner empathy attempt not found', 404);
@@ -1619,13 +1623,17 @@ export async function getEmpathyExchangeStatus(
     const partnerId = getPartnerUserIdFromSession(session, user.id);
 
     // Get both empathy attempts
+    // Only query for partner attempt if we have a partnerId, otherwise Prisma ignores
+    // undefined filter and returns any attempt (which could be the user's own)
     const [myAttempt, partnerAttempt] = await Promise.all([
       prisma.empathyAttempt.findFirst({
         where: { sessionId, sourceUserId: user.id },
       }),
-      prisma.empathyAttempt.findFirst({
-        where: { sessionId, sourceUserId: partnerId ?? undefined },
-      }),
+      partnerId
+        ? prisma.empathyAttempt.findFirst({
+            where: { sessionId, sourceUserId: partnerId },
+          })
+        : Promise.resolve(null),
     ]);
 
     // Check if both have consented

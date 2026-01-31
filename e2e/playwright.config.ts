@@ -28,11 +28,18 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `E2E_AUTH_BYPASS=true MOCK_LLM=true E2E_FIXTURES_PATH=${path.resolve(__dirname, 'fixtures')} npm run dev:api`,
+      command: 'npm run dev:api',
       url: 'http://localhost:3002/health',
       reuseExistingServer: !process.env.CI,
       cwd: '..',
       timeout: 60000,
+      env: {
+        ...process.env,
+        E2E_AUTH_BYPASS: 'true',
+        MOCK_LLM: 'true',
+        E2E_FIXTURES_PATH: path.resolve(__dirname, 'fixtures'),
+        E2E_FIXTURE_ID: 'user-a-full-journey',
+      },
     },
     {
       command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3002 npx expo start --web --port 8082',

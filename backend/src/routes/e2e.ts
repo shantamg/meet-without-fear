@@ -6,6 +6,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
+import { loadFixture } from '../lib/e2e-fixtures';
 
 const router = Router();
 
@@ -47,5 +48,93 @@ export async function cleanupE2EUsers(
 }
 
 router.post('/cleanup', cleanupE2EUsers);
+
+/**
+ * Seed a test user for E2E testing.
+ * Creates a user in the database with the provided email/name or from a fixture.
+ *
+ * Body options:
+ * - { email: string, name?: string } - Create user with explicit email
+ * - { fixtureId: string } - Load user from fixture seed
+ *
+ * Returns 201 with { id, email, name } on success.
+ * Returns 400 if email doesn't end in @e2e.test
+ * Returns 403 if E2E_AUTH_BYPASS is not true
+ */
+export async function seedE2EUser(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  // Only allow when E2E mode is enabled
+  if (process.env.E2E_AUTH_BYPASS !== 'true') {
+    res.status(403).json({
+      success: false,
+      error: 'E2E seed only available when E2E_AUTH_BYPASS is enabled',
+    });
+    return;
+  }
+
+  try {
+    const { email, name, fixtureId } = req.body;
+
+    let userEmail: string;
+    let userName: string;
+
+    if (fixtureId) {
+      // Load user from fixture
+      const fixture = loadFixture(fixtureId);
+      if (!fixture.seed?.users || fixture.seed.users.length === 0) {
+        res.status(400).json({
+          success: false,
+          error: `Fixture ${fixtureId} has no seed users`,
+        });
+        return;
+      }
+      const fixtureUser = fixture.seed.users[0];
+      userEmail = fixtureUser.email;
+      userName = fixtureUser.name;
+    } else if (email) {
+      userEmail = email;
+      userName = name || 'E2E Test User';
+    } else {
+      res.status(400).json({
+        success: false,
+        error: 'Either email or fixtureId is required',
+      });
+      return;
+    }
+
+    // Validate email domain
+    if (!userEmail.endsWith('@e2e.test')) {
+      res.status(400).json({
+        success: false,
+        error: 'Email must end with @e2e.test',
+      });
+      return;
+    }
+
+    // Create user with e2e_ prefixed clerkId
+    const user = await prisma.user.upsert({
+      where: { email: userEmail },
+      update: { name: userName },
+      create: {
+        email: userEmail,
+        name: userName,
+        clerkId: `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      },
+    });
+
+    res.status(201).json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+router.post('/seed', seedE2EUser);
 
 export default router;

@@ -32,11 +32,22 @@ export interface E2EStorylineEntry {
   ai: string;
 }
 
+/**
+ * Simple response entry for flat-array fixture format.
+ */
+export interface E2EResponseEntry {
+  user?: string;
+  ai: string;
+}
+
 export interface E2EFixture {
   name: string;
   description: string;
   seed?: E2EFixtureSeed;
-  storyline: Record<string, E2EStorylineEntry[]>;
+  /** Legacy: per-user storylines */
+  storyline?: Record<string, E2EStorylineEntry[]>;
+  /** New: flat array of responses (simpler format) */
+  responses?: E2EResponseEntry[];
   postInvitationSent?: E2EStorylineEntry[];
 }
 
@@ -83,6 +94,10 @@ export function getFixtureResponse(
   userId: string,
   responseIndex: number
 ): string {
+  if (!fixture.storyline) {
+    throw new Error(`No storyline found in fixture`);
+  }
+
   const userStoryline = fixture.storyline[userId];
 
   if (!userStoryline) {
@@ -103,4 +118,41 @@ export function getFixtureResponse(
  */
 export function clearFixtureCache(): void {
   fixtureCache.clear();
+}
+
+/**
+ * Get AI response from fixture by ID and index (flat-array format).
+ * This is the simplified API for E2E tests.
+ *
+ * @param fixtureId - The fixture file name (without .yaml extension)
+ * @param index - The response index (0-based)
+ * @returns The AI response string
+ * @throws Error if fixture not found or index out of bounds
+ */
+export function getFixtureResponseByIndex(fixtureId: string, index: number): string {
+  const fixture = loadFixture(fixtureId);
+
+  // Support flat-array format (responses array)
+  if (fixture.responses && fixture.responses.length > 0) {
+    if (index < 0 || index >= fixture.responses.length) {
+      throw new Error(
+        `Response index ${index} out of bounds for fixture ${fixtureId} (has ${fixture.responses.length} responses)`
+      );
+    }
+    return fixture.responses[index].ai;
+  }
+
+  // Fallback to legacy storyline format (use first user's storyline)
+  if (fixture.storyline && Object.keys(fixture.storyline).length > 0) {
+    const userKeys = Object.keys(fixture.storyline);
+    const storyline = fixture.storyline[userKeys[0]];
+    if (index < 0 || index >= storyline.length) {
+      throw new Error(
+        `Response index ${index} out of bounds for fixture ${fixtureId} (has ${storyline.length} responses)`
+      );
+    }
+    return storyline[index].ai;
+  }
+
+  throw new Error(`No responses or storyline found in fixture: ${fixtureId}`);
 }
