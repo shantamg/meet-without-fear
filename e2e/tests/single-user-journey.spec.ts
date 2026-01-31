@@ -49,7 +49,7 @@ async function waitForAIResponse(page: import('@playwright/test').Page, textPatt
 test.describe('Single User Journey', () => {
   const userA = {
     email: 'user-a@e2e.test',
-    name: 'Alice Test',
+    name: 'Shantam',
   };
 
   let userId: string;
@@ -90,7 +90,7 @@ test.describe('Single User Journey', () => {
         'Content-Type': 'application/json',
       },
       data: {
-        inviteName: 'Test Partner',
+        inviteName: 'Darryl',
       },
     });
 
@@ -289,7 +289,7 @@ test.describe('Single User Journey', () => {
     // Step 19b: Assert waiting status panel is visible
     // After sharing empathy, user should see "Waiting for Test Partner to feel heard"
     console.log(`${elapsed()} Step 19b: Verifying waiting status panel...`);
-    const waitingStatus = page.getByText(/Waiting for Test Partner to feel heard/i);
+    const waitingStatus = page.getByText(/Waiting for Darryl to feel heard/i);
     await expect(waitingStatus).toBeVisible({ timeout: 5000 });
     console.log(`${elapsed()} Waiting status panel is visible`);
 
