@@ -1,0 +1,744 @@
+/**
+ * State Factory for E2E Testing
+ *
+ * Creates sessions at various stages using Prisma transactions.
+ * This allows E2E tests to start from specific states rather than
+ * having to navigate through the entire UI flow.
+ */
+
+import { prisma } from '../lib/prisma';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Target stages for session seeding.
+ * Each stage represents a specific point in the user journey.
+ */
+export enum TargetStage {
+  /** Session just created, compact not signed */
+  CREATED = 'CREATED',
+
+  /** User A completed Stage 1 (witnessed, felt heard) and shared empathy */
+  EMPATHY_SHARED_A = 'EMPATHY_SHARED_A',
+
+  /** Both users active: User B has felt heard, received share suggestion, and shared context */
+  CONTEXT_SHARED_B = 'CONTEXT_SHARED_B',
+}
+
+export interface UserConfig {
+  email: string;
+  name: string;
+}
+
+export interface StateFactoryOptions {
+  userA: UserConfig;
+  userB?: UserConfig;
+  targetStage: TargetStage;
+}
+
+export interface StateFactoryResult {
+  session: {
+    id: string;
+    status: string;
+    relationshipId: string;
+  };
+  userA: {
+    id: string;
+    email: string;
+    name: string;
+  };
+  userB?: {
+    id: string;
+    email: string;
+    name: string;
+  };
+  invitation: {
+    id: string;
+    status: string;
+  };
+  pageUrls: {
+    userA: string;
+    userB?: string;
+  };
+}
+
+// ============================================================================
+// State Factory
+// ============================================================================
+
+export class StateFactory {
+  private baseUrl: string;
+
+  constructor(baseUrl: string = 'http://localhost:8082') {
+    this.baseUrl = baseUrl;
+  }
+
+  /**
+   * Create a session at the specified stage.
+   * Uses a Prisma transaction to ensure atomicity.
+   */
+  async createSessionAtStage(options: StateFactoryOptions): Promise<StateFactoryResult> {
+    const { userA, userB, targetStage } = options;
+
+    // Validate email domains
+    if (!userA.email.endsWith('@e2e.test')) {
+      throw new Error(`User A email must end with @e2e.test: ${userA.email}`);
+    }
+    if (userB && !userB.email.endsWith('@e2e.test')) {
+      throw new Error(`User B email must end with @e2e.test: ${userB.email}`);
+    }
+
+    // Use transaction to ensure all-or-nothing creation
+    return prisma.$transaction(async (tx) => {
+      // 1. Create/upsert User A
+      const userARecord = await tx.user.upsert({
+        where: { email: userA.email },
+        update: { name: userA.name },
+        create: {
+          email: userA.email,
+          name: userA.name,
+          clerkId: `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        },
+      });
+
+      // 2. Create/upsert User B if provided
+      let userBRecord: typeof userARecord | null = null;
+      if (userB) {
+        userBRecord = await tx.user.upsert({
+          where: { email: userB.email },
+          update: { name: userB.name },
+          create: {
+            email: userB.email,
+            name: userB.name,
+            clerkId: `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          },
+        });
+      }
+
+      // 3. Create relationship with members
+      const memberData = [
+        {
+          userId: userARecord.id,
+          nickname: userB?.name || null, // What A calls B
+        },
+      ];
+
+      // Add User B as member for CONTEXT_SHARED_B stage
+      if (targetStage === TargetStage.CONTEXT_SHARED_B && userBRecord) {
+        memberData.push({
+          userId: userBRecord.id,
+          nickname: userA.name, // What B calls A
+        });
+      }
+
+      const relationship = await tx.relationship.create({
+        data: {
+          members: {
+            create: memberData,
+          },
+        },
+      });
+
+      // 4. Determine session status based on target stage
+      // EMPATHY_SHARED_A: User A has completed, invitation is pending for User B
+      // Session stays INVITED until User B accepts (which changes it to ACTIVE)
+      let sessionStatus: 'CREATED' | 'INVITED' | 'ACTIVE' = 'CREATED';
+      if (targetStage === TargetStage.EMPATHY_SHARED_A) {
+        // Session is INVITED - waiting for User B to accept
+        // Will become ACTIVE when User B accepts the invitation
+        sessionStatus = 'INVITED';
+      } else if (targetStage === TargetStage.CONTEXT_SHARED_B) {
+        // Both users have joined and are active
+        sessionStatus = 'ACTIVE';
+      }
+
+      // 5. Create session
+      const session = await tx.session.create({
+        data: {
+          relationshipId: relationship.id,
+          status: sessionStatus,
+        },
+      });
+
+      // 6. Create invitation
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const invitationStatus = targetStage === TargetStage.CONTEXT_SHARED_B ? 'ACCEPTED' : 'PENDING';
+      const invitation = await tx.invitation.create({
+        data: {
+          sessionId: session.id,
+          invitedById: userARecord.id,
+          acceptedAt: targetStage === TargetStage.CONTEXT_SHARED_B ? new Date() : null,
+          name: userB?.name || 'Partner',
+          status: invitationStatus,
+          expiresAt,
+          messageConfirmed: targetStage !== TargetStage.CREATED,
+          messageConfirmedAt: targetStage !== TargetStage.CREATED ? new Date() : null,
+          invitationMessage: 'Test invitation message for E2E testing.',
+        },
+      });
+
+      // 7. Create SharedVessel
+      await tx.sharedVessel.create({
+        data: { sessionId: session.id },
+      });
+
+      // 8. Create UserVessel for User A
+      await tx.userVessel.create({
+        data: {
+          sessionId: session.id,
+          userId: userARecord.id,
+        },
+      });
+
+      // 8b. Create UserVessel for User B (if CONTEXT_SHARED_B stage)
+      if (targetStage === TargetStage.CONTEXT_SHARED_B && userBRecord) {
+        await tx.userVessel.create({
+          data: {
+            sessionId: session.id,
+            userId: userBRecord.id,
+          },
+        });
+      }
+
+      // 9. Create stage-specific data
+      if (targetStage === TargetStage.CREATED) {
+        // Just Stage 0 IN_PROGRESS for User A
+        await tx.stageProgress.create({
+          data: {
+            sessionId: session.id,
+            userId: userARecord.id,
+            stage: 0,
+            status: 'IN_PROGRESS',
+            gatesSatisfied: {},
+          },
+        });
+      } else if (targetStage === TargetStage.EMPATHY_SHARED_A) {
+        // Create full state for User A through empathy
+        // Note: User B's state (StageProgress, UserVessel) is created when they accept invitation
+        await this.createEmpathySharedState(tx, session.id, userARecord.id);
+      } else if (targetStage === TargetStage.CONTEXT_SHARED_B && userBRecord) {
+        // Create full state for both users, with User B having shared context
+        await this.createContextSharedState(tx, session.id, userARecord.id, userBRecord.id, userA.name, userB!.name);
+      }
+
+      // Build result
+      const result: StateFactoryResult = {
+        session: {
+          id: session.id,
+          status: session.status,
+          relationshipId: session.relationshipId,
+        },
+        userA: {
+          id: userARecord.id,
+          email: userARecord.email,
+          name: userARecord.name || userA.name,
+        },
+        invitation: {
+          id: invitation.id,
+          status: invitation.status,
+        },
+        pageUrls: {
+          userA: `${this.baseUrl}/session/${session.id}?e2e-user-id=${userARecord.id}&e2e-user-email=${encodeURIComponent(userARecord.email)}`,
+        },
+      };
+
+      if (userBRecord) {
+        result.userB = {
+          id: userBRecord.id,
+          email: userBRecord.email,
+          name: userBRecord.name || userB!.name,
+        };
+        result.pageUrls.userB = `${this.baseUrl}/session/${session.id}?e2e-user-id=${userBRecord.id}&e2e-user-email=${encodeURIComponent(userBRecord.email)}`;
+      }
+
+      return result;
+    });
+  }
+
+  /**
+   * Create the full state for EMPATHY_SHARED_A stage.
+   * User A has completed Stage 1 and shared empathy, now in Stage 2.
+   * User B has not accepted the invitation yet (no StageProgress or UserVessel).
+   */
+  private async createEmpathySharedState(
+    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+    sessionId: string,
+    userAId: string
+  ): Promise<void> {
+    const now = new Date();
+    const stage0CompletedAt = new Date(now.getTime() - 60000); // 1 minute ago
+    const stage1CompletedAt = new Date(now.getTime() - 30000); // 30 seconds ago
+
+    // Stage 0 for User A - COMPLETED with compact signed
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 0,
+        status: 'COMPLETED',
+        startedAt: new Date(now.getTime() - 120000), // 2 minutes ago
+        completedAt: stage0CompletedAt,
+        gatesSatisfied: {
+          compactSigned: true,
+          compactSignedAt: stage0CompletedAt.toISOString(),
+        },
+      },
+    });
+
+    // Stage 1 for User A - COMPLETED with feelHeardConfirmed
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 1,
+        status: 'COMPLETED',
+        startedAt: stage0CompletedAt,
+        completedAt: stage1CompletedAt,
+        gatesSatisfied: {
+          feelHeardConfirmed: true,
+          feelHeardConfirmedAt: stage1CompletedAt.toISOString(),
+        },
+      },
+    });
+
+    // Stage 2 for User A - IN_PROGRESS (has shared empathy but waiting for partner)
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 2,
+        status: 'IN_PROGRESS',
+        startedAt: stage1CompletedAt,
+        gatesSatisfied: {},
+      },
+    });
+
+    // NOTE: User B's StageProgress and UserVessel are NOT created here.
+    // They will be created when User B accepts the invitation via the API.
+    // This keeps the seeded state consistent with the real application flow.
+
+    // Create User A's messages (enough for turnCount threshold)
+    const messageContents = [
+      { role: 'USER' as const, content: "Hi, I'm having issues with my partner." },
+      { role: 'AI' as const, content: "I'm glad you reached out. Tell me more about what's happening." },
+      { role: 'USER' as const, content: "We argue about household chores constantly." },
+      { role: 'AI' as const, content: "That sounds frustrating. Would you like to invite your partner?" },
+      { role: 'USER' as const, content: "Yes, I sent the invitation." },
+      { role: 'AI' as const, content: "Great. Let's continue exploring your perspective while we wait." },
+      { role: 'USER' as const, content: "I feel like I do most of the work and they don't notice." },
+      { role: 'AI' as const, content: "I hear you. Do you feel like I understand what you've been experiencing?" },
+      { role: 'USER' as const, content: "Yes, I feel heard now." },
+      { role: 'AI' as const, content: "I'm glad. Now let's build some empathy for your partner's perspective." },
+      { role: 'USER' as const, content: "I think they're stressed from work too." },
+      { role: 'AI' as const, content: "That's a thoughtful observation. Here's an empathy statement you could share..." },
+    ];
+
+    for (let i = 0; i < messageContents.length; i++) {
+      const msg = messageContents[i];
+      await tx.message.create({
+        data: {
+          sessionId,
+          senderId: msg.role === 'USER' ? userAId : null,
+          forUserId: userAId, // All messages are for User A (data isolation)
+          role: msg.role,
+          content: msg.content,
+          stage: i < 4 ? 0 : i < 8 ? 1 : 1, // Approximate stage based on message index
+          timestamp: new Date(now.getTime() - (messageContents.length - i) * 5000),
+        },
+      });
+    }
+
+    // Create EmpathyDraft for User A
+    const empathyDraft = await tx.empathyDraft.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        content: "I understand you might be feeling stressed from work. I want us to support each other better.",
+        readyToShare: true,
+      },
+    });
+
+    // Create EmpathyAttempt (the shared statement)
+    await tx.empathyAttempt.create({
+      data: {
+        sessionId,
+        draftId: empathyDraft.id,
+        sourceUserId: userAId,
+        content: empathyDraft.content,
+        status: 'HELD', // Waiting for partner to complete Stage 1
+        sharedAt: now,
+      },
+    });
+
+    // Also create the EMPATHY_STATEMENT message for the chat history
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: userAId,
+        forUserId: userAId,
+        role: 'EMPATHY_STATEMENT',
+        content: empathyDraft.content,
+        stage: 2,
+        timestamp: now,
+      },
+    });
+  }
+
+  /**
+   * Create the full state for CONTEXT_SHARED_B stage.
+   * Both users are active. User B has:
+   * - Completed Stage 0 (signed compact)
+   * - Completed Stage 1 (felt heard)
+   * - Received a share suggestion from reconciler
+   * - Shared context (accepted the suggestion)
+   *
+   * User A has shared empathy and received the shared context from B.
+   */
+  private async createContextSharedState(
+    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+    sessionId: string,
+    userAId: string,
+    userBId: string,
+    userAName: string,
+    userBName: string
+  ): Promise<void> {
+    const now = new Date();
+    const baseTime = now.getTime();
+
+    // Timeline (working backwards from now):
+    // - now: Context shared
+    // - -5s: Share suggestion offered
+    // - -10s: User B felt heard, reconciler ran
+    // - -30s: User B Stage 1 completed
+    // - -60s: User B Stage 0 completed (compact signed)
+    // - -90s: User A's empathy shared
+    // - -120s: User A's Stage 1 completed
+    // - -150s: User A's Stage 0 completed
+
+    const timestamps = {
+      userAStage0Completed: new Date(baseTime - 150000),
+      userAStage1Completed: new Date(baseTime - 120000),
+      userAEmpathyShared: new Date(baseTime - 90000),
+      userBStage0Completed: new Date(baseTime - 60000),
+      userBStage1Completed: new Date(baseTime - 30000),
+      reconcilerRan: new Date(baseTime - 10000),
+      shareSuggestionOffered: new Date(baseTime - 5000),
+      contextShared: now,
+    };
+
+    // ========================================
+    // USER A STATE
+    // ========================================
+
+    // Stage 0 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 0,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 180000),
+        completedAt: timestamps.userAStage0Completed,
+        gatesSatisfied: {
+          compactSigned: true,
+          compactSignedAt: timestamps.userAStage0Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 1 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 1,
+        status: 'COMPLETED',
+        startedAt: timestamps.userAStage0Completed,
+        completedAt: timestamps.userAStage1Completed,
+        gatesSatisfied: {
+          feelHeardConfirmed: true,
+          feelHeardConfirmedAt: timestamps.userAStage1Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 2 - IN_PROGRESS (waiting for User B's empathy)
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 2,
+        status: 'IN_PROGRESS',
+        startedAt: timestamps.userAStage1Completed,
+        gatesSatisfied: {},
+      },
+    });
+
+    // User A's messages (conversation history)
+    const userAMessages = [
+      { role: 'USER' as const, content: "Hi, I'm having issues with my partner.", stage: 0 },
+      { role: 'AI' as const, content: "I'm glad you reached out. Tell me more about what's happening.", stage: 0 },
+      { role: 'USER' as const, content: "We argue about household chores constantly.", stage: 1 },
+      { role: 'AI' as const, content: "That sounds frustrating. Would you like to invite your partner?", stage: 1 },
+      { role: 'USER' as const, content: "Yes, I sent the invitation.", stage: 1 },
+      { role: 'AI' as const, content: "Great. Let's continue exploring your perspective while we wait.", stage: 1 },
+      { role: 'USER' as const, content: "I feel like I do most of the work and they don't notice.", stage: 1 },
+      { role: 'AI' as const, content: "I hear you. Do you feel like I understand what you've been experiencing?", stage: 1 },
+      { role: 'USER' as const, content: "Yes, I feel heard now.", stage: 1 },
+      { role: 'AI' as const, content: "I'm glad. Now let's build some empathy for your partner's perspective.", stage: 2 },
+      { role: 'USER' as const, content: "I think they're stressed from work too.", stage: 2 },
+      { role: 'AI' as const, content: "That's a thoughtful observation. Here's an empathy statement you could share...", stage: 2 },
+    ];
+
+    for (let i = 0; i < userAMessages.length; i++) {
+      const msg = userAMessages[i];
+      await tx.message.create({
+        data: {
+          sessionId,
+          senderId: msg.role === 'USER' ? userAId : null,
+          forUserId: userAId,
+          role: msg.role,
+          content: msg.content,
+          stage: msg.stage,
+          timestamp: new Date(baseTime - 180000 + i * 5000),
+        },
+      });
+    }
+
+    // User A's empathy draft and attempt
+    const empathyDraftA = await tx.empathyDraft.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        content: "I understand you might be feeling stressed from work. I want us to support each other better.",
+        readyToShare: true,
+      },
+    });
+
+    await tx.empathyAttempt.create({
+      data: {
+        sessionId,
+        draftId: empathyDraftA.id,
+        sourceUserId: userAId,
+        content: empathyDraftA.content,
+        status: 'REFINING', // User B has shared context, so A can now refine
+        sharedAt: timestamps.userAEmpathyShared,
+      },
+    });
+
+    // User A's EMPATHY_STATEMENT message
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: userAId,
+        forUserId: userAId,
+        role: 'EMPATHY_STATEMENT',
+        content: empathyDraftA.content,
+        stage: 2,
+        timestamp: timestamps.userAEmpathyShared,
+      },
+    });
+
+    // ========================================
+    // USER B STATE
+    // ========================================
+
+    // Stage 0 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 0,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 90000),
+        completedAt: timestamps.userBStage0Completed,
+        gatesSatisfied: {
+          compactSigned: true,
+          compactSignedAt: timestamps.userBStage0Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 1 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 1,
+        status: 'COMPLETED',
+        startedAt: timestamps.userBStage0Completed,
+        completedAt: timestamps.userBStage1Completed,
+        gatesSatisfied: {
+          feelHeardConfirmed: true,
+          feelHeardConfirmedAt: timestamps.userBStage1Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 2 - IN_PROGRESS
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 2,
+        status: 'IN_PROGRESS',
+        startedAt: timestamps.userBStage1Completed,
+        gatesSatisfied: {},
+      },
+    });
+
+    // User B's messages (conversation history)
+    const userBMessages = [
+      { role: 'AI' as const, content: `Welcome! ${userAName} invited you to work through some challenges together.`, stage: 0 },
+      { role: 'USER' as const, content: "Things have been tense lately between us.", stage: 0 },
+      { role: 'AI' as const, content: "I hear you. Tell me more about what's been happening.", stage: 1 },
+      { role: 'USER' as const, content: "I feel like they don't see how much I'm dealing with at work.", stage: 1 },
+      { role: 'AI' as const, content: "That sounds really hard. Can you tell me more?", stage: 1 },
+      { role: 'USER' as const, content: "I work so hard and come home exhausted, but there's always more to do.", stage: 1 },
+      { role: 'AI' as const, content: "I understand. How long has this been going on?", stage: 1 },
+      { role: 'USER' as const, content: "Months now. I don't know how to get through to them.", stage: 1 },
+      { role: 'AI' as const, content: "Do you feel like I understand what you've been going through?", stage: 1 },
+      { role: 'USER' as const, content: "Yes, I feel heard.", stage: 1 },
+      { role: 'AI' as const, content: `Good. Now let's work on understanding ${userAName}'s perspective.`, stage: 2 },
+    ];
+
+    for (let i = 0; i < userBMessages.length; i++) {
+      const msg = userBMessages[i];
+      await tx.message.create({
+        data: {
+          sessionId,
+          senderId: msg.role === 'USER' ? userBId : null,
+          forUserId: userBId,
+          role: msg.role,
+          content: msg.content,
+          stage: msg.stage,
+          timestamp: new Date(baseTime - 90000 + i * 5000),
+        },
+      });
+    }
+
+    // ========================================
+    // RECONCILER RESULT & SHARE OFFER
+    // ========================================
+
+    // Create ReconcilerResult (the analysis that found gaps)
+    const reconcilerResult = await tx.reconcilerResult.create({
+      data: {
+        id: `reconciler-${sessionId}-${Date.now()}`,
+        sessionId,
+        guesserId: userAId, // User A is the one who needs help understanding
+        guesserName: userAName,
+        subjectId: userBId, // User B is the subject being asked to share
+        subjectName: userBName,
+        alignmentScore: 45,
+        alignmentSummary: `${userAName}'s empathy attempt captures some elements but misses key aspects of ${userBName}'s experience.`,
+        correctlyIdentified: ['stress', 'work pressure'],
+        gapSeverity: 'significant',
+        gapSummary: `${userAName} hasn't fully grasped the depth of ${userBName}'s exhaustion and feeling unseen.`,
+        missedFeelings: ['exhaustion', 'feeling unseen', 'overwhelm'],
+        misattributions: [],
+        mostImportantGap: `${userBName} feels exhausted and unseen, not just stressed.`,
+        recommendedAction: 'OFFER_SHARING',
+        rationale: `Sharing specific context would help ${userAName} understand ${userBName}'s perspective better.`,
+        sharingWouldHelp: true,
+        suggestedShareFocus: "The exhaustion from work and feeling unseen.",
+        suggestedShareContent: "I feel like I'm running on empty - exhausted from work every day, and then coming home to more tasks. What I really need is for someone to see how hard I'm trying, even when I don't have anything left to give.",
+        suggestedShareReason: `This helps ${userAName} understand that ${userBName}'s frustration comes from exhaustion and feeling unseen, not anger or blame.`,
+        createdAt: timestamps.reconcilerRan,
+      },
+    });
+
+    // Create the share offer (ACCEPTED since context was shared)
+    const sharedContent = "I feel like I'm running on empty - exhausted from work every day, and then coming home to more tasks. What I really need is for someone to see how hard I'm trying, even when I don't have anything left to give.";
+
+    await tx.reconcilerShareOffer.create({
+      data: {
+        resultId: reconcilerResult.id,
+        userId: userBId,
+        status: 'ACCEPTED', // User B accepted the suggestion
+        suggestedContent: sharedContent,
+        suggestedReason: reconcilerResult.suggestedShareReason,
+        sharedContent: sharedContent, // Same as suggested (not refined)
+        sharedAt: timestamps.contextShared,
+        deliveryStatus: 'DELIVERED', // Delivered to User A
+        deliveredAt: timestamps.contextShared,
+      },
+    });
+
+    // ========================================
+    // SHARED CONTEXT MESSAGES
+    // ========================================
+
+    // Message for User A (the guesser) - intro
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: null,
+        forUserId: userAId,
+        role: 'AI',
+        content: `${userBName} hasn't seen your empathy statement yet because the reconciler suggested they share more. This is what they shared:`,
+        stage: 2,
+        timestamp: new Date(timestamps.contextShared.getTime() - 2),
+      },
+    });
+
+    // SHARED_CONTEXT message for User A (the guesser)
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: userBId,
+        forUserId: userAId,
+        role: 'SHARED_CONTEXT',
+        content: sharedContent,
+        stage: 2,
+        timestamp: new Date(timestamps.contextShared.getTime() - 1),
+      },
+    });
+
+    // Reflection prompt for User A
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: null,
+        forUserId: userAId,
+        role: 'AI',
+        content: `How does this land for you? Take a moment to reflect on what ${userBName} shared. Does this give you any new insight into what they might be experiencing?`,
+        stage: 2,
+        timestamp: timestamps.contextShared,
+      },
+    });
+
+    // EMPATHY_STATEMENT message for User B (showing what they shared in their own chat)
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: userBId,
+        forUserId: userBId,
+        role: 'EMPATHY_STATEMENT', // Reused for "what you shared" styling
+        content: sharedContent,
+        stage: 2,
+        timestamp: timestamps.contextShared,
+      },
+    });
+
+    // AI acknowledgment for User B
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: null,
+        forUserId: userBId,
+        role: 'AI',
+        content: `You shared this to help ${userAName} understand. They'll see it soon.`,
+        stage: 2,
+        timestamp: new Date(timestamps.contextShared.getTime() + 1),
+      },
+    });
+  }
+}
+
+/**
+ * Singleton instance for convenience
+ */
+export const stateFactory = new StateFactory();

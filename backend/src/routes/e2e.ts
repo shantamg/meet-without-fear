@@ -7,6 +7,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import { loadFixture } from '../lib/e2e-fixtures';
+import { StateFactory, TargetStage } from '../testing/state-factory';
 
 const router = Router();
 
@@ -136,5 +137,96 @@ export async function seedE2EUser(
 }
 
 router.post('/seed', seedE2EUser);
+
+/**
+ * Seed a session at a specific stage for E2E testing.
+ * Creates users, relationship, session, invitation, and stage-specific data.
+ *
+ * Body:
+ * {
+ *   userA: { email: string, name: string },
+ *   userB?: { email: string, name: string },
+ *   targetStage: 'CREATED' | 'EMPATHY_SHARED_A'
+ * }
+ *
+ * Returns 201 with session/user/invitation details and page URLs.
+ * Returns 400 if validation fails.
+ * Returns 403 if E2E_AUTH_BYPASS is not true.
+ */
+export async function seedE2ESession(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  // Only allow when E2E mode is enabled
+  if (process.env.E2E_AUTH_BYPASS !== 'true') {
+    res.status(403).json({
+      success: false,
+      error: 'E2E seed-session only available when E2E_AUTH_BYPASS is enabled',
+    });
+    return;
+  }
+
+  try {
+    const { userA, userB, targetStage } = req.body;
+
+    // Validate required fields
+    if (!userA || !userA.email || !userA.name) {
+      res.status(400).json({
+        success: false,
+        error: 'userA with email and name is required',
+      });
+      return;
+    }
+
+    // Validate email domains
+    if (!userA.email.endsWith('@e2e.test')) {
+      res.status(400).json({
+        success: false,
+        error: 'userA.email must end with @e2e.test',
+      });
+      return;
+    }
+
+    if (userB && userB.email && !userB.email.endsWith('@e2e.test')) {
+      res.status(400).json({
+        success: false,
+        error: 'userB.email must end with @e2e.test',
+      });
+      return;
+    }
+
+    // Validate target stage
+    const validStages = Object.values(TargetStage);
+    if (!targetStage || !validStages.includes(targetStage)) {
+      res.status(400).json({
+        success: false,
+        error: `targetStage must be one of: ${validStages.join(', ')}`,
+      });
+      return;
+    }
+
+    // Get base URL from environment or use default
+    const baseUrl = process.env.E2E_APP_BASE_URL || 'http://localhost:8082';
+
+    // Create the session at the specified stage
+    const factory = new StateFactory(baseUrl);
+    const result = await factory.createSessionAtStage({
+      userA: { email: userA.email, name: userA.name },
+      userB: userB ? { email: userB.email, name: userB.name } : undefined,
+      targetStage: targetStage as TargetStage,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error('[seedE2ESession] Error:', error);
+    next(error);
+  }
+}
+
+router.post('/seed-session', seedE2ESession);
 
 export default router;

@@ -65,9 +65,18 @@ export default function ShareScreen() {
     // Flatten all messages from all pages
     const allMessages = messagesData.pages.flatMap((page) => page.messages);
 
+    // Get shared context content to filter out "what you shared" echo messages
+    // These appear as EMPATHY_STATEMENT but are actually echoes of shared context
+    const sharedContextContent = sharingStatus.mySharedContext?.content;
+
     // Filter for EMPATHY_STATEMENT messages from current user
+    // Exclude messages that match the shared context (to avoid duplicates)
     const empathyMessages = allMessages.filter(
-      (msg) => msg.role === MessageRole.EMPATHY_STATEMENT && msg.senderId === user.id
+      (msg) =>
+        msg.role === MessageRole.EMPATHY_STATEMENT &&
+        msg.senderId === user.id &&
+        // Exclude if this is a "what you shared" echo
+        msg.content !== sharedContextContent
     );
 
     if (empathyMessages.length === 0) {
@@ -116,7 +125,7 @@ export default function ShareScreen() {
         isSuperseded,
       };
     });
-  }, [messagesData, user?.id, sharingStatus.myAttempt]);
+  }, [messagesData, user?.id, sharingStatus.myAttempt, sharingStatus.mySharedContext]);
 
   // Mutations
   const { mutate: respondToShareOffer } = useRespondToShareOffer();
@@ -221,7 +230,8 @@ export default function ShareScreen() {
           partnerEmpathyAttempt={sharingStatus.partnerAttempt}
           sharedContextSent={sharingStatus.mySharedContext ? [sharingStatus.mySharedContext] : []}
           sharedContextReceived={sharingStatus.sharedContext}
-          shareSuggestion={sharingStatus.shareOffer}
+          // Don't show share suggestion if content has already been shared
+          shareSuggestion={sharingStatus.mySharedContext ? null : sharingStatus.shareOffer}
           partnerEmpathyNeedsValidation={sharingStatus.needsToValidatePartner}
           isAnalyzing={sharingStatus.isAnalyzing}
           awaitingSharing={sharingStatus.hasSuggestion}
