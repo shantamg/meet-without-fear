@@ -31,6 +31,9 @@ export function requestContextMiddleware(
   // Extract sessionId from common route param patterns
   const sessionId = req.params?.id || req.params?.sessionId || undefined;
 
+  // Extract E2E fixture ID from header (for per-request fixture selection in tests)
+  const e2eFixtureId = req.headers['x-e2e-fixture-id'] as string | undefined;
+
   // Initial context - turnId will be refined once we know user info
   const context: RequestContext = {
     requestId,
@@ -38,6 +41,7 @@ export function requestContextMiddleware(
     sessionId,
     userId: undefined, // Will be set by auth middleware
     startTime: Date.now(),
+    e2eFixtureId,
   };
 
   // Run the rest of the middleware/route handlers within this context

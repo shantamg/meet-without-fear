@@ -27,11 +27,24 @@ export function createAuthHeaders(
 
 /**
  * Create extra HTTP headers object for fetch/Playwright requests.
+ * @param email - User email (should end with @e2e.test)
+ * @param userId - Optional user ID (defaults to email prefix)
+ * @param fixtureId - Optional fixture ID for mock AI responses
  */
-export function getE2EHeaders(email: string, userId?: string): Record<string, string> {
+export function getE2EHeaders(
+  email: string,
+  userId?: string,
+  fixtureId?: string
+): Record<string, string> {
   const headers = createAuthHeaders(email, userId);
-  return {
+  const result: Record<string, string> = {
     'x-e2e-user-id': headers['x-e2e-user-id'],
     'x-e2e-user-email': headers['x-e2e-user-email'],
   };
+
+  if (fixtureId) {
+    result['x-e2e-fixture-id'] = fixtureId;
+  }
+
+  return result;
 }

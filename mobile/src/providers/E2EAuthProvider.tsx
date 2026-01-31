@@ -85,9 +85,10 @@ export function E2EAuthProvider({ children }: E2EAuthProviderProps) {
     // Fetch user profile from backend to get real user data
     const fetchUser = async () => {
       try {
-        const userData = await get<User>('/auth/me');
-        console.log('[E2EAuthProvider] Fetched user from backend:', userData.id);
-        setUser(userData);
+        // The /auth/me endpoint returns { user, activeSessions, pushNotificationsEnabled }
+        const response = await get<{ user: User }>('/auth/me');
+        console.log('[E2EAuthProvider] Fetched user from backend:', response.user?.id);
+        setUser(response.user);
       } catch (error) {
         console.warn('[E2EAuthProvider] Failed to fetch user, using default:', error);
         // Fall back to default user but with correct ID from params

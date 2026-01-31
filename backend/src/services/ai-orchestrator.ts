@@ -53,6 +53,7 @@ import { publishContextUpdated } from './realtime';
 import { routeModel, scoreAmbiguity } from './model-router';
 import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from './llm-telemetry';
 import { getFixtureResponseByIndex } from '../lib/e2e-fixtures';
+import { getE2EFixtureId } from '../lib/request-context';
 // publishUserEvent and memoryService imports removed - handled in partner-session-classifier.ts
 
 // ============================================================================
@@ -613,9 +614,9 @@ function buildMessagesWithContext(
  * of the main response flow (which uses parseMicroTagResponse).
  */
 function getMockResponse(context: OrchestratorContext): string {
-  const fixtureId = process.env.E2E_FIXTURE_ID;
+  const fixtureId = getE2EFixtureId();
 
-  // Use fixture response if E2E_FIXTURE_ID is set
+  // Use fixture response if fixture ID is available
   if (fixtureId) {
     try {
       // Response index = number of user messages sent (turnCount is 1-based, so use turnCount - 1)

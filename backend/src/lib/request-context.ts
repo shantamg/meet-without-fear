@@ -18,6 +18,8 @@ export interface RequestContext {
   requestId: string;
   /** Timestamp when the request started */
   startTime: number;
+  /** E2E fixture ID for this request (from X-E2E-Fixture-ID header) */
+  e2eFixtureId?: string;
 }
 
 const asyncLocalStorage = new AsyncLocalStorage<RequestContext>();
@@ -58,6 +60,15 @@ export function getCurrentUserId(): string | undefined {
  */
 export function getCurrentSessionId(): string | undefined {
   return getRequestContext()?.sessionId;
+}
+
+/**
+ * Get the E2E fixture ID for the current request.
+ * Falls back to E2E_FIXTURE_ID environment variable if not set in context.
+ */
+export function getE2EFixtureId(): string | undefined {
+  const context = getRequestContext();
+  return context?.e2eFixtureId ?? process.env.E2E_FIXTURE_ID;
 }
 
 /**

@@ -40,6 +40,14 @@ export interface E2EResponseEntry {
   ai: string;
 }
 
+/**
+ * Operation-specific mock response for non-streaming AI calls (e.g., reconciler)
+ */
+export interface E2EOperationResponse {
+  /** JSON response to return (will be stringified) */
+  response: unknown;
+}
+
 export interface E2EFixture {
   name: string;
   description: string;
@@ -49,6 +57,8 @@ export interface E2EFixture {
   /** New: flat array of responses (simpler format) */
   responses?: E2EResponseEntry[];
   postInvitationSent?: E2EStorylineEntry[];
+  /** Operation-specific mock responses for non-streaming AI calls */
+  operations?: Record<string, E2EOperationResponse>;
 }
 
 // ============================================================================
@@ -155,4 +165,33 @@ export function getFixtureResponseByIndex(fixtureId: string, index: number): str
   }
 
   throw new Error(`No responses or storyline found in fixture: ${fixtureId}`);
+}
+
+/**
+ * Get operation-specific mock response for non-streaming AI calls.
+ * Used for reconciler, share suggestions, and other JSON-response operations.
+ *
+ * @param fixtureId - The fixture file name (without .yaml extension)
+ * @param operationName - The operation name (e.g., 'reconciler-analysis', 'share-suggestion')
+ * @returns The JSON response as a string, or null if not found
+ */
+export function getFixtureOperationResponse(fixtureId: string, operationName: string): string | null {
+  try {
+    const fixture = loadFixture(fixtureId);
+
+    if (!fixture.operations) {
+      return null;
+    }
+
+    const operation = fixture.operations[operationName];
+    if (!operation) {
+      return null;
+    }
+
+    // Return the response as a JSON string
+    return JSON.stringify(operation.response);
+  } catch {
+    // Fixture not found or other error
+    return null;
+  }
 }

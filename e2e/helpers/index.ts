@@ -6,3 +6,5 @@
 
 export { createAuthHeaders, getE2EHeaders } from './auth';
 export { cleanupE2EData } from './cleanup';
+export { SessionBuilder, setupSession } from './session-builder';
+export type { TargetStage, UserConfig, SessionSetupResult } from './session-builder';

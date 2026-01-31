@@ -29,6 +29,7 @@ console.log('[Routes] Loading main router...');
 router.use('/brain', brainRoutes);
 router.use('/auth', authRoutes);
 router.use('/tts', ttsRoutes);
+router.use('/e2e', e2eRoutes); // E2E testing helpers - must be BEFORE routers with global auth middleware
 router.use(chatRoutes); // Unified chat router
 router.use(invitationsRoutes); // Must be before innerWorkRoutes (has public endpoints)
 router.use(innerThoughtsRoutes); // Inner Thoughts (solo self-reflection, optionally linked to partner sessions)
@@ -46,7 +47,6 @@ router.use(stage2Routes);
 router.use(reconcilerRoutes); // Post-Stage 2 empathy gap analysis
 router.use(stage3Routes);
 router.use(stage4Routes);
-router.use('/e2e', e2eRoutes); // E2E testing helpers (only when E2E_AUTH_BYPASS=true)
 
 // Health check endpoint
 router.get('/health', (_, res) => {

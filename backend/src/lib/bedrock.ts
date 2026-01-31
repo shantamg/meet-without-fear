@@ -23,7 +23,8 @@ import { extractJsonFromResponse } from '../utils/json-extractor';
 import { brainService, BrainActivityCallType } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
 import { recordLlmCall } from '../services/llm-telemetry';
-import { getFixtureResponseByIndex } from './e2e-fixtures';
+import { getFixtureResponseByIndex, getFixtureOperationResponse } from './e2e-fixtures';
+import { getE2EFixtureId } from './request-context';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -545,6 +546,21 @@ export async function getHaikuJson<T>(
 export async function getSonnetResponse(
   options: SonnetCompletionOptions
 ): Promise<string | null> {
+  // E2E Mock Mode: Check for operation-specific fixture response first
+  if (isMockLLMEnabled()) {
+    const fixtureId = getE2EFixtureId();
+    const operation = options.operation ?? 'sonnet-response';
+    if (fixtureId) {
+      const mockResponse = getFixtureOperationResponse(fixtureId, operation);
+      if (mockResponse) {
+        console.log(`[Bedrock] MOCK_LLM enabled, returning fixture response for operation: ${operation}`);
+        return mockResponse;
+      }
+      console.log(`[Bedrock] MOCK_LLM enabled, no fixture response for operation: ${operation}`);
+    }
+    // Fall through to getModelCompletion which will return null
+  }
+
   return getModelCompletion('sonnet', {
     ...options,
     maxTokens: options.maxTokens ?? 2048,
@@ -704,7 +720,7 @@ export async function* getSonnetStreamingResponse(
 ): AsyncGenerator<StreamEvent, void, unknown> {
   // E2E Mock Mode: Yield fixture response as text events
   if (isMockLLMEnabled()) {
-    const fixtureId = process.env.E2E_FIXTURE_ID;
+    const fixtureId = getE2EFixtureId();
     if (fixtureId && options.mockResponseIndex !== undefined) {
       try {
         console.log(`[Bedrock] MOCK_LLM enabled, loading fixture ${fixtureId} index ${options.mockResponseIndex}`);
