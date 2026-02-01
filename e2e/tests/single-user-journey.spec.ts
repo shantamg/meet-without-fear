@@ -78,15 +78,16 @@ test.describe('Single User Journey', () => {
     const elapsed = () => `[${((Date.now() - testStart) / 1000).toFixed(1)}s]`;
 
     // Set E2E fixture ID header for this test
+    const FIXTURE_ID = 'user-a-full-journey';
     await page.setExtraHTTPHeaders({
-      ...getE2EHeaders(userA.email, userId),
+      ...getE2EHeaders(userA.email, userId, FIXTURE_ID),
     });
 
     // Step 1: Create session via API
     console.log(`${elapsed()} Step 1: Creating session...`);
     const createResponse = await request.post(`${API_BASE_URL}/api/sessions`, {
       headers: {
-        ...getE2EHeaders(userA.email, userId),
+        ...getE2EHeaders(userA.email, userId, FIXTURE_ID),
         'Content-Type': 'application/json',
       },
       data: {

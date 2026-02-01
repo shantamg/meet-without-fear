@@ -11,7 +11,7 @@ import type { APIRequestContext } from '@playwright/test';
 // Types
 // ============================================================================
 
-export type TargetStage = 'CREATED' | 'EMPATHY_SHARED_A' | 'CONTEXT_SHARED_B';
+export type TargetStage = 'CREATED' | 'EMPATHY_SHARED_A' | 'FEEL_HEARD_B' | 'CONTEXT_SHARED_B';
 
 export interface UserConfig {
   email: string;
@@ -116,6 +116,8 @@ export class SessionBuilder {
    *
    * - CREATED: Session just created, compact not signed
    * - EMPATHY_SHARED_A: User A completed through empathy, User B at Stage 0
+   * - FEEL_HEARD_B: User B has felt heard, reconciler ready to run
+   * - CONTEXT_SHARED_B: User B has shared context with User A
    */
   startingAt(stage: TargetStage): this {
     this._targetStage = stage;

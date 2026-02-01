@@ -19,6 +19,7 @@ import {
 import { Send, ChevronRight } from 'lucide-react-native';
 import { colors } from '../theme';
 import { PartnerContentCard, PartnerContentType } from './PartnerContentCard';
+import { ShareSuggestionCard } from './sharing/ShareSuggestionCard';
 import { ChatIndicator, ChatIndicatorType } from './ChatIndicator';
 import { EmpathyStatus, EmpathyAttemptDTO, ShareSuggestionDTO, EmpathyExchangeStatusResponse, SharedContentDeliveryStatus, ReconcilerResultSummary } from '@meet-without-fear/shared';
 
@@ -84,7 +85,9 @@ export interface PartnerChatTabProps {
   /** Callbacks for share suggestion */
   onShareSuggestionAccept?: () => void;
   onShareSuggestionDecline?: () => void;
-  onShareSuggestionEdit?: () => void;
+  onShareSuggestionRefine?: (message: string) => void;
+  /** Whether refinement is in progress */
+  isRefiningShareSuggestion?: boolean;
   /** Callback to refine empathy draft */
   onRefineEmpathy?: () => void;
   /** Refresh control */
@@ -145,7 +148,8 @@ export function PartnerChatTab({
   onValidateInaccurate,
   onShareSuggestionAccept,
   onShareSuggestionDecline,
-  onShareSuggestionEdit,
+  onShareSuggestionRefine,
+  isRefiningShareSuggestion = false,
   onRefineEmpathy,
   refreshing = false,
   onRefresh,
@@ -455,6 +459,19 @@ export function PartnerChatTab({
               testID={`${testID}-indicator-${item.reconcilerIndicator}`}
               metadata={item.reconcilerIndicator === 'partner-empathy-held' ? { partnerName } : undefined}
             />
+          ) : item.type === 'share_suggestion' && item.suggestion ? (
+            // Use ShareSuggestionCard for share suggestions (supports inline refinement)
+            <View style={styles.shareSuggestionContainer}>
+              <ShareSuggestionCard
+                suggestion={item.suggestion}
+                partnerName={partnerName}
+                onShare={onShareSuggestionAccept ?? (() => {})}
+                onDecline={onShareSuggestionDecline ?? (() => {})}
+                onRefine={onShareSuggestionRefine ?? (() => {})}
+                isRefining={isRefiningShareSuggestion}
+                testID="share-suggestion-card"
+              />
+            </View>
           ) : (
             <PartnerContentCard
               type={item.type as PartnerContentType}
@@ -478,15 +495,6 @@ export function PartnerChatTab({
                 item.type === 'partner_empathy' && item.isPending
                   ? onValidateInaccurate
                   : undefined
-              }
-              onShare={
-                item.type === 'share_suggestion' ? onShareSuggestionAccept : undefined
-              }
-              onDecline={
-                item.type === 'share_suggestion' ? onShareSuggestionDecline : undefined
-              }
-              onEdit={
-                item.type === 'share_suggestion' ? onShareSuggestionEdit : undefined
               }
               onRefine={
                 item.type === 'my_empathy' ? onRefineEmpathy : undefined
@@ -531,6 +539,11 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  // Share suggestion card container
+  shareSuggestionContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   // Invitation banner styles
   invitationBanner: {

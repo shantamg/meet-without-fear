@@ -19,7 +19,16 @@ import { get, getAuthToken, isE2EAuthMode } from './api';
 // ============================================================================
 
 interface AblyTokenResponse {
-  tokenRequest: Ably.TokenRequest;
+  /** The actual token (JWT string) - preferred, avoids extra round-trip */
+  token?: {
+    token: string;
+    issued: number;
+    expires: number;
+    capability: string;
+    clientId: string;
+  };
+  /** Legacy: tokenRequest for backwards compatibility */
+  tokenRequest?: Ably.TokenRequest;
 }
 
 // ============================================================================

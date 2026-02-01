@@ -80,6 +80,35 @@ export default defineConfig({
         baseURL: 'http://localhost:8082',
       },
     },
+    // Stage 2 Empathy: Reconciler tests
+    {
+      name: 'reconciler-gaps-accept',
+      testMatch: /stage-2-empathy\/reconciler\/gaps-accept-share\.spec\.ts/,
+      use: {
+        baseURL: 'http://localhost:8082',
+      },
+    },
+    {
+      name: 'reconciler-no-gaps',
+      testMatch: /stage-2-empathy\/reconciler\/no-gaps-detected\.spec\.ts/,
+      use: {
+        baseURL: 'http://localhost:8082',
+      },
+    },
+    {
+      name: 'reconciler-gaps-decline',
+      testMatch: /stage-2-empathy\/reconciler\/gaps-decline-share\.spec\.ts/,
+      use: {
+        baseURL: 'http://localhost:8082',
+      },
+    },
+    {
+      name: 'reconciler-gaps-refine',
+      testMatch: /stage-2-empathy\/reconciler\/gaps-refine-share\.spec\.ts/,
+      use: {
+        baseURL: 'http://localhost:8082',
+      },
+    },
   ],
   // Web server configuration
   // Each test specifies its fixture via the X-E2E-Fixture-ID header.

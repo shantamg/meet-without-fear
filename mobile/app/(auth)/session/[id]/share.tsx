@@ -160,10 +160,28 @@ export default function ShareScreen() {
 
   const partnerName = session?.partner?.nickname ?? session?.partner?.name ?? 'Partner';
 
+  // State for share suggestion refinement
+  const [isRefiningShare, setIsRefiningShare] = useState(false);
+
   const handleRespondToShareOffer = (response: 'accept' | 'decline') => {
     if (sharingStatus.shareOffer && sessionId) {
       const sharedContent = response === 'accept' ? sharingStatus.shareOffer.suggestedContent : undefined;
       respondToShareOffer({ sessionId, action: response, sharedContent });
+    }
+  };
+
+  const handleRefineShareOffer = (message: string) => {
+    if (sharingStatus.shareOffer && sessionId) {
+      setIsRefiningShare(true);
+      respondToShareOffer({
+        sessionId,
+        action: 'refine',
+        refinedContent: message,
+      });
+      // Clear loading state after a delay
+      setTimeout(() => {
+        setIsRefiningShare(false);
+      }, 5000);
     }
   };
 
@@ -244,10 +262,8 @@ export default function ShareScreen() {
           onValidateInaccurate={() => {/* Validation handled in Chat screen */}}
           onShareSuggestionAccept={() => handleRespondToShareOffer('accept')}
           onShareSuggestionDecline={() => handleRespondToShareOffer('decline')}
-          onShareSuggestionEdit={() => {
-            // Navigate back to chat for editing
-            router.back();
-          }}
+          onShareSuggestionRefine={handleRefineShareOffer}
+          isRefiningShareSuggestion={isRefiningShare}
           onRefineEmpathy={() => {
             // Open the empathy drawer directly on this screen
             setShowEmpathyDrawer(true);
