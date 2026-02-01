@@ -179,8 +179,9 @@ test.describe('Partner Journey (Two Browser Contexts)', () => {
 
     // User A should see the session with their partner's name and empathy shared status
     // (User A is in Stage 2 after completing Stage 1 and sharing empathy)
-    const partnerName = userAPage.getByText('Darryl');
+    const partnerName = userAPage.getByTestId('session-chat-header-partner-name');
     await expect(partnerName).toBeVisible({ timeout: 10000 });
+    await expect(partnerName).toHaveText('Darryl');
 
     // Should also see "Empathy shared" indicator
     const empathyShared = userAPage.getByText(/Empathy shared/i);

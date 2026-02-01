@@ -230,6 +230,10 @@ test.describe('Reconciler: Gaps Detected - User B Accepts Share', () => {
       }
       await userAPage.waitForTimeout(3000);
 
+      // Screenshot 1: User A's initial state (empathy already shared)
+      await userAPage.screenshot({ path: 'test-results/gaps-accept-01-userA-initial.png' });
+      console.log(`${elapsed()} Screenshot 1: User A initial state (empathy shared)`);
+
       // Accept invitation and navigate User B
       await request.post(`${API_BASE_URL}/api/invitations/${invitationId}/accept`, {
         headers: { ...getE2EHeaders(userB.email, userBId, FIXTURE_ID), 'Content-Type': 'application/json' },
@@ -251,6 +255,11 @@ test.describe('Reconciler: Gaps Detected - User B Accepts Share', () => {
       if (await moodContinue.isVisible({ timeout: 5000 }).catch(() => false)) {
         await moodContinue.click();
       }
+
+      // Screenshot 2: User A after User B joins (signed compact)
+      await userAPage.waitForTimeout(2000); // Allow time for Ably presence update
+      await userAPage.screenshot({ path: 'test-results/gaps-accept-02-userA-after-userB-joins.png' });
+      console.log(`${elapsed()} Screenshot 2: User A after User B joins`);
 
       // Complete chat and feel heard
       const chatInput = userBPage.getByTestId('chat-input');
@@ -280,6 +289,10 @@ test.describe('Reconciler: Gaps Detected - User B Accepts Share', () => {
 
       await userBPage.waitForTimeout(3000);
 
+      // Screenshot 3: User A after User B feels heard (reconciler ran)
+      await userAPage.screenshot({ path: 'test-results/gaps-accept-03-userA-after-userB-feels-heard.png' });
+      console.log(`${elapsed()} Screenshot 3: User A after User B feels heard (reconciler ran)`);
+
       // Navigate to share screen (either via modal or directly)
       const partnerEventModal = userBPage.getByTestId('partner-event-modal');
       const hasModal = await partnerEventModal.isVisible({ timeout: 5000 }).catch(() => false);
@@ -308,6 +321,13 @@ test.describe('Reconciler: Gaps Detected - User B Accepts Share', () => {
       expect(shareResponse.status()).toBeLessThan(300);
 
       console.log(`${elapsed()} User B successfully shared context`);
+
+      // Wait for Ably to propagate the context_shared event
+      await userAPage.waitForTimeout(3000);
+
+      // Screenshot 4: User A after User B shares context
+      await userAPage.screenshot({ path: 'test-results/gaps-accept-04-userA-after-userB-shares.png' });
+      console.log(`${elapsed()} Screenshot 4: User A after User B shares context`);
 
       // Verify share suggestion prompt disappears
       const shareSuggestionText = userBPage.getByText(/Would you like to share something to help/i);

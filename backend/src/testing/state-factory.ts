@@ -379,6 +379,19 @@ export class StateFactory {
       },
     });
 
+    // User A's consent record (proves they already consented to share)
+    await tx.consentRecord.create({
+      data: {
+        userId: userAId,
+        sessionId,
+        targetType: 'EMPATHY_DRAFT',
+        targetId: empathyDraft.id,
+        requestedByUserId: userAId,
+        decision: 'GRANTED',
+        decidedAt: now,
+      },
+    });
+
     // Also create the EMPATHY_STATEMENT message for the chat history
     await tx.message.create({
       data: {
@@ -527,6 +540,19 @@ export class StateFactory {
         content: empathyDraftA.content,
         status: 'HELD', // Waiting for User B to complete Stage 1 and reconciler to run
         sharedAt: timestamps.userAEmpathyShared,
+      },
+    });
+
+    // User A's consent record (proves they already consented to share)
+    await tx.consentRecord.create({
+      data: {
+        userId: userAId,
+        sessionId,
+        targetType: 'EMPATHY_DRAFT',
+        targetId: empathyDraftA.id,
+        requestedByUserId: userAId,
+        decision: 'GRANTED',
+        decidedAt: timestamps.userAEmpathyShared,
       },
     });
 
@@ -764,6 +790,19 @@ export class StateFactory {
         content: empathyDraftA.content,
         status: 'REFINING', // User B has shared context, so A can now refine
         sharedAt: timestamps.userAEmpathyShared,
+      },
+    });
+
+    // User A's consent record (proves they already consented to share)
+    await tx.consentRecord.create({
+      data: {
+        userId: userAId,
+        sessionId,
+        targetType: 'EMPATHY_DRAFT',
+        targetId: empathyDraftA.id,
+        requestedByUserId: userAId,
+        decision: 'GRANTED',
+        decidedAt: timestamps.userAEmpathyShared,
       },
     });
 
