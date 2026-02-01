@@ -857,6 +857,7 @@ export function useConsentToShareEmpathy(
             analyzing: !!old?.partnerAttempt,
             awaitingSharing: false,
             hasNewSharedContext: false,
+            hasUnviewedSharedContext: false,
             sharedContext: old?.sharedContext ?? null,
             mySharedContext: old?.mySharedContext ?? null,
             refinementHint: old?.refinementHint ?? null,

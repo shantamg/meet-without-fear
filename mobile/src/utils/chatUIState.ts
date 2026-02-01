@@ -85,6 +85,9 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
 
   // Accuracy feedback for partner's empathy (Subject side)
   hasPartnerEmpathyForValidation: boolean; // Partner empathy exists and current user hasn't validated
+
+  // Shared context viewing (Guesser side)
+  hasUnviewedSharedContext: boolean; // Guesser must view Share tab before continuing
 }
 
 /**
@@ -380,6 +383,11 @@ function computeShouldHideInput(
     return true;
   }
 
+  // If user has unviewed shared context, hide input until they view Share tab
+  if (inputs.hasUnviewedSharedContext) {
+    return true;
+  }
+
   // Safety: In Stage 2, if empathy data is still loading (undefined),
   // hide input conservatively to avoid showing input when we shouldn't.
   // This prevents the flash of input on initial load before data arrives.
@@ -510,5 +518,6 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     hasShareSuggestion: false,
     hasRespondedToShareOfferLocal: false,
     hasPartnerEmpathyForValidation: false,
+    hasUnviewedSharedContext: false,
   };
 }

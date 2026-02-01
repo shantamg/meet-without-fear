@@ -245,6 +245,8 @@ export interface EmpathyExchangeStatusResponse {
   awaitingSharing: boolean;
   /** Whether there is new shared context to view (guesser only) */
   hasNewSharedContext: boolean;
+  /** Whether user has unviewed shared context (guesser must view Share tab before continuing) */
+  hasUnviewedSharedContext: boolean;
   /** Shared context from subject (guesser only, if any) */
   sharedContext: {
     content: string;

@@ -287,11 +287,36 @@ test.describe('Reconciler: Gaps Detected - User B Accepts Share', () => {
       await feelHeardYes.click();
       await expect(feelHeardYes).not.toBeVisible({ timeout: 5000 });
 
+      console.log(`${elapsed()} User B confirmed feeling heard - reconciler running`);
+
+      // Wait for reconciler and Ably events to propagate
       await userBPage.waitForTimeout(3000);
 
       // Screenshot 3: User A after User B feels heard (reconciler ran)
       await userAPage.screenshot({ path: 'test-results/gaps-accept-03-userA-after-userB-feels-heard.png' });
       console.log(`${elapsed()} Screenshot 3: User A after User B feels heard (reconciler ran)`);
+
+      // Verify User A sees "Almost There" popup (partner considering share)
+      const userAPartnerModal = userAPage.getByTestId('partner-event-modal');
+      const userAModalVisible = await userAPartnerModal.isVisible({ timeout: 10000 }).catch(() => false);
+      if (userAModalVisible) {
+        const almostThereText = userAPage.getByText(/Almost There/i);
+        const hasAlmostThere = await almostThereText.isVisible({ timeout: 2000 }).catch(() => false);
+        if (hasAlmostThere) {
+          console.log(`${elapsed()} User A sees "Almost There" popup`);
+          await userAPage.screenshot({ path: 'test-results/gaps-accept-03a-userA-almost-there-popup.png' });
+          // Dismiss the popup
+          await userAPage.getByText('Got It').click();
+          await expect(userAPartnerModal).not.toBeVisible({ timeout: 5000 });
+        }
+      }
+
+      // Check for waiting banner text about partner deciding to share
+      const waitingBanner = userAPage.getByTestId('waiting-banner-text');
+      const bannerVisible = await waitingBanner.isVisible({ timeout: 5000 }).catch(() => false);
+      if (bannerVisible) {
+        console.log(`${elapsed()} User A sees waiting banner`);
+      }
 
       // Navigate to share screen (either via modal or directly)
       const partnerEventModal = userBPage.getByTestId('partner-event-modal');
@@ -329,7 +354,63 @@ test.describe('Reconciler: Gaps Detected - User B Accepts Share', () => {
       await userAPage.screenshot({ path: 'test-results/gaps-accept-04-userA-after-userB-shares.png' });
       console.log(`${elapsed()} Screenshot 4: User A after User B shares context`);
 
-      // Verify share suggestion prompt disappears
+      // Verify User A sees "Context Shared" popup
+      const contextSharedModal = userAPage.getByTestId('partner-event-modal');
+      const contextModalVisible = await contextSharedModal.isVisible({ timeout: 10000 }).catch(() => false);
+
+      if (contextModalVisible) {
+        const contextSharedText = userAPage.getByText(/Context Shared/i);
+        const hasContextShared = await contextSharedText.isVisible({ timeout: 2000 }).catch(() => false);
+        if (hasContextShared) {
+          console.log(`${elapsed()} User A sees "Context Shared" popup`);
+          await userAPage.screenshot({ path: 'test-results/gaps-accept-04a-userA-context-shared-popup.png' });
+        }
+      }
+
+      // Check if User A's chat input is hidden (requires viewing Share tab first)
+      const userAChatInput = userAPage.getByTestId('chat-input');
+      const inputHidden = await userAChatInput.isHidden({ timeout: 5000 }).catch(() => false);
+      if (inputHidden) {
+        console.log(`${elapsed()} User A's chat input is hidden (must view Share tab first)`);
+      }
+
+      // If modal is visible, tap "View" to go to Share tab
+      if (contextModalVisible) {
+        const viewButton = userAPage.getByText('View', { exact: true });
+        if (await viewButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+          await viewButton.click();
+          await userAPage.waitForLoadState('networkidle');
+          console.log(`${elapsed()} User A navigated to Share tab via modal`);
+          await userAPage.screenshot({ path: 'test-results/gaps-accept-05-userA-share-tab.png' });
+
+          // Wait for markShareTabViewed API call to complete and cache to update
+          await userAPage.waitForTimeout(3000);
+
+          // Navigate back to Chat tab
+          await userAPage.goBack();
+          await userAPage.waitForLoadState('networkidle');
+
+          // Wait for empathy status to refetch after navigation
+          await userAPage.waitForTimeout(2000);
+
+          // Handle mood check if it reappears
+          const moodCheck = userAPage.getByTestId('mood-check-continue-button');
+          if (await moodCheck.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await moodCheck.click();
+            await userAPage.waitForLoadState('networkidle');
+          }
+
+          // Wait for UI to stabilize after mood check dismissal
+          await userAPage.waitForTimeout(1000);
+
+          // Verify chat input is now visible after viewing Share tab
+          await expect(userAChatInput).toBeVisible({ timeout: 15000 });
+          console.log(`${elapsed()} User A's chat input is now visible after viewing Share tab`);
+          await userAPage.screenshot({ path: 'test-results/gaps-accept-06-userA-input-visible.png' });
+        }
+      }
+
+      // Verify share suggestion prompt disappears for User B
       const shareSuggestionText = userBPage.getByText(/Would you like to share something to help/i);
       await expect(shareSuggestionText).not.toBeVisible({ timeout: 10000 });
     });

@@ -186,6 +186,13 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         generateShareSuggestionForDirection(sessionId, userAId, userBId).catch((err) =>
           console.warn('[triggerReconcilerAndUpdateStatuses] Failed to generate share suggestion for A→B:', err)
         );
+
+        // Notify the guesser (User A) that subject (User B) is considering sharing
+        await publishSessionEvent(sessionId, 'empathy.partner_considering_share', {
+          forUserId: userAId, // Guesser receives notification
+          timestamp: Date.now(),
+        });
+        console.log(`[triggerReconcilerAndUpdateStatuses] Published partner_considering_share for User A`);
       }
     }
 
@@ -229,6 +236,13 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         generateShareSuggestionForDirection(sessionId, userBId, userAId).catch((err) =>
           console.warn('[triggerReconcilerAndUpdateStatuses] Failed to generate share suggestion for B→A:', err)
         );
+
+        // Notify the guesser (User B) that subject (User A) is considering sharing
+        await publishSessionEvent(sessionId, 'empathy.partner_considering_share', {
+          forUserId: userBId, // Guesser receives notification
+          timestamp: Date.now(),
+        });
+        console.log(`[triggerReconcilerAndUpdateStatuses] Published partner_considering_share for User B`);
       }
     }
 
@@ -1710,6 +1724,22 @@ export async function getEmpathyExchangeStatus(
       }
     }
 
+    // Check if user has unviewed shared context (guesser must view Share tab before continuing)
+    let hasUnviewedSharedContext = false;
+    if (hasNewSharedContext && sharedContext) {
+      // Query user's lastViewedShareTabAt from UserVessel
+      const userVessel = await prisma.userVessel.findUnique({
+        where: { userId_sessionId: { userId: user.id, sessionId } },
+        select: { lastViewedShareTabAt: true },
+      });
+
+      // User has unviewed context if they haven't viewed Share tab, or viewed it before context was shared
+      const sharedAtDate = new Date(sharedContext.sharedAt);
+      hasUnviewedSharedContext =
+        !userVessel?.lastViewedShareTabAt ||
+        userVessel.lastViewedShareTabAt < sharedAtDate;
+    }
+
     // Get delivery status and content of any shared content (for subject - the person who shared)
     const deliveryStatusResult = await getSharedContentDeliveryStatus(sessionId, user.id);
     const sharedContentDeliveryStatus = deliveryStatusResult.hasSharedContent
@@ -1801,6 +1831,7 @@ export async function getEmpathyExchangeStatus(
       partnerCompletedStage1: partnerStage1Completed,
       awaitingSharing,
       hasNewSharedContext,
+      hasUnviewedSharedContext,
       sharedContext,
       // Number of messages user has sent since receiving shared context (for delaying refinement UI)
       messageCountSinceSharedContext,
