@@ -286,7 +286,8 @@ function computeShouldShowWaitingBanner(status: WaitingStatusState): boolean {
     status === 'partner-considering-perspective' ||
     status === 'reconciler-analyzing' ||
     status === 'revision-analyzing' ||
-    status === 'awaiting-context-share'
+    status === 'awaiting-context-share' ||
+    status === 'awaiting-subject-decision'
   );
 }
 

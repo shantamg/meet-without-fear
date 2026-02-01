@@ -386,22 +386,14 @@ test.describe('Reconciler: Gaps Detected - User B Accepts Share', () => {
           // Wait for markShareTabViewed API call to complete and cache to update
           await userAPage.waitForTimeout(3000);
 
-          // Navigate back to Chat tab
-          await userAPage.goBack();
+          // Navigate back to Chat tab by clicking the back button in the header
+          const backButton = userAPage.getByTestId('share-screen-header-back-button');
+          await expect(backButton).toBeVisible({ timeout: 5000 });
+          await backButton.click();
           await userAPage.waitForLoadState('networkidle');
 
           // Wait for empathy status to refetch after navigation
           await userAPage.waitForTimeout(2000);
-
-          // Handle mood check if it reappears
-          const moodCheck = userAPage.getByTestId('mood-check-continue-button');
-          if (await moodCheck.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await moodCheck.click();
-            await userAPage.waitForLoadState('networkidle');
-          }
-
-          // Wait for UI to stabilize after mood check dismissal
-          await userAPage.waitForTimeout(1000);
 
           // Verify chat input is now visible after viewing Share tab
           await expect(userAChatInput).toBeVisible({ timeout: 15000 });
