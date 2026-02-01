@@ -950,6 +950,8 @@ export class StateFactory {
     // ========================================
 
     // Message for User A (the guesser) - intro
+    // Order: intro (oldest) → SHARED_CONTEXT (middle) → reflection (newest)
+    // Using 100ms gaps to match production code and avoid any timestamp precision issues
     await tx.message.create({
       data: {
         sessionId,
@@ -958,7 +960,7 @@ export class StateFactory {
         role: 'AI',
         content: `${userBName} hasn't seen your empathy statement yet because the reconciler suggested they share more. This is what they shared:`,
         stage: 2,
-        timestamp: new Date(timestamps.contextShared.getTime() - 2),
+        timestamp: new Date(timestamps.contextShared.getTime() - 200),
       },
     });
 
@@ -971,7 +973,7 @@ export class StateFactory {
         role: 'SHARED_CONTEXT',
         content: sharedContent,
         stage: 2,
-        timestamp: new Date(timestamps.contextShared.getTime() - 1),
+        timestamp: new Date(timestamps.contextShared.getTime() - 100),
       },
     });
 

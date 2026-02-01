@@ -1058,12 +1058,13 @@ export async function respondToShareSuggestion(
   const subjectName = shareOffer.result.subjectName;
   const guesserName = shareOffer.result.guesserName;
 
-  // Use explicit timestamps with guaranteed ordering (1ms apart) to ensure correct sort order
-  // This prevents race conditions where rapidly created messages get same/wrong timestamps
+  // Use explicit timestamps with guaranteed ordering (100ms apart) to ensure correct sort order
+  // This prevents race conditions and ensures the ordering survives any timestamp precision issues
+  // Order: intro (oldest) → SHARED_CONTEXT (middle) → reflection (newest)
   const baseTime = Date.now();
   const introTimestamp = new Date(baseTime);
-  const sharedContextTimestamp = new Date(baseTime + 1);
-  const reflectionTimestamp = new Date(baseTime + 2);
+  const sharedContextTimestamp = new Date(baseTime + 100);
+  const reflectionTimestamp = new Date(baseTime + 200);
 
   // Create AI message BEFORE the shared context (introduces what's coming) - US-7: Shared Content Label
   const introMessage = `${subjectName} hasn't seen your empathy statement yet because the reconciler suggested they share more. This is what they shared:`;
@@ -1110,9 +1111,9 @@ export async function respondToShareSuggestion(
 
   console.log(`[Reconciler] Created intro, shared context, and reflection messages for guesser ${shareOffer.result.guesserId}`);
 
-  // Timestamps for subject's messages (continue from guesser messages, 1ms apart)
-  const subjectSharedTimestamp = new Date(baseTime + 3);
-  const subjectAckTimestamp = new Date(baseTime + 4);
+  // Timestamps for subject's messages (continue from guesser messages, 100ms apart)
+  const subjectSharedTimestamp = new Date(baseTime + 300);
+  const subjectAckTimestamp = new Date(baseTime + 400);
 
   // Create message for subject showing what they shared (appears in their own chat)
   const sharedMessage = await prisma.message.create({
