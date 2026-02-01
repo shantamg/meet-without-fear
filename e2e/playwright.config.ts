@@ -17,7 +17,6 @@ const webServers = (fixtureId: string) => [
       ...process.env,
       E2E_AUTH_BYPASS: 'true',
       MOCK_LLM: 'true',
-      E2E_FIXTURES_PATH: path.resolve(__dirname, 'fixtures'),
       E2E_FIXTURE_ID: fixtureId,
     },
   },

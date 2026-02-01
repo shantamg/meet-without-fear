@@ -1,103 +1,45 @@
 /**
  * E2E Fixture Loader
  *
- * Loads YAML fixtures for E2E testing with deterministic AI responses.
+ * Loads TypeScript fixtures for E2E testing with deterministic AI responses.
  */
 
-import fs from 'fs';
-import path from 'path';
-import yaml from 'js-yaml';
+import { E2EFixture, fixtureRegistry } from '../fixtures';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-export interface E2EFixtureUser {
-  id: string;
-  email: string;
-  clerkId: string;
-  name: string;
-}
-
-export interface E2EFixtureSeed {
-  users?: E2EFixtureUser[];
-  session?: {
-    id?: string;
-    [key: string]: unknown;
-  };
-}
-
-export interface E2EStorylineEntry {
-  user: string | null;
-  ai: string;
-}
-
-/**
- * Simple response entry for flat-array fixture format.
- */
-export interface E2EResponseEntry {
-  user?: string;
-  ai: string;
-}
-
-/**
- * Operation-specific mock response for non-streaming AI calls (e.g., reconciler)
- */
-export interface E2EOperationResponse {
-  /** JSON response to return (will be stringified) */
-  response: unknown;
-}
-
-export interface E2EFixture {
-  name: string;
-  description: string;
-  seed?: E2EFixtureSeed;
-  /** Legacy: per-user storylines */
-  storyline?: Record<string, E2EStorylineEntry[]>;
-  /** New: flat array of responses (simpler format) */
-  responses?: E2EResponseEntry[];
-  postInvitationSent?: E2EStorylineEntry[];
-  /** Operation-specific mock responses for non-streaming AI calls */
-  operations?: Record<string, E2EOperationResponse>;
-}
+// Re-export types for backward compatibility
+export type {
+  E2EFixture,
+  E2EFixtureSeed,
+  E2EFixtureUser,
+  E2EOperationResponse,
+  E2EResponseEntry,
+  E2EStorylineEntry,
+} from '../fixtures';
 
 // ============================================================================
 // Fixture Loader
 // ============================================================================
 
-const fixtureCache = new Map<string, E2EFixture>();
-
 /**
- * Load a YAML fixture by name
+ * Load a fixture by ID from the registry.
+ * @param fixtureId - The fixture ID (e.g., 'user-a-full-journey')
+ * @returns The fixture
+ * @throws Error if fixture not found
  */
 export function loadFixture(fixtureId: string): E2EFixture {
-  // Check cache first
-  if (fixtureCache.has(fixtureId)) {
-    return fixtureCache.get(fixtureId)!;
+  const fixture = fixtureRegistry[fixtureId];
+
+  if (!fixture) {
+    const available = Object.keys(fixtureRegistry).join(', ');
+    throw new Error(`Fixture not found: ${fixtureId}. Available fixtures: ${available}`);
   }
-
-  const fixturesPath = process.env.E2E_FIXTURES_PATH;
-  if (!fixturesPath) {
-    throw new Error('E2E_FIXTURES_PATH environment variable not set');
-  }
-
-  const fixturePath = path.resolve(fixturesPath, `${fixtureId}.yaml`);
-
-  if (!fs.existsSync(fixturePath)) {
-    throw new Error(`Fixture not found: ${fixtureId}`);
-  }
-
-  const fileContent = fs.readFileSync(fixturePath, 'utf8');
-  const fixture = yaml.load(fileContent) as E2EFixture;
-
-  // Cache for future calls
-  fixtureCache.set(fixtureId, fixture);
 
   return fixture;
 }
 
 /**
- * Get AI response from fixture for a specific user and response index
+ * Get AI response from fixture for a specific user and response index.
+ * @deprecated Use getFixtureResponseByIndex instead
  */
 export function getFixtureResponse(
   fixture: E2EFixture,
@@ -124,17 +66,18 @@ export function getFixtureResponse(
 }
 
 /**
- * Clear the fixture cache (useful for testing)
+ * Clear the fixture cache (no-op, kept for backward compatibility).
+ * TypeScript fixtures are imported modules and don't need cache clearing.
  */
 export function clearFixtureCache(): void {
-  fixtureCache.clear();
+  // No-op: TypeScript fixtures are imported modules
 }
 
 /**
  * Get AI response from fixture by ID and index (flat-array format).
  * This is the simplified API for E2E tests.
  *
- * @param fixtureId - The fixture file name (without .yaml extension)
+ * @param fixtureId - The fixture ID (e.g., 'user-a-full-journey')
  * @param index - The response index (0-based)
  * @returns The AI response string
  * @throws Error if fixture not found or index out of bounds
@@ -171,8 +114,8 @@ export function getFixtureResponseByIndex(fixtureId: string, index: number): str
  * Get operation-specific mock response for non-streaming AI calls.
  * Used for reconciler, share suggestions, and other JSON-response operations.
  *
- * @param fixtureId - The fixture file name (without .yaml extension)
- * @param operationName - The operation name (e.g., 'reconciler-analysis', 'share-suggestion')
+ * @param fixtureId - The fixture ID (e.g., 'user-b-partner-journey')
+ * @param operationName - The operation name (e.g., 'reconciler-analysis', 'reconciler-share-suggestion')
  * @returns The JSON response as a string, or null if not found
  */
 export function getFixtureOperationResponse(fixtureId: string, operationName: string): string | null {

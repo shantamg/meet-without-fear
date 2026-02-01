@@ -5,10 +5,6 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import path from 'path';
-
-// Set up fixtures path for tests BEFORE any imports
-process.env.E2E_FIXTURES_PATH = path.join(__dirname, '../../lib/__tests__/test-fixtures');
 
 // Mock Prisma
 jest.mock('../../lib/prisma');

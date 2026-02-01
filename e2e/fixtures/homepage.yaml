@@ -1,7 +1,0 @@
-name: "Homepage Smoke Test"
-description: "Minimal fixture for verifying the app loads"
-
-seed:
-  users: []
-
-storyline: {}

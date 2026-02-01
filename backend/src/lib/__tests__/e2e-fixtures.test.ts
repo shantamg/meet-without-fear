@@ -1,30 +1,19 @@
 /**
  * E2E Fixture Loader Tests
  *
- * Tests for loading YAML fixtures for E2E testing.
+ * Tests for loading TypeScript fixtures for E2E testing.
  */
 
-import path from 'path';
-import { loadFixture, getFixtureResponse, getFixtureResponseByIndex, clearFixtureCache } from '../e2e-fixtures';
+import {
+  loadFixture,
+  getFixtureResponse,
+  getFixtureResponseByIndex,
+  clearFixtureCache,
+} from '../e2e-fixtures';
 
 describe('E2E Fixture Loader', () => {
-  const originalEnv = process.env.E2E_FIXTURES_PATH;
-
-  beforeAll(() => {
-    // Point to test fixtures directory
-    process.env.E2E_FIXTURES_PATH = path.join(__dirname, 'test-fixtures');
-  });
-
-  afterAll(() => {
-    if (originalEnv) {
-      process.env.E2E_FIXTURES_PATH = originalEnv;
-    } else {
-      delete process.env.E2E_FIXTURES_PATH;
-    }
-  });
-
   describe('loadFixture', () => {
-    it('loads a valid YAML fixture', () => {
+    it('loads a valid fixture from registry', () => {
       const fixture = loadFixture('test-fixture');
 
       expect(fixture).toBeDefined();
@@ -54,21 +43,11 @@ describe('E2E Fixture Loader', () => {
     });
 
     it('throws error when fixture not found', () => {
-      expect(() => loadFixture('non-existent')).toThrow(
-        'Fixture not found: non-existent'
-      );
+      expect(() => loadFixture('non-existent')).toThrow('Fixture not found: non-existent');
     });
 
-    it('throws error when E2E_FIXTURES_PATH not set', () => {
-      const savedPath = process.env.E2E_FIXTURES_PATH;
-      delete process.env.E2E_FIXTURES_PATH;
-      clearFixtureCache(); // Clear cache to test fresh load
-
-      expect(() => loadFixture('uncached-fixture')).toThrow(
-        'E2E_FIXTURES_PATH environment variable not set'
-      );
-
-      process.env.E2E_FIXTURES_PATH = savedPath;
+    it('lists available fixtures in error message', () => {
+      expect(() => loadFixture('non-existent')).toThrow('Available fixtures:');
     });
   });
 
@@ -79,7 +58,7 @@ describe('E2E Fixture Loader', () => {
       const response = getFixtureResponse(fixture, 'user-a', 0);
 
       expect(response).toContain('thinking');
-      expect(response).toContain("Hi there! How can I help you today?");
+      expect(response).toContain('Hi there! How can I help you today?');
     });
 
     it('returns next response when index increments', () => {
@@ -108,15 +87,11 @@ describe('E2E Fixture Loader', () => {
   });
 
   describe('getFixtureResponseByIndex', () => {
-    beforeEach(() => {
-      clearFixtureCache();
-    });
-
     it('returns AI response for given index using legacy storyline format', () => {
       const response = getFixtureResponseByIndex('test-fixture', 0);
 
       expect(response).toContain('thinking');
-      expect(response).toContain("Hi there! How can I help you today?");
+      expect(response).toContain('Hi there! How can I help you today?');
     });
 
     it('returns next response when index increments', () => {
@@ -144,7 +119,6 @@ describe('E2E Fixture Loader', () => {
     });
 
     it('loads fixture with flat-array responses format', () => {
-      // This test uses the flat-array-fixture.yaml
       const response = getFixtureResponseByIndex('flat-array-fixture', 0);
 
       expect(response).toContain('Welcome to the session');
@@ -156,6 +130,13 @@ describe('E2E Fixture Loader', () => {
 
       expect(response0).toContain('Welcome to the session');
       expect(response1).toContain('<draft>');
+    });
+  });
+
+  describe('clearFixtureCache', () => {
+    it('is a no-op for backward compatibility', () => {
+      // Should not throw
+      expect(() => clearFixtureCache()).not.toThrow();
     });
   });
 });
