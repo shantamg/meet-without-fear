@@ -846,6 +846,79 @@ Respond in JSON:
 }
 
 /**
+ * Refine a share suggestion based on user feedback.
+ * This regenerates the suggestion using AI, incorporating the user's refinement request.
+ */
+async function refineShareSuggestion(
+  originalContent: string,
+  refinementRequest: string,
+  guesserName: string,
+  subjectName: string,
+  gapContext: {
+    severity: string;
+    summary: string;
+    missedFeelings: string[];
+    mostImportantGap: string | null;
+  },
+  sessionId: string
+): Promise<string | null> {
+  console.log(`[Reconciler] Refining share suggestion for ${subjectName} based on their feedback`);
+
+  const turnId = `${sessionId}-refine-${Date.now()}`;
+
+  const response = await getSonnetJson<{ refinedContent: string }>({
+    systemPrompt: `You are helping ${subjectName} refine a message they want to share with ${guesserName}.
+
+${guesserName} tried to express empathy for ${subjectName}'s experience but missed some important aspects:
+
+Gap Analysis:
+- Severity: ${gapContext.severity}
+- Summary: ${gapContext.summary}
+- Missed feelings: ${gapContext.missedFeelings.join(', ') || 'None specified'}
+${gapContext.mostImportantGap ? `- Most important gap: ${gapContext.mostImportantGap}` : ''}
+
+The AI previously generated this suggestion for ${subjectName} to share:
+---
+${originalContent}
+---
+
+${subjectName} wants to modify this suggestion. Their feedback is:
+---
+${refinementRequest}
+---
+
+Generate a refined version of the sharing suggestion that incorporates ${subjectName}'s feedback while still addressing the gaps in ${guesserName}'s understanding.
+
+Guidelines:
+1. Keep it 1-3 sentences that ${subjectName} would say directly TO ${guesserName}
+2. Honor the user's specific feedback about what to change
+3. Maintain the focus on sharing feelings and experience (not accusations)
+4. Use "I" statements, keep the tone warm and vulnerable
+5. Never start with confrontational phrases like "Look," or "Listen,"
+
+Respond in JSON:
+\`\`\`json
+{
+  "refinedContent": "The refined suggestion text"
+}
+\`\`\``,
+    messages: [{ role: 'user', content: 'Generate the refined share suggestion.' }],
+    maxTokens: 512,
+    sessionId,
+    turnId,
+    operation: 'reconciler-refine-suggestion',
+  });
+
+  if (!response) {
+    console.warn(`[Reconciler] AI failed to refine share suggestion, returning null`);
+    return null;
+  }
+
+  console.log(`[Reconciler] Refined suggestion generated: "${response.refinedContent.substring(0, 50)}..."`);
+  return response.refinedContent;
+}
+
+/**
  * Get share suggestion for a user (called when they need to respond).
  */
 export async function getShareSuggestionForUser(
@@ -998,10 +1071,33 @@ export async function respondToShareSuggestion(
   }
 
   // User accepted or refined
-  let sharedContent =
-    response.action === 'refine' && response.refinedContent
-      ? response.refinedContent
-      : shareOffer.suggestedContent || '';
+  let sharedContent: string;
+
+  if (response.action === 'refine' && response.refinedContent) {
+    // Call AI to regenerate the suggestion based on user's feedback
+    const refinedContent = await refineShareSuggestion(
+      shareOffer.suggestedContent || '',
+      response.refinedContent,
+      shareOffer.result.guesserName,
+      shareOffer.result.subjectName,
+      {
+        severity: shareOffer.result.gapSeverity,
+        summary: shareOffer.result.gapSummary,
+        missedFeelings: shareOffer.result.missedFeelings,
+        mostImportantGap: shareOffer.result.mostImportantGap,
+      },
+      sessionId
+    );
+
+    if (!refinedContent) {
+      console.warn(`[Reconciler] AI failed to refine suggestion, falling back to original`);
+      sharedContent = shareOffer.suggestedContent || '';
+    } else {
+      sharedContent = refinedContent;
+    }
+  } else {
+    sharedContent = shareOffer.suggestedContent || '';
+  }
 
   // Error if suggestedContent was somehow empty - this is a data integrity issue
   if (!sharedContent.trim()) {
