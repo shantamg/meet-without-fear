@@ -8,6 +8,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import { loadFixture } from '../lib/e2e-fixtures';
 import { StateFactory, TargetStage } from '../testing/state-factory';
+import { runReconcilerForDirection } from '../services/reconciler';
 
 const router = Router();
 
@@ -228,5 +229,79 @@ export async function seedE2ESession(
 }
 
 router.post('/seed-session', seedE2ESession);
+
+/**
+ * Trigger the reconciler for a specific direction in a session.
+ * This allows E2E tests seeded at FEEL_HEARD_B to run the reconciler
+ * via API call instead of navigating through the UI.
+ *
+ * Body:
+ * {
+ *   sessionId: string,
+ *   guesserId: string,
+ *   subjectId: string
+ * }
+ *
+ * Returns 200 with reconciler result and share offer details.
+ * Returns 400 if validation fails.
+ * Returns 403 if E2E_AUTH_BYPASS is not true.
+ */
+export async function triggerE2EReconciler(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  // Only allow when E2E mode is enabled
+  if (process.env.E2E_AUTH_BYPASS !== 'true') {
+    res.status(403).json({
+      success: false,
+      error: 'E2E trigger-reconciler only available when E2E_AUTH_BYPASS is enabled',
+    });
+    return;
+  }
+
+  try {
+    const { sessionId, guesserId, subjectId } = req.body;
+
+    // Validate required fields
+    if (!sessionId || !guesserId || !subjectId) {
+      res.status(400).json({
+        success: false,
+        error: 'sessionId, guesserId, and subjectId are required',
+      });
+      return;
+    }
+
+    // Verify session exists
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      res.status(400).json({
+        success: false,
+        error: `Session ${sessionId} not found`,
+      });
+      return;
+    }
+
+    // Run the reconciler for the specified direction
+    const result = await runReconcilerForDirection(sessionId, guesserId, subjectId);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        reconcilerResult: result.result,
+        empathyStatus: result.empathyStatus,
+        shareOffer: result.shareOffer,
+      },
+    });
+  } catch (error) {
+    console.error('[triggerE2EReconciler] Error:', error);
+    next(error);
+  }
+}
+
+router.post('/trigger-reconciler', triggerE2EReconciler);
 
 export default router;

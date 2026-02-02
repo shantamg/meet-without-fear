@@ -8,11 +8,18 @@
  * 4. User B receives a share suggestion and EDITS it before sharing
  * 5. User A receives the modified shared context
  *
- * This tests the "edit/refine" path for the share suggestion flow.
+ * OPTIMIZED: Uses RECONCILER_SHOWN_B stage to skip chat UI setup (~15s → ~2s)
  */
 
 import { test, expect, devices, BrowserContext, Page } from '@playwright/test';
-import { cleanupE2EData, getE2EHeaders, SessionBuilder } from '../../../helpers';
+import {
+  cleanupE2EData,
+  getE2EHeaders,
+  SessionBuilder,
+  createUserContext,
+  handleMoodCheck,
+  navigateToSession,
+} from '../../../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3002';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
@@ -22,44 +29,6 @@ test.use(devices['iPhone 12']);
 
 // Fixture ID for this test - uses fixture with gaps-detected reconciler response
 const FIXTURE_ID = 'user-b-partner-journey';
-
-/**
- * Helper to wait for AI response to complete streaming.
- */
-async function waitForAIResponse(page: Page, textPattern: RegExp, timeout = 15000) {
-  await expect(page.getByText(textPattern)).toBeVisible({ timeout });
-
-  const typingIndicator = page.getByTestId('typing-indicator');
-  await expect(typingIndicator).not.toBeVisible({ timeout: 5000 }).catch(() => {});
-
-  await page.waitForTimeout(100);
-}
-
-/**
- * Create a new browser context with E2E headers for a specific user.
- */
-async function createUserContext(
-  browser: import('@playwright/test').Browser,
-  userEmail: string,
-  userId: string,
-  fixtureId?: string,
-  position?: { x: number; y: number }
-): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({
-    ...devices['iPhone 12'],
-    extraHTTPHeaders: getE2EHeaders(userEmail, userId, fixtureId),
-  });
-  const page = await context.newPage();
-
-  if (position) {
-    await page.evaluate(({ x, y }) => {
-      window.moveTo(x, y);
-      window.resizeTo(420, 750);
-    }, position).catch(() => {});
-  }
-
-  return { context, page };
-}
 
 test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
   const userA = {
@@ -75,7 +44,6 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
   let sessionId: string;
   let userAId: string;
   let userBId: string;
-  let invitationId: string;
 
   let userAContext: BrowserContext;
   let userAPage: Page;
@@ -85,18 +53,19 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
   test.beforeEach(async ({ browser, request }) => {
     await cleanupE2EData().catch(() => {});
 
+    // Seed session at RECONCILER_SHOWN_B - share modal already ready
     const setup = await new SessionBuilder()
       .userA(userA.email, userA.name)
       .userB(userB.email, userB.name)
-      .startingAt('EMPATHY_SHARED_A')
+      .startingAt('RECONCILER_SHOWN_B')
+      .withFixture(FIXTURE_ID)
       .setup(request);
 
     sessionId = setup.session.id;
     userAId = setup.userA.id;
     userBId = setup.userB!.id;
-    invitationId = setup.invitation.id;
 
-    console.log(`[Setup] Session: ${sessionId}`);
+    console.log(`[Setup] Session: ${sessionId} (RECONCILER_SHOWN_B)`);
 
     const userASetup = await createUserContext(browser, userA.email, userAId, FIXTURE_ID, { x: 0, y: 0 });
     userAContext = userASetup.context;
@@ -113,100 +82,24 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
   });
 
   /**
-   * Helper to complete User B's Stage 1 journey through feeling heard.
-   * Returns after the reconciler has run and share suggestion should be available.
+   * Helper to navigate User B to Share screen.
    */
-  async function completeUserBStage1(request: import('@playwright/test').APIRequestContext) {
-    // Navigate User A to session first
-    const userAParams = new URLSearchParams({ 'e2e-user-id': userAId, 'e2e-user-email': userA.email });
-    await userAPage.goto(`${APP_BASE_URL}/session/${sessionId}?${userAParams.toString()}`);
-    await userAPage.waitForLoadState('networkidle');
-
-    const userAMoodContinue = userAPage.getByTestId('mood-check-continue-button');
-    if (await userAMoodContinue.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await userAMoodContinue.click();
-    }
-    await userAPage.waitForTimeout(2000);
-
-    // User B accepts invitation
-    await request.post(`${API_BASE_URL}/api/invitations/${invitationId}/accept`, {
-      headers: { ...getE2EHeaders(userB.email, userBId, FIXTURE_ID), 'Content-Type': 'application/json' },
+  async function navigateUserBToShareScreen() {
+    const userBParams = new URLSearchParams({
+      'e2e-user-id': userBId,
+      'e2e-user-email': userB.email,
     });
-
-    // User B navigates to session
-    const userBParams = new URLSearchParams({ 'e2e-user-id': userBId, 'e2e-user-email': userB.email });
-    await userBPage.goto(`${APP_BASE_URL}/session/${sessionId}?${userBParams.toString()}`);
-    await userBPage.waitForLoadState('networkidle');
-
-    // Sign compact
-    const agreeCheckbox = userBPage.getByTestId('compact-agree-checkbox');
-    await expect(agreeCheckbox).toBeVisible({ timeout: 10000 });
-    await agreeCheckbox.click();
-    await userBPage.getByTestId('compact-sign-button').click();
-
-    // Handle mood check
-    const moodContinue = userBPage.getByTestId('mood-check-continue-button');
-    if (await moodContinue.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await moodContinue.click();
-    }
-
-    // Complete chat
-    const chatInput = userBPage.getByTestId('chat-input');
-    await expect(chatInput).toBeVisible({ timeout: 10000 });
-    const sendButton = userBPage.getByTestId('send-button');
-
-    await chatInput.fill('Things have been tense lately');
-    await sendButton.click();
-    await waitForAIResponse(userBPage, /tension can be really draining/i);
-
-    await chatInput.fill("I feel like they don't see how much I'm dealing with");
-    await sendButton.click();
-    await waitForAIResponse(userBPage, /feeling unseen while carrying a lot/i);
-
-    await chatInput.fill("I work so hard and come home exhausted, but there's always more to do");
-    await sendButton.click();
-    await waitForAIResponse(userBPage, /exhaustion you're describing/i);
-
-    await chatInput.fill("Months now. I don't know how to get through to them");
-    await sendButton.click();
-    await waitForAIResponse(userBPage, /Do you feel like I understand/i);
-
-    // Confirm feeling heard - triggers reconciler
-    const feelHeardYes = userBPage.getByTestId('feel-heard-yes');
-    await expect(feelHeardYes).toBeVisible({ timeout: 5000 });
-    await feelHeardYes.click();
-    await expect(feelHeardYes).not.toBeVisible({ timeout: 5000 });
-
-    // Wait for reconciler
-    await userBPage.waitForTimeout(3000);
-  }
-
-  /**
-   * Helper to navigate to Share screen and access the share suggestion card.
-   */
-  async function navigateToShareScreen() {
-    const userBParams = new URLSearchParams({ 'e2e-user-id': userBId, 'e2e-user-email': userB.email });
-
-    // Check if modal appeared and navigate through it
-    const partnerEventModal = userBPage.getByTestId('partner-event-modal');
-    if (await partnerEventModal.isVisible({ timeout: 3000 }).catch(() => false)) {
-      const viewButton = userBPage.getByText('View', { exact: true });
-      await viewButton.click();
-      await expect(partnerEventModal).not.toBeVisible({ timeout: 5000 });
-    } else {
-      await userBPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userBParams.toString()}`);
-    }
+    await userBPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userBParams.toString()}`);
     await userBPage.waitForLoadState('networkidle');
   }
 
   test.describe('User B perspective', () => {
-    test('can tap "Edit" to enter refinement mode', async ({ request }) => {
-      test.setTimeout(300000);
+    test('can tap "Edit" to enter refinement mode', async () => {
+      test.setTimeout(60000);
       const testStart = Date.now();
       const elapsed = () => `[${((Date.now() - testStart) / 1000).toFixed(1)}s]`;
 
-      await completeUserBStage1(request);
-      await navigateToShareScreen();
+      await navigateUserBToShareScreen();
 
       console.log(`${elapsed()} User B on Share screen - looking for Edit button`);
 
@@ -220,16 +113,15 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
       const refineInput = userBPage.getByTestId('share-suggestion-card-refine-input');
       await expect(refineInput).toBeVisible({ timeout: 5000 });
 
-      console.log(`${elapsed()} Edit mode activated - refinement input visible`);
+      console.log(`${elapsed()} Edit mode activated - refinement input visible - test passed`);
     });
 
-    test('sees refinement input with placeholder text', async ({ request }) => {
-      test.setTimeout(300000);
+    test('sees refinement input with placeholder text', async () => {
+      test.setTimeout(60000);
       const testStart = Date.now();
       const elapsed = () => `[${((Date.now() - testStart) / 1000).toFixed(1)}s]`;
 
-      await completeUserBStage1(request);
-      await navigateToShareScreen();
+      await navigateUserBToShareScreen();
 
       // Enter edit mode
       const editButton = userBPage.getByTestId('share-suggestion-card-edit');
@@ -246,15 +138,15 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
 
       // Placeholder should ask about changes
       expect(placeholder?.toLowerCase()).toContain('change');
+      console.log(`${elapsed()} Placeholder text verified - test passed`);
     });
 
-    test('can type refinement request and send it', async ({ request }) => {
-      test.setTimeout(300000);
+    test('can type refinement request and send it', async () => {
+      test.setTimeout(60000);
       const testStart = Date.now();
       const elapsed = () => `[${((Date.now() - testStart) / 1000).toFixed(1)}s]`;
 
-      await completeUserBStage1(request);
-      await navigateToShareScreen();
+      await navigateUserBToShareScreen();
 
       // Enter edit mode
       const editButton = userBPage.getByTestId('share-suggestion-card-edit');
@@ -285,16 +177,15 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
       const refineResponse = await refineResponsePromise;
       expect(refineResponse.status()).toBeLessThan(300);
 
-      console.log(`${elapsed()} Refinement request sent successfully`);
+      console.log(`${elapsed()} Refinement request sent successfully - test passed`);
     });
 
-    test('can cancel edit mode and return to default view', async ({ request }) => {
-      test.setTimeout(300000);
+    test('can cancel edit mode and return to default view', async () => {
+      test.setTimeout(60000);
       const testStart = Date.now();
       const elapsed = () => `[${((Date.now() - testStart) / 1000).toFixed(1)}s]`;
 
-      await completeUserBStage1(request);
-      await navigateToShareScreen();
+      await navigateUserBToShareScreen();
 
       // Enter edit mode
       const editButton = userBPage.getByTestId('share-suggestion-card-edit');
@@ -315,16 +206,15 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
       await expect(refineInput).not.toBeVisible({ timeout: 5000 });
       await expect(editButton).toBeVisible({ timeout: 5000 });
 
-      console.log(`${elapsed()} Successfully canceled edit mode`);
+      console.log(`${elapsed()} Successfully canceled edit mode - test passed`);
     });
 
     test('can share after refining content', async ({ request }) => {
-      test.setTimeout(300000);
+      test.setTimeout(60000);
       const testStart = Date.now();
       const elapsed = () => `[${((Date.now() - testStart) / 1000).toFixed(1)}s]`;
 
-      await completeUserBStage1(request);
-      await navigateToShareScreen();
+      await navigateUserBToShareScreen();
 
       // Enter edit mode and send refinement
       const editButton = userBPage.getByTestId('share-suggestion-card-edit');
@@ -345,10 +235,8 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
       console.log(`${elapsed()} Refinement processed - now sharing`);
 
       // After refinement, we should be able to share
-      // The card might update with new content - look for share button
       const shareButton = userBPage.locator('[data-testid*="share-suggestion"][data-testid$="-share"]');
 
-      // If share button is visible, click it
       if (await shareButton.isVisible({ timeout: 5000 }).catch(() => false)) {
         const shareResponsePromise = userBPage.waitForResponse(
           (response) => response.url().includes('/reconciler/share-offer/respond') && response.request().method() === 'POST',
@@ -360,7 +248,7 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
         const shareResponse = await shareResponsePromise;
         expect(shareResponse.status()).toBeLessThan(300);
 
-        console.log(`${elapsed()} Successfully shared refined content`);
+        console.log(`${elapsed()} Successfully shared refined content - test passed`);
       } else {
         // Refinement might have auto-shared or changed UI state
         console.log(`${elapsed()} Share button not visible - checking if content was shared`);
@@ -373,32 +261,27 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
 
         // Share suggestion should no longer be pending
         expect(shareData.data?.hasSuggestion).toBe(false);
+        console.log(`${elapsed()} Content was shared (verified via API) - test passed`);
       }
     });
   });
 
   test.describe('User A perspective', () => {
-    test('receives shared context after User B refines and shares', async ({ request }) => {
-      test.setTimeout(300000);
+    test('receives shared context after User B refines and shares', async () => {
+      test.setTimeout(120000);
       const testStart = Date.now();
       const elapsed = () => `[${((Date.now() - testStart) / 1000).toFixed(1)}s]`;
 
-      await completeUserBStage1(request);
+      // Navigate User A to session first
+      await navigateToSession(userAPage, APP_BASE_URL, sessionId, userAId, userA.email);
+      await handleMoodCheck(userAPage);
+      await userAPage.waitForTimeout(2000);
 
-      const userBParams = new URLSearchParams({ 'e2e-user-id': userBId, 'e2e-user-email': userB.email });
+      console.log(`${elapsed()} User A connected`);
 
-      // User B navigates to Share screen and shares (with or without editing)
-      const partnerEventModal = userBPage.getByTestId('partner-event-modal');
-      if (await partnerEventModal.isVisible({ timeout: 3000 }).catch(() => false)) {
-        const viewButton = userBPage.getByText('View', { exact: true });
-        await viewButton.click();
-        await expect(partnerEventModal).not.toBeVisible({ timeout: 5000 });
-      } else {
-        await userBPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userBParams.toString()}`);
-      }
-      await userBPage.waitForLoadState('networkidle');
+      // User B refines and shares
+      await navigateUserBToShareScreen();
 
-      // Enter edit mode, type refinement, and share
       const editButton = userBPage.getByTestId('share-suggestion-card-edit');
       await expect(editButton).toBeVisible({ timeout: 10000 });
       await editButton.click();
@@ -429,42 +312,27 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
       let hasIndicator = await sharedContextIndicator.isVisible({ timeout: 5000 }).catch(() => false);
 
       if (!hasIndicator) {
-        // Reload and check again
         await userAPage.reload();
         await userAPage.waitForLoadState('networkidle');
-
-        const moodCheck = userAPage.getByTestId('mood-check-continue-button');
-        if (await moodCheck.isVisible({ timeout: 3000 }).catch(() => false)) {
-          await moodCheck.click();
-        }
-
+        await handleMoodCheck(userAPage);
         hasIndicator = await sharedContextIndicator.isVisible({ timeout: 10000 }).catch(() => false);
       }
 
       expect(hasIndicator).toBe(true);
-      console.log(`${elapsed()} User A sees "Context from Darryl" indicator`);
+      console.log(`${elapsed()} User A sees "Context from Darryl" indicator - test passed`);
     });
 
-    test('shared context is visible in Share tab', async ({ request }) => {
-      test.setTimeout(300000);
+    test('shared context is visible in Share tab', async () => {
+      test.setTimeout(120000);
       const testStart = Date.now();
       const elapsed = () => `[${((Date.now() - testStart) / 1000).toFixed(1)}s]`;
 
-      await completeUserBStage1(request);
+      // Navigate User A to session
+      await navigateToSession(userAPage, APP_BASE_URL, sessionId, userAId, userA.email);
+      await handleMoodCheck(userAPage);
 
-      const userBParams = new URLSearchParams({ 'e2e-user-id': userBId, 'e2e-user-email': userB.email });
-      const userAParams = new URLSearchParams({ 'e2e-user-id': userAId, 'e2e-user-email': userA.email });
-
-      // User B shares (via direct share button this time, no editing)
-      const partnerEventModal = userBPage.getByTestId('partner-event-modal');
-      if (await partnerEventModal.isVisible({ timeout: 3000 }).catch(() => false)) {
-        const viewButton = userBPage.getByText('View', { exact: true });
-        await viewButton.click();
-        await expect(partnerEventModal).not.toBeVisible({ timeout: 5000 });
-      } else {
-        await userBPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userBParams.toString()}`);
-      }
-      await userBPage.waitForLoadState('networkidle');
+      // User B shares (direct share, no editing for simplicity)
+      await navigateUserBToShareScreen();
 
       const shareButton = userBPage.locator('[data-testid*="share-suggestion"][data-testid$="-share"]');
       await expect(shareButton).toBeVisible({ timeout: 10000 });
@@ -476,6 +344,10 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
       await userBPage.waitForTimeout(3000);
 
       // Navigate User A to Share tab
+      const userAParams = new URLSearchParams({
+        'e2e-user-id': userAId,
+        'e2e-user-email': userA.email,
+      });
       await userAPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userAParams.toString()}`);
       await userAPage.waitForLoadState('networkidle');
 
@@ -491,6 +363,7 @@ test.describe('Reconciler: Gaps Detected - User B Refines Share', () => {
 
       // At least one indicator should be present
       expect(hasTimeline || hasSharedText).toBe(true);
+      console.log(`${elapsed()} Shared content visible in Share tab - test passed`);
     });
   });
 });

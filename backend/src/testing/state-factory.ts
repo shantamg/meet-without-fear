@@ -26,6 +26,9 @@ export enum TargetStage {
   /** User B has completed Stage 1 (felt heard), reconciler has run. Ready for reconciler tests. */
   FEEL_HEARD_B = 'FEEL_HEARD_B',
 
+  /** User B has felt heard, reconciler has run with significant gaps, share offer is OFFERED. Ready for share modal UI tests. */
+  RECONCILER_SHOWN_B = 'RECONCILER_SHOWN_B',
+
   /** Both users active: User B has felt heard, received share suggestion, and shared context */
   CONTEXT_SHARED_B = 'CONTEXT_SHARED_B',
 }
@@ -129,7 +132,7 @@ export class StateFactory {
       ];
 
       // Add User B as member for stages where both users are active
-      if ((targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.CONTEXT_SHARED_B) && userBRecord) {
+      if ((targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B) && userBRecord) {
         memberData.push({
           userId: userBRecord.id,
           nickname: userA.name, // What B calls A
@@ -152,7 +155,7 @@ export class StateFactory {
         // Session is INVITED - waiting for User B to accept
         // Will become ACTIVE when User B accepts the invitation
         sessionStatus = 'INVITED';
-      } else if (targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.CONTEXT_SHARED_B) {
+      } else if (targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B) {
         // Both users have joined and are active
         sessionStatus = 'ACTIVE';
       }
@@ -167,7 +170,7 @@ export class StateFactory {
 
       // 6. Create invitation
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      const invitationAccepted = targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.CONTEXT_SHARED_B;
+      const invitationAccepted = targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B;
       const invitationStatus = invitationAccepted ? 'ACCEPTED' : 'PENDING';
       const invitation = await tx.invitation.create({
         data: {
@@ -197,7 +200,7 @@ export class StateFactory {
       });
 
       // 8b. Create UserVessel for User B (if both users are active)
-      if ((targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.CONTEXT_SHARED_B) && userBRecord) {
+      if ((targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B) && userBRecord) {
         await tx.userVessel.create({
           data: {
             sessionId: session.id,
@@ -225,6 +228,9 @@ export class StateFactory {
       } else if (targetStage === TargetStage.FEEL_HEARD_B && userBRecord) {
         // Both users active, User B has felt heard, reconciler ready to run
         await this.createFeelHeardBState(tx, session.id, userARecord.id, userBRecord.id, userA.name, userB!.name);
+      } else if (targetStage === TargetStage.RECONCILER_SHOWN_B && userBRecord) {
+        // Both users active, User B has felt heard, reconciler has run with significant gaps, share offer OFFERED
+        await this.createReconcilerShownBState(tx, session.id, userARecord.id, userBRecord.id, userA.name, userB!.name);
       } else if (targetStage === TargetStage.CONTEXT_SHARED_B && userBRecord) {
         // Create full state for both users, with User B having shared context
         await this.createContextSharedState(tx, session.id, userARecord.id, userBRecord.id, userA.name, userB!.name);
@@ -649,6 +655,295 @@ export class StateFactory {
     // Note: No ReconcilerResult or ReconcilerShareOffer created.
     // The test will trigger the reconciler by navigating the UI,
     // and the fixture's operation responses will determine the outcome.
+  }
+
+  /**
+   * Create the full state for RECONCILER_SHOWN_B stage.
+   * Both users are active. User B has:
+   * - Completed Stage 0 (signed compact)
+   * - Completed Stage 1 (felt heard)
+   * - ReconcilerResult with significant gaps
+   * - ReconcilerShareOffer with status OFFERED (ready for UI interaction)
+   *
+   * User A has shared empathy and is waiting (status = AWAITING_SHARING).
+   * This stage is ideal for testing the share modal UI without running the reconciler.
+   */
+  private async createReconcilerShownBState(
+    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+    sessionId: string,
+    userAId: string,
+    userBId: string,
+    userAName: string,
+    userBName: string
+  ): Promise<void> {
+    const now = new Date();
+    const baseTime = now.getTime();
+
+    // Timeline (working backwards from now):
+    // - now: Share suggestion offered and visible
+    // - -5s: Reconciler ran
+    // - -30s: User B Stage 1 completed (felt heard)
+    // - -60s: User B Stage 0 completed (compact signed)
+    // - -90s: User A's empathy shared
+    // - -120s: User A's Stage 1 completed
+    // - -150s: User A's Stage 0 completed
+
+    const timestamps = {
+      userAStage0Completed: new Date(baseTime - 150000),
+      userAStage1Completed: new Date(baseTime - 120000),
+      userAEmpathyShared: new Date(baseTime - 90000),
+      userBStage0Completed: new Date(baseTime - 60000),
+      userBStage1Completed: new Date(baseTime - 30000),
+      reconcilerRan: new Date(baseTime - 5000),
+      shareOfferOffered: now,
+    };
+
+    // ========================================
+    // USER A STATE (same as FEEL_HEARD_B but with AWAITING_SHARING status)
+    // ========================================
+
+    // Stage 0 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 0,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 180000),
+        completedAt: timestamps.userAStage0Completed,
+        gatesSatisfied: {
+          compactSigned: true,
+          compactSignedAt: timestamps.userAStage0Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 1 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 1,
+        status: 'COMPLETED',
+        startedAt: timestamps.userAStage0Completed,
+        completedAt: timestamps.userAStage1Completed,
+        gatesSatisfied: {
+          feelHeardConfirmed: true,
+          feelHeardConfirmedAt: timestamps.userAStage1Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 2 - IN_PROGRESS (waiting for User B's share decision)
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 2,
+        status: 'IN_PROGRESS',
+        startedAt: timestamps.userAStage1Completed,
+        gatesSatisfied: {},
+      },
+    });
+
+    // User A's messages (conversation history)
+    const userAMessages = [
+      { role: 'USER' as const, content: "Hi, I'm having issues with my partner.", stage: 0 },
+      { role: 'AI' as const, content: "I'm glad you reached out. Tell me more about what's happening.", stage: 0 },
+      { role: 'USER' as const, content: "We argue about household chores constantly.", stage: 1 },
+      { role: 'AI' as const, content: "That sounds frustrating. Would you like to invite your partner?", stage: 1 },
+      { role: 'USER' as const, content: "Yes, I sent the invitation.", stage: 1 },
+      { role: 'AI' as const, content: "Great. Let's continue exploring your perspective while we wait.", stage: 1 },
+      { role: 'USER' as const, content: "I feel like I do most of the work and they don't notice.", stage: 1 },
+      { role: 'AI' as const, content: "I hear you. Do you feel like I understand what you've been experiencing?", stage: 1 },
+      { role: 'USER' as const, content: "Yes, I feel heard now.", stage: 1 },
+      { role: 'AI' as const, content: "I'm glad. Now let's build some empathy for your partner's perspective.", stage: 2 },
+      { role: 'USER' as const, content: "I think they're stressed from work too.", stage: 2 },
+      { role: 'AI' as const, content: "That's a thoughtful observation. Here's an empathy statement you could share...", stage: 2 },
+    ];
+
+    for (let i = 0; i < userAMessages.length; i++) {
+      const msg = userAMessages[i];
+      await tx.message.create({
+        data: {
+          sessionId,
+          senderId: msg.role === 'USER' ? userAId : null,
+          forUserId: userAId,
+          role: msg.role,
+          content: msg.content,
+          stage: msg.stage,
+          timestamp: new Date(baseTime - 180000 + i * 5000),
+        },
+      });
+    }
+
+    // User A's empathy draft and attempt (status = AWAITING_SHARING)
+    const empathyDraftA = await tx.empathyDraft.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        content: "I understand you might be feeling stressed from work. I want us to support each other better.",
+        readyToShare: true,
+      },
+    });
+
+    await tx.empathyAttempt.create({
+      data: {
+        sessionId,
+        draftId: empathyDraftA.id,
+        sourceUserId: userAId,
+        content: empathyDraftA.content,
+        status: 'AWAITING_SHARING', // Waiting for User B to respond to share suggestion
+        sharedAt: timestamps.userAEmpathyShared,
+      },
+    });
+
+    // User A's consent record
+    await tx.consentRecord.create({
+      data: {
+        userId: userAId,
+        sessionId,
+        targetType: 'EMPATHY_DRAFT',
+        targetId: empathyDraftA.id,
+        requestedByUserId: userAId,
+        decision: 'GRANTED',
+        decidedAt: timestamps.userAEmpathyShared,
+      },
+    });
+
+    // User A's EMPATHY_STATEMENT message
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: userAId,
+        forUserId: userAId,
+        role: 'EMPATHY_STATEMENT',
+        content: empathyDraftA.content,
+        stage: 2,
+        timestamp: timestamps.userAEmpathyShared,
+      },
+    });
+
+    // ========================================
+    // USER B STATE
+    // ========================================
+
+    // Stage 0 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 0,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 90000),
+        completedAt: timestamps.userBStage0Completed,
+        gatesSatisfied: {
+          compactSigned: true,
+          compactSignedAt: timestamps.userBStage0Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 1 - COMPLETED (just felt heard)
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 1,
+        status: 'COMPLETED',
+        startedAt: timestamps.userBStage0Completed,
+        completedAt: timestamps.userBStage1Completed,
+        gatesSatisfied: {
+          feelHeardConfirmed: true,
+          feelHeardConfirmedAt: timestamps.userBStage1Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 2 - IN_PROGRESS (just started)
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 2,
+        status: 'IN_PROGRESS',
+        startedAt: timestamps.userBStage1Completed,
+        gatesSatisfied: {},
+      },
+    });
+
+    // User B's messages (conversation history)
+    const userBMessages = [
+      { role: 'AI' as const, content: `Welcome! ${userAName} invited you to work through some challenges together.`, stage: 0 },
+      { role: 'USER' as const, content: "Things have been tense lately between us.", stage: 0 },
+      { role: 'AI' as const, content: "I hear you. Tell me more about what's been happening.", stage: 1 },
+      { role: 'USER' as const, content: "I feel like they don't see how much I'm dealing with at work.", stage: 1 },
+      { role: 'AI' as const, content: "That sounds really hard. Can you tell me more?", stage: 1 },
+      { role: 'USER' as const, content: "I work so hard and come home exhausted, but there's always more to do.", stage: 1 },
+      { role: 'AI' as const, content: "I understand. How long has this been going on?", stage: 1 },
+      { role: 'USER' as const, content: "Months now. I don't know how to get through to them.", stage: 1 },
+      { role: 'AI' as const, content: "Do you feel like I understand what you've been going through?", stage: 1 },
+      { role: 'USER' as const, content: "Yes, I feel heard.", stage: 1 },
+    ];
+
+    for (let i = 0; i < userBMessages.length; i++) {
+      const msg = userBMessages[i];
+      await tx.message.create({
+        data: {
+          sessionId,
+          senderId: msg.role === 'USER' ? userBId : null,
+          forUserId: userBId,
+          role: msg.role,
+          content: msg.content,
+          stage: msg.stage,
+          timestamp: new Date(baseTime - 90000 + i * 5000),
+        },
+      });
+    }
+
+    // ========================================
+    // RECONCILER RESULT & SHARE OFFER (OFFERED status)
+    // ========================================
+
+    // Create ReconcilerResult with significant gaps
+    const reconcilerResult = await tx.reconcilerResult.create({
+      data: {
+        id: `reconciler-${sessionId}-${Date.now()}`,
+        sessionId,
+        guesserId: userAId,
+        guesserName: userAName,
+        subjectId: userBId,
+        subjectName: userBName,
+        alignmentScore: 45,
+        alignmentSummary: `${userAName}'s empathy attempt captures some elements but misses key aspects of ${userBName}'s experience.`,
+        correctlyIdentified: ['stress', 'work pressure'],
+        gapSeverity: 'significant',
+        gapSummary: `${userAName} hasn't fully grasped the depth of ${userBName}'s exhaustion and feeling unseen.`,
+        missedFeelings: ['exhaustion', 'feeling unseen', 'overwhelm'],
+        misattributions: [],
+        mostImportantGap: `${userBName} feels exhausted and unseen, not just stressed.`,
+        recommendedAction: 'OFFER_SHARING',
+        rationale: `Sharing specific context would help ${userAName} understand ${userBName}'s perspective better.`,
+        sharingWouldHelp: true,
+        suggestedShareFocus: "The exhaustion from work and feeling unseen.",
+        suggestedShareContent: "I feel like I'm running on empty - exhausted from work every day, and then coming home to more tasks. What I really need is for someone to see how hard I'm trying, even when I don't have anything left to give.",
+        suggestedShareReason: `This helps ${userAName} understand that ${userBName}'s frustration comes from exhaustion and feeling unseen, not anger or blame.`,
+        createdAt: timestamps.reconcilerRan,
+      },
+    });
+
+    // Create the share offer (OFFERED status - ready for UI interaction)
+    const suggestedContent = "I feel like I'm running on empty - exhausted from work every day, and then coming home to more tasks. What I really need is for someone to see how hard I'm trying, even when I don't have anything left to give.";
+
+    await tx.reconcilerShareOffer.create({
+      data: {
+        resultId: reconcilerResult.id,
+        userId: userBId,
+        status: 'OFFERED', // Ready for user to accept/decline/refine
+        suggestedContent,
+        suggestedReason: reconcilerResult.suggestedShareReason,
+      },
+    });
   }
 
   /**
