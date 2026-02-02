@@ -81,29 +81,29 @@ export default defineConfig({
     },
     // Stage 2 Empathy: Reconciler tests
     {
-      name: 'reconciler-gaps-accept',
-      testMatch: /stage-2-empathy\/reconciler\/gaps-accept-share\.spec\.ts/,
+      name: 'reconciler-share-accepted',
+      testMatch: /stage-2-empathy\/reconciler\/gaps-detected-share-accepted\.spec\.ts/,
+      use: {
+        baseURL: 'http://localhost:8082',
+      },
+    },
+    {
+      name: 'reconciler-share-declined',
+      testMatch: /stage-2-empathy\/reconciler\/gaps-detected-share-declined\.spec\.ts/,
+      use: {
+        baseURL: 'http://localhost:8082',
+      },
+    },
+    {
+      name: 'reconciler-share-refined',
+      testMatch: /stage-2-empathy\/reconciler\/gaps-detected-share-refined\.spec\.ts/,
       use: {
         baseURL: 'http://localhost:8082',
       },
     },
     {
       name: 'reconciler-no-gaps',
-      testMatch: /stage-2-empathy\/reconciler\/no-gaps-detected\.spec\.ts/,
-      use: {
-        baseURL: 'http://localhost:8082',
-      },
-    },
-    {
-      name: 'reconciler-gaps-decline',
-      testMatch: /stage-2-empathy\/reconciler\/gaps-decline-share\.spec\.ts/,
-      use: {
-        baseURL: 'http://localhost:8082',
-      },
-    },
-    {
-      name: 'reconciler-gaps-refine',
-      testMatch: /stage-2-empathy\/reconciler\/gaps-refine-share\.spec\.ts/,
+      testMatch: /stage-2-empathy\/reconciler\/no-gaps-proceed-directly\.spec\.ts/,
       use: {
         baseURL: 'http://localhost:8082',
       },
