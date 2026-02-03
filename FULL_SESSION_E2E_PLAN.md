@@ -10,92 +10,50 @@ This document outlines a comprehensive plan for an end-to-end test that takes **
 
 ## 1. Complete Happy Path Flow Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         FULL SESSION FLOW                                    │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  USER A (Initiator)              USER B (Partner)                           │
-│  ━━━━━━━━━━━━━━━━━━━━            ━━━━━━━━━━━━━━━━━━━━                       │
-│                                                                             │
-│  ┌──────────────┐                                                         │
-│  │ STAGE 0      │                                                         │
-│  │ Onboarding   │                                                         │
-│  │ • Sign       │                                                         │
-│  │   Compact    │                                                         │
-│  │ • Invite B   │                                                         │
-│  └──────┬───────┘                                                         │
-│         │                                                                   │
-│         │ Invitation sent ───────────────────────────┐                     │
-│         │                                            ▼                     │
-│         │                                    ┌──────────────┐              │
-│         │                                    │ STAGE 0      │              │
-│         │                                    │ Accept Invite│              │
-│         │                                    │ Sign Compact │              │
-│         │                                    └──────┬───────┘              │
-│         │                                           │                      │
-│         ▼                                           ▼                      │
-│  ┌──────────────┐                          ┌──────────────┐                │
-│  │ STAGE 1      │                          │ STAGE 1      │                │
-│  │ The Witness  │                          │ The Witness  │                │
-│  │ • Chat w/AI  │                          │ • Chat w/AI  │                │
-│  │ • Feel Heard │                          │ • Feel Heard │                │
-│  └──────┬───────┘                          └──────┬───────┘                │
-│         │                                         │                        │
-│         │ Both complete Stage 1 ──────────────────┘                        │
-│         │                                                                  │
-│         ▼                                                                  │
-│  ┌──────────────┐                          ┌──────────────┐                │
-│  │ STAGE 2      │                          │ STAGE 2      │                │
-│  │ Perspective  │                          │ Perspective  │                │
-│  │   Stretch    │                          │   Stretch    │                │
-│  │              │                          │              │                │
-│  │ • Build      │    ┌─────────────┐       │ • Build      │                │
-│  │   empathy    │◄───┤ RECONCILER  ├───►   │   empathy    │                │
-│  │   guess      │    │ • Analyzes  │       │   guess      │                │
-│  │ • Share      │    │ • Validates │       │ • Share      │                │
-│  │ • Validate   │    │ • Shares    │       │ • Validate   │                │
-│  │   partner's  │    └─────────────┘       │   partner's  │                │
-│  └──────┬───────┘                          └──────┬───────┘                │
-│         │                                         │                        │
-│         │ Both validated ─────────────────────────┘                        │
-│         │                                                                  │
-│         ▼                                                                  │
-│  ┌──────────────┐                          ┌──────────────┐                │
-│  │ STAGE 3      │                          │ STAGE 3      │                │
-│  │ Need Mapping │                          │ Need Mapping │                │
-│  │ • See needs  │                          │ • See needs  │                │
-│  │ • Find       │                          │ • Find       │                │
-│  │   common     │◄────────────────────────►│   common     │                │
-│  │   ground     │   Mutual discovery       │   ground     │                │
-│  └──────┬───────┘                          └──────┬───────┘                │
-│         │                                         │                        │
-│         │ Both confirm common ground ─────────────┘                        │
-│         │                                                                  │
-│         ▼                                                                  │
-│  ┌──────────────┐                          ┌──────────────┐                │
-│  │ STAGE 4      │                          │ STAGE 4      │                │
-│  │ Strategic    │                          │ Strategic    │                │
-│  │   Repair     │                          │   Repair     │                │
-│  │ • Propose    │                          │ • Propose    │                │
-│  │   strategies │                          │   strategies │                │
-│  │ • Rank       │◄────────────────────────►│ • Rank       │                │
-│  │   choices    │   Anonymous pool         │   choices    │                │
-│  │ • Agree on   │                          │ • Agree on   │                │
-│  │   micro-exp  │                          │   micro-exp  │                │
-│  └──────┬───────┘                          └──────┬───────┘                │
-│         │                                         │                        │
-│         │ Agreement reached ──────────────────────┘                        │
-│         │                                                                  │
-│         ▼                                                                  │
-│  ┌──────────────┐                          ┌──────────────┐                │
-│  │ RESOLUTION   │                          │ RESOLUTION   │                │
-│  │ • Documented │                          │ • Documented │                │
-│  │ • Check-in   │                          │ • Check-in   │                │
-│  │   scheduled  │                          │   scheduled  │                │
-│  └──────────────┘                          └──────────────┘                │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph UserA["👤 USER A (Initiator)"]
+        A0[Stage 0: Onboarding<br/>• Sign Compact<br/>• Invite B]
+        A1[Stage 1: The Witness<br/>• Chat w/ AI<br/>• Feel Heard]
+        A2[Stage 2: Perspective Stretch<br/>• Build empathy guess<br/>• Share & Validate]
+        A3[Stage 3: Need Mapping<br/>• See needs<br/>• Find common ground]
+        A4[Stage 4: Strategic Repair<br/>• Propose strategies<br/>• Rank & Agree]
+        AR[Resolution<br/>• Documented<br/>• Check-in scheduled]
+    end
+
+    subgraph UserB["👤 USER B (Partner)"]
+        B0[Stage 0: Accept Invite<br/>• Sign Compact]
+        B1[Stage 1: The Witness<br/>• Chat w/ AI<br/>• Feel Heard]
+        B2[Stage 2: Perspective Stretch<br/>• Build empathy guess<br/>• Share & Validate]
+        B3[Stage 3: Need Mapping<br/>• See needs<br/>• Find common ground]
+        B4[Stage 4: Strategic Repair<br/>• Propose strategies<br/>• Rank & Agree]
+        BR[Resolution<br/>• Documented<br/>• Check-in scheduled]
+    end
+
+    subgraph Reconciler["🔍 RECONCILER"]
+        R[Analyzes empathy<br/>• Validates<br/>• Shares]
+    end
+
+    A0 -->|Invitation| B0
+    B0 --> A1
+    A1 -->|Both complete| A2
+    B1 -->|Both complete| B2
+    
+    A2 <--->|Empathy exchange| R
+    R <--->|Empathy exchange| B2
+    
+    A2 -->|Both validated| A3
+    B2 -->|Both validated| B3
+    
+    A3 <--->|Mutual discovery| B3
+    
+    A3 -->|Common ground confirmed| A4
+    B3 -->|Common ground confirmed| B4
+    
+    A4 <--->|Anonymous pool| B4
+    
+    A4 -->|Agreement reached| AR
+    B4 -->|Agreement reached| BR
 ```
 
 ---
@@ -182,39 +140,26 @@ This is the most complex stage with the reconciler system.
 
 When User B confirms feel-heard (completes Stage 1):
 
-```
-User A's empathy (HELD) + User B's Stage 1 content
-                ↓
-        ┌───────────────┐
-        │  RECONCILER   │
-        │    RUNS       │
-        └───────┬───────┘
-                │
-        ┌───────┴───────┐
-        ▼               ▼
-   No gaps           Significant gaps
-   (PROCEED)        (OFFER_SHARING)
-        │               │
-        ▼               ▼
-   Status →      Share suggestion
-   READY          shown to User B
-        │               │
-        ▼               ▼
-   Wait for      User B shares
-   mutual         context
-   reveal              │
-                       ▼
-                  Status →
-                  REFINING
-                       │
-                       ▼
-                  User A refines
-                       │
-                       ▼
-                  Re-reconciler
-                       │
-                       ▼
-                  Status → READY
+```mermaid
+flowchart TD
+    Input[User A's empathy (HELD)<br/>+ User B's Stage 1 content]
+    Input --> Reconciler[RECONCILER RUNS]
+    
+    Reconciler -->|No gaps| PROCEED[PROCEED]
+    Reconciler -->|Moderate gaps| OFFER_OPT[OFFER_OPTIONAL]
+    Reconciler -->|Significant gaps| OFFER_SHARE[OFFER_SHARING]
+    
+    PROCEED -->|Status → READY| Wait1[Wait for mutual reveal]
+    OFFER_OPT -->|Normal Stage 2| Normal[User B continues]
+    
+    OFFER_SHARE -->|Share suggestion<br/>shown to User B| Share[User B shares context]
+    Share --> Refining[Status → REFINING]
+    Refining -->|User A refines| ReReconciler[Re-reconciler]
+    ReReconciler --> Ready[Status → READY]
+    
+    Wait1 --> Reveal[Mutual reveal]
+    Ready --> Reveal
+    Normal --> Reveal
 ```
 
 **Reconciler Outcomes:**
@@ -234,7 +179,7 @@ When **both** empathy attempts are `READY`:
 
 **Key UI Components:**
 - `AccuracyFeedbackPanel`
-- Validation buttons: "Accurate", "Partially", "Not quite"
+- Validation buttons: "Accurate", "Partially", "Off"
 - Partner's empathy statement card
 
 #### Phase 2D: Validation Loop
@@ -243,7 +188,7 @@ When **both** empathy attempts are `READY`:
 |------|------|
 | Accurate | Status → `VALIDATED`, can proceed to Stage 3 |
 | Partially | Status → `VALIDATED` (with note), can proceed |
-| Not quite | Status → `NEEDS_WORK`, refinement chat triggered |
+| Off | Status → `NEEDS_WORK`, refinement chat triggered |
 
 **After Refinement:**
 - Guesser revises empathy statement
@@ -772,30 +717,38 @@ The full session E2E test is successful when:
 ## 10. Appendix: State Machine Reference
 
 ### EmpathyAttempt Status Flow
-```
-DRAFTING → HELD → ANALYZING → [READY|AWAITING_SHARING|REFINING] → REVEALED → [VALIDATED|NEEDS_WORK]
-                              ↓
-                         (Subject declines)
-                              ↓
-                            READY
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFTING : User builds empathy
+    DRAFTING --> HELD : User shares
+    HELD --> ANALYZING : Reconciler triggered
+    ANALYZING --> READY : No gaps (PROCEED)
+    ANALYZING --> AWAITING_SHARING : Gaps detected
+    ANALYZING --> REFINING : Subject shares context
+    AWAITING_SHARING --> REFINING : Context shared
+    REFINING --> READY : Guesser revises
+    READY --> REVEALED : Mutual reveal
+    REVEALED --> VALIDATED : Accurate/Partially
+    REVEALED --> NEEDS_WORK : Off/Misses mark
+    NEEDS_WORK --> DRAFTING : User refines
+    VALIDATED --> [*] : Complete
 ```
 
 ### Session Stage Progression
-```
-Stage 0: Onboarding
-  └─ Both sign compact ──► Stage 1
-
-Stage 1: The Witness
-  └─ Both confirm feelHeard ──► Stage 2
-
-Stage 2: Perspective Stretch
-  └─ Both empathy validated ──► Stage 3
-
-Stage 3: Need Mapping
-  └─ Both confirm common ground ──► Stage 4
-
-Stage 4: Strategic Repair
-  └─ Agreement reached ──► Resolution
+```mermaid
+stateDiagram-v2
+    [*] --> Stage0 : Create session
+    Stage0 --> Stage1 : Both sign compact
+    Stage1 --> Stage2 : Both confirm feelHeard
+    Stage2 --> Stage3 : Both empathy validated
+    Stage3 --> Stage4 : Both confirm common ground
+    Stage4 --> Resolution : Agreement reached
+    Resolution --> [*] : Complete
+    
+    note right of Stage2
+        Most complex stage
+        with reconciler flow
+    end note
 ```
 
 ---
