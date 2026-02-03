@@ -69,6 +69,19 @@ test.describe('Stage 3-4 Complete Flow', () => {
     await pageA.waitForLoadState('networkidle');
     await pageB.waitForLoadState('networkidle');
 
+    // Handle mood check if present
+    const moodContinueA = pageA.getByRole('button', { name: /continue/i });
+    if (await moodContinueA.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await moodContinueA.click();
+      await pageA.waitForLoadState('networkidle');
+    }
+
+    const moodContinueB = pageB.getByRole('button', { name: /continue/i });
+    if (await moodContinueB.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await moodContinueB.click();
+      await pageB.waitForLoadState('networkidle');
+    }
+
     // ========================================
     // Phase 1: User B completes Stage 1 (like reconciler test)
     // ========================================
