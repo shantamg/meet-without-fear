@@ -629,11 +629,13 @@ export async function advanceStage(req: Request, res: Response): Promise<void> {
     if (nextStage === 4) {
       const partnerId = await getPartnerUserId(sessionId, user.id);
       if (partnerId) {
-        const partnerProgress = session.stageProgress
-          .filter((sp) => sp.userId === partnerId)
-          .sort((a, b) => b.stage - a.stage)[0];
+        // Check specifically if partner's Stage 3 is completed
+        // (not their highest stage, as they may already be in Stage 4)
+        const partnerStage3 = session.stageProgress.find(
+          (sp) => sp.userId === partnerId && sp.stage === 3
+        );
 
-        if (!partnerProgress || partnerProgress.stage < 3 || partnerProgress.status !== 'COMPLETED') {
+        if (!partnerStage3 || partnerStage3.status !== 'COMPLETED') {
           successResponse(res, {
             advanced: false,
             newStage: currentStage,
