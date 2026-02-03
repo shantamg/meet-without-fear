@@ -1452,7 +1452,9 @@ export class StateFactory {
         content: empathyDraftA.content,
         status: 'VALIDATED',
         sharedAt: timestamps.userAEmpathyShared,
-        validatedAt: timestamps.userBValidated,
+        revealedAt: timestamps.userAEmpathyRevealed,
+        deliveryStatus: 'DELIVERED',
+        deliveredAt: timestamps.userAEmpathyRevealed,
       },
     });
 
@@ -1577,7 +1579,9 @@ export class StateFactory {
         content: empathyDraftB.content,
         status: 'VALIDATED',
         sharedAt: timestamps.userBEmpathyShared,
-        validatedAt: timestamps.userAValidated,
+        revealedAt: timestamps.userBEmpathyRevealed,
+        deliveryStatus: 'DELIVERED',
+        deliveredAt: timestamps.userBEmpathyRevealed,
       },
     });
 
