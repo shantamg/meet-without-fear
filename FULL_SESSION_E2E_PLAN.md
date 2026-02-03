@@ -142,7 +142,7 @@ When User B confirms feel-heard (completes Stage 1):
 
 ```mermaid
 flowchart TD
-    Input[User A's empathy (HELD)<br/>+ User B's Stage 1 content]
+    Input["User A's empathy (HELD) + User B's Stage 1 content"]
     Input --> Reconciler[RECONCILER RUNS]
     
     Reconciler -->|No gaps| PROCEED[PROCEED]
@@ -152,7 +152,7 @@ flowchart TD
     PROCEED -->|Status → READY| Wait1[Wait for mutual reveal]
     OFFER_OPT -->|Normal Stage 2| Normal[User B continues]
     
-    OFFER_SHARE -->|Share suggestion<br/>shown to User B| Share[User B shares context]
+    OFFER_SHARE -->|Share suggestion shown to User B| Share[User B shares context]
     Share --> Refining[Status → REFINING]
     Refining -->|User A refines| ReReconciler[Re-reconciler]
     ReReconciler --> Ready[Status → READY]
