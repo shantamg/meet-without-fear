@@ -31,6 +31,15 @@ export enum TargetStage {
 
   /** Both users active: User B has felt heard, received share suggestion, and shared context */
   CONTEXT_SHARED_B = 'CONTEXT_SHARED_B',
+
+  /** Both users active: Both have shared empathy and validated each other's empathy (empathy reveal complete) */
+  EMPATHY_REVEALED = 'EMPATHY_REVEALED',
+
+  /** Stage 3: Both users have identified needs and confirmed common ground */
+  NEED_MAPPING_COMPLETE = 'NEED_MAPPING_COMPLETE',
+
+  /** Stage 4: Strategies collected, ranked, and agreement created */
+  STRATEGIC_REPAIR_COMPLETE = 'STRATEGIC_REPAIR_COMPLETE',
 }
 
 export interface UserConfig {
@@ -234,6 +243,15 @@ export class StateFactory {
       } else if (targetStage === TargetStage.CONTEXT_SHARED_B && userBRecord) {
         // Create full state for both users, with User B having shared context
         await this.createContextSharedState(tx, session.id, userARecord.id, userBRecord.id, userA.name, userB!.name);
+      } else if (targetStage === TargetStage.EMPATHY_REVEALED && userBRecord) {
+        // Both users have shared and validated empathy - ready for Stage 3
+        await this.createEmpathyRevealedState(tx, session.id, userARecord.id, userBRecord.id, userA.name, userB!.name);
+      } else if (targetStage === TargetStage.NEED_MAPPING_COMPLETE && userBRecord) {
+        // Stage 3 complete - needs identified and common ground confirmed
+        await this.createNeedMappingCompleteState(tx, session.id, userARecord.id, userBRecord.id, userA.name, userB!.name);
+      } else if (targetStage === TargetStage.STRATEGIC_REPAIR_COMPLETE && userBRecord) {
+        // Stage 4 complete - strategies ranked and agreement created
+        await this.createStrategicRepairCompleteState(tx, session.id, userARecord.id, userBRecord.id, userA.name, userB!.name);
       }
 
       // Build result
@@ -1308,6 +1326,947 @@ export class StateFactory {
         content: `You shared this to help ${userAName} understand. They'll see it soon.`,
         stage: 2,
         timestamp: new Date(timestamps.contextShared.getTime() + 1),
+      },
+    });
+  }
+
+  /**
+   * Create the full state for EMPATHY_REVEALED stage.
+   * Both users are active and have:
+   * - Completed Stage 0 (signed compact)
+   * - Completed Stage 1 (felt heard)
+   * - Shared empathy with each other
+   * - Validated each other's empathy as accurate
+   * - Now in Stage 2 COMPLETED, ready for Stage 3
+   *
+   * This stage is ideal for testing the Stage 3 (Need Mapping) flow.
+   */
+  private async createEmpathyRevealedState(
+    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+    sessionId: string,
+    userAId: string,
+    userBId: string,
+    userAName: string,
+    userBName: string
+  ): Promise<void> {
+    const now = new Date();
+    const baseTime = now.getTime();
+
+    // Timeline (working backwards from now):
+    // - now: Both users validated empathy, Stage 2 COMPLETE
+    // - -10s: User B validated User A's empathy
+    // - -20s: User A validated User B's empathy
+    // - -30s: User B shared empathy
+    // - -60s: User A shared empathy
+    // - -90s: Both users completed Stage 1
+
+    const timestamps = {
+      userAStage0Completed: new Date(baseTime - 180000),
+      userAStage1Completed: new Date(baseTime - 150000),
+      userAEmpathyShared: new Date(baseTime - 120000),
+      userBEmpathyShared: new Date(baseTime - 90000),
+      userAValidated: new Date(baseTime - 60000),
+      userBValidated: new Date(baseTime - 30000),
+      stage2Completed: now,
+    };
+
+    // ========================================
+    // USER A STATE
+    // ========================================
+
+    // Stage 0 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 0,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 200000),
+        completedAt: timestamps.userAStage0Completed,
+        gatesSatisfied: {
+          compactSigned: true,
+          compactSignedAt: timestamps.userAStage0Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 1 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 1,
+        status: 'COMPLETED',
+        startedAt: timestamps.userAStage0Completed,
+        completedAt: timestamps.userAStage1Completed,
+        gatesSatisfied: {
+          feelHeardConfirmed: true,
+          feelHeardConfirmedAt: timestamps.userAStage1Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 2 - COMPLETED (empathy exchanged and validated)
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 2,
+        status: 'COMPLETED',
+        startedAt: timestamps.userAStage1Completed,
+        completedAt: timestamps.stage2Completed,
+        gatesSatisfied: {
+          empathyExchanged: true,
+          empathyExchangedAt: timestamps.stage2Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 3 - IN_PROGRESS (Need Mapping)
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 3,
+        status: 'IN_PROGRESS',
+        startedAt: timestamps.stage2Completed,
+        gatesSatisfied: {},
+      },
+    });
+
+    // User A's empathy draft and attempt
+    const empathyDraftA = await tx.empathyDraft.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        content: `I understand you're feeling overwhelmed with work and home responsibilities. You need to feel seen and appreciated for all your efforts.`,
+        readyToShare: true,
+      },
+    });
+
+    await tx.empathyAttempt.create({
+      data: {
+        sessionId,
+        draftId: empathyDraftA.id,
+        sourceUserId: userAId,
+        content: empathyDraftA.content,
+        status: 'VALIDATED',
+        sharedAt: timestamps.userAEmpathyShared,
+        validatedAt: timestamps.userBValidated,
+      },
+    });
+
+    // User A's consent record
+    await tx.consentRecord.create({
+      data: {
+        userId: userAId,
+        sessionId,
+        targetType: 'EMPATHY_DRAFT',
+        targetId: empathyDraftA.id,
+        requestedByUserId: userAId,
+        decision: 'GRANTED',
+        decidedAt: timestamps.userAEmpathyShared,
+      },
+    });
+
+    // User A's EMPATHY_STATEMENT message
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: userAId,
+        forUserId: userAId,
+        role: 'EMPATHY_STATEMENT',
+        content: empathyDraftA.content,
+        stage: 2,
+        timestamp: timestamps.userAEmpathyShared,
+      },
+    });
+
+    // Validation message from User B's perspective
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: userBId,
+        forUserId: userAId,
+        role: 'EMPATHY_VALIDATION',
+        content: 'VALIDATED',
+        stage: 2,
+        timestamp: timestamps.userBValidated,
+      },
+    });
+
+    // ========================================
+    // USER B STATE
+    // ========================================
+
+    // Stage 0 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 0,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 200000),
+        completedAt: timestamps.userAStage0Completed,
+        gatesSatisfied: {
+          compactSigned: true,
+          compactSignedAt: timestamps.userAStage0Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 1 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 1,
+        status: 'COMPLETED',
+        startedAt: timestamps.userAStage0Completed,
+        completedAt: timestamps.userAStage1Completed,
+        gatesSatisfied: {
+          feelHeardConfirmed: true,
+          feelHeardConfirmedAt: timestamps.userAStage1Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 2 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 2,
+        status: 'COMPLETED',
+        startedAt: timestamps.userAStage1Completed,
+        completedAt: timestamps.stage2Completed,
+        gatesSatisfied: {
+          empathyExchanged: true,
+          empathyExchangedAt: timestamps.stage2Completed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 3 - IN_PROGRESS
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 3,
+        status: 'IN_PROGRESS',
+        startedAt: timestamps.stage2Completed,
+        gatesSatisfied: {},
+      },
+    });
+
+    // User B's empathy draft and attempt
+    const empathyDraftB = await tx.empathyDraft.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        content: `I hear that you're frustrated about household chores and feeling like you carry more of the burden. You want appreciation and partnership.`,
+        readyToShare: true,
+      },
+    });
+
+    await tx.empathyAttempt.create({
+      data: {
+        sessionId,
+        draftId: empathyDraftB.id,
+        sourceUserId: userBId,
+        content: empathyDraftB.content,
+        status: 'VALIDATED',
+        sharedAt: timestamps.userBEmpathyShared,
+        validatedAt: timestamps.userAValidated,
+      },
+    });
+
+    // User B's consent record
+    await tx.consentRecord.create({
+      data: {
+        userId: userBId,
+        sessionId,
+        targetType: 'EMPATHY_DRAFT',
+        targetId: empathyDraftB.id,
+        requestedByUserId: userBId,
+        decision: 'GRANTED',
+        decidedAt: timestamps.userBEmpathyShared,
+      },
+    });
+
+    // User B's EMPATHY_STATEMENT message
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: userBId,
+        forUserId: userBId,
+        role: 'EMPATHY_STATEMENT',
+        content: empathyDraftB.content,
+        stage: 2,
+        timestamp: timestamps.userBEmpathyShared,
+      },
+    });
+
+    // Validation message from User A's perspective
+    await tx.message.create({
+      data: {
+        sessionId,
+        senderId: userAId,
+        forUserId: userBId,
+        role: 'EMPATHY_VALIDATION',
+        content: 'VALIDATED',
+        stage: 2,
+        timestamp: timestamps.userAValidated,
+      },
+    });
+  }
+
+  /**
+   * Create the full state for NEED_MAPPING_COMPLETE stage.
+   * Both users have:
+   * - Completed Stage 2 (empathy exchanged and validated)
+   * - Identified their needs in Stage 3
+   * - Confirmed common ground
+   * - Now in Stage 4 IN_PROGRESS (Strategic Repair)
+   *
+   * This stage is ideal for testing the Stage 4 (Strategic Repair) flow.
+   */
+  private async createNeedMappingCompleteState(
+    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+    sessionId: string,
+    userAId: string,
+    userBId: string,
+    userAName: string,
+    userBName: string
+  ): Promise<void> {
+    const now = new Date();
+    const baseTime = now.getTime();
+
+    // Timeline
+    const timestamps = {
+      userAStage0Completed: new Date(baseTime - 300000),
+      userAStage1Completed: new Date(baseTime - 240000),
+      userAEmpathyShared: new Date(baseTime - 180000),
+      userBEmpathyShared: new Date(baseTime - 150000),
+      empathyValidated: new Date(baseTime - 120000),
+      needsIdentified: new Date(baseTime - 60000),
+      commonGroundConfirmed: new Date(baseTime - 30000),
+      stage3Completed: now,
+    };
+
+    // ========================================
+    // USER A STATE - Stages 0-3 COMPLETED, Stage 4 IN_PROGRESS
+    // ========================================
+
+    // Stage 0 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 0,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 350000),
+        completedAt: timestamps.userAStage0Completed,
+        gatesSatisfied: { compactSigned: true },
+      },
+    });
+
+    // Stage 1 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 1,
+        status: 'COMPLETED',
+        startedAt: timestamps.userAStage0Completed,
+        completedAt: timestamps.userAStage1Completed,
+        gatesSatisfied: { feelHeardConfirmed: true },
+      },
+    });
+
+    // Stage 2 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 2,
+        status: 'COMPLETED',
+        startedAt: timestamps.userAStage1Completed,
+        completedAt: timestamps.empathyValidated,
+        gatesSatisfied: { empathyExchanged: true },
+      },
+    });
+
+    // Stage 3 - COMPLETED (Need Mapping)
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 3,
+        status: 'COMPLETED',
+        startedAt: timestamps.empathyValidated,
+        completedAt: timestamps.stage3Completed,
+        gatesSatisfied: {
+          needsIdentified: true,
+          needsIdentifiedAt: timestamps.needsIdentified.toISOString(),
+          commonGroundConfirmed: true,
+          commonGroundConfirmedAt: timestamps.commonGroundConfirmed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 4 - IN_PROGRESS (Strategic Repair)
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 4,
+        status: 'IN_PROGRESS',
+        startedAt: timestamps.stage3Completed,
+        gatesSatisfied: {},
+      },
+    });
+
+    // User A's empathy attempt
+    const empathyDraftA = await tx.empathyDraft.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        content: `I understand you're feeling overwhelmed with work and home responsibilities.`,
+        readyToShare: true,
+      },
+    });
+
+    await tx.empathyAttempt.create({
+      data: {
+        sessionId,
+        draftId: empathyDraftA.id,
+        sourceUserId: userAId,
+        content: empathyDraftA.content,
+        status: 'VALIDATED',
+        sharedAt: timestamps.userAEmpathyShared,
+        validatedAt: timestamps.empathyValidated,
+      },
+    });
+
+    // User A's needs
+    await tx.need.createMany({
+      data: [
+        {
+          sessionId,
+          userId: userAId,
+          need: 'Appreciation',
+          description: 'I need to feel appreciated for the work I do around the house',
+          identifiedAt: timestamps.needsIdentified,
+        },
+        {
+          sessionId,
+          userId: userAId,
+          need: 'Partnership',
+          description: 'I need us to share responsibilities more equally',
+          identifiedAt: timestamps.needsIdentified,
+        },
+      ],
+    });
+
+    // ========================================
+    // USER B STATE - Stages 0-3 COMPLETED, Stage 4 IN_PROGRESS
+    // ========================================
+
+    // Stage 0 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 0,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 350000),
+        completedAt: timestamps.userAStage0Completed,
+        gatesSatisfied: { compactSigned: true },
+      },
+    });
+
+    // Stage 1 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 1,
+        status: 'COMPLETED',
+        startedAt: timestamps.userAStage0Completed,
+        completedAt: timestamps.userAStage1Completed,
+        gatesSatisfied: { feelHeardConfirmed: true },
+      },
+    });
+
+    // Stage 2 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 2,
+        status: 'COMPLETED',
+        startedAt: timestamps.userAStage1Completed,
+        completedAt: timestamps.empathyValidated,
+        gatesSatisfied: { empathyExchanged: true },
+      },
+    });
+
+    // Stage 3 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 3,
+        status: 'COMPLETED',
+        startedAt: timestamps.empathyValidated,
+        completedAt: timestamps.stage3Completed,
+        gatesSatisfied: {
+          needsIdentified: true,
+          needsIdentifiedAt: timestamps.needsIdentified.toISOString(),
+          commonGroundConfirmed: true,
+          commonGroundConfirmedAt: timestamps.commonGroundConfirmed.toISOString(),
+        },
+      },
+    });
+
+    // Stage 4 - IN_PROGRESS
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 4,
+        status: 'IN_PROGRESS',
+        startedAt: timestamps.stage3Completed,
+        gatesSatisfied: {},
+      },
+    });
+
+    // User B's empathy attempt
+    const empathyDraftB = await tx.empathyDraft.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        content: `I hear that you're frustrated about household chores and feeling like you carry more of the burden.`,
+        readyToShare: true,
+      },
+    });
+
+    await tx.empathyAttempt.create({
+      data: {
+        sessionId,
+        draftId: empathyDraftB.id,
+        sourceUserId: userBId,
+        content: empathyDraftB.content,
+        status: 'VALIDATED',
+        sharedAt: timestamps.userBEmpathyShared,
+        validatedAt: timestamps.empathyValidated,
+      },
+    });
+
+    // User B's needs
+    await tx.need.createMany({
+      data: [
+        {
+          sessionId,
+          userId: userBId,
+          need: 'Understanding',
+          description: 'I need you to understand how exhausted I am after work',
+          identifiedAt: timestamps.needsIdentified,
+        },
+        {
+          sessionId,
+          userId: userBId,
+          need: 'Support',
+          description: 'I need emotional support when I come home tired',
+          identifiedAt: timestamps.needsIdentified,
+        },
+      ],
+    });
+
+    // ========================================
+    // COMMON GROUND
+    // ========================================
+
+    // Create common ground entries (shared needs)
+    await tx.commonGround.createMany({
+      data: [
+        {
+          sessionId,
+          need: 'Mutual Recognition',
+          description: 'Both of us want to feel seen and valued by each other',
+          createdAt: timestamps.commonGroundConfirmed,
+        },
+        {
+          sessionId,
+          need: 'Collaborative Partnership',
+          description: 'We both want to work together as a team',
+          createdAt: timestamps.commonGroundConfirmed,
+        },
+      ],
+    });
+
+    // Common ground confirmation records
+    await tx.commonGroundConfirmation.createMany({
+      data: [
+        {
+          sessionId,
+          userId: userAId,
+          confirmedAt: timestamps.commonGroundConfirmed,
+        },
+        {
+          sessionId,
+          userId: userBId,
+          confirmedAt: timestamps.commonGroundConfirmed,
+        },
+      ],
+    });
+  }
+
+  /**
+   * Create the full state for STRATEGIC_REPAIR_COMPLETE stage.
+   * Both users have:
+   * - Completed Stage 3 (need mapping)
+   * - Collected strategies
+   * - Ranked strategies
+   * - Created an agreement
+   * - Now in Stage 4 COMPLETED
+   *
+   * This stage represents a fully completed session.
+   */
+  private async createStrategicRepairCompleteState(
+    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+    sessionId: string,
+    userAId: string,
+    userBId: string,
+    userAName: string,
+    userBName: string
+  ): Promise<void> {
+    const now = new Date();
+    const baseTime = now.getTime();
+
+    // Timeline
+    const timestamps = {
+      empathyValidated: new Date(baseTime - 300000),
+      needsIdentified: new Date(baseTime - 240000),
+      commonGroundConfirmed: new Date(baseTime - 180000),
+      stage3Completed: new Date(baseTime - 150000),
+      strategiesCollected: new Date(baseTime - 120000),
+      strategiesRanked: new Date(baseTime - 90000),
+      overlapRevealed: new Date(baseTime - 60000),
+      agreementCreated: new Date(baseTime - 30000),
+      agreementConfirmed: now,
+    };
+
+    // ========================================
+    // USER A STATE - All stages COMPLETED
+    // ========================================
+
+    // Stage 0 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 0,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 400000),
+        completedAt: new Date(baseTime - 350000),
+        gatesSatisfied: { compactSigned: true },
+      },
+    });
+
+    // Stage 1 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 1,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 350000),
+        completedAt: new Date(baseTime - 320000),
+        gatesSatisfied: { feelHeardConfirmed: true },
+      },
+    });
+
+    // Stage 2 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 2,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 320000),
+        completedAt: timestamps.empathyValidated,
+        gatesSatisfied: { empathyExchanged: true },
+      },
+    });
+
+    // Stage 3 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 3,
+        status: 'COMPLETED',
+        startedAt: timestamps.empathyValidated,
+        completedAt: timestamps.stage3Completed,
+        gatesSatisfied: {
+          needsIdentified: true,
+          commonGroundConfirmed: true,
+        },
+      },
+    });
+
+    // Stage 4 - COMPLETED (Strategic Repair)
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        stage: 4,
+        status: 'COMPLETED',
+        startedAt: timestamps.stage3Completed,
+        completedAt: timestamps.agreementConfirmed,
+        gatesSatisfied: {
+          strategiesRanked: true,
+          agreementCreated: true,
+          agreementConfirmed: true,
+        },
+      },
+    });
+
+    // ========================================
+    // USER B STATE - All stages COMPLETED
+    // ========================================
+
+    // Stage 0 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 0,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 400000),
+        completedAt: new Date(baseTime - 350000),
+        gatesSatisfied: { compactSigned: true },
+      },
+    });
+
+    // Stage 1 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 1,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 350000),
+        completedAt: new Date(baseTime - 320000),
+        gatesSatisfied: { feelHeardConfirmed: true },
+      },
+    });
+
+    // Stage 2 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 2,
+        status: 'COMPLETED',
+        startedAt: new Date(baseTime - 320000),
+        completedAt: timestamps.empathyValidated,
+        gatesSatisfied: { empathyExchanged: true },
+      },
+    });
+
+    // Stage 3 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 3,
+        status: 'COMPLETED',
+        startedAt: timestamps.empathyValidated,
+        completedAt: timestamps.stage3Completed,
+        gatesSatisfied: {
+          needsIdentified: true,
+          commonGroundConfirmed: true,
+        },
+      },
+    });
+
+    // Stage 4 - COMPLETED
+    await tx.stageProgress.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        stage: 4,
+        status: 'COMPLETED',
+        startedAt: timestamps.stage3Completed,
+        completedAt: timestamps.agreementConfirmed,
+        gatesSatisfied: {
+          strategiesRanked: true,
+          agreementCreated: true,
+          agreementConfirmed: true,
+        },
+      },
+    });
+
+    // ========================================
+    // SHARED DATA: Needs, Common Ground, Strategies, Agreement
+    // ========================================
+
+    // Needs for both users
+    await tx.need.createMany({
+      data: [
+        {
+          sessionId,
+          userId: userAId,
+          need: 'Appreciation',
+          description: 'I need to feel appreciated for the work I do around the house',
+          identifiedAt: timestamps.needsIdentified,
+        },
+        {
+          sessionId,
+          userId: userAId,
+          need: 'Partnership',
+          description: 'I need us to share responsibilities more equally',
+          identifiedAt: timestamps.needsIdentified,
+        },
+        {
+          sessionId,
+          userId: userBId,
+          need: 'Understanding',
+          description: 'I need you to understand how exhausted I am after work',
+          identifiedAt: timestamps.needsIdentified,
+        },
+        {
+          sessionId,
+          userId: userBId,
+          need: 'Support',
+          description: 'I need emotional support when I come home tired',
+          identifiedAt: timestamps.needsIdentified,
+        },
+      ],
+    });
+
+    // Common ground
+    await tx.commonGround.createMany({
+      data: [
+        {
+          sessionId,
+          need: 'Mutual Recognition',
+          description: 'Both of us want to feel seen and valued by each other',
+          createdAt: timestamps.commonGroundConfirmed,
+        },
+        {
+          sessionId,
+          need: 'Collaborative Partnership',
+          description: 'We both want to work together as a team',
+          createdAt: timestamps.commonGroundConfirmed,
+        },
+      ],
+    });
+
+    await tx.commonGroundConfirmation.createMany({
+      data: [
+        {
+          sessionId,
+          userId: userAId,
+          confirmedAt: timestamps.commonGroundConfirmed,
+        },
+        {
+          sessionId,
+          userId: userBId,
+          confirmedAt: timestamps.commonGroundConfirmed,
+        },
+      ],
+    });
+
+    // Strategies
+    const strategy1 = await tx.strategy.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        description: 'Weekly check-in on Sundays to discuss upcoming week and divide tasks',
+        duration: 'ongoing',
+        createdAt: timestamps.strategiesCollected,
+      },
+    });
+
+    const strategy2 = await tx.strategy.create({
+      data: {
+        sessionId,
+        userId: userBId,
+        description: 'Express appreciation for at least one thing your partner did each day',
+        duration: 'ongoing',
+        createdAt: timestamps.strategiesCollected,
+      },
+    });
+
+    const strategy3 = await tx.strategy.create({
+      data: {
+        sessionId,
+        userId: userAId,
+        description: 'Take 10 minutes to decompress when arriving home before discussing responsibilities',
+        duration: 'ongoing',
+        createdAt: timestamps.strategiesCollected,
+      },
+    });
+
+    // Strategy rankings (both users ranked the same strategies)
+    await tx.strategyRanking.createMany({
+      data: [
+        {
+          strategyId: strategy1.id,
+          userId: userAId,
+          rank: 1,
+          createdAt: timestamps.strategiesRanked,
+        },
+        {
+          strategyId: strategy2.id,
+          userId: userAId,
+          rank: 2,
+          createdAt: timestamps.strategiesRanked,
+        },
+        {
+          strategyId: strategy3.id,
+          userId: userAId,
+          rank: 3,
+          createdAt: timestamps.strategiesRanked,
+        },
+        {
+          strategyId: strategy1.id,
+          userId: userBId,
+          rank: 2,
+          createdAt: timestamps.strategiesRanked,
+        },
+        {
+          strategyId: strategy2.id,
+          userId: userBId,
+          rank: 1,
+          createdAt: timestamps.strategiesRanked,
+        },
+        {
+          strategyId: strategy3.id,
+          userId: userBId,
+          rank: 3,
+          createdAt: timestamps.strategiesRanked,
+        },
+      ],
+    });
+
+    // Agreement
+    await tx.agreement.create({
+      data: {
+        sessionId,
+        createdById: userAId,
+        description: 'Weekly check-in on Sundays to discuss upcoming week and divide tasks',
+        duration: 'We will try this for 2 weeks',
+        measureOfSuccess: 'Both of us feel less stressed about household responsibilities',
+        followUpDate: new Date(baseTime + 14 * 24 * 60 * 60 * 1000), // 2 weeks from now
+        status: 'CONFIRMED',
+        createdAt: timestamps.agreementCreated,
+        confirmedByUserAAt: timestamps.agreementConfirmed,
+        confirmedByUserBAt: timestamps.agreementConfirmed,
       },
     });
   }

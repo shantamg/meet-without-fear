@@ -85,6 +85,16 @@ export interface SessionIndicatorData {
   milestones?: {
     /** When user confirmed they feel heard (Stage 1 completion) */
     feelHeardConfirmedAt?: string | null;
+    /** When needs were identified (Stage 3) */
+    needsIdentifiedAt?: string | null;
+    /** When common ground was found (Stage 3) */
+    commonGroundFoundAt?: string | null;
+    /** When strategies were ready (Stage 4) */
+    strategiesReadyAt?: string | null;
+    /** When overlap was revealed (Stage 4) */
+    overlapRevealedAt?: string | null;
+    /** When agreement was reached (Stage 4) */
+    agreementReachedAt?: string | null;
   };
 
   /** Session creation timestamp (fallback for compact indicator) */
@@ -171,6 +181,62 @@ export function deriveIndicators(data: SessionIndicatorData): IndicatorItem[] {
       indicatorType: 'feel-heard',
       id: 'feel-heard',
       timestamp: milestones.feelHeardConfirmedAt,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Stage 3: Need Mapping Indicators
+  // ---------------------------------------------------------------------------
+  // Shows when needs have been identified
+  if (milestones?.needsIdentifiedAt) {
+    items.push({
+      type: 'indicator',
+      indicatorType: 'needs-identified',
+      id: 'needs-identified',
+      timestamp: milestones.needsIdentifiedAt,
+    });
+  }
+
+  // Shows when common ground has been found
+  if (milestones?.commonGroundFoundAt) {
+    items.push({
+      type: 'indicator',
+      indicatorType: 'common-ground-found',
+      id: 'common-ground-found',
+      timestamp: milestones.commonGroundFoundAt,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Stage 4: Strategic Repair Indicators
+  // ---------------------------------------------------------------------------
+  // Shows when strategies are ready for ranking
+  if (milestones?.strategiesReadyAt) {
+    items.push({
+      type: 'indicator',
+      indicatorType: 'strategies-ready',
+      id: 'strategies-ready',
+      timestamp: milestones.strategiesReadyAt,
+    });
+  }
+
+  // Shows when overlap has been revealed
+  if (milestones?.overlapRevealedAt) {
+    items.push({
+      type: 'indicator',
+      indicatorType: 'overlap-revealed',
+      id: 'overlap-revealed',
+      timestamp: milestones.overlapRevealedAt,
+    });
+  }
+
+  // Shows when agreement has been reached
+  if (milestones?.agreementReachedAt) {
+    items.push({
+      type: 'indicator',
+      indicatorType: 'agreement-reached',
+      id: 'agreement-reached',
+      timestamp: milestones.agreementReachedAt,
     });
   }
 

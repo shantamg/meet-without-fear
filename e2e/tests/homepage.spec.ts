@@ -7,6 +7,27 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Homepage', () => {
+  test.beforeEach(async ({ page }) => {
+    // Set E2E auth headers for fixture initialization
+    await page.setExtraHTTPHeaders({
+      'x-e2e-user-id': 'test-user-123',
+      'x-e2e-user-email': 'test@example.com',
+      'X-E2E-Fixture-ID': process.env.E2E_FIXTURE_ID || 'user-a-full-journey',
+    });
+
+    // Seed user via E2E API endpoint
+    const seedResponse = await page.request.get('/api/e2e/seed', {
+      headers: {
+        'x-e2e-user-id': 'test-user-123',
+        'x-e2e-user-email': 'test@example.com',
+      },
+    });
+    
+    if (!seedResponse.ok()) {
+      console.warn('E2E seed endpoint not available, continuing anyway');
+    }
+  });
+
   test('loads and shows actual app content (not just loading)', async ({ page }) => {
     // Capture console for debugging
     const consoleLogs: string[] = [];
@@ -34,7 +55,23 @@ test.describe('Homepage', () => {
       throw new Error('App stuck on loading screen');
     }
 
-    // Take screenshot after loading complete
+    // Wait for actual text content to render (not just be in DOM)
+    // The "Hi there" greeting should be visible after loading
+    try {
+      await page.getByText(/^Hi\s/i).first().waitFor({ timeout: 5000 });
+    } catch {
+      console.warn('Greeting text not found, waiting for alternative content...');
+      // Fallback: wait for any substantive text content
+      await page.waitForFunction(
+        () => {
+          const text = document.body.innerText;
+          return text.length > 100; // More than just labels
+        },
+        { timeout: 5000 }
+      );
+    }
+
+    // Take screenshot after loading complete AND text is visible
     await page.screenshot({ path: 'test-results/homepage-loaded.png' });
 
     // Now check for actual content

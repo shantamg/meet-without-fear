@@ -10,7 +10,7 @@ const webServers = (fixtureId: string) => [
   {
     command: 'npm run dev:api',
     url: 'http://localhost:3002/health',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     cwd: '..',
     timeout: 60000,
     env: {
@@ -23,14 +23,14 @@ const webServers = (fixtureId: string) => [
   {
     command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3002 npx expo start --web --port 8082',
     url: 'http://localhost:8082',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
+    reuseExistingServer: false,
+    timeout: 180000,
   },
 ];
 
 export default defineConfig({
   testDir: './tests',
-  timeout: 60000,
+  timeout: 120000,
   expect: {
     timeout: 10000, // 10s for Ably events
   },
@@ -41,13 +41,10 @@ export default defineConfig({
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
     baseURL: 'http://localhost:8082',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    screenshot: 'on',
+    video: 'on',
     viewport: { width: 375, height: 667 },
-    trace: 'on-first-retry',
-    launchOptions: {
-      args: ['--window-size=375,667'],
-    },
+    trace: 'on',
   },
   // Projects for different test scenarios
   projects: [
@@ -108,12 +105,19 @@ export default defineConfig({
         baseURL: 'http://localhost:8082',
       },
     },
+    {
+      name: 'reconciler-no-gaps-screenshot',
+      testMatch: /stage-2-empathy\/reconciler\/no-gaps-screenshot\.spec\.ts/,
+      use: {
+        baseURL: 'http://localhost:8082',
+      },
+    },
   ],
   // Web server configuration
   // Each test specifies its fixture via the X-E2E-Fixture-ID header.
   // The default fixture is used for tests that don't specify one.
   webServer: webServers(process.env.E2E_FIXTURE_ID || 'user-a-full-journey'),
-  // Global setup disabled - run migrations manually before tests if needed
-  // globalSetup: require.resolve('./global-setup'),
+  // Global setup: Clean database and run migrations before tests
+  globalSetup: require.resolve('./global-setup'),
   outputDir: 'test-results/',
 });

@@ -11,7 +11,15 @@ import type { APIRequestContext } from '@playwright/test';
 // Types
 // ============================================================================
 
-export type TargetStage = 'CREATED' | 'EMPATHY_SHARED_A' | 'FEEL_HEARD_B' | 'RECONCILER_SHOWN_B' | 'CONTEXT_SHARED_B';
+export type TargetStage = 
+  | 'CREATED' 
+  | 'EMPATHY_SHARED_A' 
+  | 'FEEL_HEARD_B' 
+  | 'RECONCILER_SHOWN_B' 
+  | 'CONTEXT_SHARED_B'
+  | 'EMPATHY_REVEALED'
+  | 'NEED_MAPPING_COMPLETE'
+  | 'STRATEGIC_REPAIR_COMPLETE';
 
 export interface UserConfig {
   email: string;
@@ -119,6 +127,9 @@ export class SessionBuilder {
    * - FEEL_HEARD_B: User B has felt heard, reconciler ready to run
    * - RECONCILER_SHOWN_B: User B has felt heard, reconciler has run with gaps, share offer OFFERED (ready for modal UI tests)
    * - CONTEXT_SHARED_B: User B has shared context with User A
+   * - EMPATHY_REVEALED: Both users have shared and validated empathy (Stage 2 complete)
+   * - NEED_MAPPING_COMPLETE: Stage 3 complete, needs identified and common ground confirmed
+   * - STRATEGIC_REPAIR_COMPLETE: Stage 4 complete, strategies ranked and agreement created
    */
   startingAt(stage: TargetStage): this {
     this._targetStage = stage;
