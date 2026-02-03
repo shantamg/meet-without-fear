@@ -115,7 +115,6 @@ export class StateFactory {
           email: userA.email,
           name: userA.name,
           clerkId: `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          lastMood: 'Calm',
           lastMoodIntensity: 7,
         },
       });
@@ -130,7 +129,6 @@ export class StateFactory {
             email: userB.email,
             name: userB.name,
             clerkId: `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            lastMood: 'Calm',
             lastMoodIntensity: 7,
           },
         });
