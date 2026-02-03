@@ -196,19 +196,161 @@ test.describe('Reconciler: No Gaps Detected → Proceed Directly', () => {
 
       console.log(`${elapsed()} User B can continue to Stage 2 without share suggestion blocking`);
 
-      // === VERIFY: Empathy status transitions correctly ===
+      // === VERIFY: User A empathy status is READY (not yet REVEALED because B hasn't shared empathy) ===
       const empathyStatusResponse = await request.get(`${API_BASE_URL}/api/sessions/${sessionId}/empathy/status`, {
         headers: getE2EHeaders(userA.email, userAId, FIXTURE_ID),
       });
       expect(empathyStatusResponse.ok()).toBe(true);
 
       const empathyStatus = await empathyStatusResponse.json();
-      const myStatus = empathyStatus.data?.myAttempt?.status;
-      console.log(`${elapsed()} User A empathy status: ${myStatus}`);
+      const userAStatus = empathyStatus.data?.myAttempt?.status;
+      console.log(`${elapsed()} User A empathy status after B's Stage 1: ${userAStatus}`);
 
-      // With no gaps, empathy should transition to REVEALED or READY
-      const validStatuses = ['REVEALED', 'READY'];
-      expect(validStatuses).toContain(myStatus);
+      // A's empathy should be READY (waiting for B to also share empathy for mutual reveal)
+      expect(userAStatus).toBe('READY');
+
+      // ========================================
+      // STAGE 2: User B writes empathy about User A
+      // ========================================
+      console.log(`${elapsed()} User B starting Stage 2: Writing empathy about User A...`);
+      const sendButton = userBPage.getByTestId('send-button');
+
+      // User B writes empathy about User A using fixture responses 4-6
+      await chatInput.fill('Yes, I feel understood');
+      await sendButton.click();
+      await waitForAIResponse(userBPage, /consider.*perspective|Shantam.*perspective/i);
+      console.log(`${elapsed()} User B transitioned to empathy building`);
+
+      await chatInput.fill('I think they might be feeling frustrated too');
+      await sendButton.click();
+      await waitForAIResponse(userBPage, /imagine what.*might be frustrating/i);
+
+      await chatInput.fill('Maybe they feel like I pull away when stressed and they want to connect');
+      await sendButton.click();
+      await waitForAIResponse(userBPage, /insightful observation/i);
+      console.log(`${elapsed()} User B received empathy draft suggestion`);
+
+      // Wait for empathy draft UI to appear (button appears after streaming completes)
+      await userBPage.waitForTimeout(3000);
+
+      // Click "Ready to Share" / "Review what you'll share" button to open empathy drawer
+      // Try both testID and text since web mode may render differently
+      let readyToShareButton = userBPage.getByTestId('ready-to-share-button');
+      let buttonVisible = await readyToShareButton.isVisible({ timeout: 5000 }).catch(() => false);
+
+      if (!buttonVisible) {
+        // Fallback to finding by text
+        readyToShareButton = userBPage.getByText(/Review what you.ll share/i);
+        buttonVisible = await readyToShareButton.isVisible({ timeout: 5000 }).catch(() => false);
+      }
+
+      if (!buttonVisible) {
+        // Take a screenshot for debugging
+        await userBPage.screenshot({ path: `test-results/debug-user-b-page-${Date.now()}.png` });
+        throw new Error('Ready to share button not found');
+      }
+
+      await readyToShareButton.click();
+      console.log(`${elapsed()} User B clicked ready to share`);
+
+      // Click share empathy button in the drawer
+      const shareEmpathyButton = userBPage.getByTestId('share-empathy-button');
+      await expect(shareEmpathyButton).toBeVisible({ timeout: 5000 });
+      await shareEmpathyButton.click();
+      console.log(`${elapsed()} User B consented to share empathy`);
+
+      // Wait for mutual reveal to happen (both empathy attempts now READY → REVEALED)
+      await userBPage.waitForTimeout(3000);
+
+      // ========================================
+      // VERIFY: Mutual Empathy Reveal
+      // ========================================
+      console.log(`${elapsed()} Verifying mutual empathy reveal...`);
+
+      // Check User A's empathy status - should now be REVEALED
+      const userAStatusResponse = await request.get(`${API_BASE_URL}/api/sessions/${sessionId}/empathy/status`, {
+        headers: getE2EHeaders(userA.email, userAId, FIXTURE_ID),
+      });
+      const userAStatusData = await userAStatusResponse.json();
+      const userAFinalStatus = userAStatusData.data?.myAttempt?.status;
+      const partnerAttemptForA = userAStatusData.data?.partnerAttempt;
+      console.log(`${elapsed()} User A empathy status: ${userAFinalStatus}, Partner empathy visible: ${!!partnerAttemptForA}`);
+
+      expect(userAFinalStatus).toBe('REVEALED');
+      expect(partnerAttemptForA).toBeTruthy();
+      expect(partnerAttemptForA?.status).toBe('REVEALED');
+
+      // Check User B's empathy status - should also be REVEALED
+      const userBStatusResponse = await request.get(`${API_BASE_URL}/api/sessions/${sessionId}/empathy/status`, {
+        headers: getE2EHeaders(userB.email, userBId, FIXTURE_ID),
+      });
+      const userBStatusData = await userBStatusResponse.json();
+      const userBFinalStatus = userBStatusData.data?.myAttempt?.status;
+      const partnerAttemptForB = userBStatusData.data?.partnerAttempt;
+      console.log(`${elapsed()} User B empathy status: ${userBFinalStatus}, Partner empathy visible: ${!!partnerAttemptForB}`);
+
+      expect(userBFinalStatus).toBe('REVEALED');
+      expect(partnerAttemptForB).toBeTruthy();
+      expect(partnerAttemptForB?.status).toBe('REVEALED');
+
+      // ========================================
+      // VERIFY: Navigate to Share screen and see partner's empathy
+      // ========================================
+      console.log(`${elapsed()} User B navigating to Share screen...`);
+
+      const userBParams = new URLSearchParams({
+        'e2e-user-id': userBId,
+        'e2e-user-email': userB.email,
+      });
+      await userBPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userBParams.toString()}`);
+      await userBPage.waitForLoadState('networkidle');
+      await userBPage.waitForTimeout(2000);
+
+      // Verify partner's empathy is visible on share screen
+      // Check for partner empathy card OR partner tab items (different UI variations)
+      const partnerEmpathyCard = userBPage.getByTestId('partner-empathy-card');
+      const hasPartnerEmpathyCard = await partnerEmpathyCard.isVisible({ timeout: 5000 }).catch(() => false);
+      const partnerTabItems = userBPage.locator('[data-testid*="partner-tab-item"]');
+      const partnerTabItemCount = await partnerTabItems.count();
+      console.log(`${elapsed()} User B - Partner empathy card: ${hasPartnerEmpathyCard}, tab items: ${partnerTabItemCount}`);
+
+      expect(hasPartnerEmpathyCard || partnerTabItemCount > 0).toBe(true);
+
+      // Verify the partner's empathy content is visible (User A's empathy about User B)
+      const empathyContent = userBPage.getByText(/stressed from work|support each other/i);
+      const hasEmpathyContent = await empathyContent.first().isVisible({ timeout: 5000 }).catch(() => false);
+      console.log(`${elapsed()} User B sees User A's empathy content: ${hasEmpathyContent}`);
+      expect(hasEmpathyContent).toBe(true);
+
+      // ========================================
+      // VERIFY: User A can also see User B's empathy
+      // ========================================
+      console.log(`${elapsed()} Verifying User A can see User B's empathy...`);
+
+      const userAParams = new URLSearchParams({
+        'e2e-user-id': userAId,
+        'e2e-user-email': userA.email,
+      });
+      await userAPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userAParams.toString()}`);
+      await userAPage.waitForLoadState('networkidle');
+      await userAPage.waitForTimeout(2000);
+
+      // Verify partner's empathy is visible for User A
+      const userAPartnerCard = userAPage.getByTestId('partner-empathy-card');
+      const userAHasPartnerCard = await userAPartnerCard.isVisible({ timeout: 5000 }).catch(() => false);
+      const userAPartnerItems = userAPage.locator('[data-testid*="partner-tab-item"]');
+      const userAPartnerItemCount = await userAPartnerItems.count();
+      console.log(`${elapsed()} User A - Partner empathy card: ${userAHasPartnerCard}, tab items: ${userAPartnerItemCount}`);
+
+      expect(userAHasPartnerCard || userAPartnerItemCount > 0).toBe(true);
+
+      // Verify User B's empathy content is visible to User A
+      const userBEmpathyContent = userAPage.getByText(/pull away|stay connected|pushing you away/i);
+      const hasUserBEmpathyContent = await userBEmpathyContent.first().isVisible({ timeout: 5000 }).catch(() => false);
+      console.log(`${elapsed()} User A sees User B's empathy content: ${hasUserBEmpathyContent}`);
+      expect(hasUserBEmpathyContent).toBe(true);
+
+      console.log(`${elapsed()} ✅ Mutual empathy reveal test complete!`);
     });
   });
 

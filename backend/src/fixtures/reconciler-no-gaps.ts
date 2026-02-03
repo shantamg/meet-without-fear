@@ -82,6 +82,67 @@ You're longing to reconnect - to get back to that sense of being a team. The car
 Before we continue, I want to check in with you: Do you feel like I understand what you've been going through?
 `,
     },
+
+    // ========================================
+    // STAGE 2: Empathy Building (User B writes empathy about User A)
+    // ========================================
+
+    // Response 4: Post-feel-heard, transition to empathy building
+    {
+      user: 'Yes, I feel understood',
+      ai: `<thinking>
+Mode: TRANSITION
+Intensity: 4
+FeelHeardCheck: N
+Strategy: Acknowledge and begin transitioning to empathy building
+</thinking>
+
+I'm glad you feel understood. That's an important foundation.
+
+Now that we've explored your experience, I'd like to help you consider Shantam's perspective too. This isn't about excusing anything - it's about understanding. Sometimes when we can see where someone else is coming from, it opens new possibilities.
+
+What do you think might be going on for Shantam?
+`,
+    },
+
+    // Response 5: Building empathy - first attempt
+    {
+      user: 'I think they might be feeling frustrated too',
+      ai: `<thinking>
+Mode: EMPATHY_BUILDING
+Intensity: 4
+FeelHeardCheck: N
+Strategy: Encourage deeper exploration of partner's perspective
+</thinking>
+
+That's a good starting point - recognizing that frustration might be going both ways.
+
+Can you imagine what specifically might be frustrating for Shantam? What might they be experiencing in this situation?
+`,
+    },
+
+    // Response 6: Deeper empathy building with ReadyShare: Y and draft
+    {
+      user: 'Maybe they feel like I pull away when stressed and they want to connect',
+      ai: `<thinking>
+Mode: EMPATHY_BUILDING
+Intensity: 5
+FeelHeardCheck: N
+ReadyShare: Y
+Strategy: Affirm empathy attempt and offer statement to share
+</thinking>
+
+That's a really insightful observation. You're seeing that Shantam might interpret your stress as distance, when really you're just overwhelmed. That awareness shows real empathy.
+
+I've put together a statement that captures what you've been working on understanding:
+
+<draft>
+I realize that when I get stressed and pull away, it might feel like I'm pushing you away. That's not my intention at all - I still care deeply, even when I'm overwhelmed. I want us to find ways to stay connected even during stressful times.
+</draft>
+
+Does this capture what you'd like to express to them?
+`,
+    },
   ],
 
   // Operation-specific mock responses for non-streaming AI calls
