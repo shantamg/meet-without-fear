@@ -294,20 +294,40 @@ test.describe('Reconciler: No Gaps Detected → Proceed Directly', () => {
       expect(partnerAttemptForB?.status).toBe('REVEALED');
 
       // ========================================
-      // VERIFY: Navigate to Share screen and see partner's empathy
+      // VERIFY: User B sees modal and navigates to Share screen via "Give Feedback"
       // ========================================
-      console.log(`${elapsed()} User B navigating to Share screen...`);
+      console.log(`${elapsed()} Checking for empathy reveal modal on User B...`);
 
-      const userBParams = new URLSearchParams({
-        'e2e-user-id': userBId,
-        'e2e-user-email': userB.email,
-      });
-      await userBPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userBParams.toString()}`);
-      await userBPage.waitForLoadState('networkidle');
+      // User B should see "Feedback Needed" modal since partner's empathy was revealed
+      const userBModal = userBPage.getByTestId('partner-event-modal');
+      const userBHasModal = await userBModal.isVisible({ timeout: 8000 }).catch(() => false);
+      console.log(`${elapsed()} User B sees empathy reveal modal: ${userBHasModal}`);
+
+      if (userBHasModal) {
+        // Click "Give Feedback" or "View" button to navigate to Share screen
+        const giveFeedbackButton = userBPage.getByTestId('partner-event-modal-view');
+        await expect(giveFeedbackButton).toBeVisible({ timeout: 3000 });
+        await giveFeedbackButton.click();
+        console.log(`${elapsed()} User B clicked "Give Feedback" button in modal`);
+      } else {
+        // Fallback: Use the "Share →" button in header to navigate
+        console.log(`${elapsed()} Modal not visible, using header Share button as fallback`);
+        const shareButton = userBPage.locator('[data-testid*="go-to-share"]');
+        const hasShareButton = await shareButton.first().isVisible({ timeout: 3000 }).catch(() => false);
+        if (hasShareButton) {
+          await shareButton.first().click();
+          console.log(`${elapsed()} User B clicked header Share button`);
+        } else {
+          // Last resort: click the text "Share"
+          const shareText = userBPage.getByText('Share').first();
+          await shareText.click();
+          console.log(`${elapsed()} User B clicked Share text`);
+        }
+      }
+
       await userBPage.waitForTimeout(2000);
 
-      // Verify partner's empathy is visible on share screen
-      // Check for partner empathy card OR partner tab items (different UI variations)
+      // Verify we're on the Share screen and partner's empathy is visible
       const partnerEmpathyCard = userBPage.getByTestId('partner-empathy-card');
       const hasPartnerEmpathyCard = await partnerEmpathyCard.isVisible({ timeout: 5000 }).catch(() => false);
       const partnerTabItems = userBPage.locator('[data-testid*="partner-tab-item"]');
@@ -323,16 +343,37 @@ test.describe('Reconciler: No Gaps Detected → Proceed Directly', () => {
       expect(hasEmpathyContent).toBe(true);
 
       // ========================================
-      // VERIFY: User A can also see User B's empathy
+      // VERIFY: User A sees modal and navigates to Share screen
       // ========================================
-      console.log(`${elapsed()} Verifying User A can see User B's empathy...`);
+      console.log(`${elapsed()} Checking for empathy reveal modal on User A...`);
 
-      const userAParams = new URLSearchParams({
-        'e2e-user-id': userAId,
-        'e2e-user-email': userA.email,
-      });
-      await userAPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userAParams.toString()}`);
-      await userAPage.waitForLoadState('networkidle');
+      // User A should also see "Feedback Needed" modal since their partner's empathy was revealed
+      const userAModal = userAPage.getByTestId('partner-event-modal');
+      const userAHasModal = await userAModal.isVisible({ timeout: 8000 }).catch(() => false);
+      console.log(`${elapsed()} User A sees empathy reveal modal: ${userAHasModal}`);
+
+      if (userAHasModal) {
+        // Click "Give Feedback" or "View" button to navigate to Share screen
+        const giveFeedbackButton = userAPage.getByTestId('partner-event-modal-view');
+        await expect(giveFeedbackButton).toBeVisible({ timeout: 3000 });
+        await giveFeedbackButton.click();
+        console.log(`${elapsed()} User A clicked "Give Feedback" button in modal`);
+      } else {
+        // Fallback: Use the "Share →" button in header to navigate
+        console.log(`${elapsed()} Modal not visible, using header Share button as fallback`);
+        const shareButton = userAPage.locator('[data-testid*="go-to-share"]');
+        const hasShareButton = await shareButton.first().isVisible({ timeout: 3000 }).catch(() => false);
+        if (hasShareButton) {
+          await shareButton.first().click();
+          console.log(`${elapsed()} User A clicked header Share button`);
+        } else {
+          // Last resort: click the text "Share"
+          const shareText = userAPage.getByText('Share').first();
+          await shareText.click();
+          console.log(`${elapsed()} User A clicked Share text`);
+        }
+      }
+
       await userAPage.waitForTimeout(2000);
 
       // Verify partner's empathy is visible for User A
