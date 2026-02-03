@@ -115,6 +115,8 @@ export class StateFactory {
           email: userA.email,
           name: userA.name,
           clerkId: `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          lastMood: 'Calm',
+          lastMoodIntensity: 7,
         },
       });
 
@@ -128,6 +130,8 @@ export class StateFactory {
             email: userB.email,
             name: userB.name,
             clerkId: `e2e_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            lastMood: 'Calm',
+            lastMoodIntensity: 7,
           },
         });
       }
@@ -141,7 +145,7 @@ export class StateFactory {
       ];
 
       // Add User B as member for stages where both users are active
-      if ((targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B) && userBRecord) {
+      if ((targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B || targetStage === TargetStage.EMPATHY_REVEALED || targetStage === TargetStage.NEED_MAPPING_COMPLETE || targetStage === TargetStage.STRATEGIC_REPAIR_COMPLETE) && userBRecord) {
         memberData.push({
           userId: userBRecord.id,
           nickname: userA.name, // What B calls A
@@ -209,7 +213,7 @@ export class StateFactory {
       });
 
       // 8b. Create UserVessel for User B (if both users are active)
-      if ((targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B) && userBRecord) {
+      if ((targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B || targetStage === TargetStage.EMPATHY_REVEALED || targetStage === TargetStage.NEED_MAPPING_COMPLETE || targetStage === TargetStage.STRATEGIC_REPAIR_COMPLETE) && userBRecord) {
         await tx.userVessel.create({
           data: {
             sessionId: session.id,
