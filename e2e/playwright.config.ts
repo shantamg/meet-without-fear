@@ -112,6 +112,14 @@ export default defineConfig({
         baseURL: 'http://localhost:8082',
       },
     },
+    // Stage 3-4: Complete flow test
+    {
+      name: 'stage-3-4-complete',
+      testMatch: /stage-3-4-complete\.spec\.ts/,
+      use: {
+        baseURL: 'http://localhost:8082',
+      },
+    },
   ],
   // Web server configuration
   // Each test specifies its fixture via the X-E2E-Fixture-ID header.
