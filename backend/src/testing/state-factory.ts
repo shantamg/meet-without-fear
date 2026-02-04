@@ -166,7 +166,14 @@ export class StateFactory {
         // Session is INVITED - waiting for User B to accept
         // Will become ACTIVE when User B accepts the invitation
         sessionStatus = 'INVITED';
-      } else if (targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B) {
+      } else if (
+        targetStage === TargetStage.FEEL_HEARD_B ||
+        targetStage === TargetStage.RECONCILER_SHOWN_B ||
+        targetStage === TargetStage.CONTEXT_SHARED_B ||
+        targetStage === TargetStage.EMPATHY_REVEALED ||
+        targetStage === TargetStage.NEED_MAPPING_COMPLETE ||
+        targetStage === TargetStage.STRATEGIC_REPAIR_COMPLETE
+      ) {
         // Both users have joined and are active
         sessionStatus = 'ACTIVE';
       }
@@ -181,7 +188,13 @@ export class StateFactory {
 
       // 6. Create invitation
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      const invitationAccepted = targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B;
+      const invitationAccepted =
+        targetStage === TargetStage.FEEL_HEARD_B ||
+        targetStage === TargetStage.RECONCILER_SHOWN_B ||
+        targetStage === TargetStage.CONTEXT_SHARED_B ||
+        targetStage === TargetStage.EMPATHY_REVEALED ||
+        targetStage === TargetStage.NEED_MAPPING_COMPLETE ||
+        targetStage === TargetStage.STRATEGIC_REPAIR_COMPLETE;
       const invitationStatus = invitationAccepted ? 'ACCEPTED' : 'PENDING';
       const invitation = await tx.invitation.create({
         data: {
@@ -1305,13 +1318,13 @@ export class StateFactory {
       },
     });
 
-    // EMPATHY_STATEMENT message for User B (showing what they shared in their own chat)
+    // SHARED_CONTEXT message for User B (showing what they shared in their own chat)
     await tx.message.create({
       data: {
         sessionId,
         senderId: userBId,
         forUserId: userBId,
-        role: 'EMPATHY_STATEMENT', // Reused for "what you shared" styling
+        role: 'SHARED_CONTEXT',
         content: sharedContent,
         stage: 2,
         timestamp: timestamps.contextShared,
@@ -1369,6 +1382,8 @@ export class StateFactory {
       userBEmpathyShared: new Date(baseTime - 90000),
       userAValidated: new Date(baseTime - 60000),
       userBValidated: new Date(baseTime - 30000),
+      userAEmpathyRevealed: new Date(baseTime - 50000), // When both empathies are READY → REVEALED
+      userBEmpathyRevealed: new Date(baseTime - 50000),
       stage2Completed: now,
     };
 
@@ -1660,6 +1675,18 @@ export class StateFactory {
       stage3Completed: now,
     };
 
+    const sharedVessel = await tx.sharedVessel.findUnique({ where: { sessionId } });
+    if (!sharedVessel) {
+      throw new Error(`Shared vessel not found for session ${sessionId}`);
+    }
+    const [userAVessel, userBVessel] = await Promise.all([
+      tx.userVessel.findUnique({ where: { userId_sessionId: { userId: userAId, sessionId } } }),
+      tx.userVessel.findUnique({ where: { userId_sessionId: { userId: userBId, sessionId } } }),
+    ]);
+    if (!userAVessel || !userBVessel) {
+      throw new Error(`User vessels not found for session ${sessionId}`);
+    }
+
     // ========================================
     // USER A STATE - Stages 0-3 COMPLETED, Stage 4 IN_PROGRESS
     // ========================================
@@ -1751,26 +1778,29 @@ export class StateFactory {
         content: empathyDraftA.content,
         status: 'VALIDATED',
         sharedAt: timestamps.userAEmpathyShared,
-        validatedAt: timestamps.empathyValidated,
       },
     });
 
     // User A's needs
-    await tx.need.createMany({
+    await tx.identifiedNeed.createMany({
       data: [
         {
-          sessionId,
-          userId: userAId,
+          vesselId: userAVessel.id,
           need: 'Appreciation',
-          description: 'I need to feel appreciated for the work I do around the house',
-          identifiedAt: timestamps.needsIdentified,
+          category: 'RECOGNITION',
+          evidence: [],
+          aiConfidence: 0.95,
+          confirmed: true,
+          createdAt: timestamps.needsIdentified,
         },
         {
-          sessionId,
-          userId: userAId,
+          vesselId: userAVessel.id,
           need: 'Partnership',
-          description: 'I need us to share responsibilities more equally',
-          identifiedAt: timestamps.needsIdentified,
+          category: 'FAIRNESS',
+          evidence: [],
+          aiConfidence: 0.95,
+          confirmed: true,
+          createdAt: timestamps.needsIdentified,
         },
       ],
     });
@@ -1866,26 +1896,29 @@ export class StateFactory {
         content: empathyDraftB.content,
         status: 'VALIDATED',
         sharedAt: timestamps.userBEmpathyShared,
-        validatedAt: timestamps.empathyValidated,
       },
     });
 
     // User B's needs
-    await tx.need.createMany({
+    await tx.identifiedNeed.createMany({
       data: [
         {
-          sessionId,
-          userId: userBId,
+          vesselId: userBVessel.id,
           need: 'Understanding',
-          description: 'I need you to understand how exhausted I am after work',
-          identifiedAt: timestamps.needsIdentified,
+          category: 'CONNECTION',
+          evidence: [],
+          aiConfidence: 0.95,
+          confirmed: true,
+          createdAt: timestamps.needsIdentified,
         },
         {
-          sessionId,
-          userId: userBId,
+          vesselId: userBVessel.id,
           need: 'Support',
-          description: 'I need emotional support when I come home tired',
-          identifiedAt: timestamps.needsIdentified,
+          category: 'CONNECTION',
+          evidence: [],
+          aiConfidence: 0.95,
+          confirmed: true,
+          createdAt: timestamps.needsIdentified,
         },
       ],
     });
@@ -1898,31 +1931,19 @@ export class StateFactory {
     await tx.commonGround.createMany({
       data: [
         {
-          sessionId,
+          sharedVesselId: sharedVessel.id,
           need: 'Mutual Recognition',
-          description: 'Both of us want to feel seen and valued by each other',
-          createdAt: timestamps.commonGroundConfirmed,
-        },
-        {
-          sessionId,
-          need: 'Collaborative Partnership',
-          description: 'We both want to work together as a team',
-          createdAt: timestamps.commonGroundConfirmed,
-        },
-      ],
-    });
-
-    // Common ground confirmation records
-    await tx.commonGroundConfirmation.createMany({
-      data: [
-        {
-          sessionId,
-          userId: userAId,
+          category: 'RECOGNITION',
+          confirmedByA: true,
+          confirmedByB: true,
           confirmedAt: timestamps.commonGroundConfirmed,
         },
         {
-          sessionId,
-          userId: userBId,
+          sharedVesselId: sharedVessel.id,
+          need: 'Collaborative Partnership',
+          category: 'FAIRNESS',
+          confirmedByA: true,
+          confirmedByB: true,
           confirmedAt: timestamps.commonGroundConfirmed,
         },
       ],
@@ -1963,6 +1984,18 @@ export class StateFactory {
       agreementCreated: new Date(baseTime - 30000),
       agreementConfirmed: now,
     };
+
+    const sharedVessel = await tx.sharedVessel.findUnique({ where: { sessionId } });
+    if (!sharedVessel) {
+      throw new Error(`Shared vessel not found for session ${sessionId}`);
+    }
+    const [userAVessel, userBVessel] = await Promise.all([
+      tx.userVessel.findUnique({ where: { userId_sessionId: { userId: userAId, sessionId } } }),
+      tx.userVessel.findUnique({ where: { userId_sessionId: { userId: userBId, sessionId } } }),
+    ]);
+    if (!userAVessel || !userBVessel) {
+      throw new Error(`User vessels not found for session ${sessionId}`);
+    }
 
     // ========================================
     // USER A STATE - All stages COMPLETED
@@ -2121,35 +2154,43 @@ export class StateFactory {
     // ========================================
 
     // Needs for both users
-    await tx.need.createMany({
+    await tx.identifiedNeed.createMany({
       data: [
         {
-          sessionId,
-          userId: userAId,
+          vesselId: userAVessel.id,
           need: 'Appreciation',
-          description: 'I need to feel appreciated for the work I do around the house',
-          identifiedAt: timestamps.needsIdentified,
+          category: 'RECOGNITION',
+          evidence: [],
+          aiConfidence: 0.95,
+          confirmed: true,
+          createdAt: timestamps.needsIdentified,
         },
         {
-          sessionId,
-          userId: userAId,
+          vesselId: userAVessel.id,
           need: 'Partnership',
-          description: 'I need us to share responsibilities more equally',
-          identifiedAt: timestamps.needsIdentified,
+          category: 'FAIRNESS',
+          evidence: [],
+          aiConfidence: 0.95,
+          confirmed: true,
+          createdAt: timestamps.needsIdentified,
         },
         {
-          sessionId,
-          userId: userBId,
+          vesselId: userBVessel.id,
           need: 'Understanding',
-          description: 'I need you to understand how exhausted I am after work',
-          identifiedAt: timestamps.needsIdentified,
+          category: 'CONNECTION',
+          evidence: [],
+          aiConfidence: 0.95,
+          confirmed: true,
+          createdAt: timestamps.needsIdentified,
         },
         {
-          sessionId,
-          userId: userBId,
+          vesselId: userBVessel.id,
           need: 'Support',
-          description: 'I need emotional support when I come home tired',
-          identifiedAt: timestamps.needsIdentified,
+          category: 'CONNECTION',
+          evidence: [],
+          aiConfidence: 0.95,
+          confirmed: true,
+          createdAt: timestamps.needsIdentified,
         },
       ],
     });
@@ -2158,61 +2199,53 @@ export class StateFactory {
     await tx.commonGround.createMany({
       data: [
         {
-          sessionId,
+          sharedVesselId: sharedVessel.id,
           need: 'Mutual Recognition',
-          description: 'Both of us want to feel seen and valued by each other',
-          createdAt: timestamps.commonGroundConfirmed,
-        },
-        {
-          sessionId,
-          need: 'Collaborative Partnership',
-          description: 'We both want to work together as a team',
-          createdAt: timestamps.commonGroundConfirmed,
-        },
-      ],
-    });
-
-    await tx.commonGroundConfirmation.createMany({
-      data: [
-        {
-          sessionId,
-          userId: userAId,
+          category: 'RECOGNITION',
+          confirmedByA: true,
+          confirmedByB: true,
           confirmedAt: timestamps.commonGroundConfirmed,
         },
         {
-          sessionId,
-          userId: userBId,
+          sharedVesselId: sharedVessel.id,
+          need: 'Collaborative Partnership',
+          category: 'FAIRNESS',
+          confirmedByA: true,
+          confirmedByB: true,
           confirmedAt: timestamps.commonGroundConfirmed,
         },
       ],
     });
 
     // Strategies
-    const strategy1 = await tx.strategy.create({
+    const strategy1 = await tx.strategyProposal.create({
       data: {
         sessionId,
-        userId: userAId,
+        createdByUserId: userAId,
         description: 'Weekly check-in on Sundays to discuss upcoming week and divide tasks',
+        needsAddressed: ['Appreciation', 'Partnership'],
         duration: 'ongoing',
         createdAt: timestamps.strategiesCollected,
       },
     });
 
-    const strategy2 = await tx.strategy.create({
+    const strategy2 = await tx.strategyProposal.create({
       data: {
         sessionId,
-        userId: userBId,
+        createdByUserId: userBId,
         description: 'Express appreciation for at least one thing your partner did each day',
+        needsAddressed: ['Recognition'],
         duration: 'ongoing',
         createdAt: timestamps.strategiesCollected,
       },
     });
 
-    const strategy3 = await tx.strategy.create({
+    const strategy3 = await tx.strategyProposal.create({
       data: {
         sessionId,
-        userId: userAId,
+        createdByUserId: userAId,
         description: 'Take 10 minutes to decompress when arriving home before discussing responsibilities',
+        needsAddressed: ['Emotional safety'],
         duration: 'ongoing',
         createdAt: timestamps.strategiesCollected,
       },
@@ -2222,40 +2255,16 @@ export class StateFactory {
     await tx.strategyRanking.createMany({
       data: [
         {
-          strategyId: strategy1.id,
+          sessionId,
           userId: userAId,
-          rank: 1,
-          createdAt: timestamps.strategiesRanked,
+          rankedIds: [strategy1.id, strategy2.id, strategy3.id],
+          submittedAt: timestamps.strategiesRanked,
         },
         {
-          strategyId: strategy2.id,
-          userId: userAId,
-          rank: 2,
-          createdAt: timestamps.strategiesRanked,
-        },
-        {
-          strategyId: strategy3.id,
-          userId: userAId,
-          rank: 3,
-          createdAt: timestamps.strategiesRanked,
-        },
-        {
-          strategyId: strategy1.id,
+          sessionId,
           userId: userBId,
-          rank: 2,
-          createdAt: timestamps.strategiesRanked,
-        },
-        {
-          strategyId: strategy2.id,
-          userId: userBId,
-          rank: 1,
-          createdAt: timestamps.strategiesRanked,
-        },
-        {
-          strategyId: strategy3.id,
-          userId: userBId,
-          rank: 3,
-          createdAt: timestamps.strategiesRanked,
+          rankedIds: [strategy2.id, strategy1.id, strategy3.id],
+          submittedAt: timestamps.strategiesRanked,
         },
       ],
     });
@@ -2263,16 +2272,15 @@ export class StateFactory {
     // Agreement
     await tx.agreement.create({
       data: {
-        sessionId,
-        createdById: userAId,
+        sharedVesselId: sharedVessel.id,
         description: 'Weekly check-in on Sundays to discuss upcoming week and divide tasks',
-        duration: 'We will try this for 2 weeks',
-        measureOfSuccess: 'Both of us feel less stressed about household responsibilities',
+        type: 'COMMITMENT',
+        proposalId: strategy1.id,
         followUpDate: new Date(baseTime + 14 * 24 * 60 * 60 * 1000), // 2 weeks from now
-        status: 'CONFIRMED',
-        createdAt: timestamps.agreementCreated,
-        confirmedByUserAAt: timestamps.agreementConfirmed,
-        confirmedByUserBAt: timestamps.agreementConfirmed,
+        status: 'AGREED',
+        agreedByA: true,
+        agreedByB: true,
+        agreedAt: timestamps.agreementConfirmed,
       },
     });
   }

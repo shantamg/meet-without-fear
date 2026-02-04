@@ -11,6 +11,7 @@
 
 import { test, expect, BrowserContext, Page } from '@playwright/test';
 import { SessionBuilder, SessionSetupResult } from '../helpers/session-builder';
+import { getE2EHeaders, navigateToShareFromSession } from '../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3002';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
@@ -27,13 +28,12 @@ async function setupAuthenticatedPage(
   sessionSetup: SessionSetupResult,
   user: 'A' | 'B'
 ): Promise<Page> {
-  const page = await context.newPage();
-
   // Get the appropriate user info
   const userInfo = user === 'A' ? sessionSetup.userA : sessionSetup.userB;
   if (!userInfo) {
     throw new Error(`User ${user} not found in session setup`);
   }
+  const page = await context.newPage();
 
   // Navigate to the session with E2E auth params
   const url = `${APP_BASE_URL}/session/${sessionSetup.session.id}?e2e-user-id=${userInfo.id}&e2e-user-email=${encodeURIComponent(userInfo.email)}`;
@@ -68,7 +68,9 @@ test.describe('Share Tab Rendering (from database)', () => {
 
   test('User B sees shared context correctly without duplicates', async ({ browser }) => {
     // Create a fresh browser context for User B
-    const context = await browser.newContext();
+    const context = await browser.newContext({
+      extraHTTPHeaders: getE2EHeaders(setup.userB!.email, setup.userB!.id),
+    });
     const page = await setupAuthenticatedPage(context, setup, 'B');
 
     // Handle mood check if present
@@ -79,14 +81,8 @@ test.describe('Share Tab Rendering (from database)', () => {
       await page.waitForLoadState('networkidle');
     }
 
-    // Navigate to Share tab by clicking "Go to share" button
-    const goToShareButton = page.getByRole('button', { name: /share/i });
-    await expect(goToShareButton).toBeVisible({ timeout: 5000 });
-    await goToShareButton.click();
-
-    // Wait for Share screen to load
-    await page.waitForURL(/\/share$/);
-    await page.waitForLoadState('networkidle');
+    // Navigate to Share via in-app arrow/modal path
+    await navigateToShareFromSession(page);
 
     // Take screenshot for debugging
     await page.screenshot({ path: 'test-results/share-tab-user-b-view.png' });
@@ -124,7 +120,9 @@ test.describe('Share Tab Rendering (from database)', () => {
 
   test('User A sees received context correctly', async ({ browser }) => {
     // Create a fresh browser context for User A
-    const context = await browser.newContext();
+    const context = await browser.newContext({
+      extraHTTPHeaders: getE2EHeaders(setup.userA.email, setup.userA.id),
+    });
     const page = await setupAuthenticatedPage(context, setup, 'A');
 
     // Handle mood check if present
@@ -135,14 +133,8 @@ test.describe('Share Tab Rendering (from database)', () => {
       await page.waitForLoadState('networkidle');
     }
 
-    // Navigate to Share tab
-    const goToShareButton = page.getByRole('button', { name: /share/i });
-    await expect(goToShareButton).toBeVisible({ timeout: 5000 });
-    await goToShareButton.click();
-
-    // Wait for Share screen to load
-    await page.waitForURL(/\/share$/);
-    await page.waitForLoadState('networkidle');
+    // Navigate to Share via in-app arrow/modal path
+    await navigateToShareFromSession(page);
 
     // Take screenshot for debugging
     await page.screenshot({ path: 'test-results/share-tab-user-a-view.png' });
@@ -159,17 +151,19 @@ test.describe('Share Tab Rendering (from database)', () => {
     await context.close();
   });
 
-  test('Share tab loads correctly after page refresh', async ({ browser }) => {
+  test('Share tab loads correctly when opened from chat header', async ({ browser }) => {
     // Create a fresh browser context for User B
-    const context = await browser.newContext();
+    const context = await browser.newContext({
+      extraHTTPHeaders: getE2EHeaders(setup.userB!.email, setup.userB!.id),
+    });
 
     // Get User B info
     const userInfo = setup.userB!;
 
-    // Navigate directly to the share page with auth params (simulating a direct load from URL)
+    // Start in chat, then open Share using in-app navigation
     const page = await context.newPage();
-    const shareUrl = `${APP_BASE_URL}/session/${setup.session.id}/share?e2e-user-id=${userInfo.id}&e2e-user-email=${encodeURIComponent(userInfo.email)}`;
-    await page.goto(shareUrl);
+    const sessionUrl = `${APP_BASE_URL}/session/${setup.session.id}?e2e-user-id=${userInfo.id}&e2e-user-email=${encodeURIComponent(userInfo.email)}`;
+    await page.goto(sessionUrl);
     await page.waitForLoadState('networkidle');
 
     // Handle mood check if present
@@ -180,8 +174,10 @@ test.describe('Share Tab Rendering (from database)', () => {
       await page.waitForLoadState('networkidle');
     }
 
+    await navigateToShareFromSession(page);
+
     // Take first screenshot
-    await page.screenshot({ path: 'test-results/share-tab-direct-load.png' });
+    await page.screenshot({ path: 'test-results/share-tab-navigation-load.png' });
 
     // Verify the share tab loaded with content (this tests loading from database)
     const shareTabContainer = page.getByTestId('share-screen-partner-tab');
@@ -190,7 +186,7 @@ test.describe('Share Tab Rendering (from database)', () => {
     // Verify only ONE card with shared content
     const contentCards = shareTabContainer.locator('text=/running on empty/i');
     const cardCount = await contentCards.count();
-    console.log(`[Test] Direct load to share page, found ${cardCount} cards with shared content text`);
+    console.log(`[Test] In-app share navigation found ${cardCount} cards with shared content text`);
     expect(cardCount).toBe(1);
 
     // Verify a delivery status is shown (could be "Delivered" or "Seen" depending on test order)

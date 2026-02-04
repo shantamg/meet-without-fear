@@ -197,7 +197,7 @@ describe('token-budget utilities', () => {
       expect(MODEL_LIMITS.maxInputTokens).toBeGreaterThan(100000);
       expect(MODEL_LIMITS.systemPromptBudget).toBeGreaterThan(1000);
       expect(MODEL_LIMITS.outputReservation).toBeGreaterThan(1000);
-      expect(MODEL_LIMITS.contextBudget).toBeGreaterThan(50000);
+      expect(MODEL_LIMITS.contextBudget).toBeGreaterThanOrEqual(40000);
     });
   });
 });

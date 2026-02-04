@@ -13,7 +13,7 @@
  */
 
 import { test, expect, devices, BrowserContext, Page, APIRequestContext } from '@playwright/test';
-import { cleanupE2EData, getE2EHeaders, SessionBuilder } from '../helpers';
+import { cleanupE2EData, getE2EHeaders, SessionBuilder, navigateToShareFromSession } from '../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3002';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
@@ -165,15 +165,10 @@ test.describe('Stage 3-4 Complete Flow', () => {
     // ========================================
     console.log(`${elapsed()} Navigating to Share screen...`);
 
-    // Navigate via URL directly
+    // Navigate via in-app Share arrow from chat
     await Promise.all([
-      pageA.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userAParams.toString()}`),
-      pageB.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userBParams.toString()}`),
-    ]);
-
-    await Promise.all([
-      pageA.waitForLoadState('networkidle'),
-      pageB.waitForLoadState('networkidle'),
+      navigateToShareFromSession(pageA),
+      navigateToShareFromSession(pageB),
     ]);
 
     // Screenshot Share screen
@@ -440,13 +435,10 @@ test.describe('Stage 3-4 Complete Flow', () => {
     const overlapData = await overlapResponse.json();
     console.log(`${elapsed()} Overlap: ${overlapData.data?.overlap?.length || 0} strategies, candidates: ${overlapData.data?.agreementCandidates?.length || 0}`);
 
-    // Navigate to Strategies tab
-    await pageA.goto(`${APP_BASE_URL}/session/${sessionId}/share?tab=strategies&${userAParams.toString()}`);
-    await pageB.goto(`${APP_BASE_URL}/session/${sessionId}/share?tab=strategies&${userBParams.toString()}`);
-    await Promise.all([
-      pageA.waitForLoadState('networkidle'),
-      pageB.waitForLoadState('networkidle'),
-    ]);
+    // Navigate to Strategies tab via tab selector (no deep-link)
+    await pageA.getByTestId('share-tab-selector-tab-strategies').click();
+    await pageB.getByTestId('share-tab-selector-tab-strategies').click();
+    await Promise.all([pageA.waitForTimeout(500), pageB.waitForTimeout(500)]);
 
     // Screenshot strategies view
     await pageA.screenshot({ path: 'test-results/stage-3-4-05-strategies-user-a.png' });
@@ -485,13 +477,10 @@ test.describe('Stage 3-4 Complete Flow', () => {
       console.log(`${elapsed()} User B confirmed: ${confirmAgreementData.data?.confirmed}, both confirmed: ${confirmAgreementData.data?.partnerConfirmed}`);
     }
 
-    // Navigate to Agreement tab
-    await pageA.goto(`${APP_BASE_URL}/session/${sessionId}/share?tab=agreement&${userAParams.toString()}`);
-    await pageB.goto(`${APP_BASE_URL}/session/${sessionId}/share?tab=agreement&${userBParams.toString()}`);
-    await Promise.all([
-      pageA.waitForLoadState('networkidle'),
-      pageB.waitForLoadState('networkidle'),
-    ]);
+    // Navigate to Agreement tab via tab selector (no deep-link)
+    await pageA.getByTestId('share-tab-selector-tab-agreement').click();
+    await pageB.getByTestId('share-tab-selector-tab-agreement').click();
+    await Promise.all([pageA.waitForTimeout(500), pageB.waitForTimeout(500)]);
 
     // Final screenshots
     await pageA.screenshot({ path: 'test-results/stage-3-4-06-agreement-user-a.png' });

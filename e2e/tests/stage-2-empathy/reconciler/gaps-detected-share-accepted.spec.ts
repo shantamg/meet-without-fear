@@ -11,7 +11,7 @@
  */
 
 import { test, expect, devices, BrowserContext, Page } from '@playwright/test';
-import { cleanupE2EData, getE2EHeaders, SessionBuilder } from '../../../helpers';
+import { cleanupE2EData, getE2EHeaders, SessionBuilder, navigateToShareFromSession } from '../../../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3002';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
@@ -195,19 +195,7 @@ test.describe('Reconciler: Gaps Detected → Share Accepted', () => {
       }
 
       // === USER B: Navigate to share suggestion and accept ===
-      const userBParams = new URLSearchParams({
-        'e2e-user-id': userBId,
-        'e2e-user-email': userB.email,
-      });
-
-      const partnerEventModal = userBPage.getByTestId('partner-event-modal');
-      if (await partnerEventModal.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await userBPage.getByText('View', { exact: true }).click();
-        await expect(partnerEventModal).not.toBeVisible({ timeout: 5000 });
-      } else {
-        await userBPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userBParams.toString()}`);
-      }
-      await userBPage.waitForLoadState('networkidle');
+      await navigateToShareFromSession(userBPage);
 
       // Click share button
       const shareButton = userBPage.locator('[data-testid*="share-suggestion"][data-testid$="-share"]');
@@ -286,19 +274,7 @@ test.describe('Reconciler: Gaps Detected → Share Accepted', () => {
       await completeUserBStage1(request);
 
       // User B shares
-      const userBParams = new URLSearchParams({
-        'e2e-user-id': userBId,
-        'e2e-user-email': userB.email,
-      });
-
-      const partnerEventModal = userBPage.getByTestId('partner-event-modal');
-      if (await partnerEventModal.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await userBPage.getByText('View', { exact: true }).click();
-        await expect(partnerEventModal).not.toBeVisible({ timeout: 5000 });
-      } else {
-        await userBPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userBParams.toString()}`);
-      }
-      await userBPage.waitForLoadState('networkidle');
+      await navigateToShareFromSession(userBPage);
 
       const shareButton = userBPage.locator('[data-testid*="share-suggestion"][data-testid$="-share"]');
       await expect(shareButton).toBeVisible({ timeout: 10000 });

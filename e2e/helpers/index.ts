@@ -13,6 +13,7 @@ export {
   createUserContext,
   handleMoodCheck,
   navigateToSession,
+  navigateToShareFromSession,
   signCompact,
   confirmFeelHeard,
 } from './test-utils';

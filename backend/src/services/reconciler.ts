@@ -1134,7 +1134,7 @@ export async function respondToShareSuggestion(
   });
 
   // Delete the SHARE_SUGGESTION message now that user has responded
-  // This prevents it from appearing alongside the new EMPATHY_STATEMENT
+  // This prevents it from appearing alongside the new SHARED_CONTEXT message
   await prisma.message.deleteMany({
     where: {
       sessionId,
@@ -1217,7 +1217,7 @@ export async function respondToShareSuggestion(
       sessionId,
       senderId: userId,
       forUserId: userId, // For the subject's own chat
-      role: MessageRole.EMPATHY_STATEMENT, // Reuse empathy statement styling for "what you shared"
+      role: MessageRole.SHARED_CONTEXT, // Subject's shared context (visible only to them via forUserId)
       content: sharedContent,
       stage: 2,
       timestamp: subjectSharedTimestamp,

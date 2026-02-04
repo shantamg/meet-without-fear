@@ -288,9 +288,9 @@ describe('Auth Middleware', () => {
       await requireAuth(req as Request, res as Response, next);
 
       expect(prisma.user.upsert).toHaveBeenCalledWith({
-        where: { email: 'test@e2e.test' },
+        where: { id: 'e2e-user-123' },
         create: { id: 'e2e-user-123', email: 'test@e2e.test', clerkId: 'e2e_e2e-user-123' },
-        update: {},
+        update: { email: 'test@e2e.test', clerkId: 'e2e_e2e-user-123' },
       });
       expect(next).toHaveBeenCalled();
       expect(statusMock).not.toHaveBeenCalled();

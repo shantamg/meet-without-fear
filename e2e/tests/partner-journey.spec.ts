@@ -9,7 +9,7 @@
  */
 
 import { test, expect, devices, BrowserContext, Page } from '@playwright/test';
-import { cleanupE2EData, getE2EHeaders, SessionBuilder } from '../helpers';
+import { cleanupE2EData, getE2EHeaders, SessionBuilder, navigateToShareFromSession } from '../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3002';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
@@ -361,10 +361,9 @@ test.describe('Partner Journey (Two Browser Contexts)', () => {
       await userBPage.waitForLoadState('networkidle');
       console.log(`${elapsed()} Navigated to sharing status screen via modal`);
     } else if (hasShareOfferFromAPI) {
-      // Modal didn't show but API confirms share offer exists - navigate directly
-      console.log(`${elapsed()} No modal but API has share offer - navigating directly to sharing status`);
-      await userBPage.goto(`${APP_BASE_URL}/session/${sessionId}/share?${userBParams.toString()}`);
-      await userBPage.waitForLoadState('networkidle');
+      // Modal didn't show but API confirms share offer exists - navigate via in-app arrow
+      console.log(`${elapsed()} No modal but API has share offer - navigating via header Share arrow`);
+      await navigateToShareFromSession(userBPage);
     } else {
       console.log(`${elapsed()} No share suggestion found (neither modal nor API)`);
       await userBPage.screenshot({ path: 'test-results/partner-06-user-b-no-share-suggestion.png' });

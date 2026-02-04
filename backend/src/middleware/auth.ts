@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 import { UnauthorizedError, ForbiddenError } from './errors';
 import { prisma } from '../lib/prisma';
 import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
+import { Prisma } from '@prisma/client';
 
 // ============================================================================
 // Types
@@ -83,12 +84,36 @@ async function handleE2EAuthBypass(req: Request): Promise<boolean> {
     return false;
   }
 
-  // Use ID as the unique key since E2E tests use consistent user IDs
-  const user = await prisma.user.upsert({
-    where: { id: e2eUserId },
-    create: { id: e2eUserId, email: e2eEmail, clerkId: `e2e_${e2eUserId}` },
-    update: { email: e2eEmail }, // Update email in case it changed
-  });
+  const e2eClerkId = `e2e_${e2eUserId}`;
+
+  let user;
+  try {
+    // Primary path: tie auth identity to E2E user ID
+    user = await prisma.user.upsert({
+      where: { id: e2eUserId },
+      create: { id: e2eUserId, email: e2eEmail, clerkId: e2eClerkId },
+      update: { email: e2eEmail, clerkId: e2eClerkId },
+    });
+  } catch (error) {
+    // Guard against transient unique conflicts (parallel E2E requests)
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+      throw error;
+    }
+
+    user = await prisma.user.findFirst({
+      where: {
+        OR: [{ id: e2eUserId }, { clerkId: e2eClerkId }, { email: e2eEmail }],
+      },
+    });
+    if (!user) {
+      throw error;
+    }
+
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { email: e2eEmail, clerkId: e2eClerkId },
+    });
+  }
 
   req.user = user;
   return true;

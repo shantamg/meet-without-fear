@@ -103,6 +103,66 @@ export async function navigateToSession(
 }
 
 /**
+ * Navigate from the session chat screen to the Share screen via in-app UI.
+ * This avoids deep-linking directly to /share, which can mask stale data issues.
+ */
+export async function navigateToShareFromSession(
+  page: Page,
+  timeout = 10000
+): Promise<void> {
+  if (page.url().includes('/share')) {
+    return;
+  }
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    // If session-entry mood check is present, clear it before looking for nav controls.
+    await handleMoodCheck(page, 3000);
+
+    const modalViewButton = page.getByTestId('partner-event-modal-view');
+    if (await modalViewButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await modalViewButton.click();
+      break;
+    }
+
+    const headerShareButton = page.getByTestId('session-chat-header-go-to-share');
+    if (await headerShareButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await headerShareButton.click();
+      break;
+    }
+
+    const accessibleShareButton = page.getByRole('button', { name: /share/i });
+    if (await accessibleShareButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await accessibleShareButton.click();
+      break;
+    }
+
+    // Fallback: open Share by tapping a chat indicator that routes to Share
+    const contextIndicator = page.getByTestId('chat-indicator-context-shared');
+    const empathyIndicator = page.getByTestId('chat-indicator-empathy-shared');
+    if (await contextIndicator.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await contextIndicator.click();
+      break;
+    }
+    if (await empathyIndicator.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await empathyIndicator.click();
+      break;
+    }
+
+    if (attempt === 1) {
+      throw new Error(`Could not find in-app Share navigation button on session screen (url=${page.url()})`);
+    }
+
+    await page.waitForTimeout(1500);
+  }
+
+  // Mood check can occasionally re-appear after route/state updates.
+  await handleMoodCheck(page, 2000);
+
+  await page.waitForURL(/\/session\/.*\/share/, { timeout });
+  await page.waitForLoadState('networkidle');
+}
+
+/**
  * Sign the compact agreement for a user.
  * Checks the agree checkbox and clicks the sign button.
  *
