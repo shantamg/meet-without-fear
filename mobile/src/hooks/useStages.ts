@@ -562,11 +562,37 @@ export function useConfirmFeelHeard(
     // =========================================================================
     // SUCCESS: Update caches directly (no refetch needed!)
     // =========================================================================
-    onSuccess: (data, { sessionId }) => {
+    onSuccess: (data, { sessionId }, context) => {
+      // Invalidate less critical queries in background
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-      // Invalidate session state to update milestones (feelHeardConfirmedAt)
-      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+
+      // UPDATE SESSION STATE DIRECTLY - DO NOT INVALIDATE!
+      // Invalidating sessionKeys.state causes a race condition where the refetch
+      // overwrites the optimistic update with stale server data before the server
+      // has processed the mutation. This is the root cause of the recurring bug
+      // where messages don't appear after feel-heard confirmation.
+      // See commits: 6c6504e, d16a32f, 1151ab9 for history of this bug.
+      queryClient.setQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId),
+        (old) => {
+          // If cache was cleared between onMutate and onSuccess, use context fallback
+          const baseState = old ?? context?.previousSessionState;
+          if (!baseState) return old;
+
+          return {
+            ...baseState,
+            progress: baseState.progress ? {
+              ...baseState.progress,
+              milestones: {
+                ...baseState.progress.milestones,
+                // Use server's confirmedAt timestamp (authoritative)
+                feelHeardConfirmedAt: data.confirmedAt || context?.optimisticTimestamp,
+              },
+            } : baseState.progress,
+          };
+        }
+      );
 
       // Add transition message directly to cache instead of refetching
       // This preserves existing messages and prevents re-animation

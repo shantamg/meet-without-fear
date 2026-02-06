@@ -71,18 +71,18 @@ interface Strategy {
 // Helper Functions
 // ============================================================================
 
-function transformNeedsForDisplay(needs: { id: string; need: string; description: string }[]) {
+function transformNeedsForDisplay(needs: { id: string; need: string; description: string; category?: string }[]) {
   return needs.map((need) => ({
     id: need.id,
-    category: need.need,
-    description: need.description,
+    category: need.category || need.need, // Use category enum if available, fallback to need name
+    description: need.need, // The need text is the actual description
   }));
 }
 
-function transformCommonGroundForDisplay(commonGround: { id: string; need: string; description: string }[]) {
+function transformCommonGroundForDisplay(commonGround: { id: string; need: string; description: string; category?: string }[]) {
   return commonGround.map((cg) => ({
-    category: cg.need,
-    description: cg.description,
+    category: cg.category || cg.need, // Use category enum if available, fallback to need name
+    description: cg.need, // The need text is the actual description
   }));
 }
 
@@ -417,6 +417,7 @@ const sectionStyles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: colors.textPrimary,
+    marginTop: 16,
     marginBottom: 12,
     paddingHorizontal: 16,
   },

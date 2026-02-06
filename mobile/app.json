@@ -66,7 +66,6 @@
       "eas": {
         "projectId": "f381a744-a85d-478c-a8dd-75d54414aa5a"
       },
-      "apiUrl": "https://api.meetwithoutfear.com",
       "router": {
         "root": "./app"
       }

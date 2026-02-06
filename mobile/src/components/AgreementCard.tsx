@@ -30,6 +30,23 @@ interface AgreementCardProps {
 // ============================================================================
 
 /**
+ * Format ISO date string to human-readable format
+ */
+function formatCheckInDate(isoDate: string): string {
+  try {
+    const date = new Date(isoDate);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  } catch {
+    return isoDate;
+  }
+}
+
+/**
  * AgreementCard displays the final agreement for a micro-experiment.
  *
  * Key features:
@@ -61,7 +78,7 @@ export function AgreementCard({ agreement, onConfirm }: AgreementCardProps) {
       {agreement.checkInDate && (
         <View style={styles.field}>
           <Text style={styles.label}>Check-in Scheduled</Text>
-          <Text style={styles.value}>{agreement.checkInDate}</Text>
+          <Text style={styles.value}>{formatCheckInDate(agreement.checkInDate)}</Text>
         </View>
       )}
 
@@ -121,7 +138,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmText: {
-    color: colors.textPrimary,
+    color: colors.textOnAccent,
     fontSize: 16,
     fontWeight: '600',
   },
