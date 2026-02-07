@@ -16,7 +16,7 @@ import {
   GetMessagesResponse,
   Stage,
 } from '@meet-without-fear/shared';
-import { messageKeys, sessionKeys, timelineKeys } from './queryKeys';
+import { messageKeys, sessionKeys, stageKeys, timelineKeys } from './queryKeys';
 
 // ============================================================================
 // Types
@@ -322,14 +322,19 @@ export function useStreamingMessage(
         );
       }
 
-      // Update empathy draft cache
+      // Update empathy draft cache (must use stageKeys to match useEmpathyDraft reader)
       if (metadata.proposedEmpathyStatement) {
         queryClient.setQueryData(
-          sessionKeys.empathyDraft(sessionId),
+          stageKeys.empathyDraft(sessionId),
           (old: Record<string, unknown> | undefined) => ({
             ...old,
-            content: metadata.proposedEmpathyStatement,
-            offerReadyToShare: metadata.offerReadyToShare,
+            draft: {
+              ...(old as Record<string, unknown>)?.draft as Record<string, unknown> | undefined,
+              content: metadata.proposedEmpathyStatement,
+              readyToShare: false,
+            },
+            canConsent: true,
+            alreadyConsented: false,
           })
         );
       }

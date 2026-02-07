@@ -18,8 +18,8 @@
 import { test, expect, devices } from '@playwright/test';
 import { cleanupE2EData, getE2EHeaders } from '../helpers';
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3002';
-const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
+const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8081';
 
 // Use iPhone 12 viewport - must be at top level
 test.use(devices['iPhone 12']);
@@ -251,38 +251,17 @@ test.describe('Single User Journey', () => {
     console.log(`${elapsed()} Step 15 complete`);
 
     // Assert empathy review button appears (the "Review what you'll share" button)
+    // After fixing the cache key mismatch (stageKeys.empathyDraft vs sessionKeys.empathyDraft),
+    // the empathy panel should reliably appear when the AI response includes a draft.
     console.log(`${elapsed()} Step 15b: Waiting for ready to share button...`);
-    let readyToShareButton = page.getByTestId('ready-to-share-button');
-    let buttonVisible = await readyToShareButton.isVisible({ timeout: 5000 }).catch(() => false);
-    if (!buttonVisible) {
-      readyToShareButton = page.getByText(/Review what you.ll share/i);
-      buttonVisible = await readyToShareButton.isVisible({ timeout: 5000 }).catch(() => false);
-    }
-    if (!buttonVisible) {
-      readyToShareButton = page.getByTestId('empathy-review-button');
-      buttonVisible = await readyToShareButton.isVisible({ timeout: 5000 }).catch(() => false);
-    }
+    const readyToShareButton = page.getByTestId('ready-to-share-button');
+    await expect(readyToShareButton).toBeVisible({ timeout: 10000 });
+
+    // Click to open the drawer
+    console.log(`${elapsed()} Step 15c: Clicking ready to share...`);
+    await readyToShareButton.click();
     const shareEmpathyButton = page.getByTestId('share-empathy-button');
-    if (!buttonVisible) {
-      const shareVisibleWithoutOpen = await shareEmpathyButton.isVisible({ timeout: 2000 }).catch(() => false);
-      if (!shareVisibleWithoutOpen) {
-        console.log(`${elapsed()} No share CTA visible yet; verifying Stage 2 draft exists and ending test early`);
-        const draftResponse = await request.get(`${API_BASE_URL}/api/sessions/${sessionId}/empathy/draft`, {
-          headers: getE2EHeaders(userA.email, userId),
-        });
-        expect(draftResponse.ok()).toBe(true);
-        return;
-      }
-    }
-    if (buttonVisible) {
-      // Click to open the drawer
-      console.log(`${elapsed()} Step 15c: Clicking ready to share...`);
-      await readyToShareButton.click();
-      await expect(shareEmpathyButton).toBeVisible({ timeout: 5000 });
-    } else {
-      // In some UI states the drawer is already open
-      await expect(shareEmpathyButton).toBeVisible({ timeout: 5000 });
-    }
+    await expect(shareEmpathyButton).toBeVisible({ timeout: 5000 });
 
     // Step 16: Click share-empathy-button
     console.log(`${elapsed()} Step 16: Clicking share empathy...`);

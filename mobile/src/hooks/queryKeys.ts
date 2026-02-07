@@ -24,9 +24,6 @@ export const sessionKeys = {
   invitation: (id: string) => [...sessionKeys.invitations(), id] as const,
   sessionInvitation: (sessionId: string) =>
     [...sessionKeys.all, sessionId, 'invitation'] as const,
-  // Empathy draft (referenced by streaming hook for cache updates)
-  empathyDraft: (sessionId: string) =>
-    [...sessionKeys.all, sessionId, 'empathy-draft'] as const,
 };
 
 // ============================================================================
