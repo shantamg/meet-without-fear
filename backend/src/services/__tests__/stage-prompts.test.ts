@@ -84,7 +84,7 @@ describe('Stage Prompts Service', () => {
   });
 
   describe('Stage Transition Prompts', () => {
-    it('returns transition prompt for Stage 0 → Stage 1', () => {
+    it('returns transition injection + regular Stage 1 prompt for Stage 0 → Stage 1', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = {
         isStageTransition: true,
@@ -92,16 +92,19 @@ describe('Stage Prompts Service', () => {
       };
       const prompt = buildStagePrompt(1, context, options);
 
-      // Should contain transition-specific content
-      expect(prompt).toContain('just sent an invitation');
-      expect(prompt).toContain('invite them to share');
+      // Should contain transition injection
+      expect(prompt).toContain('TRANSITION:');
+      expect(prompt).toContain('just sent their invitation');
       expect(prompt).toContain('Partner');
+      // Should also contain the regular Stage 1 prompt (not replaced)
+      expect(prompt).toContain('Witness stage');
+      expect(prompt).toContain('feel fully heard');
       // Should NOT explicitly name stages
       expect(prompt).not.toContain('"Stage 1"');
       expect(prompt).not.toContain('"witness stage"');
     });
 
-    it('returns transition prompt for Stage 1 → Stage 2', () => {
+    it('returns transition injection + regular Stage 2 prompt for Stage 1 → Stage 2', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = {
         isStageTransition: true,
@@ -109,12 +112,17 @@ describe('Stage Prompts Service', () => {
       };
       const prompt = buildStagePrompt(2, context, options);
 
+      // Transition injection content
+      expect(prompt).toContain('TRANSITION:');
       expect(prompt).toContain('feeling heard');
       expect(prompt).toContain('curiosity');
       expect(prompt).toContain('Partner');
+      // Regular Stage 2 prompt content
+      expect(prompt).toContain('Perspective Stretch');
+      expect(prompt).toContain('FOUR MODES');
     });
 
-    it('returns transition prompt for Stage 2 → Stage 3', () => {
+    it('returns transition injection + regular Stage 3 prompt for Stage 2 → Stage 3', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = {
         isStageTransition: true,
@@ -122,12 +130,17 @@ describe('Stage Prompts Service', () => {
       };
       const prompt = buildStagePrompt(3, context, options);
 
+      // Transition injection content
+      expect(prompt).toContain('TRANSITION:');
       expect(prompt).toContain('empathy');
       expect(prompt).toContain('need');
       expect(prompt).toContain('Partner');
+      // Regular Stage 3 prompt content
+      expect(prompt).toContain('Need Mapping');
+      expect(prompt).toContain('underlying needs');
     });
 
-    it('returns transition prompt for Stage 3 → Stage 4', () => {
+    it('returns transition injection + regular Stage 4 prompt for Stage 3 → Stage 4', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = {
         isStageTransition: true,
@@ -135,22 +148,27 @@ describe('Stage Prompts Service', () => {
       };
       const prompt = buildStagePrompt(4, context, options);
 
+      // Transition injection content
+      expect(prompt).toContain('TRANSITION:');
       expect(prompt).toContain('needs');
+      // Regular Stage 4 prompt content
+      expect(prompt).toContain('Strategic Repair');
       expect(prompt).toContain('experiment');
       expect(prompt).toContain('Partner');
     });
 
-    it('falls back to regular prompt when no transition match', () => {
+    it('returns regular prompt without injection for unrecognized transition', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = {
         isStageTransition: true,
-        previousStage: undefined, // No previous stage info
+        previousStage: 4, // No 4→1 transition exists
       };
       const prompt = buildStagePrompt(1, context, options);
 
-      // Should still return a valid Stage 1 prompt (either transition or regular)
-      expect(prompt).toBeDefined();
-      expect(prompt.length).toBeGreaterThan(100);
+      // Should be regular Stage 1 prompt without transition injection
+      expect(prompt).not.toContain('TRANSITION:');
+      expect(prompt).toContain('Witness stage');
+      expect(prompt).toContain('feel fully heard');
     });
 
     it('includes user and partner names in transition prompts', () => {
@@ -168,7 +186,7 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Bob');
     });
 
-    it('transition prompts use micro-tag format', () => {
+    it('transition prompts include micro-tag format from regular stage prompt', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = {
         isStageTransition: true,
@@ -176,7 +194,7 @@ describe('Stage Prompts Service', () => {
       };
       const prompt = buildStagePrompt(1, context, options);
 
-      // Transition prompts use micro-tag format with <thinking> tags
+      // The regular stage prompt includes micro-tag format via buildResponseProtocol
       expect(prompt).toContain('<thinking>');
       expect(prompt).toContain('</thinking>');
       expect(prompt).toContain('OUTPUT FORMAT');

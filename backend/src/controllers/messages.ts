@@ -13,7 +13,7 @@ import { prisma } from '../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
 import { getSonnetResponse, getSonnetStreamingResponse, BrainActivityCallType } from '../lib/bedrock';
 import { brainService } from '../services/brain-service';
-import { buildInitialMessagePrompt, buildStagePrompt } from '../services/stage-prompts';
+import { buildInitialMessagePrompt, buildStagePrompt, type PromptContext } from '../services/stage-prompts';
 import { parseMicroTagResponse } from '../utils/micro-tag-parser';
 import { type SessionStateToolInput } from '../services/stage-tools';
 import {
@@ -328,27 +328,72 @@ export async function confirmFeelHeard(
           select: {
             role: true,
             content: true,
+            timestamp: true,
           },
         });
 
-        // Format conversation for context, including the "felt heard" event marker
-        const conversationContext = conversationHistory
-          .map((m) => `${m.role === 'USER' ? 'User' : 'AI'}: ${m.content}`)
-          .join('\n\n') + '\n\n[User confirmed feeling heard]';
-
-        // Build a simple transition prompt - trust Sonnet with the context
+        // Build Stage 2 transition prompt using the standard prompt pipeline
         const userName = user.name || 'The user';
-        const partner = partnerName || 'their partner';
-        const transitionPrompt = `You are a warm, emotionally attuned guide helping ${userName} work through a relationship challenge with ${partner}.
+        const promptContext: PromptContext = {
+          userName,
+          partnerName,
+          turnCount: 1,
+          emotionalIntensity: 5,
+          contextBundle: {
+            conversationContext: {
+              recentTurns: conversationHistory.map((m) => ({
+                role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+                content: m.content,
+                timestamp: m.timestamp.toISOString(),
+              })),
+              turnCount: conversationHistory.filter((m) => m.role === 'USER').length,
+              sessionDurationMinutes: 0,
+            },
+            emotionalThread: {
+              initialIntensity: null,
+              currentIntensity: null,
+              trend: 'unknown',
+              notableShifts: [],
+            },
+            stageContext: {
+              stage: 2,
+              gatesSatisfied: {},
+            },
+            userName,
+            partnerName,
+            intent: {
+              intent: 'stage_enforcement',
+              depth: 'minimal',
+              reason: 'Stage 1→2 transition',
+              threshold: 0.60,
+              maxCrossSession: 0,
+              allowCrossSession: false,
+              surfaceStyle: 'silent',
+            },
+            assembledAt: new Date().toISOString(),
+          },
+        };
 
-CONVERSATION SO FAR:
-${conversationContext}
+        const transitionPrompt = buildStagePrompt(2, promptContext, {
+          isStageTransition: true,
+          previousStage: 1,
+        });
 
-Continue naturally from here. ${userName} just confirmed feeling heard - acknowledge this moment warmly, then gently invite them to consider ${partner}'s perspective when they're ready. Keep it brief (2-3 sentences) and conversational.`;
+        // Pass conversation history as proper messages
+        const messages = conversationHistory.map((m) => ({
+          role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+          content: m.content,
+        }));
+
+        // Bedrock requires conversations to start with a user message
+        // Add a brief user message if history is empty or starts with assistant
+        if (messages.length === 0 || messages[0].role !== 'user') {
+          messages.unshift({ role: 'user', content: 'I feel heard now.' });
+        }
 
         const aiResponse = await getSonnetResponse({
           systemPrompt: transitionPrompt,
-          messages: [{ role: 'user', content: 'Generate the transition message based on the conversation above.' }],
+          messages,
           maxTokens: 512,
           sessionId,
           turnId,

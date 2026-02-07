@@ -472,96 +472,39 @@ ${buildResponseProtocol(4)}`;
 }
 
 // ============================================================================
-// Stage Transition Prompts
+// Stage Transition Injection
 // ============================================================================
 
 /**
- * Build a transition intro prompt when user moves from one stage to another.
- * These prompts acknowledge context from the previous stage and introduce the new phase.
+ * Build a short transition injection sentence to prepend to the regular stage prompt.
+ * Instead of replacing the entire stage prompt (losing modes, rules, readiness signals),
+ * this adds a brief contextual nudge that the AI weaves into its first response.
  */
-function buildStageTransitionPrompt(toStage: number, fromStage: number | undefined, context: PromptContext): string {
-  const partnerName = context.partnerName || 'your partner';
+function buildTransitionInjection(toStage: number, fromStage: number | undefined, context: PromptContext): string {
+  const userName = context.userName || 'The user';
+  const partnerName = context.partnerName || 'their partner';
 
-  // Transition from Stage 0 (Invitation) to Stage 1 (Witness)
+  // Stage 0 → Stage 1: Invitation sent, shift to witnessing
   if (toStage === 1 && (fromStage === 0 || fromStage === undefined)) {
-    return buildInvitationToWitnessTransition(context, partnerName);
+    return `TRANSITION: ${userName} just sent their invitation to ${partnerName}. Briefly acknowledge the courage of that step (1-2 sentences), then shift into deep listening.\n\n`;
   }
 
-  // Transition from Stage 1 (Witness) to Stage 2 (Perspective Stretch)
+  // Stage 1 → Stage 2: Feel heard confirmed, shift to perspective stretch
   if (toStage === 2 && fromStage === 1) {
-    return buildWitnessToPerspectiveTransition(context, partnerName);
+    return `TRANSITION: ${userName} just confirmed feeling heard. Acknowledge this warmly (1-2 sentences), then gently invite curiosity about what ${partnerName} might be feeling or afraid of.\n\n`;
   }
 
-  // Transition from Stage 2 (Perspective) to Stage 3 (Need Mapping)
+  // Stage 2 → Stage 3: Empathy work done, shift to needs mapping
   if (toStage === 3 && fromStage === 2) {
-    return buildPerspectiveToNeedsTransition(context, partnerName);
+    return `TRANSITION: ${userName} is entering needs-mapping after working on empathy for ${partnerName}. Briefly acknowledge their empathy work, then invite exploration of underlying needs.\n\n`;
   }
 
-  // Transition from Stage 3 (Needs) to Stage 4 (Strategic Repair)
+  // Stage 3 → Stage 4: Needs clarified, shift to strategic repair
   if (toStage === 4 && fromStage === 3) {
-    return buildNeedsToRepairTransition(context, partnerName);
+    return `TRANSITION: ${userName} has clarified needs. Briefly acknowledge the clarity they've achieved, then introduce the idea of small, testable experiments.\n\n`;
   }
 
-  // Fallback to regular stage prompt if no transition match
   return '';
-}
-
-/**
- * Transition from invitation crafting to witnessing.
- * The user has just sent their invitation and is ready to dive deeper.
- */
-function buildInvitationToWitnessTransition(context: PromptContext, partnerName: string): string {
-  return `You are Meet Without Fear. ${context.userName} just sent an invitation to ${partnerName}. Now shift into listening mode.
-
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
-
-Briefly acknowledge the step they took, then invite them to share what is really going on. Keep it 2–3 sentences and one question max.
-
-${buildResponseProtocol(1)}`;
-}
-
-/**
- * Transition from witnessing to perspective stretch.
- * The user has been heard and is ready to try seeing their partner's perspective.
- */
-function buildWitnessToPerspectiveTransition(context: PromptContext, partnerName: string): string {
-  return `You are Meet Without Fear. ${context.userName} just confirmed feeling heard. Gently bridge toward curiosity about what ${partnerName} might be feeling or afraid of.
-
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
-
-Keep it brief (2-3 sentences):
-1. Acknowledge they feel heard
-2. Invite curiosity about ${partnerName}'s inner experience - their feelings, fears, unmet needs
-
-${buildResponseProtocol(2)}`;
-}
-
-/**
- * Transition from perspective stretch to need mapping.
- * Both users have built some empathy; now it's time to crystallize needs.
- */
-function buildPerspectiveToNeedsTransition(context: PromptContext, partnerName: string): string {
-  return `You are Meet Without Fear. ${context.userName} has stretched toward empathy for ${partnerName}. Now help them name underlying needs.
-
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
-
-Bridge from empathy to needs. No solutions yet.
-
-${buildResponseProtocol(3)}`;
-}
-
-/**
- * Transition from need mapping to strategic repair.
- * Both users have clarified needs; now it's time to experiment with solutions.
- */
-function buildNeedsToRepairTransition(context: PromptContext, partnerName: string): string {
-  return `You are Meet Without Fear. ${context.userName} clarified needs; now shift to small, testable experiments with ${partnerName}.
-
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
-
-Introduce experiments as low-stakes tests. Keep it practical.
-
-${buildResponseProtocol(4)}`;
 }
 
 // ============================================================================
@@ -1231,15 +1174,11 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
   // Build post-share section if user just shared context with partner
   const postShareSection = buildPostShareContextSection(context);
 
-  // Special case: Stage transition intro
-  // When isStageTransition is true, use the transition prompt to introduce the new stage
-  if (options?.isStageTransition) {
-    const transitionPrompt = buildStageTransitionPrompt(stage, options.previousStage, context);
-    if (transitionPrompt) {
-      return postShareSection ? `${transitionPrompt}\n${postShareSection}` : transitionPrompt;
-    }
-    // Fall through to regular prompt if no transition prompt found
-  }
+  // Stage transition: prepend a short injection to the regular stage prompt
+  // (instead of replacing the entire prompt, which would lose modes/rules/readiness signals)
+  const transitionInjection = options?.isStageTransition
+    ? buildTransitionInjection(stage, options.previousStage, context)
+    : '';
 
   // Special case: Refining invitation (user has already done Stage 1/2 work)
   if (options?.isRefiningInvitation) {
@@ -1287,7 +1226,8 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
       break;
   }
 
-  return postShareSection ? `${basePrompt}\n${postShareSection}` : basePrompt;
+  const fullPrompt = transitionInjection ? `${transitionInjection}${basePrompt}` : basePrompt;
+  return postShareSection ? `${fullPrompt}\n${postShareSection}` : fullPrompt;
 }
 
 // ============================================================================
