@@ -1220,7 +1220,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     };
 
     // Assemble full context including notable facts from UserVessel
-    const [contextBundle, sharedContentHistory, milestoneContext] = await Promise.all([
+    // Also fetch latest emotional reading for intensity-dependent prompt behavior
+    const [contextBundle, sharedContentHistory, milestoneContext, emotionalIntensity] = await Promise.all([
       assembleContextBundle(
         sessionId,
         user.id,
@@ -1235,15 +1236,30 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         console.warn(`[sendMessageStream:${requestId}] Milestone context fetch failed:`, err);
         return null;
       }),
+      (async () => {
+        const vessel = await prisma.userVessel.findUnique({
+          where: { userId_sessionId: { userId: user.id, sessionId } },
+          select: { id: true },
+        });
+        if (vessel) {
+          const latestReading = await prisma.emotionalReading.findFirst({
+            where: { vesselId: vessel.id },
+            orderBy: { timestamp: 'desc' },
+            select: { intensity: true },
+          });
+          if (latestReading) return latestReading.intensity;
+        }
+        return 5; // Default if no reading
+      })(),
     ]);
 
-    console.log(`[sendMessageStream:${requestId}] Context assembled: notableFacts=${contextBundle.notableFacts?.length ?? 0}`);
+    console.log(`[sendMessageStream:${requestId}] Context assembled: notableFacts=${contextBundle.notableFacts?.length ?? 0}, emotionalIntensity=${emotionalIntensity}`);
 
     const prompt = buildStagePrompt(currentStage, {
       userName,
       partnerName,
       turnCount: userTurnCount,
-      emotionalIntensity: 5,
+      emotionalIntensity,
       contextBundle,
       sharedContentHistory,
       milestoneContext,
