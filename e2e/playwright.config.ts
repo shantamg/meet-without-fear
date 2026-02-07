@@ -9,7 +9,7 @@ dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 const webServers = (fixtureId: string) => [
   {
     command: 'npm run dev:api',
-    url: 'http://localhost:3002/health',
+    url: 'http://localhost:3000/health',
     reuseExistingServer: false,
     cwd: '..',
     timeout: 60000,
@@ -21,7 +21,7 @@ const webServers = (fixtureId: string) => [
     },
   },
   {
-    command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3002 npx expo start --web --port 8082',
+    command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082',
     url: 'http://localhost:8082',
     reuseExistingServer: false,
     timeout: 180000,
@@ -30,6 +30,7 @@ const webServers = (fixtureId: string) => [
 
 export default defineConfig({
   testDir: './tests',
+  testIgnore: /live-ai-.*\.spec\.ts/,
   timeout: 120000,
   expect: {
     timeout: 10000, // 10s for Ably events

@@ -19,7 +19,7 @@ import { test, expect, devices } from '@playwright/test';
 import { cleanupE2EData, getE2EHeaders } from '../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
-const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8081';
+const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
 
 // Use iPhone 12 viewport - must be at top level
 test.use(devices['iPhone 12']);
@@ -251,15 +251,15 @@ test.describe('Single User Journey', () => {
     console.log(`${elapsed()} Step 15 complete`);
 
     // Assert empathy review button appears (the "Review what you'll share" button)
-    // After fixing the cache key mismatch (stageKeys.empathyDraft vs sessionKeys.empathyDraft),
-    // the empathy panel should reliably appear when the AI response includes a draft.
-    console.log(`${elapsed()} Step 15b: Waiting for ready to share button...`);
-    const readyToShareButton = page.getByTestId('ready-to-share-button');
-    await expect(readyToShareButton).toBeVisible({ timeout: 10000 });
+    // The actual testID is 'empathy-review-button' in UnifiedSessionScreen.tsx.
+    // (ReadyToShareConfirmation component with 'ready-to-share-button' is unused.)
+    console.log(`${elapsed()} Step 15b: Waiting for empathy review button...`);
+    const empathyReviewButton = page.getByTestId('empathy-review-button');
+    await expect(empathyReviewButton).toBeVisible({ timeout: 10000 });
 
     // Click to open the drawer
-    console.log(`${elapsed()} Step 15c: Clicking ready to share...`);
-    await readyToShareButton.click();
+    console.log(`${elapsed()} Step 15c: Clicking empathy review...`);
+    await empathyReviewButton.click();
     const shareEmpathyButton = page.getByTestId('share-empathy-button');
     await expect(shareEmpathyButton).toBeVisible({ timeout: 5000 });
 

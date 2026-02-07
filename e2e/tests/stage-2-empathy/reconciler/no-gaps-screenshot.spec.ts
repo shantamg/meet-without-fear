@@ -11,7 +11,7 @@ import { cleanupE2EData, getE2EHeaders, SessionBuilder } from '../../../helpers'
 import * as path from 'path';
 import * as fs from 'fs';
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3002';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
 
 // Ensure screenshots directory exists

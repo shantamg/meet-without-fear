@@ -10,6 +10,8 @@ export { SessionBuilder, setupSession } from './session-builder';
 export type { TargetStage, UserConfig, SessionSetupResult } from './session-builder';
 export {
   waitForAIResponse,
+  waitForAnyAIResponse,
+  sendAndWaitForPanel,
   createUserContext,
   handleMoodCheck,
   navigateToSession,

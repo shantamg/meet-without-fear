@@ -13,7 +13,7 @@ import { test, expect, BrowserContext, Page } from '@playwright/test';
 import { SessionBuilder, SessionSetupResult } from '../helpers/session-builder';
 import { getE2EHeaders, navigateToShareFromSession } from '../helpers';
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3002';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
 
 // Test users

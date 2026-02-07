@@ -75,7 +75,7 @@ export class SessionBuilder {
   private _apiBaseUrl: string;
   private _fixtureId: string | null = null;
 
-  constructor(apiBaseUrl: string = process.env.API_BASE_URL || 'http://localhost:3002') {
+  constructor(apiBaseUrl: string = process.env.API_BASE_URL || 'http://localhost:3000') {
     this._apiBaseUrl = apiBaseUrl;
   }
 

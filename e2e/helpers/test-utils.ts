@@ -188,3 +188,69 @@ export async function confirmFeelHeard(page: Page, timeout = 5000): Promise<void
   await feelHeardYes.click();
   await expect(feelHeardYes).not.toBeVisible({ timeout });
 }
+
+/**
+ * Wait for any AI response to complete (without matching specific text).
+ * Counts AI message elements before and polls until a new one appears,
+ * then waits for the typing indicator to disappear (streaming complete).
+ * Used for live-AI tests where response text is non-deterministic.
+ *
+ * @param page - Playwright Page instance
+ * @param timeout - Maximum time to wait in milliseconds (default: 60000)
+ */
+export async function waitForAnyAIResponse(page: Page, timeout = 60000): Promise<void> {
+  // Count current AI messages
+  const initialCount = await page.locator('[data-testid^="ai-message-"]').count();
+
+  // Poll until a new AI message appears
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const currentCount = await page.locator('[data-testid^="ai-message-"]').count();
+    if (currentCount > initialCount) {
+      break;
+    }
+    await page.waitForTimeout(500);
+  }
+
+  // Ensure typing indicator is gone (streaming fully complete)
+  const typingIndicator = page.getByTestId('typing-indicator');
+  await typingIndicator.waitFor({ state: 'hidden', timeout: Math.max(deadline - Date.now(), 5000) }).catch(() => {});
+
+  // Small buffer for React rendering
+  await page.waitForTimeout(300);
+}
+
+/**
+ * Send messages one at a time, checking for a panel after each AI response.
+ * Returns the number of messages it took for the panel to appear.
+ * Throws if the panel doesn't appear after maxAttempts messages.
+ *
+ * @param page - Playwright Page instance
+ * @param messages - Array of pre-written messages to send
+ * @param panelTestId - testID of the panel to wait for
+ * @param maxAttempts - Maximum number of messages to try
+ * @param responseTimeout - Timeout per AI response (default: 60000)
+ * @returns Number of messages sent before panel appeared
+ */
+export async function sendAndWaitForPanel(
+  page: Page,
+  messages: string[],
+  panelTestId: string,
+  maxAttempts: number,
+  responseTimeout = 60000
+): Promise<number> {
+  for (let i = 0; i < Math.min(messages.length, maxAttempts); i++) {
+    // Type and send message
+    await page.getByTestId('chat-input').fill(messages[i]);
+    await page.getByTestId('send-button').click();
+    // Wait for AI response
+    await waitForAnyAIResponse(page, responseTimeout);
+    // Check if panel appeared (metadata arrives via separate SSE event after text,
+    // so give it time to process through React state updates)
+    const panel = page.getByTestId(panelTestId);
+    if (await panel.isVisible({ timeout: 5000 }).catch(() => false)) {
+      return i + 1; // turns it took
+    }
+  }
+  throw new Error(`Panel '${panelTestId}' did not appear after ${Math.min(messages.length, maxAttempts)} messages`);
+}

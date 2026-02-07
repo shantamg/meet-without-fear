@@ -29,7 +29,7 @@ function buildResponseProtocol(stage: number, options?: {
   includesDraft?: boolean;
   draftPurpose?: 'invitation' | 'empathy';
 }): string {
-  const flags: string[] = ['Intensity: [1-10]'];
+  const flags: string[] = ['UserIntensity: [1-10]'];
   if (stage === 1) {
     flags.push('FeelHeardCheck: [Y/N]');
   } else if (stage === 2) {
@@ -144,7 +144,7 @@ If they are brief or guarded, widen the lens (time, values, stakes) instead of d
  */
 const FACILITATOR_RULES = `
 Facilitator rhythm: reflect → validate → one next move (one question OR one invitation).
-If intensity is high (8+), stay in witness mode and slow down.
+If the user's emotional intensity is high (8+), they are very activated/distressed — stay in witness mode and slow down. Prioritize space and validation over progress.
 `;
 
 const STAGE1_QUESTION_TEMPLATES = `
@@ -358,14 +358,14 @@ ${FACILITATOR_RULES}
 ${STAGE1_QUESTION_TEMPLATES}
 Neutrality lint (internal): avoid judging words like "reasonable", "right", "wrong", "irrational". Rephrase to impact-focused language.
 Length: default 1–3 sentences. Go longer only if they explicitly ask for help or detail.
-${witnessOnlyMode ? 'Stay in witness mode until intensity settles.' : ''}
+${witnessOnlyMode ? 'The user is highly activated — stay in witness mode until their intensity settles.' : ''}
 ${LATERAL_PROBING_GUIDANCE}
 
-Intensity: ${context.emotionalIntensity}/10
+User's emotional intensity: ${context.emotionalIntensity}/10 (how activated/distressed the user is right now — high means prioritize space and validation over progress; do NOT mirror this intensity in your tone)
 Turn: ${context.turnCount}
 
 Feel-heard check:
-- Set FeelHeardCheck:Y when: (1) they affirm a reflection, (2) the core concern/need is named, and (3) intensity is stabilizing.
+- Set FeelHeardCheck:Y when: (1) they affirm a reflection, (2) the core concern/need is named, and (3) the user's intensity is stabilizing.
 - Be proactive — offer the check when ready rather than continuing to explore.
 - When FeelHeardCheck:Y, do NOT ask "do you feel heard?" The UI handles it. Keep setting Y until they act on it or switch topics.
 - IMPORTANT: Even when FeelHeardCheck:Y, stay in pure witness mode — continue reflecting and validating. Do NOT pivot to action, steps, or solutions.
@@ -416,14 +416,14 @@ FOUR MODES:
 - MIRROR: Judgment detected? Acknowledge hurt underneath, redirect: "People usually act from fear - what might ${partnerName} be afraid of?"
 
 ${earlyStage2 ? `EARLY STAGE 2: User likely has residual feelings. Start in LISTENING mode. Give space before inviting empathy.` : ''}
-${context.emotionalIntensity >= 8 ? `HIGH INTENSITY: Stay in LISTENING mode. Validate heavily. Not the moment for perspective-taking.` : ''}
+${context.emotionalIntensity >= 8 ? `HIGH USER INTENSITY: The user is very activated/distressed. Stay in LISTENING mode. Validate heavily. Not the moment for perspective-taking. Your tone should be calm and grounding, not matching their intensity.` : ''}
 ${draftContext}
 
 Stay with ${partnerName}'s perspective - let ${context.userName} discover it through their own curiosity. Honor the pace.
 
 ${LATERAL_PROBING_GUIDANCE}
 
-Intensity: ${context.emotionalIntensity}/10
+User's emotional intensity: ${context.emotionalIntensity}/10 (how activated/distressed the user is right now — high means prioritize space and validation over progress; do NOT mirror this intensity in your tone)
 Turn: ${context.turnCount}
 
 READY TO SHARE (ReadyShare:Y):
@@ -784,10 +784,10 @@ ${
 ${
   isHighIntensity
     ? `
-IMPORTANT: Emotional intensity is high. Stay in pure reflection mode:
+IMPORTANT: The user's emotional intensity is high — they are very activated/distressed. Stay in pure reflection mode:
 - Validate heavily
 - Don't push for insight
-- Be a steady, calm presence
+- Be a steady, calm, grounding presence (do NOT escalate your own emotional tone)
 - This is not the moment for challenges or reframes`
     : ''
 }
@@ -815,7 +815,7 @@ If someone expresses suicidal thoughts or immediate danger:
 - Stay present but don't try to be their therapist
 
 Turn number: ${turnCount}
-Emotional intensity: ${emotionalIntensity}/10
+User's emotional intensity: ${emotionalIntensity}/10 (how activated/distressed the user is — high means prioritize space and validation; do NOT mirror this intensity in your tone)
 
 BEFORE EVERY RESPONSE, think through (put this reasoning in the <thinking> block):
 1. What is ${userName} feeling right now?
@@ -983,10 +983,10 @@ ${
 ${
   isHighIntensity
     ? `
-IMPORTANT: Emotional intensity is high. Stay in pure reflection mode:
+IMPORTANT: The user's emotional intensity is high — they are very activated/distressed. Stay in pure reflection mode:
 - Validate heavily
 - Don't push for insight or action
-- Be a steady, calm presence
+- Be a steady, calm, grounding presence (do NOT escalate your own emotional tone)
 - This is not the moment for challenges or reframes`
     : ''
 }
@@ -1000,7 +1000,7 @@ TECHNIQUES:
 - Holding space: "That sounds really hard" / "Take your time with this"
 
 Turn number: ${turnCount}
-Emotional intensity: ${emotionalIntensity}/10
+User's emotional intensity: ${emotionalIntensity}/10 (how activated/distressed the user is — high means prioritize space and validation; do NOT mirror this intensity in your tone)
 
 BEFORE EVERY RESPONSE, think through (put this reasoning in the <thinking> block):
 1. What is ${userName} feeling right now?

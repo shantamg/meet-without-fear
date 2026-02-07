@@ -5,7 +5,7 @@
  * Deletes all users with emails matching *@e2e.test pattern.
  */
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3002';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 
 /**
  * Clean up all E2E test data from the database.

@@ -11,7 +11,7 @@
 import { test, expect, devices, BrowserContext, Page } from '@playwright/test';
 import { cleanupE2EData, getE2EHeaders, SessionBuilder, navigateToShareFromSession } from '../helpers';
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3002';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
 
 // Use iPhone 12 viewport - must be at top level

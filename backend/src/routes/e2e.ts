@@ -208,7 +208,7 @@ export async function seedE2ESession(
     }
 
     // Get base URL from environment or use default
-    const baseUrl = process.env.E2E_APP_BASE_URL || 'http://localhost:8082';
+    const baseUrl = process.env.E2E_APP_BASE_URL || 'http://localhost:8081';
 
     // Create the session at the specified stage
     const factory = new StateFactory(baseUrl);

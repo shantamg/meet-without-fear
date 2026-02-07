@@ -538,7 +538,7 @@ export function useConfirmFeelHeard(
 
       const optimisticTimestamp = new Date().toISOString();
 
-      // Optimistically update session state with feelHeardConfirmedAt
+      // Optimistically update session state with feelHeardConfirmedAt AND advance stage
       queryClient.setQueryData<SessionStateResponse>(
         sessionKeys.state(sessionId),
         (old) => {
@@ -547,6 +547,10 @@ export function useConfirmFeelHeard(
             ...old,
             progress: old.progress ? {
               ...old.progress,
+              myProgress: old.progress.myProgress ? {
+                ...old.progress.myProgress,
+                stage: Stage.PERSPECTIVE_STRETCH,
+              } : old.progress.myProgress,
               milestones: {
                 ...old.progress.milestones,
                 feelHeardConfirmedAt: optimisticTimestamp,
@@ -584,6 +588,10 @@ export function useConfirmFeelHeard(
             ...baseState,
             progress: baseState.progress ? {
               ...baseState.progress,
+              myProgress: baseState.progress.myProgress ? {
+                ...baseState.progress.myProgress,
+                stage: Stage.PERSPECTIVE_STRETCH,
+              } : baseState.progress.myProgress,
               milestones: {
                 ...baseState.progress.milestones,
                 // Use server's confirmedAt timestamp (authoritative)
