@@ -755,8 +755,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
           props: {
             needs: needs.map((n) => ({
               id: n.id,
-              category: n.need,
-              description: n.description,
+              category: n.category || n.need, // Use category enum, fallback to need name
+              description: n.need, // The need text is the actual description
             })),
             confirmedIds: needs.filter((n) => n.confirmed).map((n) => n.id),
           },
@@ -771,8 +771,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
           position: 'end',
           props: {
             sharedNeeds: commonGround.map((cg) => ({
-              category: cg.need,
-              description: cg.description,
+              category: cg.category || cg.need, // Use category enum, fallback to need name
+              description: cg.need, // The need text is the actual description
             })),
             partnerName,
           },

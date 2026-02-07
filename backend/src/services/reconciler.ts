@@ -851,6 +851,79 @@ Respond in JSON:
 }
 
 /**
+ * Refine a share suggestion based on user feedback.
+ * This regenerates the suggestion using AI, incorporating the user's refinement request.
+ */
+async function refineShareSuggestion(
+  originalContent: string,
+  refinementRequest: string,
+  guesserName: string,
+  subjectName: string,
+  gapContext: {
+    severity: string;
+    summary: string;
+    missedFeelings: string[];
+    mostImportantGap: string | null;
+  },
+  sessionId: string
+): Promise<string | null> {
+  console.log(`[Reconciler] Refining share suggestion for ${subjectName} based on their feedback`);
+
+  const turnId = `${sessionId}-refine-${Date.now()}`;
+
+  const response = await getSonnetJson<{ refinedContent: string }>({
+    systemPrompt: `You are helping ${subjectName} refine a message they want to share with ${guesserName}.
+
+${guesserName} tried to express empathy for ${subjectName}'s experience but missed some important aspects:
+
+Gap Analysis:
+- Severity: ${gapContext.severity}
+- Summary: ${gapContext.summary}
+- Missed feelings: ${gapContext.missedFeelings.join(', ') || 'None specified'}
+${gapContext.mostImportantGap ? `- Most important gap: ${gapContext.mostImportantGap}` : ''}
+
+The AI previously generated this suggestion for ${subjectName} to share:
+---
+${originalContent}
+---
+
+${subjectName} wants to modify this suggestion. Their feedback is:
+---
+${refinementRequest}
+---
+
+Generate a refined version of the sharing suggestion that incorporates ${subjectName}'s feedback while still addressing the gaps in ${guesserName}'s understanding.
+
+Guidelines:
+1. Keep it 1-3 sentences that ${subjectName} would say directly TO ${guesserName}
+2. Honor the user's specific feedback about what to change
+3. Maintain the focus on sharing feelings and experience (not accusations)
+4. Use "I" statements, keep the tone warm and vulnerable
+5. Never start with confrontational phrases like "Look," or "Listen,"
+
+Respond in JSON:
+\`\`\`json
+{
+  "refinedContent": "The refined suggestion text"
+}
+\`\`\``,
+    messages: [{ role: 'user', content: 'Generate the refined share suggestion.' }],
+    maxTokens: 512,
+    sessionId,
+    turnId,
+    operation: 'reconciler-refine-suggestion',
+  });
+
+  if (!response) {
+    console.warn(`[Reconciler] AI failed to refine share suggestion, returning null`);
+    return null;
+  }
+
+  console.log(`[Reconciler] Refined suggestion generated: "${response.refinedContent.substring(0, 50)}..."`);
+  return response.refinedContent;
+}
+
+/**
  * Get share suggestion for a user (called when they need to respond).
  */
 export async function getShareSuggestionForUser(
@@ -1003,10 +1076,33 @@ export async function respondToShareSuggestion(
   }
 
   // User accepted or refined
-  let sharedContent =
-    response.action === 'refine' && response.refinedContent
-      ? response.refinedContent
-      : shareOffer.suggestedContent || '';
+  let sharedContent: string;
+
+  if (response.action === 'refine' && response.refinedContent) {
+    // Call AI to regenerate the suggestion based on user's feedback
+    const refinedContent = await refineShareSuggestion(
+      shareOffer.suggestedContent || '',
+      response.refinedContent,
+      shareOffer.result.guesserName,
+      shareOffer.result.subjectName,
+      {
+        severity: shareOffer.result.gapSeverity,
+        summary: shareOffer.result.gapSummary,
+        missedFeelings: shareOffer.result.missedFeelings,
+        mostImportantGap: shareOffer.result.mostImportantGap,
+      },
+      sessionId
+    );
+
+    if (!refinedContent) {
+      console.warn(`[Reconciler] AI failed to refine suggestion, falling back to original`);
+      sharedContent = shareOffer.suggestedContent || '';
+    } else {
+      sharedContent = refinedContent;
+    }
+  } else {
+    sharedContent = shareOffer.suggestedContent || '';
+  }
 
   // Error if suggestedContent was somehow empty - this is a data integrity issue
   if (!sharedContent.trim()) {
@@ -1043,7 +1139,7 @@ export async function respondToShareSuggestion(
   });
 
   // Delete the SHARE_SUGGESTION message now that user has responded
-  // This prevents it from appearing alongside the new EMPATHY_STATEMENT
+  // This prevents it from appearing alongside the new SHARED_CONTEXT message
   await prisma.message.deleteMany({
     where: {
       sessionId,
@@ -1063,12 +1159,13 @@ export async function respondToShareSuggestion(
   const subjectName = shareOffer.result.subjectName;
   const guesserName = shareOffer.result.guesserName;
 
-  // Use explicit timestamps with guaranteed ordering (1ms apart) to ensure correct sort order
-  // This prevents race conditions where rapidly created messages get same/wrong timestamps
+  // Use explicit timestamps with guaranteed ordering (100ms apart) to ensure correct sort order
+  // This prevents race conditions and ensures the ordering survives any timestamp precision issues
+  // Order: intro (oldest) → SHARED_CONTEXT (middle) → reflection (newest)
   const baseTime = Date.now();
   const introTimestamp = new Date(baseTime);
-  const sharedContextTimestamp = new Date(baseTime + 1);
-  const reflectionTimestamp = new Date(baseTime + 2);
+  const sharedContextTimestamp = new Date(baseTime + 100);
+  const reflectionTimestamp = new Date(baseTime + 200);
 
   // Create AI message BEFORE the shared context (introduces what's coming) - US-7: Shared Content Label
   const introMessage = `${subjectName} hasn't seen your empathy statement yet because the reconciler suggested they share more. This is what they shared:`;
@@ -1115,9 +1212,9 @@ export async function respondToShareSuggestion(
 
   console.log(`[Reconciler] Created intro, shared context, and reflection messages for guesser ${shareOffer.result.guesserId}`);
 
-  // Timestamps for subject's messages (continue from guesser messages, 1ms apart)
-  const subjectSharedTimestamp = new Date(baseTime + 3);
-  const subjectAckTimestamp = new Date(baseTime + 4);
+  // Timestamps for subject's messages (continue from guesser messages, 100ms apart)
+  const subjectSharedTimestamp = new Date(baseTime + 300);
+  const subjectAckTimestamp = new Date(baseTime + 400);
 
   // Create message for subject showing what they shared (appears in their own chat)
   const sharedMessage = await prisma.message.create({
@@ -1125,7 +1222,7 @@ export async function respondToShareSuggestion(
       sessionId,
       senderId: userId,
       forUserId: userId, // For the subject's own chat
-      role: MessageRole.EMPATHY_STATEMENT, // Reuse empathy statement styling for "what you shared"
+      role: MessageRole.SHARED_CONTEXT, // Subject's shared context (visible only to them via forUserId)
       content: sharedContent,
       stage: 2,
       timestamp: subjectSharedTimestamp,

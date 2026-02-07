@@ -247,6 +247,34 @@ describe('Input Hiding (shouldHideInput)', () => {
     const result = computeChatUIState(inputs);
     expect(result.shouldHideInput).toBe(false);
   });
+
+  it('hides input when user has unviewed shared context', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      hasUnviewedSharedContext: true,
+      empathyStatus: { hasNewSharedContext: true },
+      empathyDraft: { alreadyConsented: true },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.shouldHideInput).toBe(true);
+  });
+
+  it('shows input after user views Share tab (no unviewed context)', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      hasUnviewedSharedContext: false,
+      empathyStatus: { hasNewSharedContext: true },
+      empathyDraft: { alreadyConsented: true },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.shouldHideInput).toBe(false);
+  });
 });
 
 // ============================================================================

@@ -23,6 +23,8 @@ import { extractJsonFromResponse } from '../utils/json-extractor';
 import { brainService, BrainActivityCallType } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
 import { recordLlmCall } from '../services/llm-telemetry';
+import { getFixtureResponseByIndex, getFixtureOperationResponse } from './e2e-fixtures';
+import { getE2EFixtureId } from './request-context';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -36,6 +38,18 @@ const PRICING = {
   'claude-3-5-haiku': { input: 0.001, output: 0.005 },
   'titan-embed': { input: 0.00002, output: 0.0 },
 } as const;
+
+// ============================================================================
+// Mock LLM Toggle (E2E Testing)
+// ============================================================================
+
+/**
+ * Check if mock LLM mode is enabled (for E2E testing).
+ * When enabled, getModelCompletion returns null, triggering mock response path.
+ */
+export function isMockLLMEnabled(): boolean {
+  return process.env.MOCK_LLM === 'true';
+}
 
 // ============================================================================
 // Prompt Debug Logging
@@ -291,6 +305,12 @@ function recordUsage(params: {
  * Returns the text response or null if client not configured.
  */
 export async function getCompletion(options: CompletionOptions): Promise<string | null> {
+  // E2E Mock Mode: Return null immediately to trigger mock response path
+  if (isMockLLMEnabled()) {
+    console.log('[Bedrock] MOCK_LLM enabled, skipping completion call');
+    return null;
+  }
+
   const client = getBedrockClient();
   if (!client) {
     return null;
@@ -363,6 +383,12 @@ export async function getModelCompletion(
   model: ModelType,
   options: CompletionOptions
 ): Promise<string | null> {
+  // E2E Mock Mode: Return null immediately to trigger mock response path
+  if (isMockLLMEnabled()) {
+    console.log(`[Bedrock] MOCK_LLM enabled, skipping ${model} call`);
+    return null;
+  }
+
   const client = getBedrockClient();
   if (!client) {
     return null;
@@ -520,6 +546,21 @@ export async function getHaikuJson<T>(
 export async function getSonnetResponse(
   options: SonnetCompletionOptions
 ): Promise<string | null> {
+  // E2E Mock Mode: Check for operation-specific fixture response first
+  if (isMockLLMEnabled()) {
+    const fixtureId = getE2EFixtureId();
+    const operation = options.operation ?? 'sonnet-response';
+    if (fixtureId) {
+      const mockResponse = getFixtureOperationResponse(fixtureId, operation);
+      if (mockResponse) {
+        console.log(`[Bedrock] MOCK_LLM enabled, returning fixture response for operation: ${operation}`);
+        return mockResponse;
+      }
+      console.log(`[Bedrock] MOCK_LLM enabled, no fixture response for operation: ${operation}`);
+    }
+    // Fall through to getModelCompletion which will return null
+  }
+
   return getModelCompletion('sonnet', {
     ...options,
     maxTokens: options.maxTokens ?? 2048,
@@ -658,6 +699,8 @@ export interface SonnetStreamingOptions {
   turnId: string;
   /** Call type for dashboard display categorization */
   callType?: BrainActivityCallType;
+  /** Response index for mock mode - used to select which fixture response to return */
+  mockResponseIndex?: number;
 }
 
 /**
@@ -675,6 +718,31 @@ export interface SonnetStreamingOptions {
 export async function* getSonnetStreamingResponse(
   options: SonnetStreamingOptions
 ): AsyncGenerator<StreamEvent, void, unknown> {
+  // E2E Mock Mode: Yield fixture response as text events
+  if (isMockLLMEnabled()) {
+    const fixtureId = getE2EFixtureId();
+    if (fixtureId && options.mockResponseIndex !== undefined) {
+      try {
+        console.log(`[Bedrock] MOCK_LLM enabled, loading fixture ${fixtureId} index ${options.mockResponseIndex}`);
+        const mockResponse = getFixtureResponseByIndex(fixtureId, options.mockResponseIndex);
+        console.log(`[Bedrock] Yielding mock response: "${mockResponse.substring(0, 80)}..."`);
+
+        // Yield the mock response as a text event (just like streaming would)
+        // The thinking trap in sendMessageStream will process it normally
+        yield { type: 'text', text: mockResponse };
+        yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 } };
+        return;
+      } catch (error) {
+        console.error('[Bedrock] Failed to load fixture response:', error);
+        // Fall through to return empty response
+      }
+    } else {
+      console.log('[Bedrock] MOCK_LLM enabled but no fixture configured, returning empty');
+    }
+    yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 } };
+    return;
+  }
+
   const client = getBedrockClient();
   if (!client) {
     // If client not configured, yield a done event with no usage

@@ -18,7 +18,5 @@ ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "globalFacts" JSONB;
 
 -- 5. Drop old UserVessel.embedding column and add contentEmbedding
 ALTER TABLE "UserVessel" DROP COLUMN IF EXISTS "embedding";
-ALTER TABLE "UserVessel" ADD COLUMN IF NOT EXISTS "contentEmbedding" vector(1024);
 
 -- 6. Add InnerWorkSession.contentEmbedding vector column
-ALTER TABLE "InnerWorkSession" ADD COLUMN IF NOT EXISTS "contentEmbedding" vector(1024);

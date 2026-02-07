@@ -238,7 +238,10 @@ export const getAblyToken = asyncHandler(async (req: Request, res: Response): Pr
     const Ably = await import('ably');
     const ably = new Ably.Rest(ablyApiKey);
 
-    const tokenRequest = await ably.auth.createTokenRequest({
+    // Use requestToken() to get an actual token (not just a tokenRequest)
+    // This avoids the client needing to make a separate request to Ably servers,
+    // which fixes CORS issues when E2E headers are being sent
+    const tokenDetails = await ably.auth.requestToken({
       clientId: user.id,
       capability: JSON.stringify(capability),
     });
@@ -246,7 +249,13 @@ export const getAblyToken = asyncHandler(async (req: Request, res: Response): Pr
     const response: ApiResponse<AblyTokenResponse> = {
       success: true,
       data: {
-        tokenRequest: tokenRequest as AblyTokenResponse['tokenRequest'],
+        token: {
+          token: tokenDetails.token,
+          issued: tokenDetails.issued,
+          expires: tokenDetails.expires,
+          capability: tokenDetails.capability,
+          clientId: tokenDetails.clientId || user.id,
+        },
       },
     };
 
@@ -256,20 +265,19 @@ export const getAblyToken = asyncHandler(async (req: Request, res: Response): Pr
     if (process.env.NODE_ENV !== 'production') {
       console.error('[Ably] Token generation failed:', error);
 
-      const mockTokenRequest = {
-        keyName: 'mock-key-name',
-        ttl: 3600000,
-        timestamp: Date.now(),
+      // Return mock token for development (when Ably is not configured properly)
+      const mockToken = {
+        token: 'mock-token-for-development',
+        issued: Date.now(),
+        expires: Date.now() + 3600000, // 1 hour
         capability: JSON.stringify(capability),
         clientId: user.id,
-        nonce: Math.random().toString(36).substring(2),
-        mac: 'mock-mac-signature',
       };
 
       const response: ApiResponse<AblyTokenResponse> = {
         success: true,
         data: {
-          tokenRequest: mockTokenRequest,
+          token: mockToken,
         },
       };
 

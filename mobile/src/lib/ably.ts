@@ -12,14 +12,23 @@
  */
 
 import Ably from 'ably';
-import { get, getAuthToken } from './api';
+import { get, getAuthToken, isE2EAuthMode } from './api';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface AblyTokenResponse {
-  tokenRequest: Ably.TokenRequest;
+  /** The actual token (JWT string) - preferred, avoids extra round-trip */
+  token?: {
+    token: string;
+    issued: number;
+    expires: number;
+    capability: string;
+    clientId: string;
+  };
+  /** Legacy: tokenRequest for backwards compatibility */
+  tokenRequest?: Ably.TokenRequest;
 }
 
 // ============================================================================
@@ -36,12 +45,25 @@ let connectionPromise: Promise<Ably.Realtime> | null = null;
 /**
  * Fetch an Ably token from the backend.
  * This is used by the Ably client's authCallback.
+ * Returns either a TokenDetails (preferred) or TokenRequest (legacy).
  */
-async function fetchAblyToken(): Promise<Ably.TokenRequest> {
+async function fetchAblyToken(): Promise<Ably.TokenDetails | Ably.TokenRequest> {
   console.log('[AblySingleton] Fetching token...');
   const response = await get<AblyTokenResponse>('/auth/ably-token');
-  console.log('[AblySingleton] Token received, clientId:', response.tokenRequest.clientId);
-  return response.tokenRequest;
+
+  // Prefer token (actual JWT) over tokenRequest to avoid extra round-trip
+  if (response.token) {
+    console.log('[AblySingleton] Token received (JWT), clientId:', response.token.clientId);
+    return response.token as Ably.TokenDetails;
+  }
+
+  // Fallback to tokenRequest for backwards compatibility
+  if (response.tokenRequest) {
+    console.log('[AblySingleton] TokenRequest received, clientId:', response.tokenRequest.clientId);
+    return response.tokenRequest as Ably.TokenRequest;
+  }
+
+  throw new Error('Invalid response: neither token nor tokenRequest provided');
 }
 
 // ============================================================================
@@ -72,9 +94,9 @@ export async function getAblyClient(): Promise<Ably.Realtime> {
     return connectionPromise;
   }
 
-  // Check if user is authenticated
+  // Check if user is authenticated (either via token or E2E headers)
   const token = await getAuthToken();
-  if (!token) {
+  if (!token && !isE2EAuthMode()) {
     throw new Error('User not authenticated - cannot connect to Ably');
   }
 

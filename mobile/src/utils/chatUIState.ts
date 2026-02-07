@@ -85,6 +85,9 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
 
   // Accuracy feedback for partner's empathy (Subject side)
   hasPartnerEmpathyForValidation: boolean; // Partner empathy exists and current user hasn't validated
+
+  // Shared context viewing (Guesser side)
+  hasUnviewedSharedContext: boolean; // Guesser must view Share tab before continuing
 }
 
 /**
@@ -283,7 +286,8 @@ function computeShouldShowWaitingBanner(status: WaitingStatusState): boolean {
     status === 'partner-considering-perspective' ||
     status === 'reconciler-analyzing' ||
     status === 'revision-analyzing' ||
-    status === 'awaiting-context-share'
+    status === 'awaiting-context-share' ||
+    status === 'awaiting-subject-decision'
   );
 }
 
@@ -377,6 +381,11 @@ function computeShouldHideInput(
 
   // During onboarding (compact agreement bar), input is hidden
   if (aboveInputPanel === 'compact-agreement-bar') {
+    return true;
+  }
+
+  // If user has unviewed shared context, hide input until they view Share tab
+  if (inputs.hasUnviewedSharedContext) {
     return true;
   }
 
@@ -510,5 +519,6 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     hasShareSuggestion: false,
     hasRespondedToShareOfferLocal: false,
     hasPartnerEmpathyForValidation: false,
+    hasUnviewedSharedContext: false,
   };
 }

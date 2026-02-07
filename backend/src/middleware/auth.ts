@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 import { UnauthorizedError, ForbiddenError } from './errors';
 import { prisma } from '../lib/prisma';
 import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
+import { Prisma } from '@prisma/client';
 
 // ============================================================================
 // Types
@@ -68,6 +69,57 @@ async function verifyClerkToken(req: Request): Promise<string | null> {
 }
 
 /**
+ * E2E auth bypass handler
+ * When E2E_AUTH_BYPASS=true, accepts x-e2e-user-id and x-e2e-user-email headers
+ */
+async function handleE2EAuthBypass(req: Request): Promise<boolean> {
+  if (process.env.E2E_AUTH_BYPASS !== 'true') {
+    return false;
+  }
+
+  const e2eUserId = req.headers['x-e2e-user-id'] as string | undefined;
+  const e2eEmail = req.headers['x-e2e-user-email'] as string | undefined;
+
+  if (!e2eUserId || !e2eEmail) {
+    return false;
+  }
+
+  const e2eClerkId = `e2e_${e2eUserId}`;
+
+  let user;
+  try {
+    // Primary path: tie auth identity to E2E user ID
+    user = await prisma.user.upsert({
+      where: { id: e2eUserId },
+      create: { id: e2eUserId, email: e2eEmail, clerkId: e2eClerkId },
+      update: { email: e2eEmail, clerkId: e2eClerkId },
+    });
+  } catch (error) {
+    // Guard against transient unique conflicts (parallel E2E requests)
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+      throw error;
+    }
+
+    user = await prisma.user.findFirst({
+      where: {
+        OR: [{ id: e2eUserId }, { clerkId: e2eClerkId }, { email: e2eEmail }],
+      },
+    });
+    if (!user) {
+      throw error;
+    }
+
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { email: e2eEmail, clerkId: e2eClerkId },
+    });
+  }
+
+  req.user = user;
+  return true;
+}
+
+/**
  * Clerk authentication handler
  */
 async function handleClerkAuth(
@@ -76,6 +128,13 @@ async function handleClerkAuth(
   next: NextFunction,
   required: boolean
 ): Promise<void> {
+  // Check for E2E auth bypass first
+  const e2eBypassed = await handleE2EAuthBypass(req);
+  if (e2eBypassed) {
+    next();
+    return;
+  }
+
   // Check Clerk is configured
   if (!process.env.CLERK_SECRET_KEY) {
     const response: ApiResponse<never> = {

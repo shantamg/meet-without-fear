@@ -60,7 +60,7 @@ describe('AgreementCard', () => {
   it('displays the check-in date when provided', () => {
     render(<AgreementCard {...defaultProps} />);
 
-    expect(screen.getByText('January 15, 2025')).toBeTruthy();
+    expect(screen.getByText('Wednesday, January 15, 2025')).toBeTruthy();
   });
 
   it('does not display check-in section when not provided', () => {

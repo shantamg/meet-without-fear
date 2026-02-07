@@ -24,7 +24,14 @@ export type ChatIndicatorType =
   | 'reconciler-analyzing'
   | 'reconciler-gaps-found'
   | 'reconciler-ready'
-  | 'partner-empathy-held';
+  | 'partner-empathy-held'
+  // Stage 3: Need Mapping
+  | 'needs-identified'
+  | 'common-ground-found'
+  // Stage 4: Strategic Repair
+  | 'strategies-ready'
+  | 'overlap-revealed'
+  | 'agreement-reached';
 
 interface ChatIndicatorProps {
   type: ChatIndicatorType;
@@ -83,13 +90,31 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
       case 'partner-empathy-held':
         const name = metadata?.partnerName || 'Partner';
         return `${name} shared empathy • Awaiting review`;
+      // Stage 3: Need Mapping
+      case 'needs-identified':
+        return 'Needs identified';
+      case 'common-ground-found':
+        return 'Common ground found';
+      // Stage 4: Strategic Repair
+      case 'strategies-ready':
+        return 'Strategies ready';
+      case 'overlap-revealed':
+        return 'Overlap revealed';
+      case 'agreement-reached':
+        return 'Agreement reached ✓';
       default:
         return '';
     }
   };
 
   // Whether this indicator links to another page (shows arrow)
-  const hasArrow = type === 'context-shared' || type === 'empathy-shared';
+  const hasArrow = type === 'context-shared' 
+    || type === 'empathy-shared'
+    || type === 'needs-identified'
+    || type === 'common-ground-found'
+    || type === 'strategies-ready'
+    || type === 'overlap-revealed'
+    || type === 'agreement-reached';
 
   const getLineStyle = () => {
     switch (type) {
@@ -111,6 +136,18 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
         return styles.reconcilerReadyLine;
       case 'partner-empathy-held':
         return styles.partnerEmpathyHeldLine;
+      // Stage 3: Need Mapping - soft blue/teal theme
+      case 'needs-identified':
+        return styles.needsIdentifiedLine;
+      case 'common-ground-found':
+        return styles.commonGroundFoundLine;
+      // Stage 4: Strategic Repair - green/success theme
+      case 'strategies-ready':
+        return styles.strategiesReadyLine;
+      case 'overlap-revealed':
+        return styles.overlapRevealedLine;
+      case 'agreement-reached':
+        return styles.agreementReachedLine;
       default:
         return styles.defaultLine;
     }
@@ -136,6 +173,18 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
         return styles.reconcilerReadyText;
       case 'partner-empathy-held':
         return styles.partnerEmpathyHeldText;
+      // Stage 3: Need Mapping - soft blue/teal theme
+      case 'needs-identified':
+        return styles.needsIdentifiedText;
+      case 'common-ground-found':
+        return styles.commonGroundFoundText;
+      // Stage 4: Strategic Repair - green/success theme
+      case 'strategies-ready':
+        return styles.strategiesReadyText;
+      case 'overlap-revealed':
+        return styles.overlapRevealedText;
+      case 'agreement-reached':
+        return styles.agreementReachedText;
       default:
         return styles.defaultText;
     }
@@ -272,5 +321,37 @@ const useStyles = () =>
     },
     partnerEmpathyHeldText: {
       color: 'rgba(59, 130, 246, 0.9)',
+    },
+    // Stage 3: Need Mapping - soft blue/teal theme
+    needsIdentifiedLine: {
+      backgroundColor: 'rgba(94, 186, 183, 0.3)',
+    },
+    needsIdentifiedText: {
+      color: 'rgba(94, 186, 183, 0.9)',
+    },
+    commonGroundFoundLine: {
+      backgroundColor: 'rgba(134, 197, 166, 0.3)',
+    },
+    commonGroundFoundText: {
+      color: 'rgba(134, 197, 166, 0.9)',
+    },
+    // Stage 4: Strategic Repair - amber/purple theme
+    strategiesReadyLine: {
+      backgroundColor: 'rgba(245, 158, 11, 0.3)',
+    },
+    strategiesReadyText: {
+      color: 'rgba(245, 158, 11, 0.9)',
+    },
+    overlapRevealedLine: {
+      backgroundColor: 'rgba(139, 92, 246, 0.3)',
+    },
+    overlapRevealedText: {
+      color: 'rgba(139, 92, 246, 0.9)',
+    },
+    agreementReachedLine: {
+      backgroundColor: 'rgba(34, 197, 94, 0.3)',
+    },
+    agreementReachedText: {
+      color: 'rgba(34, 197, 94, 0.9)',
     },
   }));

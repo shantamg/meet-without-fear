@@ -136,13 +136,12 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
   // Stage 2: Guesser waiting for subject to decide whether to share (Guesser side)
   'awaiting-subject-decision': {
     showBanner: true,
-    hideInput: false, // Guesser can chat
+    hideInput: true, // Guesser must wait for subject's decision
     showInnerThoughts: true,
     isActionRequired: false,
     showSpinner: false,
-    showKeepChattingAction: true,
+    showKeepChattingAction: false,
     bannerText: (p) => `${p} is deciding whether to share more context.`,
-    bannerSubtext: 'You can keep chatting while you wait.',
   },
 
   // Stage 2: Subject declined sharing (transient - positive message)

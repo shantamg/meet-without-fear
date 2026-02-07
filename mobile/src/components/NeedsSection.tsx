@@ -71,6 +71,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 12,
+    marginHorizontal: 16,
   },
 });
 

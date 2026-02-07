@@ -46,6 +46,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check - must be before API routes (no auth required)
+app.get('/health', (_, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // API routes - support both /api and /api/v1 for compatibility
 app.use('/api/v1', routes);
 app.use('/api', routes);

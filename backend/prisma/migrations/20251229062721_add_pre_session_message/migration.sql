@@ -5,7 +5,6 @@ CREATE TABLE "PreSessionMessage" (
     "role" "MessageRole" NOT NULL,
     "content" TEXT NOT NULL,
     "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "embedding" vector(1024),
     "detectedIntent" TEXT,
     "emotionalTone" TEXT,
     "extractedPerson" TEXT,

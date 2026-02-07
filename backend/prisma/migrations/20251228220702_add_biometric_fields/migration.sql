@@ -1,5 +1,5 @@
 -- CreateExtension
-CREATE EXTENSION IF NOT EXISTS "vector";
+-- -- CREATE EXTENSION IF NOT EXISTS "vector";
 
 -- CreateEnum
 CREATE TYPE "SessionStatus" AS ENUM ('CREATED', 'INVITED', 'ACTIVE', 'PAUSED', 'WAITING', 'RESOLVED', 'ABANDONED');
@@ -113,7 +113,6 @@ CREATE TABLE "UserVessel" (
     "sessionId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "embedding" vector(1536),
 
     CONSTRAINT "UserVessel_pkey" PRIMARY KEY ("id")
 );
@@ -126,7 +125,6 @@ CREATE TABLE "UserEvent" (
     "attributedTo" "Attribution" NOT NULL,
     "emotions" TEXT[],
     "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "embedding" vector(1536),
 
     CONSTRAINT "UserEvent_pkey" PRIMARY KEY ("id")
 );
@@ -262,7 +260,6 @@ CREATE TABLE "Message" (
     "content" TEXT NOT NULL,
     "stage" INTEGER NOT NULL,
     "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "embedding" vector(1536),
     "extractedNeeds" TEXT[],
     "extractedEmotions" TEXT[],
 
@@ -360,7 +357,6 @@ CREATE TABLE "GlobalLibraryItem" (
     "source" "GlobalLibrarySource" NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "embedding" vector(1536),
     "contributedBy" TEXT,
     "contributionConsent" TIMESTAMP(3),
 

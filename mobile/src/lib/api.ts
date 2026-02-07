@@ -40,6 +40,8 @@ const REQUEST_TIMEOUT = 30000; // 30 seconds
 export interface TokenProvider {
   getToken: (options?: { forceRefresh?: boolean }) => Promise<string | null>;
   signOut?: () => Promise<void>;
+  /** E2E headers to send instead of bearer token (for E2E testing) */
+  e2eHeaders?: Record<string, string>;
 }
 
 let tokenProvider: TokenProvider | null = null;
@@ -61,6 +63,21 @@ export async function getAuthToken(): Promise<string | null> {
     return null;
   }
   return tokenProvider.getToken();
+}
+
+/**
+ * Check if E2E mode is active (using E2E headers instead of bearer token).
+ */
+export function isE2EAuthMode(): boolean {
+  return !!tokenProvider?.e2eHeaders;
+}
+
+/**
+ * Get E2E auth headers if in E2E mode.
+ * Returns undefined if not in E2E mode.
+ */
+export function getE2EAuthHeaders(): Record<string, string> | undefined {
+  return tokenProvider?.e2eHeaders;
 }
 
 /**
@@ -123,6 +140,15 @@ const apiClient: AxiosInstance = axios.create({
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
     if (tokenProvider) {
+      // E2E mode: use custom headers instead of bearer token
+      if (tokenProvider.e2eHeaders) {
+        Object.entries(tokenProvider.e2eHeaders).forEach(([key, value]) => {
+          config.headers[key] = value;
+        });
+        return config;
+      }
+
+      // Normal mode: use bearer token
       try {
         const token = await tokenProvider.getToken();
         if (token) {

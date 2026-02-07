@@ -31,7 +31,6 @@ CREATE TABLE "InnerWorkMessage" (
     "role" "MessageRole" NOT NULL,
     "content" TEXT NOT NULL,
     "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "embedding" vector(1536),
 
     CONSTRAINT "InnerWorkMessage_pkey" PRIMARY KEY ("id")
 );

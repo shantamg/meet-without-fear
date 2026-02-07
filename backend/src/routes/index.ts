@@ -19,6 +19,7 @@ import stage2Routes from './stage2';
 import stage3Routes from './stage3';
 import stage4Routes from './stage4';
 import ttsRoutes from './tts';
+import e2eRoutes from './e2e';
 
 const router = Router();
 
@@ -28,6 +29,7 @@ console.log('[Routes] Loading main router...');
 router.use('/brain', brainRoutes);
 router.use('/auth', authRoutes);
 router.use('/tts', ttsRoutes);
+router.use('/e2e', e2eRoutes); // E2E testing helpers - must be BEFORE routers with global auth middleware
 router.use(chatRoutes); // Unified chat router
 router.use(invitationsRoutes); // Must be before innerWorkRoutes (has public endpoints)
 router.use(innerThoughtsRoutes); // Inner Thoughts (solo self-reflection, optionally linked to partner sessions)

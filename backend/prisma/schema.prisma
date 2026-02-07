@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions = [vector]
+  // extensions = [vector]
 }
 
 // ============================================================================
@@ -311,7 +311,7 @@ model UserEvent {
   timestamp    DateTime    @default(now())
 
   // Embedding for semantic search
-  embedding Unsupported("vector(1024)")?
+  // embedding Unsupported("vector(1024)")?  -- pgvector not available
 
   @@index([vesselId, timestamp])
 }
@@ -567,7 +567,7 @@ model PreSessionMessage {
   timestamp DateTime    @default(now())
 
   // Embedding for semantic search
-  embedding Unsupported("vector(1024)")?
+  // embedding Unsupported("vector(1024)")?  -- pgvector not available
 
   // Metadata from intent detection
   detectedIntent    String? // The intent detected for this message
@@ -868,7 +868,7 @@ model GlobalLibraryItem {
   updatedAt   DateTime            @updatedAt
 
   // Embedding for semantic search
-  embedding Unsupported("vector(1024)")?
+  // embedding Unsupported("vector(1024)")?  -- pgvector not available
 
   // For user-contributed items only
   contributedBy       String? // User ID if contributed (anonymized in results)
@@ -1119,7 +1119,7 @@ model GratitudeEntry {
   aiResponse String? @db.Text
 
   // Embedding for semantic search
-  embedding Unsupported("vector(1024)")?
+  // embedding Unsupported("vector(1024)")?  -- pgvector not available
 
   @@index([userId, createdAt])
 }

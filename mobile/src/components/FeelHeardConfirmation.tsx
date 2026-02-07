@@ -35,6 +35,7 @@ export function FeelHeardConfirmation({
           onPress={onContinue}
           disabled={isPending}
           activeOpacity={0.7}
+          testID="feel-heard-not-yet"
         >
           <Text style={styles.secondaryButtonText}>Not yet</Text>
         </TouchableOpacity>
@@ -44,6 +45,7 @@ export function FeelHeardConfirmation({
         onPress={onConfirm}
         disabled={isPending}
         activeOpacity={0.7}
+        testID="feel-heard-yes"
       >
         <Text style={styles.buttonText}>I feel heard</Text>
       </TouchableOpacity>

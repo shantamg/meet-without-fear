@@ -5,6 +5,7 @@ node_modules
 build
 dist
 .expo
+*.tsbuildinfo
 
 # Environment files
 .env
@@ -116,3 +117,11 @@ backend/tmp/prompts/
 .last_reset
 progress.json
 status.json
+
+# Backend temp scripts (ad-hoc Prisma queries per CLAUDE.md guidance)
+backend/src/temp-*.ts
+backend/src/fix-*.ts
+
+# Playwright E2E testing artifacts
+e2e/playwright-report/
+e2e/test-results/test-results/

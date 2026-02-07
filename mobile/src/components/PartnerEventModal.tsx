@@ -26,7 +26,8 @@ export type PartnerEventType =
   | 'empathy_validated'      // Partner validated your empathy
   | 'context_shared'         // Partner shared context to help you understand
   | 'share_suggestion'       // AI suggests you share something with partner
-  | 'validation_needed';     // Partner's empathy needs your validation
+  | 'validation_needed'      // Partner's empathy needs your validation
+  | 'partner_considering_share'; // Partner is deciding whether to share more context
 
 export interface PartnerEventModalProps {
   /** Whether the modal is visible */
@@ -67,7 +68,7 @@ function getEventConfig(
         title: 'New Understanding Shared',
         message: `${partnerName} shared how they understand your feelings.`,
         icon: <Heart color={colors.accent} size={32} />,
-        primaryAction: 'View in Partner Tab',
+        primaryAction: 'View',
         accentColor: colors.accent,
       };
     case 'empathy_validated':
@@ -75,7 +76,7 @@ function getEventConfig(
         title: 'Your Empathy Validated',
         message: `${partnerName} confirmed your understanding feels accurate.`,
         icon: <Check color={colors.success} size={32} />,
-        primaryAction: 'View in Partner Tab',
+        primaryAction: 'View',
         accentColor: colors.success,
       };
     case 'context_shared':
@@ -83,7 +84,7 @@ function getEventConfig(
         title: 'Context Shared',
         message: `${partnerName} shared something to help you understand them better.`,
         icon: <MessageCircle color={colors.brandBlue} size={32} />,
-        primaryAction: 'View in Partner Tab',
+        primaryAction: 'View',
         accentColor: colors.brandBlue,
       };
     case 'share_suggestion':
@@ -91,7 +92,7 @@ function getEventConfig(
         title: 'Help Build Understanding',
         message: `${partnerName} is trying to understand you. You can share something to help.`,
         icon: <Send color={colors.accent} size={32} />,
-        primaryAction: 'View Suggestion',
+        primaryAction: 'View',
         accentColor: colors.accent,
       };
     case 'validation_needed':
@@ -101,6 +102,14 @@ function getEventConfig(
         icon: <Heart color={colors.accent} size={32} />,
         primaryAction: 'Give Feedback',
         accentColor: colors.accent,
+      };
+    case 'partner_considering_share':
+      return {
+        title: 'Almost There',
+        message: `${partnerName} is deciding whether to share more context to help you understand them better.`,
+        icon: <MessageCircle color={colors.brandBlue} size={32} />,
+        primaryAction: 'Got It',
+        accentColor: colors.brandBlue,
       };
   }
 }

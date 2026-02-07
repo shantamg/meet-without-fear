@@ -1281,6 +1281,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         turnId,
         operation: 'streaming-response',
         callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
+        // For E2E mock mode: response index is 0-based (userTurnCount is 1-based after save)
+        mockResponseIndex: Math.max(0, userTurnCount - 1),
       });
 
       const streamStartTime = Date.now();

@@ -83,7 +83,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(147, 197, 253, 0.3)',
     padding: 16,
-    marginBottom: 8,
+    marginBottom: 12,
+    marginHorizontal: 16,
     position: 'relative',
   },
   sharedCard: {

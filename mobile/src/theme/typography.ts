@@ -1,8 +1,13 @@
+import { Platform } from 'react-native';
+
+const webFontStack = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+const fontFamily = Platform.OS === 'web' ? webFontStack : 'System';
+
 export const typography = {
   fontFamily: {
-    regular: 'System',
-    medium: 'System',
-    bold: 'System',
+    regular: fontFamily,
+    medium: fontFamily,
+    bold: fontFamily,
   },
   fontSize: {
     xs: 10,

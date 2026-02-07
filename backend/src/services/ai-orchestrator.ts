@@ -52,6 +52,8 @@ import { getSharedContentContext, getMilestoneContext } from './shared-context';
 import { publishContextUpdated } from './realtime';
 import { routeModel, scoreAmbiguity } from './model-router';
 import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from './llm-telemetry';
+import { getFixtureResponseByIndex } from '../lib/e2e-fixtures';
+import { getE2EFixtureId } from '../lib/request-context';
 // publishUserEvent and memoryService imports removed - handled in partner-session-classifier.ts
 
 // ============================================================================
@@ -605,8 +607,33 @@ function buildMessagesWithContext(
 
 /**
  * Get a mock response for development without API key.
+ * When E2E_FIXTURE_ID is set, loads response from fixture file.
+ *
+ * NOTE: Fixture responses contain <thinking> tags just like real AI responses.
+ * We parse them here to extract the clean response, matching the behavior
+ * of the main response flow (which uses parseMicroTagResponse).
  */
 function getMockResponse(context: OrchestratorContext): string {
+  const fixtureId = getE2EFixtureId();
+
+  // Use fixture response if fixture ID is available
+  if (fixtureId) {
+    try {
+      // Response index = number of user messages sent (turnCount is 1-based, so use turnCount - 1)
+      // We subtract 1 because fixture indices are 0-based
+      const responseIndex = Math.max(0, context.turnCount - 1);
+      console.log(`[AI Orchestrator] Using fixture ${fixtureId}, index ${responseIndex}`);
+      const rawFixture = getFixtureResponseByIndex(fixtureId, responseIndex);
+
+      // Parse the fixture response to strip <thinking> tags, just like real AI responses
+      const parsed = parseMicroTagResponse(rawFixture);
+      return parsed.response || rawFixture; // Fallback to raw if parsing fails
+    } catch (error) {
+      console.warn(`[AI Orchestrator] Fixture response failed, falling back to default mock:`, error);
+      // Fall through to default mock response
+    }
+  }
+
   const { userName, turnCount, stage } = context;
 
   if (stage === 1) {

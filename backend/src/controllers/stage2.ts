@@ -30,9 +30,7 @@ import {
   runReconciler,
   getShareSuggestionForUser,
   respondToShareSuggestion as reconcilerRespondToShareSuggestion,
-  hasPartnerCompletedStage1,
   getSharedContextForGuesser,
-  getSharedContentDeliveryStatus,
   generateShareSuggestionForDirection,
 } from '../services/reconciler';
 import { isSessionCreator } from '../utils/session';
@@ -186,6 +184,13 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         generateShareSuggestionForDirection(sessionId, userAId, userBId).catch((err) =>
           console.warn('[triggerReconcilerAndUpdateStatuses] Failed to generate share suggestion for A→B:', err)
         );
+
+        // Notify the guesser (User A) that subject (User B) is considering sharing
+        await publishSessionEvent(sessionId, 'empathy.partner_considering_share', {
+          forUserId: userAId, // Guesser receives notification
+          timestamp: Date.now(),
+        });
+        console.log(`[triggerReconcilerAndUpdateStatuses] Published partner_considering_share for User A`);
       }
     }
 
@@ -229,6 +234,13 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         generateShareSuggestionForDirection(sessionId, userBId, userAId).catch((err) =>
           console.warn('[triggerReconcilerAndUpdateStatuses] Failed to generate share suggestion for B→A:', err)
         );
+
+        // Notify the guesser (User B) that subject (User A) is considering sharing
+        await publishSessionEvent(sessionId, 'empathy.partner_considering_share', {
+          forUserId: userBId, // Guesser receives notification
+          timestamp: Date.now(),
+        });
+        console.log(`[triggerReconcilerAndUpdateStatuses] Published partner_considering_share for User B`);
       }
     }
 
@@ -655,7 +667,6 @@ export async function consentToShare(
 
     // Check if partner has also consented (only if we have a partner)
     let partnerAttempt = null;
-    let bothConsented = false;
     if (partnerId) {
       partnerAttempt = await prisma.empathyAttempt.findFirst({
         where: {
@@ -666,8 +677,6 @@ export async function consentToShare(
 
       // If both have shared, transition both to ANALYZING and run reconciler
       if (partnerAttempt) {
-        bothConsented = true;
-
         // Update both attempts to ANALYZING status
         await prisma.empathyAttempt.updateMany({
           where: {
@@ -886,13 +895,15 @@ export async function getPartnerEmpathy(
     // Get partner's user ID from session data
     const partnerId = getPartnerUserIdFromSession(session, user.id);
 
-    // Get partner's empathy attempt
-    const partnerAttempt = await prisma.empathyAttempt.findFirst({
-      where: {
-        sessionId,
-        sourceUserId: partnerId ?? undefined,
-      },
-    });
+    // Get partner's empathy attempt (only if we have a partner)
+    const partnerAttempt = partnerId
+      ? await prisma.empathyAttempt.findFirst({
+          where: {
+            sessionId,
+            sourceUserId: partnerId,
+          },
+        })
+      : null;
 
     // Only reveal partner's attempt if status is REVEALED or VALIDATED
     // This is the key change from the reconciler flow design
@@ -1036,13 +1047,15 @@ export async function validateEmpathy(
     // Get partner ID from session data
     const partnerId = getPartnerUserIdFromSession(session, user.id);
 
-    // Get partner's empathy attempt
-    const partnerAttempt = await prisma.empathyAttempt.findFirst({
-      where: {
-        sessionId,
-        sourceUserId: partnerId ?? undefined,
-      },
-    });
+    // Get partner's empathy attempt (only if we have a partner)
+    const partnerAttempt = partnerId
+      ? await prisma.empathyAttempt.findFirst({
+          where: {
+            sessionId,
+            sourceUserId: partnerId,
+          },
+        })
+      : null;
 
     if (!partnerAttempt) {
       errorResponse(res, 'NOT_FOUND', 'Partner empathy attempt not found', 404);

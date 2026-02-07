@@ -370,7 +370,7 @@ export function PartnerContentCard({
               testID={`${testID}-validate-inaccurate`}
             >
               <Text style={[styles.validationButtonText, styles.validationButtonTextNegative]}>
-                Misses mark
+                Off
               </Text>
             </TouchableOpacity>
           </View>

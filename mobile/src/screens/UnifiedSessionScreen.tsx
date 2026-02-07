@@ -345,6 +345,18 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Empathy refining, updating cache');
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
       }
+
+      if (event === 'empathy.partner_considering_share') {
+        // Partner (subject) is considering sharing context - notify the guesser
+        console.log('[UnifiedSessionScreen] Partner considering share, refetching status');
+        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+        // Show modal only if this event is for us (we are the guesser)
+        if (data.forUserId === user?.id) {
+          showPartnerEventModal('partner_considering_share');
+        } else {
+          console.log('[UnifiedSessionScreen] Partner considering share not for us, skipping modal');
+        }
+      }
     },
     // Fire-and-forget pattern: AI responses arrive via Ably
     // Cache-First: Ghost dots are now derived from last message role in ChatInterface
@@ -560,6 +572,7 @@ export function UnifiedSessionScreen({
       analyzing: empathyStatusData.analyzing,
       awaitingSharing: empathyStatusData.awaitingSharing,
       hasNewSharedContext: empathyStatusData.hasNewSharedContext,
+      hasUnviewedSharedContext: empathyStatusData.hasUnviewedSharedContext,
       myAttempt: empathyStatusData.myAttempt ? {
         status: empathyStatusData.myAttempt.status,
         content: empathyStatusData.myAttempt.content,
@@ -1595,7 +1608,7 @@ export function UnifiedSessionScreen({
                        Move the styles that contain padding/bg/borders HERE. 
                        This ensures they don't take up space when the parent height is 0.
                     */}
-                        <View style={styles.invitationDraftContainer}>
+                        <View style={styles.invitationDraftContainer} testID="invitation-draft-panel">
                           <Text style={styles.invitationDraftMessage}>
                             "{invitationMessage}"
                           </Text>

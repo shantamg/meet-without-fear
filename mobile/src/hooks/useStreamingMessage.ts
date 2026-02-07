@@ -9,7 +9,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useQueryClient, InfiniteData } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import EventSource from 'react-native-sse';
-import { getAuthToken } from '../lib/api';
+import { getAuthToken, isE2EAuthMode, getE2EAuthHeaders } from '../lib/api';
 import {
   MessageDTO,
   MessageRole,
@@ -400,10 +400,22 @@ export function useStreamingMessage(
       addMessageToCache(sessionId, optimisticUserMessage, currentStage);
 
       try {
-        // Get auth token
-        const token = await getAuthToken();
-        if (!token) {
-          throw new Error('Not authenticated');
+        // Build auth headers - either E2E headers or Bearer token
+        let authHeaders: Record<string, string> = {};
+
+        if (isE2EAuthMode()) {
+          // E2E mode: use custom headers
+          const e2eHeaders = getE2EAuthHeaders();
+          if (e2eHeaders) {
+            authHeaders = { ...e2eHeaders };
+          }
+        } else {
+          // Normal mode: use Bearer token
+          const token = await getAuthToken();
+          if (!token) {
+            throw new Error('Not authenticated');
+          }
+          authHeaders = { Authorization: `Bearer ${token}` };
         }
 
         const url = `${API_BASE_URL}/sessions/${sessionId}/messages/stream`;
@@ -413,7 +425,7 @@ export function useStreamingMessage(
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
+            ...authHeaders,
           },
           body: JSON.stringify({ content }),
           pollingInterval: 0, // Disable polling, use SSE

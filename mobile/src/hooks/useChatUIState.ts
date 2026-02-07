@@ -75,6 +75,7 @@ export interface UseChatUIStateProps {
     analyzing?: boolean;
     awaitingSharing?: boolean;
     hasNewSharedContext?: boolean;
+    hasUnviewedSharedContext?: boolean;
     myAttempt?: { status?: string; content?: string };
     messageCountSinceSharedContext?: number;
   } | undefined;
@@ -230,6 +231,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasShareSuggestion: shareOfferData?.hasSuggestion ?? false,
     hasRespondedToShareOfferLocal,
     hasPartnerEmpathyForValidation: hasPartnerEmpathy && !partnerEmpathyValidated,
+    hasUnviewedSharedContext: empathyStatusData?.hasUnviewedSharedContext ?? false,
   }), [
     myProgress?.stage,
     partnerProgress?.stage,

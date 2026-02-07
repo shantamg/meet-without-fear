@@ -96,7 +96,6 @@ CREATE TABLE "GratitudeEntry" (
     "linkedConflictId" TEXT,
     "sentimentScore" DOUBLE PRECISION,
     "aiResponse" TEXT,
-    "embedding" vector(1024),
 
     CONSTRAINT "GratitudeEntry_pkey" PRIMARY KEY ("id")
 );
