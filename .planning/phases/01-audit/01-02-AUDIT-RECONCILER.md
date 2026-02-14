@@ -774,3 +774,829 @@ The reconciler state machine is a complex asymmetric flow with multiple race con
 4. **No automatic retry:** HELD status doesn't advance automatically when partner completes Stage 1
 
 **Next Steps:** Fix infinite loop by adding shared context check to all reconciler entry points, investigate Prisma isolation level, and add retry mechanism for HELD → ANALYZING transition.
+
+---
+
+## 7. User Perspectives: Reconciler Flow
+
+This section documents what each user experiences during the reconciler flow, from both the guesser's perspective (person whose empathy is being analyzed) and the subject's perspective (person whose feelings are being guessed about).
+
+### 7.1 User A (Guesser) Flow
+
+**User A** has written an empathy statement trying to guess what **User B** is feeling.
+
+#### 7.1.1 Initial Share (HELD Status)
+
+**What User A sees:**
+1. Clicks "Share" on empathy statement panel in AI chat
+2. Sees confirmation: "That took courage - trying to imagine [User B]'s perspective"
+3. AI message suggests using Inner Thoughts while waiting
+4. Empathy statement appears in chat with label "What you shared"
+
+**UI State:**
+- Empathy panel disappears from AI chat
+- Input remains enabled (can continue AI conversation)
+- Share tab shows "Empathy Pending" state
+- Invitation indicator shows "Empathy Sent" timeline marker (derived from `invitation.messageConfirmedAt` cache timestamp)
+
+**What User A does NOT see:**
+- User B's empathy statement (still held by reconciler)
+- Any indication of reconciler status
+- Whether User B has shared empathy yet
+
+**Waiting for:** User B to complete Stage 1 (confirm "I feel heard")
+
+---
+
+#### 7.1.2 Reconciler Analysis (ANALYZING Status)
+
+**Trigger:** User B confirms feelHeard in Stage 1
+
+**What User A sees:**
+- No immediate UI change (analysis happens in background)
+- Continues AI conversation normally
+- Waiting banner does NOT appear (status is transparent)
+
+**What User A does NOT see:**
+- That reconciler is running
+- Gap analysis results
+- Whether User B is being asked to share more context
+
+**Duration:** Typically 5-10 seconds for AI analysis
+
+---
+
+#### 7.1.3a Path 1: No Gaps (READY Status)
+
+**Trigger:** Reconciler finds no significant gaps
+
+**What User A sees:**
+1. AI message appears: "[User B] has felt heard. The reconciler reports your attempt to imagine what they're feeling was quite accurate. [User B] is now considering your perspective, and once they do, you'll both see what each other shared."
+2. Share tab updates to "Empathy Ready" state
+
+**UI State:**
+- Waiting banner: "Waiting for [User B] to validate your empathy"
+- Input enabled (can continue AI conversation)
+- Share tab: Empathy card shows "Pending validation"
+
+**What User A does NOT see:**
+- User B's empathy statement (still waiting for both to be READY)
+- Specific alignment score
+- What they got right/wrong
+
+**Waiting for:** User B's empathy to also reach READY status (mutual reveal)
+
+---
+
+#### 7.1.3b Path 2: Gaps Found (AWAITING_SHARING Status)
+
+**Trigger:** Reconciler finds significant gaps, subject (User B) is asked to share more context
+
+**What User A sees:**
+1. Ably event `empathy.partner_considering_share` updates cache
+2. Waiting banner appears: "Waiting for [User B] to respond to share suggestion"
+3. Share tab updates to "Awaiting Context" state
+
+**UI State:**
+- Waiting banner shows partner is considering whether to share
+- Input enabled (can continue AI conversation)
+- Share tab: Empathy card shows "Partner considering sharing more context"
+
+**What User A does NOT see:**
+- What gaps were found
+- What User B is being asked to share about
+- The share suggestion text
+
+**Ably Events Received:**
+- `empathy.status_updated` (status: AWAITING_SHARING, includes full empathy status)
+- `empathy.partner_considering_share`
+
+**Cache Updates:**
+- `stageKeys.empathyStatus` updated with `myAttempt.status: AWAITING_SHARING`
+- Waiting banner derived from empathy status
+
+**Waiting for:** User B to respond to share suggestion (accept, refine, or decline)
+
+---
+
+#### 7.1.4 Path 2a: Subject Shares Context (REFINING Status)
+
+**Trigger:** User B accepts or refines share suggestion
+
+**What User A sees:**
+1. Ably event `empathy.refining` triggers cache update
+2. Three messages appear in AI chat (with explicit 100ms timestamp gaps for ordering):
+   - AI intro: "[User B] hasn't seen your empathy statement yet because the reconciler suggested they share more. This is what they shared:"
+   - SHARED_CONTEXT message: "[User B's shared content]"
+   - AI reflection: "How does this land for you? Take a moment to reflect on what [User B] shared. Does this give you any new insight into what they might be experiencing?"
+3. Waiting banner updates: "Refine your empathy based on new context"
+4. Share tab shows "Refining" state with "Refine" button
+
+**UI State:**
+- Input enabled (can continue AI conversation about shared context)
+- Waiting banner: "You can refine your empathy or keep your original statement"
+- Share tab: Empathy card shows SHARED_CONTEXT content with "Refine" button
+- "Refine" button navigates to Share tab → Refine flow
+
+**Ably Events Received:**
+- `empathy.refining` (includes full empathy status with `hasNewSharedContext: true`)
+
+**Cache Updates:**
+- `stageKeys.empathyStatus` updated:
+  - `myAttempt.status: REFINING`
+  - `sharedContext: { content, sharedAt }`
+  - `hasNewSharedContext: true`
+  - `messageCountSinceSharedContext: 0`
+- `messageKeys.infinite` updated with 3 new messages
+
+**What User A can do:**
+1. Continue AI conversation normally (input not blocked)
+2. Click "Refine" button on Share tab to enter refinement mode:
+   - Opens Share tab with SHARED_CONTEXT content displayed
+   - Shows AI chat below with refinement conversation
+   - Can ask AI questions about the shared context
+   - AI uses abstract guidance hints (areaHint, guidanceType, promptSeed) to ask probing questions
+   - When ready, AI proposes revised empathy statement
+3. Resubmit revised empathy via Share tab
+   - Calls `resubmitEmpathy()`
+   - Status → ANALYZING (loops back to reconciler)
+
+**Waiting for:** User A to decide whether to refine or keep original empathy
+
+---
+
+#### 7.1.5 Path 2a→ Resubmit Refined Empathy (ANALYZING Again)
+
+**Trigger:** User A clicks "Resubmit" on Share tab after refining
+
+**What User A sees:**
+1. New EMPATHY_STATEMENT message in AI chat: "[Revised empathy content]"
+2. AI acknowledgment: "You're showing real understanding here. The reconciler will review your updated perspective shortly."
+3. Waiting banner: "Reconciler analyzing your refined empathy"
+4. Share tab updates to "Analyzing" state
+
+**UI State:**
+- Input enabled (can continue AI conversation)
+- Waiting banner: "Reconciler analyzing..."
+- Share tab: Empathy card shows "Analyzing" spinner
+
+**What User A does NOT see:**
+- That ReconcilerResult was deleted and recreated
+- Whether the same gaps will be found again
+
+**Ably Events:** None (reconciler runs in background)
+
+**Cache Updates:**
+- `stageKeys.empathyStatus` updated:
+  - `myAttempt.status: ANALYZING`
+  - `myAttempt.revisionCount` incremented
+  - `myAttempt.content` updated
+- `messageKeys.infinite` updated with new EMPATHY_STATEMENT and AI acknowledgment messages
+
+**Waiting for:** Reconciler to re-analyze revised empathy
+
+**Infinite Loop Risk:** If reconciler finds same gaps after resubmit, User A will loop back to AWAITING_SHARING status. The `hasContextAlreadyBeenShared()` check prevents immediate re-offering, but if that check fails, User B will see new share suggestion and cycle repeats.
+
+---
+
+#### 7.1.6 Path 2b: Subject Declines to Share (READY Status)
+
+**Trigger:** User B declines share suggestion
+
+**What User A sees:**
+1. Waiting banner disappears (status changes to READY)
+2. Share tab updates to "Empathy Ready" state
+3. No message in AI chat about the decline
+
+**UI State:**
+- Waiting banner: "Waiting for [User B] to validate your empathy"
+- Input enabled
+- Share tab: Empathy card shows "Pending validation"
+
+**Ably Events:** None (decline is silent to guesser)
+
+**Cache Updates:**
+- `stageKeys.empathyStatus` updated:
+  - `myAttempt.status: READY`
+
+**What User A does NOT see:**
+- That User B declined to share
+- Why they declined
+
+**Waiting for:** User B's empathy to also reach READY status (mutual reveal)
+
+---
+
+#### 7.1.7 Mutual Reveal (REVEALED Status)
+
+**Trigger:** Both User A's and User B's empathy attempts reach READY status
+
+**What User A sees:**
+1. Ably event `empathy.revealed` triggers cache update
+2. Share tab updates to show User B's empathy statement
+3. Modal prompt appears (only for User B, the subject): "Validate whether User A's empathy feels accurate"
+
+**UI State (User A - Guesser):**
+- Share tab: Both empathy statements now visible
+- User B's empathy shown with "Waiting for validation" label
+- Input enabled (can continue AI conversation)
+- Waiting banner: "Waiting for [User B] to validate your empathy"
+
+**UI State (User B - Subject):**
+- Share tab: Both empathy statements visible
+- User A's empathy shown with "Validate accuracy" button
+- Modal appears: "Does [User A]'s empathy feel accurate?"
+- Options: "Accurate" / "Not quite"
+
+**Ably Events Received:**
+- `empathy.revealed` (includes `guesserUserId` for filtering)
+
+**Cache Updates:**
+- `stageKeys.empathyStatus` updated:
+  - `myAttempt.status: REVEALED`
+  - `myAttempt.revealedAt` set
+  - `partnerAttempt: { ...empathy data... }`
+
+**Waiting for:** User B to validate User A's empathy
+
+---
+
+#### 7.1.8 Validation (VALIDATED Status)
+
+**Trigger:** User B validates User A's empathy as accurate
+
+**What User A sees:**
+1. Ably event `empathy.status_updated` with validation info
+2. Share tab updates: User A's empathy card shows "Validated" badge
+3. If both users have validated, Stage 3 transition begins
+
+**UI State:**
+- Share tab: Empathy card shows green checkmark "Validated"
+- If both validated: Stage 2 completion banner appears
+- Input enabled
+
+**Ably Events Received:**
+- `empathy.status_updated` (validatedBy: User B's ID)
+
+**Cache Updates:**
+- `stageKeys.empathyStatus` updated:
+  - `myAttempt.status: VALIDATED`
+  - `myAttempt.deliveryStatus: SEEN`
+  - `myAttempt.seenAt` set
+
+**Stage Transition:** If both users validated, `triggerStage3Transition()` runs:
+1. Marks Stage 2 as COMPLETED
+2. Creates Stage 3 IN_PROGRESS records
+3. Creates AI transition message
+4. Publishes `partner.stage_completed` event
+
+---
+
+### 7.2 User B (Subject) Flow
+
+**User B** is the subject of User A's empathy guess. User A is trying to imagine what User B is feeling.
+
+#### 7.2.1 Initial Share (HELD Status)
+
+**What User B sees:**
+1. Clicks "Share" on empathy statement panel in AI chat
+2. Sees confirmation: "That took courage - trying to imagine [User A]'s perspective"
+3. AI message suggests using Inner Thoughts while waiting
+4. Empathy statement appears in chat with label "What you shared"
+
+**UI State:**
+- Same as User A's experience (symmetric at this stage)
+- Share tab shows "Empathy Pending" state
+
+**What User B does NOT see:**
+- User A's empathy statement (still held by reconciler)
+- Whether User A has shared empathy yet
+- Any indication that User A's empathy is being analyzed against User B's Stage 1 content
+
+**Difference from User A:**
+- User B may NOT have completed Stage 1 yet (feelHeard confirmation)
+- If User B completes Stage 1 after sharing empathy, it triggers reconciler for User A's direction
+- Reconciler runs asymmetrically: User A's empathy is analyzed against User B's Stage 1 content immediately, even if User B hasn't shared empathy yet
+
+---
+
+#### 7.2.2 Reconciler Finds Gaps in User A's Empathy (Subject Receives Share Suggestion)
+
+**Trigger:** User A shared empathy → User B completed Stage 1 → reconciler analyzed gaps → found significant gaps
+
+**What User B sees:**
+1. Ably event `empathy.status_updated` updates cache (User A's empathy status → AWAITING_SHARING)
+2. Share tab shows "Share Suggestion" drawer
+3. Drawer contents:
+   - "Help [User A] understand you better"
+   - AI-suggested content (1-3 sentences)
+   - Reason: "This would help them understand [specific gap]"
+   - Actions: "Share" / "Edit" / "Decline"
+
+**UI State:**
+- Share tab: Drawer overlays the screen
+- AI chat input enabled (can continue conversation)
+- Drawer shows suggestedContent from ReconcilerShareOffer
+
+**What User B can do:**
+1. **Accept:** Shares the AI-suggested content as-is
+   - Calls `respondToShareSuggestion({ action: 'accept' })`
+   - Creates SHARED_CONTEXT messages in both chats
+   - User A's status → REFINING
+2. **Refine:** Edits the suggestion before sharing
+   - Opens refinement UI (text input)
+   - Calls AI to regenerate based on User B's feedback
+   - Shares refined version
+3. **Decline:** Chooses not to share
+   - Calls `respondToShareSuggestion({ action: 'decline' })`
+   - User A's status → READY
+   - No message sent to User A
+
+**Ably Events:** None (drawer triggered by cache update from reconciler)
+
+**Cache Data:**
+- `stageKeys.shareOffer` contains:
+  - `hasSuggestion: true`
+  - `suggestion: { guesserName, suggestedContent, reason }`
+
+**What User B does NOT see:**
+- User A's empathy statement (still held by reconciler)
+- Specific gap analysis results
+- Alignment score
+
+---
+
+#### 7.2.3a Subject Accepts/Refines Share Suggestion
+
+**Trigger:** User B clicks "Share" or "Share Refined" in drawer
+
+**What User B sees:**
+1. Optimistic update: Drawer closes immediately
+2. Two messages appear in User B's AI chat:
+   - SHARED_CONTEXT message: "[What User B shared]"
+   - AI acknowledgment: "Thank you for sharing that with [User A]. They'll have the chance to refine their understanding of what you're going through. [Stage-appropriate continuation]"
+3. Share tab updates to show "Context Shared" state
+4. Delivery status shows "Pending" → "Delivered" → "Seen"
+
+**UI State:**
+- Drawer closed (local latch prevents re-showing)
+- Share tab: Shared context card appears
+- Card shows delivery status:
+  - "Pending" (content saved, not yet delivered to User A)
+  - "Delivered" (User A can see it in Share tab)
+  - "Seen" (User A has viewed Share tab after delivery)
+- Input enabled (can continue AI conversation)
+
+**Ably Events Received:**
+- `empathy.refining` (sent to User A, not User B)
+
+**Cache Updates:**
+- `stageKeys.empathyStatus` updated:
+  - `sharedContentDeliveryStatus: DELIVERED` (when User A's empathy revealed)
+  - `mySharedContext: { content, sharedAt, deliveryStatus }`
+- `messageKeys.infinite` updated with SHARED_CONTEXT and AI acknowledgment messages
+
+**Delivery Status Tracking:**
+- **PENDING:** Content saved in ReconcilerShareOffer but not yet in User A's chat
+- **DELIVERED:** SHARED_CONTEXT message created in User A's chat (when User A's empathy revealed)
+- **SEEN:** User A viewed Share tab after sharedAt timestamp (tracked via UserVessel.lastViewedShareTabAt)
+
+**What User B does NOT see:**
+- User A's empathy statement (still held by reconciler)
+- Whether User A is refining their empathy
+
+---
+
+#### 7.2.4a Subject Declines Share Suggestion
+
+**Trigger:** User B clicks "Decline" in drawer
+
+**What User B sees:**
+1. Drawer closes immediately
+2. No message in AI chat about decline
+3. Share tab updates to "Empathy Ready" state
+
+**UI State:**
+- Drawer closed (local latch prevents re-showing)
+- Share tab: No shared context card (nothing was shared)
+- Waiting banner: "Waiting for [User A] to validate your empathy"
+- Input enabled
+
+**Ably Events:** None (decline is silent to both users)
+
+**Cache Updates:**
+- `stageKeys.shareOffer` updated:
+  - `hasSuggestion: false`
+- `stageKeys.empathyStatus` NOT updated (User A's status changes to READY on backend)
+
+**What User B does NOT see:**
+- That User A's empathy status changed to READY
+- User A's empathy statement (still waiting for mutual reveal)
+
+---
+
+#### 7.2.5 Subject Flow After Sharing (Same as Guesser)
+
+After User B shares context (or declines), the flow merges with User A's experience:
+1. Wait for both empathy attempts to reach READY status
+2. Mutual reveal (REVEALED status)
+3. Validation (VALIDATED status)
+4. Stage 3 transition (if both validated)
+
+**Difference from Guesser:**
+- User B (subject) sees validation modal when empathy is revealed
+- User B validates whether User A's empathy feels accurate
+- User B can see their own shared context in Share tab with delivery status
+
+---
+
+## 8. Ably Events in Reconciler Flow
+
+This section lists every Ably event published during the reconciler flow, when it's fired, who receives it, what mobile handler processes it, and what cache updates happen.
+
+### 8.1 Event: `empathy.status_updated`
+
+**When Fired:**
+1. After reconciler completes analysis (both directions analyzed)
+2. After subject validates guesser's empathy
+
+**Who Receives:** All session members
+
+**Payload:**
+```typescript
+{
+  stage: 2,
+  statuses: {
+    [userAId]: EmpathyStatus, // e.g., AWAITING_SHARING, READY
+    [userBId]: EmpathyStatus
+  },
+  empathyStatuses: {
+    [userAId]: EmpathyExchangeStatusResponse,
+    [userBId]: EmpathyExchangeStatusResponse
+  },
+  // Validation-specific (if fired after validation)
+  status?: 'VALIDATED',
+  forUserId?: string, // Guesser whose empathy was validated
+  validatedBy?: string,
+  triggeredByUserId?: string // Excludes this user from receiving event
+}
+```
+
+**Mobile Handler:** `useUnifiedSession.ts` → `handleAblyEvent()`
+
+**Cache Updates:**
+1. Invalidates `stageKeys.empathyStatus(sessionId)` query
+2. Updates `sessionKeys.state(sessionId)` with new empathy statuses
+3. Triggers re-render of Share tab and waiting banners
+
+**UI Impact:**
+- Waiting banner text changes based on new status
+- Share tab drawer appears if `hasSuggestion: true`
+- Validation modal appears if `forUserId` matches current user
+
+**Filtering:** Event includes `forUserId` and `triggeredByUserId` so mobile can:
+- Show validation modal only to guesser whose empathy was validated
+- Exclude events triggered by current user (prevents race conditions)
+
+---
+
+### 8.2 Event: `empathy.partner_considering_share`
+
+**When Fired:** After reconciler sets guesser's status to AWAITING_SHARING
+
+**Who Receives:** Guesser only (User A)
+
+**Payload:**
+```typescript
+{
+  forUserId: string, // Guesser's ID
+  timestamp: number
+}
+```
+
+**Mobile Handler:** `useUnifiedSession.ts` → `handleAblyEvent()`
+
+**Cache Updates:**
+1. Updates `stageKeys.empathyStatus(sessionId)` if stale
+2. No direct cache write (relies on `empathy.status_updated` for full status)
+
+**UI Impact:**
+- Waiting banner shows "Waiting for [Subject] to respond to share suggestion"
+- Share tab updates to "Awaiting Context" state
+
+**Purpose:** Provides immediate feedback to guesser that subject is considering sharing, without waiting for full status refetch.
+
+---
+
+### 8.3 Event: `empathy.revealed`
+
+**When Fired:** After `checkAndRevealBothIfReady()` sets both empathy attempts to REVEALED
+
+**Who Receives:** Both users (guesser and subject in each direction)
+
+**Payload:**
+```typescript
+{
+  direction: 'outgoing', // Which direction was revealed (not used in current code)
+  guesserUserId: string, // The guesser in this direction
+  forUserId: string, // The user receiving this event
+  empathyStatus: EmpathyExchangeStatusResponse
+}
+```
+
+**Mobile Handler:** `useUnifiedSession.ts` → `handleAblyEvent()`
+
+**Cache Updates:**
+1. Updates `stageKeys.empathyStatus(sessionId)` with full status
+2. Updates `sessionKeys.state(sessionId)` with revealed empathy data
+
+**UI Impact:**
+- Share tab shows both empathy statements
+- Validation modal appears (only for subject, filtered by `guesserUserId`)
+- Timeline indicator "Empathy Revealed" appears
+
+**Filtering:** Event includes `guesserUserId` so mobile can:
+- Show validation modal only to subject (NOT to guesser)
+- Subject validates whether guesser's empathy feels accurate
+
+---
+
+### 8.4 Event: `empathy.refining`
+
+**When Fired:** After subject accepts/refines share suggestion
+
+**Who Receives:** Guesser only (User A)
+
+**Payload:**
+```typescript
+{
+  guesserId: string,
+  forUserId: string,
+  empathyStatus: EmpathyExchangeStatusResponse,
+  hasNewContext: true
+}
+```
+
+**Mobile Handler:** `useUnifiedSession.ts` → `handleAblyEvent()`
+
+**Cache Updates:**
+1. Updates `stageKeys.empathyStatus(sessionId)` with:
+   - `myAttempt.status: REFINING`
+   - `sharedContext: { content, sharedAt }`
+   - `hasNewSharedContext: true`
+2. Updates `messageKeys.infinite(sessionId)` to include 3 new messages (intro AI, SHARED_CONTEXT, reflection AI)
+
+**UI Impact:**
+- Messages appear in AI chat (intro → shared context → reflection)
+- Waiting banner updates to "You can refine your empathy or keep your original statement"
+- Share tab shows "Refine" button
+- Timeline indicator "Context Shared" appears
+
+**Purpose:** Notifies guesser that subject shared context and empathy can now be refined.
+
+---
+
+### 8.5 Event: `partner.stage_completed`
+
+**When Fired:** After user validates partner's empathy
+
+**Who Receives:** Partner only (excludes user who triggered validation)
+
+**Payload:**
+```typescript
+{
+  stage: 2,
+  validated: boolean,
+  completedBy: string,
+  empathyStatus: EmpathyExchangeStatusResponse,
+  triggeredByUserId: string // Excludes this user from receiving event
+}
+```
+
+**Mobile Handler:** `useUnifiedSession.ts` → `handleAblyEvent()`
+
+**Cache Updates:**
+1. Updates `stageKeys.empathyStatus(sessionId)` with full status
+2. Updates `sessionKeys.state(sessionId)` with stage completion info
+
+**UI Impact:**
+- Share tab updates to show "Validated" badge on empathy card
+- If both validated: Stage 3 transition message appears
+- Timeline indicator "Empathy Validated" appears
+
+**Filtering:** Event includes `triggeredByUserId` to exclude the user who validated (prevents race conditions with local cache update).
+
+---
+
+### 8.6 Event: `empathy.context_shared` (LEGACY - Not Used)
+
+**Status:** Defined in types but not published by current code
+
+**Original Purpose:** Notify guesser that subject shared context
+
+**Current Replacement:** `empathy.refining` event is used instead
+
+---
+
+### 8.7 Event: `empathy.share_suggestion` (LEGACY - Not Used)
+
+**Status:** Defined in types but not published by current code
+
+**Original Purpose:** Notify subject that they have a share suggestion
+
+**Current Replacement:** Share suggestion is fetched via HTTP GET endpoint, cache update triggers drawer
+
+---
+
+## 9. Post-Reconciliation: Transition to Stage 3
+
+### 9.1 Trigger Condition
+
+**Automatic Transition:** When both users have validated their partner's empathy as accurate.
+
+**Validation Check in `validateEmpathy()`:**
+```typescript
+// After user validates
+if (validated && partnerValidation?.validated) {
+  triggerStage3Transition(sessionId, user.id, partnerId).catch(err =>
+    console.warn('[validateEmpathy] Failed to trigger transition:', err)
+  );
+}
+```
+
+**Function:** `triggerStage3Transition()` in `controllers/stage2.ts` lines 1459-1598
+
+---
+
+### 9.2 Transition Steps
+
+1. **Generate AI Transition Message:**
+   - Fetches user names for personalization
+   - Calls Sonnet AI to generate celebration message:
+     - Celebrates their success in hearing each other
+     - Pivots to future: "Now that we understand each other, let's find a way forward together"
+     - Introduces Stage 3: Strategy & Solutions
+   - Saves message to database (role: AI, stage: 2)
+
+2. **Update Stage Progress for Both Users:**
+   - Marks Stage 2 as COMPLETED (status, completedAt)
+   - Creates Stage 3 records with status IN_PROGRESS (via upsert)
+
+3. **Publish Realtime Event:**
+   - Event: `partner.stage_completed`
+   - Payload:
+     ```typescript
+     {
+       previousStage: 2,
+       currentStage: 3,
+       userId: string,
+       message: {
+         id: string,
+         content: string,
+         timestamp: string
+       }
+     }
+     ```
+   - Sent to all session members
+
+4. **Embed Session Content (Non-Blocking):**
+   - Calls `embedSessionContent()` to update session-level embedding for fact-ledger architecture
+
+---
+
+### 9.3 What Users See
+
+**Both Users:**
+1. AI transition message appears in chat: "Congratulations [User A] and [User B]! You've successfully built a foundation of understanding. Now it's time to move to Stage 3, where you'll co-create solutions that work for everyone."
+2. Stage indicator in UI updates: Stage 2 → Stage 3
+3. Share tab shows "Stage 2 Complete" badge on empathy cards
+4. New Stage 3 UI appears (Need Mapping conversation begins)
+
+**Cache Updates:**
+- `sessionKeys.state(sessionId)` updated:
+  - `progress.myProgress.stage: 3`
+  - `progress.partnerProgress.stage: 3`
+- `messageKeys.infinite(sessionId)` includes transition message
+- `stageKeys.progress(sessionId)` invalidated and refetched
+
+**UI Impact:**
+- Stage banner changes to "Stage 3: Need Mapping"
+- AI conversation context shifts to need identification
+- Share tab updates to show Stage 3 content
+
+---
+
+### 9.4 Edge Cases
+
+**What if only one user validates?**
+- Transition does NOT trigger
+- Non-validating user sees "Waiting for [Partner] to validate your empathy" banner
+- Validating user sees "Waiting for [Partner] to complete validation" banner
+
+**What if user validates as "not accurate"?**
+- `validated: false` in EmpathyValidation record
+- Feedback coach flow begins (if implemented)
+- Transition does NOT trigger
+- Current implementation: User can provide feedback, but no automated retry flow
+
+**What if validation is skipped?**
+- `skipRefinement()` endpoint allows marking as accepted without formal validation
+- Sets `gatesSatisfied.empathyValidated: true` via skip
+- Transition triggers if both users skip or validate
+
+---
+
+## 10. Consolidated Issues Summary
+
+### 10.1 Critical Issues
+
+1. **Infinite Share Loop (6.1)**
+   - **Impact:** Blocks user flow indefinitely
+   - **Root Cause:** ReconcilerShareOffer cascade-deleted on resubmit, reconciler re-analyzes and finds same gaps, creates new share suggestion
+   - **Mitigation:** `hasContextAlreadyBeenShared()` check (fragile, not in all code paths)
+   - **Fix Required:** Add check to all reconciler entry points OR track sharing history in separate table
+
+2. **ReconcilerResult Not Found After Creation (6.2)**
+   - **Impact:** Share suggestion lost, empathy stuck in AWAITING_SHARING
+   - **Root Cause:** Prisma transaction isolation delays visibility of newly created ReconcilerResult
+   - **Mitigation:** 3-attempt retry loop with 100ms delays
+   - **Fix Required:** Investigate Prisma isolation level, increase retry count, add fallback to mark as READY
+
+---
+
+### 10.2 Medium Issues
+
+3. **Message Timestamp Precision (6.3)**
+   - **Impact:** Messages may appear out of order in chat
+   - **Root Cause:** Database timestamps may have insufficient precision
+   - **Mitigation:** Explicit 100ms gaps between message timestamps
+   - **Fix Required:** Use monotonic sequence number for ordering
+
+4. **No Retry for Partner Stage 1 Completion (6.4)**
+   - **Impact:** Empathy stuck in HELD until manual retry
+   - **Root Cause:** No listener for partner's Stage 1 completion
+   - **Mitigation:** None (user must refresh)
+   - **Fix Required:** Add Ably event listener for partner feelHeard confirmation
+
+---
+
+### 10.3 Low Issues
+
+5. **ReconcilerShareOffer Cascade Delete (6.5)**
+   - **Impact:** Sharing history lost on resubmit
+   - **Root Cause:** Intentional cascade delete
+   - **Mitigation:** `hasContextAlreadyBeenShared()` checks messages instead
+   - **Fix Required:** None (working as designed, but fragile)
+
+6. **Abstract Guidance Fields Unused (6.6)**
+   - **Impact:** Incomplete feature
+   - **Root Cause:** Refinement flow uses shared context directly
+   - **Fix Required:** Remove fields OR implement hint-based refinement
+
+7. **NEEDS_WORK Status Deprecated (6.7)**
+   - **Impact:** Legacy code clutter
+   - **Root Cause:** Replaced by AWAITING_SHARING/REFINING
+   - **Fix Required:** Remove after migration
+
+---
+
+## 11. Complete Reconciler State Machine Summary
+
+### Flow Overview
+
+1. **User consents to share empathy** → EmpathyAttempt.status = HELD
+2. **Partner completes Stage 1** → Triggers reconciler
+3. **Reconciler analyzes gaps** → EmpathyAttempt.status = ANALYZING
+4. **Gap decision:**
+   - **No gaps:** Status = READY → Wait for mutual reveal
+   - **Gaps found:** Status = AWAITING_SHARING → Subject receives share suggestion
+5. **Subject responds:**
+   - **Accept/Refine:** Status = REFINING → Guesser receives shared context
+   - **Decline:** Status = READY → Wait for mutual reveal
+6. **Guesser refines (if status=REFINING):**
+   - Resubmits empathy → Status = ANALYZING (loop to step 3)
+7. **Both directions READY:**
+   - Mutual reveal → Status = REVEALED
+8. **Subject validates:**
+   - Status = VALIDATED
+9. **Both validated:**
+   - Transition to Stage 3
+
+### Key Invariants
+
+- **Asymmetric execution:** Each direction (A→B, B→A) runs independently
+- **Held-until-ready:** Empathy statements hidden until both directions READY
+- **Mutual reveal:** Neither sees partner's empathy until both pass reconciliation
+- **Single share per direction:** Subject shares context once; guesser can refine multiple times
+- **Cascade delete:** ReconcilerResult deletion cascades to ReconcilerShareOffer (creates infinite loop risk)
+
+### Fragile Areas
+
+1. **Infinite loop vulnerability:** Resubmit → same gaps → new share suggestion
+2. **Retry logic dependency:** 100ms delays to work around transaction visibility
+3. **Message-based state tracking:** `hasContextAlreadyBeenShared()` relies on SHARED_CONTEXT messages persisting
+4. **No automatic HELD→ANALYZING trigger:** Requires manual retry if partner completes Stage 1 later
+
+---
+
+**End of Audit**
