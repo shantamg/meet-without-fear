@@ -49,10 +49,11 @@ Plans:
   2. Mocked LLM responses use TypeScript fixtures for deterministic AI interactions
   3. Tests navigate full UI from scratch (no DB seeding for test setup)
   4. Infrastructure supports writing tests for any stage transition or partner interaction
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] TBD
+- [ ] 02-01-PLAN.md — Create TwoBrowserHarness class and waitForPartnerUpdate helper
+- [ ] 02-02-PLAN.md — Create two-browser Playwright config and smoke test
 
 ### Phase 3: Stage 0-1 Test Coverage
 **Goal**: Two-browser E2E tests verify both users can complete Stages 0-1 together
@@ -130,7 +131,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Audit | 4/4 | ✓ Complete | 2026-02-14 |
-| 2. Test Infrastructure | 0/TBD | Not started | - |
+| 2. Test Infrastructure | 0/2 | Planned | - |
 | 3. Stage 0-1 Test Coverage | 0/TBD | Not started | - |
 | 4. Stage 2 Test Coverage | 0/TBD | Not started | - |
 | 5. Stage Transition Fixes | 0/TBD | Not started | - |
@@ -139,4 +140,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-14 (Phase 1 complete)*
+*Last updated: 2026-02-14 (Phase 2 planned)*
