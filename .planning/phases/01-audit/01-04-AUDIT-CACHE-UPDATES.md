@@ -474,3 +474,258 @@ grep -n "sessionKeys.state" mobile/src/hooks/*.ts
 **UI Derivation Verified:** 9 cache keys read by UI state computation
 
 **Conclusion:** The cache-first architecture is correctly implemented with no cache key mismatches found. The critical stage transition bug (useConfirmFeelHeard) documented in MEMORY.md is verified as fixed. All mutations follow the optimistic update → server response → rollback on error pattern. The primary remaining risks are in the reconciler state machine (infinite loop, visibility race) and missing Ably event handler verification.
+
+---
+
+## APPENDIX A: Detailed Ably Event Handler Analysis
+
+### Reconciler and Empathy Exchange Events
+
+All Stage 2 empathy exchange events are handled in `UnifiedSessionScreen.tsx` via the `onSessionEvent` callback (lines 245-360). The handler filters out self-triggered events (line 251-255) and directly updates the React Query cache.
+
+| Event | Source | Handler Location | Cache Key Updated | Correct? | Notes |
+|-------|--------|------------------|-------------------|----------|-------|
+| `empathy.share_suggestion` | Backend reconciler (stage2.ts:189, 239) | UnifiedSessionScreen:258 | `stageKeys.empathyStatus(sessionId)` | ✅ YES | Subject receives share suggestion, updates status, refetches shareOffer |
+| `empathy.context_shared` | Backend when subject accepts share | UnifiedSessionScreen:266 | `stageKeys.empathyStatus(sessionId)` | ✅ YES | Guesser learns subject shared context, refetches messages to show SHARED_CONTEXT |
+| `empathy.revealed` | Backend reconciler (mutual reveal) | UnifiedSessionScreen:314 | `stageKeys.empathyStatus(sessionId)` | ✅ YES | Both users see partner's empathy, refetches partnerEmpathy |
+| `empathy.status_updated` | Backend reconciler (stage2.ts:252) | UnifiedSessionScreen:325 | `stageKeys.empathyStatus(sessionId)` | ✅ YES | Generic status update, handles both individual (forUserId) and broadcast (empathyStatuses) |
+| `empathy.refining` | Backend when subject shares context | UnifiedSessionScreen:343 | `stageKeys.empathyStatus(sessionId)` | ✅ YES | Guesser learns they're in refining mode |
+| `empathy.partner_considering_share` | Backend reconciler (stage2.ts:189, 239) | UnifiedSessionScreen:349 | N/A (refetch only) | ✅ YES | Guesser learns subject is considering share, shows modal |
+| `partner.empathy_shared` | Backend after consent | UnifiedSessionScreen:305 | `stageKeys.empathyStatus(sessionId)` | ✅ YES | Partner shared empathy, refetches messages |
+| `partner.stage_completed` | Backend on stage completion | UnifiedSessionScreen:296 | `stageKeys.empathyStatus(sessionId)` | ✅ YES | Partner completed stage, refetches progress |
+| `partner.session_viewed` | Backend when partner opens session | UnifiedSessionScreen:278 | `stageKeys.empathyStatus(sessionId)` | ✅ YES | Updates delivery status to "delivered" |
+| `partner.share_tab_viewed` | Backend when partner views Share tab | UnifiedSessionScreen:287 | `stageKeys.empathyStatus(sessionId)` | ✅ YES | Updates delivery status to "seen" |
+
+**Reconciler Event Handler Analysis:**
+- ✅ **HIGH PRIORITY ISSUE RESOLVED:** Reconciler Ably handlers ARE implemented in UnifiedSessionScreen.tsx
+- ✅ All events write to `stageKeys.empathyStatus(sessionId)` which is the correct cache key
+- ✅ Events include full status data in payload (no extra HTTP round-trips)
+- ✅ Self-triggered events are filtered out to prevent race conditions with optimistic updates
+- ✅ Both individual (`forUserId`) and broadcast (`empathyStatuses`) patterns supported
+
+---
+
+## APPENDIX B: Interaction Path Cache Completeness
+
+### Stage 0 (Onboarding) - Full Flow
+
+| Step | Actor | Action | Cache Update (Actor) | Ably Event | Cache Update (Partner) | Complete? |
+|------|-------|--------|---------------------|------------|------------------------|-----------|
+| 1 | Inviter | Create session | `sessionKeys.detail(id)` pre-pop | N/A | N/A | ✅ YES |
+| 2 | Inviter | Update invitation message | `sessionKeys.sessionInvitation(id)` inv | N/A | N/A | ✅ YES |
+| 3 | Inviter | Confirm invitation | `sessionKeys.state` optimistic | ❌ None | Refetch via user event | ⚠️ Async |
+| 4 | Invitee | Accept invitation | `sessionKeys.detail(id)` pre-pop | ❌ None | Refetch via user event | ⚠️ Async |
+| 5 | Both | Sign compact | `sessionKeys.state` optimistic | ❌ None | Refetch via user event | ⚠️ Async |
+| 6 | Both | Stage 0→1 advance | `sessionKeys.state` (stage update) | ❌ None | Refetch via user event | ⚠️ Async |
+
+**Findings:**
+- ⚠️ Stage 0 has NO session-specific Ably events for invitation/compact
+- ✅ User-level `useUserSessionUpdates` refetches `sessionKeys.lists()` on any user event
+- ⚠️ Partners learn of changes via polling (5-10s staleTime) or user-level refetch
+- **Recommendation:** Add session-specific events for invitation.confirmed, compact.signed (v1.1)
+
+---
+
+### Stage 1 (Witnessing) - Full Flow
+
+| Step | Actor | Action | Cache Update (Actor) | Ably Event | Cache Update (Partner) | Complete? |
+|------|-------|--------|---------------------|------------|------------------------|-----------|
+| 1 | User | Send message (SSE) | `messageKeys.infinite` optimistic | N/A | N/A (private) | ✅ YES |
+| 2 | System | AI response (SSE chunks) | Streaming cache updates | N/A | N/A (private) | ✅ YES |
+| 3 | User | Confirm feel-heard | `sessionKeys.state` optimistic + stage | N/A | N/A (private) | ✅ YES |
+| 4 | System | Stage 1→2 transition | Transition message added | N/A | N/A (private) | ✅ YES |
+
+**Findings:**
+- ✅ All Stage 1 interactions are private (by design)
+- ✅ Optimistic updates work correctly
+- ✅ Stage cache updated correctly (useConfirmFeelHeard fixed)
+- ✅ SSE streaming handles AI responses without Ably
+
+---
+
+### Stage 2 (Perspective Stretch) - Full Flow
+
+| Step | Actor | Action | Cache Update (Actor) | Ably Event | Cache Update (Partner) | Complete? |
+|------|-------|--------|---------------------|------------|------------------------|-----------|
+| 1 | Guesser | Save empathy draft | `stageKeys.empathyDraft` inv | N/A | N/A (private) | ✅ YES |
+| 2 | Guesser | Consent to share | `messageKeys.infinite` opt | `partner.empathy_shared` | `stageKeys.empathyStatus` | ✅ YES |
+| 3 | Subject | (Same: consent) | `messageKeys.infinite` opt | `partner.empathy_shared` | `stageKeys.empathyStatus` | ✅ YES |
+| 4 | System | Reconciler runs | N/A | `empathy.status_updated` | `stageKeys.empathyStatus` | ✅ YES |
+| 5a | System | Gap found → Offer share | N/A | `empathy.share_suggestion` | `stageKeys.empathyStatus` + refetch shareOffer | ✅ YES |
+| 5b | Subject | Accept/decline share | `messageKeys.infinite` opt | `empathy.context_shared` | `stageKeys.empathyStatus` + refetch messages | ✅ YES |
+| 6 | System | Mutual reveal | N/A | `empathy.revealed` | `stageKeys.empathyStatus` + refetch partnerEmpathy | ✅ YES |
+| 7 | Subject | Validate partner empathy | Invalidates partnerEmpathy | `empathy.status_updated` | `stageKeys.empathyStatus` | ✅ YES |
+| 8 | Guesser | Resubmit after context | `messageKeys.infinite` opt | Re-triggers reconciler | `empathy.status_updated` | ✅ YES |
+
+**Findings:**
+- ✅ **Complete bidirectional cache updates via Ably events**
+- ✅ Acting user gets optimistic updates
+- ✅ Partner gets Ably event with full status payload (no extra HTTP)
+- ✅ All reconciler events correctly update `stageKeys.empathyStatus`
+- ⚠️ Share suggestion response doesn't notify subject (known asymmetry, MEDIUM priority)
+
+---
+
+## APPENDIX C: UI State Derivation Verification
+
+### Cache Read vs Write Mapping
+
+All UI state inputs in `chatUIState.ts` read from React Query cache. This table verifies that every read has a corresponding write:
+
+| UI State Input | Cache Key Read | Written By (Mutations) | Written By (Ably) | Verified? |
+|----------------|----------------|------------------------|-------------------|-----------|
+| `myStage` | `sessionKeys.state(id)` → `progress.myProgress.stage` | useConfirmFeelHeard, useConfirmInvitationMessage | N/A | ✅ YES |
+| `partnerStage` | `sessionKeys.state(id)` → `progress.partnerProgress.stage` | (partner's mutations) | `partner.stage_completed` | ✅ YES |
+| `empathyStatus.analyzing` | `stageKeys.empathyStatus(id)` → `analyzing` | useConsentToShareEmpathy | `empathy.status_updated` | ✅ YES |
+| `empathyStatus.awaitingSharing` | `stageKeys.empathyStatus(id)` → `awaitingSharing` | useConsentToShareEmpathy | `empathy.status_updated` | ✅ YES |
+| `empathyStatus.hasNewSharedContext` | `stageKeys.empathyStatus(id)` → `hasNewSharedContext` | N/A | `empathy.context_shared` | ✅ YES |
+| `empathyStatus.myAttemptStatus` | `stageKeys.empathyStatus(id)` → `myAttempt.status` | useConsentToShareEmpathy | `empathy.status_updated` | ✅ YES |
+| `empathyDraft.alreadyConsented` | `stageKeys.empathyDraft(id)` → `alreadyConsented` | useConsentToShareEmpathy | N/A | ✅ YES |
+| `hasPartnerEmpathy` | `stageKeys.partnerEmpathy(id)` → `empathy` | N/A (pulled from server) | `empathy.revealed` (invalidation) | ✅ YES |
+| `shareOffer.hasSuggestion` | `stageKeys.shareOffer(id)` → `hasSuggestion` | useRespondToShareOffer | `empathy.share_suggestion` (refetch) | ✅ YES |
+| `compactMySigned` | `sessionKeys.state(id)` → `compact.mySigned` | useSignCompact | N/A | ✅ YES |
+| `invitationConfirmed` | `sessionKeys.state(id)` → `invitation.messageConfirmed` | useConfirmInvitationMessage | N/A | ✅ YES |
+| `feelHeardConfirmedAt` | `sessionKeys.state(id)` → `progress.milestones.feelHeardConfirmedAt` | useConfirmFeelHeard | N/A | ✅ YES |
+
+**UI Derivation Verification Result:**
+- ✅ **All cache reads have corresponding writes**
+- ✅ No orphaned reads (reading from keys that are never written)
+- ✅ No mismatched types (all reads match write structure)
+- ✅ Both mutation and Ably paths verified
+
+---
+
+## APPENDIX D: Final Recommendations by Priority
+
+### Immediate (v1.0) - Must Fix Before Release
+
+1. **Fix Infinite Share Loop** (CRITICAL - Reconciler)
+   - **File:** `backend/src/controllers/stage2.ts`
+   - **Location:** `runReconcilerForDirection()` and `triggerReconcilerForUser()`
+   - **Fix:** Add `hasContextAlreadyBeenShared()` check before setting AWAITING_SHARING status
+   - **Test:** Verify resubmit flow doesn't create duplicate share suggestions
+
+2. **Fix ReconcilerResult Visibility Race** (CRITICAL - Reconciler)
+   - **File:** `backend/src/controllers/stage2.ts`
+   - **Location:** `triggerReconcilerAndUpdateStatuses()` lines with 100ms retry
+   - **Fix:** Investigate Prisma isolation level, switch to READ COMMITTED or add proper transaction control
+   - **Test:** Verify share suggestion appears immediately after both users consent
+
+3. **Implement Refinement UI for Guesser** (CRITICAL - Stage 2 UX)
+   - **File:** `mobile/src/screens/ShareScreen.tsx` (likely location)
+   - **Location:** When `empathyStatus.myAttempt.status === 'REFINING'`
+   - **Fix:** Add "Refine" button or clear prompt when guesser is in REFINING mode
+   - **Test:** Verify guesser can refine empathy after receiving shared context
+
+### High Priority (v1.1) - UX Improvements
+
+4. **Add Session-Specific Ably Events for Stage 0**
+   - **Events to Add:** `compact.signed`, `invitation.confirmed`
+   - **Impact:** Reduces latency from 5-10s (polling) to real-time
+   - **Implementation:** Backend publishes events, UnifiedSessionScreen handles
+
+5. **Add Share Suggestion Response Notification**
+   - **Event to Add:** `share_offer.responded`
+   - **Impact:** Guesser knows immediately if subject accepted/declined
+   - **Implementation:** Notify guesser when subject responds to share offer
+
+6. **Show Shared Context in Subject's Timeline**
+   - **File:** `mobile/src/utils/chatListSelector.ts` or similar
+   - **Impact:** Subject sees what they shared (currently only guesser sees it)
+   - **Implementation:** Add SHARED_CONTEXT message type to subject's timeline
+
+7. **Add HELD→ANALYZING Retry**
+   - **File:** `backend/src/controllers/stage2.ts`
+   - **Location:** Listen for `partner.stage_completed` event
+   - **Impact:** Empathy unstucks automatically when partner completes Stage 1
+   - **Implementation:** Trigger reconciler when partner advances from Stage 1→2
+
+### Medium Priority (v1.2) - Code Quality & Optimization
+
+8. **Remove Deprecated Fire-and-Forget Hooks**
+   - **Files:** `mobile/src/hooks/useMessages.ts` (`useSendMessage`, `useAIMessageHandler`)
+   - **Impact:** Code cleanup, reduce confusion
+   - **Prerequisite:** Verify no usage of deprecated hooks
+
+9. **Consolidate Stage-Specific Cache Keys**
+   - **Files:** All mutation hooks updating `messageKeys.list(sessionId, stage)`
+   - **Impact:** Reduce cache writes, eliminate potential inconsistency
+   - **Implementation:** Use single cache key with filtering
+
+10. **Move Local Latches to Cache**
+    - **Files:** `mobile/src/screens/UnifiedSessionScreen.tsx` (hasSharedEmpathyLocal, hasRespondedToShareOfferLocal)
+    - **Impact:** Eliminate component state, fix navigation issues
+    - **Implementation:** Store latch flags in React Query cache
+
+11. **Extract Anti-Loop Logic to Standalone Function**
+    - **File:** `backend/src/controllers/stage2.ts`
+    - **Location:** `hasContextAlreadyBeenShared()` (line buried in complex function)
+    - **Impact:** Improve testability, easier to verify loop prevention
+    - **Implementation:** Extract to pure function with unit tests
+
+---
+
+## APPENDIX E: Verification Checklist
+
+Use this checklist to verify the audit findings:
+
+### Cache Key Match Verification
+
+```bash
+# Verify all sessionKeys.state writes match reads
+cd /Users/shantam/Software/meet-without-fear
+grep -rn "sessionKeys.state(" mobile/src/hooks/*.ts | grep "setQueryData\|getQueryData"
+
+# Verify all stageKeys.empathyStatus writes match reads
+grep -rn "stageKeys.empathyStatus(" mobile/src/hooks/*.ts mobile/src/screens/*.tsx | grep "setQueryData\|getQueryData"
+
+# Verify useConfirmFeelHeard stage update exists
+grep -A10 "useConfirmFeelHeard" mobile/src/hooks/useStages.ts | grep "Stage.PERSPECTIVE_STRETCH"
+```
+
+### Ably Event Handler Verification
+
+```bash
+# Verify all reconciler events are handled
+grep -rn "empathy.status_updated\|empathy.share_suggestion\|empathy.context_shared\|empathy.revealed" mobile/src/screens/UnifiedSessionScreen.tsx
+
+# Verify event handlers update correct cache keys
+grep -A5 "empathy.status_updated" mobile/src/screens/UnifiedSessionScreen.tsx | grep "stageKeys.empathyStatus"
+```
+
+### UI Derivation Verification
+
+```bash
+# Verify all computeShow*Panel functions exist
+grep -n "function computeShow" mobile/src/utils/chatUIState.ts
+
+# Verify computeShowEmpathyPanel checks correct stage
+grep -A20 "function computeShowEmpathyPanel" mobile/src/utils/chatUIState.ts | grep "PERSPECTIVE_STRETCH"
+```
+
+---
+
+## Audit Sign-Off
+
+**Auditor:** Claude (GSD Execute-Phase Agent)
+**Date:** 2026-02-14
+**Audit Version:** 1.0
+**Files Audited:** 10 (3 hook files, 1 screen file, 1 utility file, 5 backend files for cross-reference)
+**Total Lines Reviewed:** ~7,000 lines of TypeScript
+**Cache Updates Verified:** 60+ manual cache update locations
+**Ably Event Handlers Verified:** 10 reconciler events + 2 primary handler patterns
+**UI Derivation Verified:** 12 cache keys read by UI state computation
+**Critical Issues Found:** 3 (2 reconciler, 1 UI)
+**High Priority Issues Found:** 1 (verified as RESOLVED - handlers exist)
+**Medium Priority Issues Found:** 7
+**Low Priority Issues Found:** 7
+
+**Audit Status:** ✅ COMPLETE
+
+**High-Priority Issue Resolution:**
+- ~~Missing reconciler Ably event handler~~ → **RESOLVED** (handlers found in UnifiedSessionScreen.tsx:245-360)
+
+**Critical Issues Remaining:**
+1. Infinite share loop vulnerability (reconciler backend)
+2. ReconcilerResult visibility race (reconciler backend)
+3. Missing refinement UI for guesser (mobile frontend)
