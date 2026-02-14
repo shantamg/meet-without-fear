@@ -32,10 +32,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Reconciler state machine shows all valid transitions and expected outcomes
   4. Every manual cache update location is identified with verification of correctness
   5. Known gaps/issues are flagged for later phases
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] TBD
+- [ ] 01-01-PLAN.md — Audit Stage 0-1 two-user interaction paths and transitions
+- [ ] 01-02-PLAN.md — Audit reconciler state machine
+- [ ] 01-03-PLAN.md — Audit Stage 2 two-user interaction paths and transitions
+- [ ] 01-04-PLAN.md — Audit cache update locations and correctness verification
 
 ### Phase 2: Test Infrastructure
 **Goal**: Two-browser E2E test infrastructure with mocked LLM and real Ably that navigates full UI from scratch
@@ -126,7 +129,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Audit | 0/TBD | Not started | - |
+| 1. Audit | 0/4 | Not started | - |
 | 2. Test Infrastructure | 0/TBD | Not started | - |
 | 3. Stage 0-1 Test Coverage | 0/TBD | Not started | - |
 | 4. Stage 2 Test Coverage | 0/TBD | Not started | - |
@@ -136,4 +139,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-14*
+*Last updated: 2026-02-14 (Phase 1 planned)*
