@@ -1,0 +1,16 @@
+{
+  "workflow": {
+    "mode": "interactive",
+    "research": false
+  },
+  "gates": {
+    "researcher": false,
+    "plan_checker": true,
+    "verifier": true
+  },
+  "planning": {
+    "commit_docs": true,
+    "search_gitignored": false
+  },
+  "models": {}
+}
