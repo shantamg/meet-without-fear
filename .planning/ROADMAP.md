@@ -12,7 +12,7 @@ Transform partner sessions from fragile to reliable by completing a systematic a
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Audit** - Document all two-user interaction paths in Stages 0-2
+- [x] **Phase 1: Audit** - Document all two-user interaction paths in Stages 0-2
 - [ ] **Phase 2: Test Infrastructure** - Build two-browser E2E test infrastructure with mocked LLM and real Ably
 - [ ] **Phase 3: Stage 0-1 Test Coverage** - Two-browser E2E tests for Stages 0-1
 - [ ] **Phase 4: Stage 2 Test Coverage** - Two-browser E2E tests for Stage 2 (empathy/reconciler)
@@ -35,10 +35,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Audit Stage 0-1 two-user interaction paths and transitions
-- [ ] 01-02-PLAN.md — Audit reconciler state machine
-- [ ] 01-03-PLAN.md — Audit Stage 2 two-user interaction paths and transitions
-- [ ] 01-04-PLAN.md — Audit cache update locations and correctness verification
+- [x] 01-01-PLAN.md — Audit Stage 0-1 two-user interaction paths and transitions
+- [x] 01-02-PLAN.md — Audit reconciler state machine
+- [x] 01-03-PLAN.md — Audit Stage 2 two-user interaction paths and transitions
+- [x] 01-04-PLAN.md — Audit cache update locations and correctness verification
 
 ### Phase 2: Test Infrastructure
 **Goal**: Two-browser E2E test infrastructure with mocked LLM and real Ably that navigates full UI from scratch
@@ -129,7 +129,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Audit | 0/4 | Not started | - |
+| 1. Audit | 4/4 | ✓ Complete | 2026-02-14 |
 | 2. Test Infrastructure | 0/TBD | Not started | - |
 | 3. Stage 0-1 Test Coverage | 0/TBD | Not started | - |
 | 4. Stage 2 Test Coverage | 0/TBD | Not started | - |
@@ -139,4 +139,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-14 (Phase 1 planned)*
+*Last updated: 2026-02-14 (Phase 1 complete)*
