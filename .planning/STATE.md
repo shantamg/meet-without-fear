@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Two people can reliably complete a full partner session together — every stage transition, partner interaction, and reconciliation step works predictably every time.
-**Current focus:** Phase 4 - Stage 2 Test Coverage
+**Current focus:** Phase 5 - Stage Transition Fixes
 
 ## Current Position
 
-Phase: 4 of 7 (Stage 2 Test Coverage)
-Plan: 1 of 1 in current phase
-Status: Complete
-Last activity: 2026-02-15 — Completed plan 04-01 (Stage 2 Test Coverage)
+Phase: 5 of 7 (Stage Transition Fixes)
+Plan: 1 of 2 in current phase
+Status: In Progress
+Last activity: 2026-02-15 — Completed plan 05-01 (Partner Stage Transition Cache Updates)
 
-Progress: [██████████] 100% (1 of 1 plans complete)
+Progress: [█████-----] 50% (1 of 2 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 15 min
-- Total execution time: 2.2 hours
+- Total plans completed: 9
+- Average duration: 14 min
+- Total execution time: 2.3 hours
 
 **By Phase:**
 
@@ -31,10 +31,11 @@ Progress: [██████████] 100% (1 of 1 plans complete)
 | 02-test-infrastructure | 2 | 13 min | 7 min |
 | 03-stage-0-1-test-coverage | 1 | 34 min | 34 min |
 | 04-stage-2-test-coverage | 1 | 57 min | 57 min |
+| 05-stage-transition-fixes | 1 | 7 min | 7 min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 11min, 34min, 57min
-- Trend: E2E tests scale with stage complexity (Stage 2 = 13 AI interactions vs Stage 1 = 8)
+- Last 5 plans: 11min, 34min, 57min, 7min
+- Trend: Cache update fixes are fast (7min), E2E tests scale with stage complexity
 
 *Updated after each plan completion*
 
@@ -62,6 +63,9 @@ Recent decisions affecting current work:
 - **(04-01)** Asymmetric fixtures for reconciler determinism: User A (no reconciler ops) shares first, User B (reconciler-no-gaps ops) shares second to trigger deterministic no-gaps result
 - **(04-01)** Stage 2 timeout 15 minutes: Stage 2 requires 13 AI interactions (vs 8 in Stage 1), 13×20s circuit breaker = 260s + processing ≈ 12-13 min total
 - **(04-01)** Mood check reappears after navigation: Must call handleMoodCheck() after navigateBackToChat() as mood check can reappear after route/state updates
+- **(05-01)** partner.stage_completed vs partner.advanced distinction: partner.stage_completed updates myProgress.stage (both users advance to Stage 3), partner.advanced updates partnerProgress.stage (only partner advanced)
+- **(05-01)** Stage 0 uses invalidateQueries for cache updates: Compact signing and invitation confirmation have acceptable <500ms latency via background refetch, don't need instant setQueryData like Stage 2+ transitions
+- **(05-01)** Transition messages in event payload: Stage 2→3 transition message embedded in partner.stage_completed event for immediate display in partner's chat
 
 ### Pending Todos
 
@@ -86,7 +90,7 @@ See 01-04-AUDIT-CACHE-UPDATES.md for full issue list with v1.0/v1.1/v1.2 recomme
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 04-01-PLAN.md - Stage 2 Test Coverage (Phase 04-stage-2-test-coverage COMPLETE)
+Stopped at: Completed 05-01-PLAN.md - Partner Stage Transition Cache Updates (Phase 05-stage-transition-fixes 1/2 COMPLETE)
 Resume file: None
 
 ---
