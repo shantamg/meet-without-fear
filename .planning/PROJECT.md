@@ -8,6 +8,19 @@ A mobile app that guides two people through structured conflict resolution conve
 
 Two people can reliably complete a full partner session together — every stage transition, partner interaction, and reconciliation step works predictably every time.
 
+## Current Milestone: v1.1 Full Session Completion
+
+**Goal:** All reconciler patterns (NO_GAPS, GAPS_FOUND, NEEDS_WORK, refinement) work correctly for both users with visual proof, plus Stage 3-4 reliability — so both users can complete an entire session end-to-end.
+
+**Target features:**
+- State diagrams for every reconciler outcome (what each user sees at each step)
+- E2E tests with Playwright screenshots for all reconciler patterns
+- Fix issues discovered during reconciler pattern testing
+- GAPS_FOUND + NEEDS_WORK + refinement flows all working
+- Stage 3 (Needs) and Stage 4 (Strategies) reliability for both users
+- Fix issues discovered during Stage 3-4 testing
+- Visual verification (Playwright snapshots) at each state transition
+
 ## Requirements
 
 ### Validated
@@ -26,10 +39,15 @@ Two people can reliably complete a full partner session together — every stage
 
 ### Active
 
-- [ ] Stage 3 (Needs) and Stage 4 (Strategies) work reliably for both users
+- [ ] All reconciler patterns (NO_GAPS, GAPS_FOUND, NEEDS_WORK) work correctly for both users
+- [ ] Refinement flow works (share to clarify, partner receives, updated empathy)
+- [ ] State diagrams document what each user sees at every reconciler step
+- [ ] E2E tests with Playwright screenshots verify each reconciler pattern
+- [ ] Stage 3 (Needs) works reliably for both users
+- [ ] Stage 4 (Strategies) works reliably for both users
+- [ ] Issues found during testing are fixed
 - [ ] Missing refinement UI for guesser (empathy accuracy feedback)
 - [ ] HELD→ANALYZING retry mechanism for stuck empathy
-- [ ] Unit tests for critical backend services (ai-orchestrator, context-assembler, reconciler)
 
 ### Out of Scope
 
@@ -79,4 +97,4 @@ Shipped v1.0 Session Reliability with 15,225 new lines across 67 files.
 | Pass-by-reference for ReconcilerResult | Eliminate 100ms retry loop by querying once and passing reference | ✓ Good — simplified code path |
 
 ---
-*Last updated: 2026-02-15 after v1.0 milestone*
+*Last updated: 2026-02-15 after v1.1 milestone initialization*
