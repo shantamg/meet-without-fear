@@ -19,3 +19,5 @@ export {
   signCompact,
   confirmFeelHeard,
 } from './test-utils';
+export { TwoBrowserHarness, waitForPartnerUpdate } from './two-browser-harness';
+export type { TwoBrowserConfig } from './two-browser-harness';
