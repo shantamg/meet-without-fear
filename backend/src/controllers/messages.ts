@@ -11,7 +11,7 @@ import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
-import { getSonnetResponse, getSonnetStreamingResponse, BrainActivityCallType } from '../lib/bedrock';
+import { getSonnetResponse, getSonnetStreamingResponse, BrainActivityCallType, isMockLLMEnabled } from '../lib/bedrock';
 import { brainService } from '../services/brain-service';
 import { buildInitialMessagePrompt, buildStagePrompt, type PromptContext } from '../services/stage-prompts';
 import { parseMicroTagResponse } from '../utils/micro-tag-parser';
@@ -1747,6 +1747,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     // =========================================================================
     if (isDispatchMessage) {
       console.log(`[sendMessageStream:${requestId}] Skipping background tasks for dispatch message`);
+    } else if (isMockLLMEnabled()) {
+      console.log(`[sendMessageStream:${requestId}] Skipping background tasks in mock LLM mode`);
     } else {
       // Summarize and embed session content for cross-session retrieval
       // Per fact-ledger architecture, we embed at session level after summary updates

@@ -189,7 +189,7 @@ test.describe('Full Partner Journey: Stages 0-3', () => {
     await shareEmpathyButton.click();
 
     // Wait for Ably event delivery (User A's share triggers transition message to User B)
-    await harness.userAPage.waitForTimeout(3000);
+    await harness.userAPage.waitForTimeout(2000);
 
     // --- User B shares (triggers reconciler) ---
     const empathyReviewButtonB = harness.userBPage.getByTestId('empathy-review-button');
@@ -223,12 +223,37 @@ test.describe('Full Partner Journey: Stages 0-3', () => {
     }
 
     // ==========================================
-    // === STAGE 3 VERIFICATION ===
+    // === STAGE 3: VERIFY SHARE PAGE ===
     // ==========================================
 
-    // Navigate both users to Share tab
+    // Navigate both users to Share tab to verify empathy is displayed
     await navigateToShareFromSession(harness.userAPage);
     await navigateToShareFromSession(harness.userBPage);
+
+    // Both users should see their partner's revealed empathy card
+    // TestIDs are dynamic: share-screen-partner-tab-item-partner-empathy-{attemptId}
+    // Use .first() since the prefix also matches child elements (-card, -validate-*)
+    const userAPartnerEmpathy = harness.userAPage.locator('[data-testid^="share-screen-partner-tab-item-partner-empathy-"]').first();
+    const userBPartnerEmpathy = harness.userBPage.locator('[data-testid^="share-screen-partner-tab-item-partner-empathy-"]').first();
+    await expect(userAPartnerEmpathy).toBeVisible({ timeout: 10000 });
+    await expect(userBPartnerEmpathy).toBeVisible({ timeout: 10000 });
+
+    // Both users should see validation buttons for partner's empathy (Accurate, Partially, Off)
+    await expect(harness.userAPage.locator('[data-testid$="-validate-accurate"]')).toBeVisible({ timeout: 5000 });
+    await expect(harness.userAPage.locator('[data-testid$="-validate-partial"]')).toBeVisible({ timeout: 5000 });
+    await expect(harness.userAPage.locator('[data-testid$="-validate-inaccurate"]')).toBeVisible({ timeout: 5000 });
+
+    await expect(harness.userBPage.locator('[data-testid$="-validate-accurate"]')).toBeVisible({ timeout: 5000 });
+    await expect(harness.userBPage.locator('[data-testid$="-validate-partial"]')).toBeVisible({ timeout: 5000 });
+    await expect(harness.userBPage.locator('[data-testid$="-validate-inaccurate"]')).toBeVisible({ timeout: 5000 });
+
+    // Take screenshots of Share page with empathy and validation buttons
+    await harness.userAPage.screenshot({ path: 'test-results/full-flow-share-a.png' });
+    await harness.userBPage.screenshot({ path: 'test-results/full-flow-share-b.png' });
+
+    // ==========================================
+    // === STAGE 3: VERIFY CHAT CONTINUES ===
+    // ==========================================
 
     // Navigate both back to chat
     await navigateBackToChat(harness.userAPage);
@@ -239,7 +264,6 @@ test.describe('Full Partner Journey: Stages 0-3', () => {
     await handleMoodCheck(harness.userBPage);
 
     // Verify chat input visible for both users (Stage 3 continues conversation)
-    // This is the key indicator that both users completed Stages 0-2 and entered Stage 3
     await expect(harness.userAPage.getByTestId('chat-input')).toBeVisible({ timeout: 5000 });
     await expect(harness.userBPage.getByTestId('chat-input')).toBeVisible({ timeout: 5000 });
 

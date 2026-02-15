@@ -224,7 +224,7 @@ export async function waitForAnyAIResponse(page: Page, timeout = 60000): Promise
     if (currentCount > initialCount) {
       break;
     }
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(200);
   }
 
   // Ensure typing indicator is gone (streaming fully complete)
@@ -232,7 +232,7 @@ export async function waitForAnyAIResponse(page: Page, timeout = 60000): Promise
   await typingIndicator.waitFor({ state: 'hidden', timeout: Math.max(deadline - Date.now(), 5000) }).catch(() => {});
 
   // Small buffer for React rendering
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(100);
 }
 
 /**
@@ -263,7 +263,7 @@ export async function sendAndWaitForPanel(
     // Check if panel appeared (metadata arrives via separate SSE event after text,
     // so give it time to process through React state updates)
     const panel = page.getByTestId(panelTestId);
-    if (await panel.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await panel.isVisible({ timeout: 2000 }).catch(() => false)) {
       return i + 1; // turns it took
     }
   }
@@ -289,7 +289,7 @@ export async function waitForReconcilerComplete(page: Page, timeout = 30000): Pr
       return true;
     }
 
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(500);
   }
 
   return false;
