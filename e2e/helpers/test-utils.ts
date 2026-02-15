@@ -254,3 +254,55 @@ export async function sendAndWaitForPanel(
   }
   throw new Error(`Panel '${panelTestId}' did not appear after ${Math.min(messages.length, maxAttempts)} messages`);
 }
+
+/**
+ * Wait for the reconciler to complete by polling for the empathy-shared indicator.
+ * Returns true if the indicator becomes visible within the timeout, false if timeout expires.
+ *
+ * @param page - Playwright Page instance
+ * @param timeout - Maximum time to wait in milliseconds (default: 30000)
+ * @returns Promise resolving to true if indicator appears, false if timeout
+ */
+export async function waitForReconcilerComplete(page: Page, timeout = 30000): Promise<boolean> {
+  const deadline = Date.now() + timeout;
+
+  while (Date.now() < deadline) {
+    const indicator = page.getByTestId('chat-indicator-empathy-shared');
+    const isVisible = await indicator.isVisible({ timeout: 1000 }).catch(() => false);
+
+    if (isVisible) {
+      return true;
+    }
+
+    await page.waitForTimeout(1000);
+  }
+
+  return false;
+}
+
+/**
+ * Navigate back to the chat screen from any other screen (e.g., Share).
+ * If already on chat, returns immediately.
+ *
+ * @param page - Playwright Page instance
+ * @param timeout - Maximum time to wait for navigation (default: 10000)
+ */
+export async function navigateBackToChat(page: Page, timeout = 10000): Promise<void> {
+  // If already on chat (not on /share), return immediately
+  if (!page.url().includes('/share')) {
+    return;
+  }
+
+  // Try clicking the back button if visible
+  const backButton = page.getByTestId('share-header-back-button');
+  if (await backButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await backButton.click();
+  } else {
+    // Fallback: use browser back navigation
+    await page.goBack();
+  }
+
+  // Wait for URL to match session chat pattern (not /share)
+  await page.waitForURL(/\/session\/[^/]+$/, { timeout });
+  await page.waitForLoadState('networkidle');
+}
