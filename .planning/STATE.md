@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 ## Current Position
 
 Phase: 5 of 7 (Stage Transition Fixes)
-Plan: 1 of 2 in current phase
-Status: In Progress
-Last activity: 2026-02-15 — Completed plan 05-01 (Partner Stage Transition Cache Updates)
+Plan: 2 of 2 in current phase
+Status: Complete
+Last activity: 2026-02-15 — Completed plan 05-02 (E2E Regression Tests and Race Condition Fix)
 
-Progress: [█████-----] 50% (1 of 2 plans complete)
+Progress: [██████████] 100% (2 of 2 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 14 min
-- Total execution time: 2.3 hours
+- Total plans completed: 10
+- Average duration: 17 min
+- Total execution time: 3.0 hours
 
 **By Phase:**
 
@@ -31,11 +31,11 @@ Progress: [█████-----] 50% (1 of 2 plans complete)
 | 02-test-infrastructure | 2 | 13 min | 7 min |
 | 03-stage-0-1-test-coverage | 1 | 34 min | 34 min |
 | 04-stage-2-test-coverage | 1 | 57 min | 57 min |
-| 05-stage-transition-fixes | 1 | 7 min | 7 min |
+| 05-stage-transition-fixes | 2 | 51 min | 26 min |
 
 **Recent Trend:**
-- Last 5 plans: 11min, 34min, 57min, 7min
-- Trend: Cache update fixes are fast (7min), E2E tests scale with stage complexity
+- Last 5 plans: 34min, 57min, 7min, 44min
+- Trend: E2E regression testing requires full test execution (44min), code-only fixes are fast (7min)
 
 *Updated after each plan completion*
 
@@ -66,6 +66,7 @@ Recent decisions affecting current work:
 - **(05-01)** partner.stage_completed vs partner.advanced distinction: partner.stage_completed updates myProgress.stage (both users advance to Stage 3), partner.advanced updates partnerProgress.stage (only partner advanced)
 - **(05-01)** Stage 0 uses invalidateQueries for cache updates: Compact signing and invitation confirmation have acceptable <500ms latency via background refetch, don't need instant setQueryData like Stage 2+ transitions
 - **(05-01)** Transition messages in event payload: Stage 2→3 transition message embedded in partner.stage_completed event for immediate display in partner's chat
+- **(05-02)** Test helpers must wait for backend state: confirmFeelHeard() now waits for /feel-heard API response before returning to prevent race conditions where Stage 2 messages sent before backend stage update completes
 
 ### Pending Todos
 
@@ -90,8 +91,8 @@ See 01-04-AUDIT-CACHE-UPDATES.md for full issue list with v1.0/v1.1/v1.2 recomme
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 05-01-PLAN.md - Partner Stage Transition Cache Updates (Phase 05-stage-transition-fixes 1/2 COMPLETE)
+Stopped at: Completed 05-02-PLAN.md - E2E Regression Tests and Race Condition Fix (Phase 05-stage-transition-fixes 2/2 COMPLETE - PHASE COMPLETE)
 Resume file: None
 
 ---
-*Last updated: 2026-02-15*
+*Last updated: 2026-02-15T05:24:26Z*
