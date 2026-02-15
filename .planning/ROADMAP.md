@@ -120,10 +120,10 @@ Plans:
   1. Full two-browser E2E test passes from session start through Stage 3 entry for both users
   2. Test passes 3 consecutive runs without flakiness
   3. All 18 v1 requirements are satisfied
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] TBD
+- [ ] 07-01-PLAN.md — Full-flow E2E test with 3-run repeatability verification
 
 ## Progress
 
@@ -138,8 +138,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Stage 2 Test Coverage | 1/1 | ✓ Complete | 2026-02-14 |
 | 5. Stage Transition Fixes | 2/2 | ✓ Complete | 2026-02-15 |
 | 6. Reconciler Fixes | 2/2 | ✓ Complete | 2026-02-15 |
-| 7. End-to-End Verification | 0/TBD | Not started | - |
+| 7. End-to-End Verification | 0/1 | In Progress | - |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-15 (Phase 6 complete)*
+*Last updated: 2026-02-15 (Phase 7 planned)*
