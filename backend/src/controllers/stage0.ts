@@ -244,7 +244,9 @@ export async function signCompact(req: Request, res: Response): Promise<void> {
     // Notify via real-time and create in-app notification
     if (notificationTargetId) {
       await notifyPartner(sessionId, notificationTargetId, 'partner.signed_compact', {
+        signedBy: user.id,
         signedAt,
+        triggeredByUserId: user.id,
       });
     }
 

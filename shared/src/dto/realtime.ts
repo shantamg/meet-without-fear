@@ -104,6 +104,7 @@ export type SessionEventType =
   | 'session.resolved'
   // Invitations
   | 'invitation.declined'
+  | 'invitation.confirmed'
   // Presence (new)
   | 'presence.online'
   | 'presence.offline'

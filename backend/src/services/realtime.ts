@@ -42,6 +42,7 @@ export type SessionEvent = Extract<
   | 'session.resumed'
   | 'session.resolved'
   | 'invitation.declined'
+  | 'invitation.confirmed'
   // Empathy reconciler events
   | 'empathy.share_suggestion'
   | 'empathy.revealed'

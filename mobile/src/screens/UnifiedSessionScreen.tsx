@@ -363,6 +363,19 @@ export function UnifiedSessionScreen({
         queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
+      if (event === 'partner.signed_compact') {
+        console.log('[UnifiedSessionScreen] Partner signed compact');
+        // Refetch session state to update compact status UI
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      }
+
+      if (event === 'invitation.confirmed') {
+        console.log('[UnifiedSessionScreen] Invitation confirmed');
+        // Refetch session state and invitation data
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
+      }
+
       if (event === 'partner.empathy_shared') {
         // Partner shared their empathy statement
         console.log('[UnifiedSessionScreen] Partner shared empathy');

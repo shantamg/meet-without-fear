@@ -1073,6 +1073,13 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
       // Non-fatal - continue without transition message
     }
 
+    // Notify session that invitation was confirmed
+    await publishSessionEvent(sessionId, 'invitation.confirmed', {
+      confirmedBy: user.id,
+      triggeredByUserId: user.id,
+      timestamp: new Date().toISOString(),
+    });
+
     successResponse(res, {
       confirmed: true,
       invitation: {

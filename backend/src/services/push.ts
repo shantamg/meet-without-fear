@@ -99,6 +99,10 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'Invitation declined',
     body: 'Your partner has declined the session invitation.',
   },
+  'invitation.confirmed': {
+    title: 'Invitation confirmed',
+    body: 'Your partner confirmed the invitation message.',
+  },
   // Empathy reconciler events
   'partner.empathy_revealed': {
     title: 'Empathy revealed',
