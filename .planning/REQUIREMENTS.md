@@ -83,35 +83,35 @@ Deferred to future milestone. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RECON-DOC-01 | Phase — | Pending |
-| RECON-DOC-02 | Phase — | Pending |
-| RECON-EC-01 | Phase — | Pending |
-| RECON-EC-02 | Phase — | Pending |
-| RECON-EC-03 | Phase — | Pending |
-| RECON-EC-04 | Phase — | Pending |
-| RECON-EC-05 | Phase — | Pending |
-| RECON-VIS-01 | Phase — | Pending |
-| RECON-VIS-02 | Phase — | Pending |
-| RECON-VIS-03 | Phase — | Pending |
-| RECON-VIS-04 | Phase — | Pending |
-| NEEDS-01 | Phase — | Pending |
-| NEEDS-02 | Phase — | Pending |
-| NEEDS-03 | Phase — | Pending |
-| NEEDS-04 | Phase — | Pending |
-| STRAT-01 | Phase — | Pending |
-| STRAT-02 | Phase — | Pending |
-| STRAT-03 | Phase — | Pending |
-| STRAT-04 | Phase — | Pending |
-| STRAT-05 | Phase — | Pending |
-| E2E-01 | Phase — | Pending |
-| E2E-02 | Phase — | Pending |
-| E2E-03 | Phase — | Pending |
+| RECON-DOC-01 | Phase 8 | Pending |
+| RECON-DOC-02 | Phase 8 | Pending |
+| RECON-EC-01 | Phase 8 | Pending |
+| RECON-EC-02 | Phase 8 | Pending |
+| RECON-EC-03 | Phase 8 | Pending |
+| RECON-EC-05 | Phase 8 | Pending |
+| RECON-VIS-01 | Phase 8 | Pending |
+| RECON-VIS-02 | Phase 8 | Pending |
+| RECON-EC-04 | Phase 9 | Pending |
+| NEEDS-01 | Phase 10 | Pending |
+| NEEDS-02 | Phase 10 | Pending |
+| NEEDS-03 | Phase 10 | Pending |
+| NEEDS-04 | Phase 10 | Pending |
+| STRAT-01 | Phase 11 | Pending |
+| STRAT-02 | Phase 11 | Pending |
+| STRAT-03 | Phase 11 | Pending |
+| STRAT-04 | Phase 11 | Pending |
+| STRAT-05 | Phase 11 | Pending |
+| RECON-VIS-03 | Phase 12 | Pending |
+| RECON-VIS-04 | Phase 12 | Pending |
+| E2E-03 | Phase 12 | Pending |
+| E2E-01 | Phase 13 | Pending |
+| E2E-02 | Phase 13 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 23 total
-- Mapped to phases: 0 (populated during roadmap creation)
-- Unmapped: 23
+- Mapped to phases: 23/23 (100%)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-15*
-*Last updated: 2026-02-15 after initial definition*
+*Last updated: 2026-02-15 after roadmap creation*
