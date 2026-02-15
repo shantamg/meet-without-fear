@@ -91,10 +91,11 @@ Plans:
   3. Feel-heard confirmation advances both users' stages and shows correct panels
   4. Empathy sharing triggers reconciler and both users see post-reconciliation UI
   5. Stage 0-1 tests continue to pass (no regressions)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] TBD
+- [ ] 05-01-PLAN.md — Fix partner cache updates for stage transitions and add Stage 0 Ably events
+- [ ] 05-02-PLAN.md — E2E regression verification for stage transition fixes
 
 ### Phase 6: Reconciler Fixes
 **Goal**: Reconciler runs reliably without race conditions and advances both users toward Stage 3
@@ -134,10 +135,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Test Infrastructure | 2/2 | ✓ Complete | 2026-02-14 |
 | 3. Stage 0-1 Test Coverage | 1/1 | ✓ Complete | 2026-02-14 |
 | 4. Stage 2 Test Coverage | 1/1 | ✓ Complete | 2026-02-14 |
-| 5. Stage Transition Fixes | 0/TBD | Not started | - |
+| 5. Stage Transition Fixes | 0/2 | In Progress | - |
 | 6. Reconciler Fixes | 0/TBD | Not started | - |
 | 7. End-to-End Verification | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-14 (Phase 4 complete)*
+*Last updated: 2026-02-15 (Phase 5 planned)*
