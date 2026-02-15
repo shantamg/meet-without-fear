@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Two people can reliably complete a full partner session together — every stage transition, partner interaction, and reconciliation step works predictably every time.
-**Current focus:** Phase 2 - Test Infrastructure
+**Current focus:** Phase 3 - Stage 0-1 Test Coverage
 
 ## Current Position
 
-Phase: 2 of 7 (Test Infrastructure)
-Plan: 2 of 2 in current phase
+Phase: 3 of 7 (Stage 0-1 Test Coverage)
+Plan: 1 of 1 in current phase
 Status: Complete
-Last activity: 2026-02-14 — Completed plan 02-02 (Two Browser Smoke Test)
+Last activity: 2026-02-14 — Completed plan 03-01 (Stage 0-1 Test Coverage)
 
-Progress: [██████████] 100% (2 of 2 plans complete)
+Progress: [██████████] 100% (1 of 1 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 6 min
-- Total execution time: 0.6 hours
+- Total plans completed: 7
+- Average duration: 10 min
+- Total execution time: 1.2 hours
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [██████████] 100% (2 of 2 plans complete)
 |-------|-------|-------|----------|
 | 01-audit | 4 | 23 min | 6 min |
 | 02-test-infrastructure | 2 | 13 min | 7 min |
+| 03-stage-0-1-test-coverage | 1 | 34 min | 34 min |
 
 **Recent Trend:**
-- Last 5 plans: 4min, 6min, 2min, 11min
-- Trend: Variable (infrastructure setup time depends on test complexity)
+- Last 5 plans: 6min, 2min, 11min, 34min
+- Trend: Variable (E2E tests with circuit breaker timeouts take longer)
 
 *Updated after each plan completion*
 
@@ -54,6 +55,9 @@ Recent decisions affecting current work:
 - **(01-04)** useConfirmFeelHeard stage update verified: Stage transition to PERSPECTIVE_STRETCH confirmed at lines 552 and 594
 - **(02-02)** No global E2E_FIXTURE_ID in two-browser config: Per-request headers via TwoBrowserHarness handle fixture selection to avoid "all users get same fixture" pitfall
 - **(02-02)** Two-browser infrastructure validated: Smoke test proves independent contexts, per-user fixtures, real Ably, and full UI navigation all work together
+- **(03-01)** Extended timeout for circuit breaker: Stage 1 test needs 10 min timeout - circuit breaker adds ~20s per message (8 messages = 160s+ for timeouts alone)
+- **(03-01)** Invitation panel dismissal required: User A fixture triggers invitation panel at response 1 - test must dismiss before feel-heard flow continues
+- **(03-01)** Fixture message sequences must match exactly: Tests use exact fixture message sequences to ensure deterministic AI responses by index
 
 ### Pending Todos
 
@@ -78,7 +82,7 @@ See 01-04-AUDIT-CACHE-UPDATES.md for full issue list with v1.0/v1.1/v1.2 recomme
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 02-02-PLAN.md - Two Browser Smoke Test (Phase 02-test-infrastructure COMPLETE)
+Stopped at: Completed 03-01-PLAN.md - Stage 0-1 Test Coverage (Phase 03-stage-0-1-test-coverage COMPLETE)
 Resume file: None
 
 ---
