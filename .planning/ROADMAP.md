@@ -63,10 +63,10 @@ Plans:
   1. Test verifies both users can sign compact and both enter witnessing (Stage 0)
   2. Test verifies invitation send, acceptance, conversation, and both users confirming feel-heard (Stage 1)
   3. Tests pass with current implementation (documenting actual behavior, not ideal)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] TBD
+- [ ] 03-01-PLAN.md — Two-browser E2E tests for Stage 0 (compact signing) and Stage 1 (feel-heard flow)
 
 ### Phase 4: Stage 2 Test Coverage
 **Goal**: Two-browser E2E tests verify empathy sharing and reconciler flow through Stage 3 entry
