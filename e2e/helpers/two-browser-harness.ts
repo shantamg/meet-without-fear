@@ -174,7 +174,7 @@ export class TwoBrowserHarness {
 
     const responseData = await response.json();
     this.sessionId = responseData.data.session.id;
-    this.invitationId = responseData.data.invitation.id;
+    this.invitationId = responseData.data.invitationId;
 
     return this.sessionId;
   }
