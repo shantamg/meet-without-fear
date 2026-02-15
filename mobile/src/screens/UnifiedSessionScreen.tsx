@@ -45,7 +45,7 @@ import { useChatUIState } from '../hooks/useChatUIState';
 import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
 import { useRealtime, useUserSessionUpdates } from '../hooks/useRealtime';
-import { stageKeys, messageKeys } from '../hooks/queryKeys';
+import { stageKeys, messageKeys, sessionKeys } from '../hooks/queryKeys';
 import { useAIMessageHandler } from '../hooks/useMessages';
 import { useSharingStatus } from '../hooks/useSharingStatus';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
@@ -295,9 +295,70 @@ export function UnifiedSessionScreen({
 
       if (event === 'partner.stage_completed') {
         // Partner completed a stage - update caches
-        console.log('[UnifiedSessionScreen] Partner completed stage');
+        console.log('[UnifiedSessionScreen] Partner completed stage', data.currentStage);
         if (data.empathyStatus) {
           queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
+        }
+        // Update sessionKeys.state with new stage from event
+        if (data.currentStage !== undefined) {
+          queryClient.setQueryData(sessionKeys.state(sessionId), (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              progress: old.progress ? {
+                ...old.progress,
+                myProgress: old.progress.myProgress ? {
+                  ...old.progress.myProgress,
+                  stage: data.currentStage,
+                } : old.progress.myProgress,
+              } : old.progress,
+            };
+          });
+        }
+        // Also add transition message to cache if included in event
+        if (data.message) {
+          const message = data.message as { id: string; content: string; timestamp: string };
+          const newMessage = {
+            id: message.id,
+            content: message.content,
+            timestamp: message.timestamp,
+            stage: data.currentStage ?? 3,
+            role: 'AI' as const,
+            sessionId,
+            senderId: null,
+          };
+          queryClient.setQueryData(messageKeys.infinite(sessionId), (old: any) => {
+            if (!old || old.pages.length === 0) {
+              return { pages: [{ messages: [newMessage], hasMore: false }], pageParams: [undefined] };
+            }
+            const firstPage = old.pages[0];
+            const existingIds = new Set((firstPage.messages || []).map((m: any) => m.id));
+            if (existingIds.has(newMessage.id)) return old;
+            const updatedPages = [...old.pages];
+            updatedPages[0] = { ...firstPage, messages: [...(firstPage.messages || []), newMessage] };
+            return { ...old, pages: updatedPages };
+          });
+        }
+        queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+
+      if (event === 'partner.advanced') {
+        console.log('[UnifiedSessionScreen] Partner advanced to stage', data.toStage);
+        if (data.toStage !== undefined) {
+          // Update partner's stage in sessionKeys.state
+          queryClient.setQueryData(sessionKeys.state(sessionId), (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              progress: old.progress ? {
+                ...old.progress,
+                partnerProgress: old.progress.partnerProgress ? {
+                  ...old.progress.partnerProgress,
+                  stage: data.toStage,
+                } : old.progress.partnerProgress,
+              } : old.progress,
+            };
+          });
         }
         queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
       }

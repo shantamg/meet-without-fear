@@ -1578,6 +1578,7 @@ Respond in JSON format:
         previousStage: 2,
         currentStage: 3,
         userId,
+        triggeredByUserId: userId,
         message: {
           id: message.id,
           content: message.content,

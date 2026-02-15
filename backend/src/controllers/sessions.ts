@@ -679,6 +679,7 @@ export async function advanceStage(req: Request, res: Response): Promise<void> {
       await notifyPartner(sessionId, partnerId, 'partner.advanced', {
         toStage: nextStage,
         advancedAt: now.toISOString(),
+        triggeredByUserId: user.id,
       });
     }
 

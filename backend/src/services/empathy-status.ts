@@ -179,6 +179,10 @@ export async function buildEmpathyExchangeStatus(
     return 'pending';
   };
 
+  // Check if guesser has unviewed shared context (should view Share tab before continuing)
+  // This is true when status is REFINING and they haven't viewed the shared context yet
+  const hasUnviewedSharedContext = hasNewSharedContext && sharedContext !== null;
+
   return {
     myAttempt: myAttempt
       ? {
@@ -210,6 +214,7 @@ export async function buildEmpathyExchangeStatus(
     analyzing,
     awaitingSharing,
     hasNewSharedContext,
+    hasUnviewedSharedContext,
     sharedContext,
     refinementHint,
     readyForStage3,
