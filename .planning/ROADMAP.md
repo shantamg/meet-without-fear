@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Stage 0-1 Test Coverage** - Two-browser E2E tests for Stages 0-1
 - [x] **Phase 4: Stage 2 Test Coverage** - Two-browser E2E tests for Stage 2 (empathy/reconciler)
 - [x] **Phase 5: Stage Transition Fixes** - Fix stage transition cache updates and partner notifications
-- [ ] **Phase 6: Reconciler Fixes** - Fix reconciler reliability and post-reconciliation state
+- [x] **Phase 6: Reconciler Fixes** - Fix reconciler reliability and post-reconciliation state
 - [ ] **Phase 7: End-to-End Verification** - Prove both users can reliably reach Stage 3
 
 ## Phase Details
@@ -109,8 +109,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Fix infinite share loop guard and ReconcilerResult visibility race
-- [ ] 06-02-PLAN.md — E2E regression verification for reconciler fixes
+- [x] 06-01-PLAN.md — Fix infinite share loop guard and ReconcilerResult visibility race
+- [x] 06-02-PLAN.md — E2E regression verification for reconciler fixes
 
 ### Phase 7: End-to-End Verification
 **Goal**: Both users can reliably complete Stages 0-2 and enter Stage 3 together (repeatable proof)
@@ -137,9 +137,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Stage 0-1 Test Coverage | 1/1 | ✓ Complete | 2026-02-14 |
 | 4. Stage 2 Test Coverage | 1/1 | ✓ Complete | 2026-02-14 |
 | 5. Stage Transition Fixes | 2/2 | ✓ Complete | 2026-02-15 |
-| 6. Reconciler Fixes | 0/2 | In progress | - |
+| 6. Reconciler Fixes | 2/2 | ✓ Complete | 2026-02-15 |
 | 7. End-to-End Verification | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-15 (Phase 6 planned)*
+*Last updated: 2026-02-15 (Phase 6 complete)*
