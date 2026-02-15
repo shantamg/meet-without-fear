@@ -20,6 +20,11 @@
  *
  * This test documents actual system behavior for the Stage 2 empathy sharing flow.
  *
+ * IMPORTANT: Both users must complete empathy drafting BEFORE either shares.
+ * When User A shares empathy, the backend generates a transition message that
+ * gets delivered to User B via Ably. This extra AI message confuses the
+ * waitForAnyAIResponse message counting, causing off-by-one errors.
+ *
  * KNOWN ISSUES DOCUMENTED (from Stage 2 audit):
  * - Empathy panel visibility depends on stage cache (Pitfall 3)
  * - Validation modal depends on Ably event timing (Pitfall 5)
@@ -162,10 +167,14 @@ test.describe('Stage 2: Empathy Sharing and Reconciler', () => {
     await harness.userBPage.screenshot({ path: 'test-results/stage2-user-b-feel-heard.png' });
 
     // ==========================================
-    // STAGE 2: USER A EMPATHY DRAFT
+    // STAGE 2: BOTH USERS DRAFT EMPATHY
     // ==========================================
+    // IMPORTANT: Both users must complete empathy drafting BEFORE either shares.
+    // When User A shares empathy, the backend generates a transition message
+    // delivered to User B via Ably, which injects an extra AI message into
+    // User B's chat and breaks waitForAnyAIResponse's message counting.
 
-    // User A sends Stage 2 messages. After feel-heard confirmation, next messages build empathy.
+    // --- User A empathy draft ---
     // Response 4: Post-feel-heard transition
     // Response 5: ReadyShare: Y with empathy draft
     const userAStage2Messages = [
@@ -173,30 +182,10 @@ test.describe('Stage 2: Empathy Sharing and Reconciler', () => {
       'I guess they might be stressed from work too', // Response 5: ReadyShare: Y, empathy draft
     ];
 
-    // Send messages and wait for empathy review panel
     await sendAndWaitForPanel(harness.userAPage, userAStage2Messages, 'empathy-review-button', 2);
+    await harness.userAPage.screenshot({ path: 'test-results/stage2-user-a-empathy-draft.png' });
 
-    // Click empathy review button to open review modal
-    const empathyReviewButton = harness.userAPage.getByTestId('empathy-review-button');
-    await expect(empathyReviewButton).toBeVisible({ timeout: 5000 });
-    await empathyReviewButton.click();
-
-    // Wait for share empathy button and click to consent
-    const shareEmpathyButton = harness.userAPage.getByTestId('share-empathy-button');
-    await expect(shareEmpathyButton).toBeVisible({ timeout: 5000 });
-    await shareEmpathyButton.click();
-
-    // Screenshot User A after sharing empathy
-    await harness.userAPage.screenshot({ path: 'test-results/stage2-user-a-empathy-shared.png' });
-
-    // Brief pause for Ably event delivery between users sharing
-    await harness.userAPage.waitForTimeout(2000);
-
-    // ==========================================
-    // STAGE 2: USER B EMPATHY DRAFT
-    // ==========================================
-
-    // User B (reconciler-no-gaps) sends Stage 2 messages
+    // --- User B empathy draft ---
     // Response 4: Post-feel-heard
     // Response 5: Empathy building
     // Response 6: ReadyShare: Y with empathy draft
@@ -206,21 +195,36 @@ test.describe('Stage 2: Empathy Sharing and Reconciler', () => {
       'Maybe they feel like I pull away when stressed and they want to connect', // Response 6: ReadyShare: Y
     ];
 
-    // Send messages and wait for empathy review panel
     await sendAndWaitForPanel(harness.userBPage, userBStage2Messages, 'empathy-review-button', 3);
+    await harness.userBPage.screenshot({ path: 'test-results/stage2-user-b-empathy-draft.png' });
 
-    // Click empathy review button to open review modal
+    // ==========================================
+    // STAGE 2: BOTH USERS SHARE EMPATHY
+    // ==========================================
+    // User A shares first (has no reconciler operations).
+    // User B shares second (triggers reconciler via reconciler-no-gaps fixture).
+
+    // --- User A shares ---
+    const empathyReviewButton = harness.userAPage.getByTestId('empathy-review-button');
+    await expect(empathyReviewButton).toBeVisible({ timeout: 5000 });
+    await empathyReviewButton.click();
+
+    const shareEmpathyButton = harness.userAPage.getByTestId('share-empathy-button');
+    await expect(shareEmpathyButton).toBeVisible({ timeout: 5000 });
+    await shareEmpathyButton.click();
+    await harness.userAPage.screenshot({ path: 'test-results/stage2-user-a-empathy-shared.png' });
+
+    // Wait for Ably event delivery (User A's share triggers transition message to User B)
+    await harness.userAPage.waitForTimeout(3000);
+
+    // --- User B shares (triggers reconciler) ---
     const empathyReviewButtonB = harness.userBPage.getByTestId('empathy-review-button');
     await expect(empathyReviewButtonB).toBeVisible({ timeout: 5000 });
     await empathyReviewButtonB.click();
 
-    // Wait for share empathy button and click to consent
     const shareEmpathyButtonB = harness.userBPage.getByTestId('share-empathy-button');
     await expect(shareEmpathyButtonB).toBeVisible({ timeout: 5000 });
     await shareEmpathyButtonB.click();
-
-    // Screenshot User B after sharing empathy
-    // NOTE: User B sharing second triggers the reconciler (using reconciler-no-gaps fixture operations)
     await harness.userBPage.screenshot({ path: 'test-results/stage2-user-b-empathy-shared.png' });
 
     // ==========================================

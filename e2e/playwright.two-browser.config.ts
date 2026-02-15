@@ -19,7 +19,7 @@ dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 export default defineConfig({
   testDir: './tests',
   testMatch: /two-browser-.*\.spec\.ts/,
-  timeout: 300000, // 5 minutes per test (two-browser tests are longer)
+  timeout: 900000, // 15 minutes per test (Stage 2 needs 13 AI interactions + reconciler)
   expect: {
     timeout: 15000, // 15s for Ably events and partner updates
   },
