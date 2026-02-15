@@ -178,6 +178,8 @@ export async function signCompact(page: Page, timeout = 10000): Promise<void> {
 
 /**
  * Complete the "feel heard" confirmation by clicking the Yes button.
+ * Waits for the backend API request to complete to ensure stage transition
+ * has propagated before subsequent messages are sent.
  *
  * @param page - Playwright Page instance
  * @param timeout - Maximum time to wait for feel heard buttons (default: 5000)
@@ -185,8 +187,21 @@ export async function signCompact(page: Page, timeout = 10000): Promise<void> {
 export async function confirmFeelHeard(page: Page, timeout = 5000): Promise<void> {
   const feelHeardYes = page.getByTestId('feel-heard-yes');
   await expect(feelHeardYes).toBeVisible({ timeout });
+
+  // Wait for the API request to complete (fixes race condition where
+  // subsequent messages are sent before backend stage update completes)
+  const responsePromise = page.waitForResponse(
+    response => response.url().includes('/sessions/') && response.url().includes('/feel-heard'),
+    { timeout: 10000 }
+  );
+
   await feelHeardYes.click();
+  await responsePromise;
+
   await expect(feelHeardYes).not.toBeVisible({ timeout });
+
+  // Additional small delay to ensure React state updates from the response
+  await page.waitForTimeout(500);
 }
 
 /**
