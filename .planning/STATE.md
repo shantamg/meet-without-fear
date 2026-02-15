@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 ## Current Position
 
 Phase: 2 of 7 (Test Infrastructure)
-Plan: 1 of 1 in current phase
+Plan: 2 of 2 in current phase
 Status: Complete
-Last activity: 2026-02-14 — Completed plan 02-01 (Two Browser Harness)
+Last activity: 2026-02-14 — Completed plan 02-02 (Two Browser Smoke Test)
 
-Progress: [██████████] 100% (1 of 1 plans complete)
+Progress: [██████████] 100% (2 of 2 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 5 min
-- Total execution time: 0.5 hours
+- Total plans completed: 6
+- Average duration: 6 min
+- Total execution time: 0.6 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-audit | 4 | 23 min | 6 min |
-| 02-test-infrastructure | 1 | 2 min | 2 min |
+| 02-test-infrastructure | 2 | 13 min | 7 min |
 
 **Recent Trend:**
-- Last 5 plans: 7min, 4min, 6min, 2min
-- Trend: Accelerating (infrastructure plans faster than audits)
+- Last 5 plans: 4min, 6min, 2min, 11min
+- Trend: Variable (infrastructure setup time depends on test complexity)
 
 *Updated after each plan completion*
 
@@ -52,6 +52,8 @@ Recent decisions affecting current work:
 - **(01-04)** Cache-First architecture verified correct: All 60+ manual cache updates write to correct React Query keys - no mismatches found
 - **(01-04)** Reconciler Ably handlers located: All 10 empathy exchange events handled in UnifiedSessionScreen.tsx, all update stageKeys.empathyStatus correctly
 - **(01-04)** useConfirmFeelHeard stage update verified: Stage transition to PERSPECTIVE_STRETCH confirmed at lines 552 and 594
+- **(02-02)** No global E2E_FIXTURE_ID in two-browser config: Per-request headers via TwoBrowserHarness handle fixture selection to avoid "all users get same fixture" pitfall
+- **(02-02)** Two-browser infrastructure validated: Smoke test proves independent contexts, per-user fixtures, real Ably, and full UI navigation all work together
 
 ### Pending Todos
 
@@ -76,7 +78,7 @@ See 01-04-AUDIT-CACHE-UPDATES.md for full issue list with v1.0/v1.1/v1.2 recomme
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 02-01-PLAN.md - Two Browser Harness (Phase 02-test-infrastructure COMPLETE)
+Stopped at: Completed 02-02-PLAN.md - Two Browser Smoke Test (Phase 02-test-infrastructure COMPLETE)
 Resume file: None
 
 ---
