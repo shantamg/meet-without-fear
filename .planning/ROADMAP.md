@@ -76,10 +76,10 @@ Plans:
   1. Test verifies empathy draft, share, partner receives, reconciler runs (Stage 2)
   2. Test verifies both users enter Stage 3
   3. Tests document any failures (expected, given known issues)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] TBD
+- [ ] 04-01-PLAN.md — Two-browser E2E test for Stage 2 (empathy sharing, reconciler no-gaps, validation, Stage 3 entry)
 
 ### Phase 5: Stage Transition Fixes
 **Goal**: Stage transitions update cache correctly for both users and trigger proper UI updates
