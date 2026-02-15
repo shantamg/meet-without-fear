@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Test Infrastructure** - Build two-browser E2E test infrastructure with mocked LLM and real Ably
 - [x] **Phase 3: Stage 0-1 Test Coverage** - Two-browser E2E tests for Stages 0-1
 - [x] **Phase 4: Stage 2 Test Coverage** - Two-browser E2E tests for Stage 2 (empathy/reconciler)
-- [ ] **Phase 5: Stage Transition Fixes** - Fix stage transition cache updates and partner notifications
+- [x] **Phase 5: Stage Transition Fixes** - Fix stage transition cache updates and partner notifications
 - [ ] **Phase 6: Reconciler Fixes** - Fix reconciler reliability and post-reconciliation state
 - [ ] **Phase 7: End-to-End Verification** - Prove both users can reliably reach Stage 3
 
@@ -94,8 +94,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Fix partner cache updates for stage transitions and add Stage 0 Ably events
-- [ ] 05-02-PLAN.md — E2E regression verification for stage transition fixes
+- [x] 05-01-PLAN.md — Fix partner cache updates for stage transitions and add Stage 0 Ably events
+- [x] 05-02-PLAN.md — E2E regression verification for stage transition fixes
 
 ### Phase 6: Reconciler Fixes
 **Goal**: Reconciler runs reliably without race conditions and advances both users toward Stage 3
@@ -135,10 +135,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Test Infrastructure | 2/2 | ✓ Complete | 2026-02-14 |
 | 3. Stage 0-1 Test Coverage | 1/1 | ✓ Complete | 2026-02-14 |
 | 4. Stage 2 Test Coverage | 1/1 | ✓ Complete | 2026-02-14 |
-| 5. Stage Transition Fixes | 0/2 | In Progress | - |
+| 5. Stage Transition Fixes | 2/2 | ✓ Complete | 2026-02-15 |
 | 6. Reconciler Fixes | 0/TBD | Not started | - |
 | 7. End-to-End Verification | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-15 (Phase 5 planned)*
+*Last updated: 2026-02-15 (Phase 5 complete)*
