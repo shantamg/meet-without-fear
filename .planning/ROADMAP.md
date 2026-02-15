@@ -13,7 +13,7 @@ Transform partner sessions from fragile to reliable by completing a systematic a
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Audit** - Document all two-user interaction paths in Stages 0-2
-- [ ] **Phase 2: Test Infrastructure** - Build two-browser E2E test infrastructure with mocked LLM and real Ably
+- [x] **Phase 2: Test Infrastructure** - Build two-browser E2E test infrastructure with mocked LLM and real Ably
 - [ ] **Phase 3: Stage 0-1 Test Coverage** - Two-browser E2E tests for Stages 0-1
 - [ ] **Phase 4: Stage 2 Test Coverage** - Two-browser E2E tests for Stage 2 (empathy/reconciler)
 - [ ] **Phase 5: Stage Transition Fixes** - Fix stage transition cache updates and partner notifications
@@ -52,8 +52,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Create TwoBrowserHarness class and waitForPartnerUpdate helper
-- [ ] 02-02-PLAN.md — Create two-browser Playwright config and smoke test
+- [x] 02-01-PLAN.md — Create TwoBrowserHarness class and waitForPartnerUpdate helper
+- [x] 02-02-PLAN.md — Create two-browser Playwright config and smoke test
 
 ### Phase 3: Stage 0-1 Test Coverage
 **Goal**: Two-browser E2E tests verify both users can complete Stages 0-1 together
@@ -131,7 +131,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Audit | 4/4 | ✓ Complete | 2026-02-14 |
-| 2. Test Infrastructure | 0/2 | Planned | - |
+| 2. Test Infrastructure | 2/2 | ✓ Complete | 2026-02-14 |
 | 3. Stage 0-1 Test Coverage | 0/TBD | Not started | - |
 | 4. Stage 2 Test Coverage | 0/TBD | Not started | - |
 | 5. Stage Transition Fixes | 0/TBD | Not started | - |
@@ -140,4 +140,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-14 (Phase 2 planned)*
+*Last updated: 2026-02-14 (Phase 2 complete)*

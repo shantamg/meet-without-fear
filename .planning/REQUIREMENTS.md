@@ -20,7 +20,7 @@ Requirements for Session Reliability milestone. Each maps to roadmap phases.
 - [ ] **TEST-02**: Two-browser E2E test covers Stage 1 flow (invitation, acceptance, both converse, both feel-heard)
 - [ ] **TEST-03**: Two-browser E2E test covers Stage 2 flow (empathy draft, share, partner receives, reconciler runs)
 - [ ] **TEST-04**: Two-browser E2E test verifies both users enter Stage 3
-- [ ] **TEST-05**: All tests use mocked LLM with fixtures and real Ably, navigating full UI from scratch
+- [x] **TEST-05**: All tests use mocked LLM with fixtures and real Ably, navigating full UI from scratch
 
 ### Stage Transition Fixes
 
