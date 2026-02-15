@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Two people can reliably complete a full partner session together — every stage transition, partner interaction, and reconciliation step works predictably every time.
-**Current focus:** Phase 3 - Stage 0-1 Test Coverage
+**Current focus:** Phase 4 - Stage 2 Test Coverage
 
 ## Current Position
 
-Phase: 3 of 7 (Stage 0-1 Test Coverage)
+Phase: 4 of 7 (Stage 2 Test Coverage)
 Plan: 1 of 1 in current phase
 Status: Complete
-Last activity: 2026-02-14 — Completed plan 03-01 (Stage 0-1 Test Coverage)
+Last activity: 2026-02-15 — Completed plan 04-01 (Stage 2 Test Coverage)
 
 Progress: [██████████] 100% (1 of 1 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 10 min
-- Total execution time: 1.2 hours
+- Total plans completed: 8
+- Average duration: 15 min
+- Total execution time: 2.2 hours
 
 **By Phase:**
 
@@ -30,10 +30,11 @@ Progress: [██████████] 100% (1 of 1 plans complete)
 | 01-audit | 4 | 23 min | 6 min |
 | 02-test-infrastructure | 2 | 13 min | 7 min |
 | 03-stage-0-1-test-coverage | 1 | 34 min | 34 min |
+| 04-stage-2-test-coverage | 1 | 57 min | 57 min |
 
 **Recent Trend:**
-- Last 5 plans: 6min, 2min, 11min, 34min
-- Trend: Variable (E2E tests with circuit breaker timeouts take longer)
+- Last 5 plans: 2min, 11min, 34min, 57min
+- Trend: E2E tests scale with stage complexity (Stage 2 = 13 AI interactions vs Stage 1 = 8)
 
 *Updated after each plan completion*
 
@@ -58,6 +59,9 @@ Recent decisions affecting current work:
 - **(03-01)** Extended timeout for circuit breaker: Stage 1 test needs 10 min timeout - circuit breaker adds ~20s per message (8 messages = 160s+ for timeouts alone)
 - **(03-01)** Invitation panel dismissal required: User A fixture triggers invitation panel at response 1 - test must dismiss before feel-heard flow continues
 - **(03-01)** Fixture message sequences must match exactly: Tests use exact fixture message sequences to ensure deterministic AI responses by index
+- **(04-01)** Asymmetric fixtures for reconciler determinism: User A (no reconciler ops) shares first, User B (reconciler-no-gaps ops) shares second to trigger deterministic no-gaps result
+- **(04-01)** Stage 2 timeout 15 minutes: Stage 2 requires 13 AI interactions (vs 8 in Stage 1), 13×20s circuit breaker = 260s + processing ≈ 12-13 min total
+- **(04-01)** Mood check reappears after navigation: Must call handleMoodCheck() after navigateBackToChat() as mood check can reappear after route/state updates
 
 ### Pending Todos
 
@@ -81,9 +85,9 @@ See 01-04-AUDIT-CACHE-UPDATES.md for full issue list with v1.0/v1.1/v1.2 recomme
 
 ## Session Continuity
 
-Last session: 2026-02-14
-Stopped at: Completed 03-01-PLAN.md - Stage 0-1 Test Coverage (Phase 03-stage-0-1-test-coverage COMPLETE)
+Last session: 2026-02-15
+Stopped at: Completed 04-01-PLAN.md - Stage 2 Test Coverage (Phase 04-stage-2-test-coverage COMPLETE)
 Resume file: None
 
 ---
-*Last updated: 2026-02-14*
+*Last updated: 2026-02-15*
