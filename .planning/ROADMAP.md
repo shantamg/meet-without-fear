@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Audit** - Document all two-user interaction paths in Stages 0-2
 - [x] **Phase 2: Test Infrastructure** - Build two-browser E2E test infrastructure with mocked LLM and real Ably
 - [x] **Phase 3: Stage 0-1 Test Coverage** - Two-browser E2E tests for Stages 0-1
-- [ ] **Phase 4: Stage 2 Test Coverage** - Two-browser E2E tests for Stage 2 (empathy/reconciler)
+- [x] **Phase 4: Stage 2 Test Coverage** - Two-browser E2E tests for Stage 2 (empathy/reconciler)
 - [ ] **Phase 5: Stage Transition Fixes** - Fix stage transition cache updates and partner notifications
 - [ ] **Phase 6: Reconciler Fixes** - Fix reconciler reliability and post-reconciliation state
 - [ ] **Phase 7: End-to-End Verification** - Prove both users can reliably reach Stage 3
@@ -79,7 +79,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 04-01-PLAN.md — Two-browser E2E test for Stage 2 (empathy sharing, reconciler no-gaps, validation, Stage 3 entry)
+- [x] 04-01-PLAN.md — Two-browser E2E test for Stage 2 (empathy sharing, reconciler no-gaps, validation, Stage 3 entry)
 
 ### Phase 5: Stage Transition Fixes
 **Goal**: Stage transitions update cache correctly for both users and trigger proper UI updates
@@ -133,11 +133,11 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Audit | 4/4 | ✓ Complete | 2026-02-14 |
 | 2. Test Infrastructure | 2/2 | ✓ Complete | 2026-02-14 |
 | 3. Stage 0-1 Test Coverage | 1/1 | ✓ Complete | 2026-02-14 |
-| 4. Stage 2 Test Coverage | 0/TBD | Not started | - |
+| 4. Stage 2 Test Coverage | 1/1 | ✓ Complete | 2026-02-14 |
 | 5. Stage Transition Fixes | 0/TBD | Not started | - |
 | 6. Reconciler Fixes | 0/TBD | Not started | - |
 | 7. End-to-End Verification | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-14 (Phase 3 complete)*
+*Last updated: 2026-02-14 (Phase 4 complete)*
