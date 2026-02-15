@@ -42,6 +42,154 @@ import type {
 } from '@meet-without-fear/shared';
 
 // ============================================================================
+// Helper: Check if context has already been shared for a direction
+// ============================================================================
+
+/**
+ * Check if SHARED_CONTEXT has already been sent from subject to guesser.
+ *
+ * This prevents the reconciler loop where:
+ * 1. Reconciler finds gaps → sets status to AWAITING_SHARING
+ * 2. User shares context → SHARED_CONTEXT message created
+ * 3. User resubmits empathy → ReconcilerResult deleted (cascades to ReconcilerShareOffer)
+ * 4. Reconciler runs again → finds same gaps → sets AWAITING_SHARING again
+ * 5. Loop repeats indefinitely
+ *
+ * By checking for existing SHARED_CONTEXT messages, we can skip the sharing step
+ * if context has already been shared for this direction.
+ *
+ * @param sessionId - The session ID
+ * @param guesserId - The guesser (person whose empathy has gaps)
+ * @param subjectId - The subject (person who should share context)
+ * @returns true if context has already been shared for this direction
+ */
+export async function hasContextAlreadyBeenShared(
+  sessionId: string,
+  guesserId: string,
+  subjectId: string
+): Promise<boolean> {
+  // SHARED_CONTEXT messages have:
+  // - senderId = subject (person who shared)
+  // - forUserId = guesser (person who receives the context)
+  const existingSharedContext = await prisma.message.findFirst({
+    where: {
+      sessionId,
+      role: 'SHARED_CONTEXT',
+      senderId: subjectId,
+      forUserId: guesserId,
+    },
+  });
+
+  if (existingSharedContext) {
+    console.log(
+      `[hasContextAlreadyBeenShared] Context already shared from ${subjectId} to ${guesserId} at ${existingSharedContext.timestamp.toISOString()}`
+    );
+    return true;
+  }
+
+  return false;
+}
+
+// ============================================================================
+// Helper: Find ReconcilerResult with retry
+// ============================================================================
+
+/**
+ * Retry up to 3 times to find ReconcilerResult to handle potential race condition
+ * where the record might not be immediately visible after creation.
+ * This is only used as a fallback when the DB record is not passed by reference.
+ */
+async function findReconcilerResultWithRetry(
+  sessionId: string,
+  guesserId: string,
+  subjectId: string
+): Promise<any | null> {
+  let dbResult = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    console.log(`[Reconciler] Looking up ReconcilerResult (attempt ${attempt}/3) for guesser=${guesserId}, subject=${subjectId}`);
+    dbResult = await prisma.reconcilerResult.findUnique({
+      where: {
+        sessionId_guesserId_subjectId: {
+          sessionId,
+          guesserId,
+          subjectId,
+        },
+      },
+    });
+    if (dbResult) {
+      break;
+    }
+    if (attempt < 3) {
+      console.warn(`[Reconciler] ReconcilerResult not found on attempt ${attempt}, waiting 100ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
+  if (!dbResult) {
+    console.error(`[Reconciler] CRITICAL: Could not find reconcilerResult after 3 attempts! guesser=${guesserId}, subject=${subjectId}, sessionId=${sessionId}`);
+  }
+
+  return dbResult;
+}
+
+// ============================================================================
+// Helper: Mark empathy as READY
+// ============================================================================
+
+/**
+ * Mark guesser's empathy attempt as READY, create alignment message, and check reveal.
+ * This helper extracts the common logic when no sharing is needed.
+ */
+async function markEmpathyReady(
+  sessionId: string,
+  guesserId: string,
+  subjectName: string
+): Promise<void> {
+  console.log(`[Reconciler] Marking empathy as READY for guesser ${guesserId}`);
+
+  // Update empathy attempt status to READY
+  await prisma.empathyAttempt.updateMany({
+    where: { sessionId, sourceUserId: guesserId },
+    data: { status: 'READY' },
+  });
+
+  // Create a positive feedback message for the guesser
+  const alignmentMessage = `${subjectName} has felt heard. The reconciler reports your attempt to imagine what they're feeling was quite accurate. ${subjectName} is now considering your perspective, and once they do, you'll both see what each other shared.`;
+
+  const savedMessage = await prisma.message.create({
+    data: {
+      sessionId,
+      senderId: null, // AI message
+      forUserId: guesserId,
+      role: 'AI',
+      content: alignmentMessage,
+      stage: 2,
+    },
+  });
+
+  console.log(`[Reconciler] Created alignment message for guesser ${guesserId}: "${alignmentMessage}"`);
+
+  // Publish the message via Ably so guesser sees it immediately
+  await publishMessageAIResponse(
+    sessionId,
+    guesserId,
+    {
+      id: savedMessage.id,
+      sessionId,
+      senderId: null,
+      content: savedMessage.content,
+      timestamp: savedMessage.timestamp.toISOString(),
+      role: MessageRole.AI,
+      stage: savedMessage.stage,
+    },
+    {} // No metadata needed
+  );
+
+  // Check if both directions are now READY and reveal both if so
+  await checkAndRevealBothIfReady(sessionId);
+}
+
+// ============================================================================
 // Helper: Get Sonnet JSON response
 // ============================================================================
 
@@ -612,48 +760,21 @@ export async function runReconcilerForDirection(
   if (!shouldOfferSharing) {
     // No sharing needed - mark as READY (will reveal when both directions are ready)
     console.log(`[Reconciler] No sharing needed (action=${action}, focus=${hasSuggestedFocus}). Marking empathy as READY for ${guesserInfo.name} → ${subjectInfo.name}`);
-    await prisma.empathyAttempt.updateMany({
-      where: { sessionId, sourceUserId: guesserId },
-      data: {
-        status: 'READY',
-      },
-    });
+    await markEmpathyReady(sessionId, guesserId, subjectInfo.name);
 
-    // Create a positive feedback message for the guesser (US-6: PROCEED Positive Feedback)
-    // This confirms that their empathy attempt was well-aligned with the subject's experience
-    const alignmentMessage = `${subjectInfo.name} has felt heard. The reconciler reports your attempt to imagine what they're feeling was quite accurate. ${subjectInfo.name} is now considering your perspective, and once they do, you'll both see what each other shared.`;
+    return {
+      result,
+      empathyStatus: 'READY',
+      shareOffer: null,
+    };
+  }
 
-    const savedMessage = await prisma.message.create({
-      data: {
-        sessionId,
-        senderId: null, // AI message
-        forUserId: guesserId,
-        role: 'AI',
-        content: alignmentMessage,
-        stage: 2,
-      },
-    });
-
-    console.log(`[Reconciler] Created alignment message for guesser ${guesserId}: "${alignmentMessage}"`);
-
-    // Publish the message via Ably so guesser sees it immediately
-    await publishMessageAIResponse(
-      sessionId,
-      guesserId,
-      {
-        id: savedMessage.id,
-        sessionId,
-        senderId: null,
-        content: savedMessage.content,
-        timestamp: savedMessage.timestamp.toISOString(),
-        role: MessageRole.AI,
-        stage: savedMessage.stage,
-      },
-      {} // No metadata needed
-    );
-
-    // Check if both directions are now READY and reveal both if so
-    await checkAndRevealBothIfReady(sessionId);
+  // Check if context has already been shared for this direction
+  const contextAlreadyShared = await hasContextAlreadyBeenShared(sessionId, guesserId, subjectId);
+  if (contextAlreadyShared) {
+    console.log(`[Reconciler] Context already shared ${subjectId}->${guesserId}, skipping AWAITING_SHARING, marking READY`);
+    // Same as the no-gaps path: mark READY, create alignment message, check reveal
+    await markEmpathyReady(sessionId, guesserId, subjectInfo.name);
 
     return {
       result,
@@ -664,12 +785,25 @@ export async function runReconcilerForDirection(
 
   // Significant gaps - generate share suggestion for subject
   console.log(`[Reconciler] SIGNIFICANT gaps found. Generating share suggestion for ${subjectInfo.name}...`);
+
+  // Query the DB record once (it was just created in analyzeEmpathyGap)
+  const dbReconcilerResult = await prisma.reconcilerResult.findUnique({
+    where: {
+      sessionId_guesserId_subjectId: {
+        sessionId,
+        guesserId,
+        subjectId,
+      },
+    },
+  });
+
   const shareOffer = await generateShareSuggestion(
     sessionId,
     guesserInfo,
     subjectInfo,
     result,
-    witnessingContent
+    witnessingContent,
+    dbReconcilerResult || undefined
   );
 
   // Update empathy attempt status to AWAITING_SHARING
@@ -706,13 +840,16 @@ export async function runReconcilerForDirection(
 /**
  * Generate a share suggestion for the subject based on reconciler gaps.
  * This creates a human-readable suggestion that the subject can accept, refine, or decline.
+ *
+ * @param dbReconcilerResult - Optional DB record to avoid retry loop (passed from runReconcilerForDirection)
  */
 async function generateShareSuggestion(
   sessionId: string,
   guesser: UserInfo,
   subject: UserInfo,
   reconcilerResult: ReconcilerResult,
-  witnessingContent: WitnessingContent
+  witnessingContent: WitnessingContent,
+  dbReconcilerResult?: any
 ): Promise<{
   suggestedContent: string;
   reason: string;
@@ -789,28 +926,8 @@ Respond in JSON:
     },
   }); */
 
-  // Save to reconciler result - retry up to 3 times to handle potential race condition
-  // where the record might not be immediately visible after creation
-  let dbResult = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    console.log(`[Reconciler] Looking up ReconcilerResult (attempt ${attempt}/3) for guesser=${guesser.id}, subject=${subject.id}`);
-    dbResult = await prisma.reconcilerResult.findUnique({
-      where: {
-        sessionId_guesserId_subjectId: {
-          sessionId,
-          guesserId: guesser.id,
-          subjectId: subject.id,
-        },
-      },
-    });
-    if (dbResult) {
-      break;
-    }
-    if (attempt < 3) {
-      console.warn(`[Reconciler] ReconcilerResult not found on attempt ${attempt}, waiting 100ms before retry...`);
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  }
+  // Use provided DB record or fall back to retry loop
+  const dbResult = dbReconcilerResult || await findReconcilerResultWithRetry(sessionId, guesser.id, subject.id);
 
   if (dbResult) {
     console.log(`[Reconciler] Updating DB result ${dbResult.id} and creating/updating share offer`);
@@ -843,7 +960,7 @@ Respond in JSON:
     // The suggestion is stored in reconcilerShareOffer and displayed via the drawer only.
     console.log(`[Reconciler] Share suggestion stored for subject ${subject.id} (drawer only, not in chat)`);
   } else {
-    console.error(`[Reconciler] CRITICAL: Could not find reconcilerResult after 3 attempts! guesser=${guesser.id}, subject=${subject.id}, sessionId=${sessionId}`);
+    console.error(`[Reconciler] CRITICAL: Could not find reconcilerResult! guesser=${guesser.id}, subject=${subject.id}, sessionId=${sessionId}`);
     console.error(`[Reconciler] This will cause the share suggestion to not be displayed to the user.`);
   }
 

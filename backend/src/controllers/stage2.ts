@@ -32,6 +32,7 @@ import {
   respondToShareSuggestion as reconcilerRespondToShareSuggestion,
   getSharedContextForGuesser,
   generateShareSuggestionForDirection,
+  hasContextAlreadyBeenShared,
 } from '../services/reconciler';
 import { isSessionCreator } from '../utils/session';
 import { publishSessionEvent } from '../services/realtime';
@@ -48,55 +49,6 @@ interface SessionWithRelationship {
   relationship: {
     members: Array<{ userId: string }>;
   };
-}
-
-// ============================================================================
-// Helper: Check if context has already been shared for a direction
-// ============================================================================
-
-/**
- * Check if SHARED_CONTEXT has already been sent from subject to guesser.
- *
- * This prevents the reconciler loop where:
- * 1. Reconciler finds gaps → sets status to AWAITING_SHARING
- * 2. User shares context → SHARED_CONTEXT message created
- * 3. User resubmits empathy → ReconcilerResult deleted (cascades to ReconcilerShareOffer)
- * 4. Reconciler runs again → finds same gaps → sets AWAITING_SHARING again
- * 5. Loop repeats indefinitely
- *
- * By checking for existing SHARED_CONTEXT messages, we can skip the sharing step
- * if context has already been shared for this direction.
- *
- * @param sessionId - The session ID
- * @param guesserId - The guesser (person whose empathy has gaps)
- * @param subjectId - The subject (person who should share context)
- * @returns true if context has already been shared for this direction
- */
-async function hasContextAlreadyBeenShared(
-  sessionId: string,
-  guesserId: string,
-  subjectId: string
-): Promise<boolean> {
-  // SHARED_CONTEXT messages have:
-  // - senderId = subject (person who shared)
-  // - forUserId = guesser (person who receives the context)
-  const existingSharedContext = await prisma.message.findFirst({
-    where: {
-      sessionId,
-      role: 'SHARED_CONTEXT',
-      senderId: subjectId,
-      forUserId: guesserId,
-    },
-  });
-
-  if (existingSharedContext) {
-    console.log(
-      `[hasContextAlreadyBeenShared] Context already shared from ${subjectId} to ${guesserId} at ${existingSharedContext.timestamp.toISOString()}`
-    );
-    return true;
-  }
-
-  return false;
 }
 
 // ============================================================================
@@ -2031,6 +1983,7 @@ async function triggerReconcilerForUser(
     console.log(`[triggerReconcilerForUser] Running reconciler for direction: guesser=${guesserId} → subject=${subjectId}`);
 
     // Use runReconcilerForDirection for asymmetric flow (only guesser has shared empathy)
+    // The function now has built-in guard for context already shared, so no post-hoc override needed
     const result = await runReconcilerForDirection(sessionId, guesserId, subjectId);
 
     if (!result.result) {
@@ -2038,35 +1991,9 @@ async function triggerReconcilerForUser(
       return;
     }
 
-    const reconcilerResult = result.result;
-
-    // The runReconcilerForDirection already updates empathy status based on gaps.
-    // For re-analysis after shared context, we may need different handling.
-
-    // Check if context has already been shared to prevent infinite loop
-    const hasSignificantGaps =
-      reconcilerResult.gaps.severity === 'significant' ||
-      reconcilerResult.recommendation.action === 'OFFER_SHARING';
-
-    const contextAlreadyShared = hasSignificantGaps
-      ? await hasContextAlreadyBeenShared(sessionId, guesserId, subjectId)
-      : false;
-
-    // If context was already shared and gaps still exist, mark as READY
-    // (we don't ask for more sharing after they've already shared)
-    if (contextAlreadyShared && result.empathyStatus === 'AWAITING_SHARING') {
-      console.log(
-        `[triggerReconcilerForUser] Context already shared ${subjectId}→${guesserId}, overriding to READY`
-      );
-      await prisma.empathyAttempt.updateMany({
-        where: { sessionId, sourceUserId: guesserId },
-        data: { status: EmpathyStatus.READY },
-      });
-    }
-
     console.log(
       `[triggerReconcilerForUser] Reconciler complete: ` +
-      `alignment=${reconcilerResult.alignment.score}%, gaps=${reconcilerResult.gaps.severity}, ` +
+      `alignment=${result.result.alignment.score}%, gaps=${result.result.gaps.severity}, ` +
       `empathyStatus=${result.empathyStatus}`
     );
 
