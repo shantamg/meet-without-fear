@@ -34,6 +34,11 @@ export default defineConfig({
   timeout: 120000,
   expect: {
     timeout: 10000, // 10s for Ably events
+    toHaveScreenshot: {
+      maxDiffPixels: 100,
+      threshold: 0.2,
+      animations: 'disabled',
+    },
   },
   fullyParallel: false, // Run tests sequentially to avoid DB conflicts
   forbidOnly: !!process.env.CI,

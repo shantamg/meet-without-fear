@@ -22,6 +22,11 @@ export default defineConfig({
   timeout: 900000, // 15 minutes per test (Stage 2 needs 13 AI interactions + reconciler)
   expect: {
     timeout: 15000, // 15s for Ably events and partner updates
+    toHaveScreenshot: {
+      maxDiffPixels: 100,
+      threshold: 0.2,
+      animations: 'disabled',
+    },
   },
   fullyParallel: false, // Run tests sequentially to avoid DB conflicts
   forbidOnly: !!process.env.CI,
