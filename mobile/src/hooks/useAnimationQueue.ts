@@ -159,6 +159,9 @@ export function useAnimationQueue(
       setAnimatingId((current) => {
         // Only set if still null (avoid race conditions)
         if (current === null) {
+          // Mark as animated immediately when animation starts (not when it completes)
+          // This prevents re-animation if user navigates away mid-animation
+          animatedIdsRef.current.add(nextToAnimateId);
           return nextToAnimateId;
         }
         return current;
