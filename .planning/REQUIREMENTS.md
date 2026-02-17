@@ -36,11 +36,11 @@ Requirements for Full Session Completion milestone. Each maps to roadmap phases.
 
 ### Stage 4 (Strategies)
 
-- [ ] **STRAT-01**: Both users can view and contribute strategy suggestions
-- [ ] **STRAT-02**: Both users can rank strategies
-- [ ] **STRAT-03**: Overlap reveal shows agreed strategies to both users
-- [ ] **STRAT-04**: Both users can confirm agreement
-- [ ] **STRAT-05**: Playwright screenshots capture strategy pool, ranking, and agreement states
+- [x] **STRAT-01**: Both users can view and contribute strategy suggestions
+- [x] **STRAT-02**: Both users can rank strategies
+- [x] **STRAT-03**: Overlap reveal shows agreed strategies to both users
+- [x] **STRAT-04**: Both users can confirm agreement
+- [x] **STRAT-05**: Playwright screenshots capture strategy pool, ranking, and agreement states
 
 ### End-to-End Verification
 
@@ -96,11 +96,11 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | NEEDS-02 | Phase 10 | Complete |
 | NEEDS-03 | Phase 10 | Complete |
 | NEEDS-04 | Phase 10 | Complete |
-| STRAT-01 | Phase 11 | Pending |
-| STRAT-02 | Phase 11 | Pending |
-| STRAT-03 | Phase 11 | Pending |
-| STRAT-04 | Phase 11 | Pending |
-| STRAT-05 | Phase 11 | Pending |
+| STRAT-01 | Phase 11 | Complete |
+| STRAT-02 | Phase 11 | Complete |
+| STRAT-03 | Phase 11 | Complete |
+| STRAT-04 | Phase 11 | Complete |
+| STRAT-05 | Phase 11 | Complete |
 | RECON-VIS-03 | Phase 12 | Pending |
 | RECON-VIS-04 | Phase 12 | Pending |
 | E2E-03 | Phase 12 | Pending |
