@@ -100,7 +100,8 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
     if (result.aUnderstandingB) {
       const hasSignificantGapsA =
         result.aUnderstandingB.gaps.severity === 'significant' ||
-        result.aUnderstandingB.recommendation.action === 'OFFER_SHARING';
+        result.aUnderstandingB.recommendation.action === 'OFFER_SHARING' ||
+        (result.aUnderstandingB.recommendation.action === 'OFFER_OPTIONAL' && !!result.aUnderstandingB.recommendation.suggestedShareFocus);
 
       // Check if B has already shared context with A to prevent infinite loop
       // When A has gaps guessing B, B (subject) should share with A (guesser)
@@ -150,7 +151,8 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
     if (result.bUnderstandingA) {
       const hasSignificantGapsB =
         result.bUnderstandingA.gaps.severity === 'significant' ||
-        result.bUnderstandingA.recommendation.action === 'OFFER_SHARING';
+        result.bUnderstandingA.recommendation.action === 'OFFER_SHARING' ||
+        (result.bUnderstandingA.recommendation.action === 'OFFER_OPTIONAL' && !!result.bUnderstandingA.recommendation.suggestedShareFocus);
 
       // Check if A has already shared context with B to prevent infinite loop
       // When B has gaps guessing A, A (subject) should share with B (guesser)
