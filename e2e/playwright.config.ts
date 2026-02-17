@@ -121,6 +121,14 @@ export default defineConfig({
         baseURL: 'http://localhost:8082',
       },
     },
+    // Circuit breaker: Two-browser test
+    {
+      name: 'circuit-breaker',
+      testMatch: /two-browser-circuit-breaker\.spec\.ts/,
+      use: {
+        baseURL: 'http://localhost:8082',
+      },
+    },
   ],
   // Web server configuration
   // Each test specifies its fixture via the X-E2E-Fixture-ID header.
