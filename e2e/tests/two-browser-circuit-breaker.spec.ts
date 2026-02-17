@@ -33,9 +33,7 @@ import {
   sendAndWaitForPanel,
   confirmFeelHeard,
   waitForReconcilerComplete,
-  navigateToShareFromSession,
   navigateBackToChat,
-  waitForAnyAIResponse,
 } from '../helpers/test-utils';
 
 // Use iPhone 12 viewport
