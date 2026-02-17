@@ -24,6 +24,7 @@ import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
 // WaitingStatusMessage removed - we no longer show "waiting for partner" messages
 // EmpathyAttemptCard removed - now shown in AccuracyFeedbackDrawer
 import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
+import { ValidationCoachChat } from '../components/ValidationCoachChat';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
 import { ShareTopicPanel } from '../components/ShareTopicPanel';
 import { NeedsSection } from '../components/NeedsSection';
@@ -537,6 +538,8 @@ export function UnifiedSessionScreen({
   const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [showAccuracyFeedbackDrawer, setShowAccuracyFeedbackDrawer] = useState(false);
   const [showShareTopicDrawer, setShowShareTopicDrawer] = useState(false);
+  const [showFeedbackCoachChat, setShowFeedbackCoachChat] = useState(false);
+  const [feedbackCoachInitialDraft, setFeedbackCoachInitialDraft] = useState('');
 
   // -------------------------------------------------------------------------
   // Navigation to Share screen
@@ -1918,11 +1921,48 @@ export function UnifiedSessionScreen({
           visible={showAccuracyFeedbackDrawer}
           statement={partnerEmpathyData.attempt.content}
           partnerName={partnerName}
-          onAccurate={() => handleValidatePartnerEmpathy(true)}
-          onPartiallyAccurate={() => handleValidatePartnerEmpathy(false, 'Some parts are accurate')}
-          onInaccurate={() => handleValidatePartnerEmpathy(false, 'This does not capture my perspective')}
+          onAccurate={() => {
+            handleValidatePartnerEmpathy(true);
+            setShowAccuracyFeedbackDrawer(false);
+          }}
+          onPartiallyAccurate={() => {
+            handleValidatePartnerEmpathy(false, 'Some parts are accurate');
+            setShowAccuracyFeedbackDrawer(false);
+          }}
+          onInaccurate={() => {
+            setShowAccuracyFeedbackDrawer(false);
+            setFeedbackCoachInitialDraft('');
+            setShowFeedbackCoachChat(true);
+          }}
           onClose={() => setShowAccuracyFeedbackDrawer(false)}
         />
+      )}
+
+      {/* Validation Feedback Coach - AI-mediated feedback crafting for inaccurate empathy */}
+      {showFeedbackCoachChat && (
+        <Modal
+          visible={showFeedbackCoachChat}
+          animationType="slide"
+          presentationStyle="fullScreen"
+          onRequestClose={() => setShowFeedbackCoachChat(false)}
+        >
+          <ValidationCoachChat
+            sessionId={sessionId}
+            initialDraft={feedbackCoachInitialDraft}
+            partnerName={partnerName}
+            onCancel={() => {
+              setShowFeedbackCoachChat(false);
+              setFeedbackCoachInitialDraft('');
+            }}
+            onComplete={(feedback) => {
+              setShowFeedbackCoachChat(false);
+              setFeedbackCoachInitialDraft('');
+              // Submit the AI-crafted feedback as inaccurate validation
+              handleValidatePartnerEmpathy(false, feedback);
+            }}
+            testID="validation-feedback-coach"
+          />
+        </Modal>
       )}
 
       {/* ShareTopicDrawer - Phase 1 of two-phase share flow */}

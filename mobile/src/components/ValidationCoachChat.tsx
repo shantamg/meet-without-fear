@@ -12,7 +12,7 @@ import {
 
 interface ValidationCoachChatProps {
   sessionId: string;
-  initialDraft: string;
+  initialDraft?: string;
   onCancel: () => void;
   onComplete: (feedback: string) => void;
   partnerName: string;
@@ -35,9 +35,9 @@ export function ValidationCoachChat({
   const { mutate: refineFeedback, isPending: isRefining } = useRefineValidationFeedback();
   const { mutate: saveDraft } = useSaveValidationFeedbackDraft();
 
-  // Initialize coach with the draft
+  // Initialize coach with the draft (if provided)
   useEffect(() => {
-    if (initialDraft && isInitializing) {
+    if (initialDraft && initialDraft.trim() && isInitializing) {
       // Add initial user message locally
       const initialUserMsg: ChatMessage = {
         id: 'initial-user-msg',
@@ -53,6 +53,9 @@ export function ValidationCoachChat({
 
       // Send to AI
       handleRefine(initialDraft);
+    } else if (isInitializing) {
+      // No initial draft - just mark as initialized
+      setIsInitializing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDraft, isInitializing]);
