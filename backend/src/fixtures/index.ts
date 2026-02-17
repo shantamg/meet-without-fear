@@ -8,6 +8,7 @@
 import { E2EFixture } from './types';
 import { flatArrayFixture } from './flat-array-fixture';
 import { homepage } from './homepage';
+import { reconcilerCircuitBreaker } from './reconciler-circuit-breaker';
 import { reconcilerNoGaps } from './reconciler-no-gaps';
 import { reconcilerOfferOptional } from './reconciler-offer-optional';
 import { reconcilerOfferSharing } from './reconciler-offer-sharing';
@@ -23,6 +24,7 @@ export * from './types';
 export {
   flatArrayFixture,
   homepage,
+  reconcilerCircuitBreaker,
   reconcilerNoGaps,
   reconcilerOfferOptional,
   reconcilerOfferSharing,
@@ -39,6 +41,7 @@ export {
 export const fixtureRegistry: Record<string, E2EFixture> = {
   'flat-array-fixture': flatArrayFixture,
   homepage,
+  'reconciler-circuit-breaker': reconcilerCircuitBreaker,
   'reconciler-no-gaps': reconcilerNoGaps,
   'reconciler-offer-optional': reconcilerOfferOptional,
   'reconciler-offer-sharing': reconcilerOfferSharing,
