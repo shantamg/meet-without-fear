@@ -98,10 +98,11 @@ Plans:
   2. All Stage 3-4 screenshots use toHaveScreenshot() assertions
   3. Baseline images committed with proper masking for dynamic content
   4. Documentation exists for baseline update process
-**Plans:** TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD
+- [ ] 12-01-PLAN.md -- Playwright config + reconciler screenshot conversions (RECON-VIS-03, RECON-VIS-04)
+- [ ] 12-02-PLAN.md -- Stage 3-4 screenshot conversions + baseline update documentation (E2E-03)
 
 #### Phase 13: Full Session E2E Verification
 **Goal:** Complete two-user session flow verified from start to Stage 4 completion
