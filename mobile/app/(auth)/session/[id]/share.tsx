@@ -34,9 +34,10 @@ import { OverlapReveal } from '@/src/components/OverlapReveal';
 import { AgreementCard } from '@/src/components/AgreementCard';
 import { useSharingStatus } from '@/src/hooks/useSharingStatus';
 import { useSessionState, useMarkShareTabViewed } from '@/src/hooks/useSessions';
-import { 
-  useRespondToShareOffer, 
+import {
+  useRespondToShareOffer,
   useResubmitEmpathy,
+  useSkipRefinement,
   useProgress,
   useNeeds,
   useCommonGround,
@@ -590,6 +591,7 @@ export default function ShareScreen() {
   const { mutate: respondToShareOffer } = useRespondToShareOffer();
   const { mutate: markShareTabViewed } = useMarkShareTabViewed(sessionId);
   const { mutate: resubmitEmpathy } = useResubmitEmpathy();
+  const { mutate: skipRefinement } = useSkipRefinement();
   const { mutate: sendMessage } = useSendMessage();
 
   // Local state for drawers
@@ -814,6 +816,15 @@ export default function ShareScreen() {
               }
               setShowEmpathyDrawer(false);
               router.back(); // Go to chat to see the AI response
+            }}
+            onAcceptWithoutRevising={() => {
+              // Acceptance check: guesser accepts subject's experience without revising empathy
+              if (sessionId) {
+                skipRefinement({ sessionId, willingToAccept: true });
+              }
+              setShowEmpathyDrawer(false);
+              // Navigate back to chat
+              router.back();
             }}
             onClose={() => setShowEmpathyDrawer(false)}
           />

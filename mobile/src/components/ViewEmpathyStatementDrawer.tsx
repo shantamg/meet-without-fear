@@ -37,6 +37,8 @@ export interface ViewEmpathyStatementDrawerProps {
   onClose: () => void;
   /** Callback when user sends a refinement request from the drawer */
   onSendRefinement?: (message: string) => void;
+  /** Callback when user accepts the feedback without revising (acceptance check) */
+  onAcceptWithoutRevising?: () => void;
 }
 
 export function ViewEmpathyStatementDrawer({
@@ -47,6 +49,7 @@ export function ViewEmpathyStatementDrawer({
   onShare,
   onClose,
   onSendRefinement,
+  onAcceptWithoutRevising,
 }: ViewEmpathyStatementDrawerProps) {
   const [isRefining, setIsRefining] = useState(false);
   const [refinementText, setRefinementText] = useState('');
@@ -180,24 +183,39 @@ export function ViewEmpathyStatementDrawer({
               </View>
             ) : (
               <View style={styles.footer}>
-                <TouchableOpacity
-                  style={styles.refineButton}
-                  onPress={() => setIsRefining(true)}
-                  testID="refine-empathy-button"
-                  activeOpacity={0.8}
-                >
-                  <MessageCircle color={colors.textSecondary} size={20} />
-                  <Text style={styles.refineButtonText}>Refine further</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.shareButton}
-                  onPress={onShare}
-                  testID="share-empathy-button"
-                  activeOpacity={0.8}
-                >
-                  <Send color="white" size={20} />
-                  <Text style={styles.shareButtonText}>Share</Text>
-                </TouchableOpacity>
+                {isRevising && onAcceptWithoutRevising && (
+                  <TouchableOpacity
+                    style={styles.acceptButton}
+                    onPress={() => {
+                      onAcceptWithoutRevising();
+                      onClose();
+                    }}
+                    testID="accept-without-revising-button"
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.acceptButtonText}>I accept their experience</Text>
+                  </TouchableOpacity>
+                )}
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={styles.refineButton}
+                    onPress={() => setIsRefining(true)}
+                    testID="refine-empathy-button"
+                    activeOpacity={0.8}
+                  >
+                    <MessageCircle color={colors.textSecondary} size={20} />
+                    <Text style={styles.refineButtonText}>Refine further</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.shareButton}
+                    onPress={onShare}
+                    testID="share-empathy-button"
+                    activeOpacity={0.8}
+                  >
+                    <Send color="white" size={20} />
+                    <Text style={styles.shareButtonText}>{isRevising ? 'Resubmit' : 'Share'}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
           </ScrollView>
@@ -266,6 +284,10 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
   footer: {
+    flexDirection: 'column',
+    gap: 0,
+  },
+  actionButtons: {
     flexDirection: 'row',
     gap: 12,
   },
@@ -350,6 +372,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: 'white',
+  },
+  acceptButton: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bgSecondary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  acceptButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textSecondary,
   },
 });
 
