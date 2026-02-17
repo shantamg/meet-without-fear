@@ -694,7 +694,7 @@ export function NeedMappingScreen() {
             headerBackTitle: 'Session',
           }}
         />
-        <SafeAreaView style={styles.container} edges={['bottom']}>
+        <SafeAreaView style={styles.container} edges={['bottom']} testID="need-mapping-exploration">
           <View style={styles.header}>
             <Text style={styles.title}>Understanding Your Needs</Text>
             <Text style={styles.subtitle}>
@@ -726,7 +726,7 @@ export function NeedMappingScreen() {
             headerBackTitle: 'Session',
           }}
         />
-        <SafeAreaView style={styles.container} edges={['bottom']}>
+        <SafeAreaView style={styles.container} edges={['bottom']} testID="need-mapping-review">
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <View style={styles.headerSoft}>
               <Text style={styles.title}>Your Identified Needs</Text>
@@ -743,9 +743,10 @@ export function NeedMappingScreen() {
                 title="What you need most"
                 needs={displayNeeds}
                 sharedNeeds={confirmedNeedIds}
+                testID="needs-section"
               />
 
-              <View style={styles.confirmationSoft}>
+              <View style={styles.confirmationSoft} testID="needs-confirm-question">
                 <Text style={styles.confirmQuestion}>
                   Does this capture what you need?
                 </Text>
@@ -754,6 +755,7 @@ export function NeedMappingScreen() {
                   style={styles.adjustButtonSoft}
                   onPress={handleAdjustNeeds}
                   disabled={isConfirming}
+                  testID="adjust-needs-button"
                 >
                   <Text style={styles.adjustTextSoft}>I want to adjust these</Text>
                 </TouchableOpacity>
@@ -762,6 +764,7 @@ export function NeedMappingScreen() {
                   style={[styles.confirmButtonSoft, isConfirming && styles.disabledButton]}
                   onPress={handleConfirmNeeds}
                   disabled={isConfirming}
+                  testID="confirm-needs-button"
                 >
                   <Text style={styles.confirmTextSoft}>
                     {isConfirming ? 'Confirming...' : 'Yes, confirm my needs'}
@@ -799,7 +802,7 @@ export function NeedMappingScreen() {
             headerBackTitle: 'Session',
           }}
         />
-        <SafeAreaView style={styles.container} edges={['bottom']}>
+        <SafeAreaView style={styles.container} edges={['bottom']} testID="need-mapping-common-ground">
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <View style={styles.headerSoft}>
               <Text style={styles.title}>Common Ground Discovered</Text>
@@ -820,6 +823,7 @@ export function NeedMappingScreen() {
               <CommonGroundCard
                 sharedNeeds={displayCommonGround}
                 insight="When we see our shared needs, we remember we're on the same team."
+                testID="common-ground-card"
               />
 
               <View style={styles.confirmationSoft}>
@@ -831,6 +835,7 @@ export function NeedMappingScreen() {
                   style={[styles.confirmButtonSoft, isConfirmingCommonGround && styles.disabledButton]}
                   onPress={handleConfirmCommonGround}
                   disabled={isConfirmingCommonGround}
+                  testID="continue-to-strategies-button"
                 >
                   <Text style={styles.confirmTextSoft}>
                     {isConfirmingCommonGround ? 'Confirming...' : 'Continue to Strategies'}
@@ -854,7 +859,7 @@ export function NeedMappingScreen() {
             headerBackTitle: 'Session',
           }}
         />
-        <SafeAreaView style={styles.container} edges={['bottom']}>
+        <SafeAreaView style={styles.container} edges={['bottom']} testID="need-mapping-waiting">
           <WaitingRoom
             message="Waiting for your partner to confirm their needs so we can discover common ground"
             partnerName={session?.partner?.nickname ?? session?.partner?.name ?? undefined}
