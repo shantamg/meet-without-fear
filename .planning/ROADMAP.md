@@ -36,10 +36,13 @@ See: `milestones/v1.0-ROADMAP.md` for full details.
   3. E2E tests verify OFFER_SHARING path (share context, receive context, refine)
   4. Playwright screenshots capture share suggestion panels and refinement prompts
   5. Context-already-shared guard prevents duplicate shares
-**Plans:** TBD
+**Plans:** 4 plans
 
 Plans:
-- [ ] TBD
+- [ ] 08-01-PLAN.md -- State diagrams + reconciler fixtures (OFFER_OPTIONAL, OFFER_SHARING, refinement)
+- [ ] 08-02-PLAN.md -- ShareTopicDrawer + decline dialog + chat re-animation bug fix
+- [ ] 08-03-PLAN.md -- Accuracy feedback inaccurate path + guesser refinement UI + acceptance check
+- [ ] 08-04-PLAN.md -- E2E tests for all reconciler paths with Playwright screenshots
 
 #### Phase 9: Circuit Breaker Implementation
 **Goal:** Refinement loops are bounded with automatic safety mechanism
@@ -124,7 +127,7 @@ Phases execute in numeric order: 8 → 9 → 10 → 11 → 12 → 13
 | 5. Transitions         | v1.0      | 2/2            | Complete     | 2026-02-15 |
 | 6. Reconciler          | v1.0      | 2/2            | Complete     | 2026-02-15 |
 | 7. E2E Verify          | v1.0      | 1/1            | Complete     | 2026-02-15 |
-| 8. Reconciler Patterns | v1.1      | 0/TBD          | Not started  | -          |
+| 8. Reconciler Patterns | v1.1      | 0/4            | Planning     | -          |
 | 9. Circuit Breaker     | v1.1      | 0/TBD          | Not started  | -          |
 | 10. Stage 3 Needs      | v1.1      | 0/TBD          | Not started  | -          |
 | 11. Stage 4 Strategies | v1.1      | 0/TBD          | Not started  | -          |
