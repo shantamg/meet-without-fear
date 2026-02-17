@@ -170,8 +170,12 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await handleMoodCheck(pageB);
 
     // Take initial screenshots
-    await pageA.screenshot({ path: 'test-results/stage-3-01-initial-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-3-01-initial-user-b.png' });
+    await expect(pageA).toHaveScreenshot('stage-3-01-initial-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(pageB).toHaveScreenshot('stage-3-01-initial-user-b.png', {
+      maxDiffPixels: 100,
+    });
 
     // ========================================
     // STEP 2: Trigger needs extraction via API for both users
@@ -229,8 +233,12 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     console.log(`${elapsed()} Need cards visible for both users`);
 
     // Screenshot needs review state
-    await pageA.screenshot({ path: 'test-results/stage-3-02-needs-review-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-3-02-needs-review-user-b.png' });
+    await expect(pageA).toHaveScreenshot('stage-3-02-needs-review-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(pageB).toHaveScreenshot('stage-3-02-needs-review-user-b.png', {
+      maxDiffPixels: 100,
+    });
 
     // ========================================
     // STEP 4: Confirm and consent needs via API for both users
@@ -288,8 +296,12 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await pageA.waitForTimeout(1000);
 
     // Take screenshots after API confirmation/consent
-    await pageA.screenshot({ path: 'test-results/stage-3-03-user-a-confirmed.png' });
-    await pageB.screenshot({ path: 'test-results/stage-3-04-user-b-confirmed.png' });
+    await expect(pageA).toHaveScreenshot('stage-3-03-user-a-confirmed.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(pageB).toHaveScreenshot('stage-3-04-user-b-confirmed.png', {
+      maxDiffPixels: 100,
+    });
 
     // ========================================
     // STEP 6: Wait for common ground analysis
@@ -352,8 +364,12 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     console.log(`${elapsed()} Common ground UI visible for both users (Shared Needs Discovered)`);
 
     // Screenshot common ground state
-    await pageA.screenshot({ path: 'test-results/stage-3-05-common-ground-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-3-05-common-ground-user-b.png' });
+    await expect(pageA).toHaveScreenshot('stage-3-05-common-ground-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(pageB).toHaveScreenshot('stage-3-05-common-ground-user-b.png', {
+      maxDiffPixels: 100,
+    });
 
     // ========================================
     // STEP 8: Both users confirm common ground
@@ -368,7 +384,9 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await pageB.waitForTimeout(2000);
 
     // Screenshot User B after continuing
-    await pageB.screenshot({ path: 'test-results/stage-3-07-user-b-continue.png' });
+    await expect(pageB).toHaveScreenshot('stage-3-07-user-b-continue.png', {
+      maxDiffPixels: 100,
+    });
 
     // ========================================
     // STEP 9: Verify final state (both advanced past Stage 3)
@@ -390,8 +408,12 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     expect(progressDataB.data?.myProgress?.stage).toBeGreaterThanOrEqual(4);
 
     // Take final screenshots
-    await pageA.screenshot({ path: 'test-results/stage-3-08-final-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-3-08-final-user-b.png' });
+    await expect(pageA).toHaveScreenshot('stage-3-08-final-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(pageB).toHaveScreenshot('stage-3-08-final-user-b.png', {
+      maxDiffPixels: 100,
+    });
 
     console.log(`${elapsed()} === TEST COMPLETE ===`);
     console.log(`${elapsed()} Both users completed Stage 3 successfully!`);
