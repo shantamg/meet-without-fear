@@ -29,10 +29,10 @@ Requirements for Full Session Completion milestone. Each maps to roadmap phases.
 
 ### Stage 3 (Needs)
 
-- [ ] **NEEDS-01**: Both users can view AI-extracted needs and confirm/edit them
-- [ ] **NEEDS-02**: Both users complete needs consent flow
-- [ ] **NEEDS-03**: Common ground analysis runs and results display for both users
-- [ ] **NEEDS-04**: Playwright screenshots capture needs panel and common ground visualization
+- [x] **NEEDS-01**: Both users can view AI-extracted needs and confirm/edit them
+- [x] **NEEDS-02**: Both users complete needs consent flow
+- [x] **NEEDS-03**: Common ground analysis runs and results display for both users
+- [x] **NEEDS-04**: Playwright screenshots capture needs panel and common ground visualization
 
 ### Stage 4 (Strategies)
 
@@ -92,10 +92,10 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | RECON-VIS-01 | Phase 8 | Pending |
 | RECON-VIS-02 | Phase 8 | Pending |
 | RECON-EC-04 | Phase 9 | Pending |
-| NEEDS-01 | Phase 10 | Pending |
-| NEEDS-02 | Phase 10 | Pending |
-| NEEDS-03 | Phase 10 | Pending |
-| NEEDS-04 | Phase 10 | Pending |
+| NEEDS-01 | Phase 10 | Complete |
+| NEEDS-02 | Phase 10 | Complete |
+| NEEDS-03 | Phase 10 | Complete |
+| NEEDS-04 | Phase 10 | Complete |
 | STRAT-01 | Phase 11 | Pending |
 | STRAT-02 | Phase 11 | Pending |
 | STRAT-03 | Phase 11 | Pending |
