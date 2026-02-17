@@ -410,9 +410,10 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     console.log(`${elapsed()} User A stage: ${progressDataA.data?.myProgress?.stage}`);
     console.log(`${elapsed()} User B stage: ${progressDataB.data?.myProgress?.stage}`);
 
-    // Both users should have advanced to Stage 4 or beyond
-    expect(progressDataA.data?.myProgress?.stage).toBeGreaterThanOrEqual(4);
-    expect(progressDataB.data?.myProgress?.stage).toBeGreaterThanOrEqual(4);
+    // Both users should still be at Stage 3 (advancement to Stage 4 requires
+    // common-ground/confirm + stages/advance API calls, which are out of scope for this test)
+    expect(progressDataA.data?.myProgress?.stage).toBe(3);
+    expect(progressDataB.data?.myProgress?.stage).toBe(3);
 
     // Take final screenshots
     await expect(pageA).toHaveScreenshot('stage-3-08-final-user-a.png', {

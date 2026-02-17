@@ -134,9 +134,18 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
 
       // Only generate share suggestion if AWAITING_SHARING and context not already shared
       if (statusA === EmpathyStatus.AWAITING_SHARING) {
-        generateShareSuggestionForDirection(sessionId, userAId, userBId).catch((err) =>
-          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to generate share suggestion for A→B:', err)
-        );
+        await generateShareSuggestionForDirection(sessionId, userAId, userBId);
+
+        // Notify the subject (User B) about the share suggestion so their UI shows ShareTopicPanel
+        const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
+        const empathyStatusB = await buildEmpathyExchangeStatus(sessionId, userBId);
+        await notifyPartner(sessionId, userBId, 'empathy.share_suggestion', {
+          forUserId: userBId,
+          guesserName: 'your partner',
+          empathyStatus: empathyStatusB,
+          triggeredByUserId: userBId,
+        });
+        console.log(`[triggerReconcilerAndUpdateStatuses] Published share_suggestion for subject User B`);
 
         // Notify the guesser (User A) that subject (User B) is considering sharing
         await publishSessionEvent(sessionId, 'empathy.partner_considering_share', {
@@ -185,9 +194,18 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
 
       // Only generate share suggestion if AWAITING_SHARING and context not already shared
       if (statusB === EmpathyStatus.AWAITING_SHARING) {
-        generateShareSuggestionForDirection(sessionId, userBId, userAId).catch((err) =>
-          console.warn('[triggerReconcilerAndUpdateStatuses] Failed to generate share suggestion for B→A:', err)
-        );
+        await generateShareSuggestionForDirection(sessionId, userBId, userAId);
+
+        // Notify the subject (User A) about the share suggestion so their UI shows ShareTopicPanel
+        const { buildEmpathyExchangeStatus: buildStatusForA } = await import('../services/empathy-status');
+        const empathyStatusA = await buildStatusForA(sessionId, userAId);
+        await notifyPartner(sessionId, userAId, 'empathy.share_suggestion', {
+          forUserId: userAId,
+          guesserName: 'your partner',
+          empathyStatus: empathyStatusA,
+          triggeredByUserId: userAId,
+        });
+        console.log(`[triggerReconcilerAndUpdateStatuses] Published share_suggestion for subject User A`);
 
         // Notify the guesser (User B) that subject (User A) is considering sharing
         await publishSessionEvent(sessionId, 'empathy.partner_considering_share', {
