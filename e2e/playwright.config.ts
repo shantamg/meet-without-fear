@@ -129,6 +129,14 @@ export default defineConfig({
         baseURL: 'http://localhost:8082',
       },
     },
+    // Stage 3: Two-browser need mapping test
+    {
+      name: 'two-browser-stage-3',
+      testMatch: /two-browser-stage-3\.spec\.ts/,
+      use: {
+        baseURL: 'http://localhost:8082',
+      },
+    },
   ],
   // Web server configuration
   // Each test specifies its fixture via the X-E2E-Fixture-ID header.
