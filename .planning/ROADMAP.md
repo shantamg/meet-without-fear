@@ -52,10 +52,11 @@ Plans:
   1. Backend tracks refinement attempts per direction (A→B, B→A separately)
   2. After 3 refinement attempts, reconciler forces READY status
   3. E2E test verifies loop prevention (4th attempt skips reconciler)
-**Plans:** TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD
+- [ ] 09-01-PLAN.md -- Database model + circuit breaker logic + unit tests (TDD)
+- [ ] 09-02-PLAN.md -- E2E fixture + two-browser circuit breaker test with screenshots
 
 #### Phase 10: Stage 3 (Needs) Verification
 **Goal:** Both users can complete needs extraction, consent, and common ground analysis
