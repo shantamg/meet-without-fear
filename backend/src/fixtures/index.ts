@@ -13,6 +13,7 @@ import { reconcilerNoGaps } from './reconciler-no-gaps';
 import { reconcilerOfferOptional } from './reconciler-offer-optional';
 import { reconcilerOfferSharing } from './reconciler-offer-sharing';
 import { reconcilerRefinement } from './reconciler-refinement';
+import { stage3Needs } from './stage-3-needs';
 import { testFixture } from './test-fixture';
 import { userAFullJourney } from './user-a-full-journey';
 import { userBPartnerJourney } from './user-b-partner-journey';
@@ -29,6 +30,7 @@ export {
   reconcilerOfferOptional,
   reconcilerOfferSharing,
   reconcilerRefinement,
+  stage3Needs,
   testFixture,
   userAFullJourney,
   userBPartnerJourney,
@@ -46,6 +48,7 @@ export const fixtureRegistry: Record<string, E2EFixture> = {
   'reconciler-offer-optional': reconcilerOfferOptional,
   'reconciler-offer-sharing': reconcilerOfferSharing,
   'reconciler-refinement': reconcilerRefinement,
+  'stage-3-needs': stage3Needs,
   'test-fixture': testFixture,
   'user-a-full-journey': userAFullJourney,
   'user-b-partner-journey': userBPartnerJourney,
