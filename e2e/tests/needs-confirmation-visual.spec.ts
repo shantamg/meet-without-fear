@@ -5,7 +5,7 @@
  * This tests the inline needs-summary card that appears during Stage 3.
  */
 
-import { test, devices, BrowserContext, Page, APIRequestContext } from '@playwright/test';
+import { test, expect, devices, BrowserContext, Page, APIRequestContext } from '@playwright/test';
 import { cleanupE2EData, getE2EHeaders, SessionBuilder } from '../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';

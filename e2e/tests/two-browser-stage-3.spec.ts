@@ -20,6 +20,13 @@
  * - Both users confirm common ground and advance to Stage 4
  * - 8+ screenshots document each state for both users
  *
+ * VISUAL REGRESSION BASELINES:
+ * - Baselines auto-created in .spec.ts-snapshots/ on first run
+ * - To update after intentional UI changes: npx playwright test [test-name] --update-snapshots
+ * - Review diff images in test-results/ before committing updated baselines
+ * - Commit baselines: git add e2e/tests/[test-name]-snapshots/*.png
+ * - Never update baselines without understanding WHY pixels changed
+ *
  * This test uses the stage-3-needs fixture for deterministic needs extraction
  * and common ground discovery responses.
  */

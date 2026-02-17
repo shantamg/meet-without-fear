@@ -19,6 +19,13 @@
  * - Session marked complete after agreement confirmation
  * - 10+ screenshots document each state for both users
  *
+ * VISUAL REGRESSION BASELINES:
+ * - Baselines auto-created in .spec.ts-snapshots/ on first run
+ * - To update after intentional UI changes: npx playwright test [test-name] --update-snapshots
+ * - Review diff images in test-results/ before committing updated baselines
+ * - Commit baselines: git add e2e/tests/[test-name]-snapshots/*.png
+ * - Never update baselines without understanding WHY pixels changed
+ *
  * This test uses the stage-4-strategies fixture for deterministic AI responses
  * during the Stage 0-3 setup phase.
  */
@@ -169,8 +176,12 @@ test.describe('Stage 4: Two-Browser Strategic Repair', () => {
     await handleMoodCheck(pageB);
 
     // Take initial screenshots
-    await pageA.screenshot({ path: 'test-results/stage-4-01-initial-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-4-01-initial-user-b.png' });
+    await expect(pageA).toHaveScreenshot('stage-4-01-initial-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(pageB).toHaveScreenshot('stage-4-01-initial-user-b.png', {
+      maxDiffPixels: 100,
+    });
 
     // ========================================
     // STEP 2: Propose strategies via API (both users)
@@ -232,8 +243,12 @@ test.describe('Stage 4: Two-Browser Strategic Repair', () => {
     }
 
     // Screenshots: strategy pool phase
-    await pageA.screenshot({ path: 'test-results/stage-4-02-pool-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-4-02-pool-user-b.png' });
+    await expect(pageA).toHaveScreenshot('stage-4-02-pool-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(pageB).toHaveScreenshot('stage-4-02-pool-user-b.png', {
+      maxDiffPixels: 100,
+    });
 
     // ========================================
     // STEP 3: Mark both users ready to rank
@@ -307,8 +322,12 @@ test.describe('Stage 4: Two-Browser Strategic Repair', () => {
     }
 
     // Screenshots: ranking phase
-    await pageA.screenshot({ path: 'test-results/stage-4-03-ranking-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-4-03-ranking-user-b.png' });
+    await expect(pageA).toHaveScreenshot('stage-4-03-ranking-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(pageB).toHaveScreenshot('stage-4-03-ranking-user-b.png', {
+      maxDiffPixels: 100,
+    });
 
     // ========================================
     // STEP 5: Verify overlap via API
@@ -358,8 +377,12 @@ test.describe('Stage 4: Two-Browser Strategic Repair', () => {
     }
 
     // Screenshots: overlap reveal phase
-    await pageA.screenshot({ path: 'test-results/stage-4-04-overlap-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-4-04-overlap-user-b.png' });
+    await expect(pageA).toHaveScreenshot('stage-4-04-overlap-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(pageB).toHaveScreenshot('stage-4-04-overlap-user-b.png', {
+      maxDiffPixels: 100,
+    });
 
     // ========================================
     // STEP 6: Create agreement via API
@@ -425,8 +448,12 @@ test.describe('Stage 4: Two-Browser Strategic Repair', () => {
     }
 
     // Screenshots: agreement phase
-    await pageA.screenshot({ path: 'test-results/stage-4-05-agreement-user-a.png' });
-    await pageB.screenshot({ path: 'test-results/stage-4-05-agreement-user-b.png' });
+    await expect(pageA).toHaveScreenshot('stage-4-05-agreement-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(pageB).toHaveScreenshot('stage-4-05-agreement-user-b.png', {
+      maxDiffPixels: 100,
+    });
 
     // ========================================
     // Final summary log
