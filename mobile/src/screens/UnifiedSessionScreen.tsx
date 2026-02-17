@@ -24,6 +24,8 @@ import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
 // WaitingStatusMessage removed - we no longer show "waiting for partner" messages
 // EmpathyAttemptCard removed - now shown in AccuracyFeedbackDrawer
 import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
+import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
+import { ShareTopicPanel } from '../components/ShareTopicPanel';
 import { NeedsSection } from '../components/NeedsSection';
 import { CommonGroundCard } from '../components/CommonGroundCard';
 import { StrategyPool } from '../components/StrategyPool';
@@ -534,6 +536,7 @@ export function UnifiedSessionScreen({
   const [showEmpathyDrawer, setShowEmpathyDrawer] = useState(false);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
   const [showAccuracyFeedbackDrawer, setShowAccuracyFeedbackDrawer] = useState(false);
+  const [showShareTopicDrawer, setShowShareTopicDrawer] = useState(false);
 
   // -------------------------------------------------------------------------
   // Navigation to Share screen
@@ -571,6 +574,9 @@ export function UnifiedSessionScreen({
   // This prevents the invitation panel from flashing when AI response triggers a cache refetch
   // that returns stale data (before the confirm mutation completed on server)
   const [hasConfirmedInvitationLocal, setHasConfirmedInvitationLocal] = useState(false);
+
+  // Local latch for share offer response - once user responds (accept or decline), hide panel
+  const [hasRespondedToShareOfferLocal, setHasRespondedToShareOfferLocal] = useState(false);
 
   // -------------------------------------------------------------------------
   // Local State for Session Entry Mood Check
@@ -663,9 +669,8 @@ export function UnifiedSessionScreen({
     hasLiveProposedEmpathyStatement: !!liveProposedEmpathyStatement,
     hasSharedEmpathyLocal,
     shareOfferData: shareOfferData ?? undefined,
-    // Share suggestions are now handled via the Sharing Status screen (header button)
-    // Always true to hide the inline panel
-    hasRespondedToShareOfferLocal: true,
+    // Share offer panel shows ShareTopicPanel which opens ShareTopicDrawer
+    hasRespondedToShareOfferLocal,
     partnerEmpathyValidated: partnerEmpathyData?.validated ?? false,
     allNeedsConfirmed,
     commonGroundCount: commonGround?.length ?? 0,
@@ -1611,7 +1616,39 @@ export function UnifiedSessionScreen({
                       </View>
                     </Animated.View>
                   )
-                  // Share topic panel has been moved to the Sharing Status screen (header button)
+                  // Share topic panel - opens ShareTopicDrawer when tapped
+                  // Stable Mounting: Mount based on data (shouldShowShareSuggestion), animate visibility with typewriter guard
+                  : shouldShowShareSuggestion
+                    ? () => (
+                      <Animated.View
+                        style={{
+                          opacity: shareSuggestionAnim,
+                          maxHeight: shareSuggestionAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 60],
+                          }),
+                          transform: [{
+                            translateY: shareSuggestionAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [20, 0],
+                            }),
+                          }],
+                          overflow: 'hidden',
+                        }}
+                        pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+                      >
+                        {shareOfferData?.suggestion &&
+                         (shareOfferData.suggestion.action === 'OFFER_OPTIONAL' ||
+                          shareOfferData.suggestion.action === 'OFFER_SHARING') && (
+                          <ShareTopicPanel
+                            visible={true}
+                            action={shareOfferData.suggestion.action}
+                            partnerName={partnerName}
+                            onPress={() => setShowShareTopicDrawer(true)}
+                          />
+                        )}
+                      </Animated.View>
+                    )
                   // Show accuracy feedback trigger when partner's empathy is ready for validation
                   // Stable Mounting: Mount based on data (shouldShowAccuracyFeedback), animate visibility with typewriter guard
                   : shouldShowAccuracyFeedback
@@ -1885,6 +1922,33 @@ export function UnifiedSessionScreen({
           onPartiallyAccurate={() => handleValidatePartnerEmpathy(false, 'Some parts are accurate')}
           onInaccurate={() => handleValidatePartnerEmpathy(false, 'This does not capture my perspective')}
           onClose={() => setShowAccuracyFeedbackDrawer(false)}
+        />
+      )}
+
+      {/* ShareTopicDrawer - Phase 1 of two-phase share flow */}
+      {shareOfferData?.hasSuggestion && shareOfferData.suggestion &&
+       (shareOfferData.suggestion.action === 'OFFER_OPTIONAL' ||
+        shareOfferData.suggestion.action === 'OFFER_SHARING') && (
+        <ShareTopicDrawer
+          visible={showShareTopicDrawer}
+          action={shareOfferData.suggestion.action}
+          partnerName={partnerName}
+          suggestedShareFocus={shareOfferData.suggestion.suggestedShareFocus || ''}
+          onAccept={() => {
+            setShowShareTopicDrawer(false);
+            setHasRespondedToShareOfferLocal(true);
+            // Accept triggers draft generation via chat (US-3 from spec)
+            // handleRespondToShareOffer will send hidden message to AI
+            // AI responds with draft + "Review and share" button
+            handleRespondToShareOffer('accept');
+          }}
+          onDecline={() => {
+            setShowShareTopicDrawer(false);
+            setHasRespondedToShareOfferLocal(true);
+            // Decline marks empathy direction as READY (no notification to partner)
+            handleRespondToShareOffer('decline');
+          }}
+          onClose={() => setShowShareTopicDrawer(false)}
         />
       )}
 

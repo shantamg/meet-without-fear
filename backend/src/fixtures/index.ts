@@ -9,6 +9,9 @@ import { E2EFixture } from './types';
 import { flatArrayFixture } from './flat-array-fixture';
 import { homepage } from './homepage';
 import { reconcilerNoGaps } from './reconciler-no-gaps';
+import { reconcilerOfferOptional } from './reconciler-offer-optional';
+import { reconcilerOfferSharing } from './reconciler-offer-sharing';
+import { reconcilerRefinement } from './reconciler-refinement';
 import { testFixture } from './test-fixture';
 import { userAFullJourney } from './user-a-full-journey';
 import { userBPartnerJourney } from './user-b-partner-journey';
@@ -21,6 +24,9 @@ export {
   flatArrayFixture,
   homepage,
   reconcilerNoGaps,
+  reconcilerOfferOptional,
+  reconcilerOfferSharing,
+  reconcilerRefinement,
   testFixture,
   userAFullJourney,
   userBPartnerJourney,
@@ -34,6 +40,9 @@ export const fixtureRegistry: Record<string, E2EFixture> = {
   'flat-array-fixture': flatArrayFixture,
   homepage,
   'reconciler-no-gaps': reconcilerNoGaps,
+  'reconciler-offer-optional': reconcilerOfferOptional,
+  'reconciler-offer-sharing': reconcilerOfferSharing,
+  'reconciler-refinement': reconcilerRefinement,
   'test-fixture': testFixture,
   'user-a-full-journey': userAFullJourney,
   'user-b-partner-journey': userBPartnerJourney,
