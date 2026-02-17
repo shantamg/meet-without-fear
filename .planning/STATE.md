@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 Phase: 12 of 13 (Visual Regression Baselines)
 Plan: 1 of 2 complete
 Status: In Progress
-Last activity: 2026-02-17 — Phase 12 Plan 02 complete (Convert Stage 3-4 screenshots to visual regression)
+Last activity: 2026-02-17 — Phase 12 Plan 01 complete (Visual Regression Baselines)
 
 Progress: [███████████░░░░░░░░░] 58% (12/20 phases, 1/2 plans complete)
 
@@ -20,7 +20,7 @@ Progress: [███████████░░░░░░░░░] 58% (12
 
 **Velocity:**
 - Total plans completed: 24 (13 from v1.0 + 11 from v1.1)
-- Average duration (v1.1): 11 minutes (avg of 08-01: 5min, 08-02: 10min, 08-03: 7min, 08-04: 47min, 09-01: 4min, 09-02: 34min, 10-01: 3min, 10-02: 23min, 11-01: 1min, 11-02: 2min, 12-02: 4min)
+- Average duration (v1.1): 11 minutes (avg of 08-01: 5min, 08-02: 10min, 08-03: 7min, 08-04: 47min, 09-01: 4min, 09-02: 34min, 10-01: 3min, 10-02: 23min, 11-01: 1min, 11-02: 2min, 12-01: 4min)
 - Total execution time: ~2 days (v1.0: 2026-02-14 → 2026-02-15, v1.1: 2026-02-16 → 2026-02-17)
 
 **By Phase (v1.0):**
@@ -78,7 +78,7 @@ Progress: [███████████░░░░░░░░░] 58% (12
 - Phase 10 Plan 02: 23 minutes, 1 task, 2 files (Two-browser E2E test with API-driven flow)
 - Phase 11 Plan 01: 1 minute, 1 task, 2 files (Stage 4 fixture with SessionBuilder compatibility)
 - Phase 11 Plan 02: 2 minutes, 1 task, 2 files (Two-browser Stage 4 E2E test with API-driven strategy flow)
-- Phase 12 Plan 02: 4 minutes, 2 tasks, 4 files (Converted 28 screenshots to toHaveScreenshot assertions)
+- Phase 12 Plan 01: 4 minutes, 2 tasks, 6 files (Converted 42 reconciler screenshots to toHaveScreenshot assertions)
 
 ## Accumulated Context
 
@@ -111,8 +111,9 @@ Recent decisions affecting current work:
 - [Phase 10-02]: Text-based selectors more reliable than testIDs for RN Web verification
 - [Phase 10-02]: Visual documentation via screenshots when UI interactions unreliable
 - [Phase 11-01]: Stage 4 fixture pattern follows stage-3-needs for SessionBuilder compatibility
-- [Phase 12-02]: Use maxDiffPixels: 100 per-screenshot for explicit tolerance
-- [Phase 12-02]: Add baseline docs to test file JSDoc comments (not separate README)
+- [Phase 12-01]: Global toHaveScreenshot config with maxDiffPixels 100 prevents false positives
+- [Phase 12-01]: Per-screenshot maxDiffPixels for explicitness survives global config changes
+- [Phase 12-01]: Animations disabled globally eliminates timing-dependent flakiness
 
 ### Pending Todos
 
@@ -133,8 +134,8 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-17 (Phase 12 execution)
-Stopped at: Completed 12-02-PLAN.md (Convert Stage 3-4 screenshots to visual regression)
-Resume file: .planning/phases/12-visual-regression-baselines/12-02-SUMMARY.md
+Stopped at: Completed 12-01-PLAN.md (Visual Regression Baselines)
+Resume file: .planning/phases/12-visual-regression-baselines/12-01-SUMMARY.md
 
 ---
 *Last updated: 2026-02-17*
