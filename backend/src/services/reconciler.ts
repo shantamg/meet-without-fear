@@ -42,6 +42,44 @@ import type {
 } from '@meet-without-fear/shared';
 
 // ============================================================================
+// Circuit Breaker: Check and increment refinement attempts
+// ============================================================================
+
+/**
+ * Check and increment the refinement attempt counter for a specific direction.
+ * Returns whether the reconciler should be skipped (circuit breaker tripped).
+ *
+ * The circuit breaker prevents infinite refinement loops by limiting attempts to 3 per direction.
+ * On the 4th attempt, shouldSkipReconciler=true is returned.
+ *
+ * @param sessionId - The session ID
+ * @param guesserId - The user who made the empathy guess
+ * @param subjectId - The user being guessed about
+ * @returns Object with shouldSkipReconciler (true if >= 4 attempts) and current attempts count
+ */
+export async function checkAndIncrementAttempts(
+  sessionId: string,
+  guesserId: string,
+  subjectId: string
+): Promise<{ shouldSkipReconciler: boolean; attempts: number }> {
+  const direction = `${guesserId}->${subjectId}`;
+
+  const counter = await prisma.refinementAttemptCounter.upsert({
+    where: { sessionId_direction: { sessionId, direction } },
+    create: { sessionId, direction, attempts: 1 },
+    update: { attempts: { increment: 1 } },
+  });
+
+  const shouldSkipReconciler = counter.attempts > 3;
+
+  console.log(
+    `[CircuitBreaker] Direction ${direction}: attempt ${counter.attempts}/3, shouldSkip=${shouldSkipReconciler}`
+  );
+
+  return { shouldSkipReconciler, attempts: counter.attempts };
+}
+
+// ============================================================================
 // Helper: Check if context has already been shared for a direction
 // ============================================================================
 
@@ -139,11 +177,14 @@ async function findReconcilerResultWithRetry(
 /**
  * Mark guesser's empathy attempt as READY, create alignment message, and check reveal.
  * This helper extracts the common logic when no sharing is needed.
+ *
+ * @param circuitBreakerTripped - If true, uses a natural transition message instead of accuracy feedback
  */
 async function markEmpathyReady(
   sessionId: string,
   guesserId: string,
-  subjectName: string
+  subjectName: string,
+  circuitBreakerTripped = false
 ): Promise<void> {
   console.log(`[Reconciler] Marking empathy as READY for guesser ${guesserId}`);
 
@@ -153,8 +194,10 @@ async function markEmpathyReady(
     data: { status: 'READY' },
   });
 
-  // Create a positive feedback message for the guesser
-  const alignmentMessage = `${subjectName} has felt heard. The reconciler reports your attempt to imagine what they're feeling was quite accurate. ${subjectName} is now considering your perspective, and once they do, you'll both see what each other shared.`;
+  // Choose message based on whether circuit breaker tripped
+  const alignmentMessage = circuitBreakerTripped
+    ? `You've shared your perspective on what ${subjectName} might be experiencing. Let's move forward — ${subjectName} is also reflecting on your perspective.`
+    : `${subjectName} has felt heard. The reconciler reports your attempt to imagine what they're feeling was quite accurate. ${subjectName} is now considering your perspective, and once they do, you'll both see what each other shared.`;
 
   const savedMessage = await prisma.message.create({
     data: {
@@ -716,6 +759,25 @@ export async function runReconcilerForDirection(
   };
 
   console.log(`[Reconciler] Participants: Guesser=${guesserInfo.name}, Subject=${subjectInfo.name}`);
+
+  // ============================================================================
+  // CIRCUIT BREAKER CHECK
+  // ============================================================================
+  const { shouldSkipReconciler, attempts } = await checkAndIncrementAttempts(
+    sessionId,
+    guesserId,
+    subjectId
+  );
+
+  if (shouldSkipReconciler) {
+    console.log(`[Reconciler] Circuit breaker tripped (${attempts} attempts). Forcing READY for ${guesserInfo.name} → ${subjectInfo.name}.`);
+    await markEmpathyReady(sessionId, guesserId, subjectInfo.name, true);
+    return {
+      result: null,
+      empathyStatus: 'READY',
+      shareOffer: null,
+    };
+  }
 
   // Get guesser's empathy statement
   const empathyData = await getEmpathyData(sessionId, guesserId);
