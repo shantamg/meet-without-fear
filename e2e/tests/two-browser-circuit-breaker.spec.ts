@@ -215,11 +215,11 @@ test.describe('Circuit Breaker: Force READY After 3 Refinement Attempts', () => 
 
     const userBReconcilerComplete = await waitForReconcilerComplete(harness.userBPage, 60000);
     if (!userBReconcilerComplete) {
-      await harness.userAPage.screenshot({
-        path: 'test-results/circuit-breaker-reconciler-timeout-a.png',
+      await expect(harness.userAPage).toHaveScreenshot('circuit-breaker-reconciler-timeout-a.png', {
+        maxDiffPixels: 100,
       });
-      await harness.userBPage.screenshot({
-        path: 'test-results/circuit-breaker-reconciler-timeout-b.png',
+      await expect(harness.userBPage).toHaveScreenshot('circuit-breaker-reconciler-timeout-b.png', {
+        maxDiffPixels: 100,
       });
       throw new Error('Reconciler attempt 1 did not complete within 60s for User B');
     }
@@ -242,8 +242,8 @@ test.describe('Circuit Breaker: Force READY After 3 Refinement Attempts', () => 
     }
 
     // Screenshot during refinement loop (User B should see ShareTopicPanel)
-    await harness.userBPage.screenshot({
-      path: 'test-results/circuit-breaker-01-refinement-loop.png',
+    await expect(harness.userBPage).toHaveScreenshot('circuit-breaker-01-refinement-loop.png', {
+      maxDiffPixels: 100,
     });
 
     // ==========================================
@@ -273,11 +273,11 @@ test.describe('Circuit Breaker: Force READY After 3 Refinement Attempts', () => 
     await handleMoodCheck(harness.userBPage);
 
     // Screenshot both perspectives showing AWAITING_SHARING state
-    await harness.userAPage.screenshot({
-      path: 'test-results/circuit-breaker-02-guesser-waiting.png',
+    await expect(harness.userAPage).toHaveScreenshot('circuit-breaker-02-guesser-waiting.png', {
+      maxDiffPixels: 100,
     });
-    await harness.userBPage.screenshot({
-      path: 'test-results/circuit-breaker-02-subject-panel.png',
+    await expect(harness.userBPage).toHaveScreenshot('circuit-breaker-02-subject-panel.png', {
+      maxDiffPixels: 100,
     });
 
     // Verify User B sees ShareTopicPanel (proves OFFER_SHARING worked)

@@ -213,11 +213,11 @@ test.describe('Reconciler: OFFER_OPTIONAL Path', () => {
 
     const userBReconcilerComplete = await waitForReconcilerComplete(harness.userBPage, 60000);
     if (!userBReconcilerComplete) {
-      await harness.userAPage.screenshot({
-        path: 'test-results/offer-optional-reconciler-timeout-a.png',
+      await expect(harness.userAPage).toHaveScreenshot('offer-optional-reconciler-timeout-a.png', {
+        maxDiffPixels: 100,
       });
-      await harness.userBPage.screenshot({
-        path: 'test-results/offer-optional-reconciler-timeout-b.png',
+      await expect(harness.userBPage).toHaveScreenshot('offer-optional-reconciler-timeout-b.png', {
+        maxDiffPixels: 100,
       });
       throw new Error('Reconciler did not complete within 60s for User B');
     }
@@ -230,13 +230,13 @@ test.describe('Reconciler: OFFER_OPTIONAL Path', () => {
     await harness.userBPage.waitForTimeout(3000);
 
     // Screenshot User A (guesser): Should show waiting banner or status
-    await harness.userAPage.screenshot({
-      path: 'test-results/offer-optional-01-guesser-waiting.png',
+    await expect(harness.userAPage).toHaveScreenshot('offer-optional-01-guesser-waiting.png', {
+      maxDiffPixels: 100,
     });
 
     // Screenshot User B (subject): May show "Almost There" modal first
-    await harness.userBPage.screenshot({
-      path: 'test-results/offer-optional-01-subject-modal.png',
+    await expect(harness.userBPage).toHaveScreenshot('offer-optional-01-subject-modal.png', {
+      maxDiffPixels: 100,
     });
 
     // Dismiss "Almost There" modal if it appears (guesser perspective)
@@ -248,8 +248,8 @@ test.describe('Reconciler: OFFER_OPTIONAL Path', () => {
     }
 
     // Screenshot after modal dismissed
-    await harness.userBPage.screenshot({
-      path: 'test-results/offer-optional-01-subject-panel.png',
+    await expect(harness.userBPage).toHaveScreenshot('offer-optional-01-subject-panel.png', {
+      maxDiffPixels: 100,
     });
 
     // ==========================================
@@ -281,8 +281,8 @@ test.describe('Reconciler: OFFER_OPTIONAL Path', () => {
     });
 
     // Screenshot drawer
-    await harness.userBPage.screenshot({
-      path: 'test-results/offer-optional-02-subject-drawer.png',
+    await expect(harness.userBPage).toHaveScreenshot('offer-optional-02-subject-drawer.png', {
+      maxDiffPixels: 100,
     });
 
     // ==========================================
@@ -312,11 +312,11 @@ test.describe('Reconciler: OFFER_OPTIONAL Path', () => {
     await harness.userBPage.waitForTimeout(3000);
 
     // Screenshot both users after decline
-    await harness.userBPage.screenshot({
-      path: 'test-results/offer-optional-03-subject-after-decline.png',
+    await expect(harness.userBPage).toHaveScreenshot('offer-optional-03-subject-after-decline.png', {
+      maxDiffPixels: 100,
     });
-    await harness.userAPage.screenshot({
-      path: 'test-results/offer-optional-03-guesser-after-decline.png',
+    await expect(harness.userAPage).toHaveScreenshot('offer-optional-03-guesser-after-decline.png', {
+      maxDiffPixels: 100,
     });
 
     // ==========================================
@@ -330,11 +330,11 @@ test.describe('Reconciler: OFFER_OPTIONAL Path', () => {
     }
 
     // Screenshot after reveal
-    await harness.userAPage.screenshot({
-      path: 'test-results/offer-optional-04-guesser-revealed.png',
+    await expect(harness.userAPage).toHaveScreenshot('offer-optional-04-guesser-revealed.png', {
+      maxDiffPixels: 100,
     });
-    await harness.userBPage.screenshot({
-      path: 'test-results/offer-optional-04-subject-revealed.png',
+    await expect(harness.userBPage).toHaveScreenshot('offer-optional-04-subject-revealed.png', {
+      maxDiffPixels: 100,
     });
 
     // ==========================================
@@ -346,11 +346,11 @@ test.describe('Reconciler: OFFER_OPTIONAL Path', () => {
     await navigateToShareFromSession(harness.userBPage);
 
     // Screenshot Share screens
-    await harness.userAPage.screenshot({
-      path: 'test-results/offer-optional-05-guesser-share.png',
+    await expect(harness.userAPage).toHaveScreenshot('offer-optional-05-guesser-share.png', {
+      maxDiffPixels: 100,
     });
-    await harness.userBPage.screenshot({
-      path: 'test-results/offer-optional-05-subject-share.png',
+    await expect(harness.userBPage).toHaveScreenshot('offer-optional-05-subject-share.png', {
+      maxDiffPixels: 100,
     });
 
     // Navigate back to Chat to verify content persistence
@@ -380,8 +380,8 @@ test.describe('Reconciler: OFFER_OPTIONAL Path', () => {
     await expect(duplicatePanel).not.toBeVisible({ timeout: 2000 });
 
     // Screenshot to document guard behavior
-    await harness.userBPage.screenshot({
-      path: 'test-results/offer-optional-06-subject-no-duplicate-panel.png',
+    await expect(harness.userBPage).toHaveScreenshot('offer-optional-06-subject-no-duplicate-panel.png', {
+      maxDiffPixels: 100,
     });
 
     // Navigate back to Chat for final state
@@ -389,11 +389,11 @@ test.describe('Reconciler: OFFER_OPTIONAL Path', () => {
     await handleMoodCheck(harness.userBPage);
 
     // Final screenshots
-    await harness.userAPage.screenshot({
-      path: 'test-results/offer-optional-07-guesser-final.png',
+    await expect(harness.userAPage).toHaveScreenshot('offer-optional-07-guesser-final.png', {
+      maxDiffPixels: 100,
     });
-    await harness.userBPage.screenshot({
-      path: 'test-results/offer-optional-07-subject-final.png',
+    await expect(harness.userBPage).toHaveScreenshot('offer-optional-07-subject-final.png', {
+      maxDiffPixels: 100,
     });
 
     // ==========================================

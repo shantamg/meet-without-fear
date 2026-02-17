@@ -8,17 +8,9 @@
 
 import { test, expect, devices, BrowserContext, Page } from '@playwright/test';
 import { cleanupE2EData, getE2EHeaders, SessionBuilder } from '../../../helpers';
-import * as path from 'path';
-import * as fs from 'fs';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
-
-// Ensure screenshots directory exists
-const SCREENSHOT_DIR = path.resolve(__dirname, '../../../screenshots');
-if (!fs.existsSync(SCREENSHOT_DIR)) {
-  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
-}
 
 test.use(devices['iPhone 12']);
 
@@ -210,7 +202,9 @@ test.describe('Reconciler: No Gaps → Capture Screenshot of Validation Buttons'
       const shareDirectVisible = await userBPage.getByTestId('share-empathy-button').isVisible({ timeout: 2000 }).catch(() => false);
       if (!shareDirectVisible) {
         console.log(`${elapsed()} Share CTA not visible in this run; capturing fallback screenshot`);
-        await userBPage.screenshot({ path: `test-results/no-gaps-fallback-${Date.now()}.png` });
+        await expect(userBPage).toHaveScreenshot(`no-gaps-fallback-${Date.now()}.png`, {
+          maxDiffPixels: 100,
+        });
         return;
       }
     }
@@ -278,14 +272,13 @@ test.describe('Reconciler: No Gaps → Capture Screenshot of Validation Buttons'
     console.log(`${elapsed()} Validation buttons visible - Accurate: ${hasAccurate}, Partial: ${hasPartial}, Inaccurate: ${hasInaccurate}`);
 
     // Take screenshot - use a fixed filename for easy retrieval
-    const screenshotPath = path.join(SCREENSHOT_DIR, 'empathy-validation-buttons.png');
-    await userBPage.screenshot({ path: screenshotPath, fullPage: false });
-    console.log(`${elapsed()} Screenshot saved to: ${screenshotPath}`);
+    await expect(userBPage).toHaveScreenshot('empathy-validation-buttons.png', {
+      maxDiffPixels: 100,
+      fullPage: false,
+    });
+    console.log(`${elapsed()} Screenshot saved as empathy-validation-buttons.png`);
 
-    // Verify the screenshot was created
-    expect(fs.existsSync(screenshotPath)).toBe(true);
-
-    // Also verify at least one validation button is visible
+    // Verify at least one validation button is visible
     expect(hasAccurate || hasPartial || hasInaccurate).toBe(true);
 
     console.log(`${elapsed()} ✅ Screenshot captured successfully!`);
