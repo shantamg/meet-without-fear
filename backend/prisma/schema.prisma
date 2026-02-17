@@ -785,6 +785,20 @@ enum ReconcilerShareStatus {
   SKIPPED     // Legacy: user skipped without responding
 }
 
+/// Tracks refinement attempts per direction to implement circuit breaker.
+/// Prevents infinite refinement loops by limiting attempts to 3 per direction.
+model RefinementAttemptCounter {
+  id        String   @id @default(cuid())
+  sessionId String
+  direction String   // "guesserId->subjectId" composite string
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sessionId, direction])
+  @@index([sessionId])
+}
+
 // ============================================================================
 // Stage 4: Strategies and Rankings
 // ============================================================================
