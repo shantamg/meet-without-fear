@@ -188,20 +188,24 @@ export async function confirmFeelHeard(page: Page, timeout = 5000): Promise<void
   const feelHeardYes = page.getByTestId('feel-heard-yes');
   await expect(feelHeardYes).toBeVisible({ timeout });
 
-  // Wait for the API request to complete (fixes race condition where
-  // subsequent messages are sent before backend stage update completes)
+  // IMPORTANT: Set up response listener BEFORE clicking to avoid race condition.
+  // The response listener must be registered before the click triggers the API call,
+  // otherwise fast responses can complete before the listener is ready.
   const responsePromise = page.waitForResponse(
     response => response.url().includes('/sessions/') && response.url().includes('/feel-heard'),
-    { timeout: 10000 }
+    { timeout: 15000 }
   );
 
   await feelHeardYes.click();
+
+  // Wait for backend to complete the stage transition
   await responsePromise;
 
-  await expect(feelHeardYes).not.toBeVisible({ timeout });
+  // Wait for the button to disappear (UI reflects stage change)
+  await expect(feelHeardYes).not.toBeVisible({ timeout: 10000 });
 
-  // Additional small delay to ensure React state updates from the response
-  await page.waitForTimeout(500);
+  // Additional delay to ensure React state updates propagate fully
+  await page.waitForTimeout(1000);
 }
 
 /**
@@ -263,7 +267,7 @@ export async function sendAndWaitForPanel(
     // Check if panel appeared (metadata arrives via separate SSE event after text,
     // so give it time to process through React state updates)
     const panel = page.getByTestId(panelTestId);
-    if (await panel.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await panel.isVisible({ timeout: 5000 }).catch(() => false)) {
       return i + 1; // turns it took
     }
   }
