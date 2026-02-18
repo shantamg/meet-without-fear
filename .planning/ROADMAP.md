@@ -112,10 +112,11 @@ Plans:
   1. Two-browser E2E test completes full session (Stage 0 → Stage 4) for both users
   2. E2E tests pass for all reconciler edge cases (OFFER_OPTIONAL, OFFER_SHARING)
   3. Test suite runs reliably without flakiness (3 consecutive passes)
-**Plans:** TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD
+- [ ] 13-01-PLAN.md -- Extend full-flow test to cover Stages 0-4 (E2E-01)
+- [ ] 13-02-PLAN.md -- Verify reconciler edge case tests pass reliably (E2E-02)
 
 ## Progress
 
@@ -136,7 +137,7 @@ Phases execute in numeric order: 8 → 9 → 10 → 11 → 12 → 13
 | 10. Stage 3 Needs      | v1.1      | Complete    | 2026-02-17 | -          |
 | 11. Stage 4 Strategies | v1.1      | Complete    | 2026-02-17 | -          |
 | 12. Visual Baselines   | v1.1      | Complete    | 2026-02-18 | -          |
-| 13. Full Session E2E   | v1.1      | 0/TBD          | Not started  | -          |
+| 13. Full Session E2E   | v1.1      | 0/2            | Planning     | -          |
 
 ---
 *Roadmap created: 2026-02-14*
