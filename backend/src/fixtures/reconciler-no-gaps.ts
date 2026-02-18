@@ -179,5 +179,49 @@ Does this capture what you'd like to express to them?
         },
       },
     },
+
+    // Needs extraction operation - returns 3 deterministic needs for User B
+    'extract-needs': {
+      response: {
+        needs: [
+          {
+            category: 'CONNECTION',
+            need: 'To feel emotionally connected despite stress',
+            evidence: ['I want them to know I still care, even when I\'m stressed'],
+            aiConfidence: 0.87,
+          },
+          {
+            category: 'UNDERSTANDING',
+            need: 'To be understood when communicating',
+            evidence: ['I feel like we\'ve just been miscommunicating'],
+            aiConfidence: 0.83,
+          },
+          {
+            category: 'SAFETY',
+            need: 'To feel safe and secure in the relationship',
+            evidence: ['I just want us to be on the same page again'],
+            aiConfidence: 0.80,
+          },
+        ],
+      },
+    },
+
+    // Common ground operation - compatible with user-a-full-journey fixture
+    'common-ground': {
+      response: {
+        commonGround: [
+          {
+            category: 'CONNECTION',
+            need: 'Both partners want to feel connected and understood',
+            insight: 'Despite the tension, both value the relationship and want to support each other',
+          },
+          {
+            category: 'RECOGNITION',
+            need: 'Both need to feel seen and appreciated',
+            insight: 'Each partner wants acknowledgment for their contributions and efforts',
+          },
+        ],
+      },
+    },
   },
 };

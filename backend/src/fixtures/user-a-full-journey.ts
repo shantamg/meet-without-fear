@@ -125,4 +125,51 @@ Does this capture what you'd like to express to them?
 `,
     },
   ],
+
+  // Operation-specific mock responses for non-streaming AI calls (Stage 3-4)
+  operations: {
+    // Needs extraction operation - returns 3 deterministic needs for User A
+    'extract-needs': {
+      response: {
+        needs: [
+          {
+            category: 'RECOGNITION',
+            need: 'To have my efforts seen and appreciated',
+            evidence: ["I feel like I do most of the work and they don't notice or appreciate it"],
+            aiConfidence: 0.88,
+          },
+          {
+            category: 'CONNECTION',
+            need: 'To feel like we are partners working together',
+            evidence: ['I want us to find a way to support each other better'],
+            aiConfidence: 0.82,
+          },
+          {
+            category: 'BALANCE',
+            need: 'For household responsibilities to be shared fairly',
+            evidence: ['We keep arguing about household chores'],
+            aiConfidence: 0.85,
+          },
+        ],
+      },
+    },
+
+    // Common ground operation - compatible with reconciler-no-gaps fixture
+    'common-ground': {
+      response: {
+        commonGround: [
+          {
+            category: 'CONNECTION',
+            need: 'Both partners want to feel connected and understood',
+            insight: 'Despite the tension, both value the relationship and want to support each other',
+          },
+          {
+            category: 'RECOGNITION',
+            need: 'Both need to feel seen and appreciated',
+            insight: 'Each partner wants acknowledgment for their contributions and efforts',
+          },
+        ],
+      },
+    },
+  },
 };
