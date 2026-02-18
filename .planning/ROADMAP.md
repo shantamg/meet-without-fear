@@ -98,7 +98,7 @@ Plans:
   2. All Stage 3-4 screenshots use toHaveScreenshot() assertions
   3. Baseline images committed with proper masking for dynamic content
   4. Documentation exists for baseline update process
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 12-01-PLAN.md -- Playwright config + reconciler screenshot conversions (RECON-VIS-03, RECON-VIS-04)
@@ -135,7 +135,7 @@ Phases execute in numeric order: 8 → 9 → 10 → 11 → 12 → 13
 | 9. Circuit Breaker     | v1.1      | 0/TBD          | Not started  | -          |
 | 10. Stage 3 Needs      | v1.1      | Complete    | 2026-02-17 | -          |
 | 11. Stage 4 Strategies | v1.1      | Complete    | 2026-02-17 | -          |
-| 12. Visual Baselines   | v1.1      | 0/TBD          | Not started  | -          |
+| 12. Visual Baselines   | v1.1      | Complete    | 2026-02-18 | -          |
 | 13. Full Session E2E   | v1.1      | 0/TBD          | Not started  | -          |
 
 ---
