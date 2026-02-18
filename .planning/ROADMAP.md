@@ -112,11 +112,13 @@ Plans:
   1. Two-browser E2E test completes full session (Stage 0 → Stage 4) for both users
   2. E2E tests pass for all reconciler edge cases (OFFER_OPTIONAL, OFFER_SHARING)
   3. Test suite runs reliably without flakiness (3 consecutive passes)
-**Plans:** 2 plans
+**Plans:** 4 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- Extend full-flow test to cover Stages 0-4 (E2E-01)
-- [ ] 13-02-PLAN.md -- Verify reconciler edge case tests pass reliably (E2E-02)
+- [x] 13-01-PLAN.md -- Extend full-flow test to cover Stages 0-4 (E2E-01)
+- [x] 13-02-PLAN.md -- Verify reconciler edge case tests pass reliably (E2E-02) [deferred: stability issues]
+- [ ] 13-03-PLAN.md -- Fix test helper timing issues and verify full-flow test (E2E-01, gap closure)
+- [ ] 13-04-PLAN.md -- Stabilize reconciler E2E tests and complete visual baselines (E2E-02, gap closure)
 
 ## Progress
 
