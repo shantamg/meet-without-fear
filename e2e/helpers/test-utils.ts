@@ -285,6 +285,8 @@ export async function sendAndWaitForPanel(
     // so give it time to process through React state updates)
     const panel = page.getByTestId(panelTestId);
     if (await panel.isVisible({ timeout: 5000 }).catch(() => false)) {
+      // Wait for typewriter animation to complete so pointer-events become 'auto'
+      await page.waitForTimeout(3000);
       return i + 1; // turns it took
     }
   }

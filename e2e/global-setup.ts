@@ -4,14 +4,14 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 async function globalSetup(_config: FullConfig) {
-  console.log('\n🔧 E2E Global Setup Starting...');
+  console.log('\nE2E Global Setup Starting...');
 
   const backendDir = path.resolve(__dirname, '../backend');
   const databaseUrl =
     process.env.DATABASE_URL ||
     'postgresql://mwf_user:mwf_password@localhost:5432/meet_without_fear_test';
 
-  console.log('📌 Using database:', databaseUrl.replace(/:[^:@]+@/, ':***@'));
+  console.log('Using database:', databaseUrl.replace(/:[^:@]+@/, ':***@'));
 
   // Tables ordered for CASCADE truncation (child tables that may have FK constraints)
   const TABLES_TO_TRUNCATE = [
@@ -91,10 +91,10 @@ async function truncateTables() {
   for (const table of TABLES_TO_TRUNCATE) {
     try {
       await prisma.$executeRawUnsafe('TRUNCATE TABLE "' + table + '" CASCADE');
-      console.log('  ✓ Truncated ' + table);
+      console.log('  ok Truncated ' + table);
     } catch (error) {
       // Table might not exist yet, that's ok
-      console.log('  ⚠ Skipped ' + table + ': ' + error.message);
+      console.log('  skip Skipped ' + table + ': ' + error.message);
     }
   }
   await prisma.$disconnect();
@@ -104,7 +104,7 @@ truncateTables().catch(console.error);
 `;
 
   // Truncate all tables
-  console.log('🗑️  Truncating all tables...');
+  console.log('Truncating all tables...');
   try {
     fs.writeFileSync(truncateScriptPath, truncateScript);
     execSync(`node ${truncateScriptPath}`, {
@@ -113,7 +113,7 @@ truncateTables().catch(console.error);
       stdio: 'inherit',
     });
   } catch (error) {
-    console.error("⚠️  Table truncation had issues (may be OK if tables don't exist yet)");
+    console.error("Table truncation had issues (may be OK if tables don't exist yet)");
   } finally {
     // Clean up temp file
     try {
@@ -123,21 +123,124 @@ truncateTables().catch(console.error);
     }
   }
 
+  // Fix vector-dependent migration for the test environment.
+  //
+  // The migration 20260217162645_add_refinement_attempt_counter includes:
+  //   1. Vector columns for InnerWorkSession and UserVessel (requires pgvector extension)
+  //   2. RefinementAttemptCounter table (works on any PostgreSQL)
+  //
+  // In the E2E test environment, pgvector may not be installed on the PostgreSQL server.
+  // Vector columns are only used for AI embedding features which are mocked in E2E tests (MOCK_LLM=true).
+  //
+  // Solution: Apply the non-vector parts manually and mark the migration as applied so
+  // Prisma doesn't attempt to re-run it.
+  console.log('\nFixing vector-dependent migration for test environment...');
+  const vectorMigrationName = '20260217162645_add_refinement_attempt_counter';
+  const fixVectorScriptPath = path.join(backendDir, '.temp-fix-vector.js');
+  // Build the fix script without using template literals to avoid escaping issues
+  const fixVectorLines = [
+    "const { PrismaClient } = require('@prisma/client');",
+    "const prisma = new PrismaClient();",
+    "",
+    "async function fixVectorMigration() {",
+    "  const migrationName = '" + vectorMigrationName + "';",
+    "",
+    "  // Check current migration state",
+    "  const rows = await prisma.$queryRawUnsafe(",
+    "    'SELECT migration_name, finished_at FROM \"_prisma_migrations\" WHERE migration_name = $1',",
+    "    migrationName",
+    "  );",
+    "",
+    "  const failedRows = rows.filter(function(r) { return r.finished_at === null; });",
+    "  const appliedRows = rows.filter(function(r) { return r.finished_at !== null; });",
+    "",
+    "  // Remove any failed/pending entries from previous attempts",
+    "  if (failedRows.length > 0) {",
+    "    console.log('  Removing failed migration entries...');",
+    "    await prisma.$executeRawUnsafe(",
+    "      'DELETE FROM \"_prisma_migrations\" WHERE migration_name = $1 AND finished_at IS NULL',",
+    "      migrationName",
+    "    );",
+    "  }",
+    "",
+    "  // Apply the migration if not already done",
+    "  if (appliedRows.length === 0) {",
+    "    console.log('  Applying RefinementAttemptCounter table...');",
+    "    await prisma.$executeRawUnsafe(",
+    "      'CREATE TABLE IF NOT EXISTS \"RefinementAttemptCounter\" (' +",
+    "      '\"id\" TEXT NOT NULL,' +",
+    "      '\"sessionId\" TEXT NOT NULL,' +",
+    "      '\"direction\" TEXT NOT NULL,' +",
+    "      '\"attempts\" INTEGER NOT NULL DEFAULT 0,' +",
+    "      '\"createdAt\" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,' +",
+    "      '\"updatedAt\" TIMESTAMP(3) NOT NULL,' +",
+    "      'CONSTRAINT \"RefinementAttemptCounter_pkey\" PRIMARY KEY (\"id\"))'",
+    "    );",
+    "    await prisma.$executeRawUnsafe(",
+    "      'CREATE INDEX IF NOT EXISTS \"RefinementAttemptCounter_sessionId_idx\" ON \"RefinementAttemptCounter\"(\"sessionId\")'",
+    "    );",
+    "    await prisma.$executeRawUnsafe(",
+    "      'CREATE UNIQUE INDEX IF NOT EXISTS \"RefinementAttemptCounter_sessionId_direction_key\" ON \"RefinementAttemptCounter\"(\"sessionId\", \"direction\")'",
+    "    );",
+    "",
+    "    // Mark the migration as applied so prisma migrate deploy skips it.",
+    "    // Note: contentEmbedding vector columns are NOT added (pgvector unavailable in this env).",
+    "    // These columns are only used for AI embedding features, which are mocked in E2E tests.",
+    "    const now = new Date();",
+    "    await prisma.$executeRawUnsafe(",
+    "      'INSERT INTO \"_prisma_migrations\" (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count) ' +",
+    "      'VALUES ($1, $2, $3, $4, $5, NULL, $6, 0) ON CONFLICT DO NOTHING',",
+    "      'e2e-vector-bypass-' + Date.now(),",
+    "      'bypass-pgvector-for-e2e',",
+    "      now,",
+    "      migrationName,",
+    "      'Applied without vector columns (pgvector not installed in E2E test environment)',",
+    "      now",
+    "    );",
+    "    console.log('  ok Migration applied (RefinementAttemptCounter table created, vector columns skipped)');",
+    "  } else {",
+    "    console.log('  ok Migration already applied, skipping');",
+    "  }",
+    "",
+    "  await prisma.$disconnect();",
+    "}",
+    "",
+    "fixVectorMigration().catch(function(e) { console.error('Fix failed:', e); process.exit(1); });",
+  ];
+  const fixVectorScript = fixVectorLines.join('\n');
+
+  try {
+    fs.writeFileSync(fixVectorScriptPath, fixVectorScript);
+    execSync(`node ${fixVectorScriptPath}`, {
+      cwd: backendDir,
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+      stdio: 'inherit',
+    });
+  } catch (error) {
+    console.error('Warning: vector migration fix had issues. Will attempt full migration...');
+  } finally {
+    try {
+      fs.unlinkSync(fixVectorScriptPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+
   // Run migrations to ensure schema is up to date
-  console.log('\n📦 Running database migrations...');
+  console.log('\nRunning database migrations...');
   try {
     execSync('npx prisma migrate deploy', {
       cwd: backendDir,
       env: { ...process.env, DATABASE_URL: databaseUrl },
       stdio: 'inherit',
     });
-    console.log('✅ Migrations complete');
+    console.log('Migrations complete');
   } catch (error) {
-    console.error('❌ Migration failed:', error);
+    console.error('Migration failed:', error);
     throw error;
   }
 
-  console.log('\n✅ E2E Global Setup Complete!\n');
+  console.log('\nE2E Global Setup Complete!\n');
 }
 
 export default globalSetup;

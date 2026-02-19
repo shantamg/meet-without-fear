@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 Session Reliability** — Phases 1-7 (shipped 2026-02-15)
-- 🚧 **v1.1 Full Session Completion** — Phases 8-13 (in progress)
+- ✅ **v1.1 Full Session Completion** — Phases 8-13 (completed 2026-02-19)
 
 ## Phases
 
@@ -22,7 +22,7 @@ See: `milestones/v1.0-ROADMAP.md` for full details.
 
 </details>
 
-### 🚧 v1.1 Full Session Completion (In Progress)
+### ✅ v1.1 Full Session Completion (Completed 2026-02-19)
 
 **Milestone Goal:** All reconciler patterns (NO_GAPS, OFFER_OPTIONAL, OFFER_SHARING, refinement) work correctly for both users with visual proof, plus Stage 3-4 reliability — so both users can complete an entire session end-to-end.
 
@@ -112,13 +112,13 @@ Plans:
   1. Two-browser E2E test completes full session (Stage 0 → Stage 4) for both users
   2. E2E tests pass for all reconciler edge cases (OFFER_OPTIONAL, OFFER_SHARING)
   3. Test suite runs reliably without flakiness (3 consecutive passes)
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [x] 13-01-PLAN.md -- Extend full-flow test to cover Stages 0-4 (E2E-01)
 - [x] 13-02-PLAN.md -- Verify reconciler edge case tests pass reliably (E2E-02) [deferred: stability issues]
-- [ ] 13-03-PLAN.md -- Fix test helper timing issues and verify full-flow test (E2E-01, gap closure)
-- [ ] 13-04-PLAN.md -- Stabilize reconciler E2E tests and complete visual baselines (E2E-02, gap closure)
+- [x] 13-03-PLAN.md -- Fix test helper timing issues and verify full-flow test (E2E-01, gap closure)
+- [x] 13-04-PLAN.md -- Stabilize reconciler E2E tests and complete visual baselines (E2E-02, gap closure)
 
 ## Progress
 
@@ -139,8 +139,8 @@ Phases execute in numeric order: 8 → 9 → 10 → 11 → 12 → 13
 | 10. Stage 3 Needs      | v1.1      | Complete    | 2026-02-17 | -          |
 | 11. Stage 4 Strategies | v1.1      | Complete    | 2026-02-17 | -          |
 | 12. Visual Baselines   | v1.1      | Complete    | 2026-02-18 | -          |
-| 13. Full Session E2E   | 3/4 | In Progress|  | -          |
+| 13. Full Session E2E   | v1.1      | 4/4            | Complete     | 2026-02-19 |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-15 (v1.1 phases added)*
+*Last updated: 2026-02-19 (v1.1 milestone complete)*
