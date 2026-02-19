@@ -24,8 +24,8 @@ Requirements for Full Session Completion milestone. Each maps to roadmap phases.
 
 - [ ] **RECON-VIS-01**: Playwright screenshots capture share suggestion panel for both users
 - [ ] **RECON-VIS-02**: Playwright screenshots capture refinement prompt state for both users
-- [ ] **RECON-VIS-03**: Playwright screenshots capture validation buttons (post-reconciler) for both users
-- [ ] **RECON-VIS-04**: Playwright screenshots capture empathy reveal state for both users
+- [x] **RECON-VIS-03**: Playwright screenshots capture validation buttons (post-reconciler) for both users
+- [x] **RECON-VIS-04**: Playwright screenshots capture empathy reveal state for both users
 
 ### Stage 3 (Needs)
 
@@ -44,9 +44,9 @@ Requirements for Full Session Completion milestone. Each maps to roadmap phases.
 
 ### End-to-End Verification
 
-- [ ] **E2E-01**: Full two-browser E2E test passes from session start through Stage 4 completion for both users
+- [x] **E2E-01**: Full two-browser E2E test passes from session start through Stage 4 completion for both users
 - [ ] **E2E-02**: Reconciler edge case E2E tests pass for OFFER_OPTIONAL and OFFER_SHARING paths
-- [ ] **E2E-03**: Visual regression baselines established with toHaveScreenshot() assertions
+- [x] **E2E-03**: Visual regression baselines established with toHaveScreenshot() assertions
 
 ## v2 Requirements
 
@@ -101,10 +101,10 @@ Deferred to future milestone. Tracked but not in current roadmap.
 | STRAT-03 | Phase 11 | Complete |
 | STRAT-04 | Phase 11 | Complete |
 | STRAT-05 | Phase 11 | Complete |
-| RECON-VIS-03 | Phase 12 | Pending |
-| RECON-VIS-04 | Phase 12 | Pending |
-| E2E-03 | Phase 12 | Pending |
-| E2E-01 | Phase 13 | Pending |
+| RECON-VIS-03 | Phase 12 | Complete |
+| RECON-VIS-04 | Phase 12 | Complete |
+| E2E-03 | Phase 12 | Complete |
+| E2E-01 | Phase 13 | Complete |
 | E2E-02 | Phase 13 | Pending |
 
 **Coverage:**
