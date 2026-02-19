@@ -47,9 +47,15 @@
         user = "mwf_user";
         pass = "mwf_password";
       }
+      {
+        name = "peter_app";
+        user = "lovely_mind_user";
+        pass = "lovely_mind_password";
+      }
     ];
     initialScript = ''
       ALTER USER mwf_user LOGIN CREATEDB;
+      ALTER USER lovely_mind_user LOGIN CREATEDB;
       CREATE EXTENSION IF NOT EXISTS vector;
     '';
   };
