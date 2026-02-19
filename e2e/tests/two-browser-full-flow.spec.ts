@@ -453,6 +453,49 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     });
 
     // ==========================================
+    // === STAGE 3 → STAGE 4 TRANSITION ===
+    // ==========================================
+    // CRITICAL: Both users must confirm all common ground items AND call stages/advance
+    // to advance from Stage 3 to Stage 4. Without this, proposeStrategy returns 400
+    // "Cannot propose strategy: you are in stage 3, but stage 4 is required".
+
+    // Get common ground IDs for both users (use apiA since it's a shared vessel)
+    const finalCgResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground`);
+    const finalCgData = await finalCgResponse.json();
+    const commonGroundItems = finalCgData.data?.commonGround || [];
+    const commonGroundIds = commonGroundItems.map((cg: { id: string }) => cg.id);
+
+    if (commonGroundIds.length > 0) {
+      // Both users confirm all common ground items
+      await Promise.all([
+        apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground/confirm`, {
+          commonGroundIds,
+        }),
+        apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground/confirm`, {
+          commonGroundIds,
+        }),
+      ]);
+    }
+
+    // Allow stage confirmation to process
+    await harness.userAPage.waitForTimeout(1000);
+
+    // Both users advance from Stage 3 to Stage 4
+    const advanceResponseA = await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
+    const advanceDataA = await advanceResponseA.json();
+
+    // If User A is blocked (partner not ready), advance User B first
+    if (!advanceDataA.data?.advanced && advanceDataA.data?.blockedReason === 'PARTNER_NOT_READY') {
+      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
+      await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
+    } else {
+      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
+    }
+
+    // Allow stage advancement to propagate
+    await harness.userAPage.waitForTimeout(1000);
+
+    // ==========================================
     // === STAGE 4: STRATEGIES & AGREEMENT ===
     // ==========================================
 
