@@ -33,6 +33,7 @@ const PRICING = {
   'anthropic.claude-3-5-sonnet-20241022-v2:0': { input: 0.003, output: 0.015 },
   'anthropic.claude-3-5-haiku-20241022-v1:0': { input: 0.001, output: 0.005 },
   'amazon.titan-embed-text-v2:0': { input: 0.00002, output: 0.0 },
+  'moonshotai.kimi-k2.5': { input: 0.002, output: 0.01 },
   // Aliases
   'claude-3-5-sonnet': { input: 0.003, output: 0.015 },
   'claude-3-5-haiku': { input: 0.001, output: 0.005 },
@@ -149,15 +150,22 @@ function logResponseToFile(promptFilepath: string | null, response: string | nul
 // Configuration - Two Model Stratification
 // ============================================================================
 
+// Flip to true to test Kimi K2.5 instead of Anthropic models.
+// When enabled, both haiku and sonnet calls route to Kimi.
+export const USE_KIMI = false;
+const KIMI_MODEL_ID = 'moonshotai.kimi-k2.5';
+
 // Haiku: Fast model for mechanics (retrieval planning, classification, detection)
 // ~3x faster and cheaper than Sonnet, good for structured JSON output
-export const BEDROCK_HAIKU_MODEL_ID =
-  process.env.BEDROCK_HAIKU_MODEL_ID || 'anthropic.claude-3-5-haiku-20241022-v1:0';
+export const BEDROCK_HAIKU_MODEL_ID = USE_KIMI
+  ? KIMI_MODEL_ID
+  : (process.env.BEDROCK_HAIKU_MODEL_ID || 'anthropic.claude-3-5-haiku-20241022-v1:0');
 
 // Sonnet: Empathetic model for user-facing responses
 // Better at nuance, empathy, and natural conversation
-export const BEDROCK_SONNET_MODEL_ID =
-  process.env.BEDROCK_SONNET_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
+export const BEDROCK_SONNET_MODEL_ID = USE_KIMI
+  ? KIMI_MODEL_ID
+  : (process.env.BEDROCK_SONNET_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0');
 
 // Titan: Embedding model for semantic search
 // Outputs 1536-dimensional vectors for similarity matching
@@ -340,8 +348,8 @@ export async function getCompletion(options: CompletionOptions): Promise<string 
     inferenceConfig,
   };
 
-  // Add thinking budget if specified
-  if (thinkingBudget) {
+  // Add thinking budget if specified (not supported by Kimi)
+  if (thinkingBudget && !USE_KIMI) {
     commandInput.additionalModelRequestFields = {
       thinking: {
         type: 'enabled',
@@ -421,8 +429,8 @@ export async function getModelCompletion(
     inferenceConfig,
   };
 
-  // Add thinking budget if specified (Sonnet only)
-  if (thinkingBudget && model === 'sonnet') {
+  // Add thinking budget if specified (Sonnet only, not supported by Kimi)
+  if (thinkingBudget && model === 'sonnet' && !USE_KIMI) {
     commandInput.additionalModelRequestFields = {
       thinking: {
         type: 'enabled',
@@ -768,9 +776,9 @@ export async function* getSonnetStreamingResponse(
   const system: SystemContentBlock[] = [{ text: systemPrompt }];
   const inferenceConfig: InferenceConfiguration = { maxTokens };
 
-  // Build tool configuration if tools are provided
+  // Build tool configuration if tools are provided (not supported by Kimi)
   let toolConfig: ToolConfiguration | undefined;
-  if (tools && tools.length > 0) {
+  if (tools && tools.length > 0 && !USE_KIMI) {
     toolConfig = { tools };
   }
 
