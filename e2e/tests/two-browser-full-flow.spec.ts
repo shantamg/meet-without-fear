@@ -1,7 +1,7 @@
 /**
  * Full Partner Journey E2E Test
  *
- * Tests the complete two-user partner journey from Stages 0-2 and Stage 3 entry.
+ * Tests the complete two-user partner journey from Stages 0-4 (complete session).
  * This is the final verification that both users can reliably complete the full
  * partner session together.
  *
@@ -9,15 +9,18 @@
  * - Both users complete Stage 0 (compact signing)
  * - Both users complete Stage 1 (witnessing + feel-heard)
  * - Both users complete Stage 2 (empathy drafting + sharing + reconciler)
- * - Both users enter Stage 3 (chat continues)
+ * - Both users complete Stage 3 (needs extraction + common ground)
+ * - Both users complete Stage 4 (strategies + ranking + agreement)
+ * - Session marked complete after agreement confirmation
  * - Test passes 3 consecutive runs without flakiness
  *
- * This test composes the proven patterns from two-browser-stage-2.spec.ts into a
+ * This test composes the proven patterns from two-browser-stage-2.spec.ts,
+ * two-browser-stage-3.spec.ts, and two-browser-stage-4.spec.ts into a
  * dedicated full-flow test focused on the "proof" use case for milestone validation.
  */
 
-import { test, expect, devices } from '@playwright/test';
-import { TwoBrowserHarness } from '../helpers';
+import { test, expect, devices, APIRequestContext } from '@playwright/test';
+import { TwoBrowserHarness, getE2EHeaders } from '../helpers';
 import {
   signCompact,
   handleMoodCheck,
@@ -31,7 +34,27 @@ import {
 // Use iPhone 12 viewport
 test.use(devices['iPhone 12']);
 
-test.describe('Full Partner Journey: Stages 0-3', () => {
+// API base URL for Stage 3-4 operations
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
+
+/**
+ * Helper to make authenticated API requests for a specific user
+ */
+function makeApiRequest(
+  request: APIRequestContext,
+  userEmail: string,
+  userId: string,
+  fixtureId?: string
+) {
+  const headers = getE2EHeaders(userEmail, userId, fixtureId);
+
+  return {
+    get: (url: string) => request.get(url, { headers }),
+    post: (url: string, data?: object) => request.post(url, { headers, data }),
+  };
+}
+
+test.describe('Full Partner Journey: Stages 0-4', () => {
   let harness: TwoBrowserHarness;
 
   test.beforeEach(async ({ browser, request }) => {
@@ -63,7 +86,7 @@ test.describe('Full Partner Journey: Stages 0-3', () => {
     await harness.teardown();
   });
 
-  test('both users complete Stages 0-2 and enter Stage 3', async ({ browser, request }) => {
+  test('both users complete full session: Stages 0-4', async ({ browser, request }) => {
     test.setTimeout(900000); // 15 minutes - Stage 2 requires 13 AI interactions
 
     // ==========================================
@@ -226,6 +249,20 @@ test.describe('Full Partner Journey: Stages 0-3', () => {
     // === STAGE 3: VERIFY SHARE PAGE ===
     // ==========================================
 
+    // Create API helpers for both users (needed for empathy validation and Stage 3-4 ops)
+    const apiA = makeApiRequest(
+      request,
+      harness.config.userA.email,
+      harness.userAId,
+      harness.config.userA.fixtureId
+    );
+    const apiB = makeApiRequest(
+      request,
+      harness.config.userB.email,
+      harness.userBId,
+      harness.config.userB.fixtureId
+    );
+
     // Navigate both users to Share tab to verify empathy is displayed
     await navigateToShareFromSession(harness.userAPage);
     await navigateToShareFromSession(harness.userBPage);
@@ -247,9 +284,24 @@ test.describe('Full Partner Journey: Stages 0-3', () => {
     await expect(harness.userBPage.locator('[data-testid$="-validate-partial"]')).toBeVisible({ timeout: 5000 });
     await expect(harness.userBPage.locator('[data-testid$="-validate-inaccurate"]')).toBeVisible({ timeout: 5000 });
 
-    // Take screenshots of Share page with empathy and validation buttons
-    await harness.userAPage.screenshot({ path: 'test-results/full-flow-share-a.png' });
-    await harness.userBPage.screenshot({ path: 'test-results/full-flow-share-b.png' });
+    // ==========================================
+    // === STAGE 2 → STAGE 3 TRANSITION ===
+    // ==========================================
+    // CRITICAL: Both users must validate each other's empathy to trigger the
+    // Stage 3 (Need Mapping) transition. Without this, Stage 3 never begins
+    // and the needs extraction API returns empty data.
+
+    await Promise.all([
+      apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/empathy/validate`, {
+        validated: true,
+      }),
+      apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/empathy/validate`, {
+        validated: true,
+      }),
+    ]);
+
+    // Allow time for stage transition processing (backend creates Stage 3 progress records)
+    await harness.userAPage.waitForTimeout(2000);
 
     // ==========================================
     // === STAGE 3: VERIFY CHAT CONTINUES ===
@@ -267,9 +319,288 @@ test.describe('Full Partner Journey: Stages 0-3', () => {
     await expect(harness.userAPage.getByTestId('chat-input')).toBeVisible({ timeout: 5000 });
     await expect(harness.userBPage.getByTestId('chat-input')).toBeVisible({ timeout: 5000 });
 
-    // Take final screenshots
-    await harness.userAPage.screenshot({ path: 'test-results/full-flow-final-a.png' });
-    await harness.userBPage.screenshot({ path: 'test-results/full-flow-final-b.png' });
+    // Take screenshots after Stage 2 completion
+    await expect(harness.userAPage).toHaveScreenshot('full-flow-01-stage2-complete-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(harness.userBPage).toHaveScreenshot('full-flow-02-stage2-complete-user-b.png', {
+      maxDiffPixels: 100,
+    });
+
+    // ==========================================
+    // === STAGE 3: NEEDS EXTRACTION ===
+    // ==========================================
+
+    // Trigger needs extraction for both users
+    await Promise.all([
+      apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`),
+      apiB.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`),
+    ]);
+
+    // Wait for extraction to complete
+    await harness.userAPage.waitForTimeout(2000);
+
+    // Reload both pages to show needs review UI
+    await Promise.all([
+      harness.userAPage.reload(),
+      harness.userBPage.reload(),
+    ]);
+
+    await Promise.all([
+      harness.userAPage.waitForLoadState('networkidle'),
+      harness.userBPage.waitForLoadState('networkidle'),
+    ]);
+
+    // Handle mood check after reload
+    await handleMoodCheck(harness.userAPage);
+    await handleMoodCheck(harness.userBPage);
+
+    // Wait for "Confirm my needs" text to be visible
+    await expect(harness.userAPage.getByText('Confirm my needs')).toBeVisible({ timeout: 30000 });
+    await expect(harness.userBPage.getByText('Confirm my needs')).toBeVisible({ timeout: 30000 });
+
+    // Screenshot needs review state
+    await expect(harness.userAPage).toHaveScreenshot('full-flow-03-needs-review-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(harness.userBPage).toHaveScreenshot('full-flow-04-needs-review-user-b.png', {
+      maxDiffPixels: 100,
+    });
+
+    // Get needs for both users
+    const needsResponseA = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`);
+    const needsDataA = await needsResponseA.json();
+    const needsA = needsDataA.data?.needs || [];
+
+    const needsResponseB = await apiB.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`);
+    const needsDataB = await needsResponseB.json();
+    const needsB = needsDataB.data?.needs || [];
+
+    // Confirm needs for both users
+    if (needsA.length > 0) {
+      const needIdsA = needsA.map((n: { id: string }) => n.id);
+      await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/confirm`, {
+        needIds: needIdsA,
+      });
+    }
+
+    if (needsB.length > 0) {
+      const needIdsB = needsB.map((n: { id: string }) => n.id);
+      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/confirm`, {
+        needIds: needIdsB,
+      });
+    }
+
+    // Consent to share needs for both users
+    if (needsA.length > 0) {
+      await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/consent`, {
+        needIds: needsA.map((n: { id: string }) => n.id),
+      });
+    }
+
+    if (needsB.length > 0) {
+      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/consent`, {
+        needIds: needsB.map((n: { id: string }) => n.id),
+      });
+    }
+
+    // Poll common ground endpoint until commonGround.length > 0
+    let commonGroundComplete = false;
+    const cgDeadline = Date.now() + 30000; // 30s timeout
+    let cgAttempts = 0;
+
+    while (Date.now() < cgDeadline && !commonGroundComplete) {
+      cgAttempts++;
+      const cgResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground`);
+      const cgData = await cgResponse.json();
+
+      if (cgData.data?.commonGround && cgData.data.commonGround.length > 0) {
+        commonGroundComplete = true;
+      } else {
+        await harness.userAPage.waitForTimeout(2000);
+      }
+    }
+
+    if (!commonGroundComplete) {
+      throw new Error('Common ground analysis did not complete within 30s');
+    }
+
+    // Reload both pages to show common ground UI
+    await Promise.all([
+      harness.userAPage.reload(),
+      harness.userBPage.reload(),
+    ]);
+
+    await Promise.all([
+      harness.userAPage.waitForLoadState('networkidle'),
+      harness.userBPage.waitForLoadState('networkidle'),
+    ]);
+
+    // Handle mood check after reload
+    await handleMoodCheck(harness.userAPage);
+    await handleMoodCheck(harness.userBPage);
+
+    // Verify "Shared Needs Discovered" text visible
+    await expect(harness.userAPage.getByText(/Shared Needs Discovered/i)).toBeVisible({ timeout: 10000 });
+    await expect(harness.userBPage.getByText(/Shared Needs Discovered/i)).toBeVisible({ timeout: 10000 });
+
+    // Screenshot common ground state
+    await expect(harness.userAPage).toHaveScreenshot('full-flow-05-common-ground-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(harness.userBPage).toHaveScreenshot('full-flow-06-common-ground-user-b.png', {
+      maxDiffPixels: 100,
+    });
+
+    // ==========================================
+    // === STAGE 4: STRATEGIES & AGREEMENT ===
+    // ==========================================
+
+    // Propose strategies via API - User A proposes 2, User B proposes 1 (3 total)
+    await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies`, {
+      description: 'Have a 10-minute phone-free conversation at dinner each day',
+      needsAddressed: ['Connection', 'Recognition'],
+    });
+
+    await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies`, {
+      description: 'Use a pause signal when conversations get heated',
+      needsAddressed: ['Safety', 'Connection'],
+    });
+
+    await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies`, {
+      description: 'Say one specific thing I appreciate each morning',
+      needsAddressed: ['Recognition'],
+    });
+
+    // Verify 3 strategies via GET endpoint
+    const strategiesResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies`);
+    const strategiesData = await strategiesResponse.json();
+    const strategies = strategiesData.data?.strategies || [];
+    expect(strategies.length).toBe(3);
+
+    // Reload pages to show strategy pool
+    await Promise.all([
+      harness.userAPage.reload(),
+      harness.userBPage.reload(),
+    ]);
+
+    await Promise.all([
+      harness.userAPage.waitForLoadState('networkidle'),
+      harness.userBPage.waitForLoadState('networkidle'),
+    ]);
+
+    // Handle mood check after reload
+    await handleMoodCheck(harness.userAPage);
+    await handleMoodCheck(harness.userBPage);
+
+    // Screenshot strategy pool
+    await expect(harness.userAPage).toHaveScreenshot('full-flow-07-strategy-pool-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(harness.userBPage).toHaveScreenshot('full-flow-08-strategy-pool-user-b.png', {
+      maxDiffPixels: 100,
+    });
+
+    // Mark both users ready via POST /strategies/ready
+    await Promise.all([
+      apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies/ready`),
+      apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies/ready`),
+    ]);
+
+    // Get strategy IDs from GET endpoint
+    const strategy1 = strategies[0];
+    const strategy2 = strategies[1];
+    const strategy3 = strategies[2];
+
+    // Submit rankings for both users - both rank strategy1 first for guaranteed overlap
+    await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies/rank`, {
+      rankedIds: [strategy1.id, strategy2.id, strategy3.id],
+    });
+
+    const rankBResponse = await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies/rank`, {
+      rankedIds: [strategy1.id, strategy3.id, strategy2.id],
+    });
+    const rankBData = await rankBResponse.json();
+
+    // Verify canReveal: true from User B's ranking response
+    expect(rankBData.data?.canReveal).toBe(true);
+
+    // Get overlap via GET /strategies/overlap
+    const overlapResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies/overlap`);
+    const overlapData = await overlapResponse.json();
+    const overlapStrategies = overlapData.data?.overlap || [];
+
+    // Verify at least 1 overlap strategy
+    expect(overlapStrategies.length).toBeGreaterThanOrEqual(1);
+
+    // Reload pages to show overlap
+    await Promise.all([
+      harness.userAPage.reload(),
+      harness.userBPage.reload(),
+    ]);
+
+    await Promise.all([
+      harness.userAPage.waitForLoadState('networkidle'),
+      harness.userBPage.waitForLoadState('networkidle'),
+    ]);
+
+    // Handle mood check after reload
+    await handleMoodCheck(harness.userAPage);
+    await handleMoodCheck(harness.userBPage);
+
+    // Screenshot overlap reveal
+    await expect(harness.userAPage).toHaveScreenshot('full-flow-09-overlap-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(harness.userBPage).toHaveScreenshot('full-flow-10-overlap-user-b.png', {
+      maxDiffPixels: 100,
+    });
+
+    // Create agreement via POST /agreements using first overlap strategy
+    const followUpDate = new Date();
+    followUpDate.setDate(followUpDate.getDate() + 7); // 7 days from now
+
+    const agreementResponse = await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/agreements`, {
+      strategyId: overlapStrategies[0].id,
+      description: overlapStrategies[0].description,
+      type: 'MICRO_EXPERIMENT',
+      followUpDate: followUpDate.toISOString(),
+    });
+    const agreementData = await agreementResponse.json();
+    const agreementId = agreementData.data?.agreement?.id;
+
+    // Confirm agreement via POST /agreements/{agreementId}/confirm as User B
+    const confirmResponse = await apiB.post(
+      `${API_BASE_URL}/api/sessions/${harness.sessionId}/agreements/${agreementId}/confirm`,
+      { confirmed: true }
+    );
+    const confirmData = await confirmResponse.json();
+
+    // Verify sessionComplete: true
+    expect(confirmData.data?.sessionComplete).toBe(true);
+
+    // Reload pages to show final agreement state
+    await Promise.all([
+      harness.userAPage.reload(),
+      harness.userBPage.reload(),
+    ]);
+
+    await Promise.all([
+      harness.userAPage.waitForLoadState('networkidle'),
+      harness.userBPage.waitForLoadState('networkidle'),
+    ]);
+
+    // Handle mood check after reload
+    await handleMoodCheck(harness.userAPage);
+    await handleMoodCheck(harness.userBPage);
+
+    // Screenshot final agreement state
+    await expect(harness.userAPage).toHaveScreenshot('full-flow-11-agreement-user-a.png', {
+      maxDiffPixels: 100,
+    });
+    await expect(harness.userBPage).toHaveScreenshot('full-flow-12-agreement-user-b.png', {
+      maxDiffPixels: 100,
+    });
 
     // ==========================================
     // SUCCESS: Full partner journey complete
@@ -277,6 +608,8 @@ test.describe('Full Partner Journey: Stages 0-3', () => {
     // - Both users completed Stage 0 (compact signing)
     // - Both users completed Stage 1 (witnessing + feel-heard)
     // - Both users completed Stage 2 (empathy drafting + sharing + reconciler)
-    // - Both users entered Stage 3 (chat input visible)
+    // - Both users completed Stage 3 (needs extraction + common ground)
+    // - Both users completed Stage 4 (strategies + ranking + agreement)
+    // - Session marked complete (sessionComplete: true)
   });
 });
