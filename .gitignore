@@ -125,3 +125,8 @@ backend/src/fix-*.ts
 # Playwright E2E testing artifacts
 e2e/playwright-report/
 e2e/test-results/test-results/
+
+# Test results (all workspaces)
+test-results/
+backend/test-results/
+mobile/test-results/
