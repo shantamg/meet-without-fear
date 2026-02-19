@@ -74,7 +74,7 @@ export async function handleMoodCheck(page: Page, timeout = 5000): Promise<void>
   const moodContinue = page.getByTestId('mood-check-continue-button');
   if (await moodContinue.isVisible({ timeout }).catch(() => false)) {
     await moodContinue.click();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   }
 }
 
@@ -99,7 +99,7 @@ export async function navigateToSession(
     'e2e-user-email': userEmail,
   });
   await page.goto(`${appBaseUrl}/session/${sessionId}?${params.toString()}`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 }
 
 /**
@@ -159,7 +159,7 @@ export async function navigateToShareFromSession(
   await handleMoodCheck(page, 2000);
 
   await page.waitForURL(/\/session\/.*\/share/, { timeout });
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 }
 
 /**
@@ -181,6 +181,12 @@ export async function signCompact(page: Page, timeout = 10000): Promise<void> {
  * Waits for the backend API request to complete to ensure stage transition
  * has propagated before subsequent messages are sent.
  *
+ * Uses a retry loop to handle the case where the button is visible but not yet
+ * interactive: the FeelHeardConfirmation panel is inside an Animated.View with
+ * pointer-events: none while the typewriter animation is running (~3-5s for
+ * typical AI responses). The click is retried with force:true every 2s until
+ * the API call succeeds.
+ *
  * @param page - Playwright Page instance
  * @param timeout - Maximum time to wait for feel heard buttons (default: 5000)
  */
@@ -188,20 +194,43 @@ export async function confirmFeelHeard(page: Page, timeout = 5000): Promise<void
   const feelHeardYes = page.getByTestId('feel-heard-yes');
   await expect(feelHeardYes).toBeVisible({ timeout });
 
-  // IMPORTANT: Set up response listener BEFORE clicking to avoid race condition.
-  // The response listener must be registered before the click triggers the API call,
-  // otherwise fast responses can complete before the listener is ready.
-  const responsePromise = page.waitForResponse(
-    response => response.url().includes('/sessions/') && response.url().includes('/feel-heard'),
-    { timeout: 15000 }
-  );
+  // Retry clicking until the API response is received.
+  // The FeelHeardConfirmation panel is inside an Animated.View that has pointer-events: none
+  // while the typewriter animation is running. We use force:true to bypass the hit-test
+  // interceptor and directly dispatch the click event. The React handler fires when the
+  // pointer-events become 'auto' (typewriter finishes). We retry every 2s for up to 30s.
+  const maxRetries = 15;
+  let responseReceived = false;
 
-  await feelHeardYes.click();
+  for (let i = 0; i < maxRetries && !responseReceived; i++) {
+    // Register response listener BEFORE click to avoid missing fast responses.
+    const responsePromise = page.waitForResponse(
+      response => response.url().includes('/sessions/') && response.url().includes('/feel-heard'),
+      { timeout: 3000 }
+    ).then(() => {
+      responseReceived = true;
+    }).catch(() => {
+      // Timeout - will retry after brief wait
+    });
 
-  // Wait for backend to complete the stage transition
-  await responsePromise;
+    // Use force:true to bypass pointer-events: none interceptor check.
+    // This dispatches the click event directly to the element. When the element is
+    // blocked by pointer-events: none on an ancestor, the event may not propagate
+    // to React, so we retry until the API call succeeds.
+    await feelHeardYes.click({ force: true });
+    await responsePromise;
 
-  // Wait for the button to disappear (UI reflects stage change)
+    if (!responseReceived && i < maxRetries - 1) {
+      // Wait before retrying to allow typewriter animation to progress
+      await page.waitForTimeout(2000);
+    }
+  }
+
+  if (!responseReceived) {
+    throw new Error('confirmFeelHeard: API response not received after 15 retries (pointer-events may be stuck)');
+  }
+
+  // Wait for the button to disappear (UI reflects stage change via optimistic update)
   await expect(feelHeardYes).not.toBeVisible({ timeout: 10000 });
 
   // Additional delay to ensure React state updates propagate fully
@@ -218,25 +247,13 @@ export async function confirmFeelHeard(page: Page, timeout = 5000): Promise<void
  * @param timeout - Maximum time to wait in milliseconds (default: 60000)
  */
 export async function waitForAnyAIResponse(page: Page, timeout = 60000): Promise<void> {
-  // Count current AI messages
-  const initialCount = await page.locator('[data-testid^="ai-message-"]').count();
-
-  // Poll until a new AI message appears
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    const currentCount = await page.locator('[data-testid^="ai-message-"]').count();
-    if (currentCount > initialCount) {
-      break;
-    }
-    await page.waitForTimeout(200);
-  }
-
-  // Ensure typing indicator is gone (streaming fully complete)
   const typingIndicator = page.getByTestId('typing-indicator');
-  await typingIndicator.waitFor({ state: 'hidden', timeout: Math.max(deadline - Date.now(), 5000) }).catch(() => {});
 
-  // Small buffer for React rendering
-  await page.waitForTimeout(100);
+  // Wait for typing indicator to appear (AI started processing)
+  await typingIndicator.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+
+  // Wait for typing indicator to disappear (streaming complete)
+  await typingIndicator.waitFor({ state: 'hidden', timeout });
 }
 
 /**
@@ -283,20 +300,13 @@ export async function sendAndWaitForPanel(
  * @returns Promise resolving to true if indicator appears, false if timeout
  */
 export async function waitForReconcilerComplete(page: Page, timeout = 30000): Promise<boolean> {
-  const deadline = Date.now() + timeout;
-
-  while (Date.now() < deadline) {
-    const indicator = page.getByTestId('chat-indicator-empathy-shared');
-    const isVisible = await indicator.isVisible({ timeout: 1000 }).catch(() => false);
-
-    if (isVisible) {
-      return true;
-    }
-
-    await page.waitForTimeout(500);
+  const indicator = page.getByTestId('chat-indicator-empathy-shared');
+  try {
+    await indicator.waitFor({ state: 'visible', timeout });
+    return true;
+  } catch {
+    return false;
   }
-
-  return false;
 }
 
 /**
@@ -323,5 +333,5 @@ export async function navigateBackToChat(page: Page, timeout = 10000): Promise<v
 
   // Wait for URL to match session chat pattern (not /share)
   await page.waitForURL(/\/session\/[^/]+$/, { timeout });
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 }

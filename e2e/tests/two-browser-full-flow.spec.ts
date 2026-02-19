@@ -205,11 +205,12 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     // --- User A shares ---
     const empathyReviewButton = harness.userAPage.getByTestId('empathy-review-button');
     await expect(empathyReviewButton).toBeVisible({ timeout: 5000 });
-    await empathyReviewButton.click();
+    // Use JS click to bypass pointer-events: none from typewriter animation wrapper
+    await empathyReviewButton.evaluate((el: HTMLElement) => el.click());
 
     const shareEmpathyButton = harness.userAPage.getByTestId('share-empathy-button');
     await expect(shareEmpathyButton).toBeVisible({ timeout: 5000 });
-    await shareEmpathyButton.click();
+    await shareEmpathyButton.evaluate((el: HTMLElement) => el.click());
 
     // Wait for Ably event delivery (User A's share triggers transition message to User B)
     await harness.userAPage.waitForTimeout(2000);
@@ -217,11 +218,11 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     // --- User B shares (triggers reconciler) ---
     const empathyReviewButtonB = harness.userBPage.getByTestId('empathy-review-button');
     await expect(empathyReviewButtonB).toBeVisible({ timeout: 5000 });
-    await empathyReviewButtonB.click();
+    await empathyReviewButtonB.evaluate((el: HTMLElement) => el.click());
 
     const shareEmpathyButtonB = harness.userBPage.getByTestId('share-empathy-button');
     await expect(shareEmpathyButtonB).toBeVisible({ timeout: 5000 });
-    await shareEmpathyButtonB.click();
+    await shareEmpathyButtonB.evaluate((el: HTMLElement) => el.click());
 
     // ==========================================
     // === RECONCILER COMPLETION ===

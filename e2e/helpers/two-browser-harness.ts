@@ -287,7 +287,7 @@ export async function waitForPartnerUpdate(
   // If not visible and reload is enabled, try again after reload
   if (reloadOnMiss) {
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Handle mood check that may appear after reload
     await handleMoodCheck(page);

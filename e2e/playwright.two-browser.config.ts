@@ -35,10 +35,10 @@ export default defineConfig({
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
     baseURL: 'http://localhost:8082',
-    screenshot: 'on',
-    video: 'on',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
     viewport: { width: 375, height: 667 },
-    trace: 'on',
+    trace: 'retain-on-failure',
   },
   projects: [
     {
@@ -55,7 +55,7 @@ export default defineConfig({
     {
       command: 'npm run dev:api',
       url: 'http://localhost:3000/health',
-      reuseExistingServer: false,
+      reuseExistingServer: !process.env.CI,
       cwd: '..',
       timeout: 60000,
       env: {
@@ -68,7 +68,7 @@ export default defineConfig({
     {
       command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082',
       url: 'http://localhost:8082',
-      reuseExistingServer: false,
+      reuseExistingServer: !process.env.CI,
       timeout: 180000,
     },
   ],
