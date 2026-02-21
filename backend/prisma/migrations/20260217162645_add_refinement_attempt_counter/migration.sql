@@ -1,8 +1,8 @@
--- AlterTable
-ALTER TABLE "InnerWorkSession" ADD COLUMN     "contentEmbedding" vector(1024);
+-- AlterTable (IF NOT EXISTS — column may already exist from manual migration)
+ALTER TABLE "InnerWorkSession" ADD COLUMN IF NOT EXISTS "contentEmbedding" vector(1024);
 
--- AlterTable
-ALTER TABLE "UserVessel" ADD COLUMN     "contentEmbedding" vector(1024);
+-- AlterTable (IF NOT EXISTS — column may already exist from manual migration)
+ALTER TABLE "UserVessel" ADD COLUMN IF NOT EXISTS "contentEmbedding" vector(1024);
 
 -- CreateTable
 CREATE TABLE "RefinementAttemptCounter" (
