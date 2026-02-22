@@ -11,13 +11,18 @@ const app = express();
 // Security middleware
 app.use(helmet());
 
-// CORS - allow dashboard domain when configured, restrict to localhost in dev
-const corsOrigins: (string | RegExp)[] = [];
+// CORS - allow website, mobile, and dashboard origins
+const corsOrigins: (string | RegExp)[] = [
+  // Website (invitation acceptance flow)
+  'https://meetwithoutfear.com',
+  'https://www.meetwithoutfear.com',
+  // Local development
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:5173',
+];
 if (process.env.DASHBOARD_URL) {
   corsOrigins.push(process.env.DASHBOARD_URL);
-} else {
-  // Default to localhost origins only — never allow '*' in production
-  corsOrigins.push('http://localhost:5173', 'http://localhost:3000');
 }
 app.use(cors({ origin: corsOrigins }));
 

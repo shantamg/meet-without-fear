@@ -1490,14 +1490,11 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
               // Buffer and wait for closing tag
               tagTrapBuffer = combined;
             } else {
-              // Process any buffered content + new text
+              // Process any buffered content + new text (extract draft/dispatch before stripping)
               const toProcess = combined;
               tagTrapBuffer = '';
 
-              // Strip any complete tags that might have formed
-              const cleanText = toProcess
-                .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
-                .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
+              const cleanText = processTagTrapBuffer(toProcess);
               sendCleanText(cleanText);
             }
           }
