@@ -1,14 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { api } from '../../services/api';
+import { STAGE_LABELS } from '../../utils/chart-constants';
 import type { CacheHeatmapCell } from '../../types/costs';
-
-const STAGE_LABELS: Record<number, string> = {
-  0: 'Pre-Session',
-  1: 'Feel Heard',
-  2: 'Perspective',
-  3: 'Needs',
-  4: 'Resolution',
-};
 
 function hitRateColor(rate: number): string {
   if (rate >= 90) return '#10b981';
@@ -110,8 +103,8 @@ export function CacheHeatmap({ period }: CacheHeatmapProps) {
 
           {/* Data rows */}
           {stages.map(stage => (
-            <>
-              <div key={`label-${stage}`} className="heatmap-row-label">
+            <Fragment key={stage}>
+              <div className="heatmap-row-label">
                 {STAGE_LABELS[stage] || `Stage ${stage}`}
               </div>
               {days.map(day => {
@@ -134,7 +127,7 @@ export function CacheHeatmap({ period }: CacheHeatmapProps) {
                   </div>
                 );
               })}
-            </>
+            </Fragment>
           ))}
         </div>
 

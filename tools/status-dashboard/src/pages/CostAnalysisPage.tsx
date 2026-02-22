@@ -7,6 +7,7 @@ import {
 import { useCostAnalytics } from '../hooks/useCostAnalytics';
 import { MetricCard } from '../components/metrics/MetricCard';
 import { exportSessionCostsToCSV } from '../utils/csvExport';
+import { MODEL_COLORS, formatCost } from '../utils/chart-constants';
 import { SavingsWaterfall } from '../components/charts/SavingsWaterfall';
 import { CacheHeatmap } from '../components/charts/CacheHeatmap';
 import { CostByStage } from '../components/charts/CostByStage';
@@ -16,16 +17,6 @@ import type { SessionCost } from '../types/costs';
 type Period = '24h' | '7d' | '30d';
 type SortKey = 'participants' | 'turns' | 'sonnetCost' | 'haikuCost' | 'totalCost';
 type SortDir = 'asc' | 'desc';
-
-const MODEL_COLORS = {
-  sonnet: '#3b82f6',
-  haiku: '#10b981',
-  titan: '#eab308',
-};
-
-function formatCost(value: number): string {
-  return `$${value.toFixed(4)}`;
-}
 
 function formatCostPrecise(value: number): string {
   return `$${value.toFixed(6)}`;

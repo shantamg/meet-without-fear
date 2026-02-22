@@ -13,7 +13,7 @@ interface MetadataPanelProps {
   contextWindow?: ContextWindow;
 }
 
-function formatCost(value: number): string {
+function formatCostPrecise(value: number): string {
   return `$${value.toFixed(5)}`;
 }
 
@@ -103,27 +103,27 @@ export function MetadataPanel({ model, callType, tokens, cost, durationMs, conte
         <div className="meta-section-label">Cost Breakdown</div>
         <div className="meta-kv">
           <span className="meta-kv-label">Uncached Input</span>
-          <span className="meta-kv-value mono cost-val">{formatCost(cost.inputCost)}</span>
+          <span className="meta-kv-value mono cost-val">{formatCostPrecise(cost.inputCost)}</span>
         </div>
         <div className="meta-kv">
           <span className="meta-kv-label">Cache Read</span>
-          <span className="meta-kv-value mono cost-val cached-value">{formatCost(cost.cacheReadCost)}</span>
+          <span className="meta-kv-value mono cost-val cached-value">{formatCostPrecise(cost.cacheReadCost)}</span>
         </div>
         <div className="meta-kv">
           <span className="meta-kv-label">Cache Write</span>
-          <span className="meta-kv-value mono cost-val">{formatCost(cost.cacheWriteCost)}</span>
+          <span className="meta-kv-value mono cost-val">{formatCostPrecise(cost.cacheWriteCost)}</span>
         </div>
         <div className="meta-kv">
           <span className="meta-kv-label">Output</span>
-          <span className="meta-kv-value mono cost-val">{formatCost(cost.outputCost)}</span>
+          <span className="meta-kv-value mono cost-val">{formatCostPrecise(cost.outputCost)}</span>
         </div>
         <div className="meta-kv total">
           <span className="meta-kv-label">Total</span>
-          <span className="meta-kv-value mono cost-total">{formatCost(cost.total)}</span>
+          <span className="meta-kv-value mono cost-total">{formatCostPrecise(cost.total)}</span>
         </div>
         {cost.savings > 0.00001 && (
           <div className="meta-savings">
-            Savings from caching: {formatCost(cost.savings)}
+            Savings from caching: {formatCostPrecise(cost.savings)}
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
+import { formatCost } from '../../utils/chart-constants';
 
 interface SavingsWaterfallProps {
   periodTotal: number;
@@ -13,10 +14,6 @@ interface WaterfallEntry {
   base: number;
   value: number;
   fill: string;
-}
-
-function formatCost(value: number): string {
-  return `$${value.toFixed(4)}`;
 }
 
 function WaterfallTooltip({ active, payload }: any) {

@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../../services/api';
+import { formatCost } from '../../utils/chart-constants';
 import type { SankeyNode, SankeyLink } from '../../types/costs';
 
 interface CostFlowSankeyProps {
@@ -28,10 +29,6 @@ interface LayoutLink {
 
 const COLUMN_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#eab308'];
 
-function formatCost(value: number): string {
-  return `$${value.toFixed(4)}`;
-}
-
 function computeSankeyLayout(
   nodes: SankeyNode[],
   links: SankeyLink[],
@@ -40,8 +37,7 @@ function computeSankeyLayout(
 ): { layoutNodes: LayoutNode[]; layoutLinks: LayoutLink[] } {
   if (nodes.length === 0) return { layoutNodes: [], layoutLinks: [] };
 
-  // Determine columns by topological sort
-  const nodeColumns = new Array(nodes.length).fill(0);
+  // Build adjacency lists
   const outLinks = new Map<number, number[]>();
   const inLinks = new Map<number, number[]>();
 
@@ -52,26 +48,27 @@ function computeSankeyLayout(
     inLinks.get(link.target)!.push(link.source);
   }
 
-  // BFS from sources to assign columns
-  const visited = new Set<number>();
-  const queue: number[] = [];
-  for (let i = 0; i < nodes.length; i++) {
-    if (!inLinks.has(i) || inLinks.get(i)!.length === 0) {
-      queue.push(i);
-      visited.add(i);
+  // Longest-path algorithm: column = length of longest path from any source to this node
+  const nodeColumns = new Array(nodes.length).fill(0);
+  const memo = new Map<number, number>();
+
+  function longestPath(idx: number): number {
+    if (memo.has(idx)) return memo.get(idx)!;
+    const sources = inLinks.get(idx);
+    if (!sources || sources.length === 0) {
+      memo.set(idx, 0);
+      return 0;
     }
+    let maxDepth = 0;
+    for (const s of sources) {
+      maxDepth = Math.max(maxDepth, longestPath(s) + 1);
+    }
+    memo.set(idx, maxDepth);
+    return maxDepth;
   }
 
-  while (queue.length > 0) {
-    const idx = queue.shift()!;
-    const targets = outLinks.get(idx) || [];
-    for (const t of targets) {
-      nodeColumns[t] = Math.max(nodeColumns[t], nodeColumns[idx] + 1);
-      if (!visited.has(t)) {
-        visited.add(t);
-        queue.push(t);
-      }
-    }
+  for (let i = 0; i < nodes.length; i++) {
+    nodeColumns[i] = longestPath(i);
   }
 
   const maxCol = Math.max(...nodeColumns, 0);
@@ -79,17 +76,8 @@ function computeSankeyLayout(
   const padding = 40;
   const colSpacing = maxCol > 0 ? (width - padding * 2 - nodeWidth) / maxCol : 0;
 
-  // Compute node values
+  // Compute node values: max of incoming/outgoing sums
   const nodeValues = new Array(nodes.length).fill(0);
-  for (const link of links) {
-    nodeValues[link.source] = Math.max(nodeValues[link.source], nodeValues[link.source] || 0);
-    nodeValues[link.source] += link.value;
-  }
-  // Also consider incoming values
-  for (const link of links) {
-    nodeValues[link.target] += link.value;
-  }
-  // Each node's value is max of incoming/outgoing
   for (let i = 0; i < nodes.length; i++) {
     const outSum = links.filter(l => l.source === i).reduce((s, l) => s + l.value, 0);
     const inSum = links.filter(l => l.target === i).reduce((s, l) => s + l.value, 0);
@@ -233,6 +221,8 @@ function CostFlowSankeyInner({ period }: CostFlowSankeyProps) {
   const [links, setLinks] = useState<SankeyLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 800, height: 400 });
 
   useEffect(() => {
     let cancelled = false;
@@ -253,6 +243,20 @@ function CostFlowSankeyInner({ period }: CostFlowSankeyProps) {
       });
     return () => { cancelled = true; };
   }, [period]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (entry) {
+        const w = Math.round(entry.contentRect.width);
+        setDimensions({ width: w, height: Math.round(w * 0.5) });
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   if (loading) {
     return (
@@ -284,17 +288,13 @@ function CostFlowSankeyInner({ period }: CostFlowSankeyProps) {
   return (
     <div className="cost-section">
       <h2 className="cost-section-title">Cost Flow</h2>
-      <div className="cost-chart-container">
-        <SankeyDiagram nodes={nodes} links={links} width={800} height={400} />
+      <div className="cost-chart-container" ref={containerRef}>
+        <SankeyDiagram nodes={nodes} links={links} width={dimensions.width} height={dimensions.height} />
       </div>
     </div>
   );
 }
 
 export function CostFlowSankey(props: CostFlowSankeyProps) {
-  return (
-    <Suspense fallback={<div className="cost-loading">Loading chart...</div>}>
-      <CostFlowSankeyInner {...props} />
-    </Suspense>
-  );
+  return <CostFlowSankeyInner {...props} />;
 }

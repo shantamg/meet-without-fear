@@ -3,25 +3,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { api } from '../../services/api';
+import { STAGE_LABELS, MODEL_COLORS, formatCost } from '../../utils/chart-constants';
 import type { StageCost } from '../../types/costs';
-
-const MODEL_COLORS = {
-  sonnet: '#3b82f6',
-  haiku: '#10b981',
-  titan: '#eab308',
-};
-
-const STAGE_LABELS: Record<number, string> = {
-  0: 'Pre-Session',
-  1: 'Feel Heard',
-  2: 'Perspective',
-  3: 'Needs',
-  4: 'Resolution',
-};
-
-function formatCost(value: number): string {
-  return `$${value.toFixed(4)}`;
-}
 
 function StageTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;

@@ -3,8 +3,19 @@ import Ably from 'ably';
 import { ABLY_CHANNELS, AblyConnectionStatus } from '../constants/ably';
 import { api } from '../services/api';
 
+// WARNING: VITE_ABLY_KEY exposes the Ably API key in the client bundle.
+// In production, use token auth via the backend /api/brain/ably-token endpoint instead.
+// Only set VITE_ABLY_KEY for local development.
 const ablyKey = import.meta.env.VITE_ABLY_KEY as string | undefined;
 const apiBase = import.meta.env.VITE_API_URL || '';
+
+if (ablyKey && import.meta.env.PROD) {
+  console.warn(
+    '[useAblyConnection] VITE_ABLY_KEY is set in production! ' +
+    'This exposes your Ably API key in the client bundle. ' +
+    'Remove VITE_ABLY_KEY and use token auth via the backend instead.'
+  );
+}
 
 type EventCallback = (data: any) => void;
 

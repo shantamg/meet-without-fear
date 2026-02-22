@@ -12,12 +12,15 @@ const app = express();
 // Security middleware
 app.use(helmet());
 
-// CORS - allow dashboard domain when configured
+// CORS - allow dashboard domain when configured, restrict to localhost in dev
 const corsOrigins: (string | RegExp)[] = [];
 if (process.env.DASHBOARD_URL) {
   corsOrigins.push(process.env.DASHBOARD_URL);
+} else {
+  // Default to localhost origins only — never allow '*' in production
+  corsOrigins.push('http://localhost:5173', 'http://localhost:3000');
 }
-app.use(cors(corsOrigins.length > 0 ? { origin: corsOrigins } : undefined));
+app.use(cors({ origin: corsOrigins }));
 
 // Compression middleware - skip SSE endpoints to prevent buffering
 app.use(

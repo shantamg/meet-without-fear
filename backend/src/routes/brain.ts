@@ -1,10 +1,12 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import { prisma } from '../lib/prisma';
 import { errorResponse, successResponse } from '../utils/response';
 import { assembleContextBundle, type ContextBundle } from '../services/context-assembler';
 import { determineMemoryIntent } from '../services/memory-intent';
 import { resolveStageIntervalsForSessions, resolveStageForTimestamp } from '../utils/stage-resolver';
+import { verifyToken } from '@clerk/express';
 
 const router = Router();
 
@@ -25,16 +27,21 @@ async function requireDashboardAuth(req: Request, res: Response, next: NextFunct
 
   // Dev mode: no auth configured, skip
   if (!dashboardSecret && !clerkSecretKey) {
+    console.warn('[Dashboard Auth] No auth configured — running in dev mode without authentication');
     next();
     return;
   }
 
-  // Check X-Dashboard-Secret header
+  // Check X-Dashboard-Secret header (timing-safe comparison)
   if (dashboardSecret) {
     const headerSecret = req.headers['x-dashboard-secret'] as string | undefined;
-    if (headerSecret === dashboardSecret) {
-      next();
-      return;
+    if (headerSecret && headerSecret.length === dashboardSecret.length) {
+      const a = Buffer.from(headerSecret);
+      const b = Buffer.from(dashboardSecret);
+      if (timingSafeEqual(a, b)) {
+        next();
+        return;
+      }
     }
   }
 
@@ -43,9 +50,20 @@ async function requireDashboardAuth(req: Request, res: Response, next: NextFunct
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
       try {
-        const { verifyToken } = await import('@clerk/express');
         const token = authHeader.slice(7);
-        await verifyToken(token, { secretKey: clerkSecretKey });
+        const payload = await verifyToken(token, { secretKey: clerkSecretKey });
+
+        // Role-based auth: check email allowlist if configured
+        const allowedEmails = process.env.DASHBOARD_ALLOWED_EMAILS;
+        if (allowedEmails) {
+          const allowList = allowedEmails.split(',').map(e => e.trim().toLowerCase());
+          const email = (payload as any)?.email || (payload as any)?.sub_email;
+          if (!email || !allowList.includes(email.toLowerCase())) {
+            errorResponse(res, 'FORBIDDEN', 'Email not authorized for dashboard access', 403);
+            return;
+          }
+        }
+
         next();
         return;
       } catch {
@@ -91,11 +109,16 @@ function getModelPrices(model: string) {
   return TOKEN_PRICES[normalizeModel(model)] || TOKEN_PRICES.sonnet;
 }
 
-function extractCacheTokens(metadata: any): { cacheRead: number; cacheWrite: number } {
+const VALID_PERIODS = new Set(['24h', '7d', '30d']);
+
+const TOKEN_BUDGET_LIMIT = 150_000;
+
+function extractCacheTokens(metadata: unknown): { cacheRead: number; cacheWrite: number } {
   if (!metadata || typeof metadata !== 'object') return { cacheRead: 0, cacheWrite: 0 };
+  const m = metadata as Record<string, unknown>;
   return {
-    cacheRead: (metadata as any).cacheReadInputTokens ?? 0,
-    cacheWrite: (metadata as any).cacheWriteInputTokens ?? 0,
+    cacheRead: (m.cacheReadInputTokens as number) ?? 0,
+    cacheWrite: (m.cacheWriteInputTokens as number) ?? 0,
   };
 }
 
@@ -438,6 +461,9 @@ router.get('/costs', async (req, res) => {
 router.get('/costs/cache-heatmap', async (req, res) => {
   try {
     const period = (req.query.period as string) || '7d';
+    if (!VALID_PERIODS.has(period)) {
+      return errorResponse(res, 'INVALID_PARAMETER', `Invalid period "${period}". Must be one of: 24h, 7d, 30d`, 400);
+    }
     const periodStart = getPeriodStartDate(period);
 
     const activities = await prisma.brainActivity.findMany({
@@ -495,6 +521,9 @@ router.get('/costs/cache-heatmap', async (req, res) => {
 router.get('/costs/by-stage', async (req, res) => {
   try {
     const period = (req.query.period as string) || '7d';
+    if (!VALID_PERIODS.has(period)) {
+      return errorResponse(res, 'INVALID_PARAMETER', `Invalid period "${period}". Must be one of: 24h, 7d, 30d`, 400);
+    }
     const periodStart = getPeriodStartDate(period);
 
     const activities = await prisma.brainActivity.findMany({
@@ -549,6 +578,9 @@ router.get('/costs/by-stage', async (req, res) => {
 router.get('/costs/flow', async (req, res) => {
   try {
     const period = (req.query.period as string) || '7d';
+    if (!VALID_PERIODS.has(period)) {
+      return errorResponse(res, 'INVALID_PARAMETER', `Invalid period "${period}". Must be one of: 24h, 7d, 30d`, 400);
+    }
     const periodStart = getPeriodStartDate(period);
 
     const activities = await prisma.brainActivity.findMany({
@@ -749,12 +781,12 @@ router.get('/activity/:activityId/prompt', async (req, res) => {
             (metadata.contextSizes.summaryTokens ?? 0) +
             (metadata.contextSizes.recentTokens ?? 0) +
             (metadata.contextSizes.ragTokens ?? 0),
-          budgetLimit: 150000,
+          budgetLimit: TOKEN_BUDGET_LIMIT,
           utilizationPercent: Math.round(
             (((metadata.contextSizes.pinnedTokens ?? 0) +
               (metadata.contextSizes.summaryTokens ?? 0) +
               (metadata.contextSizes.recentTokens ?? 0) +
-              (metadata.contextSizes.ragTokens ?? 0)) / 150000) * 10000
+              (metadata.contextSizes.ragTokens ?? 0)) / TOKEN_BUDGET_LIMIT) * 10000
           ) / 100,
         },
       } : {}),

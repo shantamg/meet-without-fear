@@ -22,8 +22,8 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
   try {
     const token = await _getToken();
     if (token) return { Authorization: `Bearer ${token}` };
-  } catch {
-    // Token fetch failed, proceed without auth
+  } catch (err) {
+    console.error('[api] Auth token fetch failed:', err);
   }
   return {};
 }
