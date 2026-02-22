@@ -8,9 +8,10 @@ import { ActivityItem } from './ActivityItem';
 interface TurnViewProps {
   turn: Turn;
   userName: string;
+  isExpanded?: boolean;
 }
 
-export function TurnView({ turn, userName }: TurnViewProps) {
+export function TurnView({ turn, userName, isExpanded = true }: TurnViewProps) {
   // Sort activities by time
   const sortedActivities = useMemo(() => 
     [...turn.activities].sort((a, b) => 
@@ -100,11 +101,13 @@ export function TurnView({ turn, userName }: TurnViewProps) {
         </div>
       )}
 
-      <div className="turn-steps">
-        {sortedActivities.map(activity => (
-          <ActivityItem key={activity.id} activity={activity} />
-        ))}
-      </div>
+      {isExpanded && (
+        <div className="turn-steps">
+          {sortedActivities.map(activity => (
+            <ActivityItem key={activity.id} activity={activity} />
+          ))}
+        </div>
+      )}
 
       {assistantResponse && (
         <div className="turn-summary assistant">

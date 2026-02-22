@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { VariableSizeList as VList, ListChildComponentProps } from 'react-window';
 import { BrainActivity } from '../types';
 import { useAblyConnection } from '../hooks/useAblyConnection';
 import { getActivityIcon, getActivityPreview } from '../utils/activityDisplay';
@@ -6,6 +7,7 @@ import { formatDuration } from '../utils/formatters';
 import { ModelBadge } from '../components/metrics/ModelBadge';
 import { FormattedPrice } from '../components/session/FormattedPrice';
 import { EventRenderer } from '../components/events/EventRenderer';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,10 +108,11 @@ const SessionTab: React.FC<SessionTabProps> = React.memo(({ id, name, active, ha
 interface EventCardProps {
   event: LiveEvent;
   expanded: boolean;
+  justUpdated?: boolean;
   onToggle: () => void;
 }
 
-const EventCard: React.FC<EventCardProps> = React.memo(({ event, expanded, onToggle }) => {
+const EventCard: React.FC<EventCardProps> = React.memo(({ event, expanded, justUpdated, onToggle }) => {
   const { activity } = event;
   const preview = getActivityPreview(activity);
   const icon = getActivityIcon(activity.activityType);
@@ -129,7 +132,7 @@ const EventCard: React.FC<EventCardProps> = React.memo(({ event, expanded, onTog
 
   return (
     <div
-      className={`live-event-card ${isPending ? 'pending' : ''} ${isFailed ? 'error' : ''} ${event.activity.status === 'COMPLETED' && (event as any)._justUpdated ? 'flash' : ''}`}
+      className={`live-event-card ${isPending ? 'pending' : ''} ${isFailed ? 'error' : ''} ${justUpdated ? 'flash' : ''}`}
       style={{ borderLeftColor: borderColor }}
     >
       <div className="live-event-header" onClick={onToggle}>
@@ -173,6 +176,35 @@ const EventCard: React.FC<EventCardProps> = React.memo(({ event, expanded, onTog
   );
 });
 
+const MeasuredEventRow: React.FC<{
+  index: number;
+  event: LiveEvent;
+  expanded: boolean;
+  justUpdated: boolean;
+  onToggle: () => void;
+  onMeasure: (index: number, height: number) => void;
+}> = React.memo(({ index, event, expanded, justUpdated, onToggle, onMeasure }) => {
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (rowRef.current) {
+      const height = rowRef.current.getBoundingClientRect().height;
+      onMeasure(index, height);
+    }
+  }, [index, expanded, onMeasure]);
+
+  return (
+    <div ref={rowRef}>
+      <EventCard
+        event={event}
+        expanded={expanded}
+        justUpdated={justUpdated}
+        onToggle={onToggle}
+      />
+    </div>
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -188,10 +220,27 @@ export function LiveMonitorPage() {
   const [showNewEventsBtn, setShowNewEventsBtn] = useState(false);
   const [sessionTabs, setSessionTabs] = useState<Map<string, { name: string; lastActivity: number }>>(new Map());
   const [closedTabs, setClosedTabs] = useState<Set<string>>(new Set());
+  const [containerHeight, setContainerHeight] = useState(600);
 
-  const feedRef = useRef<HTMLDivElement>(null);
   const scrollCheckTimeout = useRef<number | null>(null);
   const justUpdatedIds = useRef<Set<string>>(new Set());
+  const listRef = useRef<VList>(null);
+  const rowHeightCache = useRef<Map<number, number>>(new Map());
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Measure container height with ResizeObserver
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setContainerHeight(el.clientHeight || 600);
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerHeight(entry.contentRect.height || 600);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Ably connection
   const handleBrainActivity = useCallback((data: any) => {
@@ -235,7 +284,7 @@ export function LiveMonitorPage() {
     });
   }, [isPaused]);
 
-  const { status, isConnected } = useAblyConnection({
+  const { status, connectionState, isConnected, reconnect, missedEventCount, clearMissedCount } = useAblyConnection({
     onBrainActivity: handleBrainActivity,
   });
 
@@ -249,21 +298,33 @@ export function LiveMonitorPage() {
     setBuffer([]);
   }, [buffer]);
 
-  // Auto-scroll
+  // Virtualized list: row height estimation + measurement
+  const getItemSize = useCallback((index: number): number => {
+    if (rowHeightCache.current.has(index)) {
+      return rowHeightCache.current.get(index)!;
+    }
+    // Estimate: collapsed ~80px, expanded ~400px
+    return 80;
+  }, []);
+
+  const setRowHeight = useCallback((index: number, height: number) => {
+    if (rowHeightCache.current.get(index) !== height) {
+      rowHeightCache.current.set(index, height);
+      listRef.current?.resetAfterIndex(index, false);
+    }
+  }, []);
+
+  // Auto-scroll: scroll to index 0 (newest) when enabled
   useEffect(() => {
-    if (!autoScroll || !feedRef.current) return;
-    // Scroll to top since we render newest first
-    feedRef.current.scrollTop = 0;
+    if (!autoScroll) return;
+    listRef.current?.scrollToItem(0, 'start');
   }, [events, autoScroll]);
 
-  // Scroll position detection (debounced)
-  const handleScroll = useCallback(() => {
+  // Scroll position detection (debounced) via VList onScroll
+  const handleVirtualScroll = useCallback(({ scrollOffset }: { scrollOffset: number }) => {
     if (scrollCheckTimeout.current) clearTimeout(scrollCheckTimeout.current);
     scrollCheckTimeout.current = window.setTimeout(() => {
-      if (!feedRef.current) return;
-      const { scrollTop } = feedRef.current;
-      // If scrolled away from top (newest), disable auto-scroll
-      if (scrollTop > 50) {
+      if (scrollOffset > 50) {
         setAutoScroll(false);
         setShowNewEventsBtn(true);
       } else {
@@ -274,9 +335,7 @@ export function LiveMonitorPage() {
   }, []);
 
   const scrollToTop = useCallback(() => {
-    if (feedRef.current) {
-      feedRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    listRef.current?.scrollToItem(0, 'start');
     setAutoScroll(true);
     setShowNewEventsBtn(false);
   }, []);
@@ -297,11 +356,81 @@ export function LiveMonitorPage() {
     return result.filter((e) => matchesFilter(e, filter));
   }, [events, activeTab, filter]);
 
+  // Reset height cache when filtered events change
+  useEffect(() => {
+    rowHeightCache.current.clear();
+    listRef.current?.resetAfterIndex(0, true);
+  }, [filteredEvents.length]);
+
   const eventCount = events.length;
   const now = Date.now();
 
   return (
     <div className="live-monitor">
+      {/* Reconnecting Banner */}
+      {connectionState === 'reconnecting' && (
+        <div style={{
+          background: '#92400e',
+          color: '#fbbf24',
+          padding: '0.5rem 1rem',
+          textAlign: 'center',
+          fontSize: '0.85rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '0.5rem',
+        }}>
+          <span className="spinner">↻</span>
+          Reconnecting...
+          <button className="live-btn" onClick={reconnect} style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}>
+            Retry Now
+          </button>
+        </div>
+      )}
+
+      {connectionState === 'disconnected' && status === 'error' && (
+        <div style={{
+          background: '#7f1d1d',
+          color: '#fca5a5',
+          padding: '0.5rem 1rem',
+          textAlign: 'center',
+          fontSize: '0.85rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '0.5rem',
+        }}>
+          Connection lost.
+          <button className="live-btn" onClick={reconnect} style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}>
+            Reconnect
+          </button>
+        </div>
+      )}
+
+      {/* Missed events recovery banner */}
+      {missedEventCount > 0 && (
+        <div style={{
+          background: '#1e3a5f',
+          color: '#93c5fd',
+          padding: '0.4rem 1rem',
+          textAlign: 'center',
+          fontSize: '0.85rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '0.5rem',
+        }}>
+          Recovered {missedEventCount} event{missedEventCount !== 1 ? 's' : ''} missed during disconnection
+          <button
+            className="live-btn"
+            onClick={clearMissedCount}
+            style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Header Bar */}
       <div className="live-header">
         <div className="live-header-left">
@@ -357,25 +486,54 @@ export function LiveMonitorPage() {
           ))}
       </div>
 
-      {/* Event Stream */}
-      <div className="live-feed" ref={feedRef} onScroll={handleScroll}>
-        {filteredEvents.length === 0 ? (
-          <div className="live-empty">
-            {isConnected
-              ? 'Waiting for events...'
-              : 'Connect to start receiving events'}
-          </div>
-        ) : (
-          filteredEvents.map((event) => (
-            <EventCard
-              key={event.id}
-              event={event}
-              expanded={expandedEvent === event.id}
-              onToggle={() => setExpandedEvent(expandedEvent === event.id ? null : event.id)}
-            />
-          ))
-        )}
-      </div>
+      {/* Event Stream (virtualized) */}
+      <ErrorBoundary fallback={
+        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+          <p style={{ marginBottom: '0.5rem' }}>Stream disconnected</p>
+          <button
+            className="live-btn"
+            onClick={() => window.location.reload()}
+          >
+            Reconnect
+          </button>
+        </div>
+      }>
+        <div className="live-feed" ref={containerRef}>
+          {filteredEvents.length === 0 ? (
+            <div className="live-empty">
+              {isConnected
+                ? 'Waiting for events...'
+                : 'Connect to start receiving events'}
+            </div>
+          ) : (
+            <VList
+              ref={listRef}
+              height={containerHeight}
+              width="100%"
+              itemCount={filteredEvents.length}
+              itemSize={getItemSize}
+              overscanCount={5}
+              onScroll={handleVirtualScroll}
+            >
+              {({ index, style }: ListChildComponentProps) => {
+                const event = filteredEvents[index];
+                return (
+                  <div style={style as React.CSSProperties}>
+                    <MeasuredEventRow
+                      index={index}
+                      event={event}
+                      expanded={expandedEvent === event.id}
+                      justUpdated={justUpdatedIds.current.has(event.id)}
+                      onToggle={() => setExpandedEvent(expandedEvent === event.id ? null : event.id)}
+                      onMeasure={setRowHeight}
+                    />
+                  </div>
+                );
+              }}
+            </VList>
+          )}
+        </div>
+      </ErrorBoundary>
 
       {/* New events floating button */}
       {showNewEventsBtn && (

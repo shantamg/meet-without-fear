@@ -1,10 +1,13 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Ably from 'ably';
 import { ABLY_CHANNELS, AblyConnectionStatus } from '../constants/ably';
+import { api } from '../services/api';
 
 const ablyKey = import.meta.env.VITE_ABLY_KEY;
 
 type EventCallback = (data: any) => void;
+
+export type ConnectionState = 'connected' | 'reconnecting' | 'disconnected';
 
 interface UseAblyConnectionOptions {
   channel?: string;
@@ -19,22 +22,32 @@ interface UseAblyConnectionOptions {
 
 interface UseAblyConnectionResult {
   status: AblyConnectionStatus;
+  connectionState: ConnectionState;
   isConnected: boolean;
+  reconnect: () => void;
   subscribe: (event: string, callback: EventCallback) => void;
   unsubscribe: (event: string) => void;
+  missedEventCount: number;
+  clearMissedCount: () => void;
 }
 
 /**
  * Hook for managing Ably real-time connection and subscriptions.
- * Eliminates duplication of Ably setup logic across components.
+ * Includes recovery logic: reconnection state tracking, manual reconnect,
+ * and gap recovery that fetches missed events after disconnection.
  */
 export function useAblyConnection(options: UseAblyConnectionOptions = {}): UseAblyConnectionResult {
   const { channel = ABLY_CHANNELS.AI_AUDIT_STREAM } = options;
   const [status, setStatus] = useState<AblyConnectionStatus>('disconnected');
+  const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
+  const [missedEventCount, setMissedEventCount] = useState(0);
   const clientRef = useRef<Ably.Realtime | null>(null);
   const channelRef = useRef<Ably.RealtimeChannel | null>(null);
   const sessionChannelRef = useRef<Ably.RealtimeChannel | null>(null);
   const subscriptionsRef = useRef<Map<string, EventCallback>>(new Map());
+  const lastEventTimestampRef = useRef<number>(Date.now());
+  const wasDisconnectedRef = useRef(false);
+  const recoveringRef = useRef(false);
 
   // Store callbacks in refs so they can be updated without reconnecting
   const callbacksRef = useRef({
@@ -54,10 +67,16 @@ export function useAblyConnection(options: UseAblyConnectionOptions = {}): UseAb
     };
   }, [options.onSessionCreated, options.onBrainActivity, options.onNewMessage, options.onContextUpdated]);
 
+  // Track last event timestamp for recovery
+  const trackEvent = useCallback(() => {
+    lastEventTimestampRef.current = Date.now();
+  }, []);
+
   useEffect(() => {
     if (!ablyKey) {
       console.warn('VITE_ABLY_KEY not set - live updates disabled');
       setStatus('error');
+      setConnectionState('disconnected');
       return;
     }
 
@@ -67,15 +86,85 @@ export function useAblyConnection(options: UseAblyConnectionOptions = {}): UseAb
     const ablyChannel = client.channels.get(channel);
     channelRef.current = ablyChannel;
 
-    client.connection.on('connecting', () => setStatus('connecting'));
-    client.connection.on('connected', () => setStatus('connected'));
-    client.connection.on('disconnected', () => setStatus('disconnected'));
-    client.connection.on('failed', () => setStatus('error'));
+    // Recovery: fetch events that occurred during the disconnection gap
+    async function recoverMissedEvents() {
+      if (recoveringRef.current) return;
+      recoveringRef.current = true;
+      const since = lastEventTimestampRef.current;
+
+      try {
+        const { sessions } = await api.getSessions();
+        const seenIds = new Set<string>();
+        let recoveredCount = 0;
+
+        for (const session of sessions.slice(0, 20)) {
+          try {
+            const { activities } = await api.getSessionActivity(session.id);
+            for (const activity of activities) {
+              const ts = new Date(activity.createdAt).getTime();
+              if (ts > since && !seenIds.has(activity.id)) {
+                seenIds.add(activity.id);
+                callbacksRef.current.onBrainActivity?.(activity);
+                recoveredCount++;
+              }
+            }
+          } catch {
+            // Skip failed session fetches
+          }
+        }
+
+        if (recoveredCount > 0) {
+          setMissedEventCount(recoveredCount);
+        }
+      } catch {
+        // Recovery failed silently
+      } finally {
+        recoveringRef.current = false;
+      }
+    }
+
+    client.connection.on('connecting', () => {
+      setStatus('connecting');
+      setConnectionState('reconnecting');
+    });
+    client.connection.on('connected', () => {
+      setStatus('connected');
+      setConnectionState('connected');
+      // Trigger gap recovery if we were previously disconnected
+      if (wasDisconnectedRef.current && !recoveringRef.current) {
+        wasDisconnectedRef.current = false;
+        recoverMissedEvents();
+      }
+    });
+    client.connection.on('disconnected', () => {
+      setStatus('disconnected');
+      setConnectionState('reconnecting');
+      wasDisconnectedRef.current = true;
+    });
+    client.connection.on('failed', () => {
+      setStatus('error');
+      setConnectionState('disconnected');
+      wasDisconnectedRef.current = true;
+    });
+    client.connection.on('suspended', () => {
+      setStatus('disconnected');
+      setConnectionState('disconnected');
+      wasDisconnectedRef.current = true;
+    });
 
     // Set up subscriptions that use refs (so callbacks can be updated)
-    ablyChannel.subscribe('session-created', () => callbacksRef.current.onSessionCreated?.());
-    ablyChannel.subscribe('brain-activity', (msg) => callbacksRef.current.onBrainActivity?.(msg.data));
-    ablyChannel.subscribe('new-message', (msg) => callbacksRef.current.onNewMessage?.(msg.data));
+    ablyChannel.subscribe('session-created', () => {
+      trackEvent();
+      callbacksRef.current.onSessionCreated?.();
+    });
+    ablyChannel.subscribe('brain-activity', (msg) => {
+      trackEvent();
+      callbacksRef.current.onBrainActivity?.(msg.data);
+    });
+    ablyChannel.subscribe('new-message', (msg) => {
+      trackEvent();
+      callbacksRef.current.onNewMessage?.(msg.data);
+    });
 
     // Session-specific channel subscriptions
     if (options.sessionId) {
@@ -85,6 +174,7 @@ export function useAblyConnection(options: UseAblyConnectionOptions = {}): UseAb
 
       // Subscribe to context.updated events
       sessionChannel.subscribe('context.updated', (msg) => {
+        trackEvent();
         console.log('[useAblyConnection] context.updated event received:', msg.data);
         callbacksRef.current.onContextUpdated?.(msg.data);
       });
@@ -101,7 +191,18 @@ export function useAblyConnection(options: UseAblyConnectionOptions = {}): UseAb
       clientRef.current = null;
       channelRef.current = null;
     };
-  }, [channel, options.sessionId]); // Reconnect if channel or sessionId changes
+  }, [channel, options.sessionId, trackEvent]); // Reconnect if channel or sessionId changes
+
+  const reconnect = useCallback(() => {
+    const client = clientRef.current;
+    if (!client) return;
+
+    setConnectionState('reconnecting');
+    client.connection.once('connected', () => {
+      setConnectionState('connected');
+    });
+    client.connect();
+  }, []);
 
   const subscribe = useCallback((event: string, callback: EventCallback) => {
     if (channelRef.current) {
@@ -117,10 +218,18 @@ export function useAblyConnection(options: UseAblyConnectionOptions = {}): UseAb
     }
   }, []);
 
+  const clearMissedCount = useCallback(() => {
+    setMissedEventCount(0);
+  }, []);
+
   return {
     status,
+    connectionState,
     isConnected: status === 'connected',
+    reconnect,
     subscribe,
     unsubscribe,
+    missedEventCount,
+    clearMissedCount,
   };
 }

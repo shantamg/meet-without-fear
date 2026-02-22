@@ -2,6 +2,9 @@ import { Session, BrainActivity, SessionSummary, ContextResponse, SessionFilters
 import type { DashboardMetrics } from '../types/dashboard';
 import type { CostParams, CostAnalytics } from '../types/costs';
 import type { PromptDetail } from '../types/prompt';
+import { fetchWithRetry } from '../utils/fetchWithRetry';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 /**
  * API response wrapper type.
@@ -60,7 +63,7 @@ export const api = {
       }
     }
 
-    const res = await fetch(`/api/brain/sessions?${params.toString()}`);
+    const res = await fetchWithRetry(`${API_BASE}/api/brain/sessions?${params.toString()}`);
     if (!res.ok) {
       throw new Error(`Failed to fetch sessions: ${res.statusText}`);
     }
@@ -85,7 +88,7 @@ export const api = {
    * Fetches activity for a specific session.
    */
   async getSessionActivity(sessionId: string): Promise<ActivityResponse> {
-    const res = await fetch(`/api/brain/activity/${sessionId}`);
+    const res = await fetchWithRetry(`${API_BASE}/api/brain/activity/${sessionId}`);
     if (!res.ok) {
       throw new Error(`Failed to fetch activity: ${res.statusText}`);
     }
@@ -105,7 +108,7 @@ export const api = {
    * Returns context for all users in the session.
    */
   async getSessionContext(sessionId: string): Promise<ContextResponse> {
-    const res = await fetch(`/api/brain/sessions/${sessionId}/context`);
+    const res = await fetchWithRetry(`${API_BASE}/api/brain/sessions/${sessionId}/context`);
     if (!res.ok) {
       throw new Error(`Failed to fetch context: ${res.statusText}`);
     }
@@ -120,7 +123,7 @@ export const api = {
    * Fetches dashboard overview metrics.
    */
   async getDashboard(period: '24h' | '7d' | '30d' = '24h'): Promise<DashboardMetrics> {
-    const res = await fetch(`/api/brain/dashboard?period=${period}`);
+    const res = await fetchWithRetry(`${API_BASE}/api/brain/dashboard?period=${period}`);
     if (!res.ok) {
       throw new Error(`Failed to fetch dashboard: ${res.statusText}`);
     }
@@ -140,7 +143,7 @@ export const api = {
     if (params.groupBy) searchParams.append('groupBy', params.groupBy);
     if (params.modelFilter) searchParams.append('modelFilter', params.modelFilter);
 
-    const res = await fetch(`/api/brain/costs?${searchParams.toString()}`);
+    const res = await fetchWithRetry(`${API_BASE}/api/brain/costs?${searchParams.toString()}`);
     if (!res.ok) {
       throw new Error(`Failed to fetch costs: ${res.statusText}`);
     }
@@ -155,7 +158,7 @@ export const api = {
    * Fetches prompt detail for a specific activity.
    */
   async getPromptDetail(activityId: string): Promise<PromptDetail> {
-    const res = await fetch(`/api/brain/activity/${activityId}/prompt`);
+    const res = await fetchWithRetry(`${API_BASE}/api/brain/activity/${activityId}/prompt`);
     if (!res.ok) {
       throw new Error(`Failed to fetch prompt detail: ${res.statusText}`);
     }

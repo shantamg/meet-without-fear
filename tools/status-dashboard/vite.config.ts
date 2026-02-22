@@ -17,4 +17,13 @@ export default defineConfig(({ command }) => ({
     }
   },
   envDir: path.resolve(__dirname),
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          recharts: ['recharts'],
+        },
+      },
+    },
+  },
 }));
