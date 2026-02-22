@@ -1,5 +1,5 @@
 -- CreateExtension
--- -- CREATE EXTENSION IF NOT EXISTS "vector";
+CREATE EXTENSION IF NOT EXISTS "vector";
 
 -- CreateEnum
 CREATE TYPE "SessionStatus" AS ENUM ('CREATED', 'INVITED', 'ACTIVE', 'PAUSED', 'WAITING', 'RESOLVED', 'ABANDONED');

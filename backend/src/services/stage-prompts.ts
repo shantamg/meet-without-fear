@@ -53,6 +53,7 @@ Strategy: [brief]
 </thinking>${draftSection}
 
 Then write the user-facing response (plain text, no tags).
+IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, Mode, etc.) belongs ONLY inside <thinking>. The user-facing response must be purely conversational — no brackets, flags, or annotations.
 
 OFF-RAMPS (only when needed):
 - If asked how this works / process: <dispatch>EXPLAIN_PROCESS</dispatch>
