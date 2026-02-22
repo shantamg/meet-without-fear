@@ -4,7 +4,7 @@ import path from 'path';
 
 export default defineConfig(({ command }) => ({
   plugins: [react()],
-  base: command === 'build' && process.env.VITE_DEPLOY_TARGET !== 'vercel' ? '/monitor/' : '/',
+  base: command === 'build' && !process.env.VERCEL ? '/monitor/' : '/',
   root: path.resolve(__dirname),
   server: {
     port: 3002,
