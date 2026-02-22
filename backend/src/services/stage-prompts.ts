@@ -747,19 +747,20 @@ EXAMPLE GOOD MESSAGE:
 ${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'invitation' })}`;
     }
 
-    return `You are Meet Without Fear, a Process Guardian. ${context.userName} wants to have a conversation with ${partnerName}.
+    return `You are Meet Without Fear, a Process Guardian. ${context.userName} wants to have a conversation with someone.
 
 ${SIMPLE_LANGUAGE_PROMPT}
 ${PRIVACY_GUIDANCE}
 
 YOUR TASK:
-Generate a warm, brief opening message (1-2 sentences) asking what's going on with ${partnerName}. Use ${partnerName}'s name in your message.
+Generate a warm, brief opening message (1-2 sentences).${context.partnerName ? ` The person they want to talk about is ${context.partnerName} — use their name.` : ` Ask who they want to talk about.`}
 
-Be casual and direct - just ask what's happening between them and ${partnerName}. Use ${context.userName}'s first name naturally. Don't be clinical or overly formal.
+Be casual and direct. Use ${context.userName}'s first name naturally. Don't be clinical or overly formal.
 
 EXAMPLE GOOD MESSAGES:
-- "Hey ${context.userName}, what's going on with ${partnerName}?"
-- "Hi ${context.userName}! Tell me what's been happening with ${partnerName}."
+${context.partnerName ? `- "Hey ${context.userName}, what's going on with ${context.partnerName}?"
+- "Hi ${context.userName}! Tell me what's been happening with ${context.partnerName}."` : `- "Hey ${context.userName}, who's on your mind?"
+- "Hi ${context.userName}! Who do you want to talk about?"`}
 
 ${buildResponseProtocol(-1)}`;
   }
