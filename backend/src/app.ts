@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
+import path from 'path';
 import routes from './routes';
 import { requestContextMiddleware } from './middleware/request-context';
 import { errorHandler, notFoundHandler } from './middleware/errors';
@@ -54,6 +55,13 @@ app.get('/health', (_, res) => {
 // API routes - support both /api and /api/v1 for compatibility
 app.use('/api/v1', routes);
 app.use('/api', routes);
+
+// Neural Monitor dashboard (static SPA)
+const monitorDist = path.join(__dirname, '../../tools/status-dashboard/dist');
+app.use('/monitor', express.static(monitorDist));
+app.get('/monitor/*', (_req, res) => {
+  res.sendFile(path.join(monitorDist, 'index.html'));
+});
 
 // 404 handler
 app.use(notFoundHandler);
