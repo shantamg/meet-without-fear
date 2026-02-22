@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { CacheIndicator } from '../metrics/CacheIndicator';
-import type { SystemPromptBlock, TokenBreakdown } from '../../types/prompt';
+import type { SystemPromptBlock, TokenBreakdown, PromptMessage } from '../../types/prompt';
 
 interface RequestPanelProps {
   systemPrompt: SystemPromptBlock[];
-  messages: { role: string; content: string }[];
+  messages: PromptMessage[];
   tokens: TokenBreakdown;
 }
 
@@ -48,10 +48,12 @@ function SystemBlock({ block }: { block: SystemPromptBlock }) {
     ? lines.slice(0, MAX_SYSTEM_LINES).join('\n') + '\n...'
     : block.content;
 
+  const label = block.type === 'static' ? 'Static Block' : 'Dynamic Block';
+
   return (
     <div className="system-block">
       <div className="system-block-header">
-        <span className="system-block-label">{block.label}</span>
+        <span className="system-block-label">{label}</span>
         <CacheIndicator cached={block.cached} />
         <span className="system-block-tokens">{block.tokenCount.toLocaleString()} tok</span>
       </div>
@@ -65,7 +67,7 @@ function SystemBlock({ block }: { block: SystemPromptBlock }) {
   );
 }
 
-function MessagesList({ messages }: { messages: { role: string; content: string }[] }) {
+function MessagesList({ messages }: { messages: PromptMessage[] }) {
   const [showAll, setShowAll] = useState(false);
   const hiddenCount = messages.length - MAX_EARLIER_MESSAGES;
   const visibleMessages = showAll ? messages : messages.slice(-MAX_EARLIER_MESSAGES);
@@ -80,6 +82,7 @@ function MessagesList({ messages }: { messages: { role: string; content: string 
       {visibleMessages.map((msg, i) => (
         <div key={i} className={`prompt-message role-${msg.role}`}>
           <span className={`prompt-role-badge ${msg.role}`}>{msg.role}</span>
+          {msg.hasCacheControl && <span className="cache-break-badge">cache_control</span>}
           <div className="prompt-message-content">{msg.content}</div>
         </div>
       ))}

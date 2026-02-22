@@ -32,10 +32,10 @@ export function PromptInspectorPage() {
           </Link>
         </div>
         <div className="prompt-inspector-meta">
-          <span className="prompt-call-type">{data.callType.replace(/_/g, ' ')}</span>
-          <ModelBadge model={data.model} />
+          <span className="prompt-call-type">{data.timing.callType.replace(/_/g, ' ')}</span>
+          <ModelBadge model={data.timing.model} />
           <span className="prompt-header-cost">
-            <FormattedPrice value={data.cost.totalCost} />
+            <FormattedPrice value={data.cost.total} />
           </span>
         </div>
       </div>
@@ -43,17 +43,17 @@ export function PromptInspectorPage() {
       {/* 3-Panel Layout */}
       <div className="prompt-inspector-panels">
         <RequestPanel
-          systemPrompt={data.systemPrompt}
+          systemPrompt={data.systemPrompt.blocks}
           messages={data.messages}
           tokens={data.tokens}
         />
         <ResponsePanel response={data.response} />
         <MetadataPanel
-          model={data.model}
-          callType={data.callType}
+          model={data.timing.model}
+          callType={data.timing.callType}
           tokens={data.tokens}
           cost={data.cost}
-          durationMs={data.durationMs}
+          durationMs={data.timing.durationMs}
         />
       </div>
     </div>

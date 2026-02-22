@@ -155,7 +155,7 @@ export const api = {
    * Fetches prompt detail for a specific activity.
    */
   async getPromptDetail(activityId: string): Promise<PromptDetail> {
-    const res = await fetch(`/api/brain/activity/prompt/${activityId}`);
+    const res = await fetch(`/api/brain/activity/${activityId}/prompt`);
     if (!res.ok) {
       throw new Error(`Failed to fetch prompt detail: ${res.statusText}`);
     }

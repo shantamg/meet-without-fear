@@ -15,13 +15,9 @@ function formatCost(value: number): string {
 }
 
 export function MetadataPanel({ model, callType, tokens, cost, durationMs }: MetadataPanelProps) {
-  const uncachedInput = Math.max(0, tokens.input - tokens.cacheRead - tokens.cacheWrite);
   const totalInput = tokens.input;
   const cacheRatio = totalInput > 0 ? tokens.cacheRead / totalInput : 0;
   const cachePercent = (cacheRatio * 100).toFixed(0);
-
-  // Estimate savings: cache read is ~10x cheaper than regular input
-  const savingsEstimate = tokens.cacheRead * 0.003 * 0.9 / 1000; // rough estimate
 
   return (
     <div className="prompt-panel metadata-panel">
@@ -70,7 +66,7 @@ export function MetadataPanel({ model, callType, tokens, cost, durationMs }: Met
         </div>
         <div className="meta-kv">
           <span className="meta-kv-label">Uncached Input</span>
-          <span className="meta-kv-value mono">{uncachedInput.toLocaleString()}</span>
+          <span className="meta-kv-value mono">{tokens.uncached.toLocaleString()}</span>
         </div>
       </div>
 
@@ -115,11 +111,11 @@ export function MetadataPanel({ model, callType, tokens, cost, durationMs }: Met
         </div>
         <div className="meta-kv total">
           <span className="meta-kv-label">Total</span>
-          <span className="meta-kv-value mono cost-total">{formatCost(cost.totalCost)}</span>
+          <span className="meta-kv-value mono cost-total">{formatCost(cost.total)}</span>
         </div>
-        {savingsEstimate > 0.00001 && (
+        {cost.savings > 0.00001 && (
           <div className="meta-savings">
-            Estimated savings from caching: ~{formatCost(savingsEstimate)}
+            Savings from caching: {formatCost(cost.savings)}
           </div>
         )}
       </div>

@@ -14,11 +14,7 @@ interface ParsedThinking {
   raw: string;
 }
 
-function parseThinking(text: string): ParsedThinking | null {
-  const thinkMatch = text.match(/<thinking>([\s\S]*?)<\/thinking>/);
-  if (!thinkMatch) return null;
-
-  const raw = thinkMatch[1].trim();
+function parseThinkingFields(raw: string): ParsedThinking {
   const result: ParsedThinking = { raw };
 
   const modeMatch = raw.match(/mode[:\s]*(\w+)/i);
@@ -39,18 +35,6 @@ function parseThinking(text: string): ParsedThinking | null {
   return result;
 }
 
-function parseDraft(text: string): string | null {
-  const match = text.match(/<draft>([\s\S]*?)<\/draft>/);
-  return match ? match[1].trim() : null;
-}
-
-function parseDispatch(text: string): string | null {
-  const match = text.match(/<dispatch[^>]*>([\s\S]*?)<\/dispatch>/);
-  if (match) return match[1].trim();
-  const tagMatch = text.match(/<(\w+_dispatch|EXPLAIN_\w+)>/i);
-  return tagMatch ? tagMatch[1] : null;
-}
-
 function getCleanResponse(text: string): string {
   return text
     .replace(/<thinking>[\s\S]*?<\/thinking>/g, '')
@@ -64,9 +48,10 @@ export function ResponsePanel({ response }: ResponsePanelProps) {
   const [showRaw, setShowRaw] = useState(false);
   const [thinkingExpanded, setThinkingExpanded] = useState(false);
 
-  const thinking = parseThinking(response.text);
-  const draft = parseDraft(response.text);
-  const dispatch = parseDispatch(response.text);
+  // Use pre-parsed fields from the backend
+  const thinking = response.thinking ? parseThinkingFields(response.thinking) : null;
+  const draft = response.draft;
+  const dispatch = response.dispatch;
   const cleanResponse = getCleanResponse(response.text);
 
   return (

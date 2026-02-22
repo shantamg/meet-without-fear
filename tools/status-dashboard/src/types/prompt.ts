@@ -1,13 +1,21 @@
 export interface SystemPromptBlock {
-  label: string;
+  type: 'static' | 'dynamic';
   content: string;
   tokenCount: number;
   cached: boolean;
 }
 
+export interface PromptMessage {
+  role: string;
+  content: string;
+  hasCacheControl: boolean;
+}
+
 export interface ParsedResponse {
   text: string;
-  structuredData?: Record<string, unknown>;
+  thinking: string | null;
+  draft: string | null;
+  dispatch: string | null;
 }
 
 export interface TokenBreakdown {
@@ -15,6 +23,7 @@ export interface TokenBreakdown {
   output: number;
   cacheRead: number;
   cacheWrite: number;
+  uncached: number;
 }
 
 export interface CostBreakdown {
@@ -22,19 +31,20 @@ export interface CostBreakdown {
   outputCost: number;
   cacheReadCost: number;
   cacheWriteCost: number;
-  totalCost: number;
+  total: number;
+  savings: number;
 }
 
 export interface PromptDetail {
-  activityId: string;
-  sessionId: string;
-  callType: string;
-  model: string;
-  systemPrompt: SystemPromptBlock[];
-  messages: { role: string; content: string }[];
+  systemPrompt: { blocks: SystemPromptBlock[] };
+  messages: PromptMessage[];
   response: ParsedResponse;
   tokens: TokenBreakdown;
   cost: CostBreakdown;
-  durationMs: number;
-  createdAt: string;
+  timing: {
+    durationMs: number;
+    model: string;
+    callType: string;
+    status: string;
+  };
 }
