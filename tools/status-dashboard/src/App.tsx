@@ -1,13 +1,10 @@
 import React, { Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react';
 import { AppLayout } from './components/layout/AppLayout';
 import SessionDetail from './components/session/SessionDetail';
 import { ContextPage } from './components/context';
 import { SessionListPage } from './pages/SessionListPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
-
-const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 // Lazy-loaded pages (less frequently visited)
 const DashboardPage = React.lazy(() =>
@@ -42,7 +39,7 @@ function PageErrorFallback() {
   );
 }
 
-function AppRoutes() {
+function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
@@ -55,23 +52,6 @@ function AppRoutes() {
         <Route path="/live" element={<ErrorBoundary fallback={<PageErrorFallback />}><Suspense fallback={<LoadingSpinner />}><LiveMonitorPage /></Suspense></ErrorBoundary>} />
       </Route>
     </Routes>
-  );
-}
-
-function App() {
-  if (!clerkEnabled) {
-    return <AppRoutes />;
-  }
-
-  return (
-    <>
-      <SignedIn>
-        <AppRoutes />
-      </SignedIn>
-      <SignedOut>
-        <RedirectToSignIn />
-      </SignedOut>
-    </>
   );
 }
 
