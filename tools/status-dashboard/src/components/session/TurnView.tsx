@@ -1,9 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { Turn } from '../../utils/turnGrouping';
 import { BrainActivity } from '../../types';
+import type { TurnTrace } from '../../types/trace';
 import { deepParse } from '../../utils/dataParsing';
 import { formatTime } from '../../utils/formatters';
 import { ActivityItem } from './ActivityItem';
+import { TimingWaterfall } from '../pipeline/TimingWaterfall';
+import { PipelineFlowDiagram } from '../pipeline/PipelineFlowDiagram';
+import { api } from '../../services/api';
+
+type PipelineView = 'none' | 'waterfall' | 'flow';
 
 interface TurnViewProps {
   turn: Turn;
@@ -12,15 +18,55 @@ interface TurnViewProps {
 }
 
 export function TurnView({ turn, userName, isExpanded = true }: TurnViewProps) {
+  const [pipelineView, setPipelineView] = useState<PipelineView>('none');
+  const [trace, setTrace] = useState<TurnTrace | null>(null);
+  const [traceLoading, setTraceLoading] = useState(false);
+  const [traceError, setTraceError] = useState<string | null>(null);
+
   // Sort activities by time
-  const sortedActivities = useMemo(() => 
-    [...turn.activities].sort((a, b) => 
+  const sortedActivities = useMemo(() =>
+    [...turn.activities].sort((a, b) =>
       new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     ),
     [turn.activities]
   );
 
   const lastActivity = sortedActivities[sortedActivities.length - 1];
+
+  // Find the turnId from the orchestrated response activity
+  const turnId = useMemo(() => {
+    const orchestrated = sortedActivities.find(a =>
+      a.callType === 'ORCHESTRATED_RESPONSE'
+    );
+    return orchestrated?.turnId ?? null;
+  }, [sortedActivities]);
+
+  const fetchTrace = useCallback(async (view: PipelineView) => {
+    if (view === 'none') {
+      setPipelineView('none');
+      return;
+    }
+    // If already loaded, just switch view
+    if (trace) {
+      setPipelineView(view);
+      return;
+    }
+    if (!turnId) {
+      setTraceError('No turn ID found');
+      return;
+    }
+    setTraceLoading(true);
+    setTraceError(null);
+    try {
+      const data = await api.getTurnTrace(turnId);
+      setTrace(data);
+      setPipelineView(view);
+    } catch (err) {
+      setTraceError(err instanceof Error ? err.message : 'Failed to load trace');
+    } finally {
+      setTraceLoading(false);
+    }
+  }, [turnId, trace]);
 
   // Extract user message
   const userMessage = useMemo(() => {
@@ -92,11 +138,43 @@ export function TurnView({ turn, userName, isExpanded = true }: TurnViewProps) {
       <div className="turn-header">
         <span className="turn-time">{formatTime(turn.timestamp)}</span>
         <span className="turn-id">Turn {turn.id}</span>
+        {turnId && (
+          <div className="turn-pipeline-btns">
+            <button
+              className={`pipeline-btn ${pipelineView === 'waterfall' ? 'active' : ''}`}
+              onClick={() => fetchTrace(pipelineView === 'waterfall' ? 'none' : 'waterfall')}
+              disabled={traceLoading}
+              title="Pipeline timing waterfall"
+            >
+              {traceLoading ? '...' : 'Pipeline'}
+            </button>
+            <button
+              className={`pipeline-btn ${pipelineView === 'flow' ? 'active' : ''}`}
+              onClick={() => fetchTrace(pipelineView === 'flow' ? 'none' : 'flow')}
+              disabled={traceLoading}
+              title="Pipeline flow diagram"
+            >
+              Flow
+            </button>
+          </div>
+        )}
       </div>
+
+      {traceError && (
+        <div className="trace-error">{traceError}</div>
+      )}
+
+      {pipelineView === 'waterfall' && trace && (
+        <TimingWaterfall trace={trace} />
+      )}
+
+      {pipelineView === 'flow' && trace && (
+        <PipelineFlowDiagram trace={trace} />
+      )}
 
       {userMessage && (
         <div className="turn-summary user">
-          <span className="summary-icon">👤</span>
+          <span className="summary-icon">&#x1F464;</span>
           <div className="summary-bubble">{userMessage}</div>
         </div>
       )}
@@ -112,7 +190,7 @@ export function TurnView({ turn, userName, isExpanded = true }: TurnViewProps) {
       {assistantResponse && (
         <div className="turn-summary assistant">
           <div className="summary-bubble">{assistantResponse}</div>
-          <span className="summary-icon">🤖</span>
+          <span className="summary-icon">&#x1F916;</span>
         </div>
       )}
     </div>
