@@ -1359,8 +1359,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       const sendCleanText = (text: string) => {
         if (!text || clientDisconnected) return;
 
-        // Strip any remaining tags that might have slipped through
+        // Strip ALL semantic tags as defense-in-depth (thinking trap should catch these,
+        // but this prevents leaks if the trap fails due to stream errors or chunk splitting)
         let cleanText = text
+          .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')  // Complete thinking blocks
+          .replace(/<thinking>[\s\S]*/gi, '')                // Unclosed thinking (strip to end)
+          .replace(/<\/thinking>/gi, '')                     // Orphaned closing tag
           .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
           .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
 
