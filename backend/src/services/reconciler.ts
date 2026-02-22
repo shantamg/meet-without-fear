@@ -834,9 +834,11 @@ export async function runReconcilerForDirection(
   // Check if context has already been shared for this direction
   const contextAlreadyShared = await hasContextAlreadyBeenShared(sessionId, guesserId, subjectId);
   if (contextAlreadyShared) {
-    console.log(`[Reconciler] Context already shared ${subjectId}->${guesserId}, skipping AWAITING_SHARING, marking READY`);
-    // Same as the no-gaps path: mark READY, create alignment message, check reveal
-    await markEmpathyReady(sessionId, guesserId, subjectInfo.name);
+    console.log(`[Reconciler] Context already shared ${subjectId}->${guesserId}, skipping AWAITING_SHARING, marking READY (gaps still present, using honest message)`);
+    // Context was already shared but gaps remain after resubmission.
+    // Mark READY to prevent infinite loop, but use the honest "let's move forward"
+    // message instead of the false "quite accurate" claim.
+    await markEmpathyReady(sessionId, guesserId, subjectInfo.name, true);
 
     return {
       result,
