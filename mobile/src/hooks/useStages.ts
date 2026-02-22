@@ -14,6 +14,7 @@ import {
   InfiniteData,
 } from '@tanstack/react-query';
 import { get, post, ApiClientError } from '../lib/api';
+import { useAuth } from './useAuth';
 import {
   // Response types
   SignCompactResponse,
@@ -167,6 +168,7 @@ export function useRespondToShareOffer(
   >
 ) {
   const queryClient = useQueryClient();
+  const { user: shareOfferUser } = useAuth();
 
   return useMutation<
     RespondToShareSuggestionResponse,
@@ -198,7 +200,7 @@ export function useRespondToShareOffer(
       const optimisticMessage = {
         id: `optimistic-shared-${Date.now()}`,
         sessionId,
-        senderId: null,
+        senderId: shareOfferUser?.id ?? null,
         role: MessageRole.EMPATHY_STATEMENT,
         content: sharedContent,
         stage: 2,
@@ -254,7 +256,7 @@ export function useRespondToShareOffer(
         const realMessage = {
           id: data.sharedMessage.id,
           sessionId,
-          senderId: null,
+          senderId: shareOfferUser?.id ?? null,
           role: MessageRole.EMPATHY_STATEMENT,
           content: data.sharedMessage.content,
           stage: data.sharedMessage.stage,
@@ -754,6 +756,7 @@ export function useConsentToShareEmpathy(
   >
 ) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   // Extract callbacks from options to merge with internal handlers
   // This prevents ...options from overwriting our onSuccess/onError
@@ -807,7 +810,7 @@ export function useConsentToShareEmpathy(
           const optimisticMessage = {
             id: `optimistic-empathy-${Date.now()}`,
             sessionId,
-            senderId: null,
+            senderId: user?.id ?? null,
             role: MessageRole.EMPATHY_STATEMENT,
             content: draftContent,
             stage: 2,
@@ -958,7 +961,7 @@ export function useConsentToShareEmpathy(
         messagesToAdd.push({
           id: data.empathyMessage.id,
           sessionId,
-          senderId: null,
+          senderId: user?.id ?? null,
           role: MessageRole.EMPATHY_STATEMENT,
           content: data.empathyMessage.content,
           stage: data.empathyMessage.stage,
@@ -1131,6 +1134,7 @@ export function useResubmitEmpathy(
   >
 ) {
   const queryClient = useQueryClient();
+  const { user: authUser } = useAuth();
 
   return useMutation<
     ResubmitEmpathyResponse,
@@ -1172,7 +1176,7 @@ export function useResubmitEmpathy(
             } = {
               id: `optimistic-resubmit-${Date.now()}`,
               sessionId,
-              senderId: null,
+              senderId: authUser?.id ?? null,
               role: MessageRole.EMPATHY_STATEMENT,
               content,
               stage: 2,
@@ -1213,7 +1217,7 @@ export function useResubmitEmpathy(
       } = {
         id: data.empathyMessage.id,
         sessionId,
-        senderId: null,
+        senderId: authUser?.id ?? null,
         role: MessageRole.EMPATHY_STATEMENT,
         content: data.empathyMessage.content,
         stage: data.empathyMessage.stage,
