@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BrainActivity } from '../../types';
 import { ModelBadge } from '../metrics/ModelBadge';
@@ -73,7 +73,7 @@ export function SessionPromptsTab({ activities, sessionId }: SessionPromptsTabPr
     );
   }
 
-  const rows: JSX.Element[] = [];
+  const rows: React.JSX.Element[] = [];
   llmCalls.forEach((activity, i) => {
     const cacheRead = activity.metadata?.cacheReadInputTokens || 0;
     const isCached = cacheRead > 0;

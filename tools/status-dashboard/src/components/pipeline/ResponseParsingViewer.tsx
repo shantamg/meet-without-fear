@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import type { ParsedResponse } from '../../types/prompt';
 import { DispatchFlowDiagram } from './DispatchFlowDiagram';
 
@@ -33,8 +33,8 @@ function extractFlags(thinking: string | null): ExtractedFlags {
 /**
  * Syntax-highlight the raw response text by coloring tags.
  */
-function highlightRaw(text: string): JSX.Element[] {
-  const parts: JSX.Element[] = [];
+function highlightRaw(text: string): React.JSX.Element[] {
+  const parts: React.JSX.Element[] = [];
   let key = 0;
 
   const tagPatterns = [
