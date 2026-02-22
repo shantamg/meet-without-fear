@@ -99,6 +99,11 @@ export function finalizeTurnMetrics(turnId: string | undefined): void {
   turnMetrics.delete(turnId);
 }
 
+export function getContextSizesForTurn(turnId: string | undefined): ContextSizeMetrics | undefined {
+  if (!turnId) return undefined;
+  return turnMetrics.get(turnId)?.contextSizes;
+}
+
 export function estimateContextSizes(params: {
   pinned: string;
   summary: string;

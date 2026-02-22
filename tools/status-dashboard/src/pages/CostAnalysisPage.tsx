@@ -7,6 +7,10 @@ import {
 import { useCostAnalytics } from '../hooks/useCostAnalytics';
 import { MetricCard } from '../components/metrics/MetricCard';
 import { exportSessionCostsToCSV } from '../utils/csvExport';
+import { SavingsWaterfall } from '../components/charts/SavingsWaterfall';
+import { CacheHeatmap } from '../components/charts/CacheHeatmap';
+import { CostByStage } from '../components/charts/CostByStage';
+import { CostFlowSankey } from '../components/charts/CostFlowSankey';
 import type { SessionCost } from '../types/costs';
 
 type Period = '24h' | '7d' | '30d';
@@ -428,6 +432,18 @@ export function CostAnalysisPage() {
           </div>
         </div>
       </div>
+
+      {/* Savings Waterfall */}
+      <SavingsWaterfall periodTotal={summary.periodTotal} cacheSavings={summary.cacheSavings} />
+
+      {/* Cache Heatmap */}
+      <CacheHeatmap period={period} />
+
+      {/* Cost by Stage */}
+      <CostByStage period={period} />
+
+      {/* Cost Flow */}
+      <CostFlowSankey period={period} />
 
       {/* Session Cost Table */}
       <div className="cost-section">

@@ -1,3 +1,5 @@
+import type { ContextWindow } from './costs';
+
 export interface SystemPromptBlock {
   type: 'static' | 'dynamic';
   content: string;
@@ -47,4 +49,5 @@ export interface PromptDetail {
     callType: string;
     status: string;
   };
+  contextWindow?: ContextWindow;
 }

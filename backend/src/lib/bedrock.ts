@@ -16,7 +16,7 @@ import { extractJsonFromResponse } from '../utils/json-extractor';
 import type { PromptBlocks } from '../services/stage-prompts';
 import { brainService, BrainActivityCallType } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
-import { recordLlmCall } from '../services/llm-telemetry';
+import { recordLlmCall, getContextSizesForTurn } from '../services/llm-telemetry';
 import { getFixtureResponseByIndex, getFixtureOperationResponse } from './e2e-fixtures';
 import { getE2EFixtureId } from './request-context';
 import * as fs from 'fs';
@@ -414,6 +414,7 @@ export async function getModelCompletion(
     const textBlock = result.content.find((block) => block.type === 'text');
     const responseText = textBlock && textBlock.type === 'text' ? textBlock.text : null;
 
+    const contextSizes = getContextSizesForTurn(options.turnId);
     await brainService.completeActivity(activity.id, {
       output: { text: responseText, stopReason: result.stop_reason },
       tokenCountInput: inputTokens,
@@ -423,6 +424,7 @@ export async function getModelCompletion(
       metadata: {
         cacheReadInputTokens: cacheReadTokens,
         cacheWriteInputTokens: cacheWriteTokens,
+        ...(contextSizes ? { contextSizes } : {}),
       },
     });
 
@@ -819,6 +821,7 @@ export async function* getSonnetStreamingResponse(
       (outputTokens / 1000) * price.output;
 
     // Complete activity log
+    const streamContextSizes = getContextSizesForTurn(options.turnId);
     await brainService.completeActivity(activity.id, {
       output: { streaming: true, stopReason: finalMessage.stop_reason },
       tokenCountInput: inputTokens,
@@ -828,6 +831,7 @@ export async function* getSonnetStreamingResponse(
       metadata: {
         cacheReadInputTokens: cacheReadTokens,
         cacheWriteInputTokens: cacheWriteTokens,
+        ...(streamContextSizes ? { contextSizes: streamContextSizes } : {}),
       },
     });
 

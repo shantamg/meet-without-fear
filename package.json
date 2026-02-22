@@ -40,6 +40,7 @@
     "website:build": "npm --workspace website run build",
     "website:deploy": "cd website && vercel --prod",
     "dev:status": "cd tools/status-dashboard && npm run dev",
+    "deploy:status": "cd tools/status-dashboard && vercel --prod",
     "e2e": "npm --workspace e2e run e2e",
     "e2e:headed": "npm --workspace e2e run e2e:headed",
     "e2e:select": "node e2e/scripts/run-test.mjs",

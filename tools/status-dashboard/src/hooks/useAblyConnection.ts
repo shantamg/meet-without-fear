@@ -3,7 +3,8 @@ import Ably from 'ably';
 import { ABLY_CHANNELS, AblyConnectionStatus } from '../constants/ably';
 import { api } from '../services/api';
 
-const ablyKey = import.meta.env.VITE_ABLY_KEY;
+const ablyKey = import.meta.env.VITE_ABLY_KEY as string | undefined;
+const apiBase = import.meta.env.VITE_API_URL || '';
 
 type EventCallback = (data: any) => void;
 
@@ -73,14 +74,33 @@ export function useAblyConnection(options: UseAblyConnectionOptions = {}): UseAb
   }, []);
 
   useEffect(() => {
-    if (!ablyKey) {
-      console.warn('VITE_ABLY_KEY not set - live updates disabled');
+    // Use token auth via backend when no direct API key is set
+    const ablyOptions: Ably.ClientOptions = ablyKey
+      ? { key: ablyKey }
+      : {
+          authCallback: async (_params, callback) => {
+            try {
+              const { getAuthHeaders } = await import('../services/api');
+              const headers = await getAuthHeaders();
+              const res = await fetch(`${apiBase}/api/brain/ably-token`, { headers });
+              if (!res.ok) throw new Error(`Ably token request failed: ${res.status}`);
+              const json = await res.json();
+              callback(null, json.data);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : 'Unknown error';
+              callback({ message, code: 40000, statusCode: 401 } as Ably.ErrorInfo, null);
+            }
+          },
+        };
+
+    if (!ablyKey && !apiBase) {
+      console.warn('Neither VITE_ABLY_KEY nor VITE_API_URL set - live updates disabled');
       setStatus('error');
       setConnectionState('disconnected');
       return;
     }
 
-    const client = new Ably.Realtime(ablyKey);
+    const client = new Ably.Realtime(ablyOptions);
     clientRef.current = client;
 
     const ablyChannel = client.channels.get(channel);

@@ -54,6 +54,7 @@ import { routeModel, scoreAmbiguity } from './model-router';
 import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from './llm-telemetry';
 import { getFixtureResponseByIndex } from '../lib/e2e-fixtures';
 import { getE2EFixtureId } from '../lib/request-context';
+import type { TraceStep, TurnTrace } from '../types/turn-trace';
 // publishUserEvent and memoryService imports removed - handled in partner-session-classifier.ts
 
 // ============================================================================
@@ -159,6 +160,7 @@ export async function orchestrateResponse(
   context: OrchestratorContext
 ): Promise<OrchestratorResult> {
   const startTime = Date.now();
+  const traceSteps: TraceStep[] = [];
   const decisionStartTime = Date.now();
 
   // Use turnId from context for grouping all logs/costs from this message processing cycle
@@ -180,6 +182,14 @@ export async function orchestrateResponse(
 
   const memoryIntent = determineMemoryIntent(memoryIntentContext);
   const decisionTime = Date.now() - decisionStartTime;
+  traceSteps.push({
+    name: 'Memory Intent',
+    type: 'decision',
+    startMs: decisionStartTime - startTime,
+    durationMs: decisionTime,
+    result: `${memoryIntent.intent} (${memoryIntent.depth})`,
+    status: 'success',
+  });
   console.log(`[AI Orchestrator] Memory intent: ${memoryIntent.intent} (${memoryIntent.depth}) [Decision: ${decisionTime}ms]`);
 
   if (decisionTime > 1000) {
@@ -224,6 +234,13 @@ export async function orchestrateResponse(
   ]);
 
   const parallelTime = Date.now() - parallelStartTime;
+  const parallelStartMs = parallelStartTime - startTime;
+  traceSteps.push(
+    { name: 'Context Assembly', type: 'retrieval', startMs: parallelStartMs, durationMs: parallelTime, result: `${contextBundle.conversationContext.turnCount} turns`, status: 'success' },
+    { name: 'Context Retrieval', type: 'retrieval', startMs: parallelStartMs, durationMs: parallelTime, result: retrievedContext ? retrievedContext.retrievalSummary : 'skipped', status: retrievedContext ? 'success' : 'skipped' },
+    { name: 'Shared Content', type: 'retrieval', startMs: parallelStartMs, durationMs: parallelTime, result: sharedContentHistory ? 'loaded' : 'none', status: 'success' },
+    { name: 'Milestones', type: 'retrieval', startMs: parallelStartMs, durationMs: parallelTime, result: milestoneContext ? 'loaded' : 'none', status: 'success' },
+  );
   console.log(`[AI Orchestrator] Parallel pre-processing completed in ${parallelTime}ms`);
 
   // Publish context.updated event for Neural Monitor dashboard (fire-and-forget)
@@ -256,6 +273,14 @@ export async function orchestrateResponse(
     countPatternEvidence(retrievedContext ?? null),
     undefined // lastSurfacingTurn
   );
+  traceSteps.push({
+    name: 'Surfacing Policy',
+    type: 'decision',
+    startMs: Date.now() - startTime,
+    durationMs: 0,
+    result: `shouldSurface=${surfacingDecision.shouldSurface}, style=${surfacingDecision.style}`,
+    status: 'success',
+  });
   console.log(`[AI Orchestrator] Surfacing decision: shouldSurface=${surfacingDecision.shouldSurface}, style=${surfacingDecision.style}`);
 
   // Step 3: Plan retrieval (for full depth, use Haiku)
@@ -269,6 +294,7 @@ export async function orchestrateResponse(
     );
 
   if (shouldPlanRetrieval) {
+    const retrievalPlanStart = Date.now();
     try {
       retrievalPlan = await planRetrieval(
         context.stage,
@@ -278,17 +304,42 @@ export async function orchestrateResponse(
         context.userMessage,
         memoryIntent.intent
       );
-      console.log(`[AI Orchestrator] Retrieval planned: ${retrievalPlan.queries.length} queries`);
+      traceSteps.push({
+        name: 'Retrieval Planning',
+        type: 'llm_call',
+        startMs: retrievalPlanStart - startTime,
+        durationMs: Date.now() - retrievalPlanStart,
+        result: `${retrievalPlan.queries.length} queries`,
+        status: 'success',
+      });
       console.log(`[AI Orchestrator] Retrieval planned: ${retrievalPlan.queries.length} queries`);
     } catch (error) {
+      traceSteps.push({
+        name: 'Retrieval Planning',
+        type: 'llm_call',
+        startMs: retrievalPlanStart - startTime,
+        durationMs: Date.now() - retrievalPlanStart,
+        result: 'failed, using mock',
+        status: 'error',
+      });
       console.warn('[AI Orchestrator] Retrieval planning failed, using mock plan:', error);
       retrievalPlan = getMockRetrievalPlan(context.stage, context.userId);
     }
+  } else {
+    traceSteps.push({
+      name: 'Retrieval Planning',
+      type: 'llm_call',
+      startMs: Date.now() - startTime,
+      durationMs: 0,
+      result: 'skipped (depth != full or no context)',
+      status: 'skipped',
+    });
   }
 
   // Step 4: Build the stage-specific prompt
   // Add caution flag for high emotional intensity (8-9) - allows Sonnet to use memory
   // if it helps de-escalate, but warns to be extra careful
+  const promptBuildStart = Date.now();
   const cautionAdvised = context.emotionalIntensity >= 8 && context.emotionalIntensity < 9;
 
   const systemPrompt = buildStagePrompt(
@@ -322,6 +373,14 @@ export async function orchestrateResponse(
 
   // Combined text for token estimation (blocks are passed to bedrock separately for caching)
   const systemPromptText = `${systemPrompt.staticBlock}\n\n${systemPrompt.dynamicBlock}`;
+  traceSteps.push({
+    name: 'Prompt Building',
+    type: 'decision',
+    startMs: promptBuildStart - startTime,
+    durationMs: Date.now() - promptBuildStart,
+    result: `stage=${context.stage}, ${systemPromptText.length} chars`,
+    status: 'success',
+  });
 
   /* auditLog removed - prompt will be captured in the LLM BrainActivity */
 
@@ -347,6 +406,7 @@ export async function orchestrateResponse(
   }
 
   // Apply token budget management to avoid exceeding context limits
+  const tokenBudgetStart = Date.now();
   const summaryExists = Boolean(contextBundle.sessionSummary?.currentFocus);
   const { trimmed: trimmedHistory, truncated } = trimConversationHistory(
     context.conversationHistory,
@@ -402,6 +462,15 @@ export async function orchestrateResponse(
     rag: budgetedContext.retrievedContext,
   }));
 
+  traceSteps.push({
+    name: 'Token Budget',
+    type: 'decision',
+    startMs: tokenBudgetStart - startTime,
+    durationMs: Date.now() - tokenBudgetStart,
+    result: `${budgetedContext.conversationMessages.length} msgs, ${budgetedContext.truncated} truncated`,
+    status: 'success',
+  });
+
   let response: string;
   let usedMock = false;
   let offerFeelHeardCheck = false;
@@ -417,6 +486,14 @@ export async function orchestrateResponse(
     conflictIntensity: context.emotionalIntensity,
     ambiguityScore: scoreAmbiguity(context.userMessage),
     messageLength: context.userMessage.length,
+  });
+  traceSteps.push({
+    name: 'Model Routing',
+    type: 'decision',
+    startMs: Date.now() - startTime,
+    durationMs: 0,
+    result: `model=${routingDecision.model}, score=${routingDecision.score}`,
+    status: 'success',
   });
   console.log(`[AI Orchestrator] Routing decision: model=${routingDecision.model}, score=${routingDecision.score}, reasons=${routingDecision.reasons.join(',')}`);
 
@@ -439,6 +516,14 @@ export async function orchestrateResponse(
     });
 
     const responseTime = Date.now() - responseStartTime;
+    traceSteps.push({
+      name: 'LLM Call',
+      type: 'llm_call',
+      startMs: responseStartTime - startTime,
+      durationMs: responseTime,
+      result: modelResponse ? `${routingDecision.model}, ${modelResponse.length} chars` : 'null response',
+      status: modelResponse ? 'success' : 'error',
+    });
     console.log(`[AI Orchestrator] Response generated in ${responseTime}ms [Time to First Byte]`);
 
     if (modelResponse) {
@@ -448,7 +533,16 @@ export async function orchestrateResponse(
       }
 
       // Parse semantic tag response (micro-tag format)
+      const parseStart = Date.now();
       const parsed = parseMicroTagResponse(modelResponse);
+      traceSteps.push({
+        name: 'Response Parsing',
+        type: 'parsing',
+        startMs: parseStart - startTime,
+        durationMs: Date.now() - parseStart,
+        result: `thinking=${!!parsed.thinking}, draft=${!!parsed.draft}, dispatch=${parsed.dispatchTag || 'none'}`,
+        status: 'success',
+      });
 
       // Check for dispatch (off-ramp)
       if (parsed.dispatchTag) {
@@ -464,13 +558,27 @@ export async function orchestrateResponse(
           turnId: context.turnId,
         };
 
+        const dispatchStart = Date.now();
         const dispatchedResponse = await handleDispatch(parsed.dispatchTag, dispatchContext);
+        traceSteps.push({
+          name: `Dispatch: ${parsed.dispatchTag}`,
+          type: 'dispatch',
+          startMs: dispatchStart - startTime,
+          durationMs: Date.now() - dispatchStart,
+          result: `${dispatchedResponse.length} chars`,
+          status: 'success',
+        });
+
+        const totalDuration = Date.now() - startTime;
+        const turnTrace: TurnTrace = { totalDurationMs: totalDuration, modelUsed: routingDecision.model, usedMock: false, steps: traceSteps };
 
         // If AI provided an initial response along with dispatch, return both
         // This enables two-message flow: acknowledgment first, then detailed response
         if (parsed.response && parsed.response.trim()) {
           console.log(`[AI Orchestrator] Two-message dispatch flow: initial="${parsed.response.substring(0, 50)}..."`);
           finalizeTurnMetrics(context.turnId);
+          // Store trace on the ORCHESTRATED_RESPONSE activity via brain service
+          storeTurnTrace(context.sessionId, turnId, turnTrace);
           return {
             response: parsed.response, // First message (AI's acknowledgment)
             memoryIntent,
@@ -493,6 +601,7 @@ export async function orchestrateResponse(
 
         // No initial response - just return the dispatched response (backward compat)
         finalizeTurnMetrics(context.turnId);
+        storeTurnTrace(context.sessionId, turnId, turnTrace);
         return {
           response: dispatchedResponse,
           memoryIntent,
@@ -539,6 +648,14 @@ export async function orchestrateResponse(
       usedMock = true;
     }
   } catch (error) {
+    traceSteps.push({
+      name: 'LLM Call',
+      type: 'llm_call',
+      startMs: responseStartTime - startTime,
+      durationMs: Date.now() - responseStartTime,
+      result: String(error),
+      status: 'error',
+    });
     console.error('[AI Orchestrator] Response generation failed:', error);
     response = getMockResponse(context);
     usedMock = true;
@@ -547,6 +664,10 @@ export async function orchestrateResponse(
   const totalDuration = Date.now() - startTime;
   console.log(`[AI Orchestrator] Total: ${totalDuration}ms | Decision: ${decisionTime}ms | Mock: ${usedMock}`);
   finalizeTurnMetrics(context.turnId);
+
+  // Store turn trace on the ORCHESTRATED_RESPONSE activity
+  const turnTrace: TurnTrace = { totalDurationMs: totalDuration, modelUsed: routingDecision.model, usedMock, steps: traceSteps };
+  storeTurnTrace(context.sessionId, turnId, turnTrace);
 
   // Log latency breakdown for monitoring
   if (totalDuration > 3000) {
@@ -604,6 +725,32 @@ function buildMessagesWithContext(
   }
 
   return messages;
+}
+
+/**
+ * Store turn trace on the ORCHESTRATED_RESPONSE BrainActivity for this turn.
+ * Merges turnTrace into the activity's metadata (fire-and-forget).
+ */
+function storeTurnTrace(sessionId: string, turnId: string, turnTrace: TurnTrace): void {
+  prisma.brainActivity.findFirst({
+    where: {
+      sessionId,
+      turnId,
+      callType: 'ORCHESTRATED_RESPONSE',
+    },
+    orderBy: { createdAt: 'desc' },
+  }).then(async (activity) => {
+    if (!activity) return;
+    const existingMeta = (activity.metadata as Record<string, unknown>) || {};
+    await prisma.brainActivity.update({
+      where: { id: activity.id },
+      data: {
+        metadata: { ...existingMeta, turnTrace: JSON.parse(JSON.stringify(turnTrace)) },
+      },
+    });
+  }).catch((err) => {
+    console.warn('[AI Orchestrator] Failed to store turn trace:', err);
+  });
 }
 
 // Legacy JSON parsing functions removed - now using micro-tag parser (parseMicroTagResponse)

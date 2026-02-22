@@ -1,11 +1,64 @@
 
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import { errorResponse, successResponse } from '../utils/response';
 import { assembleContextBundle, type ContextBundle } from '../services/context-assembler';
 import { determineMemoryIntent } from '../services/memory-intent';
+import { resolveStageIntervalsForSessions, resolveStageForTimestamp } from '../utils/stage-resolver';
 
 const router = Router();
+
+// ============================================================================
+// Dashboard Auth Middleware
+// ============================================================================
+
+/**
+ * Authentication middleware for the Neural Monitor dashboard.
+ * Accepts either:
+ *   - X-Dashboard-Secret header matching DASHBOARD_API_SECRET env var
+ *   - Clerk JWT Bearer token (verified via @clerk/express)
+ * If neither DASHBOARD_API_SECRET nor CLERK_SECRET_KEY is configured, skips auth (dev mode).
+ */
+async function requireDashboardAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const dashboardSecret = process.env.DASHBOARD_API_SECRET;
+  const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+
+  // Dev mode: no auth configured, skip
+  if (!dashboardSecret && !clerkSecretKey) {
+    next();
+    return;
+  }
+
+  // Check X-Dashboard-Secret header
+  if (dashboardSecret) {
+    const headerSecret = req.headers['x-dashboard-secret'] as string | undefined;
+    if (headerSecret === dashboardSecret) {
+      next();
+      return;
+    }
+  }
+
+  // Check Clerk JWT Bearer token
+  if (clerkSecretKey) {
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const { verifyToken } = await import('@clerk/express');
+        const token = authHeader.slice(7);
+        await verifyToken(token, { secretKey: clerkSecretKey });
+        next();
+        return;
+      } catch {
+        // Token invalid, fall through to 401
+      }
+    }
+  }
+
+  errorResponse(res, 'UNAUTHORIZED', 'Dashboard authentication required', 401);
+}
+
+// Apply dashboard auth to all brain routes
+router.use(requireDashboardAuth);
 
 // ============================================================================
 // Helpers
@@ -380,6 +433,194 @@ router.get('/costs', async (req, res) => {
 });
 
 // ============================================================================
+// Cache heatmap (stage x day)
+// ============================================================================
+router.get('/costs/cache-heatmap', async (req, res) => {
+  try {
+    const period = (req.query.period as string) || '7d';
+    const periodStart = getPeriodStartDate(period);
+
+    const activities = await prisma.brainActivity.findMany({
+      where: { createdAt: { gte: periodStart } },
+      select: {
+        sessionId: true,
+        tokenCountInput: true,
+        metadata: true,
+        createdAt: true,
+      },
+    });
+
+    // Resolve stage intervals for all sessions
+    const sessionIds = [...new Set(activities.map(a => a.sessionId))];
+    const stageIntervals = await resolveStageIntervalsForSessions(sessionIds);
+
+    // Aggregate by (stage, day)
+    const cellMap = new Map<string, { totalTokens: number; cacheReadTokens: number }>();
+
+    for (const a of activities) {
+      const stage = resolveStageForTimestamp(stageIntervals.get(a.sessionId), a.createdAt);
+      const day = formatDateKey(a.createdAt);
+      const key = `${stage}|${day}`;
+      const { cacheRead } = extractCacheTokens(a.metadata);
+
+      const entry = cellMap.get(key) || { totalTokens: 0, cacheReadTokens: 0 };
+      entry.totalTokens += a.tokenCountInput;
+      entry.cacheReadTokens += cacheRead;
+      cellMap.set(key, entry);
+    }
+
+    const cells = Array.from(cellMap.entries()).map(([key, data]) => {
+      const [stageStr, day] = key.split('|');
+      return {
+        stage: parseInt(stageStr, 10),
+        day,
+        hitRate: data.totalTokens > 0
+          ? Math.round((data.cacheReadTokens / data.totalTokens) * 10000) / 100
+          : 0,
+        totalTokens: data.totalTokens,
+        cacheReadTokens: data.cacheReadTokens,
+      };
+    });
+
+    return successResponse(res, { cells });
+  } catch (error) {
+    console.error('[BrainRoutes] Failed to fetch cache heatmap:', error);
+    return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch cache heatmap', 500);
+  }
+});
+
+// ============================================================================
+// Cost by stage
+// ============================================================================
+router.get('/costs/by-stage', async (req, res) => {
+  try {
+    const period = (req.query.period as string) || '7d';
+    const periodStart = getPeriodStartDate(period);
+
+    const activities = await prisma.brainActivity.findMany({
+      where: { createdAt: { gte: periodStart } },
+      select: {
+        sessionId: true,
+        cost: true,
+        model: true,
+        createdAt: true,
+      },
+    });
+
+    // Resolve stage intervals
+    const sessionIds = [...new Set(activities.map(a => a.sessionId))];
+    const stageIntervals = await resolveStageIntervalsForSessions(sessionIds);
+
+    // Aggregate by stage
+    const stageMap = new Map<number, { sonnetCost: number; haikuCost: number; titanCost: number; totalCost: number }>();
+
+    for (const a of activities) {
+      const stage = resolveStageForTimestamp(stageIntervals.get(a.sessionId), a.createdAt);
+      const modelNorm = normalizeModel(a.model);
+
+      const entry = stageMap.get(stage) || { sonnetCost: 0, haikuCost: 0, titanCost: 0, totalCost: 0 };
+      if (modelNorm === 'sonnet') entry.sonnetCost += a.cost;
+      else if (modelNorm === 'haiku') entry.haikuCost += a.cost;
+      else if (modelNorm === 'titan') entry.titanCost += a.cost;
+      entry.totalCost += a.cost;
+      stageMap.set(stage, entry);
+    }
+
+    const stages = Array.from(stageMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([stage, data]) => ({
+        stage,
+        sonnetCost: Math.round(data.sonnetCost * 1000000) / 1000000,
+        haikuCost: Math.round(data.haikuCost * 1000000) / 1000000,
+        titanCost: Math.round(data.titanCost * 1000000) / 1000000,
+        totalCost: Math.round(data.totalCost * 1000000) / 1000000,
+      }));
+
+    return successResponse(res, { stages });
+  } catch (error) {
+    console.error('[BrainRoutes] Failed to fetch cost by stage:', error);
+    return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch cost by stage', 500);
+  }
+});
+
+// ============================================================================
+// Cost flow (Sankey diagram data)
+// ============================================================================
+router.get('/costs/flow', async (req, res) => {
+  try {
+    const period = (req.query.period as string) || '7d';
+    const periodStart = getPeriodStartDate(period);
+
+    const activities = await prisma.brainActivity.findMany({
+      where: { createdAt: { gte: periodStart } },
+      select: {
+        sessionId: true,
+        cost: true,
+        model: true,
+        callType: true,
+        createdAt: true,
+      },
+    });
+
+    // Resolve stage intervals
+    const sessionIds = [...new Set(activities.map(a => a.sessionId))];
+    const stageIntervals = await resolveStageIntervalsForSessions(sessionIds);
+
+    // Build Sankey: Stage -> Model -> Call Type
+    const stageNames = new Map<number, string>([
+      [0, 'Pre-Session'],
+      [1, 'Feel Heard'],
+      [2, 'Perspective'],
+      [3, 'Needs'],
+      [4, 'Resolution'],
+    ]);
+
+    const nodeSet = new Map<string, number>();
+    const linkMap = new Map<string, number>();
+
+    function getNodeIndex(name: string): number {
+      if (!nodeSet.has(name)) {
+        nodeSet.set(name, nodeSet.size);
+      }
+      return nodeSet.get(name)!;
+    }
+
+    for (const a of activities) {
+      const stage = resolveStageForTimestamp(stageIntervals.get(a.sessionId), a.createdAt);
+      const stageName = stageNames.get(stage) || `Stage ${stage}`;
+      const modelNorm = normalizeModel(a.model);
+      const modelName = modelNorm.charAt(0).toUpperCase() + modelNorm.slice(1);
+      const callType = (a.callType || 'UNKNOWN').replace(/_/g, ' ');
+
+      const stageIdx = getNodeIndex(stageName);
+      const modelIdx = getNodeIndex(modelName);
+      const callIdx = getNodeIndex(callType);
+
+      // Stage -> Model link
+      const smKey = `${stageIdx}-${modelIdx}`;
+      linkMap.set(smKey, (linkMap.get(smKey) || 0) + a.cost);
+
+      // Model -> Call Type link
+      const mcKey = `${modelIdx}-${callIdx}`;
+      linkMap.set(mcKey, (linkMap.get(mcKey) || 0) + a.cost);
+    }
+
+    const nodes = Array.from(nodeSet.keys()).map(name => ({ name }));
+    const links = Array.from(linkMap.entries())
+      .filter(([, value]) => value > 0)
+      .map(([key, value]) => {
+        const [source, target] = key.split('-').map(Number);
+        return { source, target, value: Math.round(value * 1000000) / 1000000 };
+      });
+
+    return successResponse(res, { nodes, links });
+  } catch (error) {
+    console.error('[BrainRoutes] Failed to fetch cost flow:', error);
+    return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch cost flow', 500);
+  }
+});
+
+// ============================================================================
 // Prompt detail for a single BrainActivity
 // ============================================================================
 router.get('/activity/:activityId/prompt', async (req, res) => {
@@ -498,6 +739,25 @@ router.get('/activity/:activityId/prompt', async (req, res) => {
         callType: activity.callType,
         status: activity.status,
       },
+      ...(metadata?.contextSizes ? {
+        contextWindow: {
+          pinnedTokens: metadata.contextSizes.pinnedTokens ?? 0,
+          summaryTokens: metadata.contextSizes.summaryTokens ?? 0,
+          recentTokens: metadata.contextSizes.recentTokens ?? 0,
+          ragTokens: metadata.contextSizes.ragTokens ?? 0,
+          totalUsed: (metadata.contextSizes.pinnedTokens ?? 0) +
+            (metadata.contextSizes.summaryTokens ?? 0) +
+            (metadata.contextSizes.recentTokens ?? 0) +
+            (metadata.contextSizes.ragTokens ?? 0),
+          budgetLimit: 150000,
+          utilizationPercent: Math.round(
+            (((metadata.contextSizes.pinnedTokens ?? 0) +
+              (metadata.contextSizes.summaryTokens ?? 0) +
+              (metadata.contextSizes.recentTokens ?? 0) +
+              (metadata.contextSizes.ragTokens ?? 0)) / 150000) * 10000
+          ) / 100,
+        },
+      } : {}),
     });
   } catch (error) {
     console.error('[BrainRoutes] Failed to fetch prompt detail:', error);
@@ -735,6 +995,40 @@ router.get('/sessions/:sessionId/context', async (req, res) => {
   }
 });
 
+// ============================================================================
+// Turn trace (pipeline timing)
+// ============================================================================
+router.get('/turn/:turnId/trace', async (req, res) => {
+  try {
+    const { turnId } = req.params;
+
+    const activity = await prisma.brainActivity.findFirst({
+      where: {
+        turnId,
+        callType: 'ORCHESTRATED_RESPONSE',
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { metadata: true },
+    });
+
+    if (!activity) {
+      return errorResponse(res, 'NOT_FOUND', 'No orchestrated response found for this turn', 404);
+    }
+
+    const metadata = activity.metadata as any;
+    const turnTrace = metadata?.turnTrace ?? null;
+
+    if (!turnTrace) {
+      return errorResponse(res, 'NOT_FOUND', 'No trace data available for this turn', 404);
+    }
+
+    return successResponse(res, turnTrace);
+  } catch (error) {
+    console.error('[BrainRoutes] Failed to fetch turn trace:', error);
+    return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch turn trace', 500);
+  }
+});
+
 // Get sessions list with filter/search/sort support
 router.get('/sessions', async (req, res) => {
   try {
@@ -958,6 +1252,31 @@ router.get('/sessions', async (req, res) => {
   } catch (error) {
     console.error('[BrainRoutes] Failed to fetch sessions:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch sessions', 500);
+  }
+});
+
+// ============================================================================
+// Ably Token Auth (for dashboard realtime)
+// ============================================================================
+router.get('/ably-token', async (_req, res) => {
+  try {
+    const ablyApiKey = process.env.ABLY_API_KEY;
+    if (!ablyApiKey) {
+      return errorResponse(res, 'NOT_CONFIGURED', 'Ably not configured', 503);
+    }
+
+    const Ably = await import('ably');
+    const rest = new Ably.default.Rest(ablyApiKey);
+
+    const tokenRequest = await rest.auth.createTokenRequest({
+      capability: { 'ai-audit-stream': ['subscribe'] },
+      ttl: 60 * 60 * 1000, // 1 hour
+    });
+
+    return successResponse(res, tokenRequest);
+  } catch (error) {
+    console.error('[BrainRoutes] Failed to create Ably token:', error);
+    return errorResponse(res, 'INTERNAL_ERROR', 'Failed to create Ably token', 500);
   }
 });
 

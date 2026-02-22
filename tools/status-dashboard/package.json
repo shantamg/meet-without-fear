@@ -5,10 +5,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "check": "tsc"
+    "check": "tsc",
+    "deploy": "vercel --prod"
   },
   "dependencies": {
-    "@types/react-window": "^1.8.8",
+    "@clerk/clerk-react": "^5.61.1",
+    "@clerk/themes": "^2.4.55",
     "ably": "^2.16.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
@@ -21,6 +23,7 @@
   "devDependencies": {
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/react-window": "^1.8.8",
     "@vitejs/plugin-react": "^5.1.2"
   }
 }

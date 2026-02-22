@@ -11,7 +11,13 @@ const app = express();
 
 // Security middleware
 app.use(helmet());
-app.use(cors());
+
+// CORS - allow dashboard domain when configured
+const corsOrigins: (string | RegExp)[] = [];
+if (process.env.DASHBOARD_URL) {
+  corsOrigins.push(process.env.DASHBOARD_URL);
+}
+app.use(cors(corsOrigins.length > 0 ? { origin: corsOrigins } : undefined));
 
 // Compression middleware - skip SSE endpoints to prevent buffering
 app.use(

@@ -6,12 +6,16 @@ import { RequestPanel } from '../components/prompt/RequestPanel';
 import { ResponsePanel } from '../components/prompt/ResponsePanel';
 import { MetadataPanel } from '../components/prompt/MetadataPanel';
 import { PromptDiffViewer } from '../components/prompt/PromptDiffViewer';
+import { ResponseParsingViewer } from '../components/pipeline/ResponseParsingViewer';
 import { FormattedPrice } from '../components/session/FormattedPrice';
 import { api } from '../services/api';
+
+type InspectorTab = 'panels' | 'parsing';
 
 export function PromptInspectorPage() {
   const { sessionId, activityId } = useParams<{ sessionId: string; activityId: string }>();
   const { data, loading, error } = usePromptDetail(activityId);
+  const [activeTab, setActiveTab] = useState<InspectorTab>('panels');
   const [diffState, setDiffState] = useState<{
     showing: boolean;
     loading: boolean;
@@ -87,7 +91,7 @@ export function PromptInspectorPage() {
       <div className="prompt-inspector-header">
         <div className="prompt-inspector-nav">
           <Link to={`/sessions/${sessionId}`} className="prompt-back-link">
-            ← Session Detail
+            &larr; Session Detail
           </Link>
         </div>
         <div className="prompt-inspector-meta">
@@ -124,22 +128,51 @@ export function PromptInspectorPage() {
         </div>
       )}
 
-      {/* 3-Panel Layout */}
-      <div className="prompt-inspector-panels">
-        <RequestPanel
-          systemPrompt={data.systemPrompt.blocks}
-          messages={data.messages}
-          tokens={data.tokens}
-        />
-        <ResponsePanel response={data.response} />
-        <MetadataPanel
-          model={data.timing.model}
-          callType={data.timing.callType}
-          tokens={data.tokens}
-          cost={data.cost}
-          durationMs={data.timing.durationMs}
-        />
+      {/* Tab Bar */}
+      <div className="prompt-inspector-tab-bar" style={{ padding: '0 1.25rem' }}>
+        <button
+          className={`prompt-inspector-tab ${activeTab === 'panels' ? 'active' : ''}`}
+          onClick={() => setActiveTab('panels')}
+        >
+          Inspector
+        </button>
+        <button
+          className={`prompt-inspector-tab ${activeTab === 'parsing' ? 'active' : ''}`}
+          onClick={() => setActiveTab('parsing')}
+        >
+          Parsing
+        </button>
       </div>
+
+      {/* Inspector Panels */}
+      {activeTab === 'panels' && (
+        <div className="prompt-inspector-panels">
+          <RequestPanel
+            systemPrompt={data.systemPrompt.blocks}
+            messages={data.messages}
+            tokens={data.tokens}
+          />
+          <ResponsePanel response={data.response} />
+          <MetadataPanel
+            model={data.timing.model}
+            callType={data.timing.callType}
+            tokens={data.tokens}
+            cost={data.cost}
+            durationMs={data.timing.durationMs}
+            contextWindow={data.contextWindow}
+          />
+        </div>
+      )}
+
+      {/* Parsing View */}
+      {activeTab === 'parsing' && (
+        <div style={{ padding: '0 1.25rem' }}>
+          <ResponseParsingViewer
+            rawText={data.response.text}
+            parsed={data.response}
+          />
+        </div>
+      )}
     </div>
   );
 }

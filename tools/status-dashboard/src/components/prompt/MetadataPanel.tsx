@@ -1,6 +1,8 @@
 import { ModelBadge } from '../metrics/ModelBadge';
 import { formatDuration } from '../../utils/formatters';
+import { TokenBudgetGauge } from '../charts/TokenBudgetGauge';
 import type { TokenBreakdown, CostBreakdown } from '../../types/prompt';
+import type { ContextWindow } from '../../types/costs';
 
 interface MetadataPanelProps {
   model: string;
@@ -8,13 +10,14 @@ interface MetadataPanelProps {
   tokens: TokenBreakdown;
   cost: CostBreakdown;
   durationMs: number;
+  contextWindow?: ContextWindow;
 }
 
 function formatCost(value: number): string {
   return `$${value.toFixed(5)}`;
 }
 
-export function MetadataPanel({ model, callType, tokens, cost, durationMs }: MetadataPanelProps) {
+export function MetadataPanel({ model, callType, tokens, cost, durationMs, contextWindow }: MetadataPanelProps) {
   const totalInput = tokens.input;
   const cacheRatio = totalInput > 0 ? tokens.cacheRead / totalInput : 0;
   const cachePercent = (cacheRatio * 100).toFixed(0);
@@ -89,6 +92,11 @@ export function MetadataPanel({ model, callType, tokens, cost, durationMs }: Met
           </div>
         </div>
       </div>
+
+      {/* Context Window Gauge */}
+      {contextWindow && (
+        <TokenBudgetGauge contextWindow={contextWindow} />
+      )}
 
       {/* Cost Breakdown */}
       <div className="meta-section">

@@ -1,10 +1,43 @@
 import { Session, BrainActivity, SessionSummary, ContextResponse, SessionFilters } from '../types';
 import type { DashboardMetrics } from '../types/dashboard';
-import type { CostParams, CostAnalytics } from '../types/costs';
+import type { CostParams, CostAnalytics, CacheHeatmapData, CostByStageData, CostFlowData } from '../types/costs';
 import type { PromptDetail } from '../types/prompt';
+import type { TurnTrace } from '../types/trace';
 import { fetchWithRetry } from '../utils/fetchWithRetry';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
+
+/**
+ * Resolves auth headers for API requests.
+ * Uses Clerk session token when available, otherwise empty headers.
+ */
+let _getToken: (() => Promise<string | null>) | null = null;
+
+export function setAuthTokenResolver(getToken: () => Promise<string | null>): void {
+  _getToken = getToken;
+}
+
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (!_getToken) return {};
+  try {
+    const token = await _getToken();
+    if (token) return { Authorization: `Bearer ${token}` };
+  } catch {
+    // Token fetch failed, proceed without auth
+  }
+  return {};
+}
+
+/**
+ * Wrapper around fetchWithRetry that adds auth headers automatically.
+ */
+async function authedFetch(url: string, options?: RequestInit): Promise<Response> {
+  const authHeaders = await getAuthHeaders();
+  return fetchWithRetry(url, {
+    ...options,
+    headers: { ...options?.headers, ...authHeaders },
+  });
+}
 
 /**
  * API response wrapper type.
@@ -63,7 +96,7 @@ export const api = {
       }
     }
 
-    const res = await fetchWithRetry(`${API_BASE}/api/brain/sessions?${params.toString()}`);
+    const res = await authedFetch(`${API_BASE}/api/brain/sessions?${params.toString()}`);
     if (!res.ok) {
       throw new Error(`Failed to fetch sessions: ${res.statusText}`);
     }
@@ -88,7 +121,7 @@ export const api = {
    * Fetches activity for a specific session.
    */
   async getSessionActivity(sessionId: string): Promise<ActivityResponse> {
-    const res = await fetchWithRetry(`${API_BASE}/api/brain/activity/${sessionId}`);
+    const res = await authedFetch(`${API_BASE}/api/brain/activity/${sessionId}`);
     if (!res.ok) {
       throw new Error(`Failed to fetch activity: ${res.statusText}`);
     }
@@ -108,7 +141,7 @@ export const api = {
    * Returns context for all users in the session.
    */
   async getSessionContext(sessionId: string): Promise<ContextResponse> {
-    const res = await fetchWithRetry(`${API_BASE}/api/brain/sessions/${sessionId}/context`);
+    const res = await authedFetch(`${API_BASE}/api/brain/sessions/${sessionId}/context`);
     if (!res.ok) {
       throw new Error(`Failed to fetch context: ${res.statusText}`);
     }
@@ -123,7 +156,7 @@ export const api = {
    * Fetches dashboard overview metrics.
    */
   async getDashboard(period: '24h' | '7d' | '30d' = '24h'): Promise<DashboardMetrics> {
-    const res = await fetchWithRetry(`${API_BASE}/api/brain/dashboard?period=${period}`);
+    const res = await authedFetch(`${API_BASE}/api/brain/dashboard?period=${period}`);
     if (!res.ok) {
       throw new Error(`Failed to fetch dashboard: ${res.statusText}`);
     }
@@ -143,7 +176,7 @@ export const api = {
     if (params.groupBy) searchParams.append('groupBy', params.groupBy);
     if (params.modelFilter) searchParams.append('modelFilter', params.modelFilter);
 
-    const res = await fetchWithRetry(`${API_BASE}/api/brain/costs?${searchParams.toString()}`);
+    const res = await authedFetch(`${API_BASE}/api/brain/costs?${searchParams.toString()}`);
     if (!res.ok) {
       throw new Error(`Failed to fetch costs: ${res.statusText}`);
     }
@@ -155,10 +188,70 @@ export const api = {
   },
 
   /**
+   * Fetches cache heatmap data (stage x day).
+   */
+  async getCacheHeatmap(period: '24h' | '7d' | '30d'): Promise<CacheHeatmapData> {
+    const res = await authedFetch(`${API_BASE}/api/brain/costs/cache-heatmap?period=${period}`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch cache heatmap: ${res.statusText}`);
+    }
+    const json: ApiResponse<CacheHeatmapData> = await res.json();
+    if (!json.success) {
+      throw new Error(json.error || 'Failed to load cache heatmap');
+    }
+    return json.data;
+  },
+
+  /**
+   * Fetches cost breakdown by stage.
+   */
+  async getCostByStage(period: '24h' | '7d' | '30d'): Promise<CostByStageData> {
+    const res = await authedFetch(`${API_BASE}/api/brain/costs/by-stage?period=${period}`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch cost by stage: ${res.statusText}`);
+    }
+    const json: ApiResponse<CostByStageData> = await res.json();
+    if (!json.success) {
+      throw new Error(json.error || 'Failed to load cost by stage');
+    }
+    return json.data;
+  },
+
+  /**
+   * Fetches cost flow data for Sankey diagram.
+   */
+  async getCostFlow(period: '24h' | '7d' | '30d'): Promise<CostFlowData> {
+    const res = await authedFetch(`${API_BASE}/api/brain/costs/flow?period=${period}`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch cost flow: ${res.statusText}`);
+    }
+    const json: ApiResponse<CostFlowData> = await res.json();
+    if (!json.success) {
+      throw new Error(json.error || 'Failed to load cost flow');
+    }
+    return json.data;
+  },
+
+  /**
+   * Fetches pipeline trace for a specific turn.
+   */
+  async getTurnTrace(turnId: string): Promise<TurnTrace> {
+    const res = await authedFetch(`${API_BASE}/api/brain/turn/${turnId}/trace`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch turn trace: ${res.statusText}`);
+    }
+    const json: ApiResponse<TurnTrace> = await res.json();
+    if (!json.success) {
+      throw new Error(json.error || 'Failed to load turn trace');
+    }
+    return json.data;
+  },
+
+  /**
    * Fetches prompt detail for a specific activity.
    */
   async getPromptDetail(activityId: string): Promise<PromptDetail> {
-    const res = await fetchWithRetry(`${API_BASE}/api/brain/activity/${activityId}/prompt`);
+    const res = await authedFetch(`${API_BASE}/api/brain/activity/${activityId}/prompt`);
     if (!res.ok) {
       throw new Error(`Failed to fetch prompt detail: ${res.statusText}`);
     }

@@ -1,10 +1,13 @@
 import React, { Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
+import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react';
 import { AppLayout } from './components/layout/AppLayout';
 import SessionDetail from './components/session/SessionDetail';
 import { ContextPage } from './components/context';
 import { SessionListPage } from './pages/SessionListPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 // Lazy-loaded pages (less frequently visited)
 const DashboardPage = React.lazy(() =>
@@ -39,12 +42,12 @@ function PageErrorFallback() {
   );
 }
 
-function App() {
+function AppRoutes() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
         <Route path="/" element={<ErrorBoundary fallback={<PageErrorFallback />}><Suspense fallback={<LoadingSpinner />}><DashboardPage /></Suspense></ErrorBoundary>} />
-        <Route path="/sessions" element={<SessionListPage />} />
+        <Route path="/sessions" element={<ErrorBoundary fallback={<PageErrorFallback />}><SessionListPage /></ErrorBoundary>} />
         <Route path="/sessions/:sessionId" element={<ErrorBoundary fallback={<PageErrorFallback />}><SessionDetail /></ErrorBoundary>} />
         <Route path="/sessions/:sessionId/context" element={<ErrorBoundary fallback={<PageErrorFallback />}><ContextPage /></ErrorBoundary>} />
         <Route path="/sessions/:sessionId/prompt/:activityId" element={<ErrorBoundary fallback={<PageErrorFallback />}><Suspense fallback={<LoadingSpinner />}><PromptInspectorPage /></Suspense></ErrorBoundary>} />
@@ -52,6 +55,23 @@ function App() {
         <Route path="/live" element={<ErrorBoundary fallback={<PageErrorFallback />}><Suspense fallback={<LoadingSpinner />}><LiveMonitorPage /></Suspense></ErrorBoundary>} />
       </Route>
     </Routes>
+  );
+}
+
+function App() {
+  if (!clerkEnabled) {
+    return <AppRoutes />;
+  }
+
+  return (
+    <>
+      <SignedIn>
+        <AppRoutes />
+      </SignedIn>
+      <SignedOut>
+        <RedirectToSignIn />
+      </SignedOut>
+    </>
   );
 }
 

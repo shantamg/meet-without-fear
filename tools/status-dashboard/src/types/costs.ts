@@ -63,3 +63,56 @@ export interface CostAnalytics {
   cacheMetrics: CacheMetrics;
   sessionCosts: SessionCost[];
 }
+
+// A1: Cache Heatmap
+export interface CacheHeatmapCell {
+  stage: number;
+  day: string;
+  hitRate: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+}
+
+export interface CacheHeatmapData {
+  cells: CacheHeatmapCell[];
+}
+
+// A3: Cost by Stage
+export interface StageCost {
+  stage: number;
+  sonnetCost: number;
+  haikuCost: number;
+  titanCost: number;
+  totalCost: number;
+}
+
+export interface CostByStageData {
+  stages: StageCost[];
+}
+
+// A4: Token Budget Context Window
+export interface ContextWindow {
+  pinnedTokens: number;
+  summaryTokens: number;
+  recentTokens: number;
+  ragTokens: number;
+  totalUsed: number;
+  budgetLimit: number;
+  utilizationPercent: number;
+}
+
+// A5: Cost Flow Sankey
+export interface SankeyNode {
+  name: string;
+}
+
+export interface SankeyLink {
+  source: number;
+  target: number;
+  value: number;
+}
+
+export interface CostFlowData {
+  nodes: SankeyNode[];
+  links: SankeyLink[];
+}
