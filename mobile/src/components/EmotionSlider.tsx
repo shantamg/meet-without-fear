@@ -9,11 +9,14 @@
  * - Triggers callback when emotion level is high (>= threshold)
  */
 
-import { View, Text } from 'react-native';
-import { useRef } from 'react';
+import { View, Text, Animated } from 'react-native';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import Slider from '@react-native-community/slider';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
+
+const SLIDER_HINT_SEEN_KEY = 'emotion_slider_hint_seen';
 
 // ============================================================================
 // Types
@@ -91,12 +94,44 @@ export function EmotionSlider({
   const currentColor = getGradientColor(value);
   const intensityLabel = getIntensityLabel(value);
 
+  // Onboarding hint state
+  const [showHint, setShowHint] = useState(false);
+  const hintOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(SLIDER_HINT_SEEN_KEY).then((seen) => {
+      if (!cancelled && seen !== 'true') {
+        setShowHint(true);
+        Animated.timing(hintOpacity, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }).start();
+      }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const dismissHint = useCallback(() => {
+    if (!showHint) return;
+    AsyncStorage.setItem(SLIDER_HINT_SEEN_KEY, 'true');
+    Animated.timing(hintOpacity, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => setShowHint(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showHint]);
+
   // Track the value when user starts sliding
   const slideStartValue = useRef(value);
 
   const handleSlidingStart = () => {
     // Remember value at start of slide
     slideStartValue.current = value;
+    dismissHint();
   };
 
   const handleValueChange = (newValue: number) => {
@@ -151,6 +186,15 @@ export function EmotionSlider({
         <Text style={styles.labelText}>Elevated</Text>
         <Text style={styles.labelText}>Intense</Text>
       </View>
+
+        {showHint && (
+          <Animated.Text
+            style={[styles.hint, { opacity: hintOpacity }]}
+            testID={`${testID}-hint`}
+          >
+            Slide to update how you're feeling
+          </Animated.Text>
+        )}
     </View>
   );
 }
@@ -198,5 +242,11 @@ const useStyles = (compact?: boolean) =>
     labelText: {
       fontSize: t.typography.fontSize.xs,
       color: t.colors.textMuted,
+    },
+    hint: {
+      fontSize: t.typography.fontSize.xs,
+      color: t.colors.textMuted,
+      textAlign: 'center',
+      marginTop: compact ? 0 : t.spacing.xs,
     },
   }));
