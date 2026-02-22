@@ -9,22 +9,11 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 
 /**
  * Resolves auth headers for API requests.
- * Uses Clerk session token when available, otherwise empty headers.
+ * Sends X-Dashboard-Secret when VITE_DASHBOARD_SECRET is configured.
  */
-let _getToken: (() => Promise<string | null>) | null = null;
-
-export function setAuthTokenResolver(getToken: () => Promise<string | null>): void {
-  _getToken = getToken;
-}
-
 export async function getAuthHeaders(): Promise<Record<string, string>> {
-  if (!_getToken) return {};
-  try {
-    const token = await _getToken();
-    if (token) return { Authorization: `Bearer ${token}` };
-  } catch (err) {
-    console.error('[api] Auth token fetch failed:', err);
-  }
+  const secret = import.meta.env.VITE_DASHBOARD_SECRET;
+  if (secret) return { 'X-Dashboard-Secret': secret };
   return {};
 }
 
