@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { BrainActivity } from '../../types';
 import { formatModelName, formatDuration } from '../../utils/formatters';
 import { FormattedPrice } from '../session/FormattedPrice';
+import { CacheIndicator } from '../metrics/CacheIndicator';
 import { DetailBlock } from '../session/DetailBlock';
 
 interface BaseEventWrapperProps {
@@ -42,6 +43,7 @@ export function BaseEventWrapper({
 
   const modelDisplay = formatModelName(activity.model || undefined);
   const durationDisplay = activity.durationMs > 0 ? formatDuration(activity.durationMs) : '';
+  const hasCacheHit = activity.metadata?.cacheReadInputTokens > 0;
 
   return (
     <div className={`event-item ${isError ? 'error' : ''} ${isPending ? 'pending' : ''}`}>
@@ -60,6 +62,7 @@ export function BaseEventWrapper({
           <div className="event-meta">
             {modelDisplay && <span className="meta-tag model">{modelDisplay}</span>}
             {durationDisplay && <span className="meta-tag duration">{durationDisplay}</span>}
+            {hasCacheHit && <CacheIndicator cached={true} />}
           </div>
         </div>
 

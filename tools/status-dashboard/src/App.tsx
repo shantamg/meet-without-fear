@@ -1,30 +1,26 @@
-import React from 'react';
-import { Routes, Route, Link } from 'react-router-dom';
-import { SessionBrowser } from './components/browser';
+import { Routes, Route } from 'react-router-dom';
+import { AppLayout } from './components/layout/AppLayout';
 import SessionDetail from './components/session/SessionDetail';
 import { ContextPage } from './components/context';
+import { DashboardPage } from './pages/DashboardPage';
+import { SessionListPage } from './pages/SessionListPage';
+import { CostAnalysisPage } from './pages/CostAnalysisPage';
+import { LiveMonitorPage } from './pages/LiveMonitorPage';
+import { PromptInspectorPage } from './pages/PromptInspectorPage';
 
 function App() {
   return (
-    <div className="app-container">
-      <nav className="main-nav">
-        <Link to="/" className="nav-brand">
-          <span className="pulse-dot"></span>
-          <h1>Neural Monitor</h1>
-        </Link>
-        <div className="nav-links">
-          <Link to="/">Sessions</Link>
-        </div>
-      </nav>
-
-      <main className="main-content">
-        <Routes>
-          <Route path="/" element={<SessionBrowser />} />
-          <Route path="/session/:sessionId" element={<SessionDetail />} />
-          <Route path="/session/:sessionId/context" element={<ContextPage />} />
-        </Routes>
-      </main>
-    </div>
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/sessions" element={<SessionListPage />} />
+        <Route path="/sessions/:sessionId" element={<SessionDetail />} />
+        <Route path="/sessions/:sessionId/context" element={<ContextPage />} />
+        <Route path="/sessions/:sessionId/prompt/:activityId" element={<PromptInspectorPage />} />
+        <Route path="/costs" element={<CostAnalysisPage />} />
+        <Route path="/live" element={<LiveMonitorPage />} />
+      </Route>
+    </Routes>
   );
 }
 

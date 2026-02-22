@@ -15,7 +15,7 @@ function ContextPage() {
     return (
       <div className="context-page">
         <div className="context-header">
-          <Link to={`/session/${sessionId}`} className="back-link">&larr; Back to Session</Link>
+          <Link to={`/sessions/${sessionId}`} className="back-link">&larr; Back to Session</Link>
           <h2>Context Bundle</h2>
         </div>
         <div className="loading">Loading context...</div>
@@ -27,7 +27,7 @@ function ContextPage() {
     return (
       <div className="context-page">
         <div className="context-header">
-          <Link to={`/session/${sessionId}`} className="back-link">&larr; Back to Session</Link>
+          <Link to={`/sessions/${sessionId}`} className="back-link">&larr; Back to Session</Link>
           <h2>Context Bundle</h2>
         </div>
         <div className="error">Error: {error}</div>
@@ -39,7 +39,7 @@ function ContextPage() {
     return (
       <div className="context-page">
         <div className="context-header">
-          <Link to={`/session/${sessionId}`} className="back-link">&larr; Back to Session</Link>
+          <Link to={`/sessions/${sessionId}`} className="back-link">&larr; Back to Session</Link>
           <h2>Context Bundle</h2>
         </div>
         <div className="empty-state">
@@ -54,7 +54,7 @@ function ContextPage() {
   return (
     <div className="context-page">
       <div className="context-header">
-        <Link to={`/session/${sessionId}`} className="back-link">&larr; Back to Session</Link>
+        <Link to={`/sessions/${sessionId}`} className="back-link">&larr; Back to Session</Link>
         <h2>Context Bundle</h2>
         <div className="context-meta">
           <span className={`connection-status ${connectionStatus}`}>

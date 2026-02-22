@@ -8,6 +8,49 @@ import { determineMemoryIntent } from '../services/memory-intent';
 const router = Router();
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+function getPeriodStartDate(period: string): Date {
+  const now = new Date();
+  switch (period) {
+    case '24h': return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    case '7d': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    case '30d': return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    default: return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  }
+}
+
+function normalizeModel(model: string): string {
+  if (model.includes('sonnet')) return 'sonnet';
+  if (model.includes('haiku')) return 'haiku';
+  if (model.includes('titan')) return 'titan';
+  return 'other';
+}
+
+const TOKEN_PRICES: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  sonnet: { input: 0.003 / 1000, output: 0.015 / 1000, cacheRead: 0.0003 / 1000, cacheWrite: 0.00375 / 1000 },
+  haiku: { input: 0.001 / 1000, output: 0.005 / 1000, cacheRead: 0.0001 / 1000, cacheWrite: 0.00125 / 1000 },
+  titan: { input: 0.00002 / 1000, output: 0, cacheRead: 0, cacheWrite: 0 },
+};
+
+function getModelPrices(model: string) {
+  return TOKEN_PRICES[normalizeModel(model)] || TOKEN_PRICES.sonnet;
+}
+
+function extractCacheTokens(metadata: any): { cacheRead: number; cacheWrite: number } {
+  if (!metadata || typeof metadata !== 'object') return { cacheRead: 0, cacheWrite: 0 };
+  return {
+    cacheRead: (metadata as any).cacheReadInputTokens ?? 0,
+    cacheWrite: (metadata as any).cacheWriteInputTokens ?? 0,
+  };
+}
+
+function formatDateKey(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+// ============================================================================
 // Response Types
 // ============================================================================
 
@@ -23,6 +66,444 @@ interface ContextResponse {
   assembledAt: string;
   users: ContextUserData[];
 }
+
+// ============================================================================
+// Dashboard aggregate metrics
+// ============================================================================
+router.get('/dashboard', async (req, res) => {
+  try {
+    const period = (req.query.period as string) || '7d';
+    const periodStart = getPeriodStartDate(period);
+
+    // 1. Active sessions count (ACTIVE or WAITING partner sessions)
+    const activeSessions = await prisma.session.count({
+      where: { status: { in: ['ACTIVE', 'WAITING'] } },
+    });
+
+    // 2. Fetch all activities in period for aggregation
+    const activities = await prisma.brainActivity.findMany({
+      where: { createdAt: { gte: periodStart } },
+      select: {
+        cost: true,
+        tokenCountInput: true,
+        tokenCountOutput: true,
+        durationMs: true,
+        model: true,
+        metadata: true,
+        createdAt: true,
+        sessionId: true,
+      },
+    });
+
+    // 3. Compute aggregate metrics
+    let periodCost = 0;
+    let totalDurationMs = 0;
+    let totalCacheRead = 0;
+    let totalInput = 0;
+
+    // Cost trend by date
+    const costByDate = new Map<string, { cost: number; cacheRead: number; cacheWrite: number; uncached: number }>();
+    // Model distribution
+    const modelMap = new Map<string, { count: number; cost: number }>();
+
+    for (const a of activities) {
+      periodCost += a.cost;
+      totalDurationMs += a.durationMs;
+      totalInput += a.tokenCountInput;
+
+      const { cacheRead, cacheWrite } = extractCacheTokens(a.metadata);
+      totalCacheRead += cacheRead;
+
+      // Cost trend
+      const dateKey = formatDateKey(a.createdAt);
+      const dayEntry = costByDate.get(dateKey) || { cost: 0, cacheRead: 0, cacheWrite: 0, uncached: 0 };
+      dayEntry.cost += a.cost;
+      dayEntry.cacheRead += cacheRead;
+      dayEntry.cacheWrite += cacheWrite;
+      dayEntry.uncached += Math.max(0, a.tokenCountInput - cacheRead - cacheWrite);
+      costByDate.set(dateKey, dayEntry);
+
+      // Model distribution
+      const modelNorm = normalizeModel(a.model);
+      const modelEntry = modelMap.get(modelNorm) || { count: 0, cost: 0 };
+      modelEntry.count += 1;
+      modelEntry.cost += a.cost;
+      modelMap.set(modelNorm, modelEntry);
+    }
+
+    const cacheHitRate = totalInput > 0 ? (totalCacheRead / totalInput) * 100 : 0;
+    const avgResponseMs = activities.length > 0 ? totalDurationMs / activities.length : 0;
+
+    const costTrend = Array.from(costByDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, data]) => ({ date, ...data }));
+
+    const modelDistribution = Array.from(modelMap.entries())
+      .map(([model, data]) => ({ model, ...data }));
+
+    // 4. Recent sessions (last 10 by updatedAt)
+    const recentPartnerSessions = await prisma.session.findMany({
+      take: 10,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        relationship: {
+          include: { members: { include: { user: { select: { name: true } } } } },
+        },
+        stageProgress: { orderBy: { stage: 'desc' }, take: 1 },
+      },
+    });
+
+    // Get cost stats for recent sessions
+    const recentSessionIds = recentPartnerSessions.map(s => s.id);
+    let recentStats: any[] = [];
+    if (recentSessionIds.length > 0) {
+      recentStats = await (prisma.brainActivity.groupBy as any)({
+        by: ['sessionId'],
+        _sum: { cost: true },
+        _count: { id: true },
+        where: { sessionId: { in: recentSessionIds } },
+      });
+    }
+
+    const recentSessions = recentPartnerSessions.map(session => {
+      const stat = recentStats.find((s: any) => s.sessionId === session.id);
+      const participants = session.relationship.members.map(m => m.user.name || 'Unknown').join(' & ');
+      const maxStage = session.stageProgress[0]?.stage ?? 0;
+      return {
+        id: session.id,
+        participants,
+        status: session.status,
+        stage: maxStage,
+        turns: stat?._count?.id ?? 0,
+        cost: stat?._sum?.cost ?? 0,
+        age: session.createdAt.toISOString(),
+      };
+    });
+
+    return successResponse(res, {
+      activeSessions,
+      periodCost,
+      cacheHitRate: Math.round(cacheHitRate * 100) / 100,
+      avgResponseMs: Math.round(avgResponseMs),
+      costTrend,
+      modelDistribution,
+      recentSessions,
+    });
+  } catch (error) {
+    console.error('[BrainRoutes] Failed to fetch dashboard:', error);
+    return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch dashboard metrics', 500);
+  }
+});
+
+// ============================================================================
+// Cost analytics
+// ============================================================================
+router.get('/costs', async (req, res) => {
+  try {
+    const period = (req.query.period as string) || '7d';
+    const periodStart = getPeriodStartDate(period);
+    const from = req.query.from ? new Date(req.query.from as string) : periodStart;
+    const to = req.query.to ? new Date(req.query.to as string) : new Date();
+
+    // Calculate previous period for comparison
+    const periodDurationMs = to.getTime() - from.getTime();
+    const previousPeriodStart = new Date(from.getTime() - periodDurationMs);
+    const previousPeriodEnd = from;
+
+    // Fetch current period activities
+    const activities = await prisma.brainActivity.findMany({
+      where: { createdAt: { gte: from, lte: to } },
+      select: {
+        cost: true,
+        tokenCountInput: true,
+        tokenCountOutput: true,
+        durationMs: true,
+        model: true,
+        metadata: true,
+        createdAt: true,
+        sessionId: true,
+        callType: true,
+      },
+    });
+
+    // Fetch previous period total for comparison
+    const prevAggregate = await prisma.brainActivity.aggregate({
+      where: { createdAt: { gte: previousPeriodStart, lt: previousPeriodEnd } },
+      _sum: { cost: true },
+    });
+
+    const periodTotal = activities.reduce((sum, a) => sum + a.cost, 0);
+    const previousPeriodTotal = prevAggregate._sum.cost ?? 0;
+    const changePercent = previousPeriodTotal > 0
+      ? ((periodTotal - previousPeriodTotal) / previousPeriodTotal) * 100
+      : 0;
+
+    // Unique sessions for per-session average
+    const uniqueSessions = new Set(activities.map(a => a.sessionId));
+    const perSessionAvg = uniqueSessions.size > 0 ? periodTotal / uniqueSessions.size : 0;
+
+    // Cost timeline by date, split by model
+    const timelineMap = new Map<string, { sonnetCost: number; haikuCost: number; titanCost: number; total: number }>();
+    // Model breakdown
+    const modelBreakdownMap = new Map<string, { count: number; cost: number; inputTokens: number; outputTokens: number }>();
+    // Call type breakdown
+    const callTypeMap = new Map<string, { count: number; cost: number; totalDuration: number }>();
+    // Cache metrics
+    let totalCacheRead = 0;
+    let totalCacheWrite = 0;
+    let totalUncached = 0;
+
+    // Session costs
+    const sessionCostMap = new Map<string, { sonnetCost: number; haikuCost: number; titanCost: number; totalCost: number; turns: number }>();
+
+    for (const a of activities) {
+      const modelNorm = normalizeModel(a.model);
+      const { cacheRead, cacheWrite } = extractCacheTokens(a.metadata);
+      const uncached = Math.max(0, a.tokenCountInput - cacheRead - cacheWrite);
+
+      totalCacheRead += cacheRead;
+      totalCacheWrite += cacheWrite;
+      totalUncached += uncached;
+
+      // Timeline
+      const dateKey = formatDateKey(a.createdAt);
+      const dayEntry = timelineMap.get(dateKey) || { sonnetCost: 0, haikuCost: 0, titanCost: 0, total: 0 };
+      if (modelNorm === 'sonnet') dayEntry.sonnetCost += a.cost;
+      else if (modelNorm === 'haiku') dayEntry.haikuCost += a.cost;
+      else if (modelNorm === 'titan') dayEntry.titanCost += a.cost;
+      dayEntry.total += a.cost;
+      timelineMap.set(dateKey, dayEntry);
+
+      // Model breakdown
+      const modelEntry = modelBreakdownMap.get(modelNorm) || { count: 0, cost: 0, inputTokens: 0, outputTokens: 0 };
+      modelEntry.count += 1;
+      modelEntry.cost += a.cost;
+      modelEntry.inputTokens += a.tokenCountInput;
+      modelEntry.outputTokens += a.tokenCountOutput;
+      modelBreakdownMap.set(modelNorm, modelEntry);
+
+      // Call type breakdown
+      const ct = a.callType || 'UNKNOWN';
+      const ctEntry = callTypeMap.get(ct) || { count: 0, cost: 0, totalDuration: 0 };
+      ctEntry.count += 1;
+      ctEntry.cost += a.cost;
+      ctEntry.totalDuration += a.durationMs;
+      callTypeMap.set(ct, ctEntry);
+
+      // Session costs
+      const sessEntry = sessionCostMap.get(a.sessionId) || { sonnetCost: 0, haikuCost: 0, titanCost: 0, totalCost: 0, turns: 0 };
+      if (modelNorm === 'sonnet') sessEntry.sonnetCost += a.cost;
+      else if (modelNorm === 'haiku') sessEntry.haikuCost += a.cost;
+      else if (modelNorm === 'titan') sessEntry.titanCost += a.cost;
+      sessEntry.totalCost += a.cost;
+      sessEntry.turns += 1;
+      sessionCostMap.set(a.sessionId, sessEntry);
+    }
+
+    // Estimate cache savings (what it would have cost without caching)
+    // Use sonnet prices as default for estimation
+    const prices = TOKEN_PRICES.sonnet;
+    const cacheSavings = totalCacheRead * (prices.input - prices.cacheRead);
+
+    const costTimeline = Array.from(timelineMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, data]) => ({ date, ...data }));
+
+    const modelBreakdown = Array.from(modelBreakdownMap.entries()).map(([model, data]) => ({
+      model,
+      ...data,
+      percentage: periodTotal > 0 ? Math.round((data.cost / periodTotal) * 10000) / 100 : 0,
+    }));
+
+    const callTypeBreakdown = Array.from(callTypeMap.entries()).map(([callType, data]) => ({
+      callType,
+      count: data.count,
+      cost: data.cost,
+      percentage: periodTotal > 0 ? Math.round((data.cost / periodTotal) * 10000) / 100 : 0,
+      avgDuration: data.count > 0 ? Math.round(data.totalDuration / data.count) : 0,
+    }));
+
+    const totalInputTokens = totalCacheRead + totalCacheWrite + totalUncached;
+    const cacheMetrics = {
+      hitRate: totalInputTokens > 0 ? Math.round((totalCacheRead / totalInputTokens) * 10000) / 100 : 0,
+      readTokens: totalCacheRead,
+      writeTokens: totalCacheWrite,
+      uncachedTokens: totalUncached,
+      estimatedSavings: Math.round(cacheSavings * 1000000) / 1000000,
+    };
+
+    // Fetch participant info for session costs
+    const sessionIds = Array.from(sessionCostMap.keys());
+    let sessionParticipants = new Map<string, string>();
+    if (sessionIds.length > 0) {
+      const sessions = await prisma.session.findMany({
+        where: { id: { in: sessionIds } },
+        include: {
+          relationship: {
+            include: { members: { include: { user: { select: { name: true } } } } },
+          },
+        },
+      });
+      for (const s of sessions) {
+        const names = s.relationship.members.map(m => m.user.name || 'Unknown').join(' & ');
+        sessionParticipants.set(s.id, names);
+      }
+    }
+
+    const sessionCosts = Array.from(sessionCostMap.entries())
+      .sort(([, a], [, b]) => b.totalCost - a.totalCost)
+      .slice(0, 20)
+      .map(([sessionId, data]) => ({
+        sessionId,
+        participants: sessionParticipants.get(sessionId) || sessionId,
+        ...data,
+      }));
+
+    return successResponse(res, {
+      summary: {
+        periodTotal: Math.round(periodTotal * 1000000) / 1000000,
+        previousPeriodTotal: Math.round(previousPeriodTotal * 1000000) / 1000000,
+        changePercent: Math.round(changePercent * 100) / 100,
+        perSessionAvg: Math.round(perSessionAvg * 1000000) / 1000000,
+        cacheSavings: Math.round(cacheSavings * 1000000) / 1000000,
+      },
+      costTimeline,
+      modelBreakdown,
+      callTypeBreakdown,
+      cacheMetrics,
+      sessionCosts,
+    });
+  } catch (error) {
+    console.error('[BrainRoutes] Failed to fetch costs:', error);
+    return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch cost analytics', 500);
+  }
+});
+
+// ============================================================================
+// Prompt detail for a single BrainActivity
+// ============================================================================
+router.get('/activity/:activityId/prompt', async (req, res) => {
+  try {
+    const { activityId } = req.params;
+
+    const activity = await prisma.brainActivity.findUnique({
+      where: { id: activityId },
+    });
+
+    if (!activity) {
+      return errorResponse(res, 'NOT_FOUND', 'Activity not found', 404);
+    }
+
+    const input = activity.input as any;
+    const output = activity.output as any;
+    const metadata = activity.metadata as any;
+
+    // Parse system prompt blocks
+    const systemPromptBlocks: Array<{ type: string; content: string; tokenCount: number; cached: boolean }> = [];
+    if (input?.systemPrompt) {
+      const sysPrompt = input.systemPrompt;
+      if (typeof sysPrompt === 'string') {
+        systemPromptBlocks.push({
+          type: 'static',
+          content: sysPrompt,
+          tokenCount: Math.ceil(sysPrompt.length / 4), // rough estimate
+          cached: true,
+        });
+      } else if (sysPrompt.staticBlock || sysPrompt.dynamicBlock) {
+        if (sysPrompt.staticBlock) {
+          systemPromptBlocks.push({
+            type: 'static',
+            content: sysPrompt.staticBlock,
+            tokenCount: Math.ceil(sysPrompt.staticBlock.length / 4),
+            cached: true,
+          });
+        }
+        if (sysPrompt.dynamicBlock) {
+          systemPromptBlocks.push({
+            type: 'dynamic',
+            content: sysPrompt.dynamicBlock,
+            tokenCount: Math.ceil(sysPrompt.dynamicBlock.length / 4),
+            cached: false,
+          });
+        }
+      }
+    }
+
+    // Parse messages
+    const messages = Array.isArray(input?.messages)
+      ? input.messages.map((m: any) => ({
+          role: m.role || 'unknown',
+          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          hasCacheControl: !!m.cache_control,
+        }))
+      : [];
+
+    // Parse response - extract thinking/draft/dispatch tags
+    const responseText = output?.text || output?.streaming ? (output?.text || '') : '';
+    let thinking: string | null = null;
+    let draft: string | null = null;
+    let dispatch: string | null = null;
+
+    if (typeof responseText === 'string') {
+      const thinkMatch = responseText.match(/<thinking>([\s\S]*?)<\/thinking>/);
+      if (thinkMatch) thinking = thinkMatch[1].trim();
+
+      const draftMatch = responseText.match(/<draft>([\s\S]*?)<\/draft>/);
+      if (draftMatch) draft = draftMatch[1].trim();
+
+      const dispatchMatch = responseText.match(/<dispatch>([\s\S]*?)<\/dispatch>/);
+      if (dispatchMatch) dispatch = dispatchMatch[1].trim();
+    }
+
+    // Token breakdown
+    const { cacheRead, cacheWrite } = extractCacheTokens(metadata);
+    const uncached = Math.max(0, activity.tokenCountInput - cacheRead - cacheWrite);
+
+    // Cost breakdown
+    const modelPrices = getModelPrices(activity.model);
+    const inputCost = uncached * modelPrices.input;
+    const outputCost = activity.tokenCountOutput * modelPrices.output;
+    const cacheReadCost = cacheRead * modelPrices.cacheRead;
+    const cacheWriteCost = cacheWrite * modelPrices.cacheWrite;
+    const totalCost = inputCost + outputCost + cacheReadCost + cacheWriteCost;
+    const savings = cacheRead * (modelPrices.input - modelPrices.cacheRead);
+
+    return successResponse(res, {
+      systemPrompt: { blocks: systemPromptBlocks },
+      messages,
+      response: {
+        text: responseText,
+        thinking,
+        draft,
+        dispatch,
+      },
+      tokens: {
+        input: activity.tokenCountInput,
+        output: activity.tokenCountOutput,
+        cacheRead,
+        cacheWrite,
+        uncached,
+      },
+      cost: {
+        inputCost: Math.round(inputCost * 1000000) / 1000000,
+        outputCost: Math.round(outputCost * 1000000) / 1000000,
+        cacheReadCost: Math.round(cacheReadCost * 1000000) / 1000000,
+        cacheWriteCost: Math.round(cacheWriteCost * 1000000) / 1000000,
+        total: Math.round(totalCost * 1000000) / 1000000,
+        savings: Math.round(savings * 1000000) / 1000000,
+      },
+      timing: {
+        durationMs: activity.durationMs,
+        model: activity.model,
+        callType: activity.callType,
+        status: activity.status,
+      },
+    });
+  } catch (error) {
+    console.error('[BrainRoutes] Failed to fetch prompt detail:', error);
+    return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch prompt detail', 500);
+  }
+});
 
 // Get all brain activities for a session
 router.get('/activity/:sessionId', async (req, res) => {
@@ -254,63 +735,114 @@ router.get('/sessions/:sessionId/context', async (req, res) => {
   }
 });
 
-// Get sessions list (replacement for audit/sessions)
+// Get sessions list with filter/search/sort support
 router.get('/sessions', async (req, res) => {
   try {
     const cursor = req.query.cursor as string | undefined;
     const limit = parseInt(req.query.limit as string || '20', 10);
     const fetchLimit = limit + 1; // Fetch one extra to detect next page
 
-    // Common where clause for cursor pagination
-    const whereClause = cursor
-      ? { updatedAt: { lt: new Date(cursor) } }
-      : {};
+    // Filter params
+    const statusFilter = req.query.status as string | undefined; // comma-separated
+    const typeFilter = req.query.type as string | undefined; // PARTNER or INNER_WORK
+    const stageFilter = req.query.stage as string | undefined; // comma-separated stage numbers
+    const search = req.query.search as string | undefined;
+    const fromDate = req.query.from ? new Date(req.query.from as string) : undefined;
+    const toDate = req.query.to ? new Date(req.query.to as string) : undefined;
+    const sort = (req.query.sort as string) || 'age';
+    const order = (req.query.order as string) || 'desc';
+
+    const statusValues = statusFilter ? statusFilter.split(',').map(s => s.trim()) : undefined;
+    const stageValues = stageFilter ? stageFilter.split(',').map(s => parseInt(s, 10)).filter(n => !isNaN(n)) : undefined;
+
+    // Determine which session types to fetch
+    const fetchPartner = !typeFilter || typeFilter === 'PARTNER';
+    const fetchInnerWork = !typeFilter || typeFilter === 'INNER_WORK';
+
+    // Build partner session where clause
+    const partnerWhere: any = {};
+    if (cursor) partnerWhere.updatedAt = { lt: new Date(cursor) };
+    if (fromDate || toDate) {
+      partnerWhere.createdAt = {};
+      if (fromDate) partnerWhere.createdAt.gte = fromDate;
+      if (toDate) partnerWhere.createdAt.lte = toDate;
+    }
+    if (statusValues) partnerWhere.status = { in: statusValues };
+
+    // Build inner work session where clause
+    const innerWhere: any = {};
+    if (cursor) innerWhere.updatedAt = { lt: new Date(cursor) };
+    if (fromDate || toDate) {
+      innerWhere.createdAt = {};
+      if (fromDate) innerWhere.createdAt.gte = fromDate;
+      if (toDate) innerWhere.createdAt.lte = toDate;
+    }
+    if (statusValues) innerWhere.status = { in: statusValues };
+
+    // Search filter - for partner sessions, search by user names/emails or session ID
+    if (search) {
+      partnerWhere.OR = [
+        { id: { contains: search } },
+        { relationship: { members: { some: { user: { name: { contains: search, mode: 'insensitive' } } } } } },
+        { relationship: { members: { some: { user: { email: { contains: search, mode: 'insensitive' } } } } } },
+      ];
+      innerWhere.OR = [
+        { id: { contains: search } },
+        { user: { name: { contains: search, mode: 'insensitive' } } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { title: { contains: search, mode: 'insensitive' } },
+      ];
+    }
 
     // 1. Fetch Partner Sessions
-    const partnerSessions = await prisma.session.findMany({
-      take: fetchLimit,
-      where: whereClause,
-      orderBy: { updatedAt: 'desc' },
-      include: {
-        relationship: {
-          include: {
-            members: { include: { user: true } }
-          }
-        }
+    let partnerSessions: any[] = [];
+    if (fetchPartner) {
+      partnerSessions = await prisma.session.findMany({
+        take: fetchLimit,
+        where: partnerWhere,
+        orderBy: { updatedAt: 'desc' },
+        include: {
+          relationship: {
+            include: { members: { include: { user: true } } },
+          },
+          stageProgress: { orderBy: { stage: 'desc' } },
+        },
+      });
+
+      // Post-filter by stage if needed (stage is per-user, so check max stage)
+      if (stageValues && stageValues.length > 0) {
+        partnerSessions = partnerSessions.filter(s => {
+          const maxStage = s.stageProgress.length > 0
+            ? Math.max(...s.stageProgress.map((p: any) => p.stage))
+            : 0;
+          return stageValues.includes(maxStage);
+        });
       }
-    });
+    }
 
     // 2. Fetch Inner Work Sessions
-    const innerWorkSessions = await prisma.innerWorkSession.findMany({
-      take: fetchLimit,
-      where: whereClause,
-      orderBy: { updatedAt: 'desc' },
-      include: {
-        user: true // Include user for display name if needed
-      }
-    });
+    let innerWorkSessions: any[] = [];
+    if (fetchInnerWork) {
+      innerWorkSessions = await prisma.innerWorkSession.findMany({
+        take: fetchLimit,
+        where: innerWhere,
+        orderBy: { updatedAt: 'desc' },
+        include: { user: true },
+      });
+    }
 
     // 3. Aggregate stats for ALL sessions
-    const partnerSessionIds = partnerSessions.map(s => s.id);
-    const innerSessionIds = innerWorkSessions.map(s => s.id);
+    const partnerSessionIds = partnerSessions.map((s: any) => s.id);
+    const innerSessionIds = innerWorkSessions.map((s: any) => s.id);
     const allSessionIds = [...partnerSessionIds, ...innerSessionIds];
 
-    // Only fetch stats if we have sessions
     let stats: any[] = [];
     if (allSessionIds.length > 0) {
       stats = await (prisma.brainActivity.groupBy as any)({
         by: ['sessionId'],
-        _sum: {
-          cost: true,
-          tokenCountInput: true,
-          tokenCountOutput: true,
-        },
-        _count: {
-          id: true,
-        },
-        where: {
-          sessionId: { in: allSessionIds }
-        }
+        _sum: { cost: true, tokenCountInput: true, tokenCountOutput: true },
+        _count: { id: true },
+        where: { sessionId: { in: allSessionIds } },
       });
     }
 
@@ -320,10 +852,7 @@ router.get('/sessions', async (req, res) => {
       partnerTurnCounts = await (prisma.message.groupBy as any)({
         by: ['sessionId'],
         _count: { id: true },
-        where: {
-          sessionId: { in: partnerSessionIds },
-          role: 'USER'
-        }
+        where: { sessionId: { in: partnerSessionIds }, role: 'USER' },
       });
     }
 
@@ -333,64 +862,86 @@ router.get('/sessions', async (req, res) => {
       innerTurnCounts = await (prisma.innerWorkMessage.groupBy as any)({
         by: ['sessionId'],
         _count: { id: true },
-        where: {
-          sessionId: { in: innerSessionIds },
-          role: 'USER'
-        }
+        where: { sessionId: { in: innerSessionIds }, role: 'USER' },
       });
     }
 
     // 6. Map and Merge
-    const mappedPartnerSessions = partnerSessions.map(session => {
-      const stat = stats.find(s => s.sessionId === session.id);
-      const turns = partnerTurnCounts.find(t => t.sessionId === session.id);
+    const mappedPartnerSessions = partnerSessions.map((session: any) => {
+      const stat = stats.find((s: any) => s.sessionId === session.id);
+      const turns = partnerTurnCounts.find((t: any) => t.sessionId === session.id);
+      const maxStage = session.stageProgress?.length > 0
+        ? Math.max(...session.stageProgress.map((p: any) => p.stage))
+        : 0;
+      const participants = session.relationship.members
+        .map((m: any) => m.user.name || 'Unknown')
+        .join(' & ');
       return {
         id: session.id,
-        type: 'PARTNER',
+        type: 'PARTNER' as const,
         status: session.status,
+        stage: maxStage,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
-        // UI specific fields
-        title: null, // Partner sessions use relationship members
+        title: null,
+        participants,
         relationship: session.relationship,
         stats: {
           totalCost: stat?._sum.cost || 0,
           totalTokens: (stat?._sum.tokenCountInput || 0) + (stat?._sum.tokenCountOutput || 0),
           activityCount: stat?._count.id || 0,
-          turnCount: turns?._count.id || 0
-        }
+          turnCount: turns?._count.id || 0,
+        },
       };
     });
 
-    const mappedInnerSessions = innerWorkSessions.map(session => {
-      const stat = stats.find(s => s.sessionId === session.id);
-      const turns = innerTurnCounts.find(t => t.sessionId === session.id);
+    const mappedInnerSessions = innerWorkSessions.map((session: any) => {
+      const stat = stats.find((s: any) => s.sessionId === session.id);
+      const turns = innerTurnCounts.find((t: any) => t.sessionId === session.id);
       return {
         id: session.id,
-        type: 'INNER_WORK',
+        type: 'INNER_WORK' as const,
         status: session.status,
+        stage: 0, // Inner work doesn't have stages
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
-        // UI specific fields
         title: session.title || 'Untitled Session',
-        relationship: null, // No relationship for inner work
+        participants: session.user?.name || 'Unknown',
+        relationship: null,
         user: session.user,
         stats: {
           totalCost: stat?._sum.cost || 0,
           totalTokens: (stat?._sum.tokenCountInput || 0) + (stat?._sum.tokenCountOutput || 0),
           activityCount: stat?._count.id || 0,
-          turnCount: turns?._count.id || 0
-        }
+          turnCount: turns?._count.id || 0,
+        },
       };
     });
 
-    // Combine and sort by updatedAt desc
-    let allSessions = [...mappedPartnerSessions, ...mappedInnerSessions]
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    // Combine
+    let allSessions = [...mappedPartnerSessions, ...mappedInnerSessions];
 
-    // Determine next cursor (NOTE: complex since we merge two sources)
-    // We fetched limited from EACH source, so we have potentially 2*limit items
-    // We take top limit items
+    // Apply sort
+    const sortOrder = order === 'asc' ? 1 : -1;
+    allSessions.sort((a, b) => {
+      switch (sort) {
+        case 'participants':
+          return sortOrder * (a.participants || '').localeCompare(b.participants || '');
+        case 'status':
+          return sortOrder * a.status.localeCompare(b.status);
+        case 'stage':
+          return sortOrder * (a.stage - b.stage);
+        case 'turns':
+          return sortOrder * (a.stats.turnCount - b.stats.turnCount);
+        case 'cost':
+          return sortOrder * (a.stats.totalCost - b.stats.totalCost);
+        case 'age':
+        default:
+          return sortOrder * (b.updatedAt.getTime() - a.updatedAt.getTime());
+      }
+    });
+
+    // Paginate
     const hasNextPage = allSessions.length > limit;
     if (hasNextPage) {
       allSessions = allSessions.slice(0, limit);
@@ -402,7 +953,7 @@ router.get('/sessions', async (req, res) => {
 
     return successResponse(res, {
       sessions: allSessions,
-      nextCursor
+      nextCursor,
     });
   } catch (error) {
     console.error('[BrainRoutes] Failed to fetch sessions:', error);

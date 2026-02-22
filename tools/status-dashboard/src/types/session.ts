@@ -35,10 +35,25 @@ export interface Session {
   updatedAt: string;
   status: SessionStatus;
   type: string; // 'PARTNER' | 'INNER_WORK'
+  stage?: number;
+  participants?: string;
   relationship?: Relationship;
   title?: string | null;
   user?: User;
   stats?: SessionStats;
+}
+
+export type SessionSortField = 'participants' | 'status' | 'stage' | 'turns' | 'cost' | 'age';
+export type SortOrder = 'asc' | 'desc';
+
+export interface SessionFilters {
+  search?: string;
+  status?: SessionStatus[];
+  type?: 'PARTNER' | 'INNER_WORK';
+  stage?: number[];
+  dateRange?: 'today' | '7d' | '30d' | 'all';
+  sort?: SessionSortField;
+  order?: SortOrder;
 }
 
 export interface SessionSummary {

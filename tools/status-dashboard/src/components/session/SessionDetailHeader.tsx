@@ -24,7 +24,7 @@ export function SessionDetailHeader({ sessionId, connectionStatus, summary, sess
         </span>
       </div>
       <div className="header-actions">
-        <Link to={`/session/${sessionId}/context`} className="view-context-btn">
+        <Link to={`/sessions/${sessionId}/context`} className="view-context-btn">
           View Context
         </Link>
         <div className="total-cost">

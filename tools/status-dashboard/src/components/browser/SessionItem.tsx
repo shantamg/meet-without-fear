@@ -9,7 +9,7 @@ interface SessionItemProps {
 
 export function SessionItem({ session }: SessionItemProps) {
   return (
-    <Link to={`/session/${session.id}`} className="session-item">
+    <Link to={`/sessions/${session.id}`} className="session-item">
       <div className="session-info">
         <span className={`status-badge ${session.status.toLowerCase()}`}>
           {session.status}
