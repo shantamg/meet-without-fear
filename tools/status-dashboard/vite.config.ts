@@ -2,9 +2,9 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
-  base: '/monitor/',
+  base: command === 'build' ? '/monitor/' : '/',
   root: path.resolve(__dirname),
   server: {
     port: 3002,
@@ -17,4 +17,4 @@ export default defineConfig({
     }
   },
   envDir: path.resolve(__dirname),
-});
+}));

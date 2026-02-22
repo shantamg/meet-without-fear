@@ -7,7 +7,7 @@ import './style.css';
 
 ReactDOM.createRoot(document.getElementById('app')!).render(
   <React.StrictMode>
-    <BrowserRouter basename="/monitor">
+    <BrowserRouter basename={import.meta.env.PROD ? '/monitor' : '/'}>
       <App />
     </BrowserRouter>
   </React.StrictMode>
