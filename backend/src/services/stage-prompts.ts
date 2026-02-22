@@ -753,9 +753,13 @@ ${SIMPLE_LANGUAGE_PROMPT}
 ${PRIVACY_GUIDANCE}
 
 YOUR TASK:
-Generate a warm, brief opening message (1-2 sentences) asking what's going on with ${partnerName}.
+Generate a warm, brief opening message (1-2 sentences) asking what's going on with ${partnerName}. Use ${partnerName}'s name in your message.
 
 Be casual and direct - just ask what's happening between them and ${partnerName}. Use ${context.userName}'s first name naturally. Don't be clinical or overly formal.
+
+EXAMPLE GOOD MESSAGES:
+- "Hey ${context.userName}, what's going on with ${partnerName}?"
+- "Hi ${context.userName}! Tell me what's been happening with ${partnerName}."
 
 ${buildResponseProtocol(-1)}`;
   }

@@ -23,8 +23,8 @@ import * as path from 'path';
 
 // AWS Bedrock Pricing (USD per 1,000 tokens) - Updated Feb 2026
 const PRICING: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
-  'anthropic.claude-sonnet-4-6-20250514-v1:0': { input: 0.003, output: 0.015, cacheRead: 0.0003, cacheWrite: 0.00375 },
-  'anthropic.claude-haiku-4-5-20251001-v1:0': { input: 0.001, output: 0.005, cacheRead: 0.0001, cacheWrite: 0.00125 },
+  'global.anthropic.claude-sonnet-4-6': { input: 0.003, output: 0.015, cacheRead: 0.0003, cacheWrite: 0.00375 },
+  'global.anthropic.claude-haiku-4-5-20251001-v1:0': { input: 0.001, output: 0.005, cacheRead: 0.0001, cacheWrite: 0.00125 },
   'amazon.titan-embed-text-v2:0': { input: 0.00002, output: 0.0, cacheRead: 0, cacheWrite: 0 },
   // Legacy entries for historical cost lookups
   'anthropic.claude-3-5-sonnet-20241022-v2:0': { input: 0.003, output: 0.015, cacheRead: 0, cacheWrite: 0 },
@@ -144,12 +144,12 @@ function logResponseToFile(promptFilepath: string | null, response: string | nul
 // Haiku: Fast model for mechanics (retrieval planning, classification, detection)
 // ~3x faster and cheaper than Sonnet, good for structured JSON output
 export const BEDROCK_HAIKU_MODEL_ID =
-  process.env.BEDROCK_HAIKU_MODEL_ID || 'anthropic.claude-haiku-4-5-20251001-v1:0';
+  process.env.BEDROCK_HAIKU_MODEL_ID || 'global.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 // Sonnet: Empathetic model for user-facing responses
 // Better at nuance, empathy, and natural conversation
 export const BEDROCK_SONNET_MODEL_ID =
-  process.env.BEDROCK_SONNET_MODEL_ID || 'anthropic.claude-sonnet-4-6-20250514-v1:0';
+  process.env.BEDROCK_SONNET_MODEL_ID || 'global.anthropic.claude-sonnet-4-6';
 
 // Titan: Embedding model for semantic search
 // Outputs 1536-dimensional vectors for similarity matching
