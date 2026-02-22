@@ -40,7 +40,8 @@ jest.mock('../../services/brain-service', () => ({
 // Mock stage prompts
 jest.mock('../../services/stage-prompts', () => ({
   buildInitialMessagePrompt: jest.fn().mockReturnValue('Mock prompt'),
-  buildStagePrompt: jest.fn().mockReturnValue('Mock stage prompt'),
+  buildStagePrompt: jest.fn().mockReturnValue({ staticBlock: 'Mock static', dynamicBlock: 'Mock dynamic' }),
+  buildStagePromptString: jest.fn().mockReturnValue('Mock stage prompt'),
 }));
 
 // Mock json extractor

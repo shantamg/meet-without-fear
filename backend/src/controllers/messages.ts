@@ -13,7 +13,7 @@ import { prisma } from '../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
 import { getSonnetResponse, getSonnetStreamingResponse, BrainActivityCallType, isMockLLMEnabled } from '../lib/bedrock';
 import { brainService } from '../services/brain-service';
-import { buildInitialMessagePrompt, buildStagePrompt, type PromptContext } from '../services/stage-prompts';
+import { buildInitialMessagePrompt, buildStagePrompt, buildStagePromptString, type PromptContext } from '../services/stage-prompts';
 import { parseMicroTagResponse } from '../utils/micro-tag-parser';
 import { type SessionStateToolInput } from '../services/stage-tools';
 import {
@@ -848,7 +848,7 @@ export async function getInitialMessage(
     if (!isInvitee && isInvitationPhase && innerThoughtsContext) {
       // Use the actual invitation crafting prompt with extra context
       // This allows the AI to propose an invitation in the first message
-      prompt = buildStagePrompt(0, {
+      prompt = buildStagePromptString(0, {
         userName,
         partnerName,
         turnCount: 1,
@@ -1308,7 +1308,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     });
 
     recordContextSizes(turnId, estimateContextSizes({
-      pinned: prompt,
+      pinned: `${prompt.staticBlock}\n\n${prompt.dynamicBlock}`,
       summary: formattedContext,
       recentMessages: trimmedHistory,
       rag: '',

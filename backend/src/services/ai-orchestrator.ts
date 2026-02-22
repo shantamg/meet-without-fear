@@ -27,7 +27,7 @@ import {
   type ContextBundle,
 } from './context-assembler';
 import { planRetrieval, getMockRetrievalPlan, type RetrievalPlan } from './retrieval-planner';
-import { buildStagePrompt } from './stage-prompts';
+import { buildStagePrompt, type PromptBlocks } from './stage-prompts';
 import {
   retrieveContext,
   formatRetrievedContext,
@@ -320,6 +320,9 @@ export async function orchestrateResponse(
     }
   );
 
+  // Combined text for token estimation (blocks are passed to bedrock separately for caching)
+  const systemPromptText = `${systemPrompt.staticBlock}\n\n${systemPrompt.dynamicBlock}`;
+
   /* auditLog removed - prompt will be captured in the LLM BrainActivity */
 
   // Step 5: Get response from Sonnet with token budget management
@@ -355,7 +358,7 @@ export async function orchestrateResponse(
   }
 
   const budgetedContext = buildBudgetedContext(
-    systemPrompt,
+    systemPromptText,
     trimmedHistory,
     fullContext
   );
@@ -393,7 +396,7 @@ export async function orchestrateResponse(
     : '';
 
   recordContextSizes(context.turnId, estimateContextSizes({
-    pinned: systemPrompt,
+    pinned: systemPromptText,
     summary: summaryText,
     recentMessages: budgetedContext.conversationMessages,
     rag: budgetedContext.retrievedContext,

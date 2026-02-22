@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { buildStagePrompt as buildLegacyStagePrompt } from '../services/stage-prompts-legacy';
-import { buildStagePrompt } from '../services/stage-prompts';
+import { buildStagePromptString } from '../services/stage-prompts';
 import { formatContextForPrompt, formatContextForPromptLegacy } from '../services/context-formatters';
 import type { ContextBundle } from '../services/context-assembler';
 import { estimateMessagesTokens, estimateTokens, trimConversationHistory, CONTEXT_WINDOW } from '../utils/token-budget';
@@ -110,7 +110,7 @@ function simulateFixture(fixture: Fixture, mode: 'legacy' | 'optimized') {
           emotionalIntensity: fixture.emotionalIntensity,
           contextBundle: bundle,
         })
-      : buildStagePrompt(fixture.stage, {
+      : buildStagePromptString(fixture.stage, {
           userName: fixture.userName,
           partnerName: fixture.partnerName,
           turnCount: i + 1,

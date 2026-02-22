@@ -1,6 +1,9 @@
-import { buildStagePrompt, PromptContext, BuildStagePromptOptions, buildInnerWorkPrompt, InsightContext } from '../stage-prompts';
-import { type ContextBundle } from '../context-assembler';
-import { type MemoryIntentResult } from '../memory-intent';
+import { buildStagePrompt, buildStagePromptString, PromptContext, PromptBlocks, BuildStagePromptOptions, buildInnerWorkPrompt, InsightContext } from '../stage-prompts';
+import type { ContextBundle } from '../context-assembler';
+import type { MemoryIntentResult } from '../memory-intent';
+
+/** Join both blocks into a single string for content assertions */
+const fullPrompt = (blocks: PromptBlocks) => `${blocks.staticBlock}\n\n${blocks.dynamicBlock}`;
 
 describe('Stage Prompts Service', () => {
   // Create a minimal mock context bundle for tests
@@ -39,19 +42,80 @@ describe('Stage Prompts Service', () => {
     ...overrides,
   });
 
-  describe('buildStagePrompt', () => {
+  describe('buildStagePrompt returns PromptBlocks', () => {
+    it('returns an object with staticBlock and dynamicBlock', () => {
+      const context = createContext();
+      const result = buildStagePrompt(1, context);
+
+      expect(result).toHaveProperty('staticBlock');
+      expect(result).toHaveProperty('dynamicBlock');
+      expect(typeof result.staticBlock).toBe('string');
+      expect(typeof result.dynamicBlock).toBe('string');
+      expect(result.staticBlock.length).toBeGreaterThan(0);
+      expect(result.dynamicBlock.length).toBeGreaterThan(0);
+    });
+
+    it('static block does NOT contain dynamic values (turnCount, intensity numbers)', () => {
+      const context = createContext({ turnCount: 7, emotionalIntensity: 6 });
+      const result = buildStagePrompt(1, context);
+
+      // Static block should not contain turn-specific values
+      expect(result.staticBlock).not.toMatch(/Turn: \d+/);
+      expect(result.staticBlock).not.toMatch(/intensity: \d+\/10/i);
+    });
+
+    it('dynamic block contains per-turn values', () => {
+      const context = createContext({ turnCount: 7, emotionalIntensity: 6 });
+      const result = buildStagePrompt(1, context);
+
+      expect(result.dynamicBlock).toContain('Turn: 7');
+      expect(result.dynamicBlock).toContain('6/10');
+    });
+
+    it('static block is identical across turns for the same stage', () => {
+      const context1 = createContext({ turnCount: 1, emotionalIntensity: 3 });
+      const context2 = createContext({ turnCount: 5, emotionalIntensity: 7 });
+
+      const result1 = buildStagePrompt(1, context1);
+      const result2 = buildStagePrompt(1, context2);
+
+      expect(result1.staticBlock).toBe(result2.staticBlock);
+    });
+
+    it('dynamic blocks differ across turns', () => {
+      const context1 = createContext({ turnCount: 1, emotionalIntensity: 3 });
+      const context2 = createContext({ turnCount: 5, emotionalIntensity: 7 });
+
+      const result1 = buildStagePrompt(1, context1);
+      const result2 = buildStagePrompt(1, context2);
+
+      expect(result1.dynamicBlock).not.toBe(result2.dynamicBlock);
+    });
+  });
+
+  describe('buildStagePromptString', () => {
+    it('joins both blocks into a single string', () => {
+      const context = createContext();
+      const blocks = buildStagePrompt(1, context);
+      const combined = buildStagePromptString(1, context);
+
+      expect(combined).toContain(blocks.staticBlock);
+      expect(combined).toContain(blocks.dynamicBlock);
+    });
+  });
+
+  describe('buildStagePrompt content', () => {
     it('returns Stage 1 prompt for stage 1', () => {
       const context = createContext();
-      const prompt = buildStagePrompt(1, context);
+      const prompt = fullPrompt(buildStagePrompt(1, context));
 
       expect(prompt).toContain('listen to Test User');
       expect(prompt).toContain('Test User');
-      expect(prompt).toContain('GATHERING PHASE');
     });
 
     it('returns Stage 2 prompt for stage 2', () => {
       const context = createContext();
-      const prompt = buildStagePrompt(2, context);
+      const prompt = fullPrompt(buildStagePrompt(2, context));
 
       expect(prompt).toContain('exploring what Partner might be going through');
       expect(prompt).toContain('Partner');
@@ -59,7 +123,7 @@ describe('Stage Prompts Service', () => {
 
     it('returns Stage 3 prompt for stage 3', () => {
       const context = createContext();
-      const prompt = buildStagePrompt(3, context);
+      const prompt = fullPrompt(buildStagePrompt(3, context));
 
       expect(prompt).toContain('Need Mapping');
       expect(prompt).toContain('needs underneath');
@@ -67,7 +131,7 @@ describe('Stage Prompts Service', () => {
 
     it('returns Stage 4 prompt for stage 4', () => {
       const context = createContext();
-      const prompt = buildStagePrompt(4, context);
+      const prompt = fullPrompt(buildStagePrompt(4, context));
 
       expect(prompt).toContain('Strategic Repair');
       expect(prompt).toContain('experiment');
@@ -76,7 +140,7 @@ describe('Stage Prompts Service', () => {
     it('returns invitation prompt for stage 0 with isInvitationPhase', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };
-      const prompt = buildStagePrompt(0, context, options);
+      const prompt = fullPrompt(buildStagePrompt(0, context, options));
 
       expect(prompt).toContain('invitation');
       expect(prompt).toContain('Partner');
@@ -90,7 +154,7 @@ describe('Stage Prompts Service', () => {
         isStageTransition: true,
         previousStage: 0,
       };
-      const prompt = buildStagePrompt(1, context, options);
+      const prompt = fullPrompt(buildStagePrompt(1, context, options));
 
       // Should contain transition injection
       expect(prompt).toContain('TRANSITION:');
@@ -98,10 +162,23 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Partner');
       // Should also contain the regular Stage 1 prompt (not replaced)
       expect(prompt).toContain('listen to Test User');
-      expect(prompt).toContain('GATHERING PHASE');
       // Should NOT explicitly name stages
       expect(prompt).not.toContain('"Stage 1"');
       expect(prompt).not.toContain('"witness stage"');
+    });
+
+    it('transition injection goes in dynamic block, not static', () => {
+      const context = createContext();
+      const options: BuildStagePromptOptions = {
+        isStageTransition: true,
+        previousStage: 0,
+      };
+      const result = buildStagePrompt(1, context, options);
+
+      // Transition injection should be in dynamic block
+      expect(result.dynamicBlock).toContain('TRANSITION:');
+      // Static block should NOT change for transitions
+      expect(result.staticBlock).not.toContain('TRANSITION:');
     });
 
     it('returns transition injection + regular Stage 2 prompt for Stage 1 → Stage 2', () => {
@@ -110,7 +187,7 @@ describe('Stage Prompts Service', () => {
         isStageTransition: true,
         previousStage: 1,
       };
-      const prompt = buildStagePrompt(2, context, options);
+      const prompt = fullPrompt(buildStagePrompt(2, context, options));
 
       // Transition injection content
       expect(prompt).toContain('TRANSITION:');
@@ -127,7 +204,7 @@ describe('Stage Prompts Service', () => {
         isStageTransition: true,
         previousStage: 2,
       };
-      const prompt = buildStagePrompt(3, context, options);
+      const prompt = fullPrompt(buildStagePrompt(3, context, options));
 
       // Transition injection content
       expect(prompt).toContain('TRANSITION:');
@@ -145,7 +222,7 @@ describe('Stage Prompts Service', () => {
         isStageTransition: true,
         previousStage: 3,
       };
-      const prompt = buildStagePrompt(4, context, options);
+      const prompt = fullPrompt(buildStagePrompt(4, context, options));
 
       // Transition injection content
       expect(prompt).toContain('TRANSITION:');
@@ -162,12 +239,11 @@ describe('Stage Prompts Service', () => {
         isStageTransition: true,
         previousStage: 4, // No 4→1 transition exists
       };
-      const prompt = buildStagePrompt(1, context, options);
+      const prompt = fullPrompt(buildStagePrompt(1, context, options));
 
       // Should be regular Stage 1 prompt without transition injection
       expect(prompt).not.toContain('TRANSITION:');
       expect(prompt).toContain('listen to Test User');
-      expect(prompt).toContain('GATHERING PHASE');
     });
 
     it('includes user and partner names in transition prompts', () => {
@@ -179,7 +255,7 @@ describe('Stage Prompts Service', () => {
         isStageTransition: true,
         previousStage: 0,
       };
-      const prompt = buildStagePrompt(1, context, options);
+      const prompt = fullPrompt(buildStagePrompt(1, context, options));
 
       expect(prompt).toContain('Alice');
       expect(prompt).toContain('Bob');
@@ -191,7 +267,7 @@ describe('Stage Prompts Service', () => {
         isStageTransition: true,
         previousStage: 0,
       };
-      const prompt = buildStagePrompt(1, context, options);
+      const prompt = fullPrompt(buildStagePrompt(1, context, options));
 
       // The regular stage prompt includes micro-tag format via buildResponseProtocol
       expect(prompt).toContain('<thinking>');
@@ -215,7 +291,7 @@ describe('Stage Prompts Service', () => {
           isStageTransition: true,
           previousStage,
         };
-        const prompt = buildStagePrompt(toStage, context, options);
+        const prompt = fullPrompt(buildStagePrompt(toStage, context, options));
 
         // Should not explicitly name stages (avoid clinical language)
         expect(prompt).not.toMatch(/["']Stage [0-4]["']/i);
@@ -231,7 +307,7 @@ describe('Stage Prompts Service', () => {
       const options: BuildStagePromptOptions = {
         isStageTransition: false,
       };
-      const prompt = buildStagePrompt(1, context, options);
+      const prompt = fullPrompt(buildStagePrompt(1, context, options));
 
       // Should be regular listening prompt, not transition
       expect(prompt).toContain('listen to Test User');
@@ -243,7 +319,7 @@ describe('Stage Prompts Service', () => {
       const options: BuildStagePromptOptions = {
         isStageTransition: false,
       };
-      const prompt = buildStagePrompt(2, context, options);
+      const prompt = fullPrompt(buildStagePrompt(2, context, options));
 
       // Should be regular perspective prompt, not transition
       expect(prompt).toContain('LISTENING:');
@@ -338,7 +414,7 @@ describe('Stage Prompts Service', () => {
   describe('Response Protocol (Semantic Router)', () => {
     it('Stage 1 protocol includes FeelHeardCheck flag instruction', () => {
       const context = createContext();
-      const prompt = buildStagePrompt(1, context);
+      const prompt = fullPrompt(buildStagePrompt(1, context));
 
       expect(prompt).toContain('<thinking>');
       // The flag instruction is in format "FeelHeardCheck: [Y if ready..., N otherwise]"
@@ -348,7 +424,7 @@ describe('Stage Prompts Service', () => {
 
     it('Stage 2 protocol includes ReadyShare flag instruction', () => {
       const context = createContext();
-      const prompt = buildStagePrompt(2, context);
+      const prompt = fullPrompt(buildStagePrompt(2, context));
 
       expect(prompt).toContain('<thinking>');
       // The flag instruction is in format "ReadyShare: [Y if ready..., N otherwise]"
@@ -359,14 +435,14 @@ describe('Stage Prompts Service', () => {
     it('Stage 0 protocol includes draft tag instruction', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };
-      const prompt = buildStagePrompt(0, context, options);
+      const prompt = fullPrompt(buildStagePrompt(0, context, options));
 
       expect(prompt).toContain('<draft>');
     });
 
     it('protocol includes dispatch tag instruction', () => {
       const context = createContext();
-      const prompt = buildStagePrompt(1, context);
+      const prompt = fullPrompt(buildStagePrompt(1, context));
 
       expect(prompt).toContain('<dispatch>');
       expect(prompt).toContain('EXPLAIN_PROCESS');
@@ -374,7 +450,7 @@ describe('Stage Prompts Service', () => {
 
     it('does NOT include old tool call instructions', () => {
       const context = createContext();
-      const prompt = buildStagePrompt(1, context);
+      const prompt = fullPrompt(buildStagePrompt(1, context));
 
       // Should not have tool call instructions
       expect(prompt).not.toContain('update_session_state');

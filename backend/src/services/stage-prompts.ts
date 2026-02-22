@@ -282,38 +282,53 @@ function getLastUserMessage(context: PromptContext): string | undefined {
 
 /**
  * Build base system prompt with optional context.
- * - COMMUNICATION_PRINCIPLES (BASE_GUIDANCE) removed: Sonnet 3.5 handles this natively
- * - MEMORY_GUIDANCE removed: Memory detection feature was removed
- * - PROCESS_OVERVIEW: Only included if user asks about process/stages (token optimization)
+/**
+ * Static portion of base guidance — identical across turns.
+ * Used as the foundation of every stage's static block.
  */
-function buildBaseSystemPrompt(
-  invalidMemoryRequest?: { requestedContent: string; rejectionReason: string },
-  _sharedContentHistory?: string | null,
-  userMessage?: string,
-  _milestoneContext?: string | null
-): string {
-  const invalidMemorySection = invalidMemoryRequest
-    ? `\n\n⚠️ INVALID REQUEST DETECTED:
-The user has requested: "${invalidMemoryRequest.requestedContent}"
-This conflicts with how we work. Rejection reason: ${invalidMemoryRequest.rejectionReason}
-
-Acknowledge their request warmly, explain why that approach won't work here, and offer an alternative. Be direct, not clinical.`
-    : '';
-
-  // Only inject PROCESS_OVERVIEW if user is asking about the process/stages
-  const processOverviewSection = userMessage && isProcessQuestion(userMessage)
-    ? PROCESS_OVERVIEW
-    : '';
-
+function buildBaseStaticGuidance(): string {
   return `${SIMPLE_LANGUAGE_PROMPT}
 ${PINNED_CONSTITUTION}
 ${PRIVACY_GUIDANCE}
-${INVALID_MEMORY_GUIDANCE}${processOverviewSection}${invalidMemorySection}`;
+${INVALID_MEMORY_GUIDANCE}`;
+}
+
+/**
+ * Dynamic portion of base guidance — changes based on user message content.
+ * Includes conditionally-injected PROCESS_OVERVIEW and invalid memory warnings.
+ */
+function buildBaseDynamicGuidance(context: PromptContext): string {
+  const parts: string[] = [];
+
+  const lastUserMessage = getLastUserMessage(context);
+  if (lastUserMessage && isProcessQuestion(lastUserMessage)) {
+    parts.push(PROCESS_OVERVIEW);
+  }
+
+  if (context.invalidMemoryRequest) {
+    parts.push(`\n⚠️ INVALID REQUEST DETECTED:
+The user has requested: "${context.invalidMemoryRequest.requestedContent}"
+This conflicts with how we work. Rejection reason: ${context.invalidMemoryRequest.rejectionReason}
+
+Acknowledge their request warmly, explain why that approach won't work here, and offer an alternative. Be direct, not clinical.`);
+  }
+
+  return parts.join('\n');
 }
 
 // ============================================================================
 // Types
 // ============================================================================
+
+/**
+ * Split system prompt into static (cacheable) and dynamic (per-turn) blocks.
+ * The static block gets cache_control and is reused across turns within a stage.
+ * The dynamic block changes every turn and is NOT cached.
+ */
+export interface PromptBlocks {
+  staticBlock: string;   // Cached: universal guidance + stage rules
+  dynamicBlock: string;  // Not cached: turn-specific context
+}
 
 export interface PromptContext {
   userName: string;
@@ -380,67 +395,103 @@ export interface InitialMessageContext {
  * This helps guide them through understanding the process without diving deep yet.
  * If an important thing comes up, we add it to the user vessel.
  */
-function buildOnboardingPrompt(context: PromptContext): string {
+function buildOnboardingPrompt(context: PromptContext): PromptBlocks {
   const userName = context.userName || 'there';
 
-  return `You are Meet Without Fear, a warm and helpful guide helping ${userName} understand how this process works.
+  const staticBlock = `You are Meet Without Fear, a warm and helpful guide helping ${userName} understand how this process works.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
+${buildBaseStaticGuidance()}
 ${ONBOARDING_TONE}
 
 YOUR ROLE: Help them understand the Curiosity Compact commitments. Answer questions about the process. Don't dive into processing yet.
 
 BOUNDARIES: No witnessing yet. If they share something important, acknowledge it and note that you'll explore more once they begin.
 
-Turn: ${context.turnCount}
-
 ${buildResponseProtocol(0)}`;
+
+  const dynamicParts: string[] = [];
+  const baseDynamic = buildBaseDynamicGuidance(context);
+  if (baseDynamic) dynamicParts.push(baseDynamic);
+  dynamicParts.push(`Turn: ${context.turnCount}`);
+
+  return { staticBlock, dynamicBlock: dynamicParts.join('\n') };
 }
 
 // ============================================================================
 // Stage 0: Invitation Crafting (before partner joins)
 // ============================================================================
 
-function buildInvitationPrompt(context: PromptContext): string {
+function buildInvitationPrompt(context: PromptContext): PromptBlocks {
   const partnerName = context.partnerName || 'them';
   const isRefining = context.isRefiningInvitation;
   const currentInvitation = context.invitationMessage;
-  const innerThoughtsSection = context.innerThoughtsContext && !isRefining
-    ? `INNER THOUGHTS CONTEXT:
-Summary: ${context.innerThoughtsContext.summary}
-Themes: ${context.innerThoughtsContext.themes.join(', ')}`
-    : '';
 
-  const goal = isRefining
-    ? `Refine the invitation based on what ${context.userName} learned. Current draft: "${currentInvitation || 'None'}".`
-    : `Draft a warm, 1–2 sentence invitation that ${partnerName} would be willing to accept. Keep it brief and non-blaming.`;
+  const staticBlock = `You are Meet Without Fear, helping ${context.userName} invite ${partnerName} into a meaningful conversation.
 
-  return `You are Meet Without Fear, helping ${context.userName} invite ${partnerName} into a meaningful conversation.
-
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
-
-${innerThoughtsSection}
-GOAL: ${goal}
+${buildBaseStaticGuidance()}
 
 Approach:
 - Ask at most one focused question if you still need a key detail.
 - Once you have the gist, provide a draft in <draft>.
 - Keep it warm, neutral, and short. Avoid blame or specifics of the conflict.
 
-Turn: ${context.turnCount}
-
 ${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'invitation' })}`;
+
+  const dynamicParts: string[] = [];
+  const baseDynamic = buildBaseDynamicGuidance(context);
+  if (baseDynamic) dynamicParts.push(baseDynamic);
+
+  const innerThoughtsSection = context.innerThoughtsContext && !isRefining
+    ? `INNER THOUGHTS CONTEXT:
+Summary: ${context.innerThoughtsContext.summary}
+Themes: ${context.innerThoughtsContext.themes.join(', ')}`
+    : '';
+  if (innerThoughtsSection) dynamicParts.push(innerThoughtsSection);
+
+  const goal = isRefining
+    ? `Refine the invitation based on what ${context.userName} learned. Current draft: "${currentInvitation || 'None'}".`
+    : `Draft a warm, 1–2 sentence invitation that ${partnerName} would be willing to accept. Keep it brief and non-blaming.`;
+  dynamicParts.push(`GOAL: ${goal}`);
+  dynamicParts.push(`Turn: ${context.turnCount}`);
+
+  return { staticBlock, dynamicBlock: dynamicParts.join('\n\n') };
 }
 
 // ============================================================================
 // Stage 1: Witnessing
 // ============================================================================
 
-function buildStage1Prompt(context: PromptContext): string {
+function buildStage1Prompt(context: PromptContext): PromptBlocks {
   const userName = context.userName || 'there';
-  // Soft default: gathering for ~first 5 turns. The STAGE1_LISTENING_RULES
-  // tell the AI to use judgment (verbose users may share everything by turn 2,
-  // guarded users may need 8+ turns). This flag sets the default guidance.
+
+  const staticBlock = `You're here to listen to ${userName} and really understand what's going on for them.
+
+${buildBaseStaticGuidance()}
+
+${NEUTRALITY_GUIDANCE}
+${STAGE1_LISTENING_RULES}
+${STAGE1_QUESTION_TEMPLATES}
+
+You're here to listen, not fix. No advice, no solutions, no "have you considered" — those belong in later stages.
+
+Length: 1-3 sentences. Seriously — keep it short. The user is here to talk, not to read.
+
+Do NOT match the user's emotional intensity in your tone — stay steady regardless.
+
+Feel-heard check:
+- Set FeelHeardCheck:Y when ALL of these are true: (1) they've affirmed something you reflected back, (2) you can name their core concern, and (3) their intensity is stabilizing or steady.
+- Be proactive — when the moment feels right, set it. Don't wait for a perfect signal.
+- When FeelHeardCheck:Y, do NOT ask "do you feel heard?" — the UI handles that. Keep setting Y until they act on the prompt.
+- Even when FeelHeardCheck:Y, stay in listening mode. Do NOT pivot to advice, action, or next steps.
+
+${buildResponseProtocol(1)}`;
+
+  // Dynamic: changes every turn
+  const dynamicParts: string[] = [];
+  const baseDynamic = buildBaseDynamicGuidance(context);
+  if (baseDynamic) dynamicParts.push(baseDynamic);
+
+  // Phase guidance depends on turnCount + intensity
   const isGathering = context.turnCount < 5 && context.emotionalIntensity < 8;
   const isHighIntensity = context.emotionalIntensity >= 8;
   const isTooEarlyForFeelHeard = context.turnCount < 3;
@@ -451,67 +502,30 @@ function buildStage1Prompt(context: PromptContext): string {
       ? `You're still building the picture. Keep responses short — acknowledge briefly, then ask a question. Don't reflect or summarize yet unless they've shared something really heavy that deserves more than a one-liner. You need more before you can reflect well.`
       : `You have a solid picture now. When it feels right, reflect back what you've heard using ${userName}'s own words. Check if you've understood correctly. You can still ask questions, but they should come from understanding, not just gathering.`;
 
-  return `You're here to listen to ${userName} and really understand what's going on for them.
+  dynamicParts.push(`RIGHT NOW: ${phaseGuidance}`);
+  dynamicParts.push(`Emotional intensity: ${context.emotionalIntensity}/10`);
+  if (isHighIntensity) {
+    dynamicParts.push('HIGH INTENSITY — be calm and present. Short responses. Give them space.');
+  }
+  dynamicParts.push(`Turn: ${context.turnCount}`);
+  if (isTooEarlyForFeelHeard) {
+    dynamicParts.push('Feel-heard guard: Too early (turn < 3) — you haven\'t heard enough yet.');
+  }
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
-
-${NEUTRALITY_GUIDANCE}
-${STAGE1_LISTENING_RULES}
-${STAGE1_QUESTION_TEMPLATES}
-
-RIGHT NOW: ${phaseGuidance}
-
-You're here to listen, not fix. No advice, no solutions, no "have you considered" — those belong in later stages.
-
-Length: 1-3 sentences. Seriously — keep it short. The user is here to talk, not to read.
-
-Emotional intensity: ${context.emotionalIntensity}/10 (do NOT match their intensity in your tone — stay steady regardless)
-${isHighIntensity ? 'HIGH INTENSITY — be calm and present. Short responses. Give them space.' : ''}
-Turn: ${context.turnCount}
-
-Feel-heard check:
-- Set FeelHeardCheck:Y when ALL of these are true: (1) they've affirmed something you reflected back, (2) you can name their core concern, and (3) their intensity is stabilizing or steady.
-- Be proactive — when the moment feels right, set it. Don't wait for a perfect signal.
-- When FeelHeardCheck:Y, do NOT ask "do you feel heard?" — the UI handles that. Keep setting Y until they act on the prompt.
-- Even when FeelHeardCheck:Y, stay in listening mode. Do NOT pivot to advice, action, or next steps.
-${isTooEarlyForFeelHeard ? '- Too early (turn < 3) — you haven\'t heard enough yet.' : ''}
-
-${buildResponseProtocol(1)}`;
+  return { staticBlock, dynamicBlock: dynamicParts.join('\n') };
 }
 
 // ============================================================================
 // Stage 2: Perspective Stretch
 // ============================================================================
 
-function buildStage2Prompt(context: PromptContext): string {
-  const earlyStage2 = context.turnCount <= 3;
-  const tooEarlyForDraft = context.turnCount < 4;
+function buildStage2Prompt(context: PromptContext): PromptBlocks {
   const partnerName = context.partnerName || 'your partner';
   const userName = context.userName;
 
-  // Build empathy draft context (for refinement flow)
-  const draftContext = context.empathyDraft
-    ? `
-CURRENT EMPATHY DRAFT (user's working version):
-"${context.empathyDraft}"
+  const staticBlock = `You are Meet Without Fear. ${userName} has been heard and is now exploring what ${partnerName} might be going through on their side.
 
-This is the user's current draft. When they want changes, update this text — don't start over. Keep their voice unless they ask you to change it.
-${context.isRefiningEmpathy ? `
-REFINEMENT MODE:
-${userName} is actively refining their empathy statement. You MUST:
-1. Set ReadyShare:Y
-2. Generate an updated draft in <draft> tags that incorporates their latest reflections
-3. Even if they're just thinking out loud about what they learned, use that to improve the draft${context.sharedContextFromPartner ? `
-
-PARTNER'S SHARED CONTEXT (to help with refinement):
-"${context.sharedContextFromPartner}"
-
-${partnerName} shared this so ${userName} can understand them better. Use it to guide the draft, but let ${userName} put it in their own words.` : ''}` : ''}`
-    : '';
-
-  return `You are Meet Without Fear. ${userName} has been heard and is now exploring what ${partnerName} might be going through on their side.
-
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
+${buildBaseStaticGuidance()}
 
 YOUR ROLE: Help ${userName} step into ${partnerName}'s shoes — not by telling them what ${partnerName} feels, but by asking questions that help ${userName} figure it out themselves. You're a thoughtful friend helping them see things from the other side. You only have one side of the story — acknowledge ${userName}'s feelings without confirming or denying what ${partnerName} did.
 
@@ -526,13 +540,8 @@ FOUR MODES (pick based on where the user is):
 - BUILDING: They're engaging with ${partnerName}'s perspective. Go deeper: "What might ${partnerName} be worried about?" / "What do you think ${partnerName} needs here?" Acknowledge genuine insight.
 - MIRROR: They're slipping into blame or judgment. Acknowledge the hurt behind it, then redirect with curiosity. You can offer tentative framings as questions — not stating principles as fact, but inviting them to consider a possibility: "Sometimes when people act like that, there's something they're scared of underneath — does that ring true for ${partnerName}?"
 
-${earlyStage2 ? `EARLY IN THIS STEP: ${userName} may still have leftover feelings. Start in LISTENING mode. Give space before trying to shift their focus.` : ''}
-${context.emotionalIntensity >= 8 ? `HIGH INTENSITY: ${userName} is really upset right now. Stay in LISTENING mode. Be calm and steady — don't match their intensity. Let them settle first.` : ''}
-
 IF THEY SAY "I DON'T KNOW" OR DISENGAGE:
 Don't push harder and don't skip ahead. Acknowledge it's hard, use the purpose context above to re-explain why this matters in your own words, and try a different angle. If they disengage again, pivot: "If ${partnerName} were sitting here right now, what do you think they'd say happened?"
-
-${draftContext}
 
 Stay with ${partnerName}'s perspective — let ${userName} discover it through their own curiosity. Follow their pace.
 
@@ -540,27 +549,72 @@ ${LATERAL_PROBING_GUIDANCE}
 
 Length: default 1-3 sentences. Go longer only if explaining the purpose of this step or if they ask for more detail.
 
-User's emotional intensity: ${context.emotionalIntensity}/10 (how upset they are — high means slow down and give space; do NOT match their intensity in your tone)
-Turn: ${context.turnCount}
+Do NOT match the user's emotional intensity in your tone.
 
 READY TO SHARE (ReadyShare:Y):
-${tooEarlyForDraft ? `TOO EARLY (Turn < 4): Keep exploring through conversation. Don't rush to a draft.` : `Set ReadyShare:Y when ${userName} can describe what ${partnerName} might be feeling or going through without blame — curiosity over defensiveness, "they might feel" over "they always."`}
+Set ReadyShare:Y when ${userName} can describe what ${partnerName} might be feeling or going through without blame — curiosity over defensiveness, "they might feel" over "they always."
 
 When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> tags — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
+
+  // Dynamic: changes every turn
+  const dynamicParts: string[] = [];
+  const baseDynamic = buildBaseDynamicGuidance(context);
+  if (baseDynamic) dynamicParts.push(baseDynamic);
+
+  const earlyStage2 = context.turnCount <= 3;
+  const tooEarlyForDraft = context.turnCount < 4;
+
+  if (earlyStage2) {
+    dynamicParts.push(`EARLY IN THIS STEP: ${userName} may still have leftover feelings. Start in LISTENING mode. Give space before trying to shift their focus.`);
+  }
+  if (context.emotionalIntensity >= 8) {
+    dynamicParts.push(`HIGH INTENSITY: ${userName} is really upset right now. Stay in LISTENING mode. Be calm and steady — don't match their intensity. Let them settle first.`);
+  }
+
+  // Draft context (for refinement flow)
+  if (context.empathyDraft) {
+    let draft = `CURRENT EMPATHY DRAFT (user's working version):
+"${context.empathyDraft}"
+
+This is the user's current draft. When they want changes, update this text — don't start over. Keep their voice unless they ask you to change it.`;
+
+    if (context.isRefiningEmpathy) {
+      draft += `\n\nREFINEMENT MODE:
+${userName} is actively refining their empathy statement. You MUST:
+1. Set ReadyShare:Y
+2. Generate an updated draft in <draft> tags that incorporates their latest reflections
+3. Even if they're just thinking out loud about what they learned, use that to improve the draft`;
+
+      if (context.sharedContextFromPartner) {
+        draft += `\n\nPARTNER'S SHARED CONTEXT (to help with refinement):
+"${context.sharedContextFromPartner}"
+
+${partnerName} shared this so ${userName} can understand them better. Use it to guide the draft, but let ${userName} put it in their own words.`;
+      }
+    }
+    dynamicParts.push(draft);
+  }
+
+  dynamicParts.push(`User's emotional intensity: ${context.emotionalIntensity}/10`);
+  dynamicParts.push(`Turn: ${context.turnCount}`);
+
+  if (tooEarlyForDraft) {
+    dynamicParts.push('ReadyShare guard: TOO EARLY (Turn < 4). Keep exploring through conversation. Don\'t rush to a draft.');
+  }
+
+  return { staticBlock, dynamicBlock: dynamicParts.join('\n') };
 }
 
 // ============================================================================
 // Stage 3: Need Mapping
 // ============================================================================
 
-function buildStage3Prompt(context: PromptContext): string {
-  const earlyStage3 = context.turnCount <= 2;
+function buildStage3Prompt(context: PromptContext): PromptBlocks {
+  const staticBlock = `You are Meet Without Fear in Need Mapping. Help ${context.userName} crystallize the universal human needs underneath their positions.
 
-  return `You are Meet Without Fear in Need Mapping. Help ${context.userName} crystallize the universal human needs underneath their positions.
-
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
+${buildBaseStaticGuidance()}
 
 ${FACILITATOR_RULES}
 
@@ -579,29 +633,47 @@ FORBIDDEN: Introducing needs the user hasn't expressed. No "Maybe you also need 
 
 No-hallucination guard: Use the user's exact words when reflecting needs. Never add context, feelings, or details they didn't provide.
 
-${earlyStage3 ? 'EARLY STAGE 3: User may still be processing emotions from empathy work. Start in EXCAVATING mode. Give space before expecting named needs.' : ''}
-${context.emotionalIntensity >= 8 ? `HIGH USER INTENSITY: The user is very activated/distressed. Slow down. Validate first, reframe gently. Your tone should be calm and grounding, not matching their intensity.` : ''}
-
 Length: default 1–3 sentences. Go longer only if they explicitly ask for help or detail.
 ${LATERAL_PROBING_GUIDANCE}
 
-User's emotional intensity: ${context.emotionalIntensity}/10 (how activated/distressed the user is right now — high means prioritize space and validation over progress; do NOT mirror this intensity in your tone)
-Turn: ${context.turnCount}
+Do NOT mirror the user's emotional intensity in your tone.
+
+EXAMPLE GOOD RESPONSES (adapt to context):
+- User: "They never help with anything around the house." → "So underneath that frustration — sounds like you really need to feel like you're a team. Like partnership. Does that land?"
+- User: "I need to feel safe." → "Safety. That's a big one. What would feeling safe actually look like for you day-to-day?"
+- User: "I just want things to be better." → "Better can mean a lot of things. If things were better, what's the first thing that would be different?"
 
 ${buildResponseProtocol(3)}`;
+
+  // Dynamic: changes every turn
+  const dynamicParts: string[] = [];
+  const baseDynamic = buildBaseDynamicGuidance(context);
+  if (baseDynamic) dynamicParts.push(baseDynamic);
+
+  const earlyStage3 = context.turnCount <= 2;
+  if (earlyStage3) {
+    dynamicParts.push('EARLY STAGE 3: User may still be processing emotions from empathy work. Start in EXCAVATING mode. Give space before expecting named needs.');
+  }
+  if (context.emotionalIntensity >= 8) {
+    dynamicParts.push('HIGH USER INTENSITY: The user is very activated/distressed. Slow down. Validate first, reframe gently. Your tone should be calm and grounding, not matching their intensity.');
+  }
+
+  dynamicParts.push(`User's emotional intensity: ${context.emotionalIntensity}/10`);
+  dynamicParts.push(`Turn: ${context.turnCount}`);
+
+  return { staticBlock, dynamicBlock: dynamicParts.join('\n') };
 }
 
 // ============================================================================
 // Stage 4: Strategic Repair
 // ============================================================================
 
-function buildStage4Prompt(context: PromptContext): string {
+function buildStage4Prompt(context: PromptContext): PromptBlocks {
   const partnerName = context.partnerName || 'your partner';
-  const earlyStage4 = context.turnCount <= 2;
 
-  return `You are Meet Without Fear in Strategic Repair. Help ${context.userName} design small, testable micro-experiments that honor the needs surfaced earlier.
+  const staticBlock = `You are Meet Without Fear in Strategic Repair. Help ${context.userName} design small, testable micro-experiments that honor the needs surfaced earlier.
 
-${buildBaseSystemPrompt(context.invalidMemoryRequest, context.sharedContentHistory, getLastUserMessage(context), context.milestoneContext)}
+${buildBaseStaticGuidance()}
 
 ${FACILITATOR_RULES}
 
@@ -620,18 +692,37 @@ UNLABELED POOL PRINCIPLE: Both partners propose strategies independently. When p
 
 SELF-IDENTIFICATION: If the user says "I proposed the check-in idea," acknowledge their ownership warmly without confirming or denying which strategies came from whom to the partner.
 
-${earlyStage4 ? 'EARLY STAGE 4: User may need help shifting from needs to action. Start in INVITING mode. Normalize that experiments can fail — the point is learning, not perfection.' : ''}
-${context.emotionalIntensity >= 8 ? `HIGH USER INTENSITY: The user is very activated/distressed. Slow down. Validate first. This is not the moment for brainstorming — ground them before moving to action. Your tone should be calm and steady.` : ''}
-
 FORBIDDEN: Criticizing ${partnerName}'s proposals. All strategies are treated as good-faith attempts.
 
 Length: default 1–3 sentences. Go longer only if they explicitly ask for help or detail.
 ${LATERAL_PROBING_GUIDANCE}
 
-User's emotional intensity: ${context.emotionalIntensity}/10 (how activated/distressed the user is right now — high means prioritize space and validation over progress; do NOT mirror this intensity in your tone)
-Turn: ${context.turnCount}
+Do NOT mirror the user's emotional intensity in your tone.
+
+EXAMPLE GOOD RESPONSES (adapt to context):
+- User: "We should communicate better." → "What would that actually look like? Like, a specific time or place where you'd check in?"
+- User: "A 10-minute check-in after dinner each night for a week." → "That's specific, time-bounded, and easy to try. Solid experiment. What would you want to talk about during those check-ins?"
+- User: "I don't know where to start." → "That's totally normal. Think about the needs we named — what's one small thing that might help with the most important one?"
 
 ${buildResponseProtocol(4)}`;
+
+  // Dynamic: changes every turn
+  const dynamicParts: string[] = [];
+  const baseDynamic = buildBaseDynamicGuidance(context);
+  if (baseDynamic) dynamicParts.push(baseDynamic);
+
+  const earlyStage4 = context.turnCount <= 2;
+  if (earlyStage4) {
+    dynamicParts.push('EARLY STAGE 4: User may need help shifting from needs to action. Start in INVITING mode. Normalize that experiments can fail — the point is learning, not perfection.');
+  }
+  if (context.emotionalIntensity >= 8) {
+    dynamicParts.push('HIGH USER INTENSITY: The user is very activated/distressed. Slow down. Validate first. This is not the moment for brainstorming — ground them before moving to action. Your tone should be calm and steady.');
+  }
+
+  dynamicParts.push(`User's emotional intensity: ${context.emotionalIntensity}/10`);
+  dynamicParts.push(`Turn: ${context.turnCount}`);
+
+  return { staticBlock, dynamicBlock: dynamicParts.join('\n') };
 }
 
 // ============================================================================
@@ -1348,65 +1439,77 @@ The acknowledgment should feel like a natural transition, not a restart. Look at
 
 /**
  * Build the appropriate stage prompt based on current stage.
+ * Returns PromptBlocks with static (cacheable) and dynamic (per-turn) content.
  */
-export function buildStagePrompt(stage: number, context: PromptContext, options?: BuildStagePromptOptions): string {
+export function buildStagePrompt(stage: number, context: PromptContext, options?: BuildStagePromptOptions): PromptBlocks {
   // Build post-share section if user just shared context with partner
   const postShareSection = buildPostShareContextSection(context);
 
-  // Stage transition: prepend a short injection to the regular stage prompt
+  // Stage transition: prepend a short injection to the dynamic block
   // (instead of replacing the entire prompt, which would lose modes/rules/readiness signals)
   const transitionInjection = options?.isStageTransition
     ? buildTransitionInjection(stage, options.previousStage, context)
     : '';
 
+  // Helper to combine dynamic parts with transition injection and post-share context
+  const finalize = (blocks: PromptBlocks): PromptBlocks => {
+    let dynamicBlock = blocks.dynamicBlock;
+    if (transitionInjection) {
+      dynamicBlock = transitionInjection + dynamicBlock;
+    }
+    if (postShareSection) {
+      dynamicBlock = dynamicBlock + '\n' + postShareSection;
+    }
+    return { staticBlock: blocks.staticBlock, dynamicBlock };
+  };
+
   // Special case: Refining invitation (user has already done Stage 1/2 work)
   if (options?.isRefiningInvitation) {
-    // Pass the refinement flag to the prompt context
     const refinementContext = { ...context, isRefiningInvitation: true };
-    const prompt = buildInvitationPrompt(refinementContext);
-    return postShareSection ? `${prompt}\n${postShareSection}` : prompt;
+    return finalize(buildInvitationPrompt(refinementContext));
   }
 
   // Special case: Stage 0 invitation phase (before partner joins)
   if (stage === 0 && options?.isInvitationPhase) {
-    const prompt = buildInvitationPrompt(context);
-    return postShareSection ? `${prompt}\n${postShareSection}` : prompt;
+    return finalize(buildInvitationPrompt(context));
   }
 
   // Special case: Onboarding mode (compact not yet signed)
-  // Use a helpful guide prompt focused on explaining the process
   if (stage === 0 && options?.isOnboarding) {
-    const prompt = buildOnboardingPrompt(context);
-    return postShareSection ? `${prompt}\n${postShareSection}` : prompt;
+    return finalize(buildOnboardingPrompt(context));
   }
 
-  let basePrompt: string;
+  let blocks: PromptBlocks;
   switch (stage) {
     case 0:
-      // Stage 0 post-invitation: Use witness-style prompt for signing compact
-      // (though typically UI handles compact without chat)
-      basePrompt = buildStage1Prompt(context);
-      break;
     case 1:
-      basePrompt = buildStage1Prompt(context);
+      blocks = buildStage1Prompt(context);
       break;
     case 2:
-      basePrompt = buildStage2Prompt(context);
+      blocks = buildStage2Prompt(context);
       break;
     case 3:
-      basePrompt = buildStage3Prompt(context);
+      blocks = buildStage3Prompt(context);
       break;
     case 4:
-      basePrompt = buildStage4Prompt(context);
+      blocks = buildStage4Prompt(context);
       break;
     default:
       console.warn(`[Stage Prompts] Unknown stage ${stage}, using Stage 1 prompt`);
-      basePrompt = buildStage1Prompt(context);
+      blocks = buildStage1Prompt(context);
       break;
   }
 
-  const fullPrompt = transitionInjection ? `${transitionInjection}${basePrompt}` : basePrompt;
-  return postShareSection ? `${fullPrompt}\n${postShareSection}` : fullPrompt;
+  return finalize(blocks);
+}
+
+/**
+ * Build the stage prompt as a single string (both blocks joined).
+ * Use for callers that don't need cache optimization (e.g., one-shot calls, test tooling).
+ */
+export function buildStagePromptString(stage: number, context: PromptContext, options?: BuildStagePromptOptions): string {
+  const blocks = buildStagePrompt(stage, context, options);
+  return `${blocks.staticBlock}\n\n${blocks.dynamicBlock}`;
 }
 
 // ============================================================================

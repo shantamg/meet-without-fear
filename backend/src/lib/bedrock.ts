@@ -13,6 +13,7 @@ import {
 } from '@aws-sdk/client-bedrock-runtime';
 import AnthropicBedrock from '@anthropic-ai/bedrock-sdk';
 import { extractJsonFromResponse } from '../utils/json-extractor';
+import type { PromptBlocks } from '../services/stage-prompts';
 import { brainService, BrainActivityCallType } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
 import { recordLlmCall } from '../services/llm-telemetry';
@@ -64,7 +65,7 @@ function logPromptToFile(params: {
   callType?: BrainActivityCallType | null;
   operation: string;
   model: string;
-  systemPrompt: string;
+  systemPrompt: string | PromptBlocks;
   messages: { role: string; content: string }[];
   maxTokens?: number;
   sessionId: string;
@@ -101,7 +102,10 @@ function logPromptToFile(params: {
     const filepath = path.join(PROMPT_LOG_DIR, filename);
 
     // Build plain text prompt (exactly what gets sent to the model)
-    let promptText = `[SYSTEM]\n${params.systemPrompt}\n`;
+    const systemText = typeof params.systemPrompt === 'string'
+      ? params.systemPrompt
+      : `[STATIC BLOCK]\n${params.systemPrompt.staticBlock}\n\n[DYNAMIC BLOCK]\n${params.systemPrompt.dynamicBlock}`;
+    let promptText = `[SYSTEM]\n${systemText}\n`;
 
     for (const msg of params.messages) {
       const roleLabel = msg.role.toUpperCase();
@@ -223,7 +227,7 @@ export interface SimpleMessage {
  * sessionId and turnId are REQUIRED to ensure proper cost tracking and attribution.
  */
 export interface CompletionOptions {
-  systemPrompt: string;
+  systemPrompt: string | PromptBlocks;
   messages: SimpleMessage[];
   maxTokens?: number;
   thinkingBudget?: number;
@@ -343,6 +347,11 @@ export async function getModelCompletion(
   const operation = options.operation ?? `converse-${model}`;
   const startTime = Date.now();
 
+  // Resolve system prompt text for logging
+  const systemPromptText = typeof systemPrompt === 'string'
+    ? systemPrompt
+    : `${systemPrompt.staticBlock}\n\n${systemPrompt.dynamicBlock}`;
+
   // Log prompt to file for debugging
   const promptFilepath = logPromptToFile({
     callType: options.callType,
@@ -355,12 +364,14 @@ export async function getModelCompletion(
     turnId: options.turnId,
   });
 
-  // System prompt with cache_control
-  const system = [{
-    type: 'text' as const,
-    text: systemPrompt,
-    cache_control: { type: 'ephemeral' as const },
-  }];
+  // System prompt with cache_control — split into static (cached) and dynamic (uncached) blocks
+  type SystemBlock = { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } };
+  const system: SystemBlock[] = typeof systemPrompt === 'string'
+    ? [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' as const } }]
+    : [
+        { type: 'text', text: systemPrompt.staticBlock, cache_control: { type: 'ephemeral' as const } },
+        { type: 'text', text: systemPrompt.dynamicBlock },
+      ];
 
   // Messages with cache_control on second-to-last for history caching
   const anthropicMessages = toAnthropicMessages(messages);
@@ -371,7 +382,7 @@ export async function getModelCompletion(
     turnId: options.turnId,
     activityType: ActivityType.LLM_CALL,
     model: modelId,
-    input: { systemPrompt, messages, operation },
+    input: { systemPrompt: systemPromptText, messages, operation },
     metadata: { maxTokens },
     callType: options.callType,
   });
@@ -625,7 +636,7 @@ interface AnthropicToolDef {
  * Options for Sonnet streaming completion requests.
  */
 export interface SonnetStreamingOptions {
-  systemPrompt: string;
+  systemPrompt: string | PromptBlocks;
   messages: SimpleMessage[];
   tools?: AnthropicToolDef[];
   maxTokens?: number;
@@ -685,6 +696,11 @@ export async function* getSonnetStreamingResponse(
   const { systemPrompt, messages, tools, maxTokens = 2048 } = options;
   const startTime = Date.now();
 
+  // Resolve system prompt text for logging
+  const systemPromptText = typeof systemPrompt === 'string'
+    ? systemPrompt
+    : `${systemPrompt.staticBlock}\n\n${systemPrompt.dynamicBlock}`;
+
   // Log prompt to file for debugging
   const promptFilepath = logPromptToFile({
     callType: options.callType,
@@ -697,12 +713,14 @@ export async function* getSonnetStreamingResponse(
     turnId: options.turnId,
   });
 
-  // System prompt with cache_control
-  const system = [{
-    type: 'text' as const,
-    text: systemPrompt,
-    cache_control: { type: 'ephemeral' as const },
-  }];
+  // System prompt with cache_control — split into static (cached) and dynamic (uncached) blocks
+  type SystemBlock = { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } };
+  const system: SystemBlock[] = typeof systemPrompt === 'string'
+    ? [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' as const } }]
+    : [
+        { type: 'text', text: systemPrompt.staticBlock, cache_control: { type: 'ephemeral' as const } },
+        { type: 'text', text: systemPrompt.dynamicBlock },
+      ];
 
   // Messages with cache_control on second-to-last for history caching
   const anthropicMessages = toAnthropicMessages(messages);
@@ -714,7 +732,7 @@ export async function* getSonnetStreamingResponse(
     activityType: ActivityType.LLM_CALL,
     model: BEDROCK_SONNET_MODEL_ID,
     input: {
-      systemPrompt,
+      systemPrompt: systemPromptText,
       messages,
       operation: options.operation,
       streaming: true,
