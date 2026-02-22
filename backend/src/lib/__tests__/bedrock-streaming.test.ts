@@ -3,9 +3,13 @@
  */
 
 import { getSonnetStreamingResponse, StreamEvent, resetBedrockClient } from '../bedrock';
-import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 
-// Mock the AWS SDK
+// Mock the Anthropic Bedrock SDK
+jest.mock('@anthropic-ai/bedrock-sdk', () => {
+  return jest.fn();
+});
+
+// Mock the AWS SDK (still needed for getBedrockClient path)
 jest.mock('@aws-sdk/client-bedrock-runtime', () => {
   const actual = jest.requireActual('@aws-sdk/client-bedrock-runtime');
   return {
@@ -23,8 +27,10 @@ jest.mock('../../services/brain-service', () => ({
   },
 }));
 
+import AnthropicBedrock from '@anthropic-ai/bedrock-sdk';
+
 describe('getSonnetStreamingResponse', () => {
-  const mockSend = jest.fn();
+  let mockStream: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -35,9 +41,13 @@ describe('getSonnetStreamingResponse', () => {
     process.env.AWS_SECRET_ACCESS_KEY = 'test-secret';
     process.env.AWS_REGION = 'us-east-1';
 
-    // Mock the BedrockRuntimeClient constructor
-    (BedrockRuntimeClient as jest.Mock).mockImplementation(() => ({
-      send: mockSend,
+    mockStream = jest.fn();
+
+    // Mock the AnthropicBedrock constructor
+    (AnthropicBedrock as unknown as jest.Mock).mockImplementation(() => ({
+      messages: {
+        stream: mockStream,
+      },
     }));
   });
 
@@ -49,15 +59,26 @@ describe('getSonnetStreamingResponse', () => {
   });
 
   it('should yield text chunks as they arrive', async () => {
-    // Create an async generator that simulates Bedrock streaming
-    async function* mockStream() {
-      yield { contentBlockDelta: { delta: { text: 'Hello' } } };
-      yield { contentBlockDelta: { delta: { text: ', ' } } };
-      yield { contentBlockDelta: { delta: { text: 'world!' } } };
-      yield { metadata: { usage: { inputTokens: 10, outputTokens: 5 } } };
-    }
+    // Create a mock stream that yields Anthropic-format events
+    const mockEvents = [
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hello' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: ', ' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'world!' } },
+    ];
 
-    mockSend.mockResolvedValue({ stream: mockStream() });
+    const streamObj = {
+      [Symbol.asyncIterator]: async function* () {
+        for (const event of mockEvents) {
+          yield event;
+        }
+      },
+      finalMessage: jest.fn().mockResolvedValue({
+        usage: { input_tokens: 10, output_tokens: 5 },
+        stop_reason: 'end_turn',
+      }),
+    };
+
+    mockStream.mockReturnValue(streamObj);
 
     const events: StreamEvent[] = [];
     for await (const event of getSonnetStreamingResponse({
@@ -81,22 +102,27 @@ describe('getSonnetStreamingResponse', () => {
   });
 
   it('should accumulate and yield tool use results', async () => {
-    async function* mockStream() {
-      // Text output first
-      yield { contentBlockDelta: { delta: { text: 'I will update the state.' } } };
-      // Tool use block
-      yield {
-        contentBlockStart: {
-          start: { toolUse: { toolUseId: 'tool-123', name: 'update_session_state' } },
-        },
-      };
-      yield { contentBlockDelta: { delta: { toolUse: { input: '{"offer' } } } };
-      yield { contentBlockDelta: { delta: { toolUse: { input: 'FeelHeardCheck":true}' } } } };
-      yield { contentBlockStop: {} };
-      yield { metadata: { usage: { inputTokens: 50, outputTokens: 30 } } };
-    }
+    const mockEvents = [
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'I will update the state.' } },
+      { type: 'content_block_start', index: 1, content_block: { type: 'tool_use', id: 'tool-123', name: 'update_session_state' } },
+      { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{"offer' } },
+      { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: 'FeelHeardCheck":true}' } },
+      { type: 'content_block_stop', index: 1 },
+    ];
 
-    mockSend.mockResolvedValue({ stream: mockStream() });
+    const streamObj = {
+      [Symbol.asyncIterator]: async function* () {
+        for (const event of mockEvents) {
+          yield event;
+        }
+      },
+      finalMessage: jest.fn().mockResolvedValue({
+        usage: { input_tokens: 50, output_tokens: 30 },
+        stop_reason: 'tool_use',
+      }),
+    };
+
+    mockStream.mockReturnValue(streamObj);
 
     const events: StreamEvent[] = [];
     for await (const event of getSonnetStreamingResponse({
@@ -104,12 +130,11 @@ describe('getSonnetStreamingResponse', () => {
       messages: [{ role: 'user', content: 'Help me' }],
       tools: [
         {
-          toolSpec: {
-            name: 'update_session_state',
-            description: 'Update session state',
-            inputSchema: {
-              json: { type: 'object', properties: { offerFeelHeardCheck: { type: 'boolean' } } },
-            },
+          name: 'update_session_state',
+          description: 'Update session state',
+          input_schema: {
+            type: 'object',
+            properties: { offerFeelHeardCheck: { type: 'boolean' } },
           },
         },
       ],
@@ -135,17 +160,24 @@ describe('getSonnetStreamingResponse', () => {
   });
 
   it('should handle empty tool input gracefully', async () => {
-    async function* mockStream() {
-      yield {
-        contentBlockStart: {
-          start: { toolUse: { toolUseId: 'tool-456', name: 'some_tool' } },
-        },
-      };
-      yield { contentBlockStop: {} };
-      yield { metadata: { usage: { inputTokens: 20, outputTokens: 10 } } };
-    }
+    const mockEvents = [
+      { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'tool-456', name: 'some_tool' } },
+      { type: 'content_block_stop', index: 0 },
+    ];
 
-    mockSend.mockResolvedValue({ stream: mockStream() });
+    const streamObj = {
+      [Symbol.asyncIterator]: async function* () {
+        for (const event of mockEvents) {
+          yield event;
+        }
+      },
+      finalMessage: jest.fn().mockResolvedValue({
+        usage: { input_tokens: 20, output_tokens: 10 },
+        stop_reason: 'tool_use',
+      }),
+    };
+
+    mockStream.mockReturnValue(streamObj);
 
     const events: StreamEvent[] = [];
     for await (const event of getSonnetStreamingResponse({

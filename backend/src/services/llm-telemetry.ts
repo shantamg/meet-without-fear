@@ -13,6 +13,8 @@ export interface LlmCallMetrics {
   inputTokens: number;
   outputTokens: number;
   durationMs: number;
+  cacheReadInputTokens?: number;
+  cacheWriteInputTokens?: number;
 }
 
 interface TurnAggregate {
@@ -20,6 +22,8 @@ interface TurnAggregate {
   inputTokens: number;
   outputTokens: number;
   durationMs: number;
+  cacheReadInputTokens: number;
+  cacheWriteInputTokens: number;
   models: Record<string, number>;
   contextSizes?: ContextSizeMetrics;
 }
@@ -33,6 +37,8 @@ export function recordLlmCall(turnId: string | undefined, metrics: LlmCallMetric
     inputTokens: 0,
     outputTokens: 0,
     durationMs: 0,
+    cacheReadInputTokens: 0,
+    cacheWriteInputTokens: 0,
     models: {},
   };
 
@@ -40,6 +46,8 @@ export function recordLlmCall(turnId: string | undefined, metrics: LlmCallMetric
   existing.inputTokens += metrics.inputTokens;
   existing.outputTokens += metrics.outputTokens;
   existing.durationMs += metrics.durationMs;
+  existing.cacheReadInputTokens += metrics.cacheReadInputTokens ?? 0;
+  existing.cacheWriteInputTokens += metrics.cacheWriteInputTokens ?? 0;
   existing.models[metrics.model] = (existing.models[metrics.model] ?? 0) + 1;
 
   turnMetrics.set(turnId, existing);
@@ -52,6 +60,8 @@ export function recordContextSizes(turnId: string | undefined, sizes: ContextSiz
     inputTokens: 0,
     outputTokens: 0,
     durationMs: 0,
+    cacheReadInputTokens: 0,
+    cacheWriteInputTokens: 0,
     models: {},
   };
   existing.contextSizes = sizes;
@@ -67,10 +77,15 @@ export function finalizeTurnMetrics(turnId: string | undefined): void {
     .map(([model, count]) => `${model}x${count}`)
     .join(', ');
 
+  const cacheInfo = aggregate.cacheReadInputTokens > 0 || aggregate.cacheWriteInputTokens > 0
+    ? ` cache_read=${aggregate.cacheReadInputTokens} cache_write=${aggregate.cacheWriteInputTokens}` +
+      ` cache_hit_rate=${aggregate.inputTokens > 0 ? Math.round((aggregate.cacheReadInputTokens / aggregate.inputTokens) * 100) : 0}%`
+    : '';
+
   console.log(
     `[LLM Metrics] turn=${turnId} calls=${aggregate.callCount} ` +
       `tokens_in=${aggregate.inputTokens} tokens_out=${aggregate.outputTokens} ` +
-      `duration_ms=${aggregate.durationMs} models=[${modelSummary}]`
+      `duration_ms=${aggregate.durationMs} models=[${modelSummary}]${cacheInfo}`
   );
 
   if (aggregate.contextSizes) {

@@ -61,19 +61,19 @@ export interface SummarizationResult {
  */
 export const SUMMARIZATION_CONFIG = {
   /** Minimum messages before summarization kicks in */
-  minMessagesForSummary: 30,
+  minMessagesForSummary: 40,
 
   /** How many recent messages to keep in full (not summarized) */
-  recentMessagesToKeep: 15,
+  recentMessagesToKeep: 20,
 
   /** Target token count for summaries */
   targetSummaryTokens: 500,
 
   /** How often to re-summarize (every N new messages after initial summary) */
-  resummaryInterval: 20,
+  resummaryInterval: 25,
 
   /** Summarize early if total tokens exceed this threshold */
-  tokenThreshold: 3500,
+  tokenThreshold: 6_000,
 };
 
 // ============================================================================

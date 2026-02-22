@@ -9,16 +9,9 @@
 
 import {
   BedrockRuntimeClient,
-  ConverseCommand,
-  ConverseStreamCommand,
   InvokeModelCommand,
-  type Message,
-  type SystemContentBlock,
-  type InferenceConfiguration,
-  type ConverseCommandInput,
-  type Tool,
-  type ToolConfiguration,
 } from '@aws-sdk/client-bedrock-runtime';
+import AnthropicBedrock from '@anthropic-ai/bedrock-sdk';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import { brainService, BrainActivityCallType } from '../services/brain-service';
 import { ActivityType } from '@prisma/client';
@@ -28,17 +21,15 @@ import { getE2EFixtureId } from './request-context';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// AWS Bedrock Pricing (USD per 1,000 tokens) - Verified Jan 2026
-const PRICING = {
-  'anthropic.claude-3-5-sonnet-20241022-v2:0': { input: 0.003, output: 0.015 },
-  'anthropic.claude-3-5-haiku-20241022-v1:0': { input: 0.001, output: 0.005 },
-  'amazon.titan-embed-text-v2:0': { input: 0.00002, output: 0.0 },
-  'moonshotai.kimi-k2.5': { input: 0.002, output: 0.01 },
-  // Aliases
-  'claude-3-5-sonnet': { input: 0.003, output: 0.015 },
-  'claude-3-5-haiku': { input: 0.001, output: 0.005 },
-  'titan-embed': { input: 0.00002, output: 0.0 },
-} as const;
+// AWS Bedrock Pricing (USD per 1,000 tokens) - Updated Feb 2026
+const PRICING: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+  'us.anthropic.claude-sonnet-4-6-20250514-v1:0': { input: 0.003, output: 0.015, cacheRead: 0.0003, cacheWrite: 0.00375 },
+  'us.anthropic.claude-haiku-4-5-20251001-v1:0': { input: 0.001, output: 0.005, cacheRead: 0.0001, cacheWrite: 0.00125 },
+  'amazon.titan-embed-text-v2:0': { input: 0.00002, output: 0.0, cacheRead: 0, cacheWrite: 0 },
+  // Legacy entries for historical cost lookups
+  'anthropic.claude-3-5-sonnet-20241022-v2:0': { input: 0.003, output: 0.015, cacheRead: 0, cacheWrite: 0 },
+  'anthropic.claude-3-5-haiku-20241022-v1:0': { input: 0.001, output: 0.005, cacheRead: 0, cacheWrite: 0 },
+};
 
 // ============================================================================
 // Mock LLM Toggle (E2E Testing)
@@ -150,22 +141,15 @@ function logResponseToFile(promptFilepath: string | null, response: string | nul
 // Configuration - Two Model Stratification
 // ============================================================================
 
-// Flip to true to test Kimi K2.5 instead of Anthropic models.
-// When enabled, both haiku and sonnet calls route to Kimi.
-export const USE_KIMI = false;
-const KIMI_MODEL_ID = 'moonshotai.kimi-k2.5';
-
 // Haiku: Fast model for mechanics (retrieval planning, classification, detection)
 // ~3x faster and cheaper than Sonnet, good for structured JSON output
-export const BEDROCK_HAIKU_MODEL_ID = USE_KIMI
-  ? KIMI_MODEL_ID
-  : (process.env.BEDROCK_HAIKU_MODEL_ID || 'anthropic.claude-3-5-haiku-20241022-v1:0');
+export const BEDROCK_HAIKU_MODEL_ID =
+  process.env.BEDROCK_HAIKU_MODEL_ID || 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 // Sonnet: Empathetic model for user-facing responses
 // Better at nuance, empathy, and natural conversation
-export const BEDROCK_SONNET_MODEL_ID = USE_KIMI
-  ? KIMI_MODEL_ID
-  : (process.env.BEDROCK_SONNET_MODEL_ID || 'anthropic.claude-3-5-sonnet-20241022-v2:0');
+export const BEDROCK_SONNET_MODEL_ID =
+  process.env.BEDROCK_SONNET_MODEL_ID || 'us.anthropic.claude-sonnet-4-6-20250514-v1:0';
 
 // Titan: Embedding model for semantic search
 // Outputs 1536-dimensional vectors for similarity matching
@@ -176,13 +160,14 @@ export const BEDROCK_TITAN_EMBED_MODEL_ID =
 export const BEDROCK_MODEL_ID = BEDROCK_SONNET_MODEL_ID;
 
 // ============================================================================
-// Client Singleton
+// Client Singletons
 // ============================================================================
 
 let bedrockClient: BedrockRuntimeClient | null | undefined;
+let anthropicClient: AnthropicBedrock | null | undefined;
 
 /**
- * Get Bedrock client singleton.
+ * Get raw Bedrock client singleton (for Titan embeddings).
  * Returns null if AWS credentials are not configured.
  */
 export function getBedrockClient(): BedrockRuntimeClient | null {
@@ -200,10 +185,28 @@ export function getBedrockClient(): BedrockRuntimeClient | null {
 }
 
 /**
- * Reset the client (useful for testing)
+ * Get Anthropic Bedrock client singleton (for Claude models with caching).
+ * Returns null if AWS credentials are not configured.
+ */
+export function getAnthropicBedrockClient(): AnthropicBedrock | null {
+  if (anthropicClient === undefined) {
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+      anthropicClient = null;
+    } else {
+      anthropicClient = new AnthropicBedrock({
+        awsRegion: process.env.AWS_REGION || 'us-east-1',
+      });
+    }
+  }
+  return anthropicClient;
+}
+
+/**
+ * Reset both clients (useful for testing)
  */
 export function resetBedrockClient(): void {
   bedrockClient = undefined;
+  anthropicClient = undefined;
 }
 
 // ============================================================================
@@ -272,120 +275,53 @@ export { BrainActivityCallType };
 // ============================================================================
 
 /**
- * Convert simple messages to Bedrock format
+ * Anthropic message parameter type for the Messages API.
  */
-function toBedrockMessages(messages: SimpleMessage[]): Message[] {
-  return messages.map((m) => ({
-    role: m.role,
-    content: [{ text: m.content }],
-  }));
-}
+type AnthropicMessageParam = {
+  role: 'user' | 'assistant';
+  content: string | Array<{ type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }>;
+};
 
 /**
- * Record token usage from AWS Bedrock response.
+ * Convert simple messages to Anthropic Messages API format with cache_control.
+ * Adds cache_control to the second-to-last message to cache conversation history prefix.
  */
-function recordUsage(params: {
-  sessionId?: string;
-  modelId: string;
-  operation: string;
-  usage?: { inputTokens?: number; outputTokens?: number };
-  turnId?: string;
-  durationMs?: number;
-}): void {
-  const inputTokens = params.usage?.inputTokens ?? 0;
-  const outputTokens = params.usage?.outputTokens ?? 0;
+function toAnthropicMessages(messages: SimpleMessage[]): AnthropicMessageParam[] {
+  const result: AnthropicMessageParam[] = messages.map((m) => ({
+    role: m.role as 'user' | 'assistant',
+    content: m.content,
+  }));
 
-  if (inputTokens === 0 && outputTokens === 0) return;
+  // Cache conversation history prefix: add cache_control to second-to-last message
+  // This caches all messages up to and including this one, so on the next turn
+  // the entire history prefix is a cache hit.
+  if (result.length >= 2) {
+    const target = result[result.length - 2];
+    const text = typeof target.content === 'string' ? target.content : '';
+    target.content = [{
+      type: 'text' as const,
+      text,
+      cache_control: { type: 'ephemeral' as const },
+    }];
+  }
 
-  /* usageTracker.track(
-    params.sessionId ?? 'unknown',
-    params.modelId,
-    params.operation,
-    inputTokens,
-    outputTokens,
-    params.turnId,
-    params.durationMs
-  ); */
+  return result;
 }
+
 
 /**
  * Simple completion helper for text-based AI requests.
+ * Uses Anthropic Bedrock SDK with prompt caching.
  * Returns the text response or null if client not configured.
  */
 export async function getCompletion(options: CompletionOptions): Promise<string | null> {
-  // E2E Mock Mode: Return null immediately to trigger mock response path
-  if (isMockLLMEnabled()) {
-    console.log('[Bedrock] MOCK_LLM enabled, skipping completion call');
-    return null;
-  }
-
-  const client = getBedrockClient();
-  if (!client) {
-    return null;
-  }
-
-  const { systemPrompt, messages, maxTokens = 2048, thinkingBudget } = options;
-
-  // Log prompt to file for debugging
-  const promptFilepath = logPromptToFile({
-    callType: options.callType,
-    operation: options.operation ?? 'converse',
-    model: BEDROCK_MODEL_ID,
-    systemPrompt,
-    messages,
-    maxTokens,
-    sessionId: options.sessionId,
-    turnId: options.turnId,
-  });
-
-  const system: SystemContentBlock[] = [{ text: systemPrompt }];
-  const inferenceConfig: InferenceConfiguration = { maxTokens };
-
-  const commandInput: ConverseCommandInput = {
-    modelId: BEDROCK_MODEL_ID,
-    messages: toBedrockMessages(messages),
-    system,
-    inferenceConfig,
-  };
-
-  // Add thinking budget if specified (not supported by Kimi)
-  if (thinkingBudget && !USE_KIMI) {
-    commandInput.additionalModelRequestFields = {
-      thinking: {
-        type: 'enabled',
-        budget_tokens: thinkingBudget,
-      },
-    };
-  }
-
-  const command = new ConverseCommand(commandInput);
-  const response = await client.send(command);
-  recordUsage({
-    sessionId: options.sessionId,
-    modelId: BEDROCK_MODEL_ID,
-    operation: options.operation ?? 'converse',
-    usage: response.usage ?? undefined,
-  });
-
-  const outputMessage = response.output?.message;
-  if (!outputMessage?.content) {
-    return null;
-  }
-
-  // Find the text block in the response (skip thinking blocks)
-  const textBlock = outputMessage.content.find((block) => 'text' in block);
-  if (!textBlock || !('text' in textBlock)) {
-    return null;
-  }
-
-  const responseText = textBlock.text ?? null;
-  logResponseToFile(promptFilepath, responseText);
-  return responseText;
+  // Delegate to getModelCompletion with sonnet
+  return getModelCompletion('sonnet', options);
 }
 
 /**
  * Get completion from a specific model (Haiku or Sonnet).
- * Use this when you need to explicitly choose the model.
+ * Uses Anthropic Bedrock SDK with prompt caching for Claude models.
  */
 export async function getModelCompletion(
   model: ModelType,
@@ -397,12 +333,12 @@ export async function getModelCompletion(
     return null;
   }
 
-  const client = getBedrockClient();
+  const client = getAnthropicBedrockClient();
   if (!client) {
     return null;
   }
 
-  const { systemPrompt, messages, maxTokens = 2048, thinkingBudget } = options;
+  const { systemPrompt, messages, maxTokens = 2048 } = options;
   const modelId = model === 'haiku' ? BEDROCK_HAIKU_MODEL_ID : BEDROCK_SONNET_MODEL_ID;
   const operation = options.operation ?? `converse-${model}`;
   const startTime = Date.now();
@@ -419,25 +355,15 @@ export async function getModelCompletion(
     turnId: options.turnId,
   });
 
-  const system: SystemContentBlock[] = [{ text: systemPrompt }];
-  const inferenceConfig: InferenceConfiguration = { maxTokens };
+  // System prompt with cache_control
+  const system = [{
+    type: 'text' as const,
+    text: systemPrompt,
+    cache_control: { type: 'ephemeral' as const },
+  }];
 
-  const commandInput: ConverseCommandInput = {
-    modelId,
-    messages: toBedrockMessages(messages),
-    system,
-    inferenceConfig,
-  };
-
-  // Add thinking budget if specified (Sonnet only, not supported by Kimi)
-  if (thinkingBudget && model === 'sonnet' && !USE_KIMI) {
-    commandInput.additionalModelRequestFields = {
-      thinking: {
-        type: 'enabled',
-        budget_tokens: thinkingBudget,
-      },
-    };
-  }
+  // Messages with cache_control on second-to-last for history caching
+  const anthropicMessages = toAnthropicMessages(messages);
 
   // Start logging via BrainService
   const activity = await brainService.startActivity({
@@ -445,55 +371,48 @@ export async function getModelCompletion(
     turnId: options.turnId,
     activityType: ActivityType.LLM_CALL,
     model: modelId,
-    input: {
-      systemPrompt,
-      messages,
-      operation
-    },
-    metadata: {
-      maxTokens,
-      thinkingBudget: model === 'sonnet' ? thinkingBudget : undefined
-    },
+    input: { systemPrompt, messages, operation },
+    metadata: { maxTokens },
     callType: options.callType,
   });
 
   try {
-    const command = new ConverseCommand(commandInput);
-    const response = await client.send(command);
+    const result = await client.messages.create({
+      model: modelId,
+      max_tokens: maxTokens,
+      system,
+      messages: anthropicMessages,
+    });
+
     const durationMs = Date.now() - startTime;
+    const inputTokens = result.usage.input_tokens;
+    const outputTokens = result.usage.output_tokens;
+    const cacheReadTokens = (result.usage as any).cache_read_input_tokens ?? 0;
+    const cacheWriteTokens = (result.usage as any).cache_creation_input_tokens ?? 0;
 
-    // Record legacy usage tracker if needed, or rely on BrainService. 
-    // Keeping usageTracker for now as it might feed other systems, but could be removed later.
-    /* usageTracker.track({
-      sessionId: options.sessionId,
-      modelId,
-      operation,
-      usage: response.usage ?? undefined,
-      turnId: options.turnId,
-      durationMs,
-    }); */
+    // Cost with cache pricing
+    const price = PRICING[modelId] || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    const uncachedInputTokens = inputTokens - cacheReadTokens - cacheWriteTokens;
+    const cost =
+      (uncachedInputTokens / 1000) * price.input +
+      (cacheReadTokens / 1000) * price.cacheRead +
+      (cacheWriteTokens / 1000) * price.cacheWrite +
+      (outputTokens / 1000) * price.output;
 
-    // Complete activity log
-    const inputTokens = response.usage?.inputTokens ?? 0;
-    const outputTokens = response.usage?.outputTokens ?? 0;
-
-    // Calculate cost
-    const price = PRICING[modelId as keyof typeof PRICING] || { input: 0, output: 0 };
-    const cost = (inputTokens / 1000) * price.input + (outputTokens / 1000) * price.output;
-
-    const outputMessage = response.output?.message;
-    const textBlock = outputMessage?.content?.find((block) => 'text' in block);
-    const responseText = textBlock && 'text' in textBlock ? textBlock.text : null;
+    // Extract text
+    const textBlock = result.content.find((block) => block.type === 'text');
+    const responseText = textBlock && textBlock.type === 'text' ? textBlock.text : null;
 
     await brainService.completeActivity(activity.id, {
-      output: {
-        text: responseText,
-        stopReason: response.stopReason
-      },
+      output: { text: responseText, stopReason: result.stop_reason },
       tokenCountInput: inputTokens,
       tokenCountOutput: outputTokens,
       durationMs,
-      cost
+      cost,
+      metadata: {
+        cacheReadInputTokens: cacheReadTokens,
+        cacheWriteInputTokens: cacheWriteTokens,
+      },
     });
 
     recordLlmCall(options.turnId, {
@@ -502,6 +421,8 @@ export async function getModelCompletion(
       inputTokens,
       outputTokens,
       durationMs,
+      cacheReadInputTokens: cacheReadTokens,
+      cacheWriteInputTokens: cacheWriteTokens,
     });
 
     if (!responseText) {
@@ -692,12 +613,21 @@ export type StreamEvent =
   | { type: 'done'; usage: { inputTokens: number; outputTokens: number } };
 
 /**
+ * Anthropic tool definition type for the Messages API.
+ */
+interface AnthropicToolDef {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+}
+
+/**
  * Options for Sonnet streaming completion requests.
  */
 export interface SonnetStreamingOptions {
   systemPrompt: string;
   messages: SimpleMessage[];
-  tools?: Tool[];
+  tools?: AnthropicToolDef[];
   maxTokens?: number;
   /** Session ID for cost attribution - REQUIRED */
   sessionId: string;
@@ -712,16 +642,14 @@ export interface SonnetStreamingOptions {
 }
 
 /**
- * Get streaming response from Sonnet using ConverseStreamCommand.
+ * Get streaming response from Sonnet using Anthropic Bedrock SDK.
  * Use for: real-time user-facing responses with SSE delivery.
+ * Includes prompt caching for system prompts and conversation history.
  *
  * Yields StreamEvent objects:
  * - { type: 'text', text: string } - Text delta as it arrives
  * - { type: 'tool_use', toolUseId: string, name: string, input: object } - Tool call when complete
  * - { type: 'done', usage: { inputTokens, outputTokens } } - Final event with token usage
- *
- * @param options - Streaming completion options including system prompt, messages, and optional tools
- * @yields StreamEvent objects as the response streams in
  */
 export async function* getSonnetStreamingResponse(
   options: SonnetStreamingOptions
@@ -735,14 +663,11 @@ export async function* getSonnetStreamingResponse(
         const mockResponse = getFixtureResponseByIndex(fixtureId, options.mockResponseIndex);
         console.log(`[Bedrock] Yielding mock response: "${mockResponse.substring(0, 80)}..."`);
 
-        // Yield the mock response as a text event (just like streaming would)
-        // The thinking trap in sendMessageStream will process it normally
         yield { type: 'text', text: mockResponse };
         yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 } };
         return;
       } catch (error) {
         console.error('[Bedrock] Failed to load fixture response:', error);
-        // Fall through to return empty response
       }
     } else {
       console.log('[Bedrock] MOCK_LLM enabled but no fixture configured, returning empty');
@@ -751,9 +676,8 @@ export async function* getSonnetStreamingResponse(
     return;
   }
 
-  const client = getBedrockClient();
+  const client = getAnthropicBedrockClient();
   if (!client) {
-    // If client not configured, yield a done event with no usage
     yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 } };
     return;
   }
@@ -773,14 +697,15 @@ export async function* getSonnetStreamingResponse(
     turnId: options.turnId,
   });
 
-  const system: SystemContentBlock[] = [{ text: systemPrompt }];
-  const inferenceConfig: InferenceConfiguration = { maxTokens };
+  // System prompt with cache_control
+  const system = [{
+    type: 'text' as const,
+    text: systemPrompt,
+    cache_control: { type: 'ephemeral' as const },
+  }];
 
-  // Build tool configuration if tools are provided (not supported by Kimi)
-  let toolConfig: ToolConfiguration | undefined;
-  if (tools && tools.length > 0 && !USE_KIMI) {
-    toolConfig = { tools };
-  }
+  // Messages with cache_control on second-to-last for history caching
+  const anthropicMessages = toAnthropicMessages(messages);
 
   // Start logging via BrainService
   const activity = await brainService.startActivity({
@@ -802,61 +727,48 @@ export async function* getSonnetStreamingResponse(
   });
 
   try {
-    const command = new ConverseStreamCommand({
-      modelId: BEDROCK_SONNET_MODEL_ID,
-      messages: toBedrockMessages(messages),
+    const stream = client.messages.stream({
+      model: BEDROCK_SONNET_MODEL_ID,
+      max_tokens: maxTokens,
       system,
-      inferenceConfig,
-      toolConfig,
-    });
-
-    const response = await client.send(command);
-
-    if (!response.stream) {
-      throw new Error('No stream in Bedrock response');
-    }
+      messages: anthropicMessages,
+      ...(tools && tools.length > 0 ? { tools } : {}),
+    } as any);
 
     // Track accumulated content for tool use and response logging
     let currentToolUseId: string | undefined;
     let currentToolName: string | undefined;
     let accumulatedToolInput = '';
     let accumulatedResponseText = '';
-    let inputTokens = 0;
-    let outputTokens = 0;
 
-    // Process the stream
-    for await (const event of response.stream) {
+    for await (const event of stream) {
       // Text delta
-      if (event.contentBlockDelta?.delta?.text) {
-        accumulatedResponseText += event.contentBlockDelta.delta.text;
-        yield { type: 'text', text: event.contentBlockDelta.delta.text };
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        accumulatedResponseText += event.delta.text;
+        yield { type: 'text', text: event.delta.text };
       }
 
       // Tool use start
-      if (event.contentBlockStart?.start?.toolUse) {
-        const toolUse = event.contentBlockStart.start.toolUse;
-        currentToolUseId = toolUse.toolUseId;
-        currentToolName = toolUse.name;
+      if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
+        currentToolUseId = event.content_block.id;
+        currentToolName = event.content_block.name;
         accumulatedToolInput = '';
       }
 
       // Tool use delta (accumulate input JSON)
-      if (event.contentBlockDelta?.delta?.toolUse?.input) {
-        accumulatedToolInput += event.contentBlockDelta.delta.toolUse.input;
+      if (event.type === 'content_block_delta' && event.delta.type === 'input_json_delta') {
+        accumulatedToolInput += event.delta.partial_json;
       }
 
       // Content block stop - emit accumulated tool use
-      if (event.contentBlockStop !== undefined && currentToolUseId && currentToolName) {
+      if (event.type === 'content_block_stop' && currentToolUseId && currentToolName) {
         let parsedInput: Record<string, unknown> = {};
         try {
-          parsedInput = accumulatedToolInput
-            ? JSON.parse(accumulatedToolInput)
-            : {};
+          parsedInput = accumulatedToolInput ? JSON.parse(accumulatedToolInput) : {};
         } catch (parseError) {
           console.error('[Bedrock] Failed to parse tool input JSON:', parseError);
         }
 
-        // Append tool call to response for logging
         accumulatedResponseText += `\n\n[TOOL CALL: ${currentToolName}]\n${JSON.stringify(parsedInput, null, 2)}`;
 
         yield {
@@ -869,27 +781,36 @@ export async function* getSonnetStreamingResponse(
         currentToolName = undefined;
         accumulatedToolInput = '';
       }
-
-      // Message stop with usage
-      if (event.metadata?.usage) {
-        inputTokens = event.metadata.usage.inputTokens ?? 0;
-        outputTokens = event.metadata.usage.outputTokens ?? 0;
-      }
     }
 
+    // Get final message with full usage stats
+    const finalMessage = await stream.finalMessage();
     const durationMs = Date.now() - startTime;
+    const inputTokens = finalMessage.usage.input_tokens;
+    const outputTokens = finalMessage.usage.output_tokens;
+    const cacheReadTokens = (finalMessage.usage as any).cache_read_input_tokens ?? 0;
+    const cacheWriteTokens = (finalMessage.usage as any).cache_creation_input_tokens ?? 0;
 
-    // Calculate cost
-    const price = PRICING[BEDROCK_SONNET_MODEL_ID as keyof typeof PRICING] || { input: 0, output: 0 };
-    const cost = (inputTokens / 1000) * price.input + (outputTokens / 1000) * price.output;
+    // Calculate cost with cache pricing
+    const price = PRICING[BEDROCK_SONNET_MODEL_ID] || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    const uncachedInputTokens = inputTokens - cacheReadTokens - cacheWriteTokens;
+    const cost =
+      (uncachedInputTokens / 1000) * price.input +
+      (cacheReadTokens / 1000) * price.cacheRead +
+      (cacheWriteTokens / 1000) * price.cacheWrite +
+      (outputTokens / 1000) * price.output;
 
     // Complete activity log
     await brainService.completeActivity(activity.id, {
-      output: { streaming: true, stopReason: 'end_turn' },
+      output: { streaming: true, stopReason: finalMessage.stop_reason },
       tokenCountInput: inputTokens,
       tokenCountOutput: outputTokens,
       durationMs,
       cost,
+      metadata: {
+        cacheReadInputTokens: cacheReadTokens,
+        cacheWriteInputTokens: cacheWriteTokens,
+      },
     });
 
     recordLlmCall(options.turnId, {
@@ -898,6 +819,8 @@ export async function* getSonnetStreamingResponse(
       inputTokens,
       outputTokens,
       durationMs,
+      cacheReadInputTokens: cacheReadTokens,
+      cacheWriteInputTokens: cacheWriteTokens,
     });
 
     // Log the accumulated response

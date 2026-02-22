@@ -37,7 +37,7 @@ export const MODEL_LIMITS = {
  */
 export const CONTEXT_LIMITS = {
   /** Maximum recent conversation messages to include */
-  maxConversationMessages: 24,
+  maxConversationMessages: 32,
 
   /** Maximum characters per conversation message */
   maxMessageLength: 2_000,
@@ -53,8 +53,8 @@ export const CONTEXT_LIMITS = {
 };
 
 export const CONTEXT_WINDOW = {
-  recentTurnsWithSummary: 8,
-  recentTurnsWithoutSummary: 12,
+  recentTurnsWithSummary: 12,
+  recentTurnsWithoutSummary: 16,
 };
 
 // ============================================================================
@@ -206,8 +206,8 @@ export function buildBudgetedContext<T extends { role: 'user' | 'assistant'; con
   const systemTokens = estimateTokens(systemPrompt);
   const availableForContext = maxTotalTokens - systemTokens - MODEL_LIMITS.outputReservation;
 
-  // STRICT HIERARCHY: Protect last 10 turns (20 messages) at all costs
-  const PROTECTED_TURNS = 6;
+  // STRICT HIERARCHY: Protect last N turns at all costs
+  const PROTECTED_TURNS = 8;
   const PROTECTED_MESSAGES = PROTECTED_TURNS * 2; // user + assistant pairs
   
   // Split conversation into protected (last 10 turns) and evictable (older)

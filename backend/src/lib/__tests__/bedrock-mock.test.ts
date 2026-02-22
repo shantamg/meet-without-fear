@@ -6,6 +6,11 @@
 
 import { isMockLLMEnabled, getModelCompletion } from '../bedrock';
 
+// Mock the Anthropic Bedrock SDK
+jest.mock('@anthropic-ai/bedrock-sdk', () => {
+  return jest.fn();
+});
+
 // Mock brainService to avoid side effects
 jest.mock('../../services/brain-service', () => ({
   brainService: {

@@ -18,31 +18,31 @@ describe('Memory Intent', () => {
      * Facts provide emotional context, situational facts, and relationship info
      * that would otherwise require extensive history.
      *
-     * Target: 8-10 messages total (4-5 turns)
+     * Expanded buffer sizes (prompt caching reduces cost of larger history)
      */
 
-    it('returns 5 turns for Stage 1 (witnessing)', () => {
-      // Stage 1 needs some thread memory for witnessing
-      expect(getTurnBufferSize(1, 'emotional_validation')).toBe(5);
-      expect(getTurnBufferSize(1, 'recall_commitment')).toBe(5);
+    it('returns 10 turns for Stage 1 (witnessing)', () => {
+      // Stage 1 needs thread memory for witnessing emotional continuity
+      expect(getTurnBufferSize(1, 'emotional_validation')).toBe(10);
+      expect(getTurnBufferSize(1, 'recall_commitment')).toBe(10);
     });
 
-    it('returns 4 turns for Stage 2 (empathy building)', () => {
-      // Stage 2 empathy building is structured
-      expect(getTurnBufferSize(2, 'emotional_validation')).toBe(4);
-      expect(getTurnBufferSize(2, 'recall_commitment')).toBe(4);
+    it('returns 8 turns for Stage 2 (empathy building)', () => {
+      // Stage 2 empathy building benefits from shared context
+      expect(getTurnBufferSize(2, 'emotional_validation')).toBe(8);
+      expect(getTurnBufferSize(2, 'recall_commitment')).toBe(8);
     });
 
-    it('returns 4 turns for Stage 3 (need confirmation)', () => {
-      // Stage 3 need confirmation is procedural
-      expect(getTurnBufferSize(3, 'emotional_validation')).toBe(4);
-      expect(getTurnBufferSize(3, 'recall_commitment')).toBe(4);
+    it('returns 8 turns for Stage 3 (need mapping)', () => {
+      // Stage 3 need mapping benefits from seeing the full arc
+      expect(getTurnBufferSize(3, 'emotional_validation')).toBe(8);
+      expect(getTurnBufferSize(3, 'recall_commitment')).toBe(8);
     });
 
-    it('returns 5 turns for Stage 4 (negotiation)', () => {
-      // Stage 4 negotiation with facts context
-      expect(getTurnBufferSize(4, 'emotional_validation')).toBe(5);
-      expect(getTurnBufferSize(4, 'recall_commitment')).toBe(5);
+    it('returns 10 turns for Stage 4 (negotiation)', () => {
+      // Stage 4 negotiation needs full context for agreements
+      expect(getTurnBufferSize(4, 'emotional_validation')).toBe(10);
+      expect(getTurnBufferSize(4, 'recall_commitment')).toBe(10);
     });
 
     it('returns 0 for avoid_recall intent', () => {
@@ -59,8 +59,8 @@ describe('Memory Intent', () => {
       expect(getTurnBufferSize(4, 'stage_enforcement')).toBe(2);
     });
 
-    it('returns 4 for unknown stages', () => {
-      expect(getTurnBufferSize(99, 'emotional_validation')).toBe(4);
+    it('returns 8 for unknown stages', () => {
+      expect(getTurnBufferSize(99, 'emotional_validation')).toBe(8);
     });
   });
 

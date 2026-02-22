@@ -415,17 +415,17 @@ export function getTurnBufferSize(stage: number, intent: MemoryIntent): number {
     return 2;
   }
 
-  // Reduced stage-based buffer sizes (notable facts provide additional context)
+  // Expanded buffer sizes (prompt caching makes input tokens ~90% cheaper)
   switch (stage) {
     case 1:
-      return 5; // Reduced from 6: facts now capture emotional context
+      return 10; // was 5: more witnessing context helps emotional continuity
     case 2:
-      return 4; // Unchanged: empathy building remains structured
+      return 8;  // was 4: empathy building benefits from more shared context
     case 3:
-      return 4; // Unchanged: need confirmation is procedural
+      return 8;  // was 4: need mapping benefits from seeing the full arc
     case 4:
-      return 5; // Reduced from 8: facts provide relationship/situation context
+      return 10; // was 5: negotiation needs full context for agreements
     default:
-      return 4;
+      return 8;  // was 4
   }
 }
