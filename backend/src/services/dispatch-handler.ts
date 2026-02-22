@@ -11,6 +11,7 @@ import { getSonnetResponse, BrainActivityCallType } from '../lib/bedrock';
 
 export type DispatchTag =
   | 'EXPLAIN_PROCESS'
+  | 'EXPLAIN_EMPATHY_PURPOSE'
   | 'HANDLE_MEMORY_REQUEST'
   | string; // Allow unknown tags
 
@@ -103,6 +104,9 @@ export async function handleDispatch(
     case 'EXPLAIN_PROCESS':
       return handleProcessExplanation(context);
 
+    case 'EXPLAIN_EMPATHY_PURPOSE':
+      return handleEmpathyPurposeExplanation(context);
+
     case 'HANDLE_MEMORY_REQUEST':
       // Memory request is simpler - static response is fine
       return `I'd love to help you remember important things! You can add memories in your Profile under "Things to Remember." That way I'll always have them available when we talk.
@@ -174,4 +178,79 @@ Ready to continue where we were?`;
   return `The process has four stages: first each person gets to feel truly heard, then you craft empathy statements that get shared with each other, then we identify underlying needs, and finally you design small experiments to try together.
 
 Would you like me to explain more, or shall we continue?`;
+}
+
+/**
+ * Build system prompt for explaining why the empathy step exists.
+ * Triggered when user explicitly asks "Why am I guessing?" or similar.
+ */
+function buildEmpathyPurposePrompt(context: DispatchContext): string {
+  const { userName, partnerName } = context;
+  const user = userName || 'you';
+  const partner = partnerName || 'your partner';
+
+  return `You are Meet Without Fear, explaining to ${user} why this step matters — seeing things from the other side.
+
+${user} has been exploring ${partner}'s perspective and has asked something like "Why am I guessing at what ${partner} feels?" or "Shouldn't ${partner} be talking to the AI too?" or "What's the point of this?"
+
+WHAT TO EXPLAIN (in your own words, naturally — not as a bulleted list):
+
+1. Yes, ${partner} IS also going through this process separately. Both people talk to the AI on their own, working through their own side.
+
+2. This step is where each person tries to understand what the other might be going through. Both ${user} and ${partner} do this for each other.
+
+3. Why it works: Research on conflict resolution consistently shows that the single strongest predictor of working things out is each person genuinely trying to see the other's perspective. It doesn't matter if the guess is accurate — the act of honestly trying is what matters.
+
+4. It's a guess, not a test. Nobody expects ${user} to read ${partner}'s mind. Getting it "wrong" is completely fine. What matters is that ${partner} will see ${user} made the effort.
+
+5. What happens next: ${user} will write a short statement about what they think ${partner} might be feeling. That statement gets shared (with consent) so ${partner} can see how ${user} sees them. ${partner} does the same thing for ${user}.
+
+STYLE:
+- Sound like a warm, smart person explaining something that genuinely helps — not a therapist reading a protocol.
+- Keep it to 3-5 sentences. Don't over-explain.
+- End by gently inviting them back into the conversation: ask an opening question about ${partner}'s perspective.
+- Match their energy. If they seem frustrated, acknowledge that before explaining.`;
+}
+
+/**
+ * Handle empathy purpose explanation with full AI conversation capability.
+ */
+async function handleEmpathyPurposeExplanation(context: DispatchContext): Promise<string> {
+  const { userMessage, conversationHistory, sessionId, turnId } = context;
+
+  try {
+    const messages = [
+      ...conversationHistory.slice(-6),
+      { role: 'user' as const, content: userMessage },
+    ];
+
+    const response = await getSonnetResponse({
+      systemPrompt: buildEmpathyPurposePrompt(context),
+      messages,
+      maxTokens: 512,
+      sessionId,
+      turnId,
+      operation: 'dispatch-empathy-purpose',
+      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
+    });
+
+    if (response) {
+      return response.trim();
+    }
+
+    return getFallbackEmpathyPurposeResponse(context);
+  } catch (error) {
+    console.error('[Dispatch Handler] Empathy purpose explanation failed:', error);
+    return getFallbackEmpathyPurposeResponse(context);
+  }
+}
+
+/**
+ * Fallback if AI call fails for empathy purpose explanation.
+ */
+function getFallbackEmpathyPurposeResponse(context: DispatchContext): string {
+  const partner = context.partnerName || 'your partner';
+  return `Good question. ${partner} is actually going through this same process on their side — you're both independently trying to understand each other. Research shows that genuinely trying to see the other person's perspective is one of the biggest things that helps people work things out. It's not a test — it's about the effort. You'll each write a short statement that gets shared, so ${partner} can see you tried to understand them, and you'll see the same from them.
+
+What do you think might be going on for ${partner} in all this?`;
 }

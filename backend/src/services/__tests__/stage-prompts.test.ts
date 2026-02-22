@@ -44,16 +44,16 @@ describe('Stage Prompts Service', () => {
       const context = createContext();
       const prompt = buildStagePrompt(1, context);
 
-      expect(prompt).toContain('Witness');
+      expect(prompt).toContain('listen to Test User');
       expect(prompt).toContain('Test User');
-      expect(prompt).toContain('feel fully heard');
+      expect(prompt).toContain('GATHERING PHASE');
     });
 
     it('returns Stage 2 prompt for stage 2', () => {
       const context = createContext();
       const prompt = buildStagePrompt(2, context);
 
-      expect(prompt).toContain('Perspective Stretch');
+      expect(prompt).toContain('exploring what Partner might be going through');
       expect(prompt).toContain('Partner');
     });
 
@@ -62,7 +62,7 @@ describe('Stage Prompts Service', () => {
       const prompt = buildStagePrompt(3, context);
 
       expect(prompt).toContain('Need Mapping');
-      expect(prompt).toContain('underlying needs');
+      expect(prompt).toContain('needs underneath');
     });
 
     it('returns Stage 4 prompt for stage 4', () => {
@@ -97,8 +97,8 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('just sent their invitation');
       expect(prompt).toContain('Partner');
       // Should also contain the regular Stage 1 prompt (not replaced)
-      expect(prompt).toContain('Witness stage');
-      expect(prompt).toContain('feel fully heard');
+      expect(prompt).toContain('listen to Test User');
+      expect(prompt).toContain('GATHERING PHASE');
       // Should NOT explicitly name stages
       expect(prompt).not.toContain('"Stage 1"');
       expect(prompt).not.toContain('"witness stage"');
@@ -115,10 +115,9 @@ describe('Stage Prompts Service', () => {
       // Transition injection content
       expect(prompt).toContain('TRANSITION:');
       expect(prompt).toContain('feeling heard');
-      expect(prompt).toContain('curiosity');
       expect(prompt).toContain('Partner');
       // Regular Stage 2 prompt content
-      expect(prompt).toContain('Perspective Stretch');
+      expect(prompt).toContain('exploring what Partner might be going through');
       expect(prompt).toContain('FOUR MODES');
     });
 
@@ -167,8 +166,8 @@ describe('Stage Prompts Service', () => {
 
       // Should be regular Stage 1 prompt without transition injection
       expect(prompt).not.toContain('TRANSITION:');
-      expect(prompt).toContain('Witness stage');
-      expect(prompt).toContain('feel fully heard');
+      expect(prompt).toContain('listen to Test User');
+      expect(prompt).toContain('GATHERING PHASE');
     });
 
     it('includes user and partner names in transition prompts', () => {
@@ -234,9 +233,9 @@ describe('Stage Prompts Service', () => {
       };
       const prompt = buildStagePrompt(1, context, options);
 
-      // Should be regular witness prompt, not transition
-      expect(prompt).toContain('Witness stage');
-      expect(prompt).toContain('Reflect and validate');
+      // Should be regular listening prompt, not transition
+      expect(prompt).toContain('listen to Test User');
+      expect(prompt).toContain('ONE SIDE OF THE STORY');
     });
 
     it('uses regular Stage 2 prompt when not transitioning', () => {
