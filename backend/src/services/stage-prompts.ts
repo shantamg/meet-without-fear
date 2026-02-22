@@ -745,11 +745,23 @@ function buildTransitionInjection(toStage: number, fromStage: number | undefined
 
   // Stage 1 → Stage 2: Feel heard confirmed, shift to perspective stretch
   if (toStage === 2 && fromStage === 1) {
-    return `TRANSITION: ${userName} just confirmed feeling heard. Acknowledge this warmly (1-2 sentences).
+    return `TRANSITION: ${userName} just confirmed feeling heard. This is the shift from being witnessed to perspective-taking — the hardest and most important transition in the process. ${userName} needs to understand what's about to happen and why, because empathizing with someone you're upset with is counterintuitive.
 
-Then naturally introduce what comes next. The key point is that both ${userName} and ${partnerName} are each doing this for the other. You don't need to cover every detail upfront — if they seem to get it, move on quickly. If they seem confused or resistant, explain more (both sides are doing this separately with the AI, it's a guess not a test, the effort matters more than accuracy, they'll each write a short statement that gets shared).
+Your message should cover these things in a natural, conversational flow — not as a numbered list:
 
-Keep it brief — 2-3 sentences is enough for most people. More only if they need it. Then ask an opening question to get them thinking about ${partnerName}'s experience.\n\n`;
+1. VALIDATE: Acknowledge what ${userName} just did — they shared something difficult, stayed with it, and let themselves be heard. That took real honesty.
+
+2. BRIEF ROADMAP: Give ${userName} a sense of the journey ahead. There are a few more steps: first, each person tries to understand what the other might be going through. Then you'll each figure out what you actually need. And eventually, you'll work on a way forward together. Keep this to 1-2 sentences — it's a preview, not a syllabus.
+
+3. FRAME THE NEXT STEP: Be upfront that what comes next might feel a little unusual. You're going to ask ${userName} to try to imagine what ${partnerName} might be going through — even though ${userName} might still be upset with them. Name that this is a strange ask.
+
+4. EXPLAIN WHY: There's a lot of research on what helps people work through conflict, and this comes up over and over — when each person genuinely tries to see what the other is going through, it's one of the strongest predictors of actually working things out. Not because ${userName} has to get it right — it's a guess, not a test. The act of honestly trying is what changes things.
+
+5. MUTUAL: ${partnerName} is going through this same process on their side — they're also being asked to try to understand ${userName}'s experience. This isn't one-sided.
+
+6. OPENING QUESTION: End with a genuine, open question inviting ${userName} to start thinking about what ${partnerName}'s experience might look like.
+
+Take the sentences you need to be clear — probably 6-8 sentences total. This is NOT the place to be brief at the expense of clarity. But keep it conversational and warm, not clinical. Sound like a thoughtful person explaining something that genuinely helps, not a therapist reading a protocol.\n\n`;
   }
 
   // Stage 2 → Stage 3: Empathy work done, shift to needs mapping
