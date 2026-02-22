@@ -8,6 +8,7 @@ import { ModelBadge } from '../components/metrics/ModelBadge';
 import { FormattedPrice } from '../components/session/FormattedPrice';
 import { EventRenderer } from '../components/events/EventRenderer';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { playErrorSound } from '../utils/notifications';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -221,8 +222,11 @@ export function LiveMonitorPage() {
   const [sessionTabs, setSessionTabs] = useState<Map<string, { name: string; lastActivity: number }>>(new Map());
   const [closedTabs, setClosedTabs] = useState<Set<string>>(new Set());
   const [containerHeight, setContainerHeight] = useState(600);
+  const [soundEnabled, setSoundEnabled] = useState(false);
 
   const scrollCheckTimeout = useRef<number | null>(null);
+  const soundEnabledRef = useRef(soundEnabled);
+  soundEnabledRef.current = soundEnabled;
   const justUpdatedIds = useRef<Set<string>>(new Set());
   const listRef = useRef<VList>(null);
   const rowHeightCache = useRef<Map<number, number>>(new Map());
@@ -251,6 +255,11 @@ export function LiveMonitorPage() {
       activity,
       receivedAt: new Date(),
     };
+
+    // Play error sound on FAILED activities
+    if (activity.status === 'FAILED' && soundEnabledRef.current) {
+      playErrorSound();
+    }
 
     if (isPaused) {
       setBuffer((prev) => [...prev, liveEvent]);
@@ -447,6 +456,14 @@ export function LiveMonitorPage() {
             <option value="llm">LLM Calls Only</option>
             <option value="errors">Errors Only</option>
           </select>
+
+          <button
+            className={`live-btn${soundEnabled ? ' live-btn-active' : ''}`}
+            onClick={() => setSoundEnabled(prev => !prev)}
+            title={soundEnabled ? 'Disable error sound' : 'Enable error sound'}
+          >
+            {soundEnabled ? '\uD83D\uDD14' : '\uD83D\uDD15'} Sound
+          </button>
 
           {isPaused ? (
             <button className="live-btn live-btn-resume" onClick={handleResume}>

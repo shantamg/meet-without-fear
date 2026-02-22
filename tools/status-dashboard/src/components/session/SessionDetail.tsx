@@ -169,6 +169,14 @@ function SessionDetail() {
       });
 
       map.set('p', () => {
+        if (focusedTurnIndex >= 0 && sessionId) {
+          const focusedTurn = activeTurnList[focusedTurnIndex];
+          const llmActivity = focusedTurn?.activities.find(a => a.activityType === 'LLM_CALL');
+          if (llmActivity) {
+            navigate(`/sessions/${sessionId}/prompt/${llmActivity.id}`);
+            return;
+          }
+        }
         setActiveTab('prompts');
       });
     }
@@ -177,13 +185,15 @@ function SessionDetail() {
   }, [
     playbackActive,
     activeTab,
-    activeTurnList.length,
+    activeTurnList,
     hasTwoUsers,
     focusedTurnIndex,
     chronologicalTurns.length,
     toggleTurnExpanded,
     expandAllTurns,
     collapseAllTurns,
+    navigate,
+    sessionId,
   ]);
 
   useKeyboardShortcuts(shortcuts);
@@ -261,6 +271,12 @@ function SessionDetail() {
               turns={chronologicalTurns}
               currentTurn={currentTurn}
               userName={users.initiator?.name || 'User'}
+              partnerSession={hasTwoUsers && users.initiator && users.invitee ? {
+                initiatorId: users.initiator.id,
+                initiatorName: users.initiator.name,
+                inviteeId: users.invitee.id,
+                inviteeName: users.invitee.name,
+              } : undefined}
             />
           ) : hasTwoUsers && users.initiator && users.invitee ? (
             <SplitView
