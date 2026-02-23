@@ -132,6 +132,14 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'Partner update',
     body: 'Your partner is considering sharing more context.',
   },
+  'notification.pending_action': {
+    title: 'Action needed',
+    body: 'You have a new item to review in your activity menu.',
+  },
+  'empathy.resubmitted': {
+    title: 'Updated empathy',
+    body: 'Your partner has refined their understanding of your experience.',
+  },
 };
 
 /**

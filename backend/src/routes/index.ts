@@ -15,6 +15,7 @@ import reconcilerRoutes from './reconciler';
 import sessionsRoutes from './sessions';
 import stage0Routes from './stage0';
 import messagesRoutes from './messages';
+import notificationsRoutes from './notifications';
 import stage2Routes from './stage2';
 import stage3Routes from './stage3';
 import stage4Routes from './stage4';
@@ -44,6 +45,7 @@ router.use(emotionsRoutes);
 router.use(stage0Routes);
 router.use(messagesRoutes);
 router.use(stage2Routes);
+router.use(notificationsRoutes); // Pending actions & badge counts
 router.use(reconcilerRoutes); // Post-Stage 2 empathy gap analysis
 router.use(stage3Routes);
 router.use(stage4Routes);

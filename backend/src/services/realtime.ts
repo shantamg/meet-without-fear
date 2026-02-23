@@ -49,6 +49,8 @@ export type SessionEvent = Extract<
   | 'empathy.refining'
   | 'empathy.context_shared'
   | 'empathy.status_updated'
+  | 'notification.pending_action'
+  | 'empathy.resubmitted'
 >;
 
 // Re-export for backward compatibility
@@ -817,6 +819,47 @@ export async function publishChatItemUpdate(
  * @param userId - The user ID whose context was assembled
  * @param assembledAt - ISO timestamp when the context was assembled
  */
+/**
+ * Publish a pending action notification to a specific user.
+ * Triggers badge count update in the activity menu.
+ *
+ * @param sessionId - The session ID
+ * @param userId - The user who has a new pending action
+ * @param actionType - The type of pending action
+ * @param actionId - The ID of the action item
+ */
+export async function publishPendingAction(
+  sessionId: string,
+  userId: string,
+  actionType: 'share_offer' | 'validate_empathy' | 'context_received',
+  actionId: string
+): Promise<void> {
+  await publishSessionEvent(sessionId, 'notification.pending_action', {
+    forUserId: userId,
+    actionType,
+    actionId,
+  });
+}
+
+/**
+ * Publish an empathy resubmitted event when guesser refines their empathy.
+ * Notifies the subject so they can see the updated attempt.
+ *
+ * @param sessionId - The session ID
+ * @param forUserId - The subject user ID (who should see the update)
+ * @param guesserUserId - The guesser who resubmitted
+ */
+export async function publishEmpathyResubmitted(
+  sessionId: string,
+  forUserId: string,
+  guesserUserId: string
+): Promise<void> {
+  await publishSessionEvent(sessionId, 'empathy.resubmitted', {
+    forUserId,
+    guesserUserId,
+  });
+}
+
 export async function publishContextUpdated(
   sessionId: string,
   userId: string,

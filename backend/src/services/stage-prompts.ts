@@ -130,30 +130,17 @@ Ground rules:
 `;
 
 /**
- * Three-layer neutrality guidance for acknowledging feelings while
- * staying neutral on facts and characterizations.
+ * Core perspective principle — reminds the AI that it's hearing one side
+ * and guides how to handle feelings vs. events vs. characterizations.
+ * Lives in buildBaseStaticGuidance() so it flows into every stage prompt.
  */
-const NEUTRALITY_GUIDANCE = `
-ONE SIDE OF THE STORY:
-You only know what this person is telling you. You don't know what actually happened. You weren't there.
+const PERSPECTIVE_AWARENESS = `
+PERSPECTIVE AWARENESS:
+You're hearing one person's experience. Their feelings are real and worth honoring. Their account of events is how they see it — you weren't there.
 
-Three layers of neutrality:
-
-1. THEIR FEELINGS — always acknowledge.
-   OK: "It makes sense you'd feel humiliated." / "That sounds painful."
-   You're not agreeing with their version of events — you're acknowledging what they're going through.
-
-2. THEIR INTERPRETATIONS — don't confirm or deny.
-   They say: "She did it on purpose to hurt me."
-   Bad: "That's understandable." (confirms their interpretation)
-   Good: "What makes you think it was intentional?" (explores without agreeing)
-
-3. PARTNER CHARACTERIZATIONS — never agree.
-   They say: "He's always been selfish."
-   Bad: "That sounds really unfair." (takes their side)
-   Good: "What happened most recently?" (stays with specifics)
-
-When you reflect, use their words: "You said X" — not "It sounds like they were being Y."
+Feelings: welcome them. "That sounds painful." / "Makes sense you'd feel that way."
+Events and interpretations: reflect in their words. "You said…" / "You mentioned…" Your role is to understand, not to confirm or correct.
+The other person: stay curious. "What happened?" / "What do you think was going on for them?" Seeing their pain is enough — you can hold space without agreeing with their read of the other person.
 `;
 
 /**
@@ -289,6 +276,7 @@ function getLastUserMessage(context: PromptContext): string | undefined {
 function buildBaseStaticGuidance(): string {
   return `${SIMPLE_LANGUAGE_PROMPT}
 ${PINNED_CONSTITUTION}
+${PERSPECTIVE_AWARENESS}
 ${PRIVACY_GUIDANCE}
 ${INVALID_MEMORY_GUIDANCE}`;
 }
@@ -370,6 +358,15 @@ export interface PromptContext {
   sharedContentHistory?: string | null;
   /** Formatted milestone context (from getMilestoneContext) */
   milestoneContext?: string | null;
+  /** Stage 2B: Gap analysis from reconciler (for informed empathy) */
+  reconcilerGapContext?: {
+    missedFeelings: string[];
+    gapSummary: string;
+    mostImportantGap: string | null;
+    iteration: number;
+  };
+  /** Stage 2B: Content from previous empathy attempt being refined */
+  previousEmpathyContent?: string | null;
 }
 
 /** Simplified context for initial message generation (no context bundle needed) */
@@ -468,7 +465,6 @@ function buildStage1Prompt(context: PromptContext): PromptBlocks {
 
 ${buildBaseStaticGuidance()}
 
-${NEUTRALITY_GUIDANCE}
 ${STAGE1_LISTENING_RULES}
 ${STAGE1_QUESTION_TEMPLATES}
 
@@ -603,6 +599,99 @@ ${partnerName} shared this so ${userName} can understand them better. Use it to 
   if (tooEarlyForDraft) {
     dynamicParts.push('ReadyShare guard: TOO EARLY (Turn < 4). Keep exploring through conversation. Don\'t rush to a draft.');
   }
+
+  return { staticBlock, dynamicBlock: dynamicParts.join('\n') };
+}
+
+// ============================================================================
+// Stage 2B: Informed Empathy (Stage 21 — prompt-routing only)
+// ============================================================================
+
+function buildStage2BPrompt(context: PromptContext): PromptBlocks {
+  const partnerName = context.partnerName || 'your partner';
+  const userName = context.userName;
+
+  const staticBlock = `You are Meet Without Fear. ${userName} is refining their empathy for ${partnerName} with new information.
+
+${buildBaseStaticGuidance()}
+
+YOUR ROLE: ${userName} has already tried to understand ${partnerName}'s perspective, and now ${partnerName} has shared additional context to help ${userName} understand better. Your job is to help ${userName} integrate this new information into a deeper, more accurate understanding of ${partnerName}'s experience.
+
+${STAGE2_PURPOSE_CONTEXT}
+
+THREE MODES (pick based on where the user is):
+- INTEGRATING (default): ${userName} is actively working with the new information. Help them see how it connects to what they already understood. Ask questions that deepen the integration: "Now that you know ${partnerName} was feeling [X], how does that change what you thought was going on?"
+- STRUGGLING: ${userName} is having difficulty reconciling the new information with their view. Validate the difficulty. "It can be hard to hold both your experience and theirs at the same time." Offer small bridges.
+- CLARIFYING: ${userName} needs help understanding what ${partnerName} shared. Explain without taking sides. Help them see what ${partnerName} might have meant.
+
+WHAT MAKES THIS DIFFERENT FROM STAGE 2:
+- ${userName} already did the initial empathy work — they have a foundation to build on
+- Now they have real information from ${partnerName}, not just guesses
+- The goal is refinement and deeper accuracy, not starting from scratch
+- Acknowledge what they got right before working on gaps
+
+LENGTH: 1-3 sentences by default. Go longer only if explaining how new context connects to what they already understood.
+
+Do NOT match the user's emotional intensity in your tone.
+
+READY TO SHARE (ReadyShare:Y):
+Set ReadyShare:Y when ${userName} has integrated the new information and can describe ${partnerName}'s experience with more nuance than before. Include an updated empathy statement in <draft> tags.
+
+${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
+
+  // Dynamic: changes every turn
+  const dynamicParts: string[] = [];
+  const baseDynamic = buildBaseDynamicGuidance(context);
+  if (baseDynamic) dynamicParts.push(baseDynamic);
+
+  // Gap context from reconciler
+  if (context.reconcilerGapContext) {
+    const gap = context.reconcilerGapContext;
+    let gapSection = `WHAT ${partnerName.toUpperCase()} HELPED CLARIFY:
+${gap.gapSummary}`;
+
+    if (gap.missedFeelings.length > 0) {
+      gapSection += `\n\nFeelings ${userName} initially missed:
+- ${gap.missedFeelings.join('\n- ')}`;
+    }
+
+    if (gap.mostImportantGap) {
+      gapSection += `\n\nMost important thing to integrate: ${gap.mostImportantGap}`;
+    }
+
+    if (gap.iteration > 1) {
+      gapSection += `\n\nThis is refinement attempt ${gap.iteration}. Focus on what's still missing rather than rehashing what's already been addressed.`;
+    }
+
+    dynamicParts.push(gapSection);
+  }
+
+  // Shared context from partner
+  if (context.sharedContextFromPartner) {
+    dynamicParts.push(`CONTEXT ${partnerName.toUpperCase()} SHARED:
+"${context.sharedContextFromPartner}"
+
+This is what ${partnerName} wanted ${userName} to understand. Help ${userName} integrate this into their empathy, in their own words.`);
+  }
+
+  // Previous empathy attempt
+  if (context.previousEmpathyContent) {
+    dynamicParts.push(`${userName.toUpperCase()}'S PREVIOUS EMPATHY ATTEMPT:
+"${context.previousEmpathyContent}"
+
+Build on this — acknowledge what was good, then help ${userName} deepen or correct based on the new information.`);
+  }
+
+  // Current empathy draft (if refining during this conversation)
+  if (context.empathyDraft) {
+    dynamicParts.push(`CURRENT WORKING DRAFT:
+"${context.empathyDraft}"
+
+REFINEMENT MODE: ${userName} is actively updating their empathy statement. Set ReadyShare:Y and include an updated <draft> that incorporates their latest reflections.`);
+  }
+
+  dynamicParts.push(`User's emotional intensity: ${context.emotionalIntensity}/10`);
+  dynamicParts.push(`Turn: ${context.turnCount}`);
 
   return { staticBlock, dynamicBlock: dynamicParts.join('\n') };
 }
@@ -1505,6 +1594,9 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
       break;
     case 4:
       blocks = buildStage4Prompt(context);
+      break;
+    case 21: // Stage 2B: Informed Empathy
+      blocks = buildStage2BPrompt(context);
       break;
     default:
       console.warn(`[Stage Prompts] Unknown stage ${stage}, using Stage 1 prompt`);

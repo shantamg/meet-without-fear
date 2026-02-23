@@ -37,6 +37,7 @@ export enum Stage {
   PERSPECTIVE_STRETCH = 2,
   NEED_MAPPING = 3,
   STRATEGIC_REPAIR = 4,
+  INFORMED_EMPATHY = 21, // Stage 2B: prompt-routing only, StageProgress stays at 2
 }
 
 export const STAGE_NAMES: Record<Stage, string> = {
@@ -45,6 +46,7 @@ export const STAGE_NAMES: Record<Stage, string> = {
   [Stage.PERSPECTIVE_STRETCH]: 'Perspective Stretch',
   [Stage.NEED_MAPPING]: 'Need Mapping',
   [Stage.STRATEGIC_REPAIR]: 'Strategic Repair',
+  [Stage.INFORMED_EMPATHY]: 'Informed Empathy',
 };
 
 // ============================================================================

@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -42,15 +42,10 @@ export interface SessionChatHeaderProps {
   onPress?: () => void;
   /** Optional callback when brief status is pressed (e.g., to show invitation options) */
   onBriefStatusPress?: () => void;
-  /** Tab configuration - when provided, enables navigation between Chat and Share views */
-  tabs?: {
-    /** Currently selected tab key */
-    activeTab: 'ai' | 'partner';
-    /** Callback when tab is selected */
-    onTabChange: (tab: 'ai' | 'partner') => void;
-    /** Whether to show badge on share button */
-    showPartnerBadge?: boolean;
-  };
+  /** Badge count for the activity menu icon (0 = no badge) */
+  menuBadgeCount?: number;
+  /** Callback when the activity menu icon is pressed */
+  onMenuPress?: () => void;
   /** Custom container style */
   style?: ViewStyle;
   /** Test ID for testing */
@@ -98,7 +93,8 @@ export function SessionChatHeader({
   onBackPress,
   onPress,
   onBriefStatusPress,
-  tabs,
+  menuBadgeCount = 0,
+  onMenuPress,
   style,
   testID = 'session-chat-header',
 }: SessionChatHeaderProps) {
@@ -146,21 +142,9 @@ export function SessionChatHeader({
 
   return (
     <View style={[styles.container, style]} testID={testID}>
-      {/* Left section: Back button or "← Chat" when on Share view */}
+      {/* Left section: Back button */}
       <View style={styles.leftSection}>
-        {tabs && tabs.activeTab === 'partner' ? (
-          // On Share view: show "← Chat" button
-          <TouchableOpacity
-            style={styles.navButton}
-            onPress={() => tabs.onTabChange('ai')}
-            accessibilityRole="button"
-            accessibilityLabel="Go back to chat"
-            testID={`${testID}-back-to-chat`}
-          >
-            <ArrowLeft color={colors.textPrimary} size={18} />
-            <Text style={styles.navButtonText}>Chat</Text>
-          </TouchableOpacity>
-        ) : onBackPress ? (
+        {onBackPress ? (
           <TouchableOpacity
             style={styles.backButton}
             onPress={onBackPress}
@@ -189,24 +173,26 @@ export function SessionChatHeader({
         centerContent
       )}
 
-      {/* Right section: "Share →" button when on Chat, or empty when on Share */}
+      {/* Right section: Activity menu icon or brief status */}
       <View style={styles.rightSection}>
-        {tabs && tabs.activeTab === 'ai' ? (
-          // On Chat view: show "Share →" button
+        {onMenuPress ? (
           <TouchableOpacity
-            style={styles.shareButton}
-            onPress={() => tabs.onTabChange('partner')}
+            style={styles.menuButton}
+            onPress={onMenuPress}
             accessibilityRole="button"
-            accessibilityLabel="Go to share"
-            testID={`${testID}-go-to-share`}
+            accessibilityLabel="Open activity menu"
+            testID={`${testID}-menu-button`}
           >
-            <Text style={styles.shareButtonText}>Share</Text>
-            {tabs.showPartnerBadge && (
-              <View style={styles.shareBadge} testID={`${testID}-share-badge`} />
+            <MoreVertical color={colors.textPrimary} size={20} />
+            {menuBadgeCount > 0 && (
+              <View style={styles.menuBadge} testID={`${testID}-menu-badge`}>
+                <Text style={styles.menuBadgeText}>
+                  {menuBadgeCount > 9 ? '9+' : menuBadgeCount}
+                </Text>
+              </View>
             )}
-            <Text style={styles.shareButtonArrow}>→</Text>
           </TouchableOpacity>
-        ) : briefStatus && !tabs ? (
+        ) : briefStatus ? (
           onBriefStatusPress ? (
             <TouchableOpacity
               style={styles.briefStatusPill}
@@ -286,42 +272,27 @@ const useStyles = () =>
     rightSpacer: {
       width: 32,
     },
-    // Navigation button styles ("← Chat" and "Share →")
-    navButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingVertical: t.spacing.xs,
-      paddingHorizontal: t.spacing.xs,
+    // Activity menu button
+    menuButton: {
+      padding: t.spacing.xs,
+      position: 'relative',
     },
-    navButtonText: {
-      fontSize: t.typography.fontSize.base,
-      fontWeight: '500',
-      color: t.colors.textPrimary,
-    },
-    shareButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingVertical: t.spacing.xs,
-      paddingHorizontal: t.spacing.sm,
-      backgroundColor: t.colors.bgTertiary,
-      borderRadius: 16,
-    },
-    shareButtonText: {
-      fontSize: t.typography.fontSize.sm,
-      fontWeight: '500',
-      color: t.colors.textPrimary,
-    },
-    shareButtonArrow: {
-      fontSize: 14,
-      color: t.colors.textPrimary,
-    },
-    shareBadge: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+    menuBadge: {
+      position: 'absolute',
+      top: 0,
+      right: -2,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
       backgroundColor: t.colors.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 4,
+    },
+    menuBadgeText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: '#fff',
     },
     partnerName: {
       fontSize: t.typography.fontSize.lg,

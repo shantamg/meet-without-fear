@@ -31,6 +31,7 @@ import { successResponse, errorResponse } from '../utils/response';
 import { notifyPartner } from '../services/realtime';
 import { routeModel, scoreAmbiguity } from '../services/model-router';
 import { suggestSendableRewrite } from '../services/attacking-language';
+import { getModelCompletion, BrainActivityCallType } from '../lib/bedrock';
 
 // ============================================================================
 // Helpers
@@ -724,5 +725,230 @@ Respond with ONLY the message text, no additional formatting or explanation.`;
   } catch (error) {
     console.error('[generateShareDraftHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to generate share draft', 500);
+  }
+}
+
+// ============================================================================
+// Refinement Chat (Stateless, Haiku-powered)
+// ============================================================================
+
+/**
+ * Refinement chat message — stateless AI coaching for refining shared content.
+ * POST /sessions/:id/reconciler/refinement/message
+ *
+ * Client manages conversation history and sends the full history each time.
+ * Uses Haiku for cost/latency. No DB writes for chat messages.
+ */
+export async function refinementChatMessageHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const { offerId, messages, proposedContent } = req.body as {
+      offerId: string;
+      messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+      proposedContent?: string;
+    };
+
+    if (!offerId || !messages || !Array.isArray(messages)) {
+      errorResponse(res, 'VALIDATION_ERROR', 'offerId and messages are required', 400);
+      return;
+    }
+
+    // Check session access
+    const { session, error } = await checkSessionAccess(sessionId, user.id);
+    if (error || !session) {
+      errorResponse(res, 'NOT_FOUND', error || 'Session not found', 404);
+      return;
+    }
+
+    // Fetch the share offer for context
+    const shareOffer = await prisma.reconcilerShareOffer.findFirst({
+      where: {
+        id: offerId,
+        userId: user.id,
+        result: { sessionId },
+      },
+      include: { result: true },
+    });
+
+    if (!shareOffer) {
+      errorResponse(res, 'NOT_FOUND', 'Share offer not found', 404);
+      return;
+    }
+
+    const partnerName = shareOffer.result.guesserName || 'your partner';
+    const userName = user.name || 'you';
+
+    const systemPrompt = `You are Meet Without Fear, a brief coaching companion helping ${userName} refine what to share with ${partnerName}.
+
+CONTEXT:
+${userName}'s partner tried to understand their perspective but missed something important.
+Gap: ${shareOffer.result.gapSummary}
+${shareOffer.result.mostImportantGap ? `Most important gap: ${shareOffer.result.mostImportantGap}` : ''}
+
+AI's initial suggestion for what to share:
+"${shareOffer.suggestedContent || ''}"
+
+${proposedContent ? `Current proposed content:\n"${proposedContent}"` : ''}
+
+YOUR ROLE:
+- Help ${userName} find the right words to share
+- Keep suggestions brief and personal (1-3 sentences)
+- Use their own words and experiences
+- If they propose a revision, wrap the final version in <content> tags
+
+RULES:
+- 1-3 sentences per response
+- Sound like a thoughtful friend, not a therapist
+- If they refine the content, always include the updated version in <content>updated text here</content> tags
+- Don't pressure them to share more than they want`;
+
+    const turnId = `${sessionId}-refinement-${Date.now()}`;
+
+    const aiResponse = await getModelCompletion('haiku', {
+      systemPrompt,
+      messages: messages.length > 0 ? messages : [{ role: 'user', content: 'Help me refine what to share.' }],
+      maxTokens: 512,
+      sessionId,
+      turnId,
+      operation: 'refinement-chat',
+      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
+    });
+
+    if (!aiResponse) {
+      errorResponse(res, 'INTERNAL_ERROR', 'Failed to generate response', 500);
+      return;
+    }
+
+    // Extract proposed content from <content> tags
+    let extractedContent: string | null = null;
+    const contentMatch = aiResponse.match(/<content>([\s\S]*?)<\/content>/i);
+    if (contentMatch) {
+      extractedContent = contentMatch[1].trim();
+    }
+
+    // Strip content tags from visible response
+    const visibleResponse = aiResponse
+      .replace(/<content>[\s\S]*?<\/content>/gi, '')
+      .trim();
+
+    successResponse(res, {
+      response: visibleResponse,
+      proposedContent: extractedContent,
+    });
+  } catch (error) {
+    console.error('[refinementChatMessageHandler] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to process refinement message', 500);
+  }
+}
+
+/**
+ * Finalize refinement — share the refined content with partner.
+ * POST /sessions/:id/reconciler/refinement/finalize
+ *
+ * Creates a SHARED_CONTEXT message, updates offer status, and notifies partner.
+ */
+export async function refinementFinalizeHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const { offerId, content } = req.body as {
+      offerId: string;
+      content: string;
+    };
+
+    if (!offerId || !content) {
+      errorResponse(res, 'VALIDATION_ERROR', 'offerId and content are required', 400);
+      return;
+    }
+
+    // Check session access
+    const { session, error } = await checkSessionAccess(sessionId, user.id);
+    if (error || !session) {
+      errorResponse(res, 'NOT_FOUND', error || 'Session not found', 404);
+      return;
+    }
+
+    // Find the share offer
+    const shareOffer = await prisma.reconcilerShareOffer.findFirst({
+      where: {
+        id: offerId,
+        userId: user.id,
+        result: { sessionId },
+        status: { in: ['OFFERED', 'PENDING'] },
+      },
+      include: { result: true },
+    });
+
+    if (!shareOffer) {
+      errorResponse(res, 'NOT_FOUND', 'Share offer not found or already finalized', 404);
+      return;
+    }
+
+    const guesserId = shareOffer.result.guesserId;
+
+    // Update share offer
+    await prisma.reconcilerShareOffer.update({
+      where: { id: shareOffer.id },
+      data: {
+        status: 'ACCEPTED',
+        sharedContent: content,
+        refinedContent: content,
+        sharedAt: new Date(),
+      },
+    });
+
+    // Create SHARED_CONTEXT message (from subject to guesser)
+    const sharedMessage = await prisma.message.create({
+      data: {
+        sessionId,
+        senderId: user.id,
+        forUserId: guesserId,
+        role: 'SHARED_CONTEXT',
+        content,
+        stage: 2,
+      },
+    });
+
+    // Notify guesser via Ably
+    const partnerId = guesserId;
+    if (partnerId) {
+      const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
+      const partnerEmpathyStatus = await buildEmpathyExchangeStatus(sessionId, partnerId);
+
+      await notifyPartner(sessionId, partnerId, 'empathy.context_shared', {
+        stage: 2,
+        sharedBy: user.id,
+        content,
+        forUserId: partnerId,
+        empathyStatus: partnerEmpathyStatus,
+        triggeredByUserId: user.id,
+      }, { excludeUserId: user.id });
+    }
+
+    successResponse(res, {
+      status: 'shared',
+      messageId: sharedMessage.id,
+      sharedContent: content,
+    });
+  } catch (error) {
+    console.error('[refinementFinalizeHandler] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to finalize refinement', 500);
   }
 }

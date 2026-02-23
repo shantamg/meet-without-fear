@@ -709,6 +709,11 @@ model ReconcilerResult {
   suggestedShareContent String?  @db.Text  // AI-generated suggestion for what subject could share
   suggestedShareReason  String?  @db.Text  // Why this would help the guesser understand
 
+  /// Which iteration of the reconciler loop produced this result (1 = first run)
+  iteration         Int      @default(1)
+  /// Whether this result was produced by the circuit breaker forcing READY
+  wasCircuitBreakerTrip Boolean @default(false)
+
   createdAt DateTime @default(now())
 
   // Relationship to share offer
@@ -761,6 +766,11 @@ model ReconcilerShareOffer {
 
   /// Legacy: skipped without responding
   skippedAt         DateTime?
+
+  /// Which iteration of the reconciler loop this offer belongs to
+  iteration         Int      @default(1)
+  /// Whether the refinement chat was used before accepting/declining
+  refinementChatUsed Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

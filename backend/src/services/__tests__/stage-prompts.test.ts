@@ -311,7 +311,7 @@ describe('Stage Prompts Service', () => {
 
       // Should be regular listening prompt, not transition
       expect(prompt).toContain('listen to Test User');
-      expect(prompt).toContain('ONE SIDE OF THE STORY');
+      expect(prompt).toContain('PERSPECTIVE AWARENESS');
     });
 
     it('uses regular Stage 2 prompt when not transitioning', () => {
@@ -455,6 +455,148 @@ describe('Stage Prompts Service', () => {
       // Should not have tool call instructions
       expect(prompt).not.toContain('update_session_state');
       expect(prompt).not.toContain('THIRD: Call');
+    });
+  });
+
+  describe('Stage 2B (Informed Empathy) Prompt', () => {
+    it('returns PromptBlocks with staticBlock and dynamicBlock', () => {
+      const context = createContext();
+      const result = buildStagePrompt(21, context);
+
+      expect(result).toHaveProperty('staticBlock');
+      expect(result).toHaveProperty('dynamicBlock');
+      expect(result.staticBlock.length).toBeGreaterThan(0);
+      expect(result.dynamicBlock.length).toBeGreaterThan(0);
+    });
+
+    it('static block mentions refining empathy with new information', () => {
+      const context = createContext();
+      const result = buildStagePrompt(21, context);
+
+      expect(result.staticBlock).toContain('refining');
+      expect(result.staticBlock).toContain('new information');
+      expect(result.staticBlock).toContain('Test User');
+      expect(result.staticBlock).toContain('Partner');
+    });
+
+    it('static block includes three modes: INTEGRATING, STRUGGLING, CLARIFYING', () => {
+      const context = createContext();
+      const result = buildStagePrompt(21, context);
+
+      expect(result.staticBlock).toContain('INTEGRATING');
+      expect(result.staticBlock).toContain('STRUGGLING');
+      expect(result.staticBlock).toContain('CLARIFYING');
+    });
+
+    it('static block includes ReadyShare flag and draft tags', () => {
+      const context = createContext();
+      const result = buildStagePrompt(21, context);
+
+      expect(result.staticBlock).toContain('ReadyShare:Y');
+      expect(result.staticBlock).toContain('<draft>');
+    });
+
+    it('dynamic block includes gap context when provided', () => {
+      const context = createContext({
+        reconcilerGapContext: {
+          missedFeelings: ['frustration', 'disappointment'],
+          gapSummary: 'Partner felt unheard about their work concerns',
+          mostImportantGap: 'The depth of feeling about being undervalued',
+          iteration: 1,
+        },
+      });
+      const result = buildStagePrompt(21, context);
+
+      expect(result.dynamicBlock).toContain('Partner felt unheard');
+      expect(result.dynamicBlock).toContain('frustration');
+      expect(result.dynamicBlock).toContain('disappointment');
+      expect(result.dynamicBlock).toContain('depth of feeling about being undervalued');
+    });
+
+    it('dynamic block includes iteration notice for attempt > 1', () => {
+      const context = createContext({
+        reconcilerGapContext: {
+          missedFeelings: [],
+          gapSummary: 'Some gaps remain',
+          mostImportantGap: null,
+          iteration: 2,
+        },
+      });
+      const result = buildStagePrompt(21, context);
+
+      expect(result.dynamicBlock).toContain('refinement attempt 2');
+    });
+
+    it('dynamic block does NOT include iteration notice for first attempt', () => {
+      const context = createContext({
+        reconcilerGapContext: {
+          missedFeelings: [],
+          gapSummary: 'Some gaps',
+          mostImportantGap: null,
+          iteration: 1,
+        },
+      });
+      const result = buildStagePrompt(21, context);
+
+      expect(result.dynamicBlock).not.toContain('refinement attempt');
+    });
+
+    it('dynamic block includes shared context from partner', () => {
+      const context = createContext({
+        sharedContextFromPartner: 'I felt really hurt when you dismissed my concerns about the project deadline.',
+      });
+      const result = buildStagePrompt(21, context);
+
+      expect(result.dynamicBlock).toContain('dismissed my concerns about the project deadline');
+      expect(result.dynamicBlock).toContain('PARTNER');
+    });
+
+    it('dynamic block includes previous empathy content', () => {
+      const context = createContext({
+        previousEmpathyContent: 'I think Partner feels stressed about their workload.',
+      });
+      const result = buildStagePrompt(21, context);
+
+      expect(result.dynamicBlock).toContain('stressed about their workload');
+      expect(result.dynamicBlock).toContain('PREVIOUS EMPATHY ATTEMPT');
+    });
+
+    it('dynamic block includes current empathy draft', () => {
+      const context = createContext({
+        empathyDraft: 'Partner seems to feel overwhelmed and undervalued at work.',
+      });
+      const result = buildStagePrompt(21, context);
+
+      expect(result.dynamicBlock).toContain('overwhelmed and undervalued');
+      expect(result.dynamicBlock).toContain('WORKING DRAFT');
+    });
+
+    it('static block is identical across turns', () => {
+      const context1 = createContext({ turnCount: 1, emotionalIntensity: 3 });
+      const context2 = createContext({ turnCount: 5, emotionalIntensity: 7 });
+
+      const result1 = buildStagePrompt(21, context1);
+      const result2 = buildStagePrompt(21, context2);
+
+      expect(result1.staticBlock).toBe(result2.staticBlock);
+    });
+
+    it('dynamic blocks differ across turns', () => {
+      const context1 = createContext({ turnCount: 1, emotionalIntensity: 3 });
+      const context2 = createContext({ turnCount: 5, emotionalIntensity: 7 });
+
+      const result1 = buildStagePrompt(21, context1);
+      const result2 = buildStagePrompt(21, context2);
+
+      expect(result1.dynamicBlock).not.toBe(result2.dynamicBlock);
+    });
+
+    it('uses Stage 2 response protocol (ReadyShare, not FeelHeardCheck)', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(21, context));
+
+      expect(prompt).toContain('ReadyShare:');
+      expect(prompt).not.toContain('FeelHeardCheck:');
     });
   });
 });

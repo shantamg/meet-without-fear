@@ -1255,7 +1255,60 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
     console.log(`[sendMessageStream:${requestId}] Context assembled: notableFacts=${contextBundle.notableFacts?.length ?? 0}, emotionalIntensity=${emotionalIntensity}`);
 
-    const prompt = buildStagePrompt(currentStage, {
+    // =========================================================================
+    // Stage 2B routing: Check if user is in REFINING empathy status
+    // If so, route to Stage 21 (Informed Empathy) prompt instead of Stage 2
+    // =========================================================================
+    let effectiveStage = currentStage;
+    let reconcilerGapContext: {
+      missedFeelings: string[];
+      gapSummary: string;
+      mostImportantGap: string | null;
+      iteration: number;
+    } | undefined;
+    let previousEmpathyContent: string | null = null;
+    let stage2BSharedContext: string | null = null;
+
+    if (currentStage === 2) {
+      const refiningAttempt = await prisma.empathyAttempt.findFirst({
+        where: {
+          sessionId,
+          sourceUserId: user.id,
+          status: 'REFINING',
+        },
+        orderBy: { sharedAt: 'desc' },
+      });
+
+      if (refiningAttempt) {
+        effectiveStage = 21; // Stage 2B: Informed Empathy
+        previousEmpathyContent = refiningAttempt.content;
+        console.log(`[sendMessageStream:${requestId}] Stage 2B routing: user has REFINING empathy, using stage 21`);
+
+        // Fetch reconciler result for gap context
+        const reconcilerResult = await prisma.reconcilerResult.findFirst({
+          where: {
+            sessionId,
+            guesserId: user.id,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (reconcilerResult) {
+          reconcilerGapContext = {
+            missedFeelings: reconcilerResult.missedFeelings,
+            gapSummary: reconcilerResult.gapSummary,
+            mostImportantGap: reconcilerResult.mostImportantGap,
+            iteration: 1, // TODO: use iteration field once migration runs
+          };
+        }
+
+        // Fetch shared context from partner
+        const sharedContextResult = await getSharedContextForGuesser(sessionId, user.id);
+        stage2BSharedContext = sharedContextResult.content;
+      }
+    }
+
+    const prompt = buildStagePrompt(effectiveStage, {
       userName,
       partnerName,
       turnCount: userTurnCount,
@@ -1264,6 +1317,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       sharedContentHistory,
       milestoneContext,
       invitationMessage: currentInvitationMessage,
+      reconcilerGapContext,
+      previousEmpathyContent,
+      sharedContextFromPartner: stage2BSharedContext || undefined,
     }, { isInvitationPhase, isRefiningInvitation });
 
     // Prompt already includes semantic tag format instructions via buildResponseProtocol()
@@ -1672,7 +1728,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         forUserId: user.id,
         role: 'AI',
         content: accumulatedText.trim(),
-        stage: currentStage,
+        stage: effectiveStage, // Use effective stage (21 for Stage 2B) for analytics
       },
     });
     console.log(`[sendMessageStream:${requestId}] AI message created: ${aiMessage.id}`);
@@ -1709,8 +1765,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       console.log(`[sendMessageStream:${requestId}] Saved invitation message: "${metadata.invitationMessage}"`);
     }
 
-    // Save empathy draft
-    if (currentStage === 2 && metadata.offerReadyToShare && metadata.proposedEmpathyStatement) {
+    // Save empathy draft (Stage 2 or Stage 2B)
+    if ((effectiveStage === 2 || effectiveStage === 21) && metadata.offerReadyToShare && metadata.proposedEmpathyStatement) {
       await prisma.empathyDraft.upsert({
         where: {
           sessionId_userId: { sessionId, userId: user.id },

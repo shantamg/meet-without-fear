@@ -387,7 +387,7 @@ test.describe('Partner Journey (Two Browser Contexts)', () => {
         // ==========================================
         console.log(`${elapsed()} === PHASE 7: User B shares context ===`);
 
-        // Wait for the SharingStatusScreen to fully load
+        // Wait for the Activity Menu / share UI to fully load
         await userBPage.waitForLoadState('networkidle');
         console.log(`${elapsed()} User B page URL: ${userBPage.url()}`);
 

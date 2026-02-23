@@ -17,6 +17,8 @@ import {
   getReconcilerSummaryHandler,
   skipShareOfferHandler,
   generateShareDraftHandler,
+  refinementChatMessageHandler,
+  refinementFinalizeHandler,
 } from '../controllers/reconciler';
 
 const router = Router();
@@ -83,5 +85,22 @@ router.post('/sessions/:id/reconciler/share-offer/generate-draft', generateShare
  * Only available after reconciliation is complete.
  */
 router.get('/sessions/:id/reconciler/summary', getReconcilerSummaryHandler);
+
+/**
+ * Refinement chat message (stateless, Haiku-powered)
+ * POST /sessions/:id/reconciler/refinement/message
+ *
+ * Client sends full conversation history each time. No DB writes.
+ * Returns AI coaching response and optional proposed content.
+ */
+router.post('/sessions/:id/reconciler/refinement/message', refinementChatMessageHandler);
+
+/**
+ * Finalize refinement — share refined content with partner
+ * POST /sessions/:id/reconciler/refinement/finalize
+ *
+ * Creates SHARED_CONTEXT message and notifies partner via Ably.
+ */
+router.post('/sessions/:id/reconciler/refinement/finalize', refinementFinalizeHandler);
 
 export default router;

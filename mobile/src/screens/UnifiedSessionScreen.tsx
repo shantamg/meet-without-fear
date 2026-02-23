@@ -10,7 +10,7 @@ import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+// useRouter removed - share navigation replaced by ActivityMenuModal
 import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem } from '../components/ChatInterface';
@@ -42,13 +42,15 @@ import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
 // PartnerChatTab moved to separate Share screen route
 import { PartnerEventModal, PartnerEventType } from '../components/PartnerEventModal';
+import { ActivityMenuModal } from '../components/ActivityMenuModal';
+import { RefinementModalScreen } from './RefinementModalScreen';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { useChatUIState } from '../hooks/useChatUIState';
 import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
 import { useRealtime, useUserSessionUpdates } from '../hooks/useRealtime';
-import { stageKeys, messageKeys, sessionKeys } from '../hooks/queryKeys';
+import { stageKeys, messageKeys, sessionKeys, notificationKeys } from '../hooks/queryKeys';
 import { useAIMessageHandler } from '../hooks/useMessages';
 import { useSharingStatus } from '../hooks/useSharingStatus';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
@@ -108,7 +110,6 @@ export function UnifiedSessionScreen({
   onStageComplete,
 }: UnifiedSessionScreenProps) {
   const styles = useStyles();
-  const router = useRouter();
   const { user, updateUser } = useAuth();
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
@@ -294,6 +295,21 @@ export function UnifiedSessionScreen({
         if (statuses[user.id]) {
           queryClient.setQueryData(stageKeys.empathyStatus(sessionId), statuses[user.id]);
         }
+      }
+
+      // Notification events - invalidate pending actions for activity menu badges
+      if (event === 'notification.pending_action' && data.forUserId === user?.id) {
+        console.log('[UnifiedSessionScreen] Pending action notification, refreshing badges');
+        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
+        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
+      }
+
+      // Empathy resubmitted - partner refined their understanding
+      if (event === 'empathy.resubmitted' && data.forUserId === user?.id) {
+        console.log('[UnifiedSessionScreen] Partner resubmitted empathy');
+        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
       }
 
       if (event === 'partner.stage_completed') {
@@ -542,15 +558,13 @@ export function UnifiedSessionScreen({
   const [feedbackCoachInitialDraft, setFeedbackCoachInitialDraft] = useState('');
 
   // -------------------------------------------------------------------------
-  // Navigation to Share screen
+  // Activity Menu Modal
   // -------------------------------------------------------------------------
-  const navigateToShare = useCallback((highlightTimestamp?: string) => {
-    if (highlightTimestamp) {
-      router.push(`/session/${sessionId}/share?highlight=${encodeURIComponent(highlightTimestamp)}`);
-    } else {
-      router.push(`/session/${sessionId}/share`);
-    }
-  }, [router, sessionId]);
+  const [showActivityMenu, setShowActivityMenu] = useState(false);
+
+  // Refinement Modal
+  const [refinementOfferId, setRefinementOfferId] = useState<string | null>(null);
+  const [refinementInitialSuggestion, setRefinementInitialSuggestion] = useState('');
 
   // Partner event modal state - shows when new Partner tab events occur
   const [partnerEventModalVisible, setPartnerEventModalVisible] = useState(false);
@@ -566,8 +580,8 @@ export function UnifiedSessionScreen({
 
   const handleViewPartnerTab = useCallback(() => {
     setPartnerEventModalVisible(false);
-    navigateToShare();
-  }, [navigateToShare]);
+    setShowActivityMenu(true);
+  }, []);
 
   // Local latch to prevent panel flashing during server refetches
   // Once user clicks Share, this stays true even if server data temporarily reverts
@@ -1470,18 +1484,11 @@ export function UnifiedSessionScreen({
         onBackPress={onNavigateBack}
         onBriefStatusPress={
           session?.status === SessionStatus.INVITED && invitation?.isInviter
-            ? navigateToShare  // Navigate to Share screen where invitation drawer is
+            ? () => setShowActivityMenu(true)
             : undefined
         }
-        tabs={!isInOnboardingUnsigned ? {
-          activeTab: 'ai', // Always 'ai' on this screen since Share is a separate route
-          onTabChange: (tab) => {
-            if (tab === 'partner') {
-              navigateToShare();
-            }
-          },
-          showPartnerBadge: sharingStatus.pendingActionsCount > 0,
-        } : undefined}
+        menuBadgeCount={!isInOnboardingUnsigned ? sharingStatus.pendingActionsCount : 0}
+        onMenuPress={!isInOnboardingUnsigned ? () => setShowActivityMenu(true) : undefined}
         testID="session-chat-header"
       />
       {/* Chat content - Share is now a separate route */}
@@ -1526,9 +1533,9 @@ export function UnifiedSessionScreen({
           // Uses captured value from before session was marked viewed, so new messages
           // arriving while viewing don't trigger a separator
           lastSeenChatItemId={lastSeenChatItemIdForSeparator}
-          // Navigate to Share screen when "Context shared" or "Empathy shared" indicator is tapped
-          onContextSharedPress={(timestamp) => {
-            navigateToShare(timestamp ?? undefined);
+          // Open activity menu when "Context shared" or "Empathy shared" indicator is tapped
+          onContextSharedPress={() => {
+            setShowActivityMenu(true);
           }}
           // Show compact as custom empty state during onboarding when not signed
           customEmptyState={
@@ -1989,6 +1996,61 @@ export function UnifiedSessionScreen({
             handleRespondToShareOffer('decline');
           }}
           onClose={() => setShowShareTopicDrawer(false)}
+        />
+      )}
+
+      {/* Activity Menu Modal - Sent / Received tabs */}
+      <ActivityMenuModal
+        visible={showActivityMenu}
+        sessionId={sessionId}
+        partnerName={partnerName}
+        onClose={() => setShowActivityMenu(false)}
+        onOpenRefinement={(offerId, suggestion) => {
+          setShowActivityMenu(false);
+          setRefinementInitialSuggestion(suggestion);
+          setRefinementOfferId(offerId);
+        }}
+        onShareAsIs={(offerId) => {
+          setShowActivityMenu(false);
+          handleRespondToShareOffer('accept');
+        }}
+        onValidate={(attemptId, rating) => {
+          setShowActivityMenu(false);
+          if (rating === 'accurate') {
+            handleValidatePartnerEmpathy(true);
+          } else if (rating === 'partial') {
+            handleValidatePartnerEmpathy(false, 'Some parts are accurate');
+          } else {
+            // Inaccurate - open feedback coach
+            setFeedbackCoachInitialDraft('');
+            setShowFeedbackCoachChat(true);
+          }
+        }}
+        onRefresh={() => {
+          queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+          queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
+          queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
+        }}
+        testID="activity-menu-modal"
+      />
+
+      {/* Refinement Modal - AI-guided chat for refining share offer content */}
+      {refinementOfferId && (
+        <RefinementModalScreen
+          visible={!!refinementOfferId}
+          sessionId={sessionId}
+          offerId={refinementOfferId}
+          initialSuggestion={refinementInitialSuggestion}
+          partnerName={partnerName}
+          onClose={() => setRefinementOfferId(null)}
+          onShareComplete={() => {
+            setRefinementOfferId(null);
+            // Refresh activity menu data
+            queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
+            queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
+            queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
+          }}
+          testID="refinement-modal"
         />
       )}
 

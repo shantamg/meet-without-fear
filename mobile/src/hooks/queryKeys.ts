@@ -51,6 +51,12 @@ export const stageKeys = {
   shareOffer: (sessionId: string) =>
     [...stageKeys.all, 'empathy', 'share-offer', sessionId] as const,
 
+  // Pending actions (for activity menu)
+  // Written by: notification.pending_action Ably event (invalidate)
+  // Read by: usePendingActions, ActivityMenuModal (received items + badge count)
+  pendingActions: (sessionId: string) =>
+    [...stageKeys.all, 'pending-actions', sessionId] as const,
+
   // Stage 3: Needs
   needs: (sessionId: string) => [...stageKeys.all, 'needs', sessionId] as const,
   commonGround: (sessionId: string) =>
@@ -63,6 +69,17 @@ export const stageKeys = {
     [...stageKeys.all, 'strategies', 'reveal', sessionId] as const,
   agreements: (sessionId: string) =>
     [...stageKeys.all, 'agreements', sessionId] as const,
+};
+
+// ============================================================================
+// Notification Query Keys
+// ============================================================================
+
+export const notificationKeys = {
+  all: ['notifications'] as const,
+  // Written by: notification.pending_action Ably event (invalidate), refinement finalize
+  // Read by: useBadgeCount, SessionChatHeader (menu badge)
+  badgeCount: () => [...notificationKeys.all, 'badge-count'] as const,
 };
 
 // ============================================================================

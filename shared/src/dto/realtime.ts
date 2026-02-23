@@ -121,7 +121,10 @@ export type SessionEventType =
   | 'message.ai_response'
   | 'message.error'
   // Context assembly events (for Neural Monitor dashboard)
-  | 'context.updated';
+  | 'context.updated'
+  // Notification events (for activity menu badges)
+  | 'notification.pending_action'
+  | 'empathy.resubmitted';
 
 export interface SessionEventData {
   sessionId: string;
@@ -357,6 +360,32 @@ export interface EmpathyRevealedPayload extends RealtimeEventBase {
   guesserUserId: string;
   /** The revealed empathy attempt */
   partnerEmpathy: EmpathyAttemptDTO;
+  /** Updated empathy status */
+  empathyStatus: EmpathyExchangeStatusResponse;
+}
+
+/**
+ * Payload for notification.pending_action event.
+ * Notifies a user that a new pending action is available in their activity menu.
+ */
+export interface NotificationPendingActionPayload extends RealtimeEventBase {
+  /** The user ID this notification is for */
+  forUserId: string;
+  /** The type of pending action */
+  actionType: 'share_offer' | 'validate_empathy' | 'context_received';
+  /** ID of the action item */
+  actionId: string;
+}
+
+/**
+ * Payload for empathy.resubmitted event.
+ * Notifies the subject that the guesser has resubmitted a refined empathy attempt.
+ */
+export interface EmpathyResubmittedPayload extends RealtimeEventBase {
+  /** The user ID this is for (the subject who should see the updated empathy) */
+  forUserId: string;
+  /** The guesser who resubmitted */
+  guesserUserId: string;
   /** Updated empathy status */
   empathyStatus: EmpathyExchangeStatusResponse;
 }

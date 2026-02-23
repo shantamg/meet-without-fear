@@ -206,8 +206,10 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
 
   const currentStage = myStage ?? Stage.ONBOARDING;
 
-  // When refining, don't show the panel - user should use Refine button on Share screen
-  if (isRefiningEmpathy) {
+  // When refining (Stage 2B), show the panel once AI proposes a new draft
+  // (messageCountSinceSharedContext > 0 means user has engaged with Stage 2B)
+  // Otherwise hide — user should use the Activity menu to view partner's shared context first
+  if (isRefiningEmpathy && inputs.messageCountSinceSharedContext === 0) {
     return false;
   }
 
