@@ -16,6 +16,7 @@ import { ReceivedItemCard, ReceivedItem } from './ReceivedItemCard';
 
 export interface ReceivedItemsListProps {
   items: ReceivedItem[];
+  partnerName?: string;
   isRefreshing?: boolean;
   onRefresh?: () => void;
   onRefine?: (offerId: string) => void;
@@ -30,6 +31,7 @@ export interface ReceivedItemsListProps {
 
 export function ReceivedItemsList({
   items,
+  partnerName,
   isRefreshing = false,
   onRefresh,
   onRefine,
@@ -43,7 +45,7 @@ export function ReceivedItemsList({
         <Text style={styles.emptyIcon}>📬</Text>
         <Text style={styles.emptyTitle}>Nothing received yet</Text>
         <Text style={styles.emptySubtitle}>
-          Items from your partner will appear here
+          Items from {partnerName || 'the other person'} will appear here
         </Text>
       </View>
     );

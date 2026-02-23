@@ -247,6 +247,7 @@ export function ActivityMenuModal({
         ) : (
           <ReceivedItemsList
             items={receivedItems}
+            partnerName={partnerName}
             isRefreshing={pendingActionsQuery.isRefetching}
             onRefresh={handleRefresh}
             onRefine={(offerId) => {
