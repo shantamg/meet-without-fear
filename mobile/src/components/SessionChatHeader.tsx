@@ -18,6 +18,7 @@ import { ArrowLeft, ArrowLeftRight } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
+import { BadgeIndicator } from './BadgeIndicator';
 
 // ============================================================================
 // Types
@@ -184,13 +185,13 @@ export function SessionChatHeader({
             testID={`${testID}-menu-button`}
           >
             <ArrowLeftRight color={colors.textPrimary} size={20} />
-            {menuBadgeCount > 0 && (
-              <View style={styles.menuBadge} testID={`${testID}-menu-badge`}>
-                <Text style={styles.menuBadgeText}>
-                  {menuBadgeCount > 9 ? '9+' : menuBadgeCount}
-                </Text>
-              </View>
-            )}
+            <BadgeIndicator
+              count={menuBadgeCount}
+              size="small"
+              offset={{ x: -2, y: 0 }}
+              animate={true}
+              testID={`${testID}-menu-badge`}
+            />
           </TouchableOpacity>
         ) : briefStatus ? (
           onBriefStatusPress ? (
@@ -277,23 +278,7 @@ const useStyles = () =>
       padding: t.spacing.xs,
       position: 'relative',
     },
-    menuBadge: {
-      position: 'absolute',
-      top: 0,
-      right: -2,
-      minWidth: 16,
-      height: 16,
-      borderRadius: 8,
-      backgroundColor: t.colors.accent,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 4,
-    },
-    menuBadgeText: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: '#fff',
-    },
+    // menuBadge styles removed - now using BadgeIndicator component
     partnerName: {
       fontSize: t.typography.fontSize.lg,
       fontWeight: '600',

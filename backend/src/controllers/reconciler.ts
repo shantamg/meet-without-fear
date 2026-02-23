@@ -805,7 +805,7 @@ YOUR APPROACH:
 3. ALWAYS DRAFT WHEN ASKED: If they explicitly ask for a new version or say something like "can you rewrite it", always provide one.
 
 WHEN PROVIDING A REVISED VERSION:
-- Wrap it in <content>revised text</content> tags
+- Put the revised text between <content> and </content> tags, like: <content>I feel stuck because...</content>
 - Keep it 1-3 sentences, personal, in their own voice
 - Explain briefly what you changed and why
 
@@ -831,16 +831,19 @@ WHEN NOT PROVIDING A REVISED VERSION:
       return;
     }
 
-    // Extract proposed content from <content> tags
+    // Extract proposed content from <content> tags (or common AI variations)
     let extractedContent: string | null = null;
-    const contentMatch = aiResponse.match(/<content>([\s\S]*?)<\/content>/i);
+    const contentMatch = aiResponse.match(/<content>([\s\S]*?)<\/content>/i)
+      || aiResponse.match(/<revised[_ ]?text>([\s\S]*?)<\/revised[_ ]?text>/i)
+      || aiResponse.match(/<revised>([\s\S]*?)<\/revised>/i)
+      || aiResponse.match(/<draft>([\s\S]*?)<\/draft>/i);
     if (contentMatch) {
       extractedContent = contentMatch[1].trim();
     }
 
-    // Strip content tags from visible response
+    // Strip all known content tags from visible response
     const visibleResponse = aiResponse
-      .replace(/<content>[\s\S]*?<\/content>/gi, '')
+      .replace(/<\/?(?:content|revised[_ ]?text|revised|draft)>/gi, '')
       .trim();
 
     successResponse(res, {
