@@ -28,6 +28,7 @@ const PRICING: Record<string, { input: number; output: number; cacheRead: number
   'global.anthropic.claude-haiku-4-5-20251001-v1:0': { input: 0.001, output: 0.005, cacheRead: 0.0001, cacheWrite: 0.00125 },
   'amazon.titan-embed-text-v2:0': { input: 0.00002, output: 0.0, cacheRead: 0, cacheWrite: 0 },
   // Legacy entries for historical cost lookups
+  'global.anthropic.claude-sonnet-4-6': { input: 0.003, output: 0.015, cacheRead: 0.0003, cacheWrite: 0.00375 },
   'anthropic.claude-3-5-sonnet-20241022-v2:0': { input: 0.003, output: 0.015, cacheRead: 0, cacheWrite: 0 },
   'anthropic.claude-3-5-haiku-20241022-v1:0': { input: 0.001, output: 0.005, cacheRead: 0, cacheWrite: 0 },
 };
@@ -402,10 +403,11 @@ export async function getModelCompletion(
     const cacheWriteTokens = (result.usage as any).cache_creation_input_tokens ?? 0;
 
     // Cost with cache pricing
+    // NOTE: input_tokens from the Bedrock SDK already excludes cache_read and cache_creation tokens.
+    // input_tokens = uncached input only. Total content = input_tokens + cache_read + cache_creation.
     const price = PRICING[modelId] || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-    const uncachedInputTokens = inputTokens - cacheReadTokens - cacheWriteTokens;
     const cost =
-      (uncachedInputTokens / 1000) * price.input +
+      (inputTokens / 1000) * price.input +
       (cacheReadTokens / 1000) * price.cacheRead +
       (cacheWriteTokens / 1000) * price.cacheWrite +
       (outputTokens / 1000) * price.output;
@@ -812,10 +814,11 @@ export async function* getSonnetStreamingResponse(
     const cacheWriteTokens = (finalMessage.usage as any).cache_creation_input_tokens ?? 0;
 
     // Calculate cost with cache pricing
+    // NOTE: input_tokens from the Bedrock SDK already excludes cache_read and cache_creation tokens.
+    // input_tokens = uncached input only. Total content = input_tokens + cache_read + cache_creation.
     const price = PRICING[BEDROCK_SONNET_MODEL_ID] || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-    const uncachedInputTokens = inputTokens - cacheReadTokens - cacheWriteTokens;
     const cost =
-      (uncachedInputTokens / 1000) * price.input +
+      (inputTokens / 1000) * price.input +
       (cacheReadTokens / 1000) * price.cacheRead +
       (cacheWriteTokens / 1000) * price.cacheWrite +
       (outputTokens / 1000) * price.output;
