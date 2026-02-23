@@ -207,8 +207,17 @@ async function fetchLinkedPartnerSessionContext(
         invitations: {
           take: 1,
         },
-        empathyDrafts: true,
-        empathyAttempts: true,
+        empathyDrafts: {
+          where: { userId },  // Only load this user's own drafts
+        },
+        empathyAttempts: {
+          where: {
+            OR: [
+              { sourceUserId: userId },  // User's own attempts
+              { status: { in: ['REVEALED', 'VALIDATED'] } },  // Partner's only if consent-revealed
+            ],
+          },
+        },
       },
     });
 

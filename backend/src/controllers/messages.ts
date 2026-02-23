@@ -1228,10 +1228,14 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         currentStage,
         streamingIntent
       ),
-      getSharedContentContext(sessionId, user.id).catch((err: Error) => {
-        console.warn(`[sendMessageStream:${requestId}] Shared content context fetch failed:`, err);
-        return null;
-      }),
+      // Stage gate: no shared content should exist for Stages 0-1 (witnessing).
+      // Defense-in-depth: even if the query has user isolation, skip entirely for early stages.
+      currentStage >= 2
+        ? getSharedContentContext(sessionId, user.id).catch((err: Error) => {
+            console.warn(`[sendMessageStream:${requestId}] Shared content context fetch failed:`, err);
+            return null;
+          })
+        : Promise.resolve(null),
       getMilestoneContext(sessionId, user.id).catch((err: Error) => {
         console.warn(`[sendMessageStream:${requestId}] Milestone context fetch failed:`, err);
         return null;
@@ -1261,9 +1265,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     // =========================================================================
     let effectiveStage = currentStage;
     let reconcilerGapContext: {
-      missedFeelings: string[];
-      gapSummary: string;
-      mostImportantGap: string | null;
+      areaHint: string | null;
+      guidanceType: string | null;
+      promptSeed: string | null;
       iteration: number;
     } | undefined;
     let previousEmpathyContent: string | null = null;
@@ -1294,11 +1298,13 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         });
 
         if (reconcilerResult) {
+          // Use abstract guidance fields only — never inject raw partner content
+          // (missedFeelings, gapSummary, mostImportantGap) into the guesser's prompt
           reconcilerGapContext = {
-            missedFeelings: reconcilerResult.missedFeelings,
-            gapSummary: reconcilerResult.gapSummary,
-            mostImportantGap: reconcilerResult.mostImportantGap,
-            iteration: 1, // TODO: use iteration field once migration runs
+            areaHint: reconcilerResult.areaHint,
+            guidanceType: reconcilerResult.guidanceType,
+            promptSeed: reconcilerResult.promptSeed,
+            iteration: reconcilerResult.iteration,
           };
         }
 

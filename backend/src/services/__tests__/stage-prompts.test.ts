@@ -145,6 +145,42 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('invitation');
       expect(prompt).toContain('Partner');
     });
+
+    it('invitation prompt includes MOVE FAST directive', () => {
+      const context = createContext();
+      const options: BuildStagePromptOptions = { isInvitationPhase: true };
+      const prompt = fullPrompt(buildStagePrompt(0, context, options));
+
+      expect(prompt).toContain('MOVE FAST');
+      expect(prompt).toContain('turn 2 or 3');
+    });
+
+    it('invitation prompt adds PACING nudge at turn 2', () => {
+      const context = createContext({ turnCount: 2 });
+      const options: BuildStagePromptOptions = { isInvitationPhase: true };
+      const prompt = fullPrompt(buildStagePrompt(0, context, options));
+
+      expect(prompt).toContain('PACING');
+      expect(prompt).not.toContain('DRAFT NOW');
+    });
+
+    it('invitation prompt adds DRAFT NOW directive at turn 3+', () => {
+      const context = createContext({ turnCount: 3 });
+      const options: BuildStagePromptOptions = { isInvitationPhase: true };
+      const prompt = fullPrompt(buildStagePrompt(0, context, options));
+
+      expect(prompt).toContain('DRAFT NOW');
+      expect(prompt).toContain('Do not ask another question');
+    });
+
+    it('invitation prompt skips turn-based urgency when refining', () => {
+      const context = createContext({ turnCount: 5 });
+      const options: BuildStagePromptOptions = { isRefiningInvitation: true };
+      const prompt = fullPrompt(buildStagePrompt(0, context, options));
+
+      expect(prompt).not.toContain('DRAFT NOW');
+      expect(prompt).not.toContain('PACING');
+    });
   });
 
   describe('Stage Transition Prompts', () => {
@@ -496,29 +532,44 @@ describe('Stage Prompts Service', () => {
       expect(result.staticBlock).toContain('<draft>');
     });
 
-    it('dynamic block includes gap context when provided', () => {
+    it('dynamic block includes abstract guidance when provided (no raw partner content)', () => {
       const context = createContext({
         reconcilerGapContext: {
-          missedFeelings: ['frustration', 'disappointment'],
-          gapSummary: 'Partner felt unheard about their work concerns',
-          mostImportantGap: 'The depth of feeling about being undervalued',
+          areaHint: 'work and effort',
+          guidanceType: 'explore_deeper_feelings',
+          promptSeed: 'what might be underneath the surface',
           iteration: 1,
         },
       });
       const result = buildStagePrompt(21, context);
 
-      expect(result.dynamicBlock).toContain('Partner felt unheard');
-      expect(result.dynamicBlock).toContain('frustration');
-      expect(result.dynamicBlock).toContain('disappointment');
-      expect(result.dynamicBlock).toContain('depth of feeling about being undervalued');
+      expect(result.dynamicBlock).toContain('work and effort');
+      expect(result.dynamicBlock).toContain('underneath the surface');
+      // Must NOT contain raw partner feelings or gap details
+      expect(result.dynamicBlock).not.toContain('missedFeelings');
+      expect(result.dynamicBlock).not.toContain('gapSummary');
+    });
+
+    it('dynamic block includes challenge_assumptions guidance type', () => {
+      const context = createContext({
+        reconcilerGapContext: {
+          areaHint: 'safety and security',
+          guidanceType: 'challenge_assumptions',
+          promptSeed: 'what might be different from your initial understanding',
+          iteration: 1,
+        },
+      });
+      const result = buildStagePrompt(21, context);
+
+      expect(result.dynamicBlock).toContain('reconsider some of their initial assumptions');
     });
 
     it('dynamic block includes iteration notice for attempt > 1', () => {
       const context = createContext({
         reconcilerGapContext: {
-          missedFeelings: [],
-          gapSummary: 'Some gaps remain',
-          mostImportantGap: null,
+          areaHint: null,
+          guidanceType: null,
+          promptSeed: null,
           iteration: 2,
         },
       });
@@ -530,9 +581,9 @@ describe('Stage Prompts Service', () => {
     it('dynamic block does NOT include iteration notice for first attempt', () => {
       const context = createContext({
         reconcilerGapContext: {
-          missedFeelings: [],
-          gapSummary: 'Some gaps',
-          mostImportantGap: null,
+          areaHint: null,
+          guidanceType: null,
+          promptSeed: null,
           iteration: 1,
         },
       });

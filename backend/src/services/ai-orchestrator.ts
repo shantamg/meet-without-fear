@@ -223,10 +223,14 @@ export async function orchestrateResponse(
       console.warn('[AI Orchestrator] Context retrieval failed (parallel):', err);
       return undefined;
     }),
-    getSharedContentContext(context.sessionId, context.userId).catch((err: Error) => {
-      console.warn('[AI Orchestrator] Shared content context fetch failed:', err);
-      return null;
-    }),
+    // Stage gate: no shared content should exist for Stages 0-1 (witnessing).
+    // Defense-in-depth: even if the query has user isolation, skip entirely for early stages.
+    context.stage >= 2
+      ? getSharedContentContext(context.sessionId, context.userId).catch((err: Error) => {
+          console.warn('[AI Orchestrator] Shared content context fetch failed:', err);
+          return null;
+        })
+      : Promise.resolve(null),
     getMilestoneContext(context.sessionId, context.userId).catch((err: Error) => {
       console.warn('[AI Orchestrator] Milestone context fetch failed:', err);
       return null;

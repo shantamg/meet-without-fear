@@ -98,10 +98,10 @@ export async function getSessionState(req: Request, res: Response): Promise<void
           OR: [
             // Messages user sent without a specific recipient
             { senderId: user.id, forUserId: null },
-            // Messages specifically for this user (AI, SHARED_CONTEXT, etc.)
+            // Messages specifically for this user (AI, SHARED_CONTEXT, EMPATHY_STATEMENT, etc.)
+            // EMPATHY_STATEMENT messages have forUserId set to author, so they're included
+            // here for the correct user only — never leak partner's empathy statements
             { forUserId: user.id },
-            // EMPATHY_STATEMENT messages are visible to both users for mutual understanding
-            { role: 'EMPATHY_STATEMENT' },
           ],
         },
         orderBy: { timestamp: 'desc' },

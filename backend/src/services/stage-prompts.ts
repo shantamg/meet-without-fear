@@ -358,11 +358,11 @@ export interface PromptContext {
   sharedContentHistory?: string | null;
   /** Formatted milestone context (from getMilestoneContext) */
   milestoneContext?: string | null;
-  /** Stage 2B: Gap analysis from reconciler (for informed empathy) */
+  /** Stage 2B: Abstract guidance from reconciler (no specific partner content) */
   reconcilerGapContext?: {
-    missedFeelings: string[];
-    gapSummary: string;
-    mostImportantGap: string | null;
+    areaHint: string | null;
+    guidanceType: string | null;
+    promptSeed: string | null;
     iteration: number;
   };
   /** Stage 2B: Content from previous empathy attempt being refined */
@@ -427,10 +427,10 @@ function buildInvitationPrompt(context: PromptContext): PromptBlocks {
 
 ${buildBaseStaticGuidance()}
 
-Approach:
-- Ask at most one focused question if you still need a key detail.
-- Once you have the gist, provide a draft in <draft>.
-- Keep it warm, neutral, and short. Avoid blame or specifics of the conflict.
+MOVE FAST: You only need the gist — who, what's happening, what they want. Propose an invitation by turn 2 or 3.
+
+LISTENING (turn 1-2): Get the basics — who is this person, what's the situation. One focused question per turn.
+CRAFTING (once you have the gist): Propose a 1-2 sentence invitation in <draft>. Keep it warm, neutral, and short. Avoid blame or specifics of the conflict.
 
 ${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'invitation' })}`;
 
@@ -450,6 +450,15 @@ Themes: ${context.innerThoughtsContext.themes.join(', ')}`
     : `Draft a warm, 1–2 sentence invitation that ${partnerName} would be willing to accept. Keep it brief and non-blaming.`;
   dynamicParts.push(`GOAL: ${goal}`);
   dynamicParts.push(`Turn: ${context.turnCount}`);
+
+  // Turn-based urgency: propose by turn 2-3, force by turn 4
+  if (!isRefining) {
+    if (context.turnCount >= 3) {
+      dynamicParts.push(`DRAFT NOW: You have enough context. Draft the invitation in <draft> tags this turn. Do not ask another question.`);
+    } else if (context.turnCount >= 2) {
+      dynamicParts.push(`PACING: You should have the gist by now. Draft the invitation — don't wait for a perfect picture.`);
+    }
+  }
 
   return { staticBlock, dynamicBlock: dynamicParts.join('\n\n') };
 }
@@ -644,19 +653,25 @@ ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
   const baseDynamic = buildBaseDynamicGuidance(context);
   if (baseDynamic) dynamicParts.push(baseDynamic);
 
-  // Gap context from reconciler
+  // Abstract guidance from reconciler (no specific partner content — privacy-safe)
   if (context.reconcilerGapContext) {
     const gap = context.reconcilerGapContext;
-    let gapSection = `WHAT ${partnerName.toUpperCase()} HELPED CLARIFY:
-${gap.gapSummary}`;
+    let gapSection = `GUIDANCE FOR DEEPENING EMPATHY:`;
 
-    if (gap.missedFeelings.length > 0) {
-      gapSection += `\n\nFeelings ${userName} initially missed:
-- ${gap.missedFeelings.join('\n- ')}`;
+    if (gap.areaHint) {
+      gapSection += `\nThere may be more to explore around ${gap.areaHint}.`;
     }
 
-    if (gap.mostImportantGap) {
-      gapSection += `\n\nMost important thing to integrate: ${gap.mostImportantGap}`;
+    if (gap.guidanceType === 'challenge_assumptions') {
+      gapSection += `\nHelp ${userName} reconsider some of their initial assumptions — gently ask what might be different from what they first thought.`;
+    } else if (gap.guidanceType === 'explore_breadth') {
+      gapSection += `\nHelp ${userName} think about other aspects of ${partnerName}'s experience they haven't considered yet.`;
+    } else if (gap.guidanceType === 'explore_deeper_feelings') {
+      gapSection += `\nHelp ${userName} explore what might be underneath the surface of ${partnerName}'s experience.`;
+    }
+
+    if (gap.promptSeed) {
+      gapSection += `\nA good starting question might explore: ${gap.promptSeed}.`;
     }
 
     if (gap.iteration > 1) {

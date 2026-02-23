@@ -210,10 +210,16 @@ export async function getSharedContentContext(
   }
 
   // 3. Get Messages with special sharing roles
+  // CRITICAL: Only include messages directed TO this user or sent BY this user.
+  // Without this filter, partner's empathy statements leak into the other user's prompt.
   const sharedMessages = await prisma.message.findMany({
     where: {
       sessionId,
       role: { in: ['EMPATHY_STATEMENT', 'SHARED_CONTEXT'] },
+      OR: [
+        { forUserId: userId },  // Messages directed to this user
+        { senderId: userId },   // Messages sent by this user
+      ],
     },
     select: {
       content: true,
