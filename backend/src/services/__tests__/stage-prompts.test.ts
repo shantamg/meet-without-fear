@@ -363,8 +363,107 @@ describe('Stage Prompts Service', () => {
     });
   });
 
-  describe('buildInnerWorkPrompt with insights', () => {
-    it('includes insights in the prompt when provided', () => {
+  describe('buildInnerWorkPrompt', () => {
+    it('returns PromptBlocks with static and dynamic content', () => {
+      const result = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+        emotionalIntensity: 5,
+      });
+
+      expect(result).toHaveProperty('staticBlock');
+      expect(result).toHaveProperty('dynamicBlock');
+    });
+
+    it('static block contains voice/style guidance', () => {
+      const result = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+      });
+
+      expect(result.staticBlock).toContain('VOICE & STYLE');
+      expect(result.staticBlock).toContain('Say it like you\'d say it to a friend');
+      expect(result.staticBlock).toContain('1-3 sentences by default');
+    });
+
+    it('static block contains response format with JSON instructions', () => {
+      const result = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+      });
+
+      expect(result.staticBlock).toContain('"response"');
+      expect(result.staticBlock).toContain('"suggestedActions"');
+      expect(result.staticBlock).toContain('<thinking>');
+    });
+
+    it('static block does not contain clinical language patterns', () => {
+      const result = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+      });
+
+      expect(result.staticBlock).not.toContain('"It sounds like..."');
+      expect(result.staticBlock).not.toContain('"I\'m hearing..."');
+      expect(result.staticBlock).not.toContain('BEFORE EVERY RESPONSE');
+    });
+
+    it('static block does not contain old response protocol dispatch tags', () => {
+      const result = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+      });
+
+      expect(result.staticBlock).not.toContain('<dispatch>');
+      expect(result.staticBlock).not.toContain('EXPLAIN_PROCESS');
+    });
+
+    it('dynamic block contains turn-specific content', () => {
+      const result = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 7,
+        emotionalIntensity: 6,
+        sessionSummary: 'Processing work stress',
+        recentThemes: ['anxiety', 'boundaries'],
+      });
+
+      expect(result.dynamicBlock).toContain('Turn number: 7');
+      expect(result.dynamicBlock).toContain('6/10');
+      expect(result.dynamicBlock).toContain('Processing work stress');
+      expect(result.dynamicBlock).toContain('anxiety');
+      expect(result.dynamicBlock).toContain('boundaries');
+    });
+
+    it('dynamic block shows OPENING MODE for early sessions', () => {
+      const result = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 1,
+      });
+
+      expect(result.dynamicBlock).toContain('OPENING MODE');
+    });
+
+    it('dynamic block shows EXPLORATION MODE for later sessions', () => {
+      const result = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+      });
+
+      expect(result.dynamicBlock).toContain('EXPLORATION MODE');
+    });
+
+    it('dynamic block includes high intensity guidance when intensity >= 8', () => {
+      const result = buildInnerWorkPrompt({
+        userName: 'Test User',
+        turnCount: 5,
+        emotionalIntensity: 9,
+      });
+
+      expect(result.dynamicBlock).toContain('Emotional intensity is high');
+      expect(result.dynamicBlock).toContain('Validate heavily');
+    });
+
+    it('includes insights in dynamic block when provided', () => {
       const insights: InsightContext[] = [
         {
           type: 'PATTERN',
@@ -378,34 +477,34 @@ describe('Stage Prompts Service', () => {
         },
       ];
 
-      const prompt = buildInnerWorkPrompt({
+      const prompt = fullPrompt(buildInnerWorkPrompt({
         userName: 'Test User',
         turnCount: 5,
         insights,
-      });
+      }));
 
       expect(prompt).toContain('CROSS-FEATURE INSIGHTS');
       expect(prompt).toContain('Pattern noticed: You frequently mention work stress');
       expect(prompt).toContain('Suggestion: Consider trying a short meditation');
-      expect(prompt).toContain('85%'); // confidence percentage
+      expect(prompt).toContain('85%');
       expect(prompt).toContain('Weave observations naturally');
     });
 
     it('does not include insights section when no insights provided', () => {
-      const prompt = buildInnerWorkPrompt({
+      const prompt = fullPrompt(buildInnerWorkPrompt({
         userName: 'Test User',
         turnCount: 5,
         insights: [],
-      });
+      }));
 
       expect(prompt).not.toContain('CROSS-FEATURE INSIGHTS');
     });
 
     it('does not include insights section when insights is undefined', () => {
-      const prompt = buildInnerWorkPrompt({
+      const prompt = fullPrompt(buildInnerWorkPrompt({
         userName: 'Test User',
         turnCount: 5,
-      });
+      }));
 
       expect(prompt).not.toContain('CROSS-FEATURE INSIGHTS');
     });
@@ -418,11 +517,11 @@ describe('Stage Prompts Service', () => {
         },
       ];
 
-      const prompt = buildInnerWorkPrompt({
+      const prompt = fullPrompt(buildInnerWorkPrompt({
         userName: 'Test User',
         turnCount: 3,
         insights,
-      });
+      }));
 
       expect(prompt).toContain('Something to explore: You say trust is important');
     });
@@ -435,11 +534,11 @@ describe('Stage Prompts Service', () => {
         },
       ];
 
-      const prompt = buildInnerWorkPrompt({
+      const prompt = fullPrompt(buildInnerWorkPrompt({
         userName: 'Test User',
         turnCount: 3,
         insights,
-      });
+      }));
 
       expect(prompt).toContain('HOW TO USE INSIGHTS');
       expect(prompt).toContain('Don\'t force insights');

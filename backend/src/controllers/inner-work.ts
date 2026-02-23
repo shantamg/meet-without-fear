@@ -42,7 +42,7 @@ import {
   listInnerWorkSessionsQuerySchema,
 } from '@meet-without-fear/shared';
 import { getSonnetResponse, getHaikuJson, getCompletion, BrainActivityCallType } from '../lib/bedrock';
-import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildLinkedInnerThoughtsInitialMessagePrompt, buildInnerWorkSummaryPrompt, buildLinkedInnerThoughtsPrompt, LinkedPartnerSessionContext } from '../services/stage-prompts';
+import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildLinkedInnerThoughtsInitialMessagePrompt, buildInnerWorkSummaryPrompt, buildLinkedInnerThoughtsPrompt, LinkedPartnerSessionContext, PromptBlocks } from '../services/stage-prompts';
 import { extractJsonSafe } from '../utils/json-extractor';
 import { embedInnerWorkSessionContent } from '../services/embedding';
 import {
@@ -387,7 +387,7 @@ export const createInnerWorkSession = asyncHandler(
         return null;
       });
 
-      let prompt: string;
+      let prompt: string | PromptBlocks;
       if (linkedPartnerSessionId) {
         const linkedContext = await fetchLinkedPartnerSessionContext(user.id, linkedPartnerSessionId);
         if (linkedContext) {
@@ -502,7 +502,7 @@ export const createInnerWorkSession = asyncHandler(
     }
 
     // Standard flow: AI generates greeting first
-    let prompt: string;
+    let prompt: string | PromptBlocks;
     let fallbackMessage = "Hey there. What's on your mind today?";
 
     if (linkedPartnerSessionId) {
@@ -761,7 +761,7 @@ export const sendInnerWorkMessage = asyncHandler(
       : session.summary || undefined;
 
     // Build prompt - use linked prompt if this session is connected to a partner session
-    let prompt: string;
+    let prompt: string | PromptBlocks;
 
     if (linkedContext) {
       // Use the linked Inner Thoughts prompt with partner session context
