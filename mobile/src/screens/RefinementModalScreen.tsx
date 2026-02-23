@@ -2,16 +2,16 @@
  * RefinementModalScreen
  *
  * Full-screen modal for refining share offer content via AI-guided chat.
- * Follows the same pattern as ValidationCoachChat but in a full modal.
  *
  * Features:
- * - Shows AI's initial suggestion at the top
+ * - Initial suggestion seeded as first AI message with inline share button
  * - Chat interface for refining the suggestion
- * - "Share This Version" button on AI messages with proposed content
+ * - Inline draft cards on AI messages with proposed content, each with "Share This Version" button
+ * - Close confirmation when user has been chatting (ephemeral chat = data lost)
  * - Stateless chat (client manages history, no DB writes)
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,12 +19,13 @@ import {
   Modal,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
-import { colors, spacing } from '@/theme';
+import { colors } from '@/theme';
 import { ChatInterface, ChatMessage } from '../components/ChatInterface';
-import { useRefinementChat } from '../hooks/useRefinementChat';
+import { useRefinementChat, RefinementMessage } from '../hooks/useRefinementChat';
 
 // ============================================================================
 // Types
@@ -55,16 +56,16 @@ export function RefinementModalScreen({
   onShareComplete,
   testID = 'refinement-modal',
 }: RefinementModalScreenProps) {
+  const insets = useSafeAreaInsets();
   const {
     messages,
-    latestProposedContent,
     isLoading,
     isFinalizing,
     isFinalized,
     sendMessage,
     finalizeShare,
     resetChat,
-  } = useRefinementChat(sessionId, offerId);
+  } = useRefinementChat(sessionId, offerId, initialSuggestion);
 
   // Reset chat when modal opens with new offerId
   useEffect(() => {
@@ -80,34 +81,36 @@ export function RefinementModalScreen({
     }
   }, [isFinalized, onShareComplete]);
 
-  const handleShareVersion = (content: string) => {
+  const handleShareVersion = useCallback((content: string) => {
     finalizeShare(content);
-  };
+  }, [finalizeShare]);
 
-  // Render the initial suggestion as a card above the chat
-  const renderInitialSuggestion = () => (
-    <View style={styles.suggestionCard}>
-      <Text style={styles.suggestionLabel}>AI's suggestion for what to share:</Text>
-      <Text style={styles.suggestionText}>"{initialSuggestion}"</Text>
-      <Text style={styles.suggestionHint}>
-        Chat below to refine this, or share it as-is.
-      </Text>
-    </View>
-  );
+  const handleClose = useCallback(() => {
+    // Skip confirmation if the seeded initial message is the only one (user hasn't chatted)
+    if (messages.length <= 1) {
+      onClose();
+      return;
+    }
+    Alert.alert(
+      'Leave refinement?',
+      'This chat and any draft refinements will be lost.',
+      [
+        { text: 'Stay', style: 'cancel' },
+        { text: 'Leave', style: 'destructive', onPress: onClose },
+      ]
+    );
+  }, [messages.length, onClose]);
 
-  // Render the "Share This Version" button below AI messages with proposed content
-  const renderProposedContent = () => {
-    const contentToShare = latestProposedContent || initialSuggestion;
-
+  // Render inline draft card below AI messages that have proposedContent
+  const renderMessageExtra = useCallback((message: ChatMessage) => {
+    const rfMsg = message as RefinementMessage;
+    if (!rfMsg.proposedContent) return null;
     return (
-      <View style={styles.shareCard}>
-        <View style={styles.shareCardHeader}>
-          <Text style={styles.shareCardLabel}>Ready to share</Text>
-        </View>
-        <Text style={styles.shareCardContent}>"{contentToShare}"</Text>
+      <View style={styles.draftCard}>
+        <Text style={styles.draftContent}>"{rfMsg.proposedContent}"</Text>
         <TouchableOpacity
           style={[styles.shareButton, isFinalizing && styles.shareButtonDisabled]}
-          onPress={() => handleShareVersion(contentToShare)}
+          onPress={() => handleShareVersion(rfMsg.proposedContent!)}
           disabled={isFinalizing}
           testID={`${testID}-share-button`}
         >
@@ -119,7 +122,7 @@ export function RefinementModalScreen({
         </TouchableOpacity>
       </View>
     );
-  };
+  }, [isFinalizing, handleShareVersion, testID]);
 
   // Cast messages to ChatMessage[] for ChatInterface compatibility
   const chatMessages: ChatMessage[] = messages;
@@ -129,24 +132,21 @@ export function RefinementModalScreen({
       visible={visible}
       animationType="slide"
       presentationStyle="fullScreen"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
       testID={testID}
     >
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
           <Text style={styles.headerTitle}>Refining</Text>
           <TouchableOpacity
             style={styles.closeButton}
-            onPress={onClose}
+            onPress={handleClose}
             testID={`${testID}-close`}
           >
             <X color={colors.textPrimary} size={24} />
           </TouchableOpacity>
         </View>
-
-        {/* Initial suggestion */}
-        {renderInitialSuggestion()}
 
         {/* Chat interface */}
         <ChatInterface
@@ -155,9 +155,7 @@ export function RefinementModalScreen({
           onSendMessage={sendMessage}
           isLoading={isLoading}
           partnerName={partnerName}
-          renderAboveInput={renderProposedContent}
-          emptyStateTitle="Refine Your Share"
-          emptyStateMessage="Tell me how you'd like to adjust what gets shared. I'll help you find the right words."
+          renderMessageExtra={renderMessageExtra}
         />
       </SafeAreaView>
     </Modal>
@@ -178,7 +176,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -190,63 +188,24 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
   },
-  suggestionCard: {
-    margin: 16,
-    padding: 16,
-    backgroundColor: colors.bgSecondary,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.accent,
-  },
-  suggestionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  suggestionText: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.textPrimary,
-    fontStyle: 'italic',
-    marginBottom: 8,
-  },
-  suggestionHint: {
-    fontSize: 13,
-    color: colors.textMuted,
-  },
-  shareCard: {
-    margin: spacing.md,
+  draftCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 12,
     backgroundColor: colors.bgSecondary,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.accent,
-    overflow: 'hidden',
   },
-  shareCardHeader: {
-    padding: spacing.sm,
-    backgroundColor: 'rgba(16, 163, 127, 0.1)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(16, 163, 127, 0.2)',
-  },
-  shareCardLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.accent,
-    textTransform: 'uppercase',
-  },
-  shareCardContent: {
-    padding: spacing.md,
+  draftContent: {
     fontSize: 15,
     lineHeight: 22,
     color: colors.textPrimary,
     fontStyle: 'italic',
+    marginBottom: 12,
   },
   shareButton: {
-    margin: spacing.sm,
     backgroundColor: colors.accent,
     paddingVertical: 12,
     paddingHorizontal: 16,

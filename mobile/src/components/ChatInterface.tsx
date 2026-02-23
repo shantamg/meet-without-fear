@@ -130,6 +130,8 @@ interface ChatInterfaceProps {
   onHighEmotion?: (value: number) => void;
   compactEmotionSlider?: boolean;
   renderAboveInput?: () => React.ReactNode;
+  /** Render extra content below a message bubble (e.g., draft cards in refinement chat) */
+  renderMessageExtra?: (message: ChatMessage) => React.ReactNode;
   onLoadMore?: () => void;
   hasMore?: boolean;
   isLoadingMore?: boolean;
@@ -178,6 +180,7 @@ export function ChatInterface({
   onHighEmotion,
   compactEmotionSlider = false,
   renderAboveInput,
+  renderMessageExtra,
   onLoadMore,
   hasMore = false,
   isLoadingMore = false,
@@ -562,25 +565,28 @@ export function ChatInterface({
     };
 
     return (
-      <ChatBubble
-        message={bubbleMessage}
-        onAnimationStart={isNextAnimatable ? () => setAnimatingMessageId(message.id) : undefined}
-        onAnimationComplete={(isNextAnimatable || isCurrentlyAnimating) ? () => {
-          // Mark this message as animated so it won't re-animate on future renders
-          animatedMessageIdsRef.current.add(message.id);
-          // Also mark in persistent cache (survives component remounts)
-          if (sessionId) {
-            markAnimatedInCache(sessionId, message.id);
-          }
-          setAnimatingMessageId(null);
-          onTypewriterComplete?.();
-        } : undefined}
-        isSpeaking={isSpeaking && currentId === message.id}
-        onSpeakerPress={isAIMessage ? () => handleSpeakerPress(message.content, message.id) : undefined}
-        partnerName={partnerName}
-      />
+      <>
+        <ChatBubble
+          message={bubbleMessage}
+          onAnimationStart={isNextAnimatable ? () => setAnimatingMessageId(message.id) : undefined}
+          onAnimationComplete={(isNextAnimatable || isCurrentlyAnimating) ? () => {
+            // Mark this message as animated so it won't re-animate on future renders
+            animatedMessageIdsRef.current.add(message.id);
+            // Also mark in persistent cache (survives component remounts)
+            if (sessionId) {
+              markAnimatedInCache(sessionId, message.id);
+            }
+            setAnimatingMessageId(null);
+            onTypewriterComplete?.();
+          } : undefined}
+          isSpeaking={isSpeaking && currentId === message.id}
+          onSpeakerPress={isAIMessage ? () => handleSpeakerPress(message.content, message.id) : undefined}
+          partnerName={partnerName}
+        />
+        {renderMessageExtra?.(message)}
+      </>
     );
-  }, [sessionId, nextAnimatableMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName]);
+  }, [sessionId, nextAnimatableMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 

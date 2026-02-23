@@ -6,7 +6,7 @@
  * Uses regular POST (not SSE) since the backend returns a simple JSON response.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { MessageRole } from '@meet-without-fear/shared';
 import { post } from '../lib/api';
@@ -37,10 +37,10 @@ export interface RefinementMessage extends ChatMessage {
 // Hook
 // ============================================================================
 
-export function useRefinementChat(sessionId: string, offerId: string) {
+export function useRefinementChat(sessionId: string, offerId: string, initialSuggestion: string) {
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<RefinementMessage[]>([]);
-  const [latestProposedContent, setLatestProposedContent] = useState<string | null>(null);
+  const initialSuggestionRef = useRef(initialSuggestion);
 
   // Mutation for sending refinement chat messages
   const chatMutation = useMutation({
@@ -56,12 +56,15 @@ export function useRefinementChat(sessionId: string, offerId: string) {
       // Add the new user message
       apiMessages.push({ role: 'user', content });
 
+      // Derive latest proposed content from message history
+      const latestProposed = [...messages].reverse().find(m => m.proposedContent)?.proposedContent ?? null;
+
       return post<RefinementChatResponse>(
         `/sessions/${sessionId}/reconciler/refinement/message`,
         {
           offerId,
           messages: apiMessages,
-          proposedContent: latestProposedContent,
+          proposedContent: latestProposed,
         }
       );
     },
@@ -78,10 +81,6 @@ export function useRefinementChat(sessionId: string, offerId: string) {
         proposedContent: data.proposedContent,
       };
       setMessages((prev) => [...prev, aiMsg]);
-
-      if (data.proposedContent) {
-        setLatestProposedContent(data.proposedContent);
-      }
     },
     onError: (error) => {
       console.error('[useRefinementChat] Error:', error);
@@ -143,13 +142,20 @@ export function useRefinementChat(sessionId: string, offerId: string) {
   );
 
   const resetChat = useCallback(() => {
-    setMessages([]);
-    setLatestProposedContent(null);
-  }, []);
+    setMessages([{
+      id: `refinement-initial-${Date.now()}`,
+      sessionId,
+      role: MessageRole.AI,
+      content: `Here's a suggestion for what you could share:\n\n"${initialSuggestionRef.current}"\n\nWould you like to adjust this, or does it feel right as-is?`,
+      timestamp: new Date().toISOString(),
+      senderId: null,
+      stage: 2,
+      proposedContent: initialSuggestionRef.current,
+    }]);
+  }, [sessionId]);
 
   return {
     messages,
-    latestProposedContent,
     isLoading: chatMutation.isPending,
     isFinalizing: finalizeMutation.isPending,
     isFinalized: finalizeMutation.isSuccess,

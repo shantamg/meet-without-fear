@@ -250,11 +250,12 @@ export function UnifiedSessionScreen({
     onSessionEvent: (event, data) => {
       console.log('[UnifiedSessionScreen] Received realtime event:', event);
 
-      // Skip events triggered by self to prevent race conditions with optimistic updates
-      // The backend now includes triggeredByUserId in events, and also uses excludeUserId
-      // to prevent sending to the actor. This is a defense-in-depth check.
+      // Skip events triggered by self to prevent race conditions with optimistic updates.
+      // Exception: events explicitly addressed TO us (forUserId === user.id) are always
+      // processed, since system-generated events like reconciler results may be triggered
+      // by the same user who should receive them.
       const triggeredBySelf = data.triggeredByUserId === user?.id;
-      if (triggeredBySelf) {
+      if (triggeredBySelf && data.forUserId !== user?.id) {
         console.log('[UnifiedSessionScreen] Skipping event triggered by self:', event);
         return;
       }
@@ -441,15 +442,11 @@ export function UnifiedSessionScreen({
       }
 
       if (event === 'empathy.partner_considering_share') {
-        // Partner (subject) is considering sharing context - notify the guesser
+        // Partner (subject) is considering sharing context - update cache for guesser
+        // No modal: this is purely informational with no action the guesser can take.
+        // The WaitingBanner + badge update are sufficient (calm UX).
         console.log('[UnifiedSessionScreen] Partner considering share, refetching status');
         queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
-        // Show modal only if this event is for us (we are the guesser)
-        if (data.forUserId === user?.id) {
-          showPartnerEventModal('partner_considering_share');
-        } else {
-          console.log('[UnifiedSessionScreen] Partner considering share not for us, skipping modal');
-        }
       }
     },
     // Fire-and-forget pattern: AI responses arrive via Ably
@@ -575,11 +572,16 @@ export function UnifiedSessionScreen({
   const [partnerEventPreview, setPartnerEventPreview] = useState<string | undefined>();
 
   // Handler for showing partner event modal
+  // Guard: don't stack modals if Activity menu is already open
   const showPartnerEventModal = useCallback((eventType: PartnerEventType, preview?: string) => {
+    if (showActivityMenu) {
+      console.log('[UnifiedSessionScreen] Activity menu open, skipping partner event modal:', eventType);
+      return;
+    }
     setPartnerEventType(eventType);
     setPartnerEventPreview(preview);
     setPartnerEventModalVisible(true);
-  }, []);
+  }, [showActivityMenu]);
 
   const handleViewPartnerTab = useCallback(() => {
     setPartnerEventModalVisible(false);
@@ -2061,6 +2063,9 @@ export function UnifiedSessionScreen({
           onClose={() => setRefinementOfferId(null)}
           onShareComplete={() => {
             setRefinementOfferId(null);
+            // Navigate to Sent tab to show updated share status
+            setActivityMenuTab('sent');
+            setShowActivityMenu(true);
             // Refresh activity menu data
             queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
             queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
