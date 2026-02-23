@@ -58,7 +58,7 @@ export function ReceivedItemCard({
   const renderShareOffer = () => (
     <>
       <Text style={styles.heading}>Help {partnerName} understand you better</Text>
-      <Text style={styles.content} numberOfLines={4}>
+      <Text style={styles.content}>
         "{item.content}"
       </Text>
       <View style={styles.actions}>
@@ -83,7 +83,7 @@ export function ReceivedItemCard({
   const renderValidateEmpathy = () => (
     <>
       <Text style={styles.heading}>{partnerName}'s understanding</Text>
-      <Text style={styles.content} numberOfLines={4}>
+      <Text style={styles.content}>
         "{item.content}"
       </Text>
       <View style={styles.validationActions}>
@@ -115,7 +115,7 @@ export function ReceivedItemCard({
   const renderContextReceived = () => (
     <>
       <Text style={styles.heading}>{partnerName} shared context</Text>
-      <Text style={styles.content} numberOfLines={6}>
+      <Text style={styles.content}>
         "{item.content}"
       </Text>
     </>

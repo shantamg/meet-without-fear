@@ -44,6 +44,7 @@ import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 import { PartnerEventModal, PartnerEventType } from '../components/PartnerEventModal';
 import { ActivityMenuModal } from '../components/ActivityMenuModal';
 import { RefinementModalScreen } from './RefinementModalScreen';
+import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { useChatUIState } from '../hooks/useChatUIState';
@@ -561,6 +562,8 @@ export function UnifiedSessionScreen({
   // Activity Menu Modal
   // -------------------------------------------------------------------------
   const [showActivityMenu, setShowActivityMenu] = useState(false);
+  const [activityMenuTab, setActivityMenuTab] = useState<'sent' | 'received'>('received');
+  const [showInvitationRefine, setShowInvitationRefine] = useState(false);
 
   // Refinement Modal
   const [refinementOfferId, setRefinementOfferId] = useState<string | null>(null);
@@ -580,6 +583,7 @@ export function UnifiedSessionScreen({
 
   const handleViewPartnerTab = useCallback(() => {
     setPartnerEventModalVisible(false);
+    setActivityMenuTab('received');
     setShowActivityMenu(true);
   }, []);
 
@@ -913,7 +917,7 @@ export function UnifiedSessionScreen({
       .filter((m) => m.role === MessageRole.SHARED_CONTEXT || m.role === MessageRole.EMPATHY_STATEMENT)
       .map((m) => {
         // Determine if this is from the current user or partner
-        const isFromMe = user?.id ? m.senderId === user.id : true;
+        const isFromMe = user?.id ? m.senderId === user.id : false;
         return {
           type: 'indicator' as const,
           indicatorType: m.role === MessageRole.EMPATHY_STATEMENT ? 'empathy-shared' as const : 'context-shared' as const,
@@ -1534,7 +1538,8 @@ export function UnifiedSessionScreen({
           // arriving while viewing don't trigger a separator
           lastSeenChatItemId={lastSeenChatItemIdForSeparator}
           // Open activity menu when "Context shared" or "Empathy shared" indicator is tapped
-          onContextSharedPress={() => {
+          onContextSharedPress={(timestamp, isFromMe) => {
+            setActivityMenuTab(isFromMe !== false ? 'sent' : 'received');
             setShowActivityMenu(true);
           }}
           // Show compact as custom empty state during onboarding when not signed
@@ -2005,6 +2010,7 @@ export function UnifiedSessionScreen({
         sessionId={sessionId}
         partnerName={partnerName}
         onClose={() => setShowActivityMenu(false)}
+        initialTab={activityMenuTab}
         onOpenRefinement={(offerId, suggestion) => {
           setShowActivityMenu(false);
           setRefinementInitialSuggestion(suggestion);
@@ -2031,6 +2037,16 @@ export function UnifiedSessionScreen({
           queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
           queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
         }}
+        invitationMessage={invitationMessage || undefined}
+        invitationTimestamp={invitation?.messageConfirmedAt || undefined}
+        onOpenInvitationRefine={() => {
+          setShowActivityMenu(false);
+          setShowInvitationRefine(true);
+        }}
+        onOpenEmpathyDetail={(attemptId, content) => {
+          setShowActivityMenu(false);
+          setShowEmpathyDrawer(true);
+        }}
         testID="activity-menu-modal"
       />
 
@@ -2053,6 +2069,23 @@ export function UnifiedSessionScreen({
           testID="refinement-modal"
         />
       )}
+
+      {/* Refine Invitation Drawer - opened from Activity Menu Sent tab */}
+      <RefineInvitationDrawer
+        visible={showInvitationRefine}
+        invitationMessage={invitationMessage || ''}
+        invitationUrl={invitationUrl}
+        partnerName={partnerName}
+        senderName={user?.name || user?.firstName || undefined}
+        isRefining={isGenerating}
+        onSendRefinement={(text) => {
+          sendMessage(`Refine invitation: ${text}`);
+        }}
+        onShareSuccess={() => {
+          trackInvitationSent(sessionId, 'share_sheet');
+        }}
+        onClose={() => setShowInvitationRefine(false)}
+      />
 
       {/* Note: CuriosityCompactOverlay removed - now using inline CompactChatItem + CompactAgreementBar */}
 

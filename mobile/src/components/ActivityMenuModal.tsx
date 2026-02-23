@@ -5,7 +5,7 @@
  * Replaces the old Share screen navigation with an in-session modal.
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   Modal,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { colors } from '@/theme';
 import { useSharingStatus } from '../hooks/useSharingStatus';
@@ -38,6 +38,11 @@ export interface ActivityMenuModalProps {
   onShareAsIs?: (offerId: string) => void;
   onValidate?: (attemptId: string, rating: 'accurate' | 'partial' | 'inaccurate') => void;
   onRefresh?: () => void;
+  invitationMessage?: string;
+  invitationTimestamp?: string;
+  onOpenInvitationRefine?: () => void;
+  initialTab?: 'sent' | 'received';
+  onOpenEmpathyDetail?: (attemptId: string, content: string) => void;
   testID?: string;
 }
 
@@ -54,9 +59,21 @@ export function ActivityMenuModal({
   onShareAsIs,
   onValidate,
   onRefresh,
+  invitationMessage,
+  invitationTimestamp,
+  onOpenInvitationRefine,
+  initialTab,
+  onOpenEmpathyDetail,
   testID = 'activity-menu-modal',
 }: ActivityMenuModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>('received');
+
+  // Sync tab when modal opens with an initialTab
+  useEffect(() => {
+    if (visible && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [visible, initialTab]);
 
   const sharingStatus = useSharingStatus(sessionId);
   const pendingActionsQuery = usePendingActions(sessionId);
@@ -66,6 +83,16 @@ export function ActivityMenuModal({
   const sentItems = useMemo<SentItem[]>(() => {
     const items: SentItem[] = [];
 
+    // Prepend invitation if available
+    if (invitationMessage) {
+      items.push({
+        id: 'invitation',
+        type: 'invitation',
+        content: invitationMessage,
+        timestamp: invitationTimestamp || new Date().toISOString(),
+      });
+    }
+
     if (sharingStatus.myAttempt) {
       items.push({
         id: sharingStatus.myAttempt.id,
@@ -73,6 +100,9 @@ export function ActivityMenuModal({
         content: sharingStatus.myAttempt.content,
         timestamp: sharingStatus.myAttempt.sharedAt || new Date().toISOString(),
         revisionCount: sharingStatus.myAttempt.revisionCount,
+        deliveryStatus: sharingStatus.myAttempt.deliveryStatus,
+        empathyStatus: sharingStatus.myAttempt.status,
+        partnerName,
       });
     }
 
@@ -89,9 +119,9 @@ export function ActivityMenuModal({
     }
 
     return items.sort((a, b) =>
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
-  }, [sharingStatus.myAttempt, sharingStatus.sharedContextHistory]);
+  }, [sharingStatus.myAttempt, sharingStatus.sharedContextHistory, invitationMessage, invitationTimestamp]);
 
   // Build received items from pending actions + sharing status
   const receivedItems = useMemo<ReceivedItem[]>(() => {
@@ -142,6 +172,16 @@ export function ActivityMenuModal({
     onRefresh?.();
   }, [pendingActionsQuery, onRefresh]);
 
+  const handleSentItemPress = useCallback((item: SentItem) => {
+    if (item.type === 'invitation' && onOpenInvitationRefine) {
+      onOpenInvitationRefine();
+    } else if (item.type === 'empathy' && onOpenEmpathyDetail) {
+      onOpenEmpathyDetail(item.id, item.content);
+    }
+  }, [onOpenInvitationRefine, onOpenEmpathyDetail]);
+
+  const insets = useSafeAreaInsets();
+
   return (
     <Modal
       visible={visible}
@@ -150,7 +190,7 @@ export function ActivityMenuModal({
       onRequestClose={onClose}
       testID={testID}
     >
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Activity</Text>
@@ -201,6 +241,7 @@ export function ActivityMenuModal({
             items={sentItems}
             isRefreshing={false}
             onRefresh={handleRefresh}
+            onItemPress={handleSentItemPress}
             testID={`${testID}-sent-list`}
           />
         ) : (
@@ -217,7 +258,7 @@ export function ActivityMenuModal({
             testID={`${testID}-received-list`}
           />
         )}
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }

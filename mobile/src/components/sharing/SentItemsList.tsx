@@ -18,6 +18,7 @@ export interface SentItemsListProps {
   items: SentItem[];
   isRefreshing?: boolean;
   onRefresh?: () => void;
+  onItemPress?: (item: SentItem) => void;
   testID?: string;
 }
 
@@ -29,6 +30,7 @@ export function SentItemsList({
   items,
   isRefreshing = false,
   onRefresh,
+  onItemPress,
   testID = 'sent-items-list',
 }: SentItemsListProps) {
   if (items.length === 0) {
@@ -62,6 +64,7 @@ export function SentItemsList({
         <SentItemCard
           key={item.id}
           item={item}
+          onPress={onItemPress ? () => onItemPress(item) : undefined}
           style={styles.card}
           testID={`${testID}-card-${item.id}`}
         />

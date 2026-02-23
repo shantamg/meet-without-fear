@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { ArrowLeft, MoreVertical } from 'lucide-react-native';
+import { ArrowLeft, ArrowLeftRight } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -183,7 +183,7 @@ export function SessionChatHeader({
             accessibilityLabel="Open activity menu"
             testID={`${testID}-menu-button`}
           >
-            <MoreVertical color={colors.textPrimary} size={20} />
+            <ArrowLeftRight color={colors.textPrimary} size={20} />
             {menuBadgeCount > 0 && (
               <View style={styles.menuBadge} testID={`${testID}-menu-badge`}>
                 <Text style={styles.menuBadgeText}>

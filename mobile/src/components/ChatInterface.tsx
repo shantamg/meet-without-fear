@@ -150,7 +150,7 @@ interface ChatInterfaceProps {
   /** Callback when "Context shared" indicator is tapped - navigates to Sharing Status
    * @param timestamp - The timestamp of the shared context (for scrolling to it)
    */
-  onContextSharedPress?: (timestamp?: string) => void;
+  onContextSharedPress?: (timestamp?: string, isFromMe?: boolean) => void;
 }
 
 // ============================================================================
@@ -508,7 +508,7 @@ export function ChatInterface({
       // Context-shared and empathy-shared indicators are tappable to navigate to Partner tab
       const isSharedContent = item.indicatorType === 'context-shared' || item.indicatorType === 'empathy-shared';
       const onPress = isSharedContent && onContextSharedPress
-        ? () => onContextSharedPress(item.timestamp)
+        ? () => onContextSharedPress(item.timestamp, item.metadata?.isFromMe)
         : undefined;
       return (
         <ChatIndicator

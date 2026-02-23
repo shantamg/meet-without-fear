@@ -270,7 +270,7 @@ export function interleaveIndicators(
   for (const message of messages) {
     if (message.role === MessageRole.SHARED_CONTEXT) {
       // Determine if this is from the current user or partner
-      const isFromMe = sessionData.currentUserId ? message.senderId === sessionData.currentUserId : true;
+      const isFromMe = sessionData.currentUserId ? message.senderId === sessionData.currentUserId : false;
 
       // Convert SHARED_CONTEXT to collapsed indicator
       sharedContextIndicators.push({

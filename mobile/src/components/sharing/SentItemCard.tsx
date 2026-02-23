@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle, TouchableOpacity } from 'react-native';
 import { Check, Clock, Eye } from 'lucide-react-native';
 import { colors } from '@/theme';
 
@@ -16,15 +16,18 @@ import { colors } from '@/theme';
 
 export interface SentItem {
   id: string;
-  type: 'empathy' | 'context';
+  type: 'empathy' | 'context' | 'invitation';
   content: string;
   timestamp: string;
-  deliveryStatus?: 'sending' | 'pending' | 'delivered' | 'seen';
+  deliveryStatus?: 'sending' | 'pending' | 'delivered' | 'seen' | 'superseded';
   revisionCount?: number;
+  empathyStatus?: string;
+  partnerName?: string;
 }
 
 export interface SentItemCardProps {
   item: SentItem;
+  onPress?: () => void;
   style?: ViewStyle;
   testID?: string;
 }
@@ -43,6 +46,29 @@ function getDeliveryIcon(status?: string) {
       return <Check color={colors.success} size={12} />;
     case 'seen':
       return <Eye color={colors.success} size={12} />;
+    default:
+      return null;
+  }
+}
+
+const UNDELIVERED_STATUSES = new Set(['HELD', 'ANALYZING', 'AWAITING_SHARING', 'REFINING']);
+
+function getEmpathyStatusText(status: string | undefined, partnerName: string): string | null {
+  switch (status) {
+    case 'HELD':
+      return `Waiting for ${partnerName} to finish reflecting`;
+    case 'ANALYZING':
+      return 'Understanding is being reviewed...';
+    case 'AWAITING_SHARING':
+      return `Gaps detected \u2014 ${partnerName} may share more context`;
+    case 'REFINING':
+      return `New context received \u2014 you can refine your understanding`;
+    case 'READY':
+      return `Ready \u2014 waiting for ${partnerName} to finish theirs`;
+    case 'REVEALED':
+      return `Shared with ${partnerName}`;
+    case 'VALIDATED':
+      return `Confirmed accurate by ${partnerName}`;
     default:
       return null;
   }
@@ -67,15 +93,35 @@ function formatTimestamp(iso: string): string {
 
 export function SentItemCard({
   item,
+  onPress,
   style,
   testID = 'sent-item-card',
 }: SentItemCardProps) {
-  const borderColor = item.type === 'empathy' ? colors.accent : colors.brandBlue;
-  const typeLabel = item.type === 'empathy' ? 'Empathy' : 'Context';
+  const borderColor =
+    item.type === 'empathy' ? colors.accent :
+    item.type === 'invitation' ? colors.success :
+    colors.brandBlue;
+  const typeLabel =
+    item.type === 'empathy' ? 'Empathy' :
+    item.type === 'invitation' ? 'Invitation' :
+    'Context';
+
+  const isUndelivered = item.type === 'empathy' && UNDELIVERED_STATUSES.has(item.empathyStatus || '');
+  const partnerName = item.partnerName || 'Partner';
+  const statusText = item.type === 'empathy' ? getEmpathyStatusText(item.empathyStatus, partnerName) : null;
+
+  const Wrapper = onPress ? TouchableOpacity : View;
+  const wrapperProps = onPress ? { onPress, activeOpacity: 0.7 } : {};
 
   return (
-    <View
-      style={[styles.card, { borderLeftColor: borderColor }, style]}
+    <Wrapper
+      {...wrapperProps}
+      style={[
+        styles.card,
+        { borderLeftColor: borderColor },
+        isUndelivered && styles.dashedBorder,
+        style,
+      ]}
       testID={testID}
     >
       <View style={styles.header}>
@@ -88,16 +134,20 @@ export function SentItemCard({
         </View>
       </View>
 
-      <Text style={styles.content} numberOfLines={4}>
+      <Text style={styles.content}>
         "{item.content}"
       </Text>
+
+      {statusText && (
+        <Text style={styles.statusText}>{statusText}</Text>
+      )}
 
       {item.revisionCount != null && item.revisionCount > 0 && (
         <Text style={styles.revisionNote}>
           Revised {item.revisionCount} time{item.revisionCount > 1 ? 's' : ''}
         </Text>
       )}
-    </View>
+    </Wrapper>
   );
 }
 
@@ -145,6 +195,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: colors.textPrimary,
+    fontStyle: 'italic',
+  },
+  dashedBorder: {
+    borderStyle: 'dashed',
+  },
+  statusText: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 8,
     fontStyle: 'italic',
   },
   revisionNote: {
