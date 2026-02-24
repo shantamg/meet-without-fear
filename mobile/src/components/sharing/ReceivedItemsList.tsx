@@ -51,6 +51,10 @@ export function ReceivedItemsList({
     );
   }
 
+  const pendingItems = items.filter(i => i.isPending);
+  const historicalItems = items.filter(i => !i.isPending);
+  const hasBothSections = pendingItems.length > 0 && historicalItems.length > 0;
+
   return (
     <ScrollView
       style={styles.container}
@@ -66,7 +70,24 @@ export function ReceivedItemsList({
       }
       testID={testID}
     >
-      {items.map((item) => (
+      {hasBothSections && pendingItems.length > 0 && (
+        <Text style={styles.sectionHeader}>Needs your response</Text>
+      )}
+      {pendingItems.map((item) => (
+        <ReceivedItemCard
+          key={item.id}
+          item={item}
+          onRefine={onRefine}
+          onShareAsIs={onShareAsIs}
+          onValidate={onValidate}
+          style={styles.card}
+          testID={`${testID}-card-${item.id}`}
+        />
+      ))}
+      {hasBothSections && historicalItems.length > 0 && (
+        <Text style={styles.sectionHeader}>Previously received</Text>
+      )}
+      {historicalItems.map((item) => (
         <ReceivedItemCard
           key={item.id}
           item={item}
@@ -95,6 +116,15 @@ const styles = StyleSheet.create({
   },
   card: {
     // Spacing handled by gap on contentContainer
+  },
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 4,
+    marginBottom: 2,
   },
   emptyContainer: {
     flex: 1,

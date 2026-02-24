@@ -266,6 +266,8 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Share suggestion received, updating cache');
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
+        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
         showPartnerEventModal('share_suggestion');
       }
 
@@ -276,6 +278,8 @@ export function UnifiedSessionScreen({
         queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
         // Refetch messages so new SHARED_CONTEXT message appears
         queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
+        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
         // Mark session as viewed so partner sees "seen" status
         markSessionViewed({});
         showPartnerEventModal('context_shared');
@@ -411,6 +415,8 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Empathy revealed, updating cache');
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         queryClient.refetchQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
+        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
         // Show validation_needed modal only if we're the SUBJECT (not the guesser)
         if (data.guesserUserId && data.guesserUserId !== user?.id) {
           showPartnerEventModal('validation_needed');

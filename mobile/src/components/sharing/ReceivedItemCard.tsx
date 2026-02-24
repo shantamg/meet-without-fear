@@ -118,6 +118,13 @@ export function ReceivedItemCard({
       <Text style={styles.content}>
         "{item.content}"
       </Text>
+      {!item.isPending && item.timestamp && (
+        <Text style={styles.timestamp}>
+          {new Date(item.timestamp).toLocaleDateString(undefined, {
+            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+          })}
+        </Text>
+      )}
     </>
   );
 
@@ -224,6 +231,11 @@ const styles = StyleSheet.create({
   },
   validationButtonTextNeg: {
     color: colors.error,
+  },
+  timestamp: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 4,
   },
 });
 

@@ -18,6 +18,7 @@ import { X } from 'lucide-react-native';
 import { colors } from '@/theme';
 import { useSharingStatus } from '../hooks/useSharingStatus';
 import { usePendingActions } from '../hooks/usePendingActions';
+import { useMarkShareTabViewed } from '../hooks/useSessions';
 import { SentItemsList } from './sharing/SentItemsList';
 import { ReceivedItemsList } from './sharing/ReceivedItemsList';
 import { SentItem } from './sharing/SentItemCard';
@@ -78,6 +79,14 @@ export function ActivityMenuModal({
   const sharingStatus = useSharingStatus(sessionId);
   const pendingActionsQuery = usePendingActions(sessionId);
   const pendingActions = pendingActionsQuery.data?.actions ?? [];
+  const { mutate: markShareTabViewed } = useMarkShareTabViewed(sessionId);
+
+  // Mark share tab as viewed when received tab is visible (updates lastViewedShareTabAt)
+  useEffect(() => {
+    if (activeTab === 'received' && visible) {
+      markShareTabViewed();
+    }
+  }, [activeTab, visible, markShareTabViewed]);
 
   // Build sent items from sharing status
   const sentItems = useMemo<SentItem[]>(() => {
@@ -123,7 +132,7 @@ export function ActivityMenuModal({
     );
   }, [sharingStatus.myAttempt, sharingStatus.sharedContextHistory, invitationMessage, invitationTimestamp]);
 
-  // Build received items from pending actions + sharing status
+  // Build received items from pending actions + sharing status + historical context
   const receivedItems = useMemo<ReceivedItem[]>(() => {
     const items: ReceivedItem[] = [];
 
@@ -160,11 +169,41 @@ export function ActivityMenuModal({
       }
     }
 
+    // Add historical received context from sharing status (items that are no longer pending)
+    for (const item of sharingStatus.sharedContextHistory) {
+      if (item.direction === 'received' && item.type === 'shared_context') {
+        // ID-based dedup (not content-based) to avoid duplicating pending actions
+        const alreadyInItems = items.some(i =>
+          i.type === 'context_received' && i.id === item.id
+        );
+        if (!alreadyInItems) {
+          items.push({
+            id: item.id,
+            type: 'context_received',
+            content: item.content,
+            partnerName,
+            isPending: false,
+            timestamp: item.timestamp,
+          });
+        }
+      }
+    }
+
+    // Sort: pending items pinned to top, then newest-first within each group
+    items.sort((a, b) => {
+      if (a.isPending && !b.isPending) return -1;
+      if (!a.isPending && b.isPending) return 1;
+      // Within same priority, newest first
+      const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return bTime - aTime;
+    });
+
     return items;
-  }, [pendingActions, sharingStatus.partnerAttempt, partnerName]);
+  }, [pendingActions, sharingStatus.partnerAttempt, sharingStatus.sharedContextHistory, partnerName]);
 
   // Badge counts per tab
-  const sentBadge = 0; // Sent items don't have badges
+  const sentBadge = (pendingActionsQuery.data as any)?.sentTabUpdates ?? 0;
   const receivedBadge = pendingActions.length;
 
   const handleRefresh = useCallback(() => {
