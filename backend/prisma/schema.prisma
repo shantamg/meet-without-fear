@@ -775,6 +775,11 @@ model ReconcilerShareOffer {
   /// Whether the refinement chat was used before accepting/declining
   refinementChatUsed Boolean @default(false)
 
+  /// When the subject was last notified about delivery status change
+  lastDeliveryNotifiedAt DateTime?
+  /// When the subject was last notified about seen status change
+  lastSeenNotifiedAt     DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

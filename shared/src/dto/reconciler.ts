@@ -201,13 +201,9 @@ export type RunReconcilerResponse = z.infer<typeof runReconcilerResponseSchema>;
  * Request to respond to a share offer
  */
 export const respondToShareOfferRequestSchema = z.object({
-  /** Whether they accept to share */
-  accept: z.boolean().optional(),
-  /** If accepting with custom content instead of AI suggestion */
-  customContent: z.string().optional(),
-  /** New asymmetric flow action */
-  action: z.enum(['accept', 'decline', 'refine']).optional(),
-  /** New asymmetric flow refined content */
+  /** Action to take on the share offer */
+  action: z.enum(['accept', 'decline', 'refine']),
+  /** Refined content (when action is 'refine' or 'accept' with changes) */
   refinedContent: z.string().optional(),
 });
 

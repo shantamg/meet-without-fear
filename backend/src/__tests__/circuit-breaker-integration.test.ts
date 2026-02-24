@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { runReconcilerForDirection } from '../services/reconciler';
+import { runReconcilerForDirection, incrementAttempts } from '../services/reconciler';
 
 /**
  * Circuit Breaker Integration Test
@@ -115,7 +115,10 @@ describe('Circuit Breaker Integration', () => {
       },
     });
 
-    // Call runReconcilerForDirection — this should be the 4th attempt
+    // Simulate resubmitEmpathy: increment first, then run reconciler
+    await incrementAttempts(sessionId, userAId, userBId);
+
+    // Call runReconcilerForDirection — checkAttempts sees 4 and trips
     const result = await runReconcilerForDirection(sessionId, userAId, userBId);
 
     // Verify return value indicates circuit breaker tripped
@@ -140,7 +143,7 @@ describe('Circuit Breaker Integration', () => {
     // Should NOT contain the normal "quite accurate" message
     expect(messages[0].content).not.toContain('quite accurate');
 
-    // Verify the counter was incremented to 4
+    // Verify the counter is at 4 (incremented by incrementAttempts)
     const counter = await prisma.refinementAttemptCounter.findUnique({
       where: { sessionId_direction: { sessionId, direction: `${userAId}->${userBId}` } },
     });
@@ -186,6 +189,9 @@ describe('Circuit Breaker Integration', () => {
         attempts: 3,
       },
     });
+
+    // Simulate resubmitEmpathy: increment first, then run reconciler
+    await incrementAttempts(sessionId, userAId, userBId);
 
     // Trip the circuit breaker for A→B — B→A is already READY
     const result = await runReconcilerForDirection(sessionId, userAId, userBId);
@@ -243,6 +249,9 @@ describe('Circuit Breaker Integration', () => {
       },
     });
 
+    // Simulate resubmitEmpathy: increment first, then run reconciler
+    await incrementAttempts(sessionId, userAId, userBId);
+
     // Trip the circuit breaker for A→B
     await runReconcilerForDirection(sessionId, userAId, userBId);
 
@@ -259,7 +268,7 @@ describe('Circuit Breaker Integration', () => {
   });
 
   it('3rd attempt does NOT trip circuit breaker (still runs reconciler)', async () => {
-    // Pre-seed counter to 2 (next call will be attempt 3 — should NOT trip)
+    // Pre-seed counter to 2 (simulating 2 prior attempts)
     await prisma.refinementAttemptCounter.create({
       data: {
         sessionId,
@@ -278,6 +287,10 @@ describe('Circuit Breaker Integration', () => {
       },
     });
 
+    // Simulate resubmitEmpathy: increment first (2 -> 3), then run reconciler
+    await incrementAttempts(sessionId, userAId, userBId);
+
+    // checkAttempts sees 3, which is not > 3, so circuit breaker does NOT trip.
     // runReconcilerForDirection will try to run the full reconciler analysis
     // which needs witnessing content. Since we don't have it, it should throw
     // (proving the circuit breaker did NOT fire and the function tried to proceed)

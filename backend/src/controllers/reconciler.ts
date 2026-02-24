@@ -22,7 +22,6 @@ import {
 import {
   runReconciler,
   generateShareOffer,
-  respondToShareOffer,
   respondToShareSuggestion,
   getReconcilerStatus,
   generateReconcilerSummary,
@@ -350,27 +349,14 @@ export async function respondToShareOfferHandler(
       return;
     }
 
-    // Respond to the share offer
-    let result;
-    if (parseResult.data.action) {
-      // Use new asymmetric reconciler service
-      result = await respondToShareSuggestion(sessionId, user.id, {
-        action: parseResult.data.action as 'accept' | 'decline' | 'refine',
-        refinedContent: parseResult.data.refinedContent,
-      });
-    } else if (parseResult.data.accept !== undefined) {
-      // Use legacy reciprocal reconciler service
-      result = await respondToShareOffer(sessionId, user.id, {
-        accept: parseResult.data.accept,
-        customContent: parseResult.data.customContent,
-      });
-    } else {
-      errorResponse(res, 'VALIDATION_ERROR', 'Either "action" or "accept" must be provided', 400);
-      return;
-    }
+    // Respond to the share offer using the asymmetric reconciler service
+    const result = await respondToShareSuggestion(sessionId, user.id, {
+      action: parseResult.data.action as 'accept' | 'decline' | 'refine',
+      refinedContent: parseResult.data.refinedContent,
+    });
 
     // Notify partner if content was shared
-    if (result.status === 'ACCEPTED' || result.status === 'shared') {
+    if (result.status === 'shared') {
       // Get partner ID
       const members = await prisma.relationshipMember.findMany({
         where: {
@@ -384,34 +370,25 @@ export async function respondToShareOfferHandler(
       const partnerId = members.find((m) => m.userId !== user.id)?.userId;
 
       if (partnerId) {
-        // Use more specific event if it's from asymmetric flow
-        const eventName = parseResult.data.action
-          ? 'empathy.context_shared'
-          : 'partner.additional_context_shared';
-
         // Include full empathy status to avoid extra HTTP round-trip
         const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
         const partnerEmpathyStatus = await buildEmpathyExchangeStatus(sessionId, partnerId);
 
-        await notifyPartner(sessionId, partnerId, eventName, {
+        await notifyPartner(sessionId, partnerId, 'empathy.context_shared', {
           stage: 2,
           sharedBy: user.id,
           content: result.sharedContent,
-          // Include forUserId so mobile can filter - only the guesser should see the modal
           forUserId: partnerId,
           empathyStatus: partnerEmpathyStatus,
-          // Include triggeredByUserId so frontend can filter out events triggered by self
           triggeredByUserId: user.id,
-        }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions
+        }, { excludeUserId: user.id });
       }
     }
 
     const response: RespondToShareOfferResponse = {
       status: result.status as any,
       sharedContent: result.sharedContent,
-      confirmationMessage: (result as any).confirmationMessage || 'Content shared successfully.',
       guesserUpdated: (result as any).guesserUpdated,
-      sharedMessage: (result as any).sharedMessage,
     };
 
     successResponse(res, response);

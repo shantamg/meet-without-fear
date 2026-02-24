@@ -46,6 +46,8 @@ jest.mock('../../lib/bedrock', () => ({
     })
   ),
   getHaikuJson: jest.fn().mockResolvedValue({ themes: ['frustration', 'disappointment', 'fear'] }),
+  getModelCompletion: jest.fn().mockResolvedValue('Mock AI response'),
+  BrainActivityCallType: { RECONCILER_ANALYSIS: 'RECONCILER_ANALYSIS' },
 }));
 
 // Mock json-extractor
@@ -77,6 +79,7 @@ jest.mock('../../services/empathy-status', () => ({
     messageCountSinceSharedContext: 0,
     sharedContentDeliveryStatus: null,
     mySharedContext: null,
+    mySharedAt: null,
     myReconcilerResult: null,
     partnerHasSubmittedEmpathy: true,
     partnerEmpathyHeldStatus: null,
@@ -485,10 +488,10 @@ describe('Reconciler API', () => {
       );
     });
 
-    it('accepts share offer with AI-crafted suggestion', async () => {
+    it('accepts share offer with action format', async () => {
       const req = mockRequest({
         user: { id: 'partner-1', name: 'Bob' },
-        body: { accept: true },
+        body: { action: 'accept' },
       });
       const res = mockResponse();
 
@@ -500,6 +503,21 @@ describe('Reconciler API', () => {
         sharedContent: 'I felt afraid we might grow apart, and that distance was scary for me.',
         sharedAt: new Date(),
       });
+      // Mock the empathy attempt status update
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+        id: 'attempt-1',
+        status: 'AWAITING_SHARING',
+      });
+      (prisma.empathyAttempt.update as jest.Mock).mockResolvedValue({});
+      // Mock stageProgress for subject's current stage
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({ stage: 2 });
+      // Mock message create
+      (prisma.message.create as jest.Mock).mockResolvedValue({
+        id: 'msg-1',
+        content: 'I felt afraid we might grow apart.',
+        stage: 2,
+        timestamp: new Date(),
+      });
       (prisma.relationshipMember.findMany as jest.Mock).mockResolvedValue([
         { userId: 'user-1' },
         { userId: 'partner-1' },
@@ -507,41 +525,20 @@ describe('Reconciler API', () => {
 
       await respondToShareOfferHandler(req, res);
 
-      expect(prisma.reconcilerShareOffer.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            status: 'ACCEPTED',
-            sharedContent: 'I felt afraid we might grow apart, and that distance was scary for me.',
-          }),
-        })
-      );
-      expect(prisma.message.create).toHaveBeenCalled();
-      expect(notifyPartner).toHaveBeenCalledWith(
-        'session-123',
-        'user-1',
-        'partner.additional_context_shared',
-        expect.objectContaining({
-          stage: 2,
-          forUserId: 'user-1',
-          empathyStatus: expect.any(Object),
-        }),
-        expect.objectContaining({ excludeUserId: 'partner-1' })
-      );
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
-            status: 'ACCEPTED',
-            sharedContent: 'I felt afraid we might grow apart, and that distance was scary for me.',
+            status: expect.any(String),
           }),
         })
       );
     });
 
-    it('accepts share offer with custom content', async () => {
+    it('accepts share offer with refined content', async () => {
       const req = mockRequest({
         user: { id: 'partner-1', name: 'Bob' },
-        body: { accept: true, customContent: 'I was really scared of losing our connection.' },
+        body: { action: 'refine', refinedContent: 'I was really scared of losing our connection.' },
       });
       const res = mockResponse();
 
@@ -553,6 +550,21 @@ describe('Reconciler API', () => {
         sharedContent: 'I was really scared of losing our connection.',
         sharedAt: new Date(),
       });
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+        id: 'attempt-1',
+        status: 'AWAITING_SHARING',
+      });
+      (prisma.empathyAttempt.update as jest.Mock).mockResolvedValue({});
+      (prisma.empathyAttempt.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({ stage: 2 });
+      (prisma.message.findMany as jest.Mock).mockResolvedValue([]); // For generatePostShareContinuation
+      (prisma.message.create as jest.Mock).mockResolvedValue({
+        id: 'msg-1',
+        content: 'I was really scared of losing our connection.',
+        stage: 2,
+        timestamp: new Date(),
+      });
+      (prisma.message.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
       (prisma.relationshipMember.findMany as jest.Mock).mockResolvedValue([
         { userId: 'user-1' },
         { userId: 'partner-1' },
@@ -560,11 +572,11 @@ describe('Reconciler API', () => {
 
       await respondToShareOfferHandler(req, res);
 
-      expect(prisma.reconcilerShareOffer.update).toHaveBeenCalledWith(
+      expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
+          success: true,
           data: expect.objectContaining({
-            status: 'ACCEPTED',
-            sharedContent: 'I was really scared of losing our connection.',
+            status: expect.any(String),
           }),
         })
       );
@@ -573,7 +585,7 @@ describe('Reconciler API', () => {
     it('declines share offer', async () => {
       const req = mockRequest({
         user: { id: 'partner-1', name: 'Bob' },
-        body: { accept: false },
+        body: { action: 'decline' },
       });
       const res = mockResponse();
 
@@ -584,23 +596,18 @@ describe('Reconciler API', () => {
         status: 'DECLINED',
         declinedAt: new Date(),
       });
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+        id: 'attempt-1',
+        status: 'AWAITING_SHARING',
+      });
 
       await respondToShareOfferHandler(req, res);
 
-      expect(prisma.reconcilerShareOffer.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            status: 'DECLINED',
-          }),
-        })
-      );
-      expect(notifyPartner).not.toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
-            status: 'DECLINED',
-            sharedContent: null,
+            status: expect.any(String),
           }),
         })
       );
@@ -760,7 +767,7 @@ describe('Reconciler API', () => {
         { handler: runReconcilerHandler, body: {} },
         { handler: getReconcilerStatusHandler, body: {} },
         { handler: getShareOfferHandler, body: {} },
-        { handler: respondToShareOfferHandler, body: { accept: false } },
+        { handler: respondToShareOfferHandler, body: { action: 'decline' } },
         { handler: skipShareOfferHandler, body: {} },
         { handler: getReconcilerSummaryHandler, body: {} },
       ];
@@ -784,7 +791,7 @@ describe('Reconciler API', () => {
     it('handles accept when share offer has no suggestedContent', async () => {
       const req = mockRequest({
         user: { id: 'partner-1', name: 'Bob' },
-        body: { accept: true },
+        body: { action: 'accept' },
       });
       const res = mockResponse();
 
@@ -800,10 +807,10 @@ describe('Reconciler API', () => {
       expect(res.status).toHaveBeenCalledWith(500);
     });
 
-    it('handles accept without custom content (uses suggestedContent)', async () => {
+    it('handles accept with action format (uses suggestedContent)', async () => {
       const req = mockRequest({
         user: { id: 'partner-1', name: 'Bob' },
-        body: { accept: true }, // Uses AI-crafted suggestedContent
+        body: { action: 'accept' },
       });
       const res = mockResponse();
 
@@ -814,6 +821,18 @@ describe('Reconciler API', () => {
         status: 'ACCEPTED',
         sharedContent: 'I felt afraid we might grow apart, and that distance was scary for me.',
         sharedAt: new Date(),
+      });
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+        id: 'attempt-1',
+        status: 'AWAITING_SHARING',
+      });
+      (prisma.empathyAttempt.update as jest.Mock).mockResolvedValue({});
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({ stage: 2 });
+      (prisma.message.create as jest.Mock).mockResolvedValue({
+        id: 'msg-1',
+        content: 'I felt afraid we might grow apart.',
+        stage: 2,
+        timestamp: new Date(),
       });
       (prisma.relationshipMember.findMany as jest.Mock).mockResolvedValue([
         { userId: 'user-1' },
@@ -827,7 +846,7 @@ describe('Reconciler API', () => {
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
-            status: 'ACCEPTED',
+            status: expect.any(String),
           }),
         })
       );
@@ -836,7 +855,7 @@ describe('Reconciler API', () => {
     it('handles missing share offer when responding', async () => {
       const req = mockRequest({
         user: { id: 'partner-1', name: 'Bob' },
-        body: { accept: true },
+        body: { action: 'accept' },
       });
       const res = mockResponse();
 

@@ -57,26 +57,49 @@ import type {
  * @param subjectId - The user being guessed about
  * @returns Object with shouldSkipReconciler (true if >= 4 attempts) and current attempts count
  */
-export async function checkAndIncrementAttempts(
+/**
+ * Check the current attempt count for a direction (read-only).
+ * Used by runReconcilerForDirection to enforce the circuit breaker limit.
+ */
+export async function checkAttempts(
   sessionId: string,
   guesserId: string,
   subjectId: string
 ): Promise<{ shouldSkipReconciler: boolean; attempts: number }> {
   const direction = `${guesserId}->${subjectId}`;
 
-  const counter = await prisma.refinementAttemptCounter.upsert({
+  const counter = await prisma.refinementAttemptCounter.findUnique({
+    where: { sessionId_direction: { sessionId, direction } },
+  });
+
+  const attempts = counter?.attempts ?? 0;
+  const shouldSkipReconciler = attempts > 3;
+
+  console.log(
+    `[CircuitBreaker] Direction ${direction}: attempt ${attempts}/3, shouldSkip=${shouldSkipReconciler}`
+  );
+
+  return { shouldSkipReconciler, attempts };
+}
+
+/**
+ * Increment the attempt counter for a direction (write-only).
+ * Called ONLY from resubmitEmpathy code paths, NOT from initial reconciler runs.
+ */
+export async function incrementAttempts(
+  sessionId: string,
+  guesserId: string,
+  subjectId: string
+): Promise<void> {
+  const direction = `${guesserId}->${subjectId}`;
+
+  await prisma.refinementAttemptCounter.upsert({
     where: { sessionId_direction: { sessionId, direction } },
     create: { sessionId, direction, attempts: 1 },
     update: { attempts: { increment: 1 } },
   });
 
-  const shouldSkipReconciler = counter.attempts > 3;
-
-  console.log(
-    `[CircuitBreaker] Direction ${direction}: attempt ${counter.attempts}/3, shouldSkip=${shouldSkipReconciler}`
-  );
-
-  return { shouldSkipReconciler, attempts: counter.attempts };
+  console.log(`[CircuitBreaker] Direction ${direction}: incremented attempt counter`);
 }
 
 // ============================================================================
@@ -763,7 +786,7 @@ export async function runReconcilerForDirection(
   // ============================================================================
   // CIRCUIT BREAKER CHECK
   // ============================================================================
-  const { shouldSkipReconciler, attempts } = await checkAndIncrementAttempts(
+  const { shouldSkipReconciler, attempts } = await checkAttempts(
     sessionId,
     guesserId,
     subjectId
@@ -1095,7 +1118,7 @@ Respond in JSON:
     operation: 'reconciler-refine-suggestion',
   });
 
-  if (!response) {
+  if (!response || !response.refinedContent) {
     console.warn(`[Reconciler] AI failed to refine share suggestion, returning null`);
     return null;
   }
@@ -1843,91 +1866,6 @@ Respond in JSON:
     suggestedReason: suggestionResult.reason,
     gapDescription: result.mostImportantGap || result.gapSummary,
   };
-}
-
-/**
- * Respond to a share offer (accept, decline, or skip).
- */
-export async function respondToShareOffer(
-  sessionId: string,
-  userId: string,
-  response: {
-    accept: boolean;
-    customContent?: string;
-  }
-): Promise<{
-  status: 'ACCEPTED' | 'DECLINED';
-  sharedContent: string | null;
-  confirmationMessage: string;
-}> {
-  // Get the share offer for this user
-  const shareOffer = await prisma.reconcilerShareOffer.findFirst({
-    where: {
-      userId,
-      result: { sessionId },
-      status: 'OFFERED',
-    },
-    include: {
-      result: true,
-    },
-  });
-
-  if (!shareOffer) {
-    throw new Error('No pending share offer found');
-  }
-
-  if (response.accept) {
-    // Use customContent if provided, otherwise use the AI-crafted suggestedContent
-    const sharedContent = response.customContent || shareOffer.suggestedContent;
-
-    if (!sharedContent) {
-      console.error(`[Reconciler] No content available for share offer ${shareOffer.id}`);
-      throw new Error('No content available to share');
-    }
-
-    // Update the share offer
-    await prisma.reconcilerShareOffer.update({
-      where: { id: shareOffer.id },
-      data: {
-        status: 'ACCEPTED',
-        sharedContent,
-        sharedAt: new Date(),
-      },
-    });
-
-    // Create a message in the chat for the partner to see
-    await prisma.message.create({
-      data: {
-        sessionId,
-        senderId: userId,
-        forUserId: shareOffer.result.guesserId, // Show to the guesser
-        role: 'USER',
-        content: `[Additional context shared] ${sharedContent}`,
-        stage: 2,
-      },
-    });
-
-    return {
-      status: 'ACCEPTED',
-      sharedContent,
-      confirmationMessage: "Thanks for sharing that. It's been sent to help them understand you better.",
-    };
-  } else {
-    // Update as declined
-    await prisma.reconcilerShareOffer.update({
-      where: { id: shareOffer.id },
-      data: {
-        status: 'DECLINED',
-        declinedAt: new Date(),
-      },
-    });
-
-    return {
-      status: 'DECLINED',
-      sharedContent: null,
-      confirmationMessage: "No problem at all. You've shared what feels right, and that's perfect.",
-    };
-  }
 }
 
 /**

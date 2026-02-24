@@ -1,11 +1,14 @@
 import { PrismaClient } from '@prisma/client';
-import { checkAndIncrementAttempts } from '../services/reconciler';
+import { checkAttempts, incrementAttempts } from '../services/reconciler';
 
 /**
  * Circuit Breaker Tests
  *
  * Tests the refinement attempt counter that prevents infinite refinement loops.
  * The circuit breaker limits empathy refinement attempts to 3 per direction.
+ *
+ * checkAttempts is read-only (used by reconciler runs).
+ * incrementAttempts is write-only (called only from resubmitEmpathy).
  */
 describe('Circuit Breaker', () => {
   let prisma: PrismaClient;
@@ -35,59 +38,77 @@ describe('Circuit Breaker', () => {
     });
   });
 
-  describe('checkAndIncrementAttempts', () => {
-    it('first attempt returns shouldSkip=false with attempts=1', async () => {
-      const result = await checkAndIncrementAttempts(
-        testSessionId,
-        userAId,
-        userBId
-      );
+  describe('checkAttempts (read-only)', () => {
+    it('returns shouldSkip=false with attempts=0 when no counter exists', async () => {
+      const result = await checkAttempts(testSessionId, userAId, userBId);
 
       expect(result.shouldSkipReconciler).toBe(false);
-      expect(result.attempts).toBe(1);
+      expect(result.attempts).toBe(0);
     });
 
-    it('third attempt returns shouldSkip=false with attempts=3', async () => {
-      // Make 3 attempts
-      await checkAndIncrementAttempts(testSessionId, userAId, userBId);
-      await checkAndIncrementAttempts(testSessionId, userAId, userBId);
-      const result = await checkAndIncrementAttempts(testSessionId, userAId, userBId);
+    it('does not create or modify the counter', async () => {
+      // Check twice — should not create a counter
+      await checkAttempts(testSessionId, userAId, userBId);
+      await checkAttempts(testSessionId, userAId, userBId);
 
+      const direction = `${userAId}->${userBId}`;
+      const counter = await prisma.refinementAttemptCounter.findUnique({
+        where: { sessionId_direction: { sessionId: testSessionId, direction } },
+      });
+
+      expect(counter).toBeNull();
+    });
+  });
+
+  describe('incrementAttempts (write-only)', () => {
+    it('creates counter with attempts=1 on first call', async () => {
+      await incrementAttempts(testSessionId, userAId, userBId);
+
+      const result = await checkAttempts(testSessionId, userAId, userBId);
+      expect(result.attempts).toBe(1);
+      expect(result.shouldSkipReconciler).toBe(false);
+    });
+
+    it('third increment results in shouldSkip=false', async () => {
+      await incrementAttempts(testSessionId, userAId, userBId);
+      await incrementAttempts(testSessionId, userAId, userBId);
+      await incrementAttempts(testSessionId, userAId, userBId);
+
+      const result = await checkAttempts(testSessionId, userAId, userBId);
       expect(result.shouldSkipReconciler).toBe(false);
       expect(result.attempts).toBe(3);
     });
 
-    it('fourth attempt returns shouldSkip=true', async () => {
-      // Make 4 attempts
-      await checkAndIncrementAttempts(testSessionId, userAId, userBId);
-      await checkAndIncrementAttempts(testSessionId, userAId, userBId);
-      await checkAndIncrementAttempts(testSessionId, userAId, userBId);
-      const result = await checkAndIncrementAttempts(testSessionId, userAId, userBId);
+    it('fourth increment results in shouldSkip=true', async () => {
+      await incrementAttempts(testSessionId, userAId, userBId);
+      await incrementAttempts(testSessionId, userAId, userBId);
+      await incrementAttempts(testSessionId, userAId, userBId);
+      await incrementAttempts(testSessionId, userAId, userBId);
 
+      const result = await checkAttempts(testSessionId, userAId, userBId);
       expect(result.shouldSkipReconciler).toBe(true);
       expect(result.attempts).toBe(4);
     });
 
     it('tracks directions independently', async () => {
-      // Make 3 attempts for direction A->B
-      await checkAndIncrementAttempts(testSessionId, userAId, userBId);
-      await checkAndIncrementAttempts(testSessionId, userAId, userBId);
-      await checkAndIncrementAttempts(testSessionId, userAId, userBId);
+      // Increment 3 times for direction A->B
+      await incrementAttempts(testSessionId, userAId, userBId);
+      await incrementAttempts(testSessionId, userAId, userBId);
+      await incrementAttempts(testSessionId, userAId, userBId);
 
-      // First attempt for direction B->A should be independent
-      const result = await checkAndIncrementAttempts(testSessionId, userBId, userAId);
-
+      // Direction B->A should still be at 0
+      const result = await checkAttempts(testSessionId, userBId, userAId);
       expect(result.shouldSkipReconciler).toBe(false);
-      expect(result.attempts).toBe(1);
+      expect(result.attempts).toBe(0);
     });
 
     it('persists across function calls', async () => {
-      // First call
-      const result1 = await checkAndIncrementAttempts(testSessionId, userAId, userBId);
+      await incrementAttempts(testSessionId, userAId, userBId);
+      const result1 = await checkAttempts(testSessionId, userAId, userBId);
       expect(result1.attempts).toBe(1);
 
-      // Second call should have attempts=2 (not 1)
-      const result2 = await checkAndIncrementAttempts(testSessionId, userAId, userBId);
+      await incrementAttempts(testSessionId, userAId, userBId);
+      const result2 = await checkAttempts(testSessionId, userAId, userBId);
       expect(result2.attempts).toBe(2);
     });
   });

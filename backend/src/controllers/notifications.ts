@@ -144,7 +144,20 @@ export async function getPendingActionsHandler(
       });
     }
 
-    successResponse(res, { actions });
+    // 4. Count sent tab updates (delivery/seen status changes the user hasn't been notified about)
+    const sentTabUpdates = await prisma.reconcilerShareOffer.count({
+      where: {
+        userId: user.id, // items I sent (I am the subject)
+        result: { sessionId },
+        status: 'ACCEPTED',
+        OR: [
+          { deliveryStatus: 'DELIVERED', lastDeliveryNotifiedAt: null },
+          { deliveryStatus: 'SEEN', lastSeenNotifiedAt: null },
+        ],
+      },
+    });
+
+    successResponse(res, { actions, sentTabUpdates });
   } catch (error) {
     console.error('[getPendingActionsHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get pending actions', 500);

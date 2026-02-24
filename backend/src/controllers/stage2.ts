@@ -33,6 +33,7 @@ import {
   getSharedContextForGuesser,
   generateShareSuggestionForDirection,
   hasContextAlreadyBeenShared,
+  incrementAttempts,
 } from '../services/reconciler';
 import { isSessionCreator } from '../utils/session';
 import { publishSessionEvent } from '../services/realtime';
@@ -1871,6 +1872,11 @@ export async function resubmitEmpathy(
     embedSessionContent(sessionId, user.id, turnId).catch((err: unknown) =>
       console.warn('[resubmitEmpathy] Failed to embed session content:', err)
     );
+
+    // Increment circuit breaker counter (only resubmits increment, not initial runs)
+    if (partnerId) {
+      await incrementAttempts(sessionId, user.id, partnerId);
+    }
 
     // Run reconciler for just this direction
     if (partnerId) {
