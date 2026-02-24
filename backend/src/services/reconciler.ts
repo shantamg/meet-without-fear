@@ -1864,6 +1864,7 @@ export async function getReconcilerStatus(sessionId: string): Promise<{
   const results = await prisma.reconcilerResult.findMany({
     where: { sessionId, supersededAt: null },
     include: { shareOffer: true },
+    orderBy: { guesserId: 'asc' },
   });
 
   if (results.length === 0) {
@@ -1915,6 +1916,7 @@ export async function generateReconcilerSummary(
   const results = await prisma.reconcilerResult.findMany({
     where: { sessionId, supersededAt: null },
     include: { shareOffer: true },
+    orderBy: { guesserId: 'asc' },
   });
 
   if (results.length !== 2) {

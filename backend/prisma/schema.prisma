@@ -131,7 +131,7 @@ model Session {
   invitations         Invitation[]
   userMemories        UserMemory[]
   validationFeedbackDrafts ValidationFeedbackDraft[]
-
+  refinementAttemptCounters RefinementAttemptCounter[]
 
   // Linked Inner Thoughts sessions for private reflection during partner session
   linkedInnerThoughts InnerWorkSession[] @relation("LinkedInnerThoughts")
@@ -537,6 +537,7 @@ model Message {
   extractedEmotions String[]
 
   @@index([sessionId, timestamp])
+  @@index([sessionId, forUserId, role])
   @@index([senderId])
   @@index([forUserId])
 }
@@ -750,10 +751,6 @@ model ReconcilerShareOffer {
   /// The AI-generated message offering to share (shown to user)
   offerMessage      String?  @db.Text
 
-  /// Quote options extracted from their witnessing (legacy, may be removed)
-  quoteOptions      Json?    // Array of QuoteOption objects
-  recommendedQuote  Int?     // Index of recommended quote
-
   /// User's refined version (if they edited the suggestion)
   refinedContent     String?  @db.Text
 
@@ -811,6 +808,7 @@ enum ReconcilerShareStatus {
 /// Prevents infinite refinement loops by limiting attempts to 3 per direction.
 model RefinementAttemptCounter {
   id        String   @id @default(cuid())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String
   direction String   // "guesserId->subjectId" composite string
   attempts  Int      @default(0)
@@ -818,7 +816,6 @@ model RefinementAttemptCounter {
   updatedAt DateTime @updatedAt
 
   @@unique([sessionId, direction])
-  @@index([sessionId])
 }
 
 // ============================================================================

@@ -12,9 +12,11 @@ import { checkAttempts, incrementAttempts } from '../services/reconciler';
  */
 describe('Circuit Breaker', () => {
   let prisma: PrismaClient;
-  const testSessionId = 'test-session-circuit-breaker';
-  const userAId = 'user-a';
-  const userBId = 'user-b';
+  const TEST_PREFIX = 'cb-unit';
+  const testSessionId = `${TEST_PREFIX}-session`;
+  const userAId = `${TEST_PREFIX}-user-a`;
+  const userBId = `${TEST_PREFIX}-user-b`;
+  const relationshipId = `${TEST_PREFIX}-rel`;
 
   beforeAll(() => {
     prisma = new PrismaClient();
@@ -25,17 +27,39 @@ describe('Circuit Breaker', () => {
   });
 
   beforeEach(async () => {
-    // Clean up test data before each test
-    await prisma.refinementAttemptCounter.deleteMany({
-      where: { sessionId: testSessionId },
+    // Clean up in dependency order
+    await prisma.refinementAttemptCounter.deleteMany({ where: { sessionId: testSessionId } });
+    await prisma.session.deleteMany({ where: { id: testSessionId } });
+    await prisma.relationshipMember.deleteMany({ where: { relationshipId } });
+    await prisma.relationship.deleteMany({ where: { id: relationshipId } });
+    await prisma.user.deleteMany({ where: { id: { in: [userAId, userBId] } } });
+
+    // Create required parent records for FK constraint
+    await prisma.user.createMany({
+      data: [
+        { id: userAId, email: `${TEST_PREFIX}-a@test.com`, name: 'Alice', firstName: 'Alice' },
+        { id: userBId, email: `${TEST_PREFIX}-b@test.com`, name: 'Bob', firstName: 'Bob' },
+      ],
+    });
+    await prisma.relationship.create({ data: { id: relationshipId } });
+    await prisma.relationshipMember.createMany({
+      data: [
+        { relationshipId, userId: userAId },
+        { relationshipId, userId: userBId },
+      ],
+    });
+    await prisma.session.create({
+      data: { id: testSessionId, relationshipId, status: 'ACTIVE' },
     });
   });
 
   afterEach(async () => {
-    // Clean up test data after each test
-    await prisma.refinementAttemptCounter.deleteMany({
-      where: { sessionId: testSessionId },
-    });
+    // Clean up in dependency order
+    await prisma.refinementAttemptCounter.deleteMany({ where: { sessionId: testSessionId } });
+    await prisma.session.deleteMany({ where: { id: testSessionId } });
+    await prisma.relationshipMember.deleteMany({ where: { relationshipId } });
+    await prisma.relationship.deleteMany({ where: { id: relationshipId } });
+    await prisma.user.deleteMany({ where: { id: { in: [userAId, userBId] } } });
   });
 
   describe('checkAttempts (read-only)', () => {
