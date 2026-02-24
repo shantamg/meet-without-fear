@@ -894,12 +894,13 @@ export async function confirmCommonGround(
       (cg) => cg.confirmedByA && cg.confirmedByB
     );
 
-    // Update stage progress if all confirmed
+    // Update stage progress if all confirmed by me
     if (allConfirmedByMe) {
       const gatesSatisfied = {
         ...(progress?.gatesSatisfied as Record<string, unknown> || {}),
         commonGroundConfirmed: true,
         confirmedAt: now.toISOString(),
+        commonGroundFoundAt: now.toISOString(),
       } satisfies Prisma.InputJsonValue;
 
       await prisma.stageProgress.update({
@@ -924,7 +925,90 @@ export async function confirmCommonGround(
       await notifyPartner(sessionId, partnerId, 'partner.common_ground_confirmed', {
         stage: 3,
         confirmedBy: user.id,
+        allConfirmedByBoth,
       });
+    }
+
+    // If both confirmed all common ground, trigger Stage 3 -> 4 transition
+    if (allConfirmedByBoth && partnerId) {
+      try {
+        // Also mark partner's Stage 3 as COMPLETED (they may not have updated yet)
+        await prisma.stageProgress.updateMany({
+          where: {
+            sessionId,
+            stage: 3,
+            userId: { in: [user.id, partnerId] },
+          },
+          data: {
+            status: 'COMPLETED',
+            completedAt: now,
+          },
+        });
+
+        // Create Stage 4 progress records for both users
+        const userIds = [user.id, partnerId];
+        for (const uid of userIds) {
+          await prisma.stageProgress.upsert({
+            where: {
+              sessionId_userId_stage: {
+                sessionId,
+                userId: uid,
+                stage: 4,
+              },
+            },
+            create: {
+              sessionId,
+              userId: uid,
+              stage: 4,
+              status: 'IN_PROGRESS',
+              startedAt: now,
+            },
+            update: {},
+          });
+        }
+
+        // Generate transition message for each user
+        const transitionContent =
+          "You've found common ground together -- that's a real breakthrough. " +
+          "Now let's move to the final stage: building concrete strategies and agreements " +
+          "that honor what you both need.";
+
+        const transitionMessages: Array<{ id: string; content: string; timestamp: Date }> = [];
+        for (const uid of userIds) {
+          const msg = await prisma.message.create({
+            data: {
+              sessionId,
+              senderId: null,
+              forUserId: uid,
+              role: 'AI',
+              content: transitionContent,
+              stage: 4,
+            },
+          });
+          transitionMessages.push({ id: msg.id, content: msg.content, timestamp: msg.timestamp });
+        }
+
+        // Publish stage completed event
+        const firstMessage = transitionMessages[0];
+        await publishSessionEvent(sessionId, 'partner.stage_completed', {
+          previousStage: 3,
+          currentStage: 4,
+          userId: user.id,
+          triggeredByUserId: user.id,
+          message: firstMessage
+            ? {
+                id: firstMessage.id,
+                content: firstMessage.content,
+                timestamp: firstMessage.timestamp,
+              }
+            : undefined,
+        });
+
+        console.log('[confirmCommonGround] Stage 3->4 transition completed for session', sessionId);
+      } catch (err) {
+        console.error('[confirmCommonGround] Failed to trigger Stage 3->4 transition:', err);
+        // Non-fatal - the transition can be triggered manually
+      }
     }
 
     successResponse(res, {
