@@ -100,6 +100,7 @@ export interface GetCommonGroundResponse {
   commonGround: CommonGroundDTO[];
   analysisComplete: boolean;
   bothConfirmed: boolean;
+  noOverlap?: boolean; // True when AI analysis found no shared needs
 }
 
 export interface ConfirmCommonGroundRequest {

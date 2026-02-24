@@ -673,8 +673,21 @@ export async function getCommonGround(
     });
 
     // If no common ground exists, trigger AI analysis
+    let analysisRan = false;
     if (commonGround.length === 0) {
       commonGround = await findCommonGround(sessionId, user.id, partnerId);
+      analysisRan = true;
+    }
+
+    // Handle zero common ground (AI found no overlap)
+    if (commonGround.length === 0 && analysisRan) {
+      successResponse(res, {
+        commonGround: [],
+        analysisComplete: true,
+        bothConfirmed: false,
+        noOverlap: true,
+      });
+      return;
     }
 
     // Determine which user is "A" and which is "B" (based on order of members)
@@ -698,6 +711,7 @@ export async function getCommonGround(
       })),
       analysisComplete: true,
       bothConfirmed: allConfirmed,
+      noOverlap: false,
     });
   } catch (error) {
     console.error('[getCommonGround] Error:', error);
