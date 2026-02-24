@@ -33,6 +33,8 @@ export type AboveInputPanel =
   | 'feel-heard' // Feel heard confirmation panel
   | 'share-suggestion' // Share suggestion from reconciler (Subject side)
   | 'accuracy-feedback' // Accuracy feedback for partner's empathy (Subject side)
+  | 'needs-review' // Needs review panel (Stage 3: confirm identified needs)
+  | 'common-ground-confirm' // Common ground confirmation panel (Stage 3: confirm shared needs)
   | 'waiting-banner' // General waiting banner
   | 'compact-agreement-bar' // Compact agreement bar during onboarding
   | null;
@@ -88,6 +90,18 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
 
   // Shared context viewing (Guesser side)
   hasUnviewedSharedContext: boolean; // Guesser must view Share tab before continuing
+
+  // Stage 3: Needs
+  needsAvailable: boolean; // Needs have been extracted and are available for review
+  allNeedsConfirmed: boolean; // All identified needs confirmed by user
+  needsShared: boolean; // User has consented to share needs
+  hasConfirmedNeedsLocal: boolean; // Local latch to prevent panel flash after confirming
+
+  // Stage 3: Common Ground
+  commonGroundAvailable: boolean; // Common ground analysis is complete and available
+  commonGroundAllConfirmedByMe: boolean; // Current user confirmed all common ground items
+  commonGroundAllConfirmedByBoth: boolean; // Both users confirmed all common ground items
+  hasConfirmedCommonGroundLocal: boolean; // Local latch to prevent panel flash after confirming
 }
 
 /**
@@ -117,6 +131,8 @@ export interface ChatUIState {
     showFeelHeardPanel: boolean;
     showShareSuggestionPanel: boolean;
     showAccuracyFeedbackPanel: boolean;
+    showNeedsReviewPanel: boolean;
+    showCommonGroundPanel: boolean;
     showWaitingBanner: boolean;
     showCompactAgreementBar: boolean;
   };
@@ -139,8 +155,11 @@ export interface ChatUIState {
  * 2. Invitation Panel - After signing, must craft and send invitation
  * 3. Feel Heard Panel - Stage 1 completion requires feeling heard
  * 4. Share Suggestion Panel - Subject must respond to share suggestion
- * 5. Empathy Statement Panel - User's empathy statement to review
- * 6. Waiting Banner - Any waiting status
+ * 5. Accuracy Feedback Panel - Subject validating partner's empathy
+ * 6. Empathy Statement Panel - User's empathy statement to review
+ * 7. Needs Review Panel - Stage 3: Review and confirm identified needs
+ * 8. Common Ground Panel - Stage 3: Confirm common ground items
+ * 9. Waiting Banner - Any waiting status
  */
 
 // ============================================================================
@@ -290,6 +309,75 @@ function computeShowAccuracyFeedbackPanel(inputs: ChatUIStateInputs): boolean {
 }
 
 /**
+ * Determines if needs review panel should show.
+ * Shows when needs are available but not yet confirmed, and user hasn't
+ * already used the local latch (prevents flash during server refetch).
+ */
+function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
+  const {
+    myStage,
+    needsAvailable,
+    allNeedsConfirmed,
+    needsShared,
+    hasConfirmedNeedsLocal,
+  } = inputs;
+
+  const currentStage = myStage ?? Stage.ONBOARDING;
+
+  // Must be in Stage 3
+  if (currentStage !== Stage.NEED_MAPPING) {
+    return false;
+  }
+
+  // Local latch: Once user confirms, hide panel immediately (prevents flash during refetch)
+  if (hasConfirmedNeedsLocal) {
+    return false;
+  }
+
+  // Already confirmed and shared - no need to show
+  if (allNeedsConfirmed || needsShared) {
+    return false;
+  }
+
+  // Must have needs to show
+  return needsAvailable;
+}
+
+/**
+ * Determines if common ground confirmation panel should show.
+ * Shows when common ground is available but not yet confirmed by the current user.
+ */
+function computeShowCommonGroundPanel(inputs: ChatUIStateInputs): boolean {
+  const {
+    myStage,
+    commonGroundAvailable,
+    commonGroundAllConfirmedByMe,
+    commonGroundAllConfirmedByBoth,
+    hasConfirmedCommonGroundLocal,
+  } = inputs;
+
+  const currentStage = myStage ?? Stage.ONBOARDING;
+
+  // Must be in Stage 3
+  if (currentStage !== Stage.NEED_MAPPING) {
+    return false;
+  }
+
+  // Local latch: Once user confirms, hide panel immediately
+  if (hasConfirmedCommonGroundLocal) {
+    return false;
+  }
+
+  // Already confirmed by both or by me - no need to show
+  if (commonGroundAllConfirmedByBoth || commonGroundAllConfirmedByMe) {
+    return false;
+  }
+
+  // Must have common ground available
+  return commonGroundAvailable;
+}
+
+/**
  * Determines which waiting statuses should show a banner.
  */
 function computeShouldShowWaitingBanner(status: WaitingStatusState): boolean {
@@ -342,7 +430,17 @@ function computeAboveInputPanel(
     return 'empathy-statement';
   }
 
-  // Priority 7: Waiting banner
+  // Priority 7: Needs review panel (Stage 3)
+  if (panels.showNeedsReviewPanel) {
+    return 'needs-review';
+  }
+
+  // Priority 8: Common ground confirmation panel (Stage 3)
+  if (panels.showCommonGroundPanel) {
+    return 'common-ground-confirm';
+  }
+
+  // Priority 9: Waiting banner
   if (panels.showWaitingBanner) {
     return 'waiting-banner';
   }
@@ -447,6 +545,8 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const showFeelHeardPanel = computeShowFeelHeardPanel(inputs);
   const showShareSuggestionPanel = computeShowShareSuggestionPanel(inputs);
   const showAccuracyFeedbackPanel = computeShowAccuracyFeedbackPanel(inputs);
+  const showNeedsReviewPanel = computeShowNeedsReviewPanel(inputs);
+  const showCommonGroundPanel = computeShowCommonGroundPanel(inputs);
   const showWaitingBanner = computeShouldShowWaitingBanner(waitingStatus);
   const showCompactAgreementBar = isInOnboardingUnsigned;
 
@@ -456,6 +556,8 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
     showFeelHeardPanel,
     showShareSuggestionPanel,
     showAccuracyFeedbackPanel,
+    showNeedsReviewPanel,
+    showCommonGroundPanel,
     showWaitingBanner,
     showCompactAgreementBar,
   };
@@ -533,5 +635,17 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     hasRespondedToShareOfferLocal: false,
     hasPartnerEmpathyForValidation: false,
     hasUnviewedSharedContext: false,
+
+    // Stage 3: Needs
+    needsAvailable: false,
+    allNeedsConfirmed: false,
+    needsShared: false,
+    hasConfirmedNeedsLocal: false,
+
+    // Stage 3: Common Ground
+    commonGroundAvailable: false,
+    commonGroundAllConfirmedByMe: false,
+    commonGroundAllConfirmedByBoth: false,
+    hasConfirmedCommonGroundLocal: false,
   };
 }

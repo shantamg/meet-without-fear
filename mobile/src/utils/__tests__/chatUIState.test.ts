@@ -544,3 +544,216 @@ describe('Typewriter Animation Integration', () => {
     expect(result.shouldAnimatePanel).toBe(true);
   });
 });
+
+// ============================================================================
+// Stage 3: Needs Review Panel Tests
+// ============================================================================
+
+describe('Needs Review Panel Visibility', () => {
+  it('shows when needs are available in Stage 3', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      needsAvailable: true,
+      allNeedsConfirmed: false,
+      needsShared: false,
+      hasConfirmedNeedsLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showNeedsReviewPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('needs-review');
+  });
+
+  it('does not show when not in Stage 3', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      needsAvailable: true,
+      allNeedsConfirmed: false,
+      needsShared: false,
+      hasConfirmedNeedsLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showNeedsReviewPanel).toBe(false);
+  });
+
+  it('does not show when needs are already confirmed', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      needsAvailable: true,
+      allNeedsConfirmed: true,
+      needsShared: false,
+      hasConfirmedNeedsLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showNeedsReviewPanel).toBe(false);
+  });
+
+  it('does not show when needs are already shared', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      needsAvailable: true,
+      allNeedsConfirmed: false,
+      needsShared: true,
+      hasConfirmedNeedsLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showNeedsReviewPanel).toBe(false);
+  });
+
+  it('does not show when local latch is set (prevents flash)', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      needsAvailable: true,
+      allNeedsConfirmed: false,
+      needsShared: false,
+      hasConfirmedNeedsLocal: true,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showNeedsReviewPanel).toBe(false);
+  });
+
+  it('does not show when no needs available', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      needsAvailable: false,
+      allNeedsConfirmed: false,
+      needsShared: false,
+      hasConfirmedNeedsLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showNeedsReviewPanel).toBe(false);
+  });
+});
+
+// ============================================================================
+// Stage 3: Common Ground Panel Tests
+// ============================================================================
+
+describe('Common Ground Panel Visibility', () => {
+  it('shows when common ground is available in Stage 3', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      commonGroundAvailable: true,
+      commonGroundAllConfirmedByMe: false,
+      commonGroundAllConfirmedByBoth: false,
+      hasConfirmedCommonGroundLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showCommonGroundPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('common-ground-confirm');
+  });
+
+  it('does not show when not in Stage 3', () => {
+    const inputs = createInputs({
+      myStage: Stage.STRATEGIC_REPAIR,
+      compactMySigned: true,
+      myProgress: { stage: Stage.STRATEGIC_REPAIR },
+      commonGroundAvailable: true,
+      commonGroundAllConfirmedByMe: false,
+      commonGroundAllConfirmedByBoth: false,
+      hasConfirmedCommonGroundLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showCommonGroundPanel).toBe(false);
+  });
+
+  it('does not show when already confirmed by me', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      commonGroundAvailable: true,
+      commonGroundAllConfirmedByMe: true,
+      commonGroundAllConfirmedByBoth: false,
+      hasConfirmedCommonGroundLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showCommonGroundPanel).toBe(false);
+  });
+
+  it('does not show when already confirmed by both', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      commonGroundAvailable: true,
+      commonGroundAllConfirmedByMe: false,
+      commonGroundAllConfirmedByBoth: true,
+      hasConfirmedCommonGroundLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showCommonGroundPanel).toBe(false);
+  });
+
+  it('does not show when local latch is set (prevents flash)', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      commonGroundAvailable: true,
+      commonGroundAllConfirmedByMe: false,
+      commonGroundAllConfirmedByBoth: false,
+      hasConfirmedCommonGroundLocal: true,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showCommonGroundPanel).toBe(false);
+  });
+
+  it('does not show when no common ground available', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      commonGroundAvailable: false,
+      commonGroundAllConfirmedByMe: false,
+      commonGroundAllConfirmedByBoth: false,
+      hasConfirmedCommonGroundLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showCommonGroundPanel).toBe(false);
+  });
+
+  it('needs-review takes priority over common-ground-confirm', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      needsAvailable: true,
+      allNeedsConfirmed: false,
+      needsShared: false,
+      hasConfirmedNeedsLocal: false,
+      commonGroundAvailable: true,
+      commonGroundAllConfirmedByMe: false,
+      commonGroundAllConfirmedByBoth: false,
+      hasConfirmedCommonGroundLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.aboveInputPanel).toBe('needs-review');
+  });
+});
