@@ -164,7 +164,7 @@ User asking how this works
       const dispatchedResponse = await handleDispatch(parsed.dispatchTag!, mockDispatchContext);
       // AI response should explain the stages
       expect(dispatchedResponse).toBeTruthy();
-      expect(dispatchedResponse.length).toBeGreaterThan(50);
+      expect(dispatchedResponse!.length).toBeGreaterThan(50);
     });
 
     it('handles HANDLE_MEMORY_REQUEST dispatch', async () => {

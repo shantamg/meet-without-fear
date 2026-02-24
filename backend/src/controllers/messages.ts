@@ -1310,6 +1310,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     } | undefined;
     let previousEmpathyContent: string | null = null;
     let stage2BSharedContext: string | null = null;
+    let isRefiningEmpathy = false;
+    let empathyDraftContent: string | null = null;
 
     if (currentStage === 2) {
       const refiningAttempt = await prisma.empathyAttempt.findFirst({
@@ -1324,7 +1326,22 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       if (refiningAttempt) {
         effectiveStage = 21; // Stage 2B: Informed Empathy
         previousEmpathyContent = refiningAttempt.content;
+        isRefiningEmpathy = true;
         console.log(`[sendMessageStream:${requestId}] Stage 2B routing: user has REFINING empathy, using stage 21`);
+
+        // Fetch current empathy draft (may have been saved from a previous turn in this conversation)
+        const currentEmpathyDraft = await prisma.empathyDraft.findUnique({
+          where: { sessionId_userId: { sessionId, userId: user.id } },
+          select: { content: true },
+        });
+        if (currentEmpathyDraft) {
+          empathyDraftContent = currentEmpathyDraft.content;
+          console.log(`[sendMessageStream:${requestId}] Stage 2B: found existing empathy draft (${empathyDraftContent.length} chars)`);
+        } else {
+          // Use the previous empathy attempt content as starting draft
+          empathyDraftContent = refiningAttempt.content;
+          console.log(`[sendMessageStream:${requestId}] Stage 2B: using previous empathy attempt as draft`);
+        }
 
         // Fetch reconciler result for gap context
         const reconcilerResult = await prisma.reconcilerResult.findFirst({
@@ -1365,6 +1382,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       reconcilerGapContext,
       previousEmpathyContent,
       sharedContextFromPartner: stage2BSharedContext || undefined,
+      empathyDraft: empathyDraftContent || undefined,
+      isRefiningEmpathy: isRefiningEmpathy || undefined,
     }, { isInvitationPhase, isRefiningInvitation });
 
     // Prompt already includes semantic tag format instructions via buildResponseProtocol()
@@ -1700,11 +1719,17 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
         const dispatchedResponse = await handleDispatch(dispatchTag, dispatchContext);
 
-        // Use ONLY the dispatch response - ignore any acknowledgment text the AI may have sent
-        // (The prompt instructs AI to not send visible text, but in case it does, we ignore it)
-        console.log(`[sendMessageStream:${requestId}] Dispatch response only (ignoring any streamed acknowledgment)`);
-        sendSSE(res, { event: 'chunk', data: { text: dispatchedResponse } });
-        accumulatedText = dispatchedResponse;
+        if (dispatchedResponse !== null) {
+          // Use ONLY the dispatch response - ignore any acknowledgment text the AI may have sent
+          // (The prompt instructs AI to not send visible text, but in case it does, we ignore it)
+          console.log(`[sendMessageStream:${requestId}] Dispatch response only (ignoring any streamed acknowledgment)`);
+          sendSSE(res, { event: 'chunk', data: { text: dispatchedResponse } });
+          accumulatedText = dispatchedResponse;
+        } else {
+          // Unknown dispatch tag — fall through and use the AI's original streamed response
+          console.log(`[sendMessageStream:${requestId}] Unknown dispatch tag "${dispatchTag}" — using original AI response`);
+          isDispatchMessage = false;
+        }
       }
 
       finalizeTurnMetrics(turnId);

@@ -564,27 +564,64 @@ export async function orchestrateResponse(
 
         const dispatchStart = Date.now();
         const dispatchedResponse = await handleDispatch(parsed.dispatchTag, dispatchContext);
-        traceSteps.push({
-          name: `Dispatch: ${parsed.dispatchTag}`,
-          type: 'dispatch',
-          startMs: dispatchStart - startTime,
-          durationMs: Date.now() - dispatchStart,
-          result: `${dispatchedResponse.length} chars`,
-          status: 'success',
-        });
 
-        const totalDuration = Date.now() - startTime;
-        const turnTrace: TurnTrace = { totalDurationMs: totalDuration, modelUsed: routingDecision.model, usedMock: false, steps: traceSteps };
+        // If dispatch handler returned null (unknown tag), fall through to normal response flow
+        if (dispatchedResponse === null) {
+          console.log(`[AI Orchestrator] Unknown dispatch tag "${parsed.dispatchTag}" — using original AI response`);
+          traceSteps.push({
+            name: `Dispatch (ignored): ${parsed.dispatchTag}`,
+            type: 'dispatch',
+            startMs: dispatchStart - startTime,
+            durationMs: Date.now() - dispatchStart,
+            result: 'Unknown tag — fell through to normal response',
+            status: 'skipped',
+          });
+          // Fall through to normal response flow below
+        } else {
+          traceSteps.push({
+            name: `Dispatch: ${parsed.dispatchTag}`,
+            type: 'dispatch',
+            startMs: dispatchStart - startTime,
+            durationMs: Date.now() - dispatchStart,
+            result: `${dispatchedResponse.length} chars`,
+            status: 'success',
+          });
 
-        // If AI provided an initial response along with dispatch, return both
-        // This enables two-message flow: acknowledgment first, then detailed response
-        if (parsed.response && parsed.response.trim()) {
-          console.log(`[AI Orchestrator] Two-message dispatch flow: initial="${parsed.response.substring(0, 50)}..."`);
+          const totalDuration = Date.now() - startTime;
+          const turnTrace: TurnTrace = { totalDurationMs: totalDuration, modelUsed: routingDecision.model, usedMock: false, steps: traceSteps };
+
+          // If AI provided an initial response along with dispatch, return both
+          // This enables two-message flow: acknowledgment first, then detailed response
+          if (parsed.response && parsed.response.trim()) {
+            console.log(`[AI Orchestrator] Two-message dispatch flow: initial="${parsed.response.substring(0, 50)}..."`);
+            finalizeTurnMetrics(context.turnId);
+            // Store trace on the ORCHESTRATED_RESPONSE activity via brain service
+            storeTurnTrace(context.sessionId, turnId, turnTrace);
+            return {
+              response: parsed.response, // First message (AI's acknowledgment)
+              memoryIntent,
+              contextBundle,
+              retrievalPlan,
+              retrievedContext,
+              usedMock: false,
+              offerFeelHeardCheck: false,
+              offerReadyToShare: false,
+              invitationMessage: null,
+              proposedEmpathyStatement: null,
+              analysis: `DISPATCHED: ${parsed.dispatchTag} | Original thinking: ${parsed.thinking}`,
+              initialResponse: parsed.response, // Explicit initial response
+              dispatchedResponse, // Second message (handler response)
+              dispatchTag: parsed.dispatchTag,
+              modelUsed: routingDecision.model,
+              routingDecision,
+            };
+          }
+
+          // No initial response - just return the dispatched response (backward compat)
           finalizeTurnMetrics(context.turnId);
-          // Store trace on the ORCHESTRATED_RESPONSE activity via brain service
           storeTurnTrace(context.sessionId, turnId, turnTrace);
           return {
-            response: parsed.response, // First message (AI's acknowledgment)
+            response: dispatchedResponse,
             memoryIntent,
             contextBundle,
             retrievalPlan,
@@ -595,34 +632,12 @@ export async function orchestrateResponse(
             invitationMessage: null,
             proposedEmpathyStatement: null,
             analysis: `DISPATCHED: ${parsed.dispatchTag} | Original thinking: ${parsed.thinking}`,
-            initialResponse: parsed.response, // Explicit initial response
-            dispatchedResponse, // Second message (handler response)
+            dispatchedResponse,
             dispatchTag: parsed.dispatchTag,
             modelUsed: routingDecision.model,
             routingDecision,
           };
         }
-
-        // No initial response - just return the dispatched response (backward compat)
-        finalizeTurnMetrics(context.turnId);
-        storeTurnTrace(context.sessionId, turnId, turnTrace);
-        return {
-          response: dispatchedResponse,
-          memoryIntent,
-          contextBundle,
-          retrievalPlan,
-          retrievedContext,
-          usedMock: false,
-          offerFeelHeardCheck: false,
-          offerReadyToShare: false,
-          invitationMessage: null,
-          proposedEmpathyStatement: null,
-          analysis: `DISPATCHED: ${parsed.dispatchTag} | Original thinking: ${parsed.thinking}`,
-          dispatchedResponse,
-          dispatchTag: parsed.dispatchTag,
-          modelUsed: routingDecision.model,
-          routingDecision,
-        };
       }
 
       // Normal response flow

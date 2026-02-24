@@ -28,7 +28,7 @@ describe('dispatch-handler', () => {
 
       // Should call the AI and return a response
       expect(result).toBeTruthy();
-      expect(result.length).toBeGreaterThan(10);
+      expect(result!.length).toBeGreaterThan(10);
     });
 
     it('returns memory guidance for HANDLE_MEMORY_REQUEST', async () => {
@@ -38,16 +38,15 @@ describe('dispatch-handler', () => {
       expect(result).toContain('Things to Remember');
     });
 
-    it('returns generic message for unknown dispatch tag', async () => {
+    it('returns null for unknown dispatch tag (falls through to original AI response)', async () => {
       const result = await handleDispatch('UNKNOWN_TAG', mockContext);
 
-      expect(result).toBeTruthy();
-      expect(result.length).toBeGreaterThan(10);
+      expect(result).toBeNull();
     });
 
-    it('handles empty dispatch tag gracefully', async () => {
+    it('returns null for empty dispatch tag', async () => {
       const result = await handleDispatch('', mockContext);
-      expect(result).toBeTruthy();
+      expect(result).toBeNull();
     });
 
     it('passes conversation history to AI for context-aware responses', async () => {

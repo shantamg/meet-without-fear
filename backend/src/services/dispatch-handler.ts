@@ -92,12 +92,13 @@ NEVER say things like "you'd need to set up in real life" - the conversation hap
 
 /**
  * Handle a dispatch tag with full conversation context.
- * Returns a contextual AI response for the specific scenario.
+ * Returns a contextual AI response for the specific scenario,
+ * or null if the tag is unrecognized (letting the original AI response through).
  */
 export async function handleDispatch(
   dispatchTag: DispatchTag,
   context: DispatchContext
-): Promise<string> {
+): Promise<string | null> {
   console.log(`[Dispatch Handler] Triggered: ${dispatchTag}`);
 
   switch (dispatchTag) {
@@ -114,8 +115,11 @@ export async function handleDispatch(
 Is there something specific you'd like to note down?`;
 
     default:
-      console.warn(`[Dispatch Handler] Unknown tag: ${dispatchTag}`);
-      return "I'm here to help. What would you like to explore?";
+      // Unknown tags are ignored — the AI's original streamed response is used instead.
+      // This handles cases where the AI freelances dispatch tags (e.g. STAGE_4_REPAIR)
+      // that don't have dedicated handlers.
+      console.warn(`[Dispatch Handler] Unknown tag ignored (using AI response): ${dispatchTag}`);
+      return null;
   }
 }
 
