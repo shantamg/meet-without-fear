@@ -20,11 +20,16 @@ const corsOrigins: (string | RegExp)[] = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
+  'http://localhost:8081',
 ];
 if (process.env.DASHBOARD_URL) {
   corsOrigins.push(process.env.DASHBOARD_URL);
 }
-app.use(cors({ origin: corsOrigins }));
+const corsOptions: cors.CorsOptions = { origin: corsOrigins };
+if (process.env.E2E_AUTH_BYPASS === 'true') {
+  corsOptions.allowedHeaders = '*';
+}
+app.use(cors(corsOptions));
 
 // Compression middleware - skip SSE endpoints to prevent buffering
 app.use(
