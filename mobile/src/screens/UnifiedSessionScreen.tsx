@@ -899,9 +899,11 @@ export function UnifiedSessionScreen({
           (hasEverConfirmedFeelHeard.current || isConfirmingFeelHeard ? new Date().toISOString() : null),
       },
       sessionCreatedAt: session?.createdAt,
+      mySharedAt: empathyStatusData?.mySharedAt,
     };
 
     // Derive indicators from session data
+    // (includes self-shared context indicator derived from mySharedAt)
     const derivedIndicators = deriveIndicators(sessionData);
 
     // Convert to ChatIndicatorItem format (add 'type' field)
@@ -913,27 +915,28 @@ export function UnifiedSessionScreen({
       metadata: indicator.metadata,
     }));
 
-    // Add indicators for SHARED_CONTEXT and EMPATHY_STATEMENT messages
-    // Both types link to the Partner tab where full content is shown
+    // Add indicators for partner-authored SHARED_CONTEXT and EMPATHY_STATEMENT messages only.
+    // Self-authored context-shared indicator is now derived from mySharedAt in deriveIndicators().
     const sharedContentIndicators = messages
-      .filter((m) => m.role === MessageRole.SHARED_CONTEXT || m.role === MessageRole.EMPATHY_STATEMENT)
-      .map((m) => {
-        // Determine if this is from the current user or partner
+      .filter((m) => {
+        if (m.role !== MessageRole.SHARED_CONTEXT && m.role !== MessageRole.EMPATHY_STATEMENT) return false;
+        // Only include partner-authored messages (self-referential messages have been removed)
         const isFromMe = user?.id ? m.senderId === user.id : false;
-        return {
-          type: 'indicator' as const,
-          indicatorType: m.role === MessageRole.EMPATHY_STATEMENT ? 'empathy-shared' as const : 'context-shared' as const,
-          id: `shared-${m.id}`,
-          timestamp: m.timestamp,
-          metadata: {
-            isFromMe,
-            partnerName: partnerName || 'Partner',
-          },
-        };
-      });
+        return !isFromMe;
+      })
+      .map((m) => ({
+        type: 'indicator' as const,
+        indicatorType: m.role === MessageRole.EMPATHY_STATEMENT ? 'empathy-shared' as const : 'context-shared' as const,
+        id: `shared-${m.id}`,
+        timestamp: m.timestamp,
+        metadata: {
+          isFromMe: false,
+          partnerName: partnerName || 'Partner',
+        },
+      }));
 
     return [...baseIndicators, ...sharedContentIndicators];
-  }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName]);
+  }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt]);
 
   // -------------------------------------------------------------------------
   // Effective Stage (accounts for compact signed but stage not yet updated)

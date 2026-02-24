@@ -99,6 +99,9 @@ export interface SessionIndicatorData {
 
   /** Session creation timestamp (fallback for compact indicator) */
   sessionCreatedAt?: string;
+
+  /** When current user shared context via ReconcilerShareOffer (for self-indicator) */
+  mySharedAt?: string | null;
 }
 
 // ============================================================================
@@ -237,6 +240,25 @@ export function deriveIndicators(data: SessionIndicatorData): IndicatorItem[] {
       indicatorType: 'agreement-reached',
       id: 'agreement-reached',
       timestamp: milestones.agreementReachedAt,
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Context Shared (self) Indicator
+  // ---------------------------------------------------------------------------
+  // Shows when the current user shared context via ReconcilerShareOffer.
+  // Derived from mySharedAt in empathy status cache (not from SHARED_CONTEXT messages,
+  // since self-referential messages have been removed).
+  if (data.mySharedAt) {
+    items.push({
+      type: 'indicator',
+      indicatorType: 'context-shared',
+      id: 'context-shared-self',
+      timestamp: data.mySharedAt,
+      metadata: {
+        isFromMe: true,
+        partnerName: data.partnerName,
+      },
     });
   }
 
