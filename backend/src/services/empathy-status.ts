@@ -72,6 +72,7 @@ export async function buildEmpathyExchangeStatus(
       where: {
         sessionId,
         guesserId: userId,
+        supersededAt: null,
       },
       select: {
         areaHint: true,
@@ -153,6 +154,7 @@ export async function buildEmpathyExchangeStatus(
       where: {
         sessionId,
         guesserId: userId,
+        supersededAt: null,
       },
       select: {
         gapSeverity: true,

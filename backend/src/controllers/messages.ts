@@ -158,7 +158,19 @@ export async function confirmFeelHeard(
       include: {
         relationship: {
           include: {
-            members: true,
+            members: {
+              select: {
+                userId: true,
+                nickname: true,
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    firstName: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -293,22 +305,43 @@ export async function confirmFeelHeard(
 
     if (confirmed) {
       try {
-        // Get partner name for the transition message
-        const partnerId = await getPartnerUserId(sessionId, user.id);
+        // Get partner name (using nickname) and status for the transition message
+        const myMember = session.relationship.members.find(
+          (m) => m.userId === user.id
+        );
+        const partnerMember = session.relationship.members.find(
+          (m) => m.userId !== user.id
+        );
+
         let partnerName: string | undefined;
-        if (partnerId) {
-          const partner = await prisma.user.findUnique({
-            where: { id: partnerId },
-            select: { name: true },
+        let partnerStatus: 'not_joined' | 'in_progress' | 'completed' = 'not_joined';
+
+        if (partnerMember) {
+          // Use nickname (what I call my partner) → firstName → name
+          partnerName = myMember?.nickname ||
+            partnerMember.user.firstName ||
+            partnerMember.user.name ||
+            undefined;
+
+          // Check partner's stage progress to determine their status
+          const partnerProgress = await prisma.stageProgress.findFirst({
+            where: {
+              sessionId,
+              userId: partnerMember.userId,
+            },
+            orderBy: { stage: 'desc' },
           });
-          partnerName = partner?.name || undefined;
+
+          if (partnerProgress) {
+            partnerStatus = 'in_progress';
+          }
         } else {
-          // Get from invitation if partner hasn't joined yet
+          // Partner hasn't joined yet - get name from invitation
           const invitation = await prisma.invitation.findFirst({
             where: { sessionId, invitedById: user.id },
             select: { name: true },
           });
-          partnerName = invitation?.name || undefined;
+          partnerName = myMember?.nickname || invitation?.name || undefined;
         }
 
         // Fetch Stage 1 conversation history for context
@@ -337,6 +370,7 @@ export async function confirmFeelHeard(
         const promptContext: PromptContext = {
           userName,
           partnerName,
+          partnerStatus,
           turnCount: 1,
           emotionalIntensity: 5,
           contextBundle: {
@@ -401,13 +435,17 @@ export async function confirmFeelHeard(
           callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
         });
 
+        const mutualPhrase = partnerStatus === 'not_joined'
+          ? `${partnerName || 'Your partner'} will be doing this same thing for you on their side.`
+          : `${partnerName || 'Your partner'} is doing this same thing for you on their side.`;
+
         let transitionContent: string;
         if (aiResponse) {
           // Parse the semantic tag response (micro-tag format)
           const parsed = parseMicroTagResponse(aiResponse);
-          transitionContent = parsed.response.trim() || `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\nHere's what comes next: there are a few more steps in this process. First, each of you tries to understand what the other person might be going through. Then you'll figure out what you each actually need, and eventually work on a way forward together.\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${partnerName || 'Your partner'} is doing this same thing for you on their side.\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
+          transitionContent = parsed.response.trim() || `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\nHere's what comes next: there are a few more steps in this process. First, each of you tries to understand what the other person might be going through. Then you'll figure out what you each actually need, and eventually work on a way forward together.\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
         } else {
-          transitionContent = `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\nHere's what comes next: there are a few more steps in this process. First, each of you tries to understand what the other person might be going through. Then you'll figure out what you each actually need, and eventually work on a way forward together.\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${partnerName || 'Your partner'} is doing this same thing for you on their side.\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
+          transitionContent = `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\nHere's what comes next: there are a few more steps in this process. First, each of you tries to understand what the other person might be going through. Then you'll figure out what you each actually need, and eventually work on a way forward together.\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
         }
 
         // Save the transition message to the database as Stage 2
@@ -1293,6 +1331,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           where: {
             sessionId,
             guesserId: user.id,
+            supersededAt: null,
           },
           orderBy: { createdAt: 'desc' },
         });

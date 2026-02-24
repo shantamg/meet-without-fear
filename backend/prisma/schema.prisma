@@ -623,6 +623,7 @@ model EmpathyAttempt {
 
   // Reconciler flow fields
   status        EmpathyStatus @default(HELD)
+  statusVersion Int           @default(0)  // Incremented on every status change for event ordering
   revealedAt    DateTime?
   revisionCount Int           @default(0)
 
@@ -716,14 +717,17 @@ model ReconcilerResult {
   iteration         Int      @default(1)
   /// Whether this result was produced by the circuit breaker forcing READY
   wasCircuitBreakerTrip Boolean @default(false)
+  /// When set, this result has been superseded by a newer analysis (audit trail)
+  supersededAt      DateTime?
 
   createdAt DateTime @default(now())
 
   // Relationship to share offer
   shareOffer ReconcilerShareOffer?
 
-  @@unique([sessionId, guesserId, subjectId])
+  @@index([sessionId, guesserId, subjectId])
   @@index([sessionId])
+  @@index([sessionId, subjectId])
 }
 
 /// Tracks the share suggestion made to a user (the subject) and their response.

@@ -125,6 +125,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         where: { sessionId, sourceUserId: userAId },
         data: {
           status: statusA,
+          statusVersion: { increment: 1 },
         },
       });
 
@@ -185,6 +186,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         where: { sessionId, sourceUserId: userBId },
         data: {
           status: statusB,
+          statusVersion: { increment: 1 },
         },
       });
 
@@ -669,6 +671,7 @@ export async function consentToShare(
           },
           data: {
             status: 'ANALYZING',
+            statusVersion: { increment: 1 },
           },
         });
 
@@ -1076,6 +1079,7 @@ export async function validateEmpathy(
         where: { id: partnerAttempt.id },
         data: {
           status: 'VALIDATED',
+          statusVersion: { increment: 1 },
           deliveryStatus: 'SEEN',
           seenAt: new Date(),
         },
@@ -1246,6 +1250,7 @@ export async function skipRefinement(
       where: { id: attempt.id },
       data: {
         status: 'VALIDATED', // Treat as validated for collecting purposes
+        statusVersion: { increment: 1 },
         deliveryStatus: 'SEEN',
       },
     });
@@ -1669,6 +1674,7 @@ export async function refineEmpathy(
       where: {
         sessionId,
         guesserId: user.id,
+        supersededAt: null,
       },
       select: {
         areaHint: true,
@@ -1820,15 +1826,20 @@ export async function resubmitEmpathy(
       data: {
         content,
         status: 'ANALYZING',
+        statusVersion: { increment: 1 },
         revisionCount: attempt.revisionCount + 1,
       },
     });
 
-    // Delete the old reconciler result so it re-runs
-    await prisma.reconcilerResult.deleteMany({
+    // Mark old reconciler results as superseded (preserves audit trail)
+    await prisma.reconcilerResult.updateMany({
       where: {
         sessionId,
         guesserId: user.id,
+        supersededAt: null,
+      },
+      data: {
+        supersededAt: new Date(),
       },
     });
 

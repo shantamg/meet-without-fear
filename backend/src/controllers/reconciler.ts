@@ -393,6 +393,10 @@ export async function respondToShareOfferHandler(
 
     successResponse(res, response);
   } catch (error) {
+    if (error instanceof Error && error.message === 'Share offer already processed') {
+      errorResponse(res, 'CONFLICT', 'Share offer has already been processed', 409);
+      return;
+    }
     console.error('[respondToShareOfferHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to respond to share offer', 500);
   }
