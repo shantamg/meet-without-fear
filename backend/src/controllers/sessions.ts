@@ -357,8 +357,20 @@ export async function getProgress(req: Request, res: Response): Promise<void> {
     const stage1Gates = myStage1Record?.gatesSatisfied as {
       feelHeardConfirmedAt?: string;
     } | null;
+
+    // Get user's Stage 3 progress for need mapping milestones
+    const myStage3Record = session.stageProgress.find(
+      (sp) => sp.userId === user.id && sp.stage === 3
+    );
+    const stage3Gates = myStage3Record?.gatesSatisfied as {
+      needsIdentifiedAt?: string;
+      commonGroundFoundAt?: string;
+    } | null;
+
     const milestones = {
       feelHeardConfirmedAt: stage1Gates?.feelHeardConfirmedAt ?? null,
+      needsIdentifiedAt: stage3Gates?.needsIdentifiedAt ?? null,
+      commonGroundFoundAt: stage3Gates?.commonGroundFoundAt ?? null,
     };
 
     successResponse(res, {
