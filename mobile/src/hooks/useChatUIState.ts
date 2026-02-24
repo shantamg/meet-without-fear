@@ -98,7 +98,14 @@ export interface UseChatUIStateProps {
 
   // Stage 3: Needs
   allNeedsConfirmed: boolean;
+  needsAvailable: boolean;
+  needsShared: boolean;
+  hasConfirmedNeedsLocal: boolean;
   commonGroundCount: number;
+  commonGroundAvailable: boolean;
+  commonGroundAllConfirmedByMe: boolean;
+  commonGroundAllConfirmedByBoth: boolean;
+  hasConfirmedCommonGroundLocal: boolean;
 
   // Stage 4: Strategies
   strategyPhase: StrategyPhase | string;
@@ -176,7 +183,14 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasRespondedToShareOfferLocal,
     partnerEmpathyValidated,
     allNeedsConfirmed,
+    needsAvailable,
+    needsShared,
+    hasConfirmedNeedsLocal,
     commonGroundCount,
+    commonGroundAvailable,
+    commonGroundAllConfirmedByMe,
+    commonGroundAllConfirmedByBoth,
+    hasConfirmedCommonGroundLocal,
     strategyPhase,
     overlappingStrategiesCount,
   } = props;
@@ -232,6 +246,18 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasRespondedToShareOfferLocal,
     hasPartnerEmpathyForValidation: hasPartnerEmpathy && !partnerEmpathyValidated,
     hasUnviewedSharedContext: empathyStatusData?.hasUnviewedSharedContext ?? false,
+
+    // Stage 3: Needs
+    needsAvailable,
+    allNeedsConfirmed,
+    needsShared,
+    hasConfirmedNeedsLocal,
+
+    // Stage 3: Common Ground
+    commonGroundAvailable,
+    commonGroundAllConfirmedByMe,
+    commonGroundAllConfirmedByBoth,
+    hasConfirmedCommonGroundLocal,
   }), [
     myProgress?.stage,
     partnerProgress?.stage,
@@ -241,7 +267,14 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasPartnerEmpathy,
     shareOfferData,
     allNeedsConfirmed,
+    needsAvailable,
+    needsShared,
+    hasConfirmedNeedsLocal,
     commonGroundCount,
+    commonGroundAvailable,
+    commonGroundAllConfirmedByMe,
+    commonGroundAllConfirmedByBoth,
+    hasConfirmedCommonGroundLocal,
     strategyPhase,
     overlappingStrategiesCount,
     sessionStatus,

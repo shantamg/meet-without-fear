@@ -1333,6 +1333,10 @@ export function useRefineValidationFeedback(
 
 /**
  * Get AI-identified needs for the current user.
+ *
+ * Automatically polls every 3 seconds when the backend returns
+ * `extracting: true`, indicating AI extraction is in progress.
+ * Polling stops once needs are available or extraction completes.
  */
 export function useNeeds(
   sessionId: string | undefined,
@@ -1346,6 +1350,15 @@ export function useNeeds(
     },
     enabled: !!sessionId,
     staleTime: 60_000, // Needs analysis doesn't change frequently
+    // Poll every 3s while extraction is in progress
+    // Note: extracting field added to GetNeedsResponse in shared/src/dto/needs.ts
+    refetchInterval: (query) => {
+      const data = query.state.data as (GetNeedsResponse & { extracting?: boolean }) | undefined;
+      if (data?.extracting && (!data.needs || data.needs.length === 0)) {
+        return 3_000; // Poll every 3 seconds
+      }
+      return false; // Stop polling
+    },
     ...options,
   });
 }
@@ -1442,21 +1455,33 @@ export function useConsentShareNeeds(
 
 /**
  * Get common ground (shared needs between both users).
+ *
+ * Query is gated by allNeedsConfirmed and needsShared to prevent
+ * racing with the needs confirmation flow. Common ground analysis
+ * only runs server-side after both users share needs, so querying
+ * before that returns empty results and wastes network.
  */
 export function useCommonGround(
   sessionId: string | undefined,
+  conditions?: {
+    allNeedsConfirmed?: boolean;
+    needsShared?: boolean;
+  },
   options?: Omit<
     UseQueryOptions<GetCommonGroundResponse, ApiClientError>,
     'queryKey' | 'queryFn'
   >
 ) {
+  const allNeedsConfirmed = conditions?.allNeedsConfirmed ?? true;
+  const needsShared = conditions?.needsShared ?? true;
+
   return useQuery({
     queryKey: stageKeys.commonGround(sessionId || ''),
     queryFn: async () => {
       if (!sessionId) throw new Error('Session ID is required');
       return get<GetCommonGroundResponse>(`/sessions/${sessionId}/common-ground`);
     },
-    enabled: !!sessionId,
+    enabled: !!sessionId && allNeedsConfirmed && needsShared,
     staleTime: 30_000,
     ...options,
   });

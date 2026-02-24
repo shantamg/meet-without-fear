@@ -171,8 +171,12 @@ export function UnifiedSessionScreen({
     setLiveProposedEmpathyStatement,
     aiRecommendsReadyToShare: _aiRecommendsReadyToShare,
     setAiRecommendsReadyToShare,
+    needs,
+    needsData,
     allNeedsConfirmed,
     commonGround,
+    commonGroundData,
+    commonGroundComplete,
     strategyPhase,
     strategies,
     overlappingStrategies,
@@ -209,6 +213,7 @@ export function UnifiedSessionScreen({
     handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
     handleConfirmAllNeeds,
+    handleConfirmCommonGround,
     handleRequestMoreStrategies,
     handleMarkReadyToRank,
     handleSubmitRankings,
@@ -471,6 +476,40 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Partner considering share, refetching status');
         queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
+
+      // -----------------------------------------------------------------------
+      // Stage 3: Need Mapping Events
+      // -----------------------------------------------------------------------
+      // Note: event type cast to string for forward-compat with new event types
+      // defined in shared/src/dto/realtime.ts SessionEventType
+      const eventName = event as string;
+
+      if (eventName === 'partner.needs_confirmed') {
+        // Partner confirmed their identified needs
+        console.log('[UnifiedSessionScreen] Partner confirmed needs');
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+
+      if (eventName === 'partner.needs_shared') {
+        // Partner consented to share their needs for common ground discovery
+        console.log('[UnifiedSessionScreen] Partner shared needs');
+        queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+
+      if (eventName === 'session.common_ground_ready') {
+        // Common ground analysis complete (both users shared needs)
+        console.log('[UnifiedSessionScreen] Common ground ready');
+        queryClient.refetchQueries({ queryKey: stageKeys.commonGround(sessionId) });
+      }
+
+      if (eventName === 'partner.common_ground_confirmed') {
+        // Partner confirmed common ground items
+        console.log('[UnifiedSessionScreen] Partner confirmed common ground');
+        queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
     },
     // Fire-and-forget pattern: AI responses arrive via Ably
     // Cache-First: Ghost dots are now derived from last message role in ChatInterface
@@ -624,6 +663,13 @@ export function UnifiedSessionScreen({
   // Local latch for share offer response - once user responds (accept or decline), hide panel
   const [hasRespondedToShareOfferLocal, setHasRespondedToShareOfferLocal] = useState(false);
 
+  // Local latch for needs confirmation - once user confirms needs, hide panel immediately
+  // This prevents the needs review panel from flashing during server refetch
+  const [hasConfirmedNeedsLocal, setHasConfirmedNeedsLocal] = useState(false);
+
+  // Local latch for common ground confirmation - once user confirms, hide panel immediately
+  const [hasConfirmedCommonGroundLocal, setHasConfirmedCommonGroundLocal] = useState(false);
+
   // -------------------------------------------------------------------------
   // Local State for Session Entry Mood Check
   // -------------------------------------------------------------------------
@@ -672,6 +718,8 @@ export function UnifiedSessionScreen({
       showFeelHeardPanel: shouldShowFeelHeard,
       showShareSuggestionPanel: shouldShowShareSuggestion,
       showAccuracyFeedbackPanel: shouldShowAccuracyFeedback,
+      showNeedsReviewPanel: shouldShowNeedsReview,
+      showCommonGroundPanel: shouldShowCommonGround,
     },
   } = useChatUIState({
     partnerName: partnerName || 'Partner',
@@ -719,7 +767,14 @@ export function UnifiedSessionScreen({
     hasRespondedToShareOfferLocal,
     partnerEmpathyValidated: partnerEmpathyData?.validated ?? false,
     allNeedsConfirmed,
+    needsAvailable: (needs?.length ?? 0) > 0,
+    needsShared: allNeedsConfirmed, // Sharing happens immediately after confirmation
+    hasConfirmedNeedsLocal,
     commonGroundCount: commonGround?.length ?? 0,
+    commonGroundAvailable: (commonGround?.length ?? 0) > 0 && (commonGroundData?.analysisComplete ?? false),
+    commonGroundAllConfirmedByMe: commonGround?.length > 0 && commonGround.every((cg) => cg.confirmedByMe),
+    commonGroundAllConfirmedByBoth: commonGroundComplete,
+    hasConfirmedCommonGroundLocal,
     strategyPhase,
     overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
   });
@@ -765,6 +820,12 @@ export function UnifiedSessionScreen({
   // Animation for the accuracy feedback panel slide-up
   const accuracyFeedbackAnim = useRef(new Animated.Value(0)).current;
 
+  // Animation for the needs review panel slide-up
+  const needsReviewAnim = useRef(new Animated.Value(0)).current;
+
+  // Animation for the common ground confirmation panel slide-up
+  const commonGroundAnim = useRef(new Animated.Value(0)).current;
+
   // Animation for the waiting banner slide-up
   const waitingBannerAnim = useRef(new Animated.Value(0)).current;
 
@@ -799,6 +860,8 @@ export function UnifiedSessionScreen({
   const readyToShowFeelHeard = shouldShowFeelHeard;
   const readyToShowShareSuggestion = shouldShowShareSuggestion;
   const readyToShowAccuracyFeedback = shouldShowAccuracyFeedback;
+  const readyToShowNeedsReview = shouldShowNeedsReview;
+  const readyToShowCommonGround = shouldShowCommonGround;
   const readyToShowWaitingBanner = shouldShowWaitingBanner;
 
   // Debug logging for invitation panel timing
@@ -881,6 +944,26 @@ export function UnifiedSessionScreen({
       friction: 9,
     }).start();
   }, [readyToShowAccuracyFeedback, accuracyFeedbackAnim]);
+
+  // Animate needs review panel - synced with mount condition
+  useEffect(() => {
+    Animated.spring(needsReviewAnim, {
+      toValue: readyToShowNeedsReview ? 1 : 0,
+      useNativeDriver: false,
+      tension: 40,
+      friction: 9,
+    }).start();
+  }, [readyToShowNeedsReview, needsReviewAnim]);
+
+  // Animate common ground confirmation panel - synced with mount condition
+  useEffect(() => {
+    Animated.spring(commonGroundAnim, {
+      toValue: readyToShowCommonGround ? 1 : 0,
+      useNativeDriver: false,
+      tension: 40,
+      friction: 9,
+    }).start();
+  }, [readyToShowCommonGround, commonGroundAnim]);
 
   // Animate waiting banner - uses readyToShowWaitingBanner (Stable Mounting pattern)
   useEffect(() => {
@@ -1793,6 +1876,82 @@ export function UnifiedSessionScreen({
                         </View>
                       </Animated.View>
                     )
+                    // Show needs review panel when needs are extracted and ready for confirmation
+                    // Stable Mounting: Mount based on data (shouldShowNeedsReview), animate visibility with typewriter guard
+                    : shouldShowNeedsReview
+                      ? () => (
+                        <Animated.View
+                          style={{
+                            opacity: needsReviewAnim,
+                            maxHeight: needsReviewAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0, 100],
+                            }),
+                            transform: [{
+                              translateY: needsReviewAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [20, 0],
+                              }),
+                            }],
+                            overflow: 'hidden',
+                          }}
+                          pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+                        >
+                          <View style={styles.needsReviewContainer}>
+                            <TouchableOpacity
+                              style={styles.needsReviewButton}
+                              onPress={() => {
+                                setHasConfirmedNeedsLocal(true);
+                                handleConfirmAllNeeds(() => onStageComplete?.(Stage.NEED_MAPPING));
+                              }}
+                              activeOpacity={0.7}
+                              testID="needs-review-button"
+                            >
+                              <Text style={styles.needsReviewButtonText}>
+                                Review and confirm your needs
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </Animated.View>
+                      )
+                    // Show common ground confirmation panel when common ground is ready
+                    // Stable Mounting: Mount based on data (shouldShowCommonGround), animate visibility with typewriter guard
+                    : shouldShowCommonGround
+                      ? () => (
+                        <Animated.View
+                          style={{
+                            opacity: commonGroundAnim,
+                            maxHeight: commonGroundAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0, 100],
+                            }),
+                            transform: [{
+                              translateY: commonGroundAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [20, 0],
+                              }),
+                            }],
+                            overflow: 'hidden',
+                          }}
+                          pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+                        >
+                          <View style={styles.commonGroundContainer}>
+                            <TouchableOpacity
+                              style={styles.commonGroundButton}
+                              onPress={() => {
+                                setHasConfirmedCommonGroundLocal(true);
+                                handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
+                              }}
+                              activeOpacity={0.7}
+                              testID="common-ground-confirm-button"
+                            >
+                              <Text style={styles.commonGroundButtonText}>
+                                Confirm common ground
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </Animated.View>
+                      )
                     // Show waiting banners with animation
                     : shouldShowWaitingBanner
                       ? () => (
@@ -1808,7 +1967,8 @@ export function UnifiedSessionScreen({
           hideInput={
             // Use derived hideInput logic from useChatUIState
             // Never hide when empathy review panel is showing (user still needs to interact)
-            !shouldShowEmpathyPanel && derivedShouldHideInput
+            // Never hide when needs/common ground panels are showing (Stage 3 interaction)
+            !shouldShowEmpathyPanel && !shouldShowNeedsReview && !shouldShowCommonGround && derivedShouldHideInput
           }
         />
 
@@ -2248,6 +2408,50 @@ const useStyles = () =>
       justifyContent: 'center',
     },
     accuracyFeedbackButtonText: {
+      fontSize: t.typography.fontSize.md,
+      fontWeight: '500',
+      color: t.colors.brandBlue,
+    },
+
+    // Needs Review Panel (Stage 3)
+    needsReviewContainer: {
+      paddingHorizontal: t.spacing.lg,
+      paddingVertical: t.spacing.md,
+      backgroundColor: t.colors.bgSecondary,
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
+    },
+    needsReviewButton: {
+      paddingVertical: t.spacing.sm,
+      paddingHorizontal: t.spacing.md,
+      backgroundColor: t.colors.bgPrimary,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    needsReviewButtonText: {
+      fontSize: t.typography.fontSize.md,
+      fontWeight: '500',
+      color: t.colors.brandBlue,
+    },
+
+    // Common Ground Confirmation Panel (Stage 3)
+    commonGroundContainer: {
+      paddingHorizontal: t.spacing.lg,
+      paddingVertical: t.spacing.md,
+      backgroundColor: t.colors.bgSecondary,
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
+    },
+    commonGroundButton: {
+      paddingVertical: t.spacing.sm,
+      paddingHorizontal: t.spacing.md,
+      backgroundColor: t.colors.bgPrimary,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    commonGroundButtonText: {
       fontSize: t.typography.fontSize.md,
       fontWeight: '500',
       color: t.colors.brandBlue,
