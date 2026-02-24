@@ -33,6 +33,7 @@ import {
   ValidateEmpathyResponse,
   GetNeedsResponse,
   ConfirmNeedsRequest,
+  NeedAdjustment,
   ConfirmNeedsResponse,
   GetCommonGroundResponse,
   ConfirmCommonGroundRequest,
@@ -1357,7 +1358,7 @@ export function useConfirmNeeds(
     UseMutationOptions<
       ConfirmNeedsResponse,
       ApiClientError,
-      { sessionId: string; confirmations: ConfirmNeedsRequest['confirmations'] }
+      { sessionId: string; needIds: string[]; adjustments?: NeedAdjustment[] }
     >,
     'mutationFn'
   >
@@ -1365,9 +1366,10 @@ export function useConfirmNeeds(
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ sessionId, confirmations }) => {
+    mutationFn: async ({ sessionId, needIds, adjustments }) => {
       return post<ConfirmNeedsResponse>(`/sessions/${sessionId}/needs/confirm`, {
-        confirmations,
+        needIds,
+        adjustments,
       });
     },
     onSuccess: (_, { sessionId }) => {

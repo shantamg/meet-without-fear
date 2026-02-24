@@ -576,19 +576,16 @@ export function NeedMappingScreen() {
   const handleConfirmNeeds = useCallback(() => {
     if (!sessionId) return;
 
-    const confirmations = needs.map((need) => ({
-      needId: need.id,
-      confirmed: true,
-    }));
+    const needIds = needs.map((need) => need.id);
 
     confirmNeeds(
-      { sessionId, confirmations },
+      { sessionId, needIds },
       {
         onSuccess: () => {
           // After confirming, consent to share for common ground discovery
           consentShareNeeds({
             sessionId,
-            needIds: needs.map((n) => n.id),
+            needIds,
           });
         },
       }

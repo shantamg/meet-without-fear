@@ -30,20 +30,26 @@ export interface GetNeedsResponse {
 // Need Confirmation
 // ============================================================================
 
-export interface NeedConfirmation {
+export interface NeedAdjustment {
   needId: string;
   confirmed: boolean;
-  adjustment?: string; // If user wants to rephrase
+  correction?: string; // If user wants to rephrase
 }
 
+/**
+ * @deprecated Use ConfirmNeedsRequestInput from contracts/stages for Zod-validated type.
+ * Kept for backward compatibility - aligns with the Zod schema (needIds + adjustments).
+ */
 export interface ConfirmNeedsRequest {
-  confirmations: NeedConfirmation[];
+  needIds: string[];
+  adjustments?: NeedAdjustment[];
 }
 
 export interface ConfirmNeedsResponse {
-  updated: IdentifiedNeedDTO[];
-  allConfirmed: boolean;
-  canProceedToCommonGround: boolean;
+  confirmed: boolean;
+  confirmedAt: string;
+  partnerConfirmed: boolean;
+  canAdvance: boolean;
 }
 
 // ============================================================================

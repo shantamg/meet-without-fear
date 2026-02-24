@@ -1072,18 +1072,15 @@ export function useUnifiedSession(sessionId: string | undefined) {
     (onSuccess?: () => void) => {
       if (!sessionId || needs.length === 0) return;
 
-      const confirmations = needs.map((need) => ({
-        needId: need.id,
-        confirmed: true,
-      }));
+      const needIds = needs.map((need) => need.id);
 
       confirmNeeds(
-        { sessionId, confirmations },
+        { sessionId, needIds },
         {
           onSuccess: () => {
             consentShareNeeds({
               sessionId,
-              needIds: needs.map((n) => n.id),
+              needIds,
             });
             onSuccess?.();
           },
