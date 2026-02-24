@@ -1440,21 +1440,33 @@ export function useConsentShareNeeds(
 
 /**
  * Get common ground (shared needs between both users).
+ *
+ * Query is gated by allNeedsConfirmed and needsShared to prevent
+ * racing with the needs confirmation flow. Common ground analysis
+ * only runs server-side after both users share needs, so querying
+ * before that returns empty results and wastes network.
  */
 export function useCommonGround(
   sessionId: string | undefined,
+  conditions?: {
+    allNeedsConfirmed?: boolean;
+    needsShared?: boolean;
+  },
   options?: Omit<
     UseQueryOptions<GetCommonGroundResponse, ApiClientError>,
     'queryKey' | 'queryFn'
   >
 ) {
+  const allNeedsConfirmed = conditions?.allNeedsConfirmed ?? true;
+  const needsShared = conditions?.needsShared ?? true;
+
   return useQuery({
     queryKey: stageKeys.commonGround(sessionId || ''),
     queryFn: async () => {
       if (!sessionId) throw new Error('Session ID is required');
       return get<GetCommonGroundResponse>(`/sessions/${sessionId}/common-ground`);
     },
-    enabled: !!sessionId,
+    enabled: !!sessionId && allNeedsConfirmed && needsShared,
     staleTime: 30_000,
     ...options,
   });

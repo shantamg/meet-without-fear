@@ -276,7 +276,17 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
   // Stage 3: Needs - always fetch to avoid waterfall
   const { data: needsData } = useNeeds(sessionId);
-  const { data: commonGroundData } = useCommonGround(sessionId);
+
+  // Derive needs state for gating common ground query
+  const needsForGating = needsData?.needs ?? [];
+  const allNeedsConfirmedForGating = needsForGating.length > 0 && needsForGating.every((n) => n.confirmed);
+
+  // Common ground query is gated on needs being confirmed to prevent
+  // racing with the needs confirmation/sharing flow
+  const { data: commonGroundData } = useCommonGround(sessionId, {
+    allNeedsConfirmed: allNeedsConfirmedForGating,
+    needsShared: allNeedsConfirmedForGating, // Sharing happens immediately after confirmation
+  });
 
   // Stage 4: Strategies - always fetch to avoid waterfall
   const { data: strategyData } = useStrategies(sessionId);
