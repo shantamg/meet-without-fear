@@ -1191,12 +1191,6 @@ export async function respondToShareSuggestion(
   status: 'shared' | 'declined';
   sharedContent: string | null;
   guesserUpdated: boolean;
-  sharedMessage?: {
-    id: string;
-    content: string;
-    stage: number;
-    timestamp: string;
-  };
 }> {
   console.log(`[Reconciler] respondToShareSuggestion called: user=${userId}, action=${response.action}`);
 
