@@ -22,7 +22,6 @@ import { BodyScanExercise } from '../components/BodyScanExercise';
 import { SupportOptionsModal, SupportOption } from '../components/SupportOptionsModal';
 import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
 // WaitingStatusMessage removed - we no longer show "waiting for partner" messages
-// EmpathyAttemptCard removed - now shown in AccuracyFeedbackDrawer
 import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
 import { ValidationCoachChat } from '../components/ValidationCoachChat';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
@@ -40,7 +39,6 @@ import { InvitationShareButton } from '../components/InvitationShareButton';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
-// PartnerChatTab moved to separate Share screen route
 import { PartnerEventModal, PartnerEventType } from '../components/PartnerEventModal';
 import { ActivityMenuModal } from '../components/ActivityMenuModal';
 import { RefinementModalScreen } from './RefinementModalScreen';
@@ -171,7 +169,7 @@ export function UnifiedSessionScreen({
     empathyDraftData,
     liveProposedEmpathyStatement,
     setLiveProposedEmpathyStatement,
-    aiRecommendsReadyToShare,
+    aiRecommendsReadyToShare: _aiRecommendsReadyToShare,
     setAiRecommendsReadyToShare,
     allNeedsConfirmed,
     commonGround,
@@ -201,7 +199,7 @@ export function UnifiedSessionScreen({
     // Stage-specific actions
     handleBarometerChange,
     handleConfirmFeelHeard,
-    handleDismissFeelHeard,
+    handleDismissFeelHeard: _handleDismissFeelHeard,
     handleConfirmReadyToShare,
     handleDismissReadyToShare,
     handleSignCompact,
@@ -225,7 +223,7 @@ export function UnifiedSessionScreen({
 
     // Utility actions
     showCooling,
-    setPendingConfirmation,
+    setPendingConfirmation: _setPendingConfirmation,
 
     // Session viewed tracking
     markSessionViewed,
@@ -247,7 +245,7 @@ export function UnifiedSessionScreen({
   });
 
   // Real-time presence and event tracking
-  const { partnerOnline, connectionStatus, reconnect: reconnectRealtime } = useRealtime({
+  const { partnerOnline, connectionStatus, reconnect: _reconnectRealtime } = useRealtime({
     sessionId,
     enablePresence: true,
     onSessionEvent: (event, data) => {
@@ -2038,11 +2036,11 @@ export function UnifiedSessionScreen({
           setRefinementInitialSuggestion(suggestion);
           setRefinementOfferId(offerId);
         }}
-        onShareAsIs={(offerId) => {
+        onShareAsIs={(_offerId) => {
           setShowActivityMenu(false);
           handleRespondToShareOffer('accept');
         }}
-        onValidate={(attemptId, rating) => {
+        onValidate={(_attemptId, rating) => {
           setShowActivityMenu(false);
           if (rating === 'accurate') {
             handleValidatePartnerEmpathy(true);
@@ -2065,7 +2063,7 @@ export function UnifiedSessionScreen({
           setShowActivityMenu(false);
           setShowInvitationRefine(true);
         }}
-        onOpenEmpathyDetail={(attemptId, content) => {
+        onOpenEmpathyDetail={(_attemptId, _content) => {
           setShowActivityMenu(false);
           setShowEmpathyDrawer(true);
         }}

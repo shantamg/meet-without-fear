@@ -52,7 +52,6 @@ export { RefineInvitationDrawer } from './RefineInvitationDrawer';
 export { FeelHeardConfirmation } from './FeelHeardConfirmation';
 
 // Stage 2 components - Perspective Stretch
-export { EmpathyAttemptCard } from './EmpathyAttemptCard';
 export { ConsentPrompt } from './ConsentPrompt';
 export { AccuracyFeedback } from './AccuracyFeedback';
 export { ReadyToShareConfirmation } from './ReadyToShareConfirmation';
