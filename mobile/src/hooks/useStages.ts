@@ -251,51 +251,8 @@ export function useRespondToShareOffer(
       queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
 
-      // Replace optimistic message with real one (if provided) to avoid flash
-      if (data.sharedMessage) {
-        const realMessage = {
-          id: data.sharedMessage.id,
-          sessionId,
-          senderId: shareOfferUser?.id ?? null,
-          role: MessageRole.EMPATHY_STATEMENT,
-          content: data.sharedMessage.content,
-          stage: data.sharedMessage.stage,
-          timestamp: data.sharedMessage.timestamp,
-        };
-
-        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
-          messageKeys.infinite(sessionId),
-          (old) => {
-            if (!old || !old.pages || old.pages.length === 0) {
-              return {
-                pages: [{ messages: [realMessage], hasMore: false }],
-                pageParams: [undefined],
-              };
-            }
-
-            // Replace optimistic message with real one
-            const newPages = old.pages.map((page, pageIndex) => {
-              if (pageIndex === 0) {
-                const filteredMessages = page.messages.filter(
-                  (m) => !m.id.startsWith('optimistic-shared-')
-                );
-                // Check if real message already exists
-                const exists = filteredMessages.some((m) => m.id === realMessage.id);
-                if (!exists) {
-                  return { ...page, messages: [realMessage, ...filteredMessages] };
-                }
-                return { ...page, messages: filteredMessages };
-              }
-              return page;
-            });
-            return { ...old, pages: newPages };
-          }
-        );
-        console.log('[useRespondToShareOffer] Replaced optimistic message with real one');
-      } else {
-        // Fallback: invalidate if no message returned
-        queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
-      }
+      // Refetch messages to pick up any new messages from the share response
+      queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
     },
     ...options,
   });
