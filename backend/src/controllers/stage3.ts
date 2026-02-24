@@ -18,6 +18,41 @@ import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
 
 // ============================================================================
+// Extraction Lock (in-memory idempotency guard)
+// ============================================================================
+
+/**
+ * Track in-progress needs extractions to prevent concurrent AI calls.
+ * Key: `${sessionId}:${userId}`, Value: timestamp when extraction started.
+ */
+const extractionLocks = new Map<string, number>();
+const EXTRACTION_LOCK_TIMEOUT_MS = 60_000; // 60 seconds max
+
+function getExtractionKey(sessionId: string, userId: string): string {
+  return `${sessionId}:${userId}`;
+}
+
+function isExtractionRunning(sessionId: string, userId: string): boolean {
+  const key = getExtractionKey(sessionId, userId);
+  const startedAt = extractionLocks.get(key);
+  if (!startedAt) return false;
+  // Auto-expire stale locks
+  if (Date.now() - startedAt > EXTRACTION_LOCK_TIMEOUT_MS) {
+    extractionLocks.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function setExtractionLock(sessionId: string, userId: string): void {
+  extractionLocks.set(getExtractionKey(sessionId, userId), Date.now());
+}
+
+function clearExtractionLock(sessionId: string, userId: string): void {
+  extractionLocks.delete(getExtractionKey(sessionId, userId));
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -145,9 +180,24 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
       orderBy: { createdAt: 'asc' },
     });
 
-    // If no needs exist, trigger AI extraction
+    // If no needs exist, trigger AI extraction (with idempotency guard)
     if (needs.length === 0) {
-      needs = await extractNeedsFromConversation(sessionId, user.id);
+      if (isExtractionRunning(sessionId, user.id)) {
+        // Another request is already extracting - return loading state
+        successResponse(res, {
+          needs: [],
+          extracting: true,
+          synthesizedAt: null,
+        });
+        return;
+      }
+
+      setExtractionLock(sessionId, user.id);
+      try {
+        needs = await extractNeedsFromConversation(sessionId, user.id);
+      } finally {
+        clearExtractionLock(sessionId, user.id);
+      }
     }
 
     successResponse(res, {
@@ -161,6 +211,7 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
         confirmed: n.confirmed,
         createdAt: n.createdAt.toISOString(),
       })),
+      extracting: false,
       synthesizedAt: needs[0]?.createdAt.toISOString() ?? new Date().toISOString(),
     });
   } catch (error) {

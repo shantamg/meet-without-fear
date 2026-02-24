@@ -22,8 +22,9 @@ export interface IdentifiedNeedDTO {
 
 export interface GetNeedsResponse {
   needs: IdentifiedNeedDTO[];
-  synthesizedAt: string;
-  isDirty: boolean; // True if content changed since synthesis
+  synthesizedAt: string | null;
+  extracting?: boolean; // True if AI extraction is currently in progress
+  isDirty?: boolean; // True if content changed since synthesis
 }
 
 // ============================================================================
