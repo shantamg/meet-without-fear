@@ -152,7 +152,7 @@ Does this capture what you'd like to express to them?
   // ============================================================================
   // The circuit breaker operates at the runReconcilerForDirection level BEFORE
   // any fixture/AI call. So the fixture needs to return OFFER_SHARING consistently
-  // for the first 3 attempts. On the 4th attempt, checkAndIncrementAttempts
+  // for the first 3 attempts. On the 4th attempt, checkAttempts
   // returns shouldSkipReconciler=true and the reconciler never runs (fixture is
   // never consulted).
   operations: {
