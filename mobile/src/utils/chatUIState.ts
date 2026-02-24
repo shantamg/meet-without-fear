@@ -192,8 +192,9 @@ function computeShowInvitationPanel(inputs: ChatUIStateInputs): boolean {
  * Determines if empathy statement panel should show.
  *
  * The panel shows "Review what you'll share" for initial empathy drafts.
- * When refining (received shared context from partner), the user should use
- * the Refine button on the Share screen instead - no panel shown in AI chat.
+ * During REFINING (after receiving shared context from partner), the panel
+ * re-appears as "Revisit what you'll share" so the user can resubmit their
+ * revised empathy through the UI.
  */
 function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
   const {
@@ -202,6 +203,7 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
     empathyAlreadyConsented,
     hasSharedEmpathyLocal,
     isRefiningEmpathy,
+    myAttemptContent,
   } = inputs;
 
   const currentStage = myStage ?? Stage.ONBOARDING;
@@ -223,13 +225,14 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  // If already consented, don't show
-  if (empathyAlreadyConsented) {
+  // If already consented and NOT refining, don't show.
+  // During REFINING, the user needs the panel to resubmit their revised empathy.
+  if (empathyAlreadyConsented && !isRefiningEmpathy) {
     return false;
   }
 
-  // Must have content to show (from AI or draft)
-  return hasEmpathyContent;
+  // Must have content to show (from AI, draft, or existing attempt during refining)
+  return hasEmpathyContent || (isRefiningEmpathy && myAttemptContent);
 }
 
 /**
@@ -255,9 +258,17 @@ function computeShowFeelHeardPanel(inputs: ChatUIStateInputs): boolean {
 
 /**
  * Determines if share suggestion panel should show.
+ * Only shows during Stage 2 (Perspective Stretch).
  */
 function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
-  const { hasShareSuggestion, hasRespondedToShareOfferLocal } = inputs;
+  const { hasShareSuggestion, hasRespondedToShareOfferLocal, myStage } = inputs;
+
+  const currentStage = myStage ?? Stage.ONBOARDING;
+
+  // Only show share suggestion during Stage 2
+  if (currentStage !== Stage.PERSPECTIVE_STRETCH) {
+    return false;
+  }
 
   return hasShareSuggestion && !hasRespondedToShareOfferLocal;
 }

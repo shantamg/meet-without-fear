@@ -612,6 +612,13 @@ export function useStreamingMessage(
               console.log(`[useStreamingMessage] [TIMING] handleMetadata returned at ${Date.now()}`);
             }
 
+            // Refresh empathy status after streaming completes during Stage 2
+            // This picks up messageCountSinceSharedContext and other server-side state
+            // that changes when user sends messages during REFINING
+            if (currentStage === Stage.PERSPECTIVE_STRETCH) {
+              queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+            }
+
             // Mark streaming as complete - cursor stops immediately
             textCompleteReceivedRef.current = true;
             setStatus('complete');
@@ -650,6 +657,11 @@ export function useStreamingMessage(
 
                 if (data.metadata) {
                   handleMetadata(sessionId, data.metadata);
+                }
+
+                // Refresh empathy status (fallback path)
+                if (currentStage === Stage.PERSPECTIVE_STRETCH) {
+                  queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
                 }
 
                 setStatus('complete');

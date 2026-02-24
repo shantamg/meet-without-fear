@@ -938,25 +938,30 @@ export function UnifiedSessionScreen({
       metadata: indicator.metadata,
     }));
 
-    // Add indicators for partner-authored SHARED_CONTEXT and EMPATHY_STATEMENT messages only.
-    // Self-authored context-shared indicator is now derived from mySharedAt in deriveIndicators().
+    // Add indicators for SHARED_CONTEXT and EMPATHY_STATEMENT messages.
+    // Self-authored SHARED_CONTEXT indicator is derived from mySharedAt in deriveIndicators().
+    // Self-authored EMPATHY_STATEMENT indicators are included here so users see "Empathy shared" in their timeline.
     const sharedContentIndicators = messages
       .filter((m) => {
         if (m.role !== MessageRole.SHARED_CONTEXT && m.role !== MessageRole.EMPATHY_STATEMENT) return false;
-        // Only include partner-authored messages (self-referential messages have been removed)
         const isFromMe = user?.id ? m.senderId === user.id : false;
-        return !isFromMe;
+        // Self-authored SHARED_CONTEXT is already handled by deriveIndicators (via mySharedAt)
+        if (isFromMe && m.role === MessageRole.SHARED_CONTEXT) return false;
+        return true;
       })
-      .map((m) => ({
-        type: 'indicator' as const,
-        indicatorType: m.role === MessageRole.EMPATHY_STATEMENT ? 'empathy-shared' as const : 'context-shared' as const,
-        id: `shared-${m.id}`,
-        timestamp: m.timestamp,
-        metadata: {
-          isFromMe: false,
-          partnerName: partnerName || 'Partner',
-        },
-      }));
+      .map((m) => {
+        const isFromMe = user?.id ? m.senderId === user.id : false;
+        return {
+          type: 'indicator' as const,
+          indicatorType: m.role === MessageRole.EMPATHY_STATEMENT ? 'empathy-shared' as const : 'context-shared' as const,
+          id: `shared-${m.id}`,
+          timestamp: m.timestamp,
+          metadata: {
+            isFromMe,
+            partnerName: partnerName || 'Partner',
+          },
+        };
+      });
 
     return [...baseIndicators, ...sharedContentIndicators];
   }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt]);

@@ -152,6 +152,19 @@ describe('Above Input Panel Priority', () => {
     expect(result.aboveInputPanel).toBe('share-suggestion');
   });
 
+  it('does not show share-suggestion panel after Stage 2', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      hasShareSuggestion: true,
+      hasRespondedToShareOfferLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showShareSuggestionPanel).toBe(false);
+  });
+
   it('shows empathy-statement panel when user has content to review', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
@@ -417,21 +430,22 @@ describe('Empathy Panel Visibility', () => {
     expect(result.panels.showEmpathyPanel).toBe(false);
   });
 
-  it('does not show in refining mode - user should use Refine button on Share screen', () => {
-    // When refining, the empathy panel should NOT show in AI chat.
-    // Users should use the Refine button on the Share screen instead.
+  it('shows in refining mode after user engages with Stage 2B', () => {
+    // During REFINING, the panel should re-appear so user can resubmit revised empathy.
+    // empathyAlreadyConsented is true (user shared once) but panel still shows during REFINING.
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
       myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
       isRefiningEmpathy: true,
+      empathyAlreadyConsented: true,
       messageCountSinceSharedContext: 1,
       myAttemptContent: true,
       empathyStatus: { hasNewSharedContext: true },
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showEmpathyPanel).toBe(false);
+    expect(result.panels.showEmpathyPanel).toBe(true);
   });
 
   it('does not show in refining mode before user sends message', () => {
@@ -449,17 +463,16 @@ describe('Empathy Panel Visibility', () => {
     expect(result.panels.showEmpathyPanel).toBe(false);
   });
 
-  it('does not show in refining mode even when AI returns proposedEmpathyStatement', () => {
-    // When refining, the empathy panel should NOT show in AI chat.
-    // Users should use the Refine button on the Share screen instead,
-    // even if AI has returned a proposed empathy statement.
+  it('does not show in refining mode before user sends message even with new AI content', () => {
+    // Before user engages with Stage 2B chat (messageCountSinceSharedContext === 0),
+    // hide panel — user should first view partner's shared context in Activity menu.
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
       myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
       isRefiningEmpathy: true,
-      messageCountSinceSharedContext: 0, // Stale - hasn't refetched yet
-      hasEmpathyContent: true, // AI just returned proposedEmpathyStatement
+      messageCountSinceSharedContext: 0,
+      hasEmpathyContent: true,
       empathyStatus: { hasNewSharedContext: true },
     });
 

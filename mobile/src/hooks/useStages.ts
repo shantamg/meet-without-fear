@@ -1071,6 +1071,7 @@ export function useValidateEmpathy(
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
     },
     ...options,
   });
@@ -1235,6 +1236,7 @@ export function useResubmitEmpathy(
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyDraft(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
     },
     onError: (_err, { sessionId }, context) => {
       // Rollback to previous state on error
