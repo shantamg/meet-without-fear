@@ -1393,22 +1393,8 @@ export async function respondToShareSuggestion(
 
   console.log(`[Reconciler] Created intro, shared context, and reflection messages for guesser ${shareOffer.result.guesserId}`);
 
-  // Timestamps for subject's messages (continue from guesser messages, 100ms apart)
-  const subjectSharedTimestamp = new Date(baseTime + 300);
-  const subjectAckTimestamp = new Date(baseTime + 400);
-
-  // Create message for subject showing what they shared (appears in their own chat)
-  const sharedMessage = await prisma.message.create({
-    data: {
-      sessionId,
-      senderId: userId,
-      forUserId: userId, // For the subject's own chat
-      role: MessageRole.SHARED_CONTEXT, // Subject's shared context (visible only to them via forUserId)
-      content: sharedContent,
-      stage: 2,
-      timestamp: subjectSharedTimestamp,
-    },
-  });
+  // Timestamp for subject's acknowledgment message (continues from guesser messages)
+  const subjectAckTimestamp = new Date(baseTime + 300);
 
   // Generate AI acknowledgment message for subject using their current stage context
   // This ensures the continuation picks up where their conversation left off
@@ -1440,18 +1426,12 @@ export async function respondToShareSuggestion(
     },
   });
 
-  console.log(`[Reconciler] Created acknowledgment messages for subject ${userId}`);
+  console.log(`[Reconciler] Created acknowledgment message for subject ${userId}`);
 
   return {
     status: 'shared',
     sharedContent,
     guesserUpdated: true,
-    sharedMessage: {
-      id: sharedMessage.id,
-      content: sharedMessage.content,
-      stage: sharedMessage.stage,
-      timestamp: sharedMessage.timestamp.toISOString(),
-    },
   };
 }
 

@@ -270,6 +270,8 @@ export interface EmpathyExchangeStatusResponse {
     sharedAt: string;
     deliveryStatus: SharedContentDeliveryStatus | null;
   } | null;
+  /** When the user shared context via ReconcilerShareOffer (for indicator derivation) */
+  mySharedAt: string | null;
   /** Reconciler result for my empathy attempt (if reconciler has run) */
   myReconcilerResult: ReconcilerResultSummary | null;
   /** Whether partner has submitted an empathy attempt (even if not revealed to me yet) */

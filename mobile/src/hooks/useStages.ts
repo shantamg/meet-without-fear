@@ -897,6 +897,7 @@ export function useConsentToShareEmpathy(
             hasUnviewedSharedContext: false,
             sharedContext: old?.sharedContext ?? null,
             mySharedContext: old?.mySharedContext ?? null,
+            mySharedAt: old?.mySharedAt ?? null,
             refinementHint: old?.refinementHint ?? null,
             readyForStage3: false,
             messageCountSinceSharedContext: old?.messageCountSinceSharedContext ?? 0,

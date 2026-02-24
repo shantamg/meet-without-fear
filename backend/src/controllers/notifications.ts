@@ -123,6 +123,7 @@ export async function getPendingActionsHandler(
       where: {
         sessionId,
         forUserId: user.id,
+        senderId: { not: user.id },
         role: 'SHARED_CONTEXT',
         ...(vessel?.lastViewedShareTabAt
           ? { timestamp: { gt: vessel.lastViewedShareTabAt } }
@@ -204,6 +205,25 @@ export async function getBadgeCountHandler(
         },
       });
       count += unvalidatedCount;
+
+      // Unread shared context messages (from partner, not self-sent)
+      const vessel = await prisma.userVessel.findUnique({
+        where: { userId_sessionId: { userId: user.id, sessionId: session.id } },
+        select: { lastViewedShareTabAt: true },
+      });
+
+      const unreadContextCount = await prisma.message.count({
+        where: {
+          sessionId: session.id,
+          forUserId: user.id,
+          senderId: { not: user.id },
+          role: 'SHARED_CONTEXT',
+          ...(vessel?.lastViewedShareTabAt
+            ? { timestamp: { gt: vessel.lastViewedShareTabAt } }
+            : {}),
+        },
+      });
+      count += unreadContextCount;
 
       if (count > 0) {
         bySession[session.id] = count;

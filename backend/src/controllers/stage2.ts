@@ -587,16 +587,26 @@ export async function consentToShare(
 
     // Create empathy attempt (shared copy) with HELD status
     // The status will transition to ANALYZING when partner also consents
-    const empathyAttempt = await prisma.empathyAttempt.create({
-      data: {
-        draftId: draft.id,
-        sessionId,
-        sourceUserId: user.id,
-        content: draft.content,
-        sharedAt: new Date(),
-        status: 'HELD', // Wait for partner to also consent
-      },
-    });
+    let empathyAttempt;
+    try {
+      empathyAttempt = await prisma.empathyAttempt.create({
+        data: {
+          draftId: draft.id,
+          sessionId,
+          sourceUserId: user.id,
+          content: draft.content,
+          sharedAt: new Date(),
+          status: 'HELD', // Wait for partner to also consent
+        },
+      });
+    } catch (err: any) {
+      // Unique constraint violation (P2002) — duplicate empathy attempt for this user+session
+      if (err?.code === 'P2002') {
+        errorResponse(res, 'CONFLICT', 'Empathy attempt already exists for this session', 409);
+        return;
+      }
+      throw err;
+    }
 
     // Get partner ID from session data
     const partnerId = getPartnerUserIdFromSession(session, user.id);

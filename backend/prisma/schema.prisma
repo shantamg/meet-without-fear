@@ -635,7 +635,10 @@ model EmpathyAttempt {
 
   validations EmpathyValidation[]
 
-  @@index([sessionId, sourceUserId])
+  // Unique constraint: one empathy attempt per user per session.
+  // Note: sourceUserId is String? (nullable). PostgreSQL treats NULL != NULL in unique constraints,
+  // so multiple NULL rows for same sessionId would be allowed. In practice sourceUserId is always set.
+  @@unique([sessionId, sourceUserId])
 }
 
 enum EmpathyStatus {

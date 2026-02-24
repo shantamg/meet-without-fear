@@ -221,6 +221,7 @@ export async function buildEmpathyExchangeStatus(
     messageCountSinceSharedContext,
     sharedContentDeliveryStatus: sharedContentDeliveryStatus as SharedContentDeliveryStatus | null,
     mySharedContext,
+    mySharedAt: mySharedContext?.sharedAt ?? null,
     myReconcilerResult,
     partnerHasSubmittedEmpathy: !!partnerAttempt,
     partnerEmpathyHeldStatus: partnerAttempt?.status ?? null,
