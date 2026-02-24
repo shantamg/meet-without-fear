@@ -287,11 +287,13 @@ export async function confirmNeeds(req: Request, res: Response): Promise<void> {
       data: { confirmed: true },
     });
 
-    // Update stage progress
+    // Update stage progress with needsIdentifiedAt milestone
+    const now = new Date();
     const gatesSatisfied = {
       ...(progress?.gatesSatisfied as Record<string, unknown> || {}),
       needsConfirmed: true,
-      confirmedAt: new Date().toISOString(),
+      confirmedAt: now.toISOString(),
+      needsIdentifiedAt: now.toISOString(),
     } satisfies Prisma.InputJsonValue;
 
     await prisma.stageProgress.update({
@@ -307,12 +309,21 @@ export async function confirmNeeds(req: Request, res: Response): Promise<void> {
       },
     });
 
-    // Check if partner has also confirmed
+    // Notify partner that needs were confirmed
+    const partnerId = await getPartnerUserId(sessionId, user.id);
+    if (partnerId) {
+      await notifyPartner(sessionId, partnerId, 'partner.needs_confirmed', {
+        stage: 3,
+        confirmedBy: user.id,
+      });
+    }
+
+    // Check if partner has also shared
     const partnerShared = await hasPartnerSharedNeeds(sessionId, user.id);
 
     successResponse(res, {
       confirmed: true,
-      confirmedAt: new Date().toISOString(),
+      confirmedAt: now.toISOString(),
       partnerConfirmed: partnerShared,
       canAdvance: false, // Need to share needs first
     });

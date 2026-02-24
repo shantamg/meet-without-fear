@@ -88,7 +88,9 @@ export type SessionEventType =
   | 'empathy.context_shared' // Subject shared context with guesser
   | 'empathy.status_updated' // Reconciler completed, empathy statuses changed
   | 'empathy.partner_considering_share' // Notify guesser that subject is considering sharing
+  | 'partner.needs_confirmed'
   | 'partner.needs_shared'
+  | 'session.common_ground_ready'
   | 'partner.common_ground_confirmed'
   | 'partner.ranking_submitted'
   | 'partner.ready_to_rank'
