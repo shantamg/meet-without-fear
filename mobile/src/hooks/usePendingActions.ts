@@ -21,6 +21,7 @@ export interface PendingAction {
 
 interface PendingActionsResponse {
   actions: PendingAction[];
+  sentTabUpdates?: number;
 }
 
 interface BadgeCountResponse {

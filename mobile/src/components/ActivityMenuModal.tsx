@@ -203,7 +203,7 @@ export function ActivityMenuModal({
   }, [pendingActions, sharingStatus.partnerAttempt, sharingStatus.sharedContextHistory, partnerName]);
 
   // Badge counts per tab
-  const sentBadge = (pendingActionsQuery.data as any)?.sentTabUpdates ?? 0;
+  const sentBadge = pendingActionsQuery.data?.sentTabUpdates ?? 0;
   const receivedBadge = pendingActions.length;
 
   const handleRefresh = useCallback(() => {

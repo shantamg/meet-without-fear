@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '500',
     color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
