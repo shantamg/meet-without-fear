@@ -367,6 +367,8 @@ export interface PromptContext {
   };
   /** Stage 2B: Content from previous empathy attempt being refined */
   previousEmpathyContent?: string | null;
+  /** Partner's progress status for transition messages */
+  partnerStatus?: 'not_joined' | 'in_progress' | 'completed';
 }
 
 /** Simplified context for initial message generation (no context bundle needed) */
@@ -861,7 +863,7 @@ Your message should cover these things in a natural, conversational flow — not
 
 4. EXPLAIN WHY: There's a lot of research on what helps people work through conflict, and this comes up over and over — when each person genuinely tries to see what the other is going through, it's one of the strongest predictors of actually working things out. Not because ${userName} has to get it right — it's a guess, not a test. The act of honestly trying is what changes things.
 
-5. MUTUAL: ${partnerName} is going through this same process on their side — they're also being asked to try to understand ${userName}'s experience. This isn't one-sided.
+5. MUTUAL: ${context.partnerStatus === 'not_joined' ? `${partnerName} will be going through this same process on their side — they'll also be asked to try to understand ${userName}'s experience. This isn't one-sided.` : `${partnerName} is going through this same process on their side — they're also being asked to try to understand ${userName}'s experience. This isn't one-sided.`}
 
 6. OPENING QUESTION: End with a genuine, open question inviting ${userName} to start thinking about what ${partnerName}'s experience might look like.
 
