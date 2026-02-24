@@ -27,10 +27,20 @@ const DEFAULT_E2E_USER: User = {
 };
 
 /**
- * Parse E2E user info from URL hash params (set by Playwright via page.goto with hash)
- * Format: #e2e-user-id=xxx&e2e-user-email=xxx
+ * Cached E2E user info — persists across re-renders and client-side navigations.
+ * Without this, navigating from /?e2e-user-id=xxx to /session/xxx loses the
+ * query params, causing the provider to fall back to the default E2E user.
+ */
+let cachedE2EUserInfo: { id: string; email: string } | null = null;
+
+/**
+ * Parse E2E user info from URL search params (set by Playwright via page.goto)
+ * Format: ?e2e-user-id=xxx&e2e-user-email=xxx
+ *
+ * Caches the result so client-side navigation doesn't lose the params.
  */
 function getE2EUserFromURL(): { id: string; email: string } | null {
+  if (cachedE2EUserInfo) return cachedE2EUserInfo;
   if (Platform.OS !== 'web') return null;
 
   try {
@@ -40,7 +50,8 @@ function getE2EUserFromURL(): { id: string; email: string } | null {
     const userEmail = urlParams.get('e2e-user-email');
 
     if (userId && userEmail) {
-      return { id: userId, email: userEmail };
+      cachedE2EUserInfo = { id: userId, email: userEmail };
+      return cachedE2EUserInfo;
     }
   } catch {
     // Ignore - not in web environment

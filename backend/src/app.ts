@@ -27,7 +27,10 @@ if (process.env.DASHBOARD_URL) {
 }
 const corsOptions: cors.CorsOptions = { origin: corsOrigins };
 if (process.env.E2E_AUTH_BYPASS === 'true') {
-  corsOptions.allowedHeaders = '*';
+  corsOptions.allowedHeaders = [
+    'Content-Type', 'Authorization', 'Cache-Control',
+    'X-Requested-With', 'x-e2e-user-id', 'x-e2e-user-email',
+  ];
 }
 app.use(cors(corsOptions));
 
