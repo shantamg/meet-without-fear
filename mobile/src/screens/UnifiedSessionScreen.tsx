@@ -54,6 +54,7 @@ import { useRealtime, useUserSessionUpdates } from '../hooks/useRealtime';
 import { stageKeys, messageKeys, sessionKeys, notificationKeys } from '../hooks/queryKeys';
 import { useAIMessageHandler } from '../hooks/useMessages';
 import { useSharingStatus } from '../hooks/useSharingStatus';
+import { usePendingActions } from '../hooks/usePendingActions';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { createStyles } from '../theme/styled';
 import { WaitingBanner } from '../components/WaitingBanner';
@@ -117,6 +118,8 @@ export function UnifiedSessionScreen({
 
   // Sharing status for header button
   const sharingStatus = useSharingStatus(sessionId);
+  // Server-side pending actions for badge count (replaces client-side computation)
+  const pendingActionsQuery = usePendingActions(sessionId);
 
   // Real-time presence tracking
 
@@ -426,15 +429,31 @@ export function UnifiedSessionScreen({
       if (event === 'empathy.status_updated') {
         // Status changed - update cache directly
         console.log('[UnifiedSessionScreen] Empathy status updated');
-        // Check for individual status (forUserId + empathyStatus) or broadcast (empathyStatuses)
-        if (data.empathyStatus && data.forUserId === user?.id) {
-          queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
-        } else if (data.empathyStatuses && user?.id) {
-          const empathyStatuses = data.empathyStatuses as Record<string, unknown>;
-          if (empathyStatuses[user.id]) {
-            queryClient.setQueryData(stageKeys.empathyStatus(sessionId), empathyStatuses[user.id]);
+
+        // Version checking: reject stale events when statusVersion is available
+        const shouldUpdate = (() => {
+          const incomingVersion = data.statusVersion as number | undefined;
+          if (incomingVersion === undefined) return true; // No version = always accept (backward compat)
+          const cached = queryClient.getQueryData<any>(stageKeys.empathyStatus(sessionId));
+          const cachedVersion = cached?.statusVersion as number | undefined;
+          if (cachedVersion === undefined) return true; // No cached version = accept
+          return incomingVersion > cachedVersion;
+        })();
+
+        if (shouldUpdate) {
+          // Check for individual status (forUserId + empathyStatus) or broadcast (empathyStatuses)
+          if (data.empathyStatus && data.forUserId === user?.id) {
+            queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
+          } else if (data.empathyStatuses && user?.id) {
+            const empathyStatuses = data.empathyStatuses as Record<string, unknown>;
+            if (empathyStatuses[user.id]) {
+              queryClient.setQueryData(stageKeys.empathyStatus(sessionId), empathyStatuses[user.id]);
+            }
           }
+        } else {
+          console.log('[UnifiedSessionScreen] Rejecting stale empathy.status_updated event (version:', data.statusVersion, ')');
         }
+
         // Show empathy_validated modal if our empathy was validated
         if (data.status === 'VALIDATED' && data.forUserId === user?.id) {
           showPartnerEventModal('empathy_validated');
@@ -1502,7 +1521,7 @@ export function UnifiedSessionScreen({
             ? () => setShowActivityMenu(true)
             : undefined
         }
-        menuBadgeCount={!isInOnboardingUnsigned ? sharingStatus.pendingActionsCount : 0}
+        menuBadgeCount={!isInOnboardingUnsigned ? (pendingActionsQuery.data?.actions?.length ?? 0) : 0}
         onMenuPress={!isInOnboardingUnsigned ? () => setShowActivityMenu(true) : undefined}
         testID="session-chat-header"
       />
