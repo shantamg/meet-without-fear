@@ -47,9 +47,17 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'More context shared',
     body: 'Your partner shared additional context to help you understand them better.',
   },
+  'partner.needs_confirmed': {
+    title: 'Needs confirmed',
+    body: 'Your partner has confirmed their identified needs.',
+  },
   'partner.needs_shared': {
     title: 'Needs shared',
     body: 'Your partner shared their identified needs.',
+  },
+  'session.common_ground_ready': {
+    title: 'Common ground ready',
+    body: 'Both of you have shared your needs. Common ground analysis is available.',
   },
   'partner.ranking_submitted': {
     title: 'Ranking submitted',
