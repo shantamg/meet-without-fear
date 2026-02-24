@@ -476,6 +476,40 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Partner considering share, refetching status');
         queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
+
+      // -----------------------------------------------------------------------
+      // Stage 3: Need Mapping Events
+      // -----------------------------------------------------------------------
+      // Note: event type cast to string for forward-compat with new event types
+      // defined in shared/src/dto/realtime.ts SessionEventType
+      const eventName = event as string;
+
+      if (eventName === 'partner.needs_confirmed') {
+        // Partner confirmed their identified needs
+        console.log('[UnifiedSessionScreen] Partner confirmed needs');
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+
+      if (eventName === 'partner.needs_shared') {
+        // Partner consented to share their needs for common ground discovery
+        console.log('[UnifiedSessionScreen] Partner shared needs');
+        queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+
+      if (eventName === 'session.common_ground_ready') {
+        // Common ground analysis complete (both users shared needs)
+        console.log('[UnifiedSessionScreen] Common ground ready');
+        queryClient.refetchQueries({ queryKey: stageKeys.commonGround(sessionId) });
+      }
+
+      if (eventName === 'partner.common_ground_confirmed') {
+        // Partner confirmed common ground items
+        console.log('[UnifiedSessionScreen] Partner confirmed common ground');
+        queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
     },
     // Fire-and-forget pattern: AI responses arrive via Ably
     // Cache-First: Ghost dots are now derived from last message role in ChatInterface

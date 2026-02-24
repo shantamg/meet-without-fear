@@ -88,8 +88,12 @@ export type SessionEventType =
   | 'empathy.context_shared' // Subject shared context with guesser
   | 'empathy.status_updated' // Reconciler completed, empathy statuses changed
   | 'empathy.partner_considering_share' // Notify guesser that subject is considering sharing
-  | 'partner.needs_shared'
-  | 'partner.common_ground_confirmed'
+  // Stage 3: Need Mapping events
+  | 'partner.needs_confirmed' // Partner confirmed their identified needs
+  | 'partner.needs_shared' // Partner consented to share needs for common ground
+  | 'session.common_ground_ready' // Common ground analysis complete (both shared)
+  | 'partner.common_ground_confirmed' // Partner confirmed common ground items
+  // Stage 4: Strategic Repair events
   | 'partner.ranking_submitted'
   | 'partner.ready_to_rank'
   | 'partner.consent_granted'
