@@ -469,18 +469,29 @@ export async function consentToShareNeeds(
     // Check if partner has also shared
     const partnerShared = await hasPartnerSharedNeeds(sessionId, user.id);
 
-    // Notify partner via real-time and create in-app notification
+    // Notify partner via real-time
     const partnerId = await getPartnerUserId(sessionId, user.id);
     if (partnerId) {
       await notifyPartner(sessionId, partnerId, 'partner.needs_shared', {
         stage: 3,
         sharedBy: user.id,
+        commonGroundReady: partnerShared,
       });
     }
 
-    // If both have shared, publish common ground ready event
-    if (partnerShared) {
-      await publishSessionEvent(sessionId, 'partner.needs_shared', {
+    // If both have shared, auto-trigger common ground analysis and notify
+    if (partnerShared && partnerId) {
+      // Trigger common ground analysis server-side to prevent race conditions
+      // where GET /common-ground returns empty before analysis completes
+      try {
+        await findCommonGround(sessionId, user.id, partnerId);
+        console.log('[consentToShareNeeds] Common ground analysis triggered for session', sessionId);
+      } catch (err) {
+        console.error('[consentToShareNeeds] Failed to trigger common ground analysis:', err);
+        // Non-fatal - client can still trigger via GET /common-ground
+      }
+
+      await publishSessionEvent(sessionId, 'session.common_ground_ready', {
         stage: 3,
         commonGroundReady: true,
       });
