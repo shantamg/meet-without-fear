@@ -182,8 +182,17 @@ export async function buildEmpathyExchangeStatus(
   };
 
   // Check if guesser has unviewed shared context (should view Share tab before continuing)
-  // This is true when status is REFINING and they haven't viewed the shared context yet
-  const hasUnviewedSharedContext = hasNewSharedContext && sharedContext !== null;
+  // True when status is REFINING, shared context exists, and user hasn't viewed the share tab
+  // since the context was delivered
+  let hasUnviewedSharedContext = false;
+  if (hasNewSharedContext && sharedContext !== null) {
+    const vessel = await prisma.userVessel.findUnique({
+      where: { userId_sessionId: { userId, sessionId } },
+      select: { lastViewedShareTabAt: true },
+    });
+    const sharedAtDate = new Date(sharedContext.sharedAt);
+    hasUnviewedSharedContext = !vessel?.lastViewedShareTabAt || vessel.lastViewedShareTabAt < sharedAtDate;
+  }
 
   return {
     myAttempt: myAttempt
