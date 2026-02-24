@@ -1088,16 +1088,30 @@ export function useUnifiedSession(sessionId: string | undefined) {
         { sessionId, needIds },
         {
           onSuccess: () => {
-            consentShareNeeds({
-              sessionId,
-              needIds,
-            });
             onSuccess?.();
           },
         }
       );
     },
-    [sessionId, needs, confirmNeeds, consentShareNeeds]
+    [sessionId, needs, confirmNeeds]
+  );
+
+  const handleConsentToShareNeeds = useCallback(
+    (onSuccess?: () => void) => {
+      if (!sessionId || needs.length === 0) return;
+
+      const needIds = needs.map((need) => need.id);
+
+      consentShareNeeds(
+        { sessionId, needIds },
+        {
+          onSuccess: () => {
+            onSuccess?.();
+          },
+        }
+      );
+    },
+    [sessionId, needs, consentShareNeeds]
   );
 
   const handleConfirmCommonGround = useCallback(
@@ -1284,6 +1298,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
     handleConfirmAllNeeds,
+    handleConsentToShareNeeds,
     handleConfirmCommonGround,
     handleAddStrategy,
     handleRequestMoreStrategies,

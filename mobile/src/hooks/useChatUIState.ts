@@ -103,6 +103,7 @@ export interface UseChatUIStateProps {
   hasConfirmedNeedsLocal: boolean;
   commonGroundCount: number;
   commonGroundAvailable: boolean;
+  commonGroundNoOverlap: boolean;
   commonGroundAllConfirmedByMe: boolean;
   commonGroundAllConfirmedByBoth: boolean;
   hasConfirmedCommonGroundLocal: boolean;
@@ -188,6 +189,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasConfirmedNeedsLocal,
     commonGroundCount,
     commonGroundAvailable,
+    commonGroundNoOverlap,
     commonGroundAllConfirmedByMe,
     commonGroundAllConfirmedByBoth,
     hasConfirmedCommonGroundLocal,
@@ -255,6 +257,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
 
     // Stage 3: Common Ground
     commonGroundAvailable,
+    commonGroundNoOverlap,
     commonGroundAllConfirmedByMe,
     commonGroundAllConfirmedByBoth,
     hasConfirmedCommonGroundLocal,
@@ -272,6 +275,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasConfirmedNeedsLocal,
     commonGroundCount,
     commonGroundAvailable,
+    commonGroundNoOverlap,
     commonGroundAllConfirmedByMe,
     commonGroundAllConfirmedByBoth,
     hasConfirmedCommonGroundLocal,

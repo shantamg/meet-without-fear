@@ -738,6 +738,23 @@ describe('Common Ground Panel Visibility', () => {
     expect(result.panels.showCommonGroundPanel).toBe(false);
   });
 
+  it('shows when noOverlap is true even without common ground items', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      commonGroundAvailable: false,
+      commonGroundNoOverlap: true,
+      commonGroundAllConfirmedByMe: false,
+      commonGroundAllConfirmedByBoth: false,
+      hasConfirmedCommonGroundLocal: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.panels.showCommonGroundPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('common-ground-confirm');
+  });
+
   it('needs-review takes priority over common-ground-confirm', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,

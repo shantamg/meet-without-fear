@@ -99,6 +99,7 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
 
   // Stage 3: Common Ground
   commonGroundAvailable: boolean; // Common ground analysis is complete and available
+  commonGroundNoOverlap: boolean; // AI analysis found no shared needs between users
   commonGroundAllConfirmedByMe: boolean; // Current user confirmed all common ground items
   commonGroundAllConfirmedByBoth: boolean; // Both users confirmed all common ground items
   hasConfirmedCommonGroundLocal: boolean; // Local latch to prevent panel flash after confirming
@@ -346,11 +347,14 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
 /**
  * Determines if common ground confirmation panel should show.
  * Shows when common ground is available but not yet confirmed by the current user.
+ * Also shows when noOverlap is true (no shared needs found) — panel text changes
+ * to "Continue to Strategies" in the UI layer.
  */
 function computeShowCommonGroundPanel(inputs: ChatUIStateInputs): boolean {
   const {
     myStage,
     commonGroundAvailable,
+    commonGroundNoOverlap,
     commonGroundAllConfirmedByMe,
     commonGroundAllConfirmedByBoth,
     hasConfirmedCommonGroundLocal,
@@ -371,6 +375,11 @@ function computeShowCommonGroundPanel(inputs: ChatUIStateInputs): boolean {
   // Already confirmed by both or by me - no need to show
   if (commonGroundAllConfirmedByBoth || commonGroundAllConfirmedByMe) {
     return false;
+  }
+
+  // Show panel when no overlap detected (user can "Continue to Strategies")
+  if (commonGroundNoOverlap) {
+    return true;
   }
 
   // Must have common ground available
@@ -644,6 +653,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
 
     // Stage 3: Common Ground
     commonGroundAvailable: false,
+    commonGroundNoOverlap: false,
     commonGroundAllConfirmedByMe: false,
     commonGroundAllConfirmedByBoth: false,
     hasConfirmedCommonGroundLocal: false,

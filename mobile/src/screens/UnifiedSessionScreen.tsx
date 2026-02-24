@@ -213,6 +213,7 @@ export function UnifiedSessionScreen({
     handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
     handleConfirmAllNeeds,
+    handleConsentToShareNeeds,
     handleConfirmCommonGround,
     handleRequestMoreStrategies,
     handleMarkReadyToRank,
@@ -670,6 +671,9 @@ export function UnifiedSessionScreen({
   // Local latch for common ground confirmation - once user confirms, hide panel immediately
   const [hasConfirmedCommonGroundLocal, setHasConfirmedCommonGroundLocal] = useState(false);
 
+  // Consent modal for sharing needs with partner (shown after needs are confirmed)
+  const [showShareNeedsConfirm, setShowShareNeedsConfirm] = useState(false);
+
   // -------------------------------------------------------------------------
   // Local State for Session Entry Mood Check
   // -------------------------------------------------------------------------
@@ -772,6 +776,7 @@ export function UnifiedSessionScreen({
     hasConfirmedNeedsLocal,
     commonGroundCount: commonGround?.length ?? 0,
     commonGroundAvailable: (commonGround?.length ?? 0) > 0 && (commonGroundData?.analysisComplete ?? false),
+    commonGroundNoOverlap: commonGroundData?.noOverlap ?? false,
     commonGroundAllConfirmedByMe: commonGround?.length > 0 && commonGround.every((cg) => cg.confirmedByMe),
     commonGroundAllConfirmedByBoth: commonGroundComplete,
     hasConfirmedCommonGroundLocal,
@@ -1902,7 +1907,10 @@ export function UnifiedSessionScreen({
                               style={styles.needsReviewButton}
                               onPress={() => {
                                 setHasConfirmedNeedsLocal(true);
-                                handleConfirmAllNeeds(() => onStageComplete?.(Stage.NEED_MAPPING));
+                                handleConfirmAllNeeds(() => {
+                                  // After confirming needs, show consent prompt
+                                  setShowShareNeedsConfirm(true);
+                                });
                               }}
                               activeOpacity={0.7}
                               testID="needs-review-button"
@@ -1936,19 +1944,40 @@ export function UnifiedSessionScreen({
                           pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
                         >
                           <View style={styles.commonGroundContainer}>
-                            <TouchableOpacity
-                              style={styles.commonGroundButton}
-                              onPress={() => {
-                                setHasConfirmedCommonGroundLocal(true);
-                                handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
-                              }}
-                              activeOpacity={0.7}
-                              testID="common-ground-confirm-button"
-                            >
-                              <Text style={styles.commonGroundButtonText}>
-                                Confirm common ground
-                              </Text>
-                            </TouchableOpacity>
+                            {commonGroundData?.noOverlap ? (
+                              <>
+                                <Text style={styles.noOverlapText}>
+                                  No obvious common ground identified. That's completely normal.
+                                </Text>
+                                <TouchableOpacity
+                                  style={styles.commonGroundButton}
+                                  onPress={() => {
+                                    setHasConfirmedCommonGroundLocal(true);
+                                    handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
+                                  }}
+                                  activeOpacity={0.7}
+                                  testID="no-overlap-continue-button"
+                                >
+                                  <Text style={styles.commonGroundButtonText}>
+                                    Continue to Strategies
+                                  </Text>
+                                </TouchableOpacity>
+                              </>
+                            ) : (
+                              <TouchableOpacity
+                                style={styles.commonGroundButton}
+                                onPress={() => {
+                                  setHasConfirmedCommonGroundLocal(true);
+                                  handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
+                                }}
+                                activeOpacity={0.7}
+                                testID="common-ground-confirm-button"
+                              >
+                                <Text style={styles.commonGroundButtonText}>
+                                  Confirm common ground
+                                </Text>
+                              </TouchableOpacity>
+                            )}
                           </View>
                         </Animated.View>
                       )
@@ -2048,6 +2077,46 @@ export function UnifiedSessionScreen({
                 }}
               >
                 <Text style={styles.primaryButtonText}>Send now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Share Needs Consent Modal */}
+      <Modal
+        visible={showShareNeedsConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowShareNeedsConfirm(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {partnerName
+                ? `Share your needs with ${partnerName}?`
+                : 'Share your needs with your partner?'}
+            </Text>
+            <Text style={styles.modalSubtitle}>
+              Your confirmed needs will be shared so you can discover common ground together.
+            </Text>
+            <View style={styles.shareActions}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => setShowShareNeedsConfirm(false)}
+                testID="share-needs-cancel-button"
+              >
+                <Text style={styles.secondaryButtonText}>Not yet</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={() => {
+                  handleConsentToShareNeeds();
+                  setShowShareNeedsConfirm(false);
+                }}
+                testID="share-needs-confirm-button"
+              >
+                <Text style={styles.primaryButtonText}>Share</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2455,6 +2524,12 @@ const useStyles = () =>
       fontSize: t.typography.fontSize.md,
       fontWeight: '500',
       color: t.colors.brandBlue,
+    },
+    noOverlapText: {
+      fontSize: t.typography.fontSize.sm,
+      color: t.colors.textSecondary,
+      textAlign: 'center' as const,
+      marginBottom: t.spacing.sm,
     },
 
     // Inline Cards
