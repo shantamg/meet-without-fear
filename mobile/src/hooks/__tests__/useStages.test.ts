@@ -53,6 +53,14 @@ jest.mock('../../lib/api', () => ({
   },
 }));
 
+// Mock useAuth to provide user context
+jest.mock('../useAuth', () => ({
+  useAuth: () => ({
+    user: { id: 'user-123', name: 'Test User' },
+    isAuthenticated: true,
+  }),
+}));
+
 const mockGet = api.get as jest.MockedFunction<typeof api.get>;
 const mockPost = api.post as jest.MockedFunction<typeof api.post>;
 
@@ -440,7 +448,9 @@ describe('useStages', () => {
       it('confirms identified needs', async () => {
         mockPost.mockResolvedValueOnce({
           confirmed: true,
-          confirmedNeeds: ['need-1', 'need-2'],
+          confirmedAt: '2024-01-01T00:00:00.000Z',
+          partnerConfirmed: false,
+          canAdvance: false,
         });
 
         const { result } = renderHook(() => useConfirmNeeds(), {
@@ -450,18 +460,13 @@ describe('useStages', () => {
         await act(async () => {
           await result.current.mutateAsync({
             sessionId,
-            confirmations: [
-              { needId: 'need-1', confirmed: true },
-              { needId: 'need-2', confirmed: true },
-            ],
+            needIds: ['need-1', 'need-2'],
           });
         });
 
         expect(mockPost).toHaveBeenCalledWith(`/sessions/${sessionId}/needs/confirm`, {
-          confirmations: [
-            { needId: 'need-1', confirmed: true },
-            { needId: 'need-2', confirmed: true },
-          ],
+          needIds: ['need-1', 'need-2'],
+          adjustments: undefined,
         });
       });
     });
@@ -833,14 +838,13 @@ describe('useStages', () => {
           wrapper: createWrapper(),
         });
 
-        const mutationPromise = result.current.mutateAsync({ sessionId });
+        let mutationResult: typeof responseData | undefined;
         await act(async () => {
-          await mutationPromise;
+          mutationResult = await result.current.mutateAsync({ sessionId });
         });
 
         expect(mockPost).toHaveBeenCalledWith(`/sessions/${sessionId}/resolve`);
-        const mutationResult = await mutationPromise;
-        expect(mutationResult.resolved).toBe(true);
+        expect(mutationResult?.resolved).toBe(true);
       });
     });
   });
