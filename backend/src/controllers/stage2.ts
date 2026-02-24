@@ -1504,16 +1504,25 @@ Respond in JSON format:
       }
     }
 
-    // 3. Save Message
-    const message = await prisma.message.create({
-      data: {
-        sessionId,
-        senderId: null, // AI
-        role: 'AI',
-        content,
-        stage: 2, // Technically end of stage 2 / start of 3
-      }
-    });
+    // 3. Save per-user transition messages (each user must have their own with forUserId)
+    const userIds = [userId, partnerId].filter((id): id is string => id !== null);
+    const messages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
+    for (const uid of userIds) {
+      const msg = await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: null, // AI
+          forUserId: uid,
+          role: 'AI',
+          content,
+          stage: 3, // Start of stage 3
+        }
+      });
+      messages.push({ id: msg.id, content: msg.content, timestamp: msg.timestamp, forUserId: uid });
+    }
+
+    // Use first message as representative for the event payload
+    const message = messages[0];
 
     // 4. Update Stage Progress for both to Stage 3
     // Mark Stage 2 as COMPLETED
@@ -1521,7 +1530,7 @@ Respond in JSON format:
       where: {
         sessionId,
         stage: 2,
-        userId: { in: [userId, partnerId].filter((id): id is string => id !== null) }
+        userId: { in: userIds }
       },
       data: {
         status: 'COMPLETED',
@@ -1530,8 +1539,6 @@ Respond in JSON format:
     });
 
     // Create Stage 3 records if not exist
-    // We do this loop to handle each user individualy just in case
-    const userIds = [userId, partnerId].filter((id): id is string => id !== null);
     for (const uid of userIds) {
       await prisma.stageProgress.upsert({
         where: {
@@ -1548,20 +1555,13 @@ Respond in JSON format:
           status: 'IN_PROGRESS',
           startedAt: new Date(),
         },
-        update: {
-          // If it exists, ensure it's in progress? Or leave it if they already started?
-          // Let's ensure it's IN_PROGRESS if it was NOT_STARTED
-          // But upsert update is unconditional. Let's just create if missing, or no-op if exists.
-          // Actually, if we are transitioning, we should probably ensure it's active.
-        }
+        update: {}
       });
     }
 
     // 5. Notify Realtime
     // Notify session channel that stage changed
-    if (partnerId) {
-      // We can use notifyPartner or a session-wide event if available.
-      // publishSessionEvent is generic
+    if (partnerId && message) {
       await publishSessionEvent(sessionId, 'partner.stage_completed', {
         previousStage: 2,
         currentStage: 3,
