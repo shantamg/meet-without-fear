@@ -963,15 +963,7 @@ export function UnifiedSessionScreen({
     return [...baseIndicators, ...sharedContentIndicators];
   }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt]);
 
-  // -------------------------------------------------------------------------
-  // Effective Stage (accounts for compact signed but stage not yet updated)
-  // -------------------------------------------------------------------------
-  const effectiveStage = useMemo(() => {
-    if (currentStage === Stage.ONBOARDING && compactData?.mySigned) {
-      return Stage.WITNESS;
-    }
-    return currentStage;
-  }, [currentStage, compactData?.mySigned]);
+
 
 
   // -------------------------------------------------------------------------
@@ -1568,7 +1560,7 @@ export function UnifiedSessionScreen({
           // arriving while viewing don't trigger a separator
           lastSeenChatItemId={lastSeenChatItemIdForSeparator}
           // Open activity menu when "Context shared" or "Empathy shared" indicator is tapped
-          onContextSharedPress={(timestamp, isFromMe) => {
+          onContextSharedPress={(_timestamp, isFromMe) => {
             setActivityMenuTab(isFromMe !== false ? 'sent' : 'received');
             setShowActivityMenu(true);
           }}
