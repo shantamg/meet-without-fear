@@ -10,7 +10,7 @@ import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
-// useRouter removed - share navigation replaced by ActivityMenuModal
+// useRouter removed - share navigation replaced by ActivityDrawer
 import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem } from '../components/ChatInterface';
@@ -39,7 +39,7 @@ import { InvitationShareButton } from '../components/InvitationShareButton';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
-import { ActivityMenuModal } from '../components/ActivityMenuModal';
+import { ActivityDrawer } from '../components/ActivityDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 
@@ -716,7 +716,6 @@ export function UnifiedSessionScreen({
   // Activity Menu Modal
   // -------------------------------------------------------------------------
   const [showActivityMenu, setShowActivityMenu] = useState(false);
-  const [activityMenuTab, setActivityMenuTab] = useState<'sent' | 'received'>('received');
   const [showInvitationRefine, setShowInvitationRefine] = useState(false);
 
   // Refinement Modal
@@ -2151,8 +2150,7 @@ export function UnifiedSessionScreen({
           // arriving while viewing don't trigger a separator
           lastSeenChatItemId={lastSeenChatItemIdForSeparator}
           // Open activity menu when "Context shared" or "Empathy shared" indicator is tapped
-          onContextSharedPress={(_timestamp, isFromMe) => {
-            setActivityMenuTab(isFromMe !== false ? 'sent' : 'received');
+          onContextSharedPress={() => {
             setShowActivityMenu(true);
           }}
           // Show compact as custom empty state during onboarding when not signed
@@ -2420,14 +2418,13 @@ export function UnifiedSessionScreen({
         />
       )}
 
-      {/* Activity Menu Modal - Sent / Received tabs */}
-      <ActivityMenuModal
+      {/* Activity Drawer - bottom sheet with timeline items */}
+      <ActivityDrawer
         visible={showActivityMenu}
         sessionId={sessionId}
         partnerName={partnerName}
         sessionStatus={session?.status}
         onClose={() => setShowActivityMenu(false)}
-        initialTab={activityMenuTab}
         onOpenRefinement={(offerId, suggestion) => {
           setShowActivityMenu(false);
           setRefinementInitialSuggestion(suggestion);
@@ -2437,24 +2434,9 @@ export function UnifiedSessionScreen({
           setShowActivityMenu(false);
           handleRespondToShareOffer('accept');
         }}
-        onValidate={(_attemptId, rating) => {
+        onOpenEmpathyDetail={(_attemptId, _content) => {
           setShowActivityMenu(false);
-          if (rating === 'accurate') {
-            handleValidatePartnerEmpathy(true);
-          } else if (rating === 'partial') {
-            handleValidatePartnerEmpathy(false, 'Some parts are accurate');
-          } else {
-            // Inaccurate - open feedback coach
-            setFeedbackCoachInitialDraft('');
-            setShowFeedbackCoachChat(true);
-          }
-        }}
-        onRefresh={() => {
-          queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
-          queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
-          queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
-          queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
-          queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
+          setShowEmpathyDrawer(true);
         }}
         invitationMessage={invitationMessage || undefined}
         invitationTimestamp={invitation?.messageConfirmedAt || undefined}
@@ -2462,11 +2444,8 @@ export function UnifiedSessionScreen({
           setShowActivityMenu(false);
           setShowInvitationRefine(true);
         }}
-        onOpenEmpathyDetail={(_attemptId, _content) => {
-          setShowActivityMenu(false);
-          setShowEmpathyDrawer(true);
-        }}
-        testID="activity-menu-modal"
+        partnerEmpathyValidated={isEmpathyValidated || (partnerEmpathyData?.validated ?? false)}
+        testID="activity-drawer"
       />
 
       {/* Refinement Modal - AI-guided chat for refining share offer content */}
@@ -2480,8 +2459,7 @@ export function UnifiedSessionScreen({
           onClose={() => setRefinementOfferId(null)}
           onShareComplete={() => {
             setRefinementOfferId(null);
-            // Navigate to Sent tab to show updated share status
-            setActivityMenuTab('sent');
+            // Open activity drawer to show updated share status
             setShowActivityMenu(true);
             // Refresh activity menu data
             queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
