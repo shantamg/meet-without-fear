@@ -13,7 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 // useRouter removed - share navigation replaced by ActivityMenuModal
 import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion } from '@meet-without-fear/shared';
 
-import { ChatInterface, ChatMessage, ChatIndicatorItem } from '../components/ChatInterface';
+import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
 import { FeelHeardConfirmation } from '../components/FeelHeardConfirmation';
 import { BreathingExercise } from '../components/BreathingExercise';
@@ -473,6 +473,18 @@ export function UnifiedSessionScreen({
         queryClient.refetchQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
         queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
+        // Optimistic cache write for partner empathy so validation card appears immediately
+        if (data.empathyContent && data.attemptId) {
+          queryClient.setQueryData(stageKeys.partnerEmpathy(sessionId), (old: any) => ({
+            ...old,
+            attempt: {
+              ...old?.attempt,
+              id: data.attemptId,
+              content: data.empathyContent,
+              revealedAt: data.revealedAt || new Date().toISOString(),
+            },
+          }));
+        }
         // Show validation_needed modal only if we're the SUBJECT (not the guesser)
         if (data.guesserUserId && data.guesserUserId !== user?.id) {
           showPartnerEventModal('validation_needed');
@@ -1286,6 +1298,53 @@ export function UnifiedSessionScreen({
       message.role !== MessageRole.EMPATHY_STATEMENT
     );
   }, [messages, empathyStatusData?.myAttempt?.content, empathyStatusData?.myAttempt?.deliveryStatus, empathyStatusData?.sharedContentDeliveryStatus]);
+
+  // -------------------------------------------------------------------------
+  // Validation Cards (Inline in Chat FlatList)
+  // -------------------------------------------------------------------------
+  const validationCards = useMemo((): ChatValidationCardItem[] => {
+    if (
+      !partnerEmpathyData?.attempt?.content ||
+      !partnerEmpathyData.attempt.revealedAt ||
+      myProgress?.stage !== Stage.PERSPECTIVE_STRETCH
+    ) {
+      return [];
+    }
+
+    const attemptId = partnerEmpathyData.attempt.id;
+    const isValidated = partnerEmpathyData.validated || isEmpathyValidated;
+
+    let cardStatus: 'pending' | 'validated' | 'feedback-given' | 'superseded';
+    if (isValidated) {
+      cardStatus = 'validated';
+    } else if (completedActions.has('validated-empathy')) {
+      cardStatus = 'feedback-given';
+    } else {
+      cardStatus = 'pending';
+    }
+
+    return [{
+      type: 'validation-card',
+      id: `validation-${attemptId}`,
+      timestamp: partnerEmpathyData.attempt.revealedAt,
+      partnerName: partnerName || 'Partner',
+      empathyContent: partnerEmpathyData.attempt.content,
+      status: cardStatus,
+      attemptId,
+    }];
+  }, [partnerEmpathyData, myProgress?.stage, partnerName, isEmpathyValidated, completedActions]);
+
+  // -------------------------------------------------------------------------
+  // Validation Card Handlers
+  // -------------------------------------------------------------------------
+  const handleValidationAccurate = useCallback(() => {
+    markCompleted('validated-empathy');
+    handleValidatePartnerEmpathy(true);
+  }, [markCompleted, handleValidatePartnerEmpathy]);
+
+  const handleValidationNotQuite = useCallback(() => {
+    setShowFeedbackCoachChat(true);
+  }, []);
 
   // -------------------------------------------------------------------------
   // Render Inline Card
@@ -2192,6 +2251,9 @@ export function UnifiedSessionScreen({
             // Never hide when needs/common ground panels are showing (Stage 3 interaction)
             !shouldShowEmpathyPanel && !shouldShowNeedsReview && !shouldShowCommonGround && derivedShouldHideInput
           }
+          validationCards={validationCards}
+          onValidateAccurate={handleValidationAccurate}
+          onValidateNotQuite={handleValidationNotQuite}
         />
 
         {/* Waiting banner removed - now handled in renderAboveInput */}

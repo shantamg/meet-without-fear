@@ -17,6 +17,7 @@ import { TypingIndicator } from './TypingIndicator';
 import { ChatInput } from './ChatInput';
 import { EmotionSlider } from './EmotionSlider';
 import { ChatIndicator, ChatIndicatorType } from './ChatIndicator';
+import { EmpathyValidationCard } from './EmpathyValidationCard';
 import { createStyles } from '../theme/styled';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 
@@ -89,10 +90,24 @@ export interface CustomEmptyStateItem {
   id: string;
 }
 
-export type ChatListItem = ChatMessage | ChatIndicatorItem | CustomEmptyStateItem;
+export interface ChatValidationCardItem {
+  type: 'validation-card';
+  id: string;
+  timestamp: string;
+  partnerName: string;
+  empathyContent: string;
+  status: 'pending' | 'validated' | 'feedback-given' | 'superseded';
+  attemptId: string;
+}
+
+export type ChatListItem = ChatMessage | ChatIndicatorItem | ChatValidationCardItem | CustomEmptyStateItem;
 
 function isIndicator(item: ChatListItem): item is ChatIndicatorItem {
   return 'type' in item && item.type === 'indicator';
+}
+
+function isValidationCard(item: ChatListItem): item is ChatValidationCardItem {
+  return 'type' in item && item.type === 'validation-card';
 }
 
 function isCustomEmptyState(item: ChatListItem): item is CustomEmptyStateItem {
@@ -155,6 +170,12 @@ interface ChatInterfaceProps {
    * @param timestamp - The timestamp of the shared context (for scrolling to it)
    */
   onContextSharedPress?: (timestamp?: string, isFromMe?: boolean) => void;
+  /** Validation cards to render inline (e.g., partner's empathy attempt for validation) */
+  validationCards?: ChatValidationCardItem[];
+  /** Callback when user taps "Yes, mostly" on a validation card */
+  onValidateAccurate?: () => void;
+  /** Callback when user taps "Not quite yet" on a validation card */
+  onValidateNotQuite?: () => void;
 }
 
 // ============================================================================
@@ -194,6 +215,9 @@ export function ChatInterface({
   partnerName,
   lastSeenChatItemId,
   onContextSharedPress,
+  validationCards,
+  onValidateAccurate,
+  onValidateNotQuite,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -232,8 +256,8 @@ export function ChatInterface({
 
   // STABLE SORT: Ensure order never flip-flops if timestamps are identical
   const listItems = useMemo((): ChatListItem[] => {
-    // 1. Combine messages and indicators
-    const items: ChatListItem[] = [...messages, ...indicators];
+    // 1. Combine messages, indicators, and validation cards
+    const items: ChatListItem[] = [...messages, ...indicators, ...(validationCards || [])];
 
     // 2. Sort Newest First (standard chat sort)
     items.sort((a, b) => {
@@ -249,6 +273,13 @@ export function ChatInterface({
       const bIsIndicator = isIndicator(b);
       if (aIsIndicator && !bIsIndicator) return 1; // a (indicator) comes after b (message) in array = appears higher
       if (bIsIndicator && !aIsIndicator) return -1; // b (indicator) comes after a (message) in array = appears higher
+
+      // Validation cards should appear BELOW messages at the same time
+      // (newer position = lower index in the sorted array)
+      const aIsValidation = isValidationCard(a);
+      const bIsValidation = isValidationCard(b);
+      if (aIsValidation && !bIsValidation) return -1; // validation card appears after/below message
+      if (bIsValidation && !aIsValidation) return 1;
 
       // Fallback: ID comparison for stability
       return b.id.localeCompare(a.id);
@@ -271,7 +302,7 @@ export function ChatInterface({
     }
 
     return items;
-  }, [messages, indicators, customEmptyState, lastSeenChatItemId]);
+  }, [messages, indicators, validationCards, customEmptyState, lastSeenChatItemId]);
 
   const scrollMetricsRef = useRef({
     offset: 0,
@@ -474,6 +505,7 @@ export function ChatInterface({
     for (let i = listItems.length - 1; i >= 0; i--) {
       const item = listItems[i];
       if (isIndicator(item)) continue;
+      if (isValidationCard(item)) continue;
       if (isCustomEmptyState(item)) continue;
       // At this point, item must be a ChatMessage
       const message = item as ChatMessage;
@@ -525,8 +557,23 @@ export function ChatInterface({
       );
     }
 
+    // 3. Render Validation Cards
+    if (isValidationCard(item)) {
+      return (
+        <EmpathyValidationCard
+          partnerName={item.partnerName}
+          empathyContent={item.empathyContent}
+          status={item.status}
+          onValidateAccurate={onValidateAccurate || (() => {})}
+          onValidateNotQuite={onValidateNotQuite || (() => {})}
+          skipRevealAnimation={item.status !== 'pending'}
+          testID={`validation-card-${item.id}`}
+        />
+      );
+    }
+
     // 4. Render Messages
-    // At this point, item must be a ChatMessage (we've already handled indicators and custom empty state)
+    // At this point, item must be a ChatMessage (we've already handled indicators, validation cards, and custom empty state)
     const message = item as ChatMessage;
     
     // Skip typewriter for:
@@ -588,7 +635,7 @@ export function ChatInterface({
         {renderMessageExtra?.(message)}
       </>
     );
-  }, [sessionId, nextAnimatableMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra]);
+  }, [sessionId, nextAnimatableMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra, onValidateAccurate, onValidateNotQuite]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 
