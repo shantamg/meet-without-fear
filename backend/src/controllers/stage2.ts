@@ -163,13 +163,6 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
           triggeredByUserId: userBId,
         });
         console.log(`[triggerReconcilerAndUpdateStatuses] Published share_suggestion for subject User B`);
-
-        // Notify the guesser (User A) that subject (User B) is considering sharing
-        await publishSessionEvent(sessionId, 'empathy.partner_considering_share', {
-          forUserId: userAId, // Guesser receives notification
-          timestamp: Date.now(),
-        });
-        console.log(`[triggerReconcilerAndUpdateStatuses] Published partner_considering_share for User A`);
       }
     } else if (result.aUnderstandingB && !shouldUpdateA) {
       // A→B direction already processed by asymmetric reconciler — preserve current status
@@ -230,13 +223,6 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
           triggeredByUserId: userAId,
         });
         console.log(`[triggerReconcilerAndUpdateStatuses] Published share_suggestion for subject User A`);
-
-        // Notify the guesser (User B) that subject (User A) is considering sharing
-        await publishSessionEvent(sessionId, 'empathy.partner_considering_share', {
-          forUserId: userBId, // Guesser receives notification
-          timestamp: Date.now(),
-        });
-        console.log(`[triggerReconcilerAndUpdateStatuses] Published partner_considering_share for User B`);
       }
     } else if (result.bUnderstandingA && !shouldUpdateB) {
       // B→A direction already processed by asymmetric reconciler — preserve current status

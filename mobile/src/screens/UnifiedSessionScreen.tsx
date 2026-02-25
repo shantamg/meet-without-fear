@@ -471,14 +471,6 @@ export function UnifiedSessionScreen({
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
       }
 
-      if (event === 'empathy.partner_considering_share') {
-        // Partner (subject) is considering sharing context - update cache for guesser
-        // No modal: this is purely informational with no action the guesser can take.
-        // The WaitingBanner + badge update are sufficient (calm UX).
-        console.log('[UnifiedSessionScreen] Partner considering share, refetching status');
-        queryClient.refetchQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
-      }
-
       // -----------------------------------------------------------------------
       // Stage 3: Need Mapping Events
       // -----------------------------------------------------------------------

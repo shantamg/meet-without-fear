@@ -87,7 +87,6 @@ export type SessionEventType =
   | 'empathy.refining' // Guesser should refine their empathy (new context available)
   | 'empathy.context_shared' // Subject shared context with guesser
   | 'empathy.status_updated' // Reconciler completed, empathy statuses changed
-  | 'empathy.partner_considering_share' // Notify guesser that subject is considering sharing
   // Stage 3: Need Mapping events
   | 'partner.needs_confirmed' // Partner confirmed their identified needs
   | 'partner.needs_shared' // Partner consented to share needs for common ground

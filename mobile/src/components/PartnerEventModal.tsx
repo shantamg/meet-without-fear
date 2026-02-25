@@ -26,8 +26,7 @@ export type PartnerEventType =
   | 'empathy_validated'      // Partner validated your empathy
   | 'context_shared'         // Partner shared context to help you understand
   | 'share_suggestion'       // AI suggests you share something with partner
-  | 'validation_needed'      // Partner's empathy needs your validation
-  | 'partner_considering_share'; // Partner is deciding whether to share more context
+  | 'validation_needed';     // Partner's empathy needs your validation
 
 export interface PartnerEventModalProps {
   /** Whether the modal is visible */
@@ -102,14 +101,6 @@ function getEventConfig(
         icon: <Heart color={colors.accent} size={32} />,
         primaryAction: 'Give Feedback',
         accentColor: colors.accent,
-      };
-    case 'partner_considering_share':
-      return {
-        title: 'Almost There',
-        message: `${partnerName} is deciding whether to share more context to help you understand them better.`,
-        icon: <MessageCircle color={colors.brandBlue} size={32} />,
-        primaryAction: 'Got It',
-        accentColor: colors.brandBlue,
       };
   }
 }
