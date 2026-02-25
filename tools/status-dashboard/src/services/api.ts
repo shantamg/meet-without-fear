@@ -97,13 +97,19 @@ export const api = {
   },
 
   /**
-   * Fetches a single session by ID.
+   * Fetches a single session by ID via dedicated endpoint.
    */
   async getSession(sessionId: string): Promise<Session | null> {
-    // Currently there's no direct endpoint for a single session,
-    // so we fetch all and filter
-    const { sessions } = await this.getSessions();
-    return sessions.find(s => s.id === sessionId) || null;
+    const res = await authedFetch(`${API_BASE}/api/brain/sessions/${sessionId}`);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      throw new Error(`Failed to fetch session: ${res.statusText}`);
+    }
+    const json: ApiResponse<Session> = await res.json();
+    if (!json.success) {
+      throw new Error(json.error || 'Failed to load session');
+    }
+    return json.data;
   },
 
   /**

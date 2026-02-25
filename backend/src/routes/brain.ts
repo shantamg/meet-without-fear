@@ -229,28 +229,39 @@ router.get('/dashboard', async (req, res) => {
       },
     });
 
-    // Get cost stats for recent sessions
+    // Get cost stats and user-message turn counts for recent sessions
     const recentSessionIds = recentPartnerSessions.map(s => s.id);
     let recentStats: any[] = [];
+    let recentTurnCounts: any[] = [];
     if (recentSessionIds.length > 0) {
-      recentStats = await (prisma.brainActivity.groupBy as any)({
-        by: ['sessionId'],
-        _sum: { cost: true },
-        _count: { id: true },
-        where: { sessionId: { in: recentSessionIds } },
-      });
+      [recentStats, recentTurnCounts] = await Promise.all([
+        (prisma.brainActivity.groupBy as any)({
+          by: ['sessionId'],
+          _sum: { cost: true },
+          _count: { id: true },
+          where: { sessionId: { in: recentSessionIds } },
+        }),
+        (prisma.message.groupBy as any)({
+          by: ['sessionId'],
+          _count: { id: true },
+          where: { sessionId: { in: recentSessionIds }, role: 'USER' },
+        }),
+      ]);
     }
 
     const recentSessions = recentPartnerSessions.map(session => {
       const stat = recentStats.find((s: any) => s.sessionId === session.id);
-      const participants = session.relationship.members.map(m => m.user.name || 'Unknown').join(' & ');
+      const turnStat = recentTurnCounts.find((t: any) => t.sessionId === session.id);
+      const participants = session.relationship?.members?.length
+        ? session.relationship.members.map(m => m.user.name || 'Unknown').join(' & ')
+        : session.relationship ? 'Deleted Users' : 'No Relationship';
       const maxStage = session.stageProgress[0]?.stage ?? 0;
       return {
         id: session.id,
         participants,
         status: session.status,
         stage: maxStage,
-        turns: stat?._count?.id ?? 0,
+        turns: turnStat?._count?.id ?? 0,
         cost: stat?._sum?.cost ?? 0,
         age: session.createdAt.toISOString(),
       };
@@ -330,7 +341,7 @@ router.get('/costs', async (req, res) => {
     let totalUncached = 0;
 
     // Session costs
-    const sessionCostMap = new Map<string, { sonnetCost: number; haikuCost: number; titanCost: number; totalCost: number; turns: number }>();
+    const sessionCostMap = new Map<string, { sonnetCost: number; haikuCost: number; titanCost: number; totalCost: number; activityCount: number }>();
 
     for (const a of activities) {
       const modelNorm = normalizeModel(a.model);
@@ -366,14 +377,15 @@ router.get('/costs', async (req, res) => {
       ctEntry.totalDuration += a.durationMs;
       callTypeMap.set(ct, ctEntry);
 
-      // Session costs
-      const sessEntry = sessionCostMap.get(a.sessionId) || { sonnetCost: 0, haikuCost: 0, titanCost: 0, totalCost: 0, turns: 0 };
+      // Session costs — group by sessionId, treating null/empty as 'unattributed'
+      const sessKey = a.sessionId || 'unattributed';
+      const sessEntry = sessionCostMap.get(sessKey) || { sonnetCost: 0, haikuCost: 0, titanCost: 0, totalCost: 0, activityCount: 0 };
       if (modelNorm === 'sonnet') sessEntry.sonnetCost += a.cost;
       else if (modelNorm === 'haiku') sessEntry.haikuCost += a.cost;
       else if (modelNorm === 'titan') sessEntry.titanCost += a.cost;
       sessEntry.totalCost += a.cost;
-      sessEntry.turns += 1;
-      sessionCostMap.set(a.sessionId, sessEntry);
+      sessEntry.activityCount += 1;
+      sessionCostMap.set(sessKey, sessEntry);
     }
 
     // Estimate cache savings (what it would have cost without caching)
@@ -408,9 +420,10 @@ router.get('/costs', async (req, res) => {
       estimatedSavings: Math.round(cacheSavings * 1000000) / 1000000,
     };
 
-    // Fetch participant info for session costs
-    const sessionIds = Array.from(sessionCostMap.keys());
+    // Fetch participant info and user-message turn counts for session costs
+    const sessionIds = Array.from(sessionCostMap.keys()).filter(id => id !== 'unattributed');
     let sessionParticipants = new Map<string, string>();
+    let sessionTurnCounts = new Map<string, number>();
     if (sessionIds.length > 0) {
       const sessions = await prisma.session.findMany({
         where: { id: { in: sessionIds } },
@@ -421,8 +434,41 @@ router.get('/costs', async (req, res) => {
         },
       });
       for (const s of sessions) {
-        const names = s.relationship.members.map(m => m.user.name || 'Unknown').join(' & ');
+        const names = s.relationship?.members?.length
+          ? s.relationship.members.map(m => m.user.name || 'Unknown').join(' & ')
+          : s.relationship ? 'Deleted Users' : 'No Relationship';
         sessionParticipants.set(s.id, names);
+      }
+
+      // Query user-message turn counts (consistent with sessions endpoint)
+      const partnerTurnCounts = await (prisma.message.groupBy as any)({
+        by: ['sessionId'],
+        _count: { id: true },
+        where: { sessionId: { in: sessionIds }, role: 'USER' },
+      });
+      for (const tc of partnerTurnCounts) {
+        sessionTurnCounts.set(tc.sessionId, tc._count.id);
+      }
+
+      // Also check inner work sessions for any that weren't partner sessions
+      const foundPartnerIds = new Set(sessions.map(s => s.id));
+      const missingIds = sessionIds.filter(id => !foundPartnerIds.has(id));
+      if (missingIds.length > 0) {
+        const innerSessions = await prisma.innerWorkSession.findMany({
+          where: { id: { in: missingIds } },
+          include: { user: { select: { name: true } } },
+        });
+        for (const s of innerSessions) {
+          sessionParticipants.set(s.id, s.user?.name || 'Unknown');
+        }
+        const innerTurnCounts = await (prisma.innerWorkMessage.groupBy as any)({
+          by: ['sessionId'],
+          _count: { id: true },
+          where: { sessionId: { in: missingIds }, role: 'USER' },
+        });
+        for (const tc of innerTurnCounts) {
+          sessionTurnCounts.set(tc.sessionId, tc._count.id);
+        }
       }
     }
 
@@ -431,8 +477,11 @@ router.get('/costs', async (req, res) => {
       .slice(0, 20)
       .map(([sessionId, data]) => ({
         sessionId,
-        participants: sessionParticipants.get(sessionId) || sessionId,
+        participants: sessionId === 'unattributed'
+          ? 'Unattributed'
+          : sessionParticipants.get(sessionId) || sessionId,
         ...data,
+        turnCount: sessionTurnCounts.get(sessionId) ?? 0,
       }));
 
     return successResponse(res, {
@@ -1199,9 +1248,9 @@ router.get('/sessions', async (req, res) => {
       const maxStage = session.stageProgress?.length > 0
         ? Math.max(...session.stageProgress.map((p: any) => p.stage))
         : 0;
-      const participants = session.relationship.members
-        .map((m: any) => m.user.name || 'Unknown')
-        .join(' & ');
+      const participants = session.relationship?.members?.length
+        ? session.relationship.members.map((m: any) => m.user.name || 'Unknown').join(' & ')
+        : session.relationship ? 'Deleted Users' : 'No Relationship';
       return {
         id: session.id,
         type: 'PARTNER' as const,
@@ -1284,6 +1333,104 @@ router.get('/sessions', async (req, res) => {
   } catch (error) {
     console.error('[BrainRoutes] Failed to fetch sessions:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch sessions', 500);
+  }
+});
+
+// ============================================================================
+// Single session detail
+// ============================================================================
+router.get('/sessions/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    // Try as partner session first
+    const partnerSession = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        relationship: {
+          include: { members: { include: { user: true } } },
+        },
+        stageProgress: { orderBy: { stage: 'desc' } },
+      },
+    });
+
+    if (partnerSession) {
+      // Get stats
+      const [stat, turnCount] = await Promise.all([
+        (prisma.brainActivity.aggregate as any)({
+          where: { sessionId },
+          _sum: { cost: true, tokenCountInput: true, tokenCountOutput: true },
+          _count: { id: true },
+        }),
+        prisma.message.count({ where: { sessionId, role: 'USER' } }),
+      ]);
+
+      const maxStage = partnerSession.stageProgress?.length > 0
+        ? Math.max(...partnerSession.stageProgress.map((p: any) => p.stage))
+        : 0;
+      const participants = partnerSession.relationship?.members?.length
+        ? partnerSession.relationship.members.map((m: any) => m.user.name || 'Unknown').join(' & ')
+        : partnerSession.relationship ? 'Deleted Users' : 'No Relationship';
+
+      return successResponse(res, {
+        id: partnerSession.id,
+        type: 'PARTNER' as const,
+        status: partnerSession.status,
+        stage: maxStage,
+        createdAt: partnerSession.createdAt,
+        updatedAt: partnerSession.updatedAt,
+        title: null,
+        participants,
+        relationship: partnerSession.relationship,
+        stats: {
+          totalCost: stat?._sum?.cost || 0,
+          totalTokens: (stat?._sum?.tokenCountInput || 0) + (stat?._sum?.tokenCountOutput || 0),
+          activityCount: stat?._count?.id || 0,
+          turnCount,
+        },
+      });
+    }
+
+    // Try as inner work session
+    const innerSession = await prisma.innerWorkSession.findUnique({
+      where: { id: sessionId },
+      include: { user: true },
+    });
+
+    if (innerSession) {
+      const [stat, turnCount] = await Promise.all([
+        (prisma.brainActivity.aggregate as any)({
+          where: { sessionId },
+          _sum: { cost: true, tokenCountInput: true, tokenCountOutput: true },
+          _count: { id: true },
+        }),
+        prisma.innerWorkMessage.count({ where: { sessionId, role: 'USER' } }),
+      ]);
+
+      return successResponse(res, {
+        id: innerSession.id,
+        type: 'INNER_WORK' as const,
+        status: innerSession.status,
+        stage: 0,
+        createdAt: innerSession.createdAt,
+        updatedAt: innerSession.updatedAt,
+        title: innerSession.title || 'Untitled Session',
+        participants: innerSession.user?.name || 'Unknown',
+        relationship: null,
+        user: innerSession.user,
+        stats: {
+          totalCost: stat?._sum?.cost || 0,
+          totalTokens: (stat?._sum?.tokenCountInput || 0) + (stat?._sum?.tokenCountOutput || 0),
+          activityCount: stat?._count?.id || 0,
+          turnCount,
+        },
+      });
+    }
+
+    return errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+  } catch (error) {
+    console.error('[BrainRoutes] Failed to fetch session:', error);
+    return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch session', 500);
   }
 });
 

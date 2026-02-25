@@ -28,15 +28,20 @@ function isSessionActive(status: string): boolean {
   return status === 'ACTIVE' || status === 'WAITING';
 }
 
-function getParticipantDisplay(session: Session): string {
+function getParticipantDisplay(session: Session): string | null {
   if (session.type === 'INNER_WORK') return 'Inner Thoughts';
   if (session.participants) return session.participants;
-  if (session.relationship?.members) {
+  if (session.relationship?.members && session.relationship.members.length > 0) {
     return session.relationship.members
       .map(m => m.user.firstName || m.user.email)
       .join(' & ');
   }
-  return session.title || 'Unknown';
+  if (session.title) return session.title;
+  // Empty participants with a relationship that has no members means users were deleted
+  if (session.relationship && (!session.relationship.members || session.relationship.members.length === 0)) {
+    return null; // Signal "Deleted Users"
+  }
+  return 'Unknown';
 }
 
 const SORTABLE_COLUMNS: { field: SessionSortField; label: string }[] = [
@@ -92,7 +97,13 @@ export function SessionTable({ sessions, sort, order, onSort }: SessionTableProp
                 <span className={`activity-dot ${isSessionActive(session.status) ? 'active' : 'inactive'}`} />
               </td>
               <td className="col-participants">
-                <span className="participant-name">{getParticipantDisplay(session)}</span>
+                {(() => {
+                  const display = getParticipantDisplay(session);
+                  if (display === null) {
+                    return <span className="participant-name" style={{ color: 'var(--text-tertiary, #6b7280)', fontStyle: 'italic' }}>Deleted Users</span>;
+                  }
+                  return <span className="participant-name">{display}</span>;
+                })()}
                 {session.type === 'INNER_WORK' && (
                   <span className="type-tag inner">Solo</span>
                 )}

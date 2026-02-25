@@ -32,17 +32,91 @@ export async function cleanupE2EUsers(
   }
 
   try {
-    const result = await prisma.user.deleteMany({
+    // Step 1: Find all E2E test users
+    const e2eUsers = await prisma.user.findMany({
+      where: { email: { endsWith: '@e2e.test' } },
+      select: { id: true },
+    });
+    const e2eUserIds = e2eUsers.map((u) => u.id);
+
+    if (e2eUserIds.length === 0) {
+      res.status(200).json({
+        success: true,
+        deletedUsers: 0,
+        deletedSessions: 0,
+        deletedRelationships: 0,
+      });
+      return;
+    }
+
+    // Step 2: Find all relationships that have E2E test members
+    const e2eRelationships = await prisma.relationship.findMany({
       where: {
-        email: {
-          endsWith: '@e2e.test',
+        members: {
+          some: { userId: { in: e2eUserIds } },
         },
       },
+      select: { id: true },
+    });
+    const e2eRelationshipIds = e2eRelationships.map((r) => r.id);
+
+    // Step 3: Delete sessions linked to those relationships
+    // Session cascade (onDelete: Cascade) handles all children:
+    // Messages, StageProgress, UserVessel, EmpathyDraft, EmpathyAttempt,
+    // EmpathyValidation, ReconcilerResult -> ReconcilerShareOffer,
+    // StrategyProposal, StrategyRanking, ConsentRecord, SharedVessel,
+    // Invitation, UserMemory, ValidationFeedbackDraft,
+    // RefinementAttemptCounter, BrainActivity, EmotionalExerciseCompletion
+    let deletedSessions = 0;
+    if (e2eRelationshipIds.length > 0) {
+      const sessionResult = await prisma.session.deleteMany({
+        where: { relationshipId: { in: e2eRelationshipIds } },
+      });
+      deletedSessions = sessionResult.count;
+    }
+
+    // Step 4: Delete the relationships themselves
+    let deletedRelationships = 0;
+    if (e2eRelationshipIds.length > 0) {
+      const relationshipResult = await prisma.relationship.deleteMany({
+        where: { id: { in: e2eRelationshipIds } },
+      });
+      deletedRelationships = relationshipResult.count;
+    }
+
+    // Step 5: Also clean up any orphaned relationships (zero members)
+    // This handles edge cases where prior partial cleanup removed members
+    const orphanedRelationships = await prisma.relationship.findMany({
+      where: {
+        members: { none: {} },
+      },
+      select: { id: true },
+    });
+    if (orphanedRelationships.length > 0) {
+      const orphanRelIds = orphanedRelationships.map((r) => r.id);
+      // Delete sessions under orphaned relationships first
+      const orphanSessionResult = await prisma.session.deleteMany({
+        where: { relationshipId: { in: orphanRelIds } },
+      });
+      deletedSessions += orphanSessionResult.count;
+      const orphanRelResult = await prisma.relationship.deleteMany({
+        where: { id: { in: orphanRelIds } },
+      });
+      deletedRelationships += orphanRelResult.count;
+    }
+
+    // Step 6: Delete the E2E users themselves
+    // User cascade handles user-owned children:
+    // RelationshipMember, InnerWorkSession, NeedScore, Person, etc.
+    const userResult = await prisma.user.deleteMany({
+      where: { email: { endsWith: '@e2e.test' } },
     });
 
     res.status(200).json({
       success: true,
-      deletedCount: result.count,
+      deletedUsers: userResult.count,
+      deletedSessions,
+      deletedRelationships,
     });
   } catch (error) {
     next(error);

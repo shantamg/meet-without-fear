@@ -1,10 +1,11 @@
 import type { SessionCost } from '../types/costs';
 
 export function exportSessionCostsToCSV(sessions: SessionCost[]): void {
-  const headers = ['Session', 'Turns', 'Sonnet Cost', 'Haiku Cost', 'Titan Cost', 'Total Cost'];
+  const headers = ['Session', 'Turns', 'AI Calls', 'Sonnet Cost', 'Haiku Cost', 'Titan Cost', 'Total Cost'];
   const rows = sessions.map(s => [
     s.participants,
-    s.turns.toString(),
+    s.turnCount.toString(),
+    s.activityCount.toString(),
     `$${s.sonnetCost.toFixed(6)}`,
     `$${s.haikuCost.toFixed(6)}`,
     `$${s.titanCost.toFixed(6)}`,

@@ -132,6 +132,8 @@ model Session {
   userMemories        UserMemory[]
   validationFeedbackDrafts ValidationFeedbackDraft[]
   refinementAttemptCounters RefinementAttemptCounter[]
+  reconcilerResults        ReconcilerResult[]
+  brainActivities          BrainActivity[]
 
   // Linked Inner Thoughts sessions for private reflection during partner session
   linkedInnerThoughts InnerWorkSession[] @relation("LinkedInnerThoughts")
@@ -678,6 +680,7 @@ model EmpathyValidation {
 /// guessed about the other vs what they actually expressed.
 model ReconcilerResult {
   id        String   @id @default(cuid())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String
 
   /// The user who made the empathy guess
@@ -1283,6 +1286,7 @@ model SavedMeditation {
 
 model BrainActivity {
   id              String           @id @default(cuid())
+  session         Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId       String
   turnId          String?
   activityType    ActivityType

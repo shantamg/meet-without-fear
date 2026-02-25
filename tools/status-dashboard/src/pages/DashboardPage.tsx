@@ -280,7 +280,12 @@ export function DashboardPage() {
                 <td>
                   <span className={`status-dot ${session.status === 'ACTIVE' || session.status === 'WAITING' ? 'active' : 'inactive'}`} />
                 </td>
-                <td className="participants-cell">{session.participants}</td>
+                <td className="participants-cell">
+                  {session.participants
+                    ? session.participants
+                    : <span style={{ color: 'var(--text-tertiary, #6b7280)', fontStyle: 'italic' }}>Deleted Users</span>
+                  }
+                </td>
                 <td><StageBadge stage={session.stage} /></td>
                 <td className="mono-cell">{session.turns}</td>
                 <td className="mono-cell cost-cell">{formatCost(session.cost)}</td>

@@ -46,7 +46,8 @@ export interface SessionCost {
   haikuCost: number;
   titanCost: number;
   totalCost: number;
-  turns: number;
+  activityCount: number;
+  turnCount: number;
 }
 
 export interface CostParams {

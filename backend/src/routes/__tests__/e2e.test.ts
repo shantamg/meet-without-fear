@@ -30,9 +30,18 @@ describe('E2E Routes', () => {
   });
 
   describe('POST /api/e2e/cleanup', () => {
-    it('deletes users with @e2e.test emails when E2E_AUTH_BYPASS=true', async () => {
-      const mockDeleteResult = { count: 3 };
-      (prisma.user.deleteMany as jest.Mock).mockResolvedValue(mockDeleteResult);
+    it('deletes sessions, relationships, and users for @e2e.test emails', async () => {
+      const mockUsers = [{ id: 'user-1' }, { id: 'user-2' }];
+      const mockRelationships = [{ id: 'rel-1' }];
+      const mockOrphanedRelationships: { id: string }[] = [];
+
+      (prisma.user.findMany as jest.Mock).mockResolvedValue(mockUsers);
+      (prisma.relationship.findMany as jest.Mock)
+        .mockResolvedValueOnce(mockRelationships) // E2E relationships
+        .mockResolvedValueOnce(mockOrphanedRelationships); // Orphaned relationships
+      (prisma.session.deleteMany as jest.Mock).mockResolvedValue({ count: 2 });
+      (prisma.relationship.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.user.deleteMany as jest.Mock).mockResolvedValue({ count: 2 });
 
       const req = {} as Request;
       const jsonMock = jest.fn();
@@ -42,17 +51,49 @@ describe('E2E Routes', () => {
 
       await cleanupE2EUsers(req, res, next);
 
+      // Should find E2E users first
+      expect(prisma.user.findMany).toHaveBeenCalledWith({
+        where: { email: { endsWith: '@e2e.test' } },
+        select: { id: true },
+      });
+      // Should delete sessions before relationships
+      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+        where: { relationshipId: { in: ['rel-1'] } },
+      });
+      // Should delete relationships before users
+      expect(prisma.relationship.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['rel-1'] } },
+      });
+      // Should delete users last
       expect(prisma.user.deleteMany).toHaveBeenCalledWith({
-        where: {
-          email: {
-            endsWith: '@e2e.test',
-          },
-        },
+        where: { email: { endsWith: '@e2e.test' } },
       });
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(jsonMock).toHaveBeenCalledWith({
         success: true,
-        deletedCount: 3,
+        deletedUsers: 2,
+        deletedSessions: 2,
+        deletedRelationships: 1,
+      });
+    });
+
+    it('returns early with zero counts when no E2E users exist', async () => {
+      (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
+
+      const req = {} as Request;
+      const jsonMock = jest.fn();
+      const statusMock = jest.fn().mockReturnValue({ json: jsonMock });
+      const res = { status: statusMock, json: jsonMock } as unknown as Response;
+      const next = jest.fn() as NextFunction;
+
+      await cleanupE2EUsers(req, res, next);
+
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith({
+        success: true,
+        deletedUsers: 0,
+        deletedSessions: 0,
+        deletedRelationships: 0,
       });
     });
 

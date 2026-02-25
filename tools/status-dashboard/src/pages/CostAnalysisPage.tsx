@@ -15,7 +15,7 @@ import { CostFlowSankey } from '../components/charts/CostFlowSankey';
 import type { SessionCost } from '../types/costs';
 
 type Period = '24h' | '7d' | '30d';
-type SortKey = 'participants' | 'turns' | 'sonnetCost' | 'haikuCost' | 'totalCost';
+type SortKey = 'participants' | 'turnCount' | 'sonnetCost' | 'haikuCost' | 'totalCost';
 type SortDir = 'asc' | 'desc';
 
 function formatCostPrecise(value: number): string {
@@ -454,8 +454,8 @@ export function CostAnalysisPage() {
                 <th onClick={() => handleSort('participants')} className="sortable">
                   Session{sortIndicator('participants')}
                 </th>
-                <th onClick={() => handleSort('turns')} className="sortable">
-                  Turns{sortIndicator('turns')}
+                <th onClick={() => handleSort('turnCount')} className="sortable">
+                  Turns{sortIndicator('turnCount')}
                 </th>
                 <th onClick={() => handleSort('sonnetCost')} className="sortable">
                   Sonnet{sortIndicator('sonnetCost')}
@@ -476,7 +476,7 @@ export function CostAnalysisPage() {
                   onClick={() => navigate(`/sessions/${session.sessionId}`)}
                 >
                   <td className="session-name-cell">{session.participants}</td>
-                  <td className="numeric-cell">{session.turns}</td>
+                  <td className="numeric-cell">{session.turnCount}</td>
                   <td className="cost-cell sonnet">{formatCostPrecise(session.sonnetCost)}</td>
                   <td className="cost-cell haiku">{formatCostPrecise(session.haikuCost)}</td>
                   <td className="cost-cell total">{formatCostPrecise(session.totalCost)}</td>

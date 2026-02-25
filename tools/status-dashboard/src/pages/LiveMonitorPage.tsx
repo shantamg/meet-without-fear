@@ -68,8 +68,8 @@ const ConnectionDot: React.FC<{ status: string }> = ({ status }) => {
   let color = '#ef4444';
   let label = 'Disconnected';
   if (status === 'connected') { color = '#4ade80'; label = 'Connected'; }
-  else if (status === 'connecting') { color = '#fbbf24'; label = 'Reconnecting'; }
-  else if (status === 'error') { color = '#ef4444'; label = 'Error'; }
+  else if (status === 'connecting') { color = '#fbbf24'; label = 'Connecting...'; }
+  else if (status === 'error') { color = '#94a3b8'; label = 'Offline'; }
   return (
     <span className="live-connection-status">
       <span className="live-connection-dot" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
@@ -376,42 +376,42 @@ export function LiveMonitorPage() {
 
   return (
     <div className="live-monitor">
-      {/* Reconnecting Banner */}
+      {/* Connection status banners — kept subtle to avoid alarm */}
       {connectionState === 'reconnecting' && (
         <div style={{
-          background: '#92400e',
-          color: '#fbbf24',
-          padding: '0.5rem 1rem',
+          background: 'var(--bg-secondary, #1e293b)',
+          color: 'var(--text-secondary, #94a3b8)',
+          padding: '0.4rem 1rem',
           textAlign: 'center',
-          fontSize: '0.85rem',
+          fontSize: '0.8rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           gap: '0.5rem',
         }}>
-          <span className="spinner">↻</span>
-          Reconnecting...
-          <button className="live-btn" onClick={reconnect} style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}>
-            Retry Now
+          <span className="spinner">&#x21BB;</span>
+          Attempting to connect...
+          <button className="live-btn" onClick={reconnect} style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}>
+            Retry
           </button>
         </div>
       )}
 
       {connectionState === 'disconnected' && status === 'error' && (
         <div style={{
-          background: '#7f1d1d',
-          color: '#fca5a5',
-          padding: '0.5rem 1rem',
+          background: 'var(--bg-secondary, #1e293b)',
+          color: 'var(--text-secondary, #94a3b8)',
+          padding: '0.4rem 1rem',
           textAlign: 'center',
-          fontSize: '0.85rem',
+          fontSize: '0.8rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           gap: '0.5rem',
         }}>
-          Connection lost.
-          <button className="live-btn" onClick={reconnect} style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}>
-            Reconnect
+          Stream not connected.
+          <button className="live-btn" onClick={reconnect} style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}>
+            Connect
           </button>
         </div>
       )}
@@ -517,10 +517,13 @@ export function LiveMonitorPage() {
       }>
         <div className="live-feed" ref={containerRef}>
           {filteredEvents.length === 0 ? (
-            <div className="live-empty">
-              {isConnected
-                ? 'Waiting for events...'
-                : 'Connect to start receiving events'}
+            <div className="live-empty" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '1.5rem', opacity: 0.4 }}>{'\u{1F50D}'}</span>
+              <span>
+                {isConnected
+                  ? 'No active sessions. Events will appear here when AI calls are made.'
+                  : 'No active sessions. Connect to start receiving debug events.'}
+              </span>
             </div>
           ) : (
             <VList

@@ -33,8 +33,8 @@ export function Sidebar({ collapsed }: SidebarProps) {
           <span className="bottom-tab-label">Costs</span>
         </NavLink>
         <NavLink to="/live" className={({ isActive }) => `bottom-tab${isActive ? ' active' : ''}`}>
-          <span className="bottom-tab-icon">{'\u25C9'}</span>
-          <span className="bottom-tab-label">Live</span>
+          <span className="bottom-tab-icon">{'\u{1F41E}'}</span>
+          <span className="bottom-tab-label">Debug Stream</span>
         </NavLink>
       </nav>
     );
@@ -77,8 +77,8 @@ export function Sidebar({ collapsed }: SidebarProps) {
           to="/live"
           className={({ isActive }) => `sidebar-nav-item${isActive ? ' active' : ''}`}
         >
-          <span className="sidebar-nav-icon">{'\u25C9'}</span>
-          <span className="sidebar-nav-label">Live</span>
+          <span className="sidebar-nav-icon">{'\u{1F41E}'}</span>
+          <span className="sidebar-nav-label">Debug Stream</span>
         </NavLink>
       </nav>
 
