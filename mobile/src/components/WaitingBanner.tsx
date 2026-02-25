@@ -5,7 +5,7 @@
  * Uses configuration from waitingStatusConfig.ts for consistent UI behavior.
  */
 
-import { View, Text, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, ActivityIndicator, Animated, Pressable } from 'react-native';
 import { createStyles } from '../theme/styled';
 import type { WaitingStatusState } from '../utils/getWaitingStatus';
 import { getWaitingStatusConfig } from '../config/waitingStatusConfig';
@@ -21,6 +21,8 @@ interface WaitingBannerProps {
   partnerName: string;
   /** Animation value for slide-up effect (0 = hidden, 1 = visible) */
   animationValue?: Animated.Value;
+  /** Callback when user taps the breathing exercise link */
+  onExercisePress?: () => void;
   /** Test ID for testing */
   testID?: string;
 }
@@ -33,6 +35,7 @@ export function WaitingBanner({
   status,
   partnerName,
   animationValue,
+  onExercisePress,
   testID = 'waiting-banner',
 }: WaitingBannerProps) {
   const styles = useStyles();
@@ -92,6 +95,22 @@ export function WaitingBanner({
             {config.bannerSubtext}
           </Text>
         )}
+
+        {/* Breathing exercise link */}
+        {onExercisePress && (
+          <Pressable
+            onPress={onExercisePress}
+            style={styles.exerciseLink}
+            testID={`${testID}-exercise-link`}
+            accessibilityRole="button"
+            accessibilityLabel="Take a breath while you wait"
+            accessibilityHint="Opens breathing and grounding exercises"
+          >
+            <Text style={styles.exerciseLinkText}>
+              Take a breath while you wait
+            </Text>
+          </Pressable>
+        )}
       </View>
     </Animated.View>
   );
@@ -131,6 +150,16 @@ const useStyles = () =>
       color: t.colors.textMuted,
       textAlign: 'center',
       marginTop: 2,
+    },
+    exerciseLink: {
+      marginTop: t.spacing.sm,
+      minHeight: 44,
+      justifyContent: 'center',
+    },
+    exerciseLinkText: {
+      fontSize: t.typography.fontSize.sm,
+      color: t.colors.accent,
+      textDecorationLine: 'underline',
     },
   }));
 
