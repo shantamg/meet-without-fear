@@ -705,27 +705,37 @@ export function UnifiedSessionScreen({
     setShowActivityMenu(true);
   }, []);
 
-  // Local latch to prevent panel flashing during server refetches
-  // Once user clicks Share, this stays true even if server data temporarily reverts
-  const [hasSharedEmpathyLocal, setHasSharedEmpathyLocal] = useState(false);
+  // Local latches to prevent panel flashing during server refetches.
+  // Once user completes an action, the latch stays true even if server data temporarily reverts.
+  type CompletedAction =
+    | 'shared-empathy'
+    | 'confirmed-invitation'
+    | 'responded-to-share-offer'
+    | 'confirmed-needs'
+    | 'confirmed-common-ground'
+    | 'validated-empathy';
 
-  // Local latch for invitation confirmation - once user confirms, hide panel immediately
-  // This prevents the invitation panel from flashing when AI response triggers a cache refetch
-  // that returns stale data (before the confirm mutation completed on server)
-  const [hasConfirmedInvitationLocal, setHasConfirmedInvitationLocal] = useState(false);
+  const [completedActions, setCompletedActions] = useState<Set<CompletedAction>>(new Set());
 
-  // Local latch for share offer response - once user responds (accept or decline), hide panel
-  const [hasRespondedToShareOfferLocal, setHasRespondedToShareOfferLocal] = useState(false);
+  const markCompleted = useCallback((action: CompletedAction) => {
+    setCompletedActions(prev => {
+      const next = new Set(prev);
+      next.add(action);
+      return next;
+    });
+  }, []);
 
-  // Local latch for needs confirmation - once user confirms needs, hide panel immediately
-  // This prevents the needs review panel from flashing during server refetch
-  const [hasConfirmedNeedsLocal, setHasConfirmedNeedsLocal] = useState(false);
+  const resetCompleted = useCallback((action: CompletedAction) => {
+    setCompletedActions(prev => {
+      const next = new Set(prev);
+      next.delete(action);
+      return next;
+    });
+  }, []);
 
-  // Local latch for common ground confirmation - once user confirms, hide panel immediately
-  const [hasConfirmedCommonGroundLocal, setHasConfirmedCommonGroundLocal] = useState(false);
-
-  // Local latch for empathy validation - once user validates, don't reshow accuracy panel
-  const [hasValidatedEmpathyLocal, setHasValidatedEmpathyLocal] = useState(false);
+  // Extract frequently-read booleans to prevent FlatList re-renders
+  const isEmpathyValidated = completedActions.has('validated-empathy');
+  const isEmpathyShared = completedActions.has('shared-empathy');
 
   // Consent modal for sharing needs with partner (shown after needs are confirmed)
   const [showShareNeedsConfirm, setShowShareNeedsConfirm] = useState(false);
@@ -814,9 +824,9 @@ export function UnifiedSessionScreen({
     hasInvitationMessage: !!invitationMessage,
     // Cache-First: invitationConfirmed is derived from cache (invitation.messageConfirmed)
     // The optimistic update in useConfirmInvitationMessage.onMutate sets this immediately.
-    // Local latch (hasConfirmedInvitationLocal) prevents panel flash when background refetch
+    // Local latch (completedActions 'confirmed-invitation') prevents panel flash when background refetch
     // returns stale data during race conditions with AI response events.
-    invitationConfirmed: invitationConfirmed || isConfirmingInvitation || hasConfirmedInvitationLocal,
+    invitationConfirmed: invitationConfirmed || isConfirmingInvitation || completedActions.has('confirmed-invitation'),
     // isConfirmingInvitation: mutation is in flight (panel hides during API call)
     isConfirmingInvitation,
     showFeelHeardConfirmation,
@@ -841,21 +851,21 @@ export function UnifiedSessionScreen({
     } : undefined,
     hasPartnerEmpathy: !!empathyStatusData?.partnerAttempt,
     hasLiveProposedEmpathyStatement: !!liveProposedEmpathyStatement,
-    hasSharedEmpathyLocal,
+    hasSharedEmpathyLocal: isEmpathyShared,
     shareOfferData: shareOfferData ?? undefined,
     // Share offer panel shows ShareTopicPanel which opens ShareTopicDrawer
-    hasRespondedToShareOfferLocal,
-    partnerEmpathyValidated: hasValidatedEmpathyLocal || (partnerEmpathyData?.validated ?? false),
+    hasRespondedToShareOfferLocal: completedActions.has('responded-to-share-offer'),
+    partnerEmpathyValidated: isEmpathyValidated || (partnerEmpathyData?.validated ?? false),
     allNeedsConfirmed,
     needsAvailable: (needs?.length ?? 0) > 0,
     needsShared: allNeedsConfirmed, // Sharing happens immediately after confirmation
-    hasConfirmedNeedsLocal,
+    hasConfirmedNeedsLocal: completedActions.has('confirmed-needs'),
     commonGroundCount: commonGround?.length ?? 0,
     commonGroundAvailable: (commonGround?.length ?? 0) > 0 && (commonGroundData?.analysisComplete ?? false),
     commonGroundNoOverlap: commonGroundData?.noOverlap ?? false,
     commonGroundAllConfirmedByMe: commonGround?.length > 0 && commonGround.every((cg) => cg.confirmedByMe),
     commonGroundAllConfirmedByBoth: commonGroundComplete,
-    hasConfirmedCommonGroundLocal,
+    hasConfirmedCommonGroundLocal: completedActions.has('confirmed-common-ground'),
     strategyPhase,
     overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
   });
@@ -984,7 +994,7 @@ export function UnifiedSessionScreen({
   // This allows the panel to show again so user can share their revised empathy
   useEffect(() => {
     if (isRefiningEmpathy) {
-      setHasSharedEmpathyLocal(false);
+      resetCompleted('shared-empathy');
     }
   }, [isRefiningEmpathy]);
 
@@ -1946,7 +1956,7 @@ export function UnifiedSessionScreen({
                               trackInvitationSent(sessionId, 'share_sheet');
                               setIsRefiningInvitation(false); // Exit refinement mode
                               // Local latch: Immediately hide panel, survives cache race conditions
-                              setHasConfirmedInvitationLocal(true);
+                              markCompleted('confirmed-invitation');
                               // Cache-First: useConfirmInvitationMessage.onMutate sets invitation.messageConfirmed optimistically
                               // The indicator will appear immediately because the cache is updated
                               handleConfirmInvitationMessage(invitationMessage!);
@@ -1985,7 +1995,7 @@ export function UnifiedSessionScreen({
                             <TouchableOpacity
                               style={styles.needsReviewButton}
                               onPress={() => {
-                                setHasConfirmedNeedsLocal(true);
+                                markCompleted('confirmed-needs');
                                 handleConfirmAllNeeds(() => {
                                   // After confirming needs, show consent prompt
                                   setShowShareNeedsConfirm(true);
@@ -2031,7 +2041,7 @@ export function UnifiedSessionScreen({
                                 <TouchableOpacity
                                   style={styles.commonGroundButton}
                                   onPress={() => {
-                                    setHasConfirmedCommonGroundLocal(true);
+                                    markCompleted('confirmed-common-ground');
                                     handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
                                   }}
                                   activeOpacity={0.7}
@@ -2046,7 +2056,7 @@ export function UnifiedSessionScreen({
                               <TouchableOpacity
                                 style={styles.commonGroundButton}
                                 onPress={() => {
-                                  setHasConfirmedCommonGroundLocal(true);
+                                  markCompleted('confirmed-common-ground');
                                   handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
                                 }}
                                 activeOpacity={0.7}
@@ -2149,7 +2159,7 @@ export function UnifiedSessionScreen({
                 style={styles.primaryButton}
                 onPress={() => {
                   // Set local latch immediately to prevent panel from flashing back
-                  setHasSharedEmpathyLocal(true);
+                  markCompleted('shared-empathy');
                   handleConfirmReadyToShare();
                   handleShareEmpathy();
                   setShowShareConfirm(false);
@@ -2226,7 +2236,7 @@ export function UnifiedSessionScreen({
               return;
             }
             // Set local latch immediately to prevent panel from flashing back during refetch
-            setHasSharedEmpathyLocal(true);
+            markCompleted('shared-empathy');
             // Close drawer immediately
             setShowEmpathyDrawer(false);
 
@@ -2267,12 +2277,12 @@ export function UnifiedSessionScreen({
           statement={partnerEmpathyData.attempt.content}
           partnerName={partnerName}
           onAccurate={() => {
-            setHasValidatedEmpathyLocal(true);
+            markCompleted('validated-empathy');
             handleValidatePartnerEmpathy(true);
             setShowAccuracyFeedbackDrawer(false);
           }}
           onPartiallyAccurate={() => {
-            setHasValidatedEmpathyLocal(true);
+            markCompleted('validated-empathy');
             handleValidatePartnerEmpathy(false, 'Some parts are accurate');
             setShowAccuracyFeedbackDrawer(false);
           }}
@@ -2304,7 +2314,7 @@ export function UnifiedSessionScreen({
             onComplete={(feedback) => {
               setShowFeedbackCoachChat(false);
               setFeedbackCoachInitialDraft('');
-              setHasValidatedEmpathyLocal(true);
+              markCompleted('validated-empathy');
               // Submit the AI-crafted feedback as inaccurate validation
               handleValidatePartnerEmpathy(false, feedback);
             }}
@@ -2324,7 +2334,7 @@ export function UnifiedSessionScreen({
           suggestedShareFocus={shareOfferData.suggestion.suggestedShareFocus || ''}
           onAccept={() => {
             setShowShareTopicDrawer(false);
-            setHasRespondedToShareOfferLocal(true);
+            markCompleted('responded-to-share-offer');
             // Accept triggers draft generation via chat (US-3 from spec)
             // handleRespondToShareOffer will send hidden message to AI
             // AI responds with draft + "Review and share" button
@@ -2332,7 +2342,7 @@ export function UnifiedSessionScreen({
           }}
           onDecline={() => {
             setShowShareTopicDrawer(false);
-            setHasRespondedToShareOfferLocal(true);
+            markCompleted('responded-to-share-offer');
             // Decline marks empathy direction as READY (no notification to partner)
             handleRespondToShareOffer('decline');
           }}
