@@ -802,6 +802,7 @@ export function UnifiedSessionScreen({
     shouldShowWaitingBanner,
     shouldHideInput: derivedShouldHideInput,
     isInOnboardingUnsigned,
+    aboveInputPanel,
     panels: {
       showInvitationPanel: shouldShowInvitationPanel,
       showEmpathyPanel: shouldShowEmpathyPanel,
@@ -1677,6 +1678,373 @@ export function UnifiedSessionScreen({
   }
 
   // -------------------------------------------------------------------------
+  // Render Above Input (switch on aboveInputPanel from useChatUIState)
+  // -------------------------------------------------------------------------
+  const renderAboveInput = useCallback((): React.ReactNode | undefined => {
+    switch (aboveInputPanel) {
+      case 'compact-agreement-bar':
+        return (
+          <CompactAgreementBar
+            onSign={() => {
+              // Cache-First: useSignCompact.onMutate sets compact.mySignedAt optimistically
+              // Mark that compact was just signed (for typewriter animation after mood check)
+              setJustSignedCompact(true);
+              trackCompactSigned(sessionId, invitation?.isInviter ?? true);
+              handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING));
+            }}
+            isPending={isSigningCompact}
+            testID="compact-agreement-bar"
+          />
+        );
+
+      case 'feel-heard':
+        return (
+          <Animated.View
+            style={{
+              opacity: feelHeardAnim,
+              maxHeight: feelHeardAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 100],
+              }),
+              transform: [{
+                translateY: feelHeardAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+              overflow: 'hidden',
+            }}
+            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+          >
+            <View style={styles.feelHeardContainer}>
+              <FeelHeardConfirmation
+                onConfirm={() => {
+                  // Track felt heard response
+                  trackFeltHeardResponse(sessionId, 'yes');
+                  // Cache-First: useConfirmFeelHeard.onMutate sets milestones.feelHeardConfirmedAt optimistically
+                  handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
+                }}
+                isPending={isConfirmingFeelHeard}
+              />
+            </View>
+          </Animated.View>
+        );
+
+      case 'empathy-statement':
+        return (
+          <Animated.View
+            style={{
+              opacity: empathyPanelAnim,
+              maxHeight: empathyPanelAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 100],
+              }),
+              transform: [{
+                translateY: empathyPanelAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+              overflow: 'hidden',
+            }}
+            pointerEvents={!isTypewriterAnimating && !isSharingEmpathy ? 'auto' : 'none'}
+          >
+            <View style={styles.empathyReviewContainer}>
+              <TouchableOpacity
+                style={styles.empathyReviewButton}
+                onPress={() => setShowEmpathyDrawer(true)}
+                activeOpacity={0.7}
+                testID="empathy-review-button"
+              >
+                <Text style={styles.empathyReviewButtonText}>
+                  {isRefiningEmpathy ? 'Revisit what you\'ll share' : 'Review what you\'ll share'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        );
+
+      case 'share-suggestion':
+        return (
+          <Animated.View
+            style={{
+              opacity: shareSuggestionAnim,
+              maxHeight: shareSuggestionAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 60],
+              }),
+              transform: [{
+                translateY: shareSuggestionAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+              overflow: 'hidden',
+            }}
+            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+          >
+            {shareOfferData?.suggestion &&
+             (shareOfferData.suggestion.action === 'OFFER_OPTIONAL' ||
+              shareOfferData.suggestion.action === 'OFFER_SHARING') && (
+              <ShareTopicPanel
+                visible={true}
+                action={shareOfferData.suggestion.action}
+                partnerName={partnerName}
+                onPress={() => setShowShareTopicDrawer(true)}
+              />
+            )}
+          </Animated.View>
+        );
+
+      case 'accuracy-feedback':
+        return (
+          <Animated.View
+            style={{
+              opacity: accuracyFeedbackAnim,
+              maxHeight: accuracyFeedbackAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 80],
+              }),
+              transform: [{
+                translateY: accuracyFeedbackAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+              overflow: 'hidden',
+            }}
+            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+          >
+            <View style={styles.accuracyFeedbackContainer}>
+              <TouchableOpacity
+                style={styles.accuracyFeedbackButton}
+                onPress={() => setShowAccuracyFeedbackDrawer(true)}
+                activeOpacity={0.7}
+                testID="accuracy-feedback-trigger"
+              >
+                <Text style={styles.accuracyFeedbackButtonText}>
+                  Review {partnerName}'s understanding
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        );
+
+      case 'invitation':
+        return (
+          <Animated.View
+            style={{
+              // 1. Animate Opacity
+              opacity: invitationPanelAnim,
+
+              // 2. Animate Height (Slide in effect)
+              // We use maxHeight to safely animate from 0 to a value large enough to fit content
+              maxHeight: invitationPanelAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 400], // 400 is arbitrary but large enough for your message + buttons
+              }),
+
+              // 3. Optional: Add a slight slide-up transform for visual flair
+              transform: [{
+                translateY: invitationPanelAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+
+              // 4. Clip content while closed so padding doesn't leak space
+              overflow: 'hidden',
+            }}
+            // Disable touches while invisible (during typewriter animation)
+            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+          >
+            {/* 5. INNER CONTAINER
+           Move the styles that contain padding/bg/borders HERE.
+           This ensures they don't take up space when the parent height is 0.
+        */}
+            <View style={styles.invitationDraftContainer} testID="invitation-draft-panel">
+              <Text style={styles.invitationDraftMessage}>
+                "{invitationMessage}"
+              </Text>
+
+              <InvitationShareButton
+                invitationMessage={invitationMessage!}
+                invitationUrl={invitationUrl}
+                partnerName={partnerName}
+                senderName={user?.name || user?.firstName || undefined}
+                testID="invitation-share-button"
+              />
+
+              <TouchableOpacity
+                style={styles.continueButton}
+                onPress={() => {
+                  // Track invitation sent
+                  trackInvitationSent(sessionId, 'share_sheet');
+                  setIsRefiningInvitation(false); // Exit refinement mode
+                  // Local latch: Immediately hide panel, survives cache race conditions
+                  markCompleted('confirmed-invitation');
+                  // Cache-First: useConfirmInvitationMessage.onMutate sets invitation.messageConfirmed optimistically
+                  // The indicator will appear immediately because the cache is updated
+                  handleConfirmInvitationMessage(invitationMessage!);
+                }}
+                testID="invitation-continue-button"
+              >
+                <Text style={styles.continueButtonText}>
+                  {isRefiningInvitation ? "I've sent it - Back to conversation" : "I've sent it - Continue"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        );
+
+      case 'needs-review':
+        return (
+          <Animated.View
+            style={{
+              opacity: needsReviewAnim,
+              maxHeight: needsReviewAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 100],
+              }),
+              transform: [{
+                translateY: needsReviewAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+              overflow: 'hidden',
+            }}
+            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+          >
+            <View style={styles.needsReviewContainer}>
+              <TouchableOpacity
+                style={styles.needsReviewButton}
+                onPress={() => {
+                  markCompleted('confirmed-needs');
+                  handleConfirmAllNeeds(() => {
+                    // After confirming needs, show consent prompt
+                    setShowShareNeedsConfirm(true);
+                  });
+                }}
+                activeOpacity={0.7}
+                testID="needs-review-button"
+              >
+                <Text style={styles.needsReviewButtonText}>
+                  Review and confirm your needs
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        );
+
+      case 'common-ground-confirm':
+        return (
+          <Animated.View
+            style={{
+              opacity: commonGroundAnim,
+              maxHeight: commonGroundAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 100],
+              }),
+              transform: [{
+                translateY: commonGroundAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+              overflow: 'hidden',
+            }}
+            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+          >
+            <View style={styles.commonGroundContainer}>
+              {commonGroundData?.noOverlap ? (
+                <>
+                  <Text style={styles.noOverlapText}>
+                    No obvious common ground identified. That's completely normal.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.commonGroundButton}
+                    onPress={() => {
+                      markCompleted('confirmed-common-ground');
+                      handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
+                    }}
+                    activeOpacity={0.7}
+                    testID="no-overlap-continue-button"
+                  >
+                    <Text style={styles.commonGroundButtonText}>
+                      Continue to Strategies
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={styles.commonGroundButton}
+                  onPress={() => {
+                    markCompleted('confirmed-common-ground');
+                    handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
+                  }}
+                  activeOpacity={0.7}
+                  testID="common-ground-confirm-button"
+                >
+                  <Text style={styles.commonGroundButtonText}>
+                    Confirm common ground
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </Animated.View>
+        );
+
+      case 'waiting-banner':
+        return (
+          <WaitingBanner
+            status={waitingStatus}
+            partnerName={partnerName || 'your partner'}
+            animationValue={waitingBannerAnim}
+            testID="waiting-banner"
+          />
+        );
+
+      default:
+        return undefined;
+    }
+  }, [
+    aboveInputPanel,
+    sessionId,
+    invitation?.isInviter,
+    isSigningCompact,
+    isTypewriterAnimating,
+    isConfirmingFeelHeard,
+    isSharingEmpathy,
+    isRefiningEmpathy,
+    isRefiningInvitation,
+    invitationMessage,
+    invitationUrl,
+    partnerName,
+    shareOfferData,
+    commonGroundData?.noOverlap,
+    waitingStatus,
+    user?.name,
+    user?.firstName,
+    styles,
+    feelHeardAnim,
+    empathyPanelAnim,
+    shareSuggestionAnim,
+    accuracyFeedbackAnim,
+    invitationPanelAnim,
+    needsReviewAnim,
+    commonGroundAnim,
+    waitingBannerAnim,
+    handleSignCompact,
+    handleConfirmFeelHeard,
+    handleConfirmInvitationMessage,
+    handleConfirmAllNeeds,
+    handleConfirmCommonGround,
+    markCompleted,
+    onStageComplete,
+  ]);
+
+  // -------------------------------------------------------------------------
   // Main Chat Interface
   // -------------------------------------------------------------------------
   return (
@@ -1748,340 +2116,7 @@ export function UnifiedSessionScreen({
           customEmptyState={
             isInOnboardingUnsigned ? compactEmptyStateElement : undefined
           }
-          renderAboveInput={
-            // Show compact agreement bar during onboarding when compact not signed
-            isInOnboardingUnsigned
-              ? () => (
-                <CompactAgreementBar
-                  onSign={() => {
-                    // Cache-First: useSignCompact.onMutate sets compact.mySignedAt optimistically
-                    // Mark that compact was just signed (for typewriter animation after mood check)
-                    setJustSignedCompact(true);
-                    trackCompactSigned(sessionId, invitation?.isInviter ?? true);
-                    handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING));
-                  }}
-                  isPending={isSigningCompact}
-                  testID="compact-agreement-bar"
-                />
-              )
-              // Show feel-heard confirmation panel when AI recommends it
-              // Stable Mounting: Mount based on data (shouldShowFeelHeard), animate visibility with typewriter guard
-              : shouldShowFeelHeard
-                ? () => (
-                  <Animated.View
-                    style={{
-                      opacity: feelHeardAnim,
-                      maxHeight: feelHeardAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, 100],
-                      }),
-                      transform: [{
-                        translateY: feelHeardAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [20, 0],
-                        }),
-                      }],
-                      overflow: 'hidden',
-                    }}
-                    pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
-                  >
-                    <View style={styles.feelHeardContainer}>
-                      <FeelHeardConfirmation
-                        onConfirm={() => {
-                          // Track felt heard response
-                          trackFeltHeardResponse(sessionId, 'yes');
-                          // Cache-First: useConfirmFeelHeard.onMutate sets milestones.feelHeardConfirmedAt optimistically
-                          handleConfirmFeelHeard(() => onStageComplete?.(Stage.WITNESS));
-                        }}
-                        isPending={isConfirmingFeelHeard}
-                      />
-                    </View>
-                  </Animated.View>
-                )
-                // Show empathy review panel when empathy statement is ready
-                // Stable Mounting: Mount based on data (shouldShowEmpathyPanel), animate visibility with typewriter guard
-                : shouldShowEmpathyPanel
-                  ? () => (
-                    <Animated.View
-                      style={{
-                        opacity: empathyPanelAnim,
-                        maxHeight: empathyPanelAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0, 100],
-                        }),
-                        transform: [{
-                          translateY: empathyPanelAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [20, 0],
-                          }),
-                        }],
-                        overflow: 'hidden',
-                      }}
-                      pointerEvents={!isTypewriterAnimating && !isSharingEmpathy ? 'auto' : 'none'}
-                    >
-                      <View style={styles.empathyReviewContainer}>
-                        <TouchableOpacity
-                          style={styles.empathyReviewButton}
-                          onPress={() => setShowEmpathyDrawer(true)}
-                          activeOpacity={0.7}
-                          testID="empathy-review-button"
-                        >
-                          <Text style={styles.empathyReviewButtonText}>
-                            {isRefiningEmpathy ? 'Revisit what you\'ll share' : 'Review what you\'ll share'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </Animated.View>
-                  )
-                  // Share topic panel - opens ShareTopicDrawer when tapped
-                  // Stable Mounting: Mount based on data (shouldShowShareSuggestion), animate visibility with typewriter guard
-                  : shouldShowShareSuggestion
-                    ? () => (
-                      <Animated.View
-                        style={{
-                          opacity: shareSuggestionAnim,
-                          maxHeight: shareSuggestionAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0, 60],
-                          }),
-                          transform: [{
-                            translateY: shareSuggestionAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [20, 0],
-                            }),
-                          }],
-                          overflow: 'hidden',
-                        }}
-                        pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
-                      >
-                        {shareOfferData?.suggestion &&
-                         (shareOfferData.suggestion.action === 'OFFER_OPTIONAL' ||
-                          shareOfferData.suggestion.action === 'OFFER_SHARING') && (
-                          <ShareTopicPanel
-                            visible={true}
-                            action={shareOfferData.suggestion.action}
-                            partnerName={partnerName}
-                            onPress={() => setShowShareTopicDrawer(true)}
-                          />
-                        )}
-                      </Animated.View>
-                    )
-                  // Show accuracy feedback trigger when partner's empathy is ready for validation
-                  // Stable Mounting: Mount based on data (shouldShowAccuracyFeedback), animate visibility with typewriter guard
-                  : shouldShowAccuracyFeedback
-                    ? () => (
-                      <Animated.View
-                        style={{
-                          opacity: accuracyFeedbackAnim,
-                          maxHeight: accuracyFeedbackAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0, 80],
-                          }),
-                          transform: [{
-                            translateY: accuracyFeedbackAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [20, 0],
-                            }),
-                          }],
-                          overflow: 'hidden',
-                        }}
-                        pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
-                      >
-                        <View style={styles.accuracyFeedbackContainer}>
-                          <TouchableOpacity
-                            style={styles.accuracyFeedbackButton}
-                            onPress={() => setShowAccuracyFeedbackDrawer(true)}
-                            activeOpacity={0.7}
-                            testID="accuracy-feedback-trigger"
-                          >
-                            <Text style={styles.accuracyFeedbackButtonText}>
-                              Review {partnerName}'s understanding
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      </Animated.View>
-                    )
-                  // Only render if inviter has a draft message (not confirmed yet)
-                  // Stable Mounting: Mount based on data (shouldShowInvitationPanel), animate visibility with typewriter guard
-                  // This prevents flickering by keeping panel mounted during AI response typewriter animation
-                  : shouldShowInvitationPanel
-                    ? () => (
-                      <Animated.View
-                        style={{
-                          // 1. Animate Opacity
-                          opacity: invitationPanelAnim,
-
-                          // 2. Animate Height (Slide in effect)
-                          // We use maxHeight to safely animate from 0 to a value large enough to fit content
-                          maxHeight: invitationPanelAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0, 400], // 400 is arbitrary but large enough for your message + buttons
-                          }),
-
-                          // 3. Optional: Add a slight slide-up transform for visual flair
-                          transform: [{
-                            translateY: invitationPanelAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [20, 0],
-                            }),
-                          }],
-
-                          // 4. Clip content while closed so padding doesn't leak space
-                          overflow: 'hidden',
-                        }}
-                        // Disable touches while invisible (during typewriter animation)
-                        pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
-                      >
-                        {/* 5. INNER CONTAINER 
-                       Move the styles that contain padding/bg/borders HERE. 
-                       This ensures they don't take up space when the parent height is 0.
-                    */}
-                        <View style={styles.invitationDraftContainer} testID="invitation-draft-panel">
-                          <Text style={styles.invitationDraftMessage}>
-                            "{invitationMessage}"
-                          </Text>
-
-                          <InvitationShareButton
-                            invitationMessage={invitationMessage!}
-                            invitationUrl={invitationUrl}
-                            partnerName={partnerName}
-                            senderName={user?.name || user?.firstName || undefined}
-                            testID="invitation-share-button"
-                          />
-
-                          <TouchableOpacity
-                            style={styles.continueButton}
-                            onPress={() => {
-                              // Track invitation sent
-                              trackInvitationSent(sessionId, 'share_sheet');
-                              setIsRefiningInvitation(false); // Exit refinement mode
-                              // Local latch: Immediately hide panel, survives cache race conditions
-                              markCompleted('confirmed-invitation');
-                              // Cache-First: useConfirmInvitationMessage.onMutate sets invitation.messageConfirmed optimistically
-                              // The indicator will appear immediately because the cache is updated
-                              handleConfirmInvitationMessage(invitationMessage!);
-                            }}
-                            testID="invitation-continue-button"
-                          >
-                            <Text style={styles.continueButtonText}>
-                              {isRefiningInvitation ? "I've sent it - Back to conversation" : "I've sent it - Continue"}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      </Animated.View>
-                    )
-                    // Show needs review panel when needs are extracted and ready for confirmation
-                    // Stable Mounting: Mount based on data (shouldShowNeedsReview), animate visibility with typewriter guard
-                    : shouldShowNeedsReview
-                      ? () => (
-                        <Animated.View
-                          style={{
-                            opacity: needsReviewAnim,
-                            maxHeight: needsReviewAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [0, 100],
-                            }),
-                            transform: [{
-                              translateY: needsReviewAnim.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [20, 0],
-                              }),
-                            }],
-                            overflow: 'hidden',
-                          }}
-                          pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
-                        >
-                          <View style={styles.needsReviewContainer}>
-                            <TouchableOpacity
-                              style={styles.needsReviewButton}
-                              onPress={() => {
-                                markCompleted('confirmed-needs');
-                                handleConfirmAllNeeds(() => {
-                                  // After confirming needs, show consent prompt
-                                  setShowShareNeedsConfirm(true);
-                                });
-                              }}
-                              activeOpacity={0.7}
-                              testID="needs-review-button"
-                            >
-                              <Text style={styles.needsReviewButtonText}>
-                                Review and confirm your needs
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        </Animated.View>
-                      )
-                    // Show common ground confirmation panel when common ground is ready
-                    // Stable Mounting: Mount based on data (shouldShowCommonGround), animate visibility with typewriter guard
-                    : shouldShowCommonGround
-                      ? () => (
-                        <Animated.View
-                          style={{
-                            opacity: commonGroundAnim,
-                            maxHeight: commonGroundAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [0, 100],
-                            }),
-                            transform: [{
-                              translateY: commonGroundAnim.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [20, 0],
-                              }),
-                            }],
-                            overflow: 'hidden',
-                          }}
-                          pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
-                        >
-                          <View style={styles.commonGroundContainer}>
-                            {commonGroundData?.noOverlap ? (
-                              <>
-                                <Text style={styles.noOverlapText}>
-                                  No obvious common ground identified. That's completely normal.
-                                </Text>
-                                <TouchableOpacity
-                                  style={styles.commonGroundButton}
-                                  onPress={() => {
-                                    markCompleted('confirmed-common-ground');
-                                    handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
-                                  }}
-                                  activeOpacity={0.7}
-                                  testID="no-overlap-continue-button"
-                                >
-                                  <Text style={styles.commonGroundButtonText}>
-                                    Continue to Strategies
-                                  </Text>
-                                </TouchableOpacity>
-                              </>
-                            ) : (
-                              <TouchableOpacity
-                                style={styles.commonGroundButton}
-                                onPress={() => {
-                                  markCompleted('confirmed-common-ground');
-                                  handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
-                                }}
-                                activeOpacity={0.7}
-                                testID="common-ground-confirm-button"
-                              >
-                                <Text style={styles.commonGroundButtonText}>
-                                  Confirm common ground
-                                </Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        </Animated.View>
-                      )
-                    // Show waiting banners with animation
-                    : shouldShowWaitingBanner
-                      ? () => (
-                        <WaitingBanner
-                          status={waitingStatus}
-                          partnerName={partnerName || 'your partner'}
-                          animationValue={waitingBannerAnim}
-                          testID="waiting-banner"
-                        />
-                      )
-                      : undefined
-          }
+          renderAboveInput={aboveInputPanel ? renderAboveInput : undefined}
           hideInput={
             // Use derived hideInput logic from useChatUIState
             // Never hide when empathy review panel is showing (user still needs to interact)
