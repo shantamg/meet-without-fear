@@ -32,7 +32,6 @@ export type AboveInputPanel =
   | 'empathy-statement' // Empathy statement review panel
   | 'feel-heard' // Feel heard confirmation panel
   | 'share-suggestion' // Share suggestion from reconciler (Subject side)
-  | 'accuracy-feedback' // Accuracy feedback for partner's empathy (Subject side)
   | 'needs-review' // Needs review panel (Stage 3: confirm identified needs)
   | 'common-ground-confirm' // Common ground confirmation panel (Stage 3: confirm shared needs)
   | 'waiting-banner' // General waiting banner
@@ -85,9 +84,6 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   hasShareSuggestion: boolean;
   hasRespondedToShareOfferLocal: boolean;
 
-  // Accuracy feedback for partner's empathy (Subject side)
-  hasPartnerEmpathyForValidation: boolean; // Partner empathy exists and current user hasn't validated
-
   // Shared context viewing (Guesser side)
   hasUnviewedSharedContext: boolean; // Guesser must view Share tab before continuing
 
@@ -131,7 +127,6 @@ export interface ChatUIState {
     showEmpathyPanel: boolean;
     showFeelHeardPanel: boolean;
     showShareSuggestionPanel: boolean;
-    showAccuracyFeedbackPanel: boolean;
     showNeedsReviewPanel: boolean;
     showCommonGroundPanel: boolean;
     showWaitingBanner: boolean;
@@ -156,11 +151,10 @@ export interface ChatUIState {
  * 2. Invitation Panel - After signing, must craft and send invitation
  * 3. Feel Heard Panel - Stage 1 completion requires feeling heard
  * 4. Share Suggestion Panel - Subject must respond to share suggestion
- * 5. Accuracy Feedback Panel - Subject validating partner's empathy
- * 6. Empathy Statement Panel - User's empathy statement to review
- * 7. Needs Review Panel - Stage 3: Review and confirm identified needs
- * 8. Common Ground Panel - Stage 3: Confirm common ground items
- * 9. Waiting Banner - Any waiting status
+ * 5. Empathy Statement Panel - User's empathy statement to review
+ * 6. Needs Review Panel - Stage 3: Review and confirm identified needs
+ * 7. Common Ground Panel - Stage 3: Confirm common ground items
+ * 8. Waiting Banner - Any waiting status
  */
 
 // ============================================================================
@@ -294,22 +288,6 @@ function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
 }
 
 /**
- * Determines if accuracy feedback panel should show.
- * Shows when partner's empathy is available and current user hasn't validated it yet.
- */
-function computeShowAccuracyFeedbackPanel(inputs: ChatUIStateInputs): boolean {
-  const { myStage, hasPartnerEmpathyForValidation } = inputs;
-  const currentStage = myStage ?? Stage.ONBOARDING;
-
-  // Must be in Stage 2 (Perspective Stretch)
-  if (currentStage !== Stage.PERSPECTIVE_STRETCH) {
-    return false;
-  }
-
-  return hasPartnerEmpathyForValidation;
-}
-
-/**
  * Determines if needs review panel should show.
  * Shows when needs are available but not yet confirmed, and user hasn't
  * already used the local latch (prevents flash during server refetch).
@@ -429,27 +407,22 @@ function computeAboveInputPanel(
     return 'share-suggestion';
   }
 
-  // Priority 5: Accuracy feedback panel (Subject validating partner's empathy)
-  if (panels.showAccuracyFeedbackPanel) {
-    return 'accuracy-feedback';
-  }
-
-  // Priority 6: Empathy statement panel (Stage 2)
+  // Priority 5: Empathy statement panel (Stage 2)
   if (panels.showEmpathyPanel) {
     return 'empathy-statement';
   }
 
-  // Priority 7: Needs review panel (Stage 3)
+  // Priority 6: Needs review panel (Stage 3)
   if (panels.showNeedsReviewPanel) {
     return 'needs-review';
   }
 
-  // Priority 8: Common ground confirmation panel (Stage 3)
+  // Priority 7: Common ground confirmation panel (Stage 3)
   if (panels.showCommonGroundPanel) {
     return 'common-ground-confirm';
   }
 
-  // Priority 9: Waiting banner
+  // Priority 8: Waiting banner
   if (panels.showWaitingBanner) {
     return 'waiting-banner';
   }
@@ -565,7 +538,6 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const showEmpathyPanel = computeShowEmpathyPanel(inputs);
   const showFeelHeardPanel = computeShowFeelHeardPanel(inputs);
   const showShareSuggestionPanel = computeShowShareSuggestionPanel(inputs);
-  const showAccuracyFeedbackPanel = computeShowAccuracyFeedbackPanel(inputs);
   const showNeedsReviewPanel = computeShowNeedsReviewPanel(inputs);
   const showCommonGroundPanel = computeShowCommonGroundPanel(inputs);
   const showWaitingBanner = computeShouldShowWaitingBanner(waitingStatus);
@@ -576,7 +548,6 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
     showEmpathyPanel,
     showFeelHeardPanel,
     showShareSuggestionPanel,
-    showAccuracyFeedbackPanel,
     showNeedsReviewPanel,
     showCommonGroundPanel,
     showWaitingBanner,
@@ -654,7 +625,6 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     myAttemptContent: false,
     hasShareSuggestion: false,
     hasRespondedToShareOfferLocal: false,
-    hasPartnerEmpathyForValidation: false,
     hasUnviewedSharedContext: false,
 
     // Stage 3: Needs

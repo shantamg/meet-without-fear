@@ -39,7 +39,6 @@ import { InvitationShareButton } from '../components/InvitationShareButton';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
-import { PartnerEventModal, PartnerEventType } from '../components/PartnerEventModal';
 import { ActivityMenuModal } from '../components/ActivityMenuModal';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
@@ -324,7 +323,6 @@ export function UnifiedSessionScreen({
         queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
         queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
-        showPartnerEventModal('share_suggestion');
       }
 
       if (event === 'empathy.context_shared' && data.forUserId === user?.id) {
@@ -338,7 +336,6 @@ export function UnifiedSessionScreen({
         queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
         // Mark session as viewed so partner sees "seen" status
         markSessionViewed({});
-        showPartnerEventModal('context_shared');
       }
 
       if (event === 'partner.session_viewed' && data.empathyStatuses && user?.id) {
@@ -485,10 +482,6 @@ export function UnifiedSessionScreen({
             },
           }));
         }
-        // Show validation_needed modal only if we're the SUBJECT (not the guesser)
-        if (data.guesserUserId && data.guesserUserId !== user?.id) {
-          showPartnerEventModal('validation_needed');
-        }
       }
 
       if (event === 'empathy.status_updated') {
@@ -519,10 +512,6 @@ export function UnifiedSessionScreen({
           console.log('[UnifiedSessionScreen] Rejecting stale empathy.status_updated event (version:', data.statusVersion, ')');
         }
 
-        // Show empathy_validated modal if our empathy was validated
-        if (data.status === 'VALIDATED' && data.forUserId === user?.id) {
-          showPartnerEventModal('empathy_validated');
-        }
       }
 
       if (event === 'empathy.refining' && data.forUserId === user?.id) {
@@ -734,29 +723,6 @@ export function UnifiedSessionScreen({
   const [refinementOfferId, setRefinementOfferId] = useState<string | null>(null);
   const [refinementInitialSuggestion, setRefinementInitialSuggestion] = useState('');
 
-  // Partner event modal state - shows when new Partner tab events occur
-  const [partnerEventModalVisible, setPartnerEventModalVisible] = useState(false);
-  const [partnerEventType, setPartnerEventType] = useState<PartnerEventType | null>(null);
-  const [partnerEventPreview, setPartnerEventPreview] = useState<string | undefined>();
-
-  // Handler for showing partner event modal
-  // Guard: don't stack modals if Activity menu is already open
-  const showPartnerEventModal = useCallback((eventType: PartnerEventType, preview?: string) => {
-    if (showActivityMenu) {
-      console.log('[UnifiedSessionScreen] Activity menu open, skipping partner event modal:', eventType);
-      return;
-    }
-    setPartnerEventType(eventType);
-    setPartnerEventPreview(preview);
-    setPartnerEventModalVisible(true);
-  }, [showActivityMenu]);
-
-  const handleViewPartnerTab = useCallback(() => {
-    setPartnerEventModalVisible(false);
-    setActivityMenuTab('received');
-    setShowActivityMenu(true);
-  }, []);
-
   // Local latches to prevent panel flashing during server refetches.
   // Once user completes an action, the latch stays true even if server data temporarily reverts.
   type CompletedAction =
@@ -860,7 +826,6 @@ export function UnifiedSessionScreen({
       showEmpathyPanel: shouldShowEmpathyPanel,
       showFeelHeardPanel: shouldShowFeelHeard,
       showShareSuggestionPanel: shouldShowShareSuggestion,
-      showAccuracyFeedbackPanel: shouldShowAccuracyFeedback,
       showNeedsReviewPanel: shouldShowNeedsReview,
       showCommonGroundPanel: shouldShowCommonGround,
     },
@@ -908,7 +873,6 @@ export function UnifiedSessionScreen({
     shareOfferData: shareOfferData ?? undefined,
     // Share offer panel shows ShareTopicPanel which opens ShareTopicDrawer
     hasRespondedToShareOfferLocal: completedActions.has('responded-to-share-offer'),
-    partnerEmpathyValidated: isEmpathyValidated || (partnerEmpathyData?.validated ?? false),
     allNeedsConfirmed,
     needsAvailable: (needs?.length ?? 0) > 0,
     needsShared: allNeedsConfirmed, // Sharing happens immediately after confirmation
@@ -961,9 +925,6 @@ export function UnifiedSessionScreen({
   // Animation for the share suggestion panel slide-up
   const shareSuggestionAnim = useRef(new Animated.Value(0)).current;
 
-  // Animation for the accuracy feedback panel slide-up
-  const accuracyFeedbackAnim = useRef(new Animated.Value(0)).current;
-
   // Animation for the needs review panel slide-up
   const needsReviewAnim = useRef(new Animated.Value(0)).current;
 
@@ -1003,7 +964,6 @@ export function UnifiedSessionScreen({
   const readyToShowEmpathy = shouldShowEmpathyPanel;
   const readyToShowFeelHeard = shouldShowFeelHeard;
   const readyToShowShareSuggestion = shouldShowShareSuggestion;
-  const readyToShowAccuracyFeedback = shouldShowAccuracyFeedback;
   const readyToShowNeedsReview = shouldShowNeedsReview;
   const readyToShowCommonGround = shouldShowCommonGround;
   const readyToShowWaitingBanner = shouldShowWaitingBanner;
@@ -1078,16 +1038,6 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // Share suggestions are now accessed via the header button and displayed
   // in the Sharing Status screen at /session/[id]/sharing-status
-
-  // Animate accuracy feedback panel - synced with mount condition
-  useEffect(() => {
-    Animated.spring(accuracyFeedbackAnim, {
-      toValue: readyToShowAccuracyFeedback ? 1 : 0,
-      useNativeDriver: false,
-      tension: 40,
-      friction: 9,
-    }).start();
-  }, [readyToShowAccuracyFeedback, accuracyFeedbackAnim]);
 
   // Animate needs review panel - synced with mount condition
   useEffect(() => {
@@ -1364,9 +1314,7 @@ export function UnifiedSessionScreen({
 
         // Note: ready-to-share-confirmation case removed - now shown as panel above chat input
         // Note: empathy-draft-preview case removed - users access empathy statement via the overlay drawer
-
-        // Note: accuracy-feedback case removed - now rendered as panel above chat input
-        // See shouldShowAccuracyFeedback and accuracyFeedbackContainer
+        // Note: accuracy-feedback case removed - now handled by inline validation card
 
         case 'needs-summary':
           return (
@@ -1923,40 +1871,6 @@ export function UnifiedSessionScreen({
           </Animated.View>
         );
 
-      case 'accuracy-feedback':
-        return (
-          <Animated.View
-            style={{
-              opacity: accuracyFeedbackAnim,
-              maxHeight: accuracyFeedbackAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 80],
-              }),
-              transform: [{
-                translateY: accuracyFeedbackAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0],
-                }),
-              }],
-              overflow: 'hidden',
-            }}
-            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
-          >
-            <View style={styles.accuracyFeedbackContainer}>
-              <TouchableOpacity
-                style={styles.accuracyFeedbackButton}
-                onPress={() => setShowAccuracyFeedbackDrawer(true)}
-                activeOpacity={0.7}
-                testID="accuracy-feedback-trigger"
-              >
-                <Text style={styles.accuracyFeedbackButtonText}>
-                  Review {partnerName}'s understanding
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        );
-
       case 'invitation':
         return (
           <Animated.View
@@ -2128,6 +2042,7 @@ export function UnifiedSessionScreen({
             status={waitingStatus}
             partnerName={partnerName || 'your partner'}
             animationValue={waitingBannerAnim}
+            onExercisePress={() => openOverlay('support-options')}
             testID="waiting-banner"
           />
         );
@@ -2157,7 +2072,6 @@ export function UnifiedSessionScreen({
     feelHeardAnim,
     empathyPanelAnim,
     shareSuggestionAnim,
-    accuracyFeedbackAnim,
     invitationPanelAnim,
     needsReviewAnim,
     commonGroundAnim,
@@ -2169,6 +2083,7 @@ export function UnifiedSessionScreen({
     handleConfirmCommonGround,
     markCompleted,
     onStageComplete,
+    openOverlay,
   ]);
 
   // -------------------------------------------------------------------------
@@ -2278,17 +2193,6 @@ export function UnifiedSessionScreen({
         )}
       </View>
       )}
-
-      {/* Partner Event Modal - notifies when new content arrives on Partner tab */}
-      <PartnerEventModal
-        visible={partnerEventModalVisible}
-        eventType={partnerEventType}
-        partnerName={partnerName}
-        contentPreview={partnerEventPreview}
-        onViewPartnerTab={handleViewPartnerTab}
-        onDismiss={() => setPartnerEventModalVisible(false)}
-        testID="partner-event-modal"
-      />
 
       {/* Overlays */}
       {renderOverlay()}
@@ -2719,28 +2623,6 @@ const useStyles = () =>
       fontSize: t.typography.fontSize.md,
       fontWeight: '500',
       color: 'white',
-    },
-
-    // Accuracy Feedback Panel (trigger button to open drawer)
-    accuracyFeedbackContainer: {
-      paddingHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.md,
-      backgroundColor: t.colors.bgSecondary,
-      borderTopWidth: 1,
-      borderTopColor: t.colors.border,
-    },
-    accuracyFeedbackButton: {
-      paddingVertical: t.spacing.sm,
-      paddingHorizontal: t.spacing.md,
-      backgroundColor: t.colors.bgPrimary,
-      borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    accuracyFeedbackButtonText: {
-      fontSize: t.typography.fontSize.md,
-      fontWeight: '500',
-      color: t.colors.brandBlue,
     },
 
     // Needs Review Panel (Stage 3)

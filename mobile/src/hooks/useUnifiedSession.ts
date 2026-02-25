@@ -81,7 +81,6 @@ export type InlineCardType =
   // Stage 2: Perspective Stretch
   | 'consent-prompt'
   | 'ready-to-share-confirmation'
-  | 'accuracy-feedback'
   // Stage 3: Need Mapping
   | 'need-card'
   | 'needs-summary'
@@ -772,8 +771,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
       // Note: empathy-draft-preview card removed - users access empathy statement via the overlay drawer
       // The ready-to-share-confirmation card opens the overlay, and after sending it appears as a message in chat
 
-      // Note: accuracy-feedback card removed - now shown as panel above chat input
-      // See showAccuracyFeedbackPanel in useChatUIState
+      // Note: accuracy-feedback card removed - now handled by inline validation card
 
       // Note: Share suggestion from reconciler is now handled via the low-profile panel
       // + ShareSuggestionDrawer pattern instead of an inline card.

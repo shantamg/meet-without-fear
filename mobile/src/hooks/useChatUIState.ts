@@ -93,9 +93,6 @@ export interface UseChatUIStateProps {
   } | undefined;
   hasRespondedToShareOfferLocal: boolean;
 
-  // Stage 2: Accuracy feedback (Subject validating partner's empathy)
-  partnerEmpathyValidated: boolean;
-
   // Stage 3: Needs
   allNeedsConfirmed: boolean;
   needsAvailable: boolean;
@@ -182,7 +179,6 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasSharedEmpathyLocal,
     shareOfferData,
     hasRespondedToShareOfferLocal,
-    partnerEmpathyValidated,
     allNeedsConfirmed,
     needsAvailable,
     needsShared,
@@ -246,7 +242,6 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     myAttemptContent: !!empathyStatusData?.myAttempt?.content,
     hasShareSuggestion: shareOfferData?.hasSuggestion ?? false,
     hasRespondedToShareOfferLocal,
-    hasPartnerEmpathyForValidation: hasPartnerEmpathy && !partnerEmpathyValidated,
     hasUnviewedSharedContext: empathyStatusData?.hasUnviewedSharedContext ?? false,
 
     // Stage 3: Needs
@@ -297,7 +292,6 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasLiveProposedEmpathyStatement,
     hasSharedEmpathyLocal,
     hasRespondedToShareOfferLocal,
-    partnerEmpathyValidated,
   ]);
 
   // Compute the complete UI state using the pure function
