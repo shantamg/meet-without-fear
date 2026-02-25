@@ -49,6 +49,18 @@ export const STAGE_NAMES: Record<Stage, string> = {
   [Stage.INFORMED_EMPATHY]: 'Informed Empathy',
 };
 
+// INFORMED_EMPATHY is a Stage 2B sub-phase (prompt-routing only).
+// This name exists for type completeness and internal tooling.
+// It is suppressed from user-facing chapter markers.
+export const STAGE_FRIENDLY_NAMES: Record<Stage, string> = {
+  [Stage.ONBOARDING]: 'Getting Started',
+  [Stage.WITNESS]: 'Your Story',
+  [Stage.PERSPECTIVE_STRETCH]: 'Walking in Their Shoes',
+  [Stage.NEED_MAPPING]: 'What Matters Most',
+  [Stage.STRATEGIC_REPAIR]: 'Moving Forward Together',
+  [Stage.INFORMED_EMPATHY]: 'Deeper Understanding',
+};
+
 // ============================================================================
 // User & Content
 // ============================================================================

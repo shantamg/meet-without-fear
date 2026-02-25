@@ -84,7 +84,7 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
       case 'reconciler-analyzing':
         return 'Analyzing understanding...';
       case 'reconciler-gaps-found':
-        return 'Gaps detected - awaiting context';
+        return 'Understanding taking shape';
       case 'reconciler-ready':
         return 'Understanding verified ✓';
       case 'partner-empathy-held':

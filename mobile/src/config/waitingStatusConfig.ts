@@ -60,7 +60,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: true,
-    bannerText: (p) => `Waiting for ${p} to feel heard.`,
+    bannerText: (p) => `${p} is still reflecting.`,
   },
 
   // Stage 2: Waiting for partner to share their empathy perspective
@@ -71,7 +71,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: true,
-    bannerText: (p) => `Waiting for ${p} to share their perspective.`,
+    bannerText: (p) => `${p} is working on their perspective.`,
   },
 
   // Stage 2: Partner is now considering user's perspective (good alignment)
@@ -82,7 +82,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: true,
-    bannerText: (p) => `${p} is now considering how you might feel.`,
+    bannerText: (p) => `${p} is thinking about how you might feel.`,
     bannerSubtext: "Once they share, you'll both be able to reflect on what each other shared.",
   },
 
@@ -117,7 +117,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: true, // User must respond to the share suggestion
     showSpinner: false,
     showKeepChattingAction: false,
-    bannerText: (p) => `${p}'s understanding has some gaps.`,
+    bannerText: (p) => `${p}'s understanding is taking shape.`,
     bannerSubtext: 'Review the suggestion below to help them understand you better.',
   },
 
