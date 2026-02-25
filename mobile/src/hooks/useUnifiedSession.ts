@@ -1116,7 +1116,10 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
   const handleConfirmCommonGround = useCallback(
     (onSuccess?: () => void) => {
-      if (!sessionId || commonGround.length === 0) return;
+      if (!sessionId) return;
+
+      // Allow empty confirmations for noOverlap case (no common ground found)
+      if (commonGround.length === 0 && !commonGroundData?.noOverlap) return;
 
       const confirmations = commonGround.map((cg) => ({
         commonGroundId: cg.id,
@@ -1125,7 +1128,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
       confirmCommonGroundMutation({ sessionId, confirmations }, { onSuccess });
     },
-    [sessionId, commonGround, confirmCommonGroundMutation]
+    [sessionId, commonGround, commonGroundData?.noOverlap, confirmCommonGroundMutation]
   );
 
   const handleAddStrategy = useCallback(

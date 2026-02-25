@@ -74,6 +74,24 @@ describe('Priority 2: Stage 2 Reconciler States', () => {
     expect(computeWaitingStatus(inputs)).toBe('awaiting-context-share');
   });
 
+  it('does not return awaiting-context-share when in Stage 3 (stage gate)', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.NEED_MAPPING,
+      shareOffer: { hasSuggestion: true },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBeNull();
+  });
+
+  it('does not return awaiting-context-share when in Stage 4 (stage gate)', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.STRATEGIC_REPAIR,
+      shareOffer: { hasSuggestion: true },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBeNull();
+  });
+
   it('reconciler-analyzing takes priority over awaiting-context-share', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
@@ -217,6 +235,16 @@ describe('Priority 5: Stage 3 (Needs)', () => {
     });
 
     expect(computeWaitingStatus(inputs)).toBe('needs-pending');
+  });
+
+  it('does not return needs-pending when in Stage 2 (stage gate)', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      needs: { allConfirmed: true },
+      commonGround: { count: 0 },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBeNull();
   });
 
   it('returns null when needs confirmed and common ground exists', () => {

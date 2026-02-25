@@ -179,7 +179,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
   // Stage 3: Waiting for partner to confirm their needs
   'needs-pending': {
     showBanner: true,
-    hideInput: true,
+    hideInput: false,  // Users can chat while waiting for partner
     showInnerThoughts: false,
     isActionRequired: false,
     showSpinner: false,

@@ -1055,7 +1055,12 @@ export function usePartnerEmpathy(
  */
 export function useValidateEmpathy(
   options?: Omit<
-    UseMutationOptions<ValidateEmpathyResponse, ApiClientError, ValidateEmpathyRequest>,
+    UseMutationOptions<
+      ValidateEmpathyResponse,
+      ApiClientError,
+      ValidateEmpathyRequest,
+      { previousPartnerEmpathy: GetPartnerEmpathyResponse | undefined }
+    >,
     'mutationFn'
   >
 ) {
@@ -1068,11 +1073,42 @@ export function useValidateEmpathy(
         request
       );
     },
+    // Optimistic update: immediately mark as validated so the accuracy panel hides
+    onMutate: async ({ sessionId, validated }) => {
+      await queryClient.cancelQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
+
+      const previousPartnerEmpathy = queryClient.getQueryData<GetPartnerEmpathyResponse>(
+        stageKeys.partnerEmpathy(sessionId)
+      );
+
+      // Write optimistic result: set validated and validatedAt immediately
+      queryClient.setQueryData<GetPartnerEmpathyResponse>(
+        stageKeys.partnerEmpathy(sessionId),
+        (old) => old ? {
+          ...old,
+          validated,
+          validatedAt: new Date().toISOString(),
+          awaitingRevision: !validated,
+        } : old
+      );
+
+      return { previousPartnerEmpathy };
+    },
     onSuccess: (_, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
+    },
+    // Rollback on error: restore previous cache state
+    onError: (_error, { sessionId }, context) => {
+      if (context?.previousPartnerEmpathy) {
+        queryClient.setQueryData(
+          stageKeys.partnerEmpathy(sessionId),
+          context.previousPartnerEmpathy
+        );
+      }
     },
     ...options,
   });

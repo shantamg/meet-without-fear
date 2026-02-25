@@ -139,8 +139,8 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
   }
 
   // User needs to respond to share suggestion (Subject side)
-  // This takes priority over other waiting states
-  if (shareOffer?.hasSuggestion) {
+  // This takes priority over other waiting states, but only during Stage 2
+  if (shareOffer?.hasSuggestion && myStage === Stage.PERSPECTIVE_STRETCH) {
     return 'awaiting-context-share';
   }
 
@@ -199,8 +199,8 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
   }
 
   // --- Priority 5: Stage 3 (Needs) ---
-
-  if (needs.allConfirmed && commonGround.count === 0) {
+  // Only show needs-pending when in Stage 3, needs confirmed, and no common ground yet
+  if (myStage === Stage.NEED_MAPPING && needs.allConfirmed && commonGround.count === 0) {
     return 'needs-pending';
   }
 
