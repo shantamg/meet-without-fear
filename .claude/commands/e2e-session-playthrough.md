@@ -270,21 +270,145 @@ You've been invited to this session by Alice. You know you've been canceling pla
 
 ---
 
-## Phase 5: Both Users — Continue Through Remaining Stages
+## Phase 5: Stage 2 — Empathy Exchange & Validation
 
-After both users complete Stage 1 chat, the app will guide them through Stage 2 and beyond. Alternate between browsers as needed:
+After both users complete Stage 1, they enter Stage 2 (Perspective Stretch). Each user chats with the AI to draft an empathy statement about what their partner might be feeling, then shares it for validation.
 
-- Check **Browser A** (`mcp__playwright-a__browser_snapshot`) — if there's a panel or action needed, handle it as Alice.
-- Check **Browser B** (`mcp__playwright-b__browser_snapshot`) — if there's a panel or action needed, handle it as Bob.
-- Keep alternating until both users complete or get stuck.
+### Phase 5a: Empathy Drafting & Sharing (Both Users)
 
-**Important**: After either user takes an action that might affect the other (sharing empathy, sending content, etc.), check the other browser to see if it updated in real time.
+For **each user** (alternate between Browser A and Browser B):
+
+1. The AI will guide the user to imagine what the other person might be going through. Chat 3-5 messages exploring the partner's perspective.
+2. After sufficient exploration, the AI proposes a draft empathy statement and a **"Review what you'll share"** button appears above the chat input (testID: `empathy-review-button`).
+3. Click the review button. A drawer opens showing the draft statement with **"Refine further"** and **"Share"** buttons.
+4. Click **"Share"** (testID: `share-empathy-button`) to share the empathy statement with the partner.
+5. An **"Empathy shared"** indicator appears in the timeline. The chat input may be hidden while waiting for the partner.
+
+**Important**: Complete empathy drafting for BOTH users BEFORE either shares, to avoid race conditions with the reconciler's transition messages.
+
+### Phase 5b: Reconciler & Share Offers
+
+After both users share empathy, the backend reconciler analyzes gaps between each user's empathy attempt and what the partner actually expressed.
+
+1. Wait ~20 seconds for the reconciler to process.
+2. Each user may see a **"Help Build Understanding"** dialog with **"Later"** and **"View"** buttons. This is the reconciler's share suggestion.
+3. Click **"View"** to see the Activity panel with the suggestion. Two options appear:
+   - **"Share as-is"** — shares recommended context immediately
+   - **"Refine"** — opens refinement flow
+4. After sharing context, the partner enters **REFINING** state. They will:
+   - See a **"Context from [Partner]"** indicator in their chat
+   - Need to send at least 1 message reflecting on the shared context
+   - Then see **"Revisit what you'll share"** button to revise their empathy
+5. Click **"Revisit what you'll share"** → drawer shows revised statement → click **"Resubmit"** (testID: `share-empathy-button`)
+6. Handle share offers for both users — each may get one.
+
+**Known issue**: The share offer dialog can block interaction. If clicks time out, use `browser_evaluate` to dismiss: `document.querySelectorAll('[role="dialog"]').forEach(d => d.remove())`
+
+### Phase 5c: Empathy Validation (Both Users)
+
+Once both users have finalized their empathy statements, each sees the partner's attempt and must validate it.
+
+1. An **AccuracyFeedbackDrawer** appears (or a button to view the partner's empathy).
+2. Read the partner's empathy statement and choose:
+   - **"Accurate"** (testID: `accuracy-accurate-button`) — validates the attempt
+   - **"Partially accurate"** (testID: `accuracy-partial-button`) — still validates, with feedback
+   - **"Not quite"** (testID: `accuracy-inaccurate-button`) — requests revision
+3. For this E2E test, click **"Accurate"** for both users to advance.
+4. Once BOTH users validate, the app automatically transitions to Stage 3.
+5. Verify: A transition message appears ("You've validated each other's understanding...").
+
+**Bug monitoring**: Check console errors after validation. Check both browsers to verify real-time sync of validation events.
 
 ---
 
-## Phase 6: Final Report
+## Phase 6: Stage 3 — Needs & Common Ground
 
-When the playthrough is complete (or you decide to stop), compile a summary for the user:
+Stage 3 extracts each user's underlying needs from the conversation, has them confirm/adjust, then finds common ground.
+
+### Phase 6a: Needs Extraction (Automatic)
+
+1. After entering Stage 3, needs extraction begins automatically.
+2. The AI analyzes the conversation and identifies each user's needs.
+3. **Polling**: The client polls `GET /sessions/:id/needs` every 3 seconds while `extracting: true`. Wait for extraction to complete (usually 5-15 seconds).
+4. A real-time event `session.needs_extracted` fires when complete.
+5. Take a snapshot — you should see a needs card (testID: `needs-section`) showing AI-extracted needs.
+
+### Phase 6b: Confirm Needs (Both Users)
+
+For **each user**:
+
+1. Review the extracted needs shown in the `needs-section` card.
+2. Optionally click **"Adjust"** (testID: `adjust-needs-button`) to modify needs.
+3. Click **"Confirm"** (testID: `confirm-needs-button`) to confirm the needs list.
+4. The backend publishes `partner.needs_confirmed` to notify the partner.
+5. After confirming, a share needs step may appear — click **"Share"** (testID: `share-needs-confirm-button`) to share needs for common ground analysis.
+
+### Phase 6c: Common Ground Analysis (Automatic)
+
+1. Once BOTH users share their needs, the backend analyzes common ground.
+2. Wait ~10-15 seconds for the analysis. A loading state may appear.
+3. The client calls `GET /sessions/:id/common-ground` to fetch results.
+4. Two possible outcomes:
+   - **Common ground found**: Cards showing overlapping needs appear (testID: `common-ground-card`)
+   - **No overlap**: A "no overlap" message appears
+
+### Phase 6d: Confirm Common Ground (Both Users)
+
+For **each user**:
+
+1. **If common ground exists**: Review the common ground items. Click confirm (testID: `common-ground-confirm-button`) to agree with the overlap.
+2. **If no overlap**: Click continue (testID: `no-overlap-continue-button`) to proceed anyway.
+3. Once BOTH users confirm, Stage 3 completes and Stage 4 begins automatically.
+4. Verify: A transition message appears ("You've found common ground together..." or "Even though your needs don't overlap directly...").
+
+---
+
+## Phase 7: Stage 4 — Strategies & Resolution
+
+Stage 4 is the final stage where users propose strategies, rank them, create agreements, and resolve the session.
+
+### Phase 7a: Strategy Proposals
+
+1. After entering Stage 4, both users can propose strategies.
+2. The AI may suggest strategies based on the common ground / needs.
+3. Each user can type strategy ideas in the chat. The AI will help shape them.
+4. Strategies appear in an anonymous pool — neither user knows who proposed what.
+
+### Phase 7b: Ready to Rank
+
+1. Once enough strategies are proposed, a **"Ready to rank"** button appears.
+2. Click it for each user. The backend publishes `partner.ready_to_rank`.
+3. Once BOTH users are ready, the ranking phase begins.
+
+### Phase 7c: Strategy Ranking
+
+1. A full-screen **StrategyRankingOverlay** appears showing all strategies.
+2. Each user drags strategies to rank them by preference (most preferred first).
+3. Submit the ranking. The backend publishes `partner.ranking_submitted`.
+4. Once BOTH users submit rankings, overlap is revealed:
+   - Top-3 strategies that BOTH users ranked highly are highlighted
+   - These become agreement candidates
+
+### Phase 7d: Create & Confirm Agreements
+
+1. From the overlap, create an agreement by clicking on a strategy.
+2. Fill in agreement details (description, type, duration, measure of success).
+3. Submit the agreement. The partner receives an `agreement.proposed` event.
+4. The partner reviews and confirms the agreement.
+5. Once BOTH users confirm at least one agreement, a **"Resolve"** button appears.
+
+### Phase 7e: Resolve Session
+
+1. Click **"Resolve"** to complete the session.
+2. The backend publishes `session.resolved` and updates session status to `RESOLVED`.
+3. Both users see a completion/summary screen.
+4. **The session is complete!**
+
+---
+
+## Phase 8: Final Report
+
+When the playthrough is complete (session resolved, or you decide to stop), compile a summary for the user:
 
 1. **Progress**: How far each user got (which stage, what was the last action).
 2. **Bugs found**: Any console errors, broken UI, or crashes — with severity (CRITICAL / WARNING / INFO). Include relevant server log excerpts from `/tmp/e2e-*.log` if applicable.
@@ -307,7 +431,7 @@ When the playthrough is complete (or you decide to stop), compile a summary for 
 
 5. **Mood check screen**: After signing the compact, a mood slider appears before the chat. You must click "Continue" to proceed — the chat input won't appear until this is dismissed.
 
-6. **Send button is an img, not a button**: The send message icon next to the chat input is an `img` element, not a `button`. Click it by ref from the snapshot.
+6. **Send button**: The send button has `data-testid="send-button"` on the parent container. The inner element is an `img`. Use the testID to click, or use `browser_evaluate` with `document.querySelector('[data-testid="send-button"]').click()`.
 
 7. **Expo web first bundle is slow**: The first page load after `--clear` can take 15-30 seconds as Expo builds the web bundle. Be patient on the health check and browser navigate steps.
 
@@ -316,6 +440,14 @@ When the playthrough is complete (or you decide to stop), compile a summary for 
 9. **Invitation must be accepted via API**: The "I've sent it - Continue" button only confirms Alice sent the invitation externally. Bob's account is NOT linked to the session until `POST /api/invitations/:id/accept` is called as Bob. Without this, Bob sees "Partner" instead of "Alice" and the session won't work correctly.
 
 10. **Mood check repeats on page reload**: Every full page reload shows the mood check slider again, even after it was already completed. This is a known UX issue — just click "Continue" again.
+
+11. **Playwright click timeouts on most elements**: Playwright MCP's `browser_click` frequently times out on buttons in this React Native Web app. **Workaround**: Use `browser_evaluate` with `document.querySelector('[data-testid="..."]').click()` or `document.querySelector('button[...]').click()`. This is more reliable than the built-in click.
+
+12. **Use `pressSequentially` for typing, not `fill()`**: React Native Web textareas don't hold values set via Playwright's `fill()` method — the value clears immediately. Use `browser_type` with the `pressSequentially` option (slow typing character by character) or `browser_evaluate` with `page.getByTestId('chat-input').pressSequentially('text', { delay: 30 })` to ensure React state picks up the value.
+
+13. **Dialogs block all interaction**: Modal dialogs (e.g., "Help Build Understanding", "Context Shared") can block clicks on elements behind them even after dismissing with "Later". **Workaround**: Force-remove the dialog DOM: `document.querySelectorAll('[role="dialog"]').forEach(d => d.remove())`.
+
+14. **First message send can silently fail**: The first attempt to send a message sometimes clears the textarea but doesn't actually post the message. If the message doesn't appear in the chat after sending, try typing and sending again.
 
 ---
 
