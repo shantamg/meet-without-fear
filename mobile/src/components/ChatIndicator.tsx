@@ -9,13 +9,31 @@ import { View, Text, TouchableOpacity } from 'react-native';
 import { createStyles } from '../theme/styled';
 
 // ============================================================================
+// Semantic Color System
+// ============================================================================
+
+const INDICATOR_COLORS = {
+  informational: { text: 'rgba(100, 149, 237, 0.9)', line: 'rgba(100, 149, 237, 0.2)' },
+  action: { text: 'rgba(245, 158, 11, 0.9)', line: 'rgba(245, 158, 11, 0.2)' },
+  success: { text: 'rgba(34, 197, 94, 0.9)', line: 'rgba(34, 197, 94, 0.2)' },
+};
+
+function getSemanticCategory(type: ChatIndicatorType): 'informational' | 'action' | 'success' {
+  switch (type) {
+    case 'empathy-validated': return 'success';
+    case 'share-suggestion-received': return 'action';
+    case 'stage-chapter': return 'informational';
+    default: return 'informational';
+  }
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
 export type ChatIndicatorType =
   | 'invitation-sent'
   | 'invitation-accepted'
-  | 'stage-transition'
   | 'session-start'
   | 'feel-heard'
   | 'compact-signed'
@@ -31,7 +49,11 @@ export type ChatIndicatorType =
   // Stage 4: Strategic Repair
   | 'strategies-ready'
   | 'overlap-revealed'
-  | 'agreement-reached';
+  | 'agreement-reached'
+  // Semantic indicator types
+  | 'empathy-validated'         // Partner confirmed your understanding (success)
+  | 'share-suggestion-received' // Sharing opportunity available (action)
+  | 'stage-chapter';            // Stage transition chapter marker (informational)
 
 interface ChatIndicatorProps {
   type: ChatIndicatorType;
@@ -45,6 +67,8 @@ interface ChatIndicatorProps {
     isFromMe?: boolean;
     /** Partner's display name (for "Context from {name}" text) */
     partnerName?: string;
+    /** Stage name for stage-chapter indicators */
+    stageName?: string;
   };
 }
 
@@ -61,8 +85,6 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
         return 'Invitation Sent';
       case 'invitation-accepted':
         return 'Accepted Invitation';
-      case 'stage-transition':
-        return 'Moving Forward';
       case 'session-start':
         return 'Session Started';
       case 'feel-heard':
@@ -102,6 +124,14 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
         return 'Overlap revealed';
       case 'agreement-reached':
         return 'Agreement reached ✓';
+      // Semantic indicator types
+      case 'empathy-validated':
+        const validatorName = metadata?.partnerName || 'Partner';
+        return `${validatorName} confirmed your understanding`;
+      case 'share-suggestion-received':
+        return 'Sharing opportunity available';
+      case 'stage-chapter':
+        return metadata?.stageName || 'New Chapter';
       default:
         return '';
     }
@@ -148,6 +178,13 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
         return styles.overlapRevealedLine;
       case 'agreement-reached':
         return styles.agreementReachedLine;
+      // Semantic indicator types
+      case 'empathy-validated':
+      case 'share-suggestion-received':
+      case 'stage-chapter': {
+        const category = getSemanticCategory(type);
+        return { backgroundColor: INDICATOR_COLORS[category].line };
+      }
       default:
         return styles.defaultLine;
     }
@@ -185,10 +222,44 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
         return styles.overlapRevealedText;
       case 'agreement-reached':
         return styles.agreementReachedText;
+      // Semantic indicator types
+      case 'empathy-validated':
+      case 'share-suggestion-received':
+      case 'stage-chapter': {
+        const category = getSemanticCategory(type);
+        return { color: INDICATOR_COLORS[category].text };
+      }
       default:
         return styles.defaultText;
     }
   };
+
+  // Special rendering for stage-chapter indicators
+  if (type === 'stage-chapter') {
+    const stageChapterStyle = {
+      fontSize: 15,
+      textTransform: 'none' as const,
+      letterSpacing: 0,
+      fontWeight: '500' as const,
+      color: INDICATOR_COLORS.informational.text,
+    };
+
+    const chapterContent = (
+      <View style={styles.lineContainer}>
+        <Text style={[styles.text, stageChapterStyle]}>{'\u2014\u2014\u2014'}</Text>
+        <View style={styles.textContainer}>
+          <Text style={[styles.text, stageChapterStyle]}>{getIndicatorText()}</Text>
+        </View>
+        <Text style={[styles.text, stageChapterStyle]}>{'\u2014\u2014\u2014'}</Text>
+      </View>
+    );
+
+    return (
+      <View style={styles.container} testID={testID || 'chat-indicator-stage-chapter'}>
+        {chapterContent}
+      </View>
+    );
+  }
 
   const content = (
     <View style={styles.lineContainer}>

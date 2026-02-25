@@ -101,6 +101,54 @@ function getBriefStatus(status?: SessionStatus, isInviter?: boolean): string | u
 }
 
 // ============================================================================
+// Chapter Marker Helpers
+// ============================================================================
+
+/** Friendly stage names for chapter markers in the chat timeline */
+const STAGE_FRIENDLY_NAMES: Record<number, string> = {
+  [Stage.ONBOARDING]: 'Getting Started',
+  [Stage.WITNESS]: 'Your Story',
+  [Stage.PERSPECTIVE_STRETCH]: 'Walking in Their Shoes',
+  [Stage.NEED_MAPPING]: 'What Matters Most',
+  [Stage.STRATEGIC_REPAIR]: 'Moving Forward Together',
+  [Stage.INFORMED_EMPATHY]: 'Deeper Understanding',
+};
+
+/** Stages that should NOT generate chapter markers */
+const SUPPRESSED_CHAPTER_STAGES = new Set([Stage.ONBOARDING, Stage.INFORMED_EMPATHY]);
+
+/**
+ * Derive chapter marker indicators from message stage transitions.
+ * Inserts a chapter indicator at the first message of each new stage.
+ */
+function deriveChapterMarkers(
+  messages: ChatMessage[],
+): ChatIndicatorItem[] {
+  const markers: ChatIndicatorItem[] = [];
+  const seenStages = new Set<number>();
+
+  for (const msg of messages) {
+    const stage = msg.stage as number | undefined;
+    if (stage !== undefined && !seenStages.has(stage)) {
+      seenStages.add(stage);
+      if (SUPPRESSED_CHAPTER_STAGES.has(stage)) continue;
+
+      const friendlyName = STAGE_FRIENDLY_NAMES[stage];
+      if (friendlyName) {
+        markers.push({
+          type: 'indicator',
+          indicatorType: 'stage-chapter',
+          id: `stage-chapter-${stage}`,
+          timestamp: msg.timestamp,
+          metadata: { stageName: friendlyName },
+        });
+      }
+    }
+  }
+  return markers;
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -1097,7 +1145,7 @@ export function UnifiedSessionScreen({
     const derivedIndicators = deriveIndicators(sessionData);
 
     // Convert to ChatIndicatorItem format (add 'type' field)
-    const baseIndicators = derivedIndicators.map((indicator) => ({
+    const baseIndicators: ChatIndicatorItem[] = derivedIndicators.map((indicator) => ({
       type: 'indicator' as const,
       indicatorType: indicator.indicatorType,
       id: indicator.id,
@@ -1108,7 +1156,7 @@ export function UnifiedSessionScreen({
     // Add indicators for SHARED_CONTEXT and EMPATHY_STATEMENT messages.
     // Self-authored SHARED_CONTEXT indicator is derived from mySharedAt in deriveIndicators().
     // Self-authored EMPATHY_STATEMENT indicators are included here so users see "Empathy shared" in their timeline.
-    const sharedContentIndicators = messages
+    const sharedContentIndicators: ChatIndicatorItem[] = messages
       .filter((m) => {
         if (m.role !== MessageRole.SHARED_CONTEXT && m.role !== MessageRole.EMPATHY_STATEMENT) return false;
         const isFromMe = user?.id ? m.senderId === user.id : false;
@@ -1130,8 +1178,36 @@ export function UnifiedSessionScreen({
         };
       });
 
-    return [...baseIndicators, ...sharedContentIndicators];
-  }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt]);
+    const allIndicators: ChatIndicatorItem[] = [...baseIndicators, ...sharedContentIndicators];
+
+    // --- Empathy validated indicator ---
+    if (empathyStatusData?.myAttempt?.status === 'VALIDATED') {
+      allIndicators.push({
+        type: 'indicator' as const,
+        indicatorType: 'empathy-validated' as const,
+        id: 'empathy-validated',
+        timestamp: empathyStatusData.myAttempt.revealedAt
+          || new Date().toISOString(),
+        metadata: { partnerName: partnerName || 'Partner' },
+      });
+    }
+
+    // --- Share suggestion received indicator ---
+    if (shareOfferData?.hasSuggestion && shareOfferData.suggestion) {
+      allIndicators.push({
+        type: 'indicator' as const,
+        indicatorType: 'share-suggestion-received' as const,
+        id: 'share-suggestion-received',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // --- Stage chapter markers ---
+    const chapterIndicators = deriveChapterMarkers(messages);
+    allIndicators.push(...chapterIndicators);
+
+    return allIndicators;
+  }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion]);
 
 
 

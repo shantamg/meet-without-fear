@@ -79,6 +79,8 @@ export interface ChatIndicatorItem {
     isFromMe?: boolean;
     /** Partner's display name (for "Context from {name}" text) */
     partnerName?: string;
+    /** Stage name for stage-chapter indicators */
+    stageName?: string;
   };
 }
 
