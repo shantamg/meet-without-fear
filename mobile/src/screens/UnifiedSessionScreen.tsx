@@ -757,6 +757,11 @@ export function UnifiedSessionScreen({
   // Consent modal for sharing needs with partner (shown after needs are confirmed)
   const [showShareNeedsConfirm, setShowShareNeedsConfirm] = useState(false);
 
+  // New activity pill: floating indicator when new indicators/cards appear off-screen
+  const [pendingPillTarget, setPendingPillTarget] = useState<string | null>(null);
+  const prevIndicatorCountRef = useRef(0);
+  const prevValidationCardCountRef = useRef(0);
+
   // Auto-dismiss stage-specific drawers when stage transitions
   // Prevents stale drawers from stacking when the session advances
   useEffect(() => {
@@ -1282,6 +1287,32 @@ export function UnifiedSessionScreen({
       attemptId,
     }];
   }, [partnerEmpathyData, myProgress?.stage, partnerName, isEmpathyValidated, completedActions]);
+
+  // -------------------------------------------------------------------------
+  // New Activity Pill: detect when new indicators/cards appear
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const indicatorCount = indicators.length;
+    const cardCount = validationCards.length;
+    const prevTotal = prevIndicatorCountRef.current + prevValidationCardCountRef.current;
+    const currentTotal = indicatorCount + cardCount;
+
+    if (currentTotal > prevTotal && prevTotal > 0) {
+      // New item appeared - find the newest one
+      const allItems = [...indicators, ...validationCards];
+      const newest = allItems.sort((a, b) => {
+        const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return bTime - aTime;
+      })[0];
+      if (newest) {
+        setPendingPillTarget(newest.id);
+      }
+    }
+
+    prevIndicatorCountRef.current = indicatorCount;
+    prevValidationCardCountRef.current = cardCount;
+  }, [indicators, validationCards]);
 
   // -------------------------------------------------------------------------
   // Validation Card Handlers
@@ -2167,6 +2198,8 @@ export function UnifiedSessionScreen({
           validationCards={validationCards}
           onValidateAccurate={handleValidationAccurate}
           onValidateNotQuite={handleValidationNotQuite}
+          pendingPillTarget={pendingPillTarget}
+          onPillDismiss={() => setPendingPillTarget(null)}
         />
 
         {/* Waiting banner removed - now handled in renderAboveInput */}

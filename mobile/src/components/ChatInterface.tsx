@@ -18,6 +18,7 @@ import { ChatInput } from './ChatInput';
 import { EmotionSlider } from './EmotionSlider';
 import { ChatIndicator, ChatIndicatorType } from './ChatIndicator';
 import { EmpathyValidationCard } from './EmpathyValidationCard';
+import { NewActivityPill } from './NewActivityPill';
 import { createStyles } from '../theme/styled';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 
@@ -176,6 +177,10 @@ interface ChatInterfaceProps {
   onValidateAccurate?: () => void;
   /** Callback when user taps "Not quite yet" on a validation card */
   onValidateNotQuite?: () => void;
+  /** Target item ID for the new activity pill (null = no pill) */
+  pendingPillTarget?: string | null;
+  /** Callback when pill is dismissed (tapped or auto-dismissed) */
+  onPillDismiss?: () => void;
 }
 
 // ============================================================================
@@ -218,6 +223,8 @@ export function ChatInterface({
   validationCards,
   onValidateAccurate,
   onValidateNotQuite,
+  pendingPillTarget,
+  onPillDismiss,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -751,6 +758,48 @@ export function ChatInterface({
     }
   }, [isLoadingMore]);
 
+  // ---------------------------------------------------------------------------
+  // New Activity Pill: floating indicator for off-screen new items
+  // ---------------------------------------------------------------------------
+  const [pillVisible, setPillVisible] = useState(false);
+  const pillTargetRef = useRef<string | null>(null);
+  const viewableItemKeysRef = useRef<Set<string>>(new Set());
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+  }).current;
+
+  useEffect(() => {
+    if (pendingPillTarget) {
+      pillTargetRef.current = pendingPillTarget;
+      // Show pill only if target is NOT currently visible in viewport
+      if (!viewableItemKeysRef.current.has(pendingPillTarget)) {
+        setPillVisible(true);
+      }
+    } else {
+      setPillVisible(false);
+    }
+  }, [pendingPillTarget]);
+
+  const handleViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: Array<{ key: string }> }) => {
+    viewableItemKeysRef.current = new Set(viewableItems.map(v => v.key));
+    if (pillTargetRef.current && viewableItemKeysRef.current.has(pillTargetRef.current)) {
+      setPillVisible(false);
+      onPillDismiss?.();
+    }
+  }, [onPillDismiss]);
+
+  const handlePillPress = useCallback(() => {
+    if (pillTargetRef.current) {
+      const targetIndex = listItems.findIndex(item => item.id === pillTargetRef.current);
+      if (targetIndex >= 0) {
+        flatListRef.current?.scrollToIndex({ index: targetIndex, viewPosition: 0.3, animated: true });
+      }
+    }
+    setPillVisible(false);
+    onPillDismiss?.();
+  }, [listItems, onPillDismiss]);
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -782,6 +831,13 @@ export function ChatInterface({
         onScroll={handleScroll}
         scrollEventThrottle={16}
         onContentSizeChange={handleContentSizeChange}
+        onViewableItemsChanged={handleViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+      />
+      <NewActivityPill
+        visible={pillVisible}
+        partnerName={partnerName || 'Partner'}
+        onPress={handlePillPress}
       />
       <View style={styles.bottomContainer}>
         {showEmotionSlider && onEmotionChange && (
