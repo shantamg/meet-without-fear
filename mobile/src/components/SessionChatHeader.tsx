@@ -14,11 +14,10 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
-import { ArrowLeft, ArrowLeftRight } from 'lucide-react-native';
+import { ArrowLeft, BookOpen } from 'lucide-react-native';
 import { ConnectionStatus } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
-import { BadgeIndicator } from './BadgeIndicator';
 
 // ============================================================================
 // Types
@@ -43,10 +42,12 @@ export interface SessionChatHeaderProps {
   onPress?: () => void;
   /** Optional callback when brief status is pressed (e.g., to show invitation options) */
   onBriefStatusPress?: () => void;
-  /** Badge count for the activity menu icon (0 = no badge) */
-  menuBadgeCount?: number;
+  /** Whether there is new activity to indicate with a dot badge */
+  hasNewActivity?: boolean;
   /** Callback when the activity menu icon is pressed */
   onMenuPress?: () => void;
+  /** Current stage friendly name to display below partner name */
+  stageName?: string;
   /** Custom container style */
   style?: ViewStyle;
   /** Test ID for testing */
@@ -94,8 +95,9 @@ export function SessionChatHeader({
   onBackPress,
   onPress,
   onBriefStatusPress,
-  menuBadgeCount = 0,
+  hasNewActivity = false,
   onMenuPress,
+  stageName,
   style,
   testID = 'session-chat-header',
 }: SessionChatHeaderProps) {
@@ -127,7 +129,15 @@ export function SessionChatHeader({
       >
         {displayName}
       </Text>
-      {!hideOnlineStatus && (
+      {stageName ? (
+        <Text
+          style={styles.stageNameText}
+          numberOfLines={1}
+          testID={`${testID}-stage-name`}
+        >
+          {stageName}
+        </Text>
+      ) : !hideOnlineStatus ? (
         <View style={styles.statusRow}>
           <StatusDot isOnline={isOnline} />
           <Text
@@ -137,7 +147,7 @@ export function SessionChatHeader({
             {getOnlineText()}
           </Text>
         </View>
-      )}
+      ) : null}
     </View>
   );
 
@@ -181,17 +191,17 @@ export function SessionChatHeader({
             style={styles.menuButton}
             onPress={onMenuPress}
             accessibilityRole="button"
-            accessibilityLabel="Open activity menu"
+            accessibilityLabel={hasNewActivity ? "Open exchange history, new activity" : "Open exchange history"}
             testID={`${testID}-menu-button`}
           >
-            <ArrowLeftRight color={colors.textPrimary} size={20} />
-            <BadgeIndicator
-              count={menuBadgeCount}
-              size="small"
-              offset={{ x: -2, y: 0 }}
-              animate={true}
-              testID={`${testID}-menu-badge`}
-            />
+            <BookOpen color={colors.textPrimary} size={20} />
+            {hasNewActivity && (
+              <View
+                style={styles.activityDot}
+                testID={`${testID}-activity-dot`}
+                accessibilityLabel="New activity available"
+              />
+            )}
           </TouchableOpacity>
         ) : briefStatus ? (
           onBriefStatusPress ? (
@@ -278,7 +288,15 @@ const useStyles = () =>
       padding: t.spacing.xs,
       position: 'relative',
     },
-    // menuBadge styles removed - now using BadgeIndicator component
+    activityDot: {
+      position: 'absolute' as const,
+      top: 4,
+      right: 2,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: t.colors.accent,
+    },
     partnerName: {
       fontSize: t.typography.fontSize.lg,
       fontWeight: '600',
@@ -297,6 +315,12 @@ const useStyles = () =>
     },
     onlineTextActive: {
       color: t.colors.success,
+    },
+    stageNameText: {
+      fontSize: t.typography.fontSize.xs,
+      color: t.colors.textMuted,
+      textAlign: 'center' as const,
+      marginTop: 1,
     },
     briefStatus: {
       fontSize: t.typography.fontSize.sm,

@@ -2129,8 +2129,9 @@ export function UnifiedSessionScreen({
             ? () => setShowActivityMenu(true)
             : undefined
         }
-        menuBadgeCount={!isInOnboardingUnsigned ? (pendingActionsQuery.data?.actions?.length ?? 0) : 0}
+        hasNewActivity={!isInOnboardingUnsigned ? (pendingActionsQuery.data?.actions?.length ?? 0) > 0 : false}
         onMenuPress={!isInOnboardingUnsigned ? () => setShowActivityMenu(true) : undefined}
+        stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
         testID="session-chat-header"
       />
       {/* Chat content - Share is now a separate route */}
