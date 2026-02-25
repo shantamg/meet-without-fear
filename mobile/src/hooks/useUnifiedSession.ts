@@ -7,7 +7,7 @@
 
 import { useMemo, useCallback, useReducer, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Stage, MessageRole, StrategyPhase, MemorySuggestion } from '@meet-without-fear/shared';
+import { Stage, MessageRole, StrategyPhase, AgreementType, MemorySuggestion } from '@meet-without-fear/shared';
 import { useToast } from '../contexts/ToastContext';
 import { ApiClientError } from '../lib/api';
 
@@ -329,7 +329,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { mutate: markReady } = useMarkReadyToRank();
   const { mutate: submitRankings } = useSubmitRankings();
   const { mutate: confirmAgreement } = useConfirmAgreement();
-  useCreateAgreement(); // Available if needed for hybrid strategies
+  const { mutate: createAgreement } = useCreateAgreement();
   const { mutate: resolveSession } = useResolveSession();
 
   // Auto-consent to share needs when needs are confirmed but common ground hasn't started.
@@ -1196,6 +1196,19 @@ export function useUnifiedSession(sessionId: string | undefined) {
     [sessionId, confirmAgreement]
   );
 
+  const handleCreateAgreementFromOverlap = useCallback(
+    (strategy: { id: string; description: string }) => {
+      if (!sessionId) return;
+      createAgreement({
+        sessionId,
+        strategyId: strategy.id,
+        description: strategy.description,
+        type: AgreementType.MICRO_EXPERIMENT,
+      });
+    },
+    [sessionId, createAgreement]
+  );
+
   const handleResolveSession = useCallback(
     (onSuccess?: () => void) => {
       if (!sessionId) return;
@@ -1336,6 +1349,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     handleMarkReadyToRank,
     handleSubmitRankings,
     handleConfirmAgreement,
+    handleCreateAgreementFromOverlap,
     handleResolveSession,
     handleRespondToShareOffer,
 

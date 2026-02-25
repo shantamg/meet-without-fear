@@ -523,6 +523,19 @@ function computeShouldHideInput(
     return true;
   }
 
+  // During Stage 4 non-COLLECTING phases, hide input
+  // Users should focus on ranking, reviewing overlap, or confirming agreements
+  if (currentStage === Stage.STRATEGIC_REPAIR &&
+      inputs.strategyPhase &&
+      inputs.strategyPhase !== 'COLLECTING') {
+    return true;
+  }
+
+  // After session resolves, hide input
+  if (inputs.sessionStatus === SessionStatus.RESOLVED) {
+    return true;
+  }
+
   return false;
 }
 

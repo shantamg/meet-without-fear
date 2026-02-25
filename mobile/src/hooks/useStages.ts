@@ -1510,7 +1510,6 @@ export function useCommonGround(
   >
 ) {
   const allNeedsConfirmed = conditions?.allNeedsConfirmed ?? true;
-  const needsShared = conditions?.needsShared ?? true;
 
   return useQuery({
     queryKey: stageKeys.commonGround(sessionId || ''),
@@ -1518,8 +1517,8 @@ export function useCommonGround(
       if (!sessionId) throw new Error('Session ID is required');
       return get<GetCommonGroundResponse>(`/sessions/${sessionId}/common-ground`);
     },
-    enabled: !!sessionId && allNeedsConfirmed && needsShared,
-    staleTime: 30_000,
+    enabled: !!sessionId && allNeedsConfirmed,
+    staleTime: 0,
     ...options,
   });
 }
@@ -1576,7 +1575,7 @@ export function useStrategies(
       return get<GetStrategiesResponse>(`/sessions/${sessionId}/strategies`);
     },
     enabled: !!sessionId,
-    staleTime: 30_000,
+    staleTime: 0,
     ...options,
   });
 }

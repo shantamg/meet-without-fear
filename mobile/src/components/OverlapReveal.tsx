@@ -5,7 +5,7 @@
  * and shows unique selections from each side.
  */
 
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { StrategyCard } from './StrategyCard';
 import { colors } from '@/theme';
 
@@ -26,6 +26,8 @@ interface OverlapRevealProps {
   uniqueToMe: Strategy[];
   /** Strategies only the partner selected */
   uniqueToPartner: Strategy[];
+  /** Callback when user wants to create an agreement from a matched strategy */
+  onCreateAgreement?: (strategy: { id: string; description: string }) => void;
 }
 
 // ============================================================================
@@ -45,6 +47,7 @@ export function OverlapReveal({
   overlapping,
   uniqueToMe,
   uniqueToPartner,
+  onCreateAgreement,
 }: OverlapRevealProps) {
   const hasOverlap = overlapping.length > 0;
   const hasUnique = uniqueToMe.length > 0 || uniqueToPartner.length > 0;
@@ -59,8 +62,21 @@ export function OverlapReveal({
       {hasOverlap && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>You Both Chose</Text>
-          {overlapping.map((strategy) => (
-            <StrategyCard key={strategy.id} strategy={strategy} isOverlap />
+          {overlapping.map((strategy, index) => (
+            <View key={strategy.id}>
+              <StrategyCard strategy={strategy} isOverlap />
+              {onCreateAgreement && index === 0 && (
+                <TouchableOpacity
+                  style={styles.createAgreementButton}
+                  onPress={() => onCreateAgreement({ id: strategy.id, description: strategy.description })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Create agreement from strategy: ${strategy.description}`}
+                  testID="create-agreement-button"
+                >
+                  <Text style={styles.createAgreementText}>Create Agreement</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           ))}
         </View>
       )}
@@ -122,6 +138,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
     color: colors.textPrimary,
+  },
+  createAgreementButton: {
+    backgroundColor: colors.accent,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  createAgreementText: {
+    color: colors.textOnAccent,
+    fontSize: 16,
+    fontWeight: '600',
   },
   noOverlap: {
     padding: 24,

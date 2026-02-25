@@ -61,6 +61,12 @@ export async function getPendingActionsHandler(
       return;
     }
 
+    // Don't return pending actions for resolved/terminal sessions
+    if (session.status === 'RESOLVED' || session.status === 'ABANDONED' || session.status === 'ARCHIVED') {
+      successResponse(res, { actions: [], sentTabUpdates: 0 });
+      return;
+    }
+
     const actions: PendingAction[] = [];
 
     // 1. Pending share offers (reconciler suggested sharing)

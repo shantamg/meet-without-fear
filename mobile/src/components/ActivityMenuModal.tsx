@@ -44,6 +44,7 @@ export interface ActivityMenuModalProps {
   onOpenInvitationRefine?: () => void;
   initialTab?: 'sent' | 'received';
   onOpenEmpathyDetail?: (attemptId: string, content: string) => void;
+  sessionStatus?: string;
   testID?: string;
 }
 
@@ -65,8 +66,10 @@ export function ActivityMenuModal({
   onOpenInvitationRefine,
   initialTab,
   onOpenEmpathyDetail,
+  sessionStatus,
   testID = 'activity-menu-modal',
 }: ActivityMenuModalProps) {
+  const isSessionActive = !sessionStatus || (sessionStatus !== 'RESOLVED' && sessionStatus !== 'ABANDONED' && sessionStatus !== 'ARCHIVED');
   const [activeTab, setActiveTab] = useState<Tab>('received');
 
   // Sync tab when modal opens with an initialTab
@@ -199,8 +202,13 @@ export function ActivityMenuModal({
       return bTime - aTime;
     });
 
+    // When session is no longer active, suppress action buttons by marking all items as not pending
+    if (!isSessionActive) {
+      return items.map(item => ({ ...item, isPending: false }));
+    }
+
     return items;
-  }, [pendingActions, sharingStatus.partnerAttempt, sharingStatus.sharedContextHistory, partnerName]);
+  }, [pendingActions, sharingStatus.partnerAttempt, sharingStatus.sharedContextHistory, partnerName, isSessionActive]);
 
   // Badge counts per tab
   const sentBadge = pendingActionsQuery.data?.sentTabUpdates ?? 0;

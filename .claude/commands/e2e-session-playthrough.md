@@ -227,12 +227,14 @@ You're frustrated with Bob. They keep making plans with you and canceling last m
    - Click the **"Begin"** button (testID: `compact-sign-button`) — note: the button text is "Begin", not "Sign"
 7. A **mood check** screen appears ("How are you feeling right now?" with a slider). Click **"Continue"** (testID: `mood-check-continue-button`) to proceed with the default mood.
 8. The chat screen loads. You should see the AI's first message (e.g., "Hey Alice, what's going on with Bob?") and the chat input (textbox "Type a message...").
+   - **Header check:** The header should show "Bob" on the first line and a stage name like "Your Story" on the second line (NOT an online status indicator). There should be a **BookOpen icon** (not ArrowLeftRight) on the right side for the exchange history.
 9. **Chat with the AI facilitator**: Send 4-6 messages about the conflict with Bob. After each message:
    - Click the send button (the img icon next to the textbox)
    - Wait 8-10 seconds for the AI response
    - Take a snapshot to read the response
    - Respond naturally to what the AI says
 10. After chatting, the app will show panels or buttons. Read them and respond appropriately.
+    - **Note:** Copy has been softened throughout the app. Status messages use warmer language like "Your words are held safely until Bob is ready" instead of "Waiting for Bob to finish reflecting."
 11. When you see the invitation panel with "Invite Bob" and "I've sent it - Continue":
     - Do NOT click "Invite Bob" — it uses the native share API (`navigator.share`) which fails in Playwright/automated browsers.
     - Instead, click **"I've sent it - Continue"** to confirm the invitation.
@@ -259,6 +261,7 @@ You've been invited to this session by Alice. You know you've been canceling pla
 
 1. Navigate Browser B directly to the session: `http://localhost:8081/session/{SESSION_ID}?e2e-user-id={USER_B_ID}&e2e-user-email=bob@e2e.test`
 2. Wait for the session to load. You should see "Alice" (not "Partner") in the header and "Accepted Invitation" indicator — this confirms Phase 1.5 worked.
+   - **Header check:** The header should show "Alice" on the first line and a stage name on the second line (e.g., "Getting Started"). A **BookOpen icon** should appear on the right with a small **dot indicator** (not a number badge) if there is new activity.
 3. Sign the compact (same flow as User A — checkbox then "Begin" then mood check "Continue").
 4. **Chat with the AI facilitator**: Send 4-6 messages about your perspective. After each message:
    - Wait 8-10 seconds for the AI response
@@ -274,6 +277,12 @@ You've been invited to this session by Alice. You know you've been canceling pla
 
 After both users complete Stage 1, they enter Stage 2 (Perspective Stretch). Each user chats with the AI to draft an empathy statement about what their partner might be feeling, then shares it for validation.
 
+### UI changes in Stage 2
+
+- **Chapter markers**: When entering Stage 2, a chapter marker appears in the chat timeline: `——— Walking in Their Shoes ———` (testID: `chat-indicator-stage-chapter`). These are styled differently from regular indicators — larger font, no uppercase, em-dash delimiters.
+- **Header stage name**: The header subtitle updates to "Walking in Their Shoes" (testID: `session-chat-header-stage-name`).
+- **No more PartnerEventModal**: Partner events (empathy shared, context shared, etc.) now appear as **inline chat indicators** in the timeline, NOT as pop-up modals. You will NOT see modal dialogs blocking the screen for these events.
+
 ### Phase 5a: Empathy Drafting & Sharing (Both Users)
 
 For **each user** (alternate between Browser A and Browser B):
@@ -283,41 +292,50 @@ For **each user** (alternate between Browser A and Browser B):
 3. Click the review button. A drawer opens showing the draft statement with **"Refine further"** and **"Share"** buttons.
 4. Click **"Share"** (testID: `share-empathy-button`) to share the empathy statement with the partner.
 5. An **"Empathy shared"** indicator appears in the timeline. The chat input may be hidden while waiting for the partner.
+   - You may also see a **"Take a breath while you wait"** link (testID: `waiting-banner-exercise-link`) below the waiting banner. This opens breathing/grounding exercises. Optional — you can skip it for the E2E test.
 
-**Note**: Users can share empathy at any time — the reconciler handles asymmetric timing gracefully. If User A shares before User B has completed Stage 1, the reconciler runs for the A→B direction as soon as B confirms "feel heard", and User A sees a banner like "Bob is now considering how you might feel." The symmetric reconciler only processes directions not already handled by the asymmetric path.
+**Note**: Users can share empathy at any time — the reconciler handles asymmetric timing gracefully. If User A shares before User B has completed Stage 1, the reconciler runs for the A→B direction as soon as B confirms "feel heard", and User A sees a banner like "Bob is thinking about how you might feel." The symmetric reconciler only processes directions not already handled by the asymmetric path.
+
+**Important**: The `partner_considering_share` event has been removed. You will NOT see a "partner is considering whether to share" notification — this was deleted intentionally to reduce anxiety.
 
 ### Phase 5b: Reconciler & Share Offers
 
 After both users share empathy, the backend reconciler analyzes gaps between each user's empathy attempt and what the partner actually expressed.
 
 1. Wait ~20 seconds for the reconciler to process.
-2. Each user may see a **"Help Build Understanding"** dialog with **"Later"** and **"View"** buttons. This is the reconciler's share suggestion.
-3. Click **"View"** to see the Activity panel with the suggestion. Two options appear:
-   - **"Share as-is"** — shares recommended context immediately
-   - **"Refine"** — opens refinement flow
+2. Each user may see an inline **"Sharing opportunity available"** indicator in the chat timeline (testID: `chat-indicator-share-suggestion-received`), along with the share suggestion appearing in the exchange history.
+3. To view the share offer, tap the **BookOpen icon** in the header to open the **ActivityDrawer** (testID: `activity-drawer`) — a bottom sheet that slides up from the bottom at ~60% screen height.
+   - The drawer header reads **"Between you and [Partner Name]"** (e.g., "Between you and Bob").
+   - The drawer has two sections: **"Needs Your Attention"** (pinned at top with action items) and **"History"** (chronological list below).
+   - Share offers appear in "Needs Your Attention" with two options:
+     - **"Share as-is"** — shares recommended context immediately
+     - **"Refine"** — opens the RefinementModalScreen (full-screen coaching chat for refining content)
+   - Close the drawer by dragging it down, tapping the dimmed backdrop, or pressing Android back.
 4. After sharing context, the partner enters **REFINING** state. They will:
-   - See a **"Context from [Partner]"** indicator in their chat
+   - See a **"[Partner] shared more context"** indicator in their chat (testID: `chat-indicator-context-shared`)
    - Need to send at least 1 message reflecting on the shared context
    - Then see **"Revisit what you'll share"** button to revise their empathy
 5. Click **"Revisit what you'll share"** → drawer shows revised statement → click **"Resubmit"** (testID: `share-empathy-button`)
 6. Handle share offers for both users — each may get one.
 
-**Known issue**: The share offer dialog can block interaction. If clicks time out, use `browser_evaluate` to dismiss: `document.querySelectorAll('[role="dialog"]').forEach(d => d.remove())`
-
 ### Phase 5c: Empathy Validation (Both Users)
 
-Once both users have finalized their empathy statements, each sees the partner's attempt and must validate it.
+Once both users have finalized their empathy statements, each sees the partner's attempt as an **inline interactive card** in the chat timeline and must validate it.
 
-1. An **AccuracyFeedbackDrawer** appears (or a button to view the partner's empathy).
-2. Read the partner's empathy statement and choose:
-   - **"Accurate"** (testID: `accuracy-accurate-button`) — validates the attempt
-   - **"Partially accurate"** (testID: `accuracy-partial-button`) — still validates, with feedback
-   - **"Not quite"** (testID: `accuracy-inaccurate-button`) — requests revision
-3. For this E2E test, click **"Accurate"** for both users to advance.
-4. Once BOTH users validate, the app automatically transitions to Stage 3.
-5. Verify: A transition message appears ("You've validated each other's understanding...").
+1. An **EmpathyValidationCard** (testID: `empathy-validation-card`) appears directly in the chat FlatList, NOT in a separate modal or drawer. It has a distinct visual treatment:
+   - Full-width card with accent-colored left border
+   - Header: "[Partner Name]'s understanding" with a heart icon
+   - The empathy content reveals with a deliberate animation (card entrance → content fade-in → buttons appear, ~2.5 seconds total)
+   - For long statements, only 4 lines show initially with a "Read full statement" toggle
+2. The card asks **"Does this feel right?"** with two buttons:
+   - **"Yes, mostly"** (testID: `empathy-validation-card-yes-button`) — confirms the understanding. Card transitions to a completed state showing "You confirmed this feels right" with a green check.
+   - **"Not quite yet"** (testID: `empathy-validation-card-no-button`) — opens the **ValidationCoachChat** modal for AI-mediated feedback. After completing the feedback conversation, the card transitions to "Feedback shared" state.
+3. For this E2E test, click **"Yes, mostly"** for both users to advance.
+4. After validation, a green **"[Partner] confirmed your understanding"** indicator appears in the other user's chat (testID: `chat-indicator-empathy-validated`).
+5. Once BOTH users validate, the app automatically transitions to Stage 3.
+6. Verify: A transition message appears ("You've validated each other's understanding...") and a new chapter marker: `——— What Matters Most ———`.
 
-**Bug monitoring**: Check console errors after validation. Check both browsers to verify real-time sync of validation events.
+**Bug monitoring**: Check console errors after validation. Check both browsers to verify real-time sync of validation events via the inline indicators.
 
 ---
 
@@ -359,7 +377,7 @@ For **each user**:
 1. **If common ground exists**: Review the common ground items. Click confirm (testID: `common-ground-confirm-button`) to agree with the overlap.
 2. **If no overlap**: Click continue (testID: `no-overlap-continue-button`) to proceed anyway.
 3. Once BOTH users confirm, Stage 3 completes and Stage 4 begins automatically.
-4. Verify: A transition message appears ("You've found common ground together..." or "Even though your needs don't overlap directly...").
+4. Verify: A transition message appears ("You've found common ground together..." or "Even though your needs don't overlap directly...") and a chapter marker: `——— Moving Forward Together ———`.
 
 ---
 
@@ -413,9 +431,19 @@ When the playthrough is complete (session resolved, or you decide to stop), comp
 1. **Progress**: How far each user got (which stage, what was the last action).
 2. **Bugs found**: Any console errors, broken UI, or crashes — with severity (CRITICAL / WARNING / INFO). Include relevant server log excerpts from `/tmp/e2e-*.log` if applicable.
 3. **UX confusion**: Places where you (the AI) couldn't figure out what the UI wanted. These are real UX issues — if an AI can't parse it, many humans will struggle too.
-4. **Real-time sync**: Did changes in one browser show up correctly in the other?
+4. **Real-time sync**: Did changes in one browser show up correctly in the other? Specifically check that inline indicators (empathy-validated, context-shared, stage-chapter) appear in both browsers at the right time.
 5. **Performance**: Any noticeably slow responses or loading screens.
-6. **Overall assessment**: Could two real users complete this flow successfully?
+6. **New UI verification**: Verify these specific elements worked correctly:
+   - BookOpen icon in header (not ArrowLeftRight)
+   - Dot badge on header icon (not numeric)
+   - Stage names in header subtitle (not online status)
+   - Chapter markers at stage transitions
+   - Inline EmpathyValidationCard with 2-step buttons
+   - ActivityDrawer bottom sheet (not full-screen modal)
+   - Unified timeline (not Sent/Received tabs)
+   - No PartnerEventModal popups (all events inline)
+   - Softened copy in waiting banners and status text
+7. **Overall assessment**: Could two real users complete this flow successfully?
 
 ---
 
@@ -445,9 +473,54 @@ When the playthrough is complete (session resolved, or you decide to stop), comp
 
 12. **Use `pressSequentially` for typing, not `fill()`**: React Native Web textareas don't hold values set via Playwright's `fill()` method — the value clears immediately. Use `browser_type` with the `pressSequentially` option (slow typing character by character) or `browser_evaluate` with `page.getByTestId('chat-input').pressSequentially('text', { delay: 30 })` to ensure React state picks up the value.
 
-13. **Dialogs block all interaction**: Modal dialogs (e.g., "Help Build Understanding", "Context Shared") can block clicks on elements behind them even after dismissing with "Later". **Workaround**: Force-remove the dialog DOM: `document.querySelectorAll('[role="dialog"]').forEach(d => d.remove())`.
+13. **EmpathyValidationCard has a deliberate reveal delay**: The inline validation card uses a 3-phase stagger animation (~2.5 seconds total before buttons appear). Do NOT click the buttons before they're visible. After the card appears in the chat, wait at least 3 seconds before attempting to click "Yes, mostly" or "Not quite yet". If buttons aren't visible yet, take a snapshot to verify the animation state.
 
-14. **First message send can silently fail**: The first attempt to send a message sometimes clears the textarea but doesn't actually post the message. If the message doesn't appear in the chat after sending, try typing and sending again.
+14. **ActivityDrawer is a bottom sheet, not a modal**: The exchange history is now a bottom-sheet drawer (testID: `activity-drawer`) that slides up from the bottom. It does NOT have tabs. It shows a unified chronological timeline. To open it, click the BookOpen icon in the header. To close it, drag it down or tap the dimmed backdrop. The drawer does NOT intercept FlatList scrolling inside it — only the drag handle at the top responds to swipe-down gestures.
+
+15. **First message send can silently fail**: The first attempt to send a message sometimes clears the textarea but doesn't actually post the message. If the message doesn't appear in the chat after sending, try typing and sending again.
+
+16. **Inline indicators replace all PartnerEventModal popups**: Partner events (empathy revealed, empathy validated, context shared, share suggestion) now appear as small inline indicators in the chat timeline, NOT as blocking modal dialogs. If you see a blocking modal for a partner event, that's a regression bug — report it.
+
+17. **Chapter markers appear at stage transitions**: When entering a new stage, a chapter marker like `——— Walking in Their Shoes ———` appears in the chat. These use em-dash delimiters and are visually distinct from regular indicators (larger font, no uppercase). The first chapter marker visible is "Your Story" (Stage 1) — the ONBOARDING stage does NOT produce a marker.
+
+---
+
+## Quick Reference: TestID Changes
+
+These testIDs have changed from the previous version. If you encounter references to old testIDs, use the new ones:
+
+| Old TestID | Status | New TestID |
+|------------|--------|------------|
+| `activity-menu-modal` | REMOVED | `activity-drawer` |
+| `activity-menu-modal-tab-sent` | REMOVED | N/A (no tabs) |
+| `activity-menu-modal-tab-received` | REMOVED | N/A (no tabs) |
+| `partner-event-modal` | REMOVED | N/A (inline indicators) |
+| `accuracy-feedback-trigger` | REMOVED | `empathy-validation-card` |
+| `accuracy-accurate-button` | REMOVED | `empathy-validation-card-yes-button` |
+| `accuracy-partial-button` | REMOVED | `empathy-validation-card-yes-button` (maps to "Yes, mostly") |
+| `accuracy-inaccurate-button` | REMOVED | `empathy-validation-card-no-button` ("Not quite yet") |
+| `sent-item-card` | REMOVED | `timeline-item-card` |
+| `received-item-card` | REMOVED | `timeline-item-card` |
+
+New testIDs introduced:
+
+| TestID | Component | Description |
+|--------|-----------|-------------|
+| `empathy-validation-card` | EmpathyValidationCard | Inline validation card in chat FlatList |
+| `empathy-validation-card-yes-button` | EmpathyValidationCard | "Yes, mostly" button |
+| `empathy-validation-card-no-button` | EmpathyValidationCard | "Not quite yet" button |
+| `empathy-validation-card-content` | EmpathyValidationCard | Partner's empathy text |
+| `empathy-validation-card-completed` | EmpathyValidationCard | Completed state indicator |
+| `empathy-validation-card-superseded` | EmpathyValidationCard | Superseded state indicator |
+| `activity-drawer` | ActivityDrawer | Bottom sheet drawer |
+| `timeline-item-card` | TimelineItemCard | Unified timeline item in drawer |
+| `chat-indicator-empathy-validated` | ChatIndicator | "[Partner] confirmed your understanding" |
+| `chat-indicator-context-shared` | ChatIndicator | "[Partner] shared more context" |
+| `chat-indicator-share-suggestion-received` | ChatIndicator | "Sharing opportunity available" |
+| `chat-indicator-stage-chapter` | ChatIndicator | Stage chapter marker |
+| `session-chat-header-activity-dot` | SessionChatHeader | Dot badge on BookOpen icon |
+| `session-chat-header-stage-name` | SessionChatHeader | Stage name in header subtitle |
+| `waiting-banner-exercise-link` | WaitingBanner | "Take a breath while you wait" link |
 
 ---
 

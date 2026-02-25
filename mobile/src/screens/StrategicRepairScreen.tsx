@@ -526,6 +526,19 @@ export function StrategicRepairScreen() {
     }
   };
 
+  // Handle creating agreement from overlapping strategy
+  const handleCreateAgreementFromOverlap = (strategy: { id: string; description: string }) => {
+    if (sessionId) {
+      createAgreement({
+        sessionId,
+        strategyId: strategy.id,
+        description: strategy.description,
+        type: AgreementType.MICRO_EXPERIMENT,
+        followUpDate: followUpDate?.toISOString(),
+      });
+    }
+  };
+
   // Handle confirm agreement
   const handleConfirmAgreement = () => {
     const agreement = agreementsData?.agreements?.[0];
@@ -638,6 +651,7 @@ export function StrategicRepairScreen() {
           overlapping={overlappingStrategies}
           uniqueToMe={[]}
           uniqueToPartner={[]}
+          onCreateAgreement={handleCreateAgreementFromOverlap}
         />
       </SafeAreaView>
     );

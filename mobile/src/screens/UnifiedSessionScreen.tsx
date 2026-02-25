@@ -219,6 +219,7 @@ export function UnifiedSessionScreen({
     handleMarkReadyToRank,
     handleSubmitRankings,
     handleConfirmAgreement,
+    handleCreateAgreementFromOverlap,
     handleResolveSession,
     handleRespondToShareOffer,
 
@@ -508,7 +509,9 @@ export function UnifiedSessionScreen({
       if (eventName === 'session.common_ground_ready') {
         // Common ground analysis complete (both users shared needs)
         console.log('[UnifiedSessionScreen] Common ground ready');
-        queryClient.refetchQueries({ queryKey: stageKeys.commonGround(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
       if (eventName === 'partner.common_ground_confirmed') {
@@ -516,6 +519,50 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Partner confirmed common ground');
         queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+
+      // -----------------------------------------------------------------------
+      // Stage 4: Strategic Repair Events
+      // -----------------------------------------------------------------------
+
+      if (eventName === 'partner.ranking_submitted') {
+        // Partner submitted their strategy rankings
+        console.log('[UnifiedSessionScreen] Partner submitted rankings');
+        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.strategiesReveal(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+
+      if (eventName === 'partner.marked_ready') {
+        // Partner marked ready to rank
+        console.log('[UnifiedSessionScreen] Partner marked ready to rank');
+        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+
+      if (eventName === 'agreement.proposed') {
+        // Partner proposed an agreement
+        console.log('[UnifiedSessionScreen] Agreement proposed');
+        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      }
+
+      if (eventName === 'agreement.confirmed') {
+        // Partner confirmed an agreement
+        console.log('[UnifiedSessionScreen] Agreement confirmed');
+        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      }
+
+      if (eventName === 'session.resolved') {
+        // Session has been resolved
+        console.log('[UnifiedSessionScreen] Session resolved');
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
+        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
+        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
       }
     },
     // Fire-and-forget pattern: AI responses arrive via Ably
@@ -677,8 +724,31 @@ export function UnifiedSessionScreen({
   // Local latch for common ground confirmation - once user confirms, hide panel immediately
   const [hasConfirmedCommonGroundLocal, setHasConfirmedCommonGroundLocal] = useState(false);
 
+  // Local latch for empathy validation - once user validates, don't reshow accuracy panel
+  const [hasValidatedEmpathyLocal, setHasValidatedEmpathyLocal] = useState(false);
+
   // Consent modal for sharing needs with partner (shown after needs are confirmed)
   const [showShareNeedsConfirm, setShowShareNeedsConfirm] = useState(false);
+
+  // Auto-dismiss stage-specific drawers when stage transitions
+  // Prevents stale drawers from stacking when the session advances
+  useEffect(() => {
+    const currentStage = myProgress?.stage;
+
+    // Stage 2 drawers: empathy statement, accuracy feedback, share topic, validation coach
+    if (currentStage !== undefined && currentStage !== Stage.PERSPECTIVE_STRETCH) {
+      setShowEmpathyDrawer(false);
+      setShowShareConfirm(false);
+      setShowAccuracyFeedbackDrawer(false);
+      setShowShareTopicDrawer(false);
+      setShowFeedbackCoachChat(false);
+    }
+
+    // Stage 3 drawers: share needs consent
+    if (currentStage !== undefined && currentStage !== Stage.NEED_MAPPING) {
+      setShowShareNeedsConfirm(false);
+    }
+  }, [myProgress?.stage]);
 
   // -------------------------------------------------------------------------
   // Local State for Session Entry Mood Check
@@ -775,7 +845,7 @@ export function UnifiedSessionScreen({
     shareOfferData: shareOfferData ?? undefined,
     // Share offer panel shows ShareTopicPanel which opens ShareTopicDrawer
     hasRespondedToShareOfferLocal,
-    partnerEmpathyValidated: partnerEmpathyData?.validated ?? false,
+    partnerEmpathyValidated: hasValidatedEmpathyLocal || (partnerEmpathyData?.validated ?? false),
     allNeedsConfirmed,
     needsAvailable: (needs?.length ?? 0) > 0,
     needsShared: allNeedsConfirmed, // Sharing happens immediately after confirmation
@@ -1473,6 +1543,7 @@ export function UnifiedSessionScreen({
               }))}
               uniqueToMe={[]}
               uniqueToPartner={[]}
+              onCreateAgreement={handleCreateAgreementFromOverlap}
             />
             <TouchableOpacity style={styles.closeOverlay} onPress={closeOverlay}>
               <Text style={styles.closeOverlayText}>Continue</Text>
@@ -1522,6 +1593,7 @@ export function UnifiedSessionScreen({
     handleMarkReadyToRank,
     handleSubmitRankings,
     handleConfirmAgreement,
+    handleCreateAgreementFromOverlap,
     handleResolveSession,
     handleSignCompact,
     closeOverlay,
@@ -2195,10 +2267,12 @@ export function UnifiedSessionScreen({
           statement={partnerEmpathyData.attempt.content}
           partnerName={partnerName}
           onAccurate={() => {
+            setHasValidatedEmpathyLocal(true);
             handleValidatePartnerEmpathy(true);
             setShowAccuracyFeedbackDrawer(false);
           }}
           onPartiallyAccurate={() => {
+            setHasValidatedEmpathyLocal(true);
             handleValidatePartnerEmpathy(false, 'Some parts are accurate');
             setShowAccuracyFeedbackDrawer(false);
           }}
@@ -2230,6 +2304,7 @@ export function UnifiedSessionScreen({
             onComplete={(feedback) => {
               setShowFeedbackCoachChat(false);
               setFeedbackCoachInitialDraft('');
+              setHasValidatedEmpathyLocal(true);
               // Submit the AI-crafted feedback as inaccurate validation
               handleValidatePartnerEmpathy(false, feedback);
             }}
@@ -2270,6 +2345,7 @@ export function UnifiedSessionScreen({
         visible={showActivityMenu}
         sessionId={sessionId}
         partnerName={partnerName}
+        sessionStatus={session?.status}
         onClose={() => setShowActivityMenu(false)}
         initialTab={activityMenuTab}
         onOpenRefinement={(offerId, suggestion) => {
@@ -2297,6 +2373,8 @@ export function UnifiedSessionScreen({
           queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
           queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });
           queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
+          queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
+          queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
         }}
         invitationMessage={invitationMessage || undefined}
         invitationTimestamp={invitation?.messageConfirmedAt || undefined}
