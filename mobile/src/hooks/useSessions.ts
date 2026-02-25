@@ -44,6 +44,7 @@ import {
   stageKeys,
   messageKeys,
   timelineKeys,
+  notificationKeys,
 } from './queryKeys';
 
 // Re-export for backwards compatibility
@@ -1039,6 +1040,10 @@ export function useMarkShareTabViewed(sessionId: string | undefined) {
     onSuccess: () => {
       // Invalidate empathy status to update delivery statuses
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId || '') });
+      // Invalidate pending actions (unread context count changed)
+      queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId || '') });
+      // Invalidate aggregate badge count
+      queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
     },
   });
 }
