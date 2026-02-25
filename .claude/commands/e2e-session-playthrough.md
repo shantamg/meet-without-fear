@@ -284,7 +284,7 @@ For **each user** (alternate between Browser A and Browser B):
 4. Click **"Share"** (testID: `share-empathy-button`) to share the empathy statement with the partner.
 5. An **"Empathy shared"** indicator appears in the timeline. The chat input may be hidden while waiting for the partner.
 
-**Important**: Complete empathy drafting for BOTH users BEFORE either shares, to avoid race conditions with the reconciler's transition messages.
+**Note**: Users can share empathy at any time — the reconciler handles asymmetric timing gracefully. If User A shares before User B has completed Stage 1, the reconciler runs for the A→B direction as soon as B confirms "feel heard", and User A sees a banner like "Bob is now considering how you might feel." The symmetric reconciler only processes directions not already handled by the asymmetric path.
 
 ### Phase 5b: Reconciler & Share Offers
 

@@ -93,12 +93,27 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
     const userAId = session.relationship.members[0].user.id;
     const userBId = session.relationship.members[1].user.id;
 
+    // Fetch current empathy attempt statuses to avoid overriding statuses
+    // already set by the asymmetric reconciler (runReconcilerForDirection).
+    // When User A shares empathy before User B, the asymmetric reconciler runs
+    // for A→B when B completes Stage 1. Later when B shares empathy, this
+    // symmetric path runs for both directions. Without this guard, A's status
+    // (already READY or AWAITING_SHARING) would be redundantly overwritten,
+    // causing duplicate events and potential state confusion.
+    const alreadyProcessed = new Set(['READY', 'AWAITING_SHARING', 'REFINING', 'REVEALED']);
+    const [currentAttemptA, currentAttemptB] = await Promise.all([
+      prisma.empathyAttempt.findFirst({ where: { sessionId, sourceUserId: userAId } }),
+      prisma.empathyAttempt.findFirst({ where: { sessionId, sourceUserId: userBId } }),
+    ]);
+    const shouldUpdateA = currentAttemptA && !alreadyProcessed.has(currentAttemptA.status);
+    const shouldUpdateB = currentAttemptB && !alreadyProcessed.has(currentAttemptB.status);
+
     // Track new statuses for notification
     let statusA: EmpathyStatus | null = null;
     let statusB: EmpathyStatus | null = null;
 
     // Update empathy attempt for User A (A's guess about B)
-    if (result.aUnderstandingB) {
+    if (result.aUnderstandingB && shouldUpdateA) {
       const hasSignificantGapsA =
         result.aUnderstandingB.gaps.severity === 'significant' ||
         result.aUnderstandingB.recommendation.action === 'OFFER_SHARING' ||
@@ -156,10 +171,16 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         });
         console.log(`[triggerReconcilerAndUpdateStatuses] Published partner_considering_share for User A`);
       }
+    } else if (result.aUnderstandingB && !shouldUpdateA) {
+      // A→B direction already processed by asymmetric reconciler — preserve current status
+      statusA = (currentAttemptA?.status as EmpathyStatus) ?? null;
+      console.log(
+        `[triggerReconcilerAndUpdateStatuses] Skipping User A update — already processed by asymmetric reconciler (status: ${statusA})`
+      );
     }
 
     // Update empathy attempt for User B (B's guess about A)
-    if (result.bUnderstandingA) {
+    if (result.bUnderstandingA && shouldUpdateB) {
       const hasSignificantGapsB =
         result.bUnderstandingA.gaps.severity === 'significant' ||
         result.bUnderstandingA.recommendation.action === 'OFFER_SHARING' ||
@@ -217,9 +238,15 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         });
         console.log(`[triggerReconcilerAndUpdateStatuses] Published partner_considering_share for User B`);
       }
+    } else if (result.bUnderstandingA && !shouldUpdateB) {
+      // B→A direction already processed by asymmetric reconciler — preserve current status
+      statusB = (currentAttemptB?.status as EmpathyStatus) ?? null;
+      console.log(
+        `[triggerReconcilerAndUpdateStatuses] Skipping User B update — already processed by asymmetric reconciler (status: ${statusB})`
+      );
     }
 
-    // Bug 1 fix: Notify both clients that empathy statuses have been updated
+    // Notify both clients that empathy statuses have been updated
     // This allows the UI to immediately show share suggestions or reveal empathy
     // Include full empathy status for both users to avoid extra HTTP round-trips
     const { buildEmpathyExchangeStatusForBothUsers } = await import('../services/empathy-status');
@@ -234,7 +261,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
     });
     console.log(`[triggerReconcilerAndUpdateStatuses] Published empathy.status_updated event with full status data`);
 
-    // Check if both are now READY and reveal both simultaneously
+    // Always check if both are now READY and reveal both simultaneously
     const { checkAndRevealBothIfReady } = await import('../services/reconciler');
     await checkAndRevealBothIfReady(sessionId);
   } catch (error) {

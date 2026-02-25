@@ -177,11 +177,37 @@ describe('Priority 4: Stage 2 (Empathy)', () => {
     expect(computeWaitingStatus(inputs)).toBe('partner-considering-perspective');
   });
 
+  it('returns partner-considering-perspective when my attempt is READY (asymmetric reconciler approved)', () => {
+    // When User A shares empathy and the asymmetric reconciler approves it (READY),
+    // but User B hasn't shared yet, A should see "partner is considering your perspective"
+    const inputs = createDefaultInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      partnerStage: Stage.PERSPECTIVE_STRETCH,
+      empathyStatus: { myAttemptStatus: 'READY' },
+      empathyDraft: { alreadyConsented: true },
+      hasPartnerEmpathy: false,
+    });
+
+    expect(computeWaitingStatus(inputs)).toBe('partner-considering-perspective');
+  });
+
   it('returns null when REVEALED but partner has shared empathy', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       partnerStage: Stage.PERSPECTIVE_STRETCH, // Partner also in Stage 2
       empathyStatus: { myAttemptStatus: 'REVEALED' },
+      hasPartnerEmpathy: true,
+    });
+
+    expect(computeWaitingStatus(inputs)).toBeNull();
+  });
+
+  it('returns null when READY and partner has shared empathy', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      partnerStage: Stage.PERSPECTIVE_STRETCH,
+      empathyStatus: { myAttemptStatus: 'READY' },
+      empathyDraft: { alreadyConsented: true },
       hasPartnerEmpathy: true,
     });
 

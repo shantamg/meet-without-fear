@@ -173,9 +173,12 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     return 'awaiting-subject-decision';
   }
 
-  // Good alignment: User is revealed, Partner is working on their empathy for us
+  // Good alignment: User's empathy is READY (or REVEALED), partner is working on their empathy for us.
+  // READY means the asymmetric reconciler has analyzed the guesser's empathy and approved it,
+  // but the partner hasn't shared their own empathy yet.
+  // REVEALED means both are ready and empathy has been revealed (brief transient state).
   if (
-    empathyStatus?.myAttemptStatus === 'REVEALED' &&
+    (empathyStatus?.myAttemptStatus === 'READY' || empathyStatus?.myAttemptStatus === 'REVEALED') &&
     !hasPartnerEmpathy &&
     !empathyStatus?.analyzing
   ) {

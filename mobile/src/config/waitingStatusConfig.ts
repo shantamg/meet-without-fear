@@ -71,7 +71,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: true,
-    bannerText: (p) => `Waiting for ${p} to feel heard.`,
+    bannerText: (p) => `Waiting for ${p} to share their perspective.`,
   },
 
   // Stage 2: Partner is now considering user's perspective (good alignment)
