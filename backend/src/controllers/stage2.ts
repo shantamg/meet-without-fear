@@ -438,8 +438,17 @@ export async function getDraft(req: Request, res: Response): Promise<void> {
       },
     });
 
-    // Can consent if draft exists and is ready to share
-    const canConsent = !!(draft && draft.readyToShare && !existingConsent);
+    // Check if user is in REFINING state (received shared context, revising empathy)
+    const myAttempt = await prisma.empathyAttempt.findFirst({
+      where: { sessionId, sourceUserId: user.id },
+      select: { status: true },
+    });
+    const isRefining = myAttempt?.status === 'REFINING';
+
+    // Can consent if draft exists and is ready to share AND:
+    // - No existing consent (first time), OR
+    // - User is in REFINING state (resubmission after receiving partner's shared context)
+    const canConsent = !!(draft && draft.readyToShare && (!existingConsent || isRefining));
     const alreadyConsented = !!existingConsent;
 
     successResponse(res, {

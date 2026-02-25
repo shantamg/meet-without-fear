@@ -504,10 +504,9 @@ function computeShouldHideInput(
     return true;
   }
 
-  // If user has unviewed shared context, hide input until they view Share tab
-  if (inputs.hasUnviewedSharedContext) {
-    return true;
-  }
+  // Note: hasUnviewedSharedContext no longer hides input.
+  // The notification popup already surfaces the shared context to the user,
+  // so requiring them to also open the Activity menu is unnecessary friction.
 
   // Safety: In Stage 2, if empathy data is still loading (undefined),
   // hide input conservatively to avoid showing input when we shouldn't.

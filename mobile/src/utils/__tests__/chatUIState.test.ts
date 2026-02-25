@@ -261,7 +261,7 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(false);
   });
 
-  it('hides input when user has unviewed shared context', () => {
+  it('does NOT hide input when user has unviewed shared context (notification popup is sufficient)', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -272,7 +272,7 @@ describe('Input Hiding (shouldHideInput)', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.shouldHideInput).toBe(true);
+    expect(result.shouldHideInput).toBe(false);
   });
 
   it('shows input after user views Share tab (no unviewed context)', () => {
