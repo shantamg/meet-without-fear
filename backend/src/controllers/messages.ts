@@ -1669,6 +1669,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       // Extract metadata from parsed response
       metadata.offerFeelHeardCheck = parsed.offerFeelHeardCheck;
       metadata.offerReadyToShare = parsed.offerReadyToShare;
+      if (parsed.proposedStrategies.length > 0) {
+        metadata.proposedStrategies = parsed.proposedStrategies;
+      }
 
       // Use draftContent captured during streaming (more reliable than re-parsing)
       const draft = draftContent || parsed.draft;
@@ -1853,6 +1856,33 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           version: { increment: 1 },
         },
       });
+    }
+
+    // Save proposed strategies (Stage 4)
+    if (currentStage === 4 && metadata.proposedStrategies && metadata.proposedStrategies.length > 0) {
+      // Deduplicate: check existing strategies to avoid duplicates from re-proposals
+      const existingStrategies = await prisma.strategyProposal.findMany({
+        where: { sessionId, createdByUserId: user.id },
+        select: { description: true },
+      });
+      const existingDescriptions = new Set(existingStrategies.map((s) => s.description.toLowerCase()));
+
+      const newStrategies = metadata.proposedStrategies.filter(
+        (desc) => !existingDescriptions.has(desc.toLowerCase())
+      );
+
+      if (newStrategies.length > 0) {
+        await prisma.strategyProposal.createMany({
+          data: newStrategies.map((description) => ({
+            sessionId,
+            createdByUserId: user.id,
+            description,
+            needsAddressed: [],
+            source: 'AI_SUGGESTED' as const,
+          })),
+        });
+        console.log(`[sendMessageStream:${requestId}] Created ${newStrategies.length} strategy proposals for user ${user.id}`);
+      }
     }
 
     // =========================================================================

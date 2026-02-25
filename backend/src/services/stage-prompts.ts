@@ -34,6 +34,8 @@ function buildResponseProtocol(stage: number, options?: {
     flags.push('FeelHeardCheck: [Y/N]');
   } else if (stage === 2) {
     flags.push('ReadyShare: [Y/N]');
+  } else if (stage === 4) {
+    flags.push('StrategyProposed: [Y/N]');
   }
 
   const draftSection = options?.includesDraft
@@ -49,12 +51,18 @@ ${options.draftPurpose} text
     ? `\n- If asked why they're doing this / why guess partner's feelings / what's the point: <dispatch>EXPLAIN_EMPATHY_PURPOSE</dispatch>`
     : '';
 
+  const strategySection = stage === 4
+    ? `\nIf StrategyProposed is Y, list each concrete strategy the user committed to on its own line, prefixed with "ProposedStrategy: ". Only extract specific, actionable strategies — NOT vague ones like "communicate better". Example:
+ProposedStrategy: 10-minute check-in after dinner each night for one week
+ProposedStrategy: Sunday evening phone call to plan the week ahead`
+    : '';
+
   return `
 OUTPUT FORMAT:
 <thinking>
 Mode: [WITNESS|PERSPECTIVE|NEEDS|REPAIR|ONBOARDING|DISPATCH]
 ${flags.join('\n')}
-Strategy: [brief]
+Strategy: [brief]${strategySection}
 </thinking>${draftSection}
 
 Then write the user-facing response (plain text, no tags).

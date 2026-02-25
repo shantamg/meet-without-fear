@@ -20,6 +20,7 @@ import {
   AgreementType,
   ApiResponse,
   ErrorCode,
+  StrategyPhase,
 } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
@@ -123,7 +124,8 @@ export async function getStrategies(req: Request, res: Response): Promise<void> 
     if (session.status !== 'ACTIVE') {
       successResponse(res, {
         strategies: [],
-        phase: 'collecting',
+        phase: StrategyPhase.COLLECTING,
+        aiSuggestionsAvailable: false,
       });
       return;
     }
@@ -141,12 +143,40 @@ export async function getStrategies(req: Request, res: Response): Promise<void> 
       },
     });
 
+    // Compute actual phase from DB state
+    const allProgress = await prisma.stageProgress.findMany({
+      where: { sessionId, stage: 4 },
+    });
+
+    const rankings = await prisma.strategyRanking.findMany({
+      where: { sessionId },
+    });
+
+    // Check gates for both users
+    const allReadyToRank = allProgress.length >= 2 &&
+      allProgress.every((p) => {
+        const gates = p.gatesSatisfied as Record<string, unknown> | null;
+        return gates?.readyToRank === true;
+      });
+
+    const bothRanked = rankings.length >= 2;
+
+    let phase: StrategyPhase;
+    if (bothRanked) {
+      phase = StrategyPhase.REVEALING;
+    } else if (allReadyToRank) {
+      phase = StrategyPhase.RANKING;
+    } else {
+      phase = StrategyPhase.COLLECTING;
+    }
+
     // Shuffle to avoid order bias
     const shuffled = shuffleArray(strategies);
 
     successResponse(res, {
       strategies: shuffled,
-      phase: 'pool',
+      phase,
+      aiSuggestionsAvailable: false,
     });
   } catch (error) {
     console.error('[getStrategies] Error:', error);

@@ -6,6 +6,7 @@
  */
 
 import { useMemo, useCallback, useReducer, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Stage, MessageRole, StrategyPhase, MemorySuggestion } from '@meet-without-fear/shared';
 import { useToast } from '../contexts/ToastContext';
 import { ApiClientError } from '../lib/api';
@@ -21,6 +22,7 @@ import {
   useFetchInitialMessage,
 } from './useMessages';
 import { useStreamingMessage, StreamMetadata } from './useStreamingMessage';
+import { stageKeys } from './queryKeys';
 import {
   useSignCompact,
   useAdvanceStage,
@@ -209,6 +211,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const [state, dispatch] = useReducer(sessionReducer, initialState);
   const lastActivityTime = useRef<number>(Date.now());
   const prevMessageCountRef = useRef(0);
+  const queryClient = useQueryClient();
 
   // Toast for error feedback
   const { showError } = useToast();
@@ -329,6 +332,24 @@ export function useUnifiedSession(sessionId: string | undefined) {
   useCreateAgreement(); // Available if needed for hybrid strategies
   const { mutate: resolveSession } = useResolveSession();
 
+  // Auto-consent to share needs when needs are confirmed but common ground hasn't started.
+  // This handles the case where needs were confirmed without the consent-to-share step.
+  const autoConsentTriggered = useRef(false);
+  useEffect(() => {
+    if (
+      sessionId &&
+      allNeedsConfirmedForGating &&
+      commonGroundData &&
+      !commonGroundData.analysisComplete &&
+      commonGroundData.commonGround.length === 0 &&
+      !autoConsentTriggered.current
+    ) {
+      autoConsentTriggered.current = true;
+      const needIds = needsForGating.map((n) => n.id);
+      consentShareNeeds({ sessionId, needIds });
+    }
+  }, [sessionId, allNeedsConfirmedForGating, commonGroundData, needsForGating, consentShareNeeds]);
+
   // Streaming message hook with callbacks for metadata handling
   const handleStreamMetadata = useCallback(
     (_sessionId: string, metadata: StreamMetadata) => {
@@ -353,9 +374,13 @@ export function useUnifiedSession(sessionId: string | undefined) {
         // Save to database with readyToShare: false (user hasn't confirmed yet)
         saveDraft({ sessionId, content: metadata.proposedEmpathyStatement, readyToShare: false });
       }
+      // Invalidate strategies cache when AI extracts new strategies (Stage 4)
+      if (sessionId && metadata.proposedStrategies && metadata.proposedStrategies.length > 0) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
+      }
     },
     [sessionId, saveDraft, setStreamTriggeredFeelHeard, setAiRecommendsReadyToShare,
-     setLiveInvitationMessage, setLiveProposedEmpathyStatement]
+     setLiveInvitationMessage, setLiveProposedEmpathyStatement, queryClient]
   );
 
   const handleStreamError = useCallback(
@@ -1088,12 +1113,15 @@ export function useUnifiedSession(sessionId: string | undefined) {
         { sessionId, needIds },
         {
           onSuccess: () => {
+            // After confirming needs, automatically consent to share for common ground discovery.
+            // This eliminates the need for a separate consent step.
+            consentShareNeeds({ sessionId, needIds });
             onSuccess?.();
           },
         }
       );
     },
-    [sessionId, needs, confirmNeeds]
+    [sessionId, needs, confirmNeeds, consentShareNeeds]
   );
 
   const handleConsentToShareNeeds = useCallback(

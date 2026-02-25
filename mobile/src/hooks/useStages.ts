@@ -1385,15 +1385,16 @@ export function useNeeds(
       return get<GetNeedsResponse>(`/sessions/${sessionId}/needs`);
     },
     enabled: !!sessionId,
-    staleTime: 60_000, // Needs analysis doesn't change frequently
-    // Poll every 3s while extraction is in progress
-    // Note: extracting field added to GetNeedsResponse in shared/src/dto/needs.ts
+    staleTime: 0, // Always treat as stale so Ably event invalidation triggers fresh fetch
+    // Poll every 3s while extraction is in progress OR while no needs exist yet.
+    // The backend returns extracting: true while AI is analyzing, and extracting: false
+    // once needs are saved. We also poll if needs haven't arrived yet (race condition guard).
     refetchInterval: (query) => {
       const data = query.state.data as (GetNeedsResponse & { extracting?: boolean }) | undefined;
-      if (data?.extracting && (!data.needs || data.needs.length === 0)) {
+      if (!data || data.extracting || !data.needs || data.needs.length === 0) {
         return 3_000; // Poll every 3 seconds
       }
-      return false; // Stop polling
+      return false; // Stop polling once needs exist
     },
     ...options,
   });

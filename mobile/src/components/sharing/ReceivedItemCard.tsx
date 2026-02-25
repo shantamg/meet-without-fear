@@ -61,22 +61,26 @@ export function ReceivedItemCard({
       <Text style={styles.content}>
         "{item.content}"
       </Text>
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={() => onRefine?.(item.id)}
-          testID={`${testID}-refine`}
-        >
-          <Text style={styles.secondaryButtonText}>Refine</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => onShareAsIs?.(item.id)}
-          testID={`${testID}-share-as-is`}
-        >
-          <Text style={styles.primaryButtonText}>Share as-is</Text>
-        </TouchableOpacity>
-      </View>
+      {item.isPending ? (
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => onRefine?.(item.id)}
+            testID={`${testID}-refine`}
+          >
+            <Text style={styles.secondaryButtonText}>Refine</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => onShareAsIs?.(item.id)}
+            testID={`${testID}-share-as-is`}
+          >
+            <Text style={styles.primaryButtonText}>Share as-is</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <Text style={styles.completedLabel}>Shared</Text>
+      )}
     </>
   );
 
@@ -86,29 +90,33 @@ export function ReceivedItemCard({
       <Text style={styles.content}>
         "{item.content}"
       </Text>
-      <View style={styles.validationActions}>
-        <TouchableOpacity
-          style={styles.validationButton}
-          onPress={() => onValidate?.(item.id, 'accurate')}
-          testID={`${testID}-accurate`}
-        >
-          <Text style={styles.validationButtonText}>Accurate</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.validationButton}
-          onPress={() => onValidate?.(item.id, 'partial')}
-          testID={`${testID}-partial`}
-        >
-          <Text style={styles.validationButtonText}>Partially</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.validationButton, styles.validationButtonNegative]}
-          onPress={() => onValidate?.(item.id, 'inaccurate')}
-          testID={`${testID}-inaccurate`}
-        >
-          <Text style={[styles.validationButtonText, styles.validationButtonTextNeg]}>Not quite</Text>
-        </TouchableOpacity>
-      </View>
+      {item.isPending ? (
+        <View style={styles.validationActions}>
+          <TouchableOpacity
+            style={styles.validationButton}
+            onPress={() => onValidate?.(item.id, 'accurate')}
+            testID={`${testID}-accurate`}
+          >
+            <Text style={styles.validationButtonText}>Accurate</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.validationButton}
+            onPress={() => onValidate?.(item.id, 'partial')}
+            testID={`${testID}-partial`}
+          >
+            <Text style={styles.validationButtonText}>Partially</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.validationButton, styles.validationButtonNegative]}
+            onPress={() => onValidate?.(item.id, 'inaccurate')}
+            testID={`${testID}-inaccurate`}
+          >
+            <Text style={[styles.validationButtonText, styles.validationButtonTextNeg]}>Not quite</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <Text style={styles.completedLabel}>Validated</Text>
+      )}
     </>
   );
 
@@ -231,6 +239,12 @@ const styles = StyleSheet.create({
   },
   validationButtonTextNeg: {
     color: colors.error,
+  },
+  completedLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.textMuted,
+    fontStyle: 'italic',
   },
   timestamp: {
     fontSize: 12,

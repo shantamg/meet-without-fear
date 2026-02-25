@@ -334,6 +334,14 @@ export async function findCommonGround(
     commonGroundItems = getMockCommonGround();
   }
 
+  // Check if common ground already exists (defense against concurrent calls)
+  const existingRecords = await prisma.commonGround.findMany({
+    where: { sharedVesselId: sharedVessel.id },
+  });
+  if (existingRecords.length > 0) {
+    return existingRecords as CommonGroundRecord[];
+  }
+
   // Save common ground to database
   const savedCommonGround: CommonGroundRecord[] = [];
   for (const item of commonGroundItems) {

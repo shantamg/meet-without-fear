@@ -52,6 +52,7 @@ export interface StreamMetadata {
   offerReadyToShare?: boolean;
   invitationMessage?: string | null;
   proposedEmpathyStatement?: string | null;
+  proposedStrategies?: string[];
   analysis?: string;
 }
 

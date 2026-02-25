@@ -23,6 +23,8 @@ export interface ParsedMicroTagResponse {
   offerFeelHeardCheck: boolean;
   /** Extracted from thinking: ReadyShare:Y */
   offerReadyToShare: boolean;
+  /** Extracted from thinking: ProposedStrategy lines (Stage 4) */
+  proposedStrategies: string[];
 }
 
 /**
@@ -50,6 +52,17 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
   const offerFeelHeardCheck = /FeelHeardCheck:\s*Y/i.test(thinking);
   const offerReadyToShare = /ReadyShare:\s*Y/i.test(thinking);
 
+  // 4. Extract proposed strategies from thinking (Stage 4)
+  const proposedStrategies: string[] = [];
+  const strategyRegex = /ProposedStrategy:\s*(.+)/gi;
+  let strategyMatch: RegExpExecArray | null;
+  while ((strategyMatch = strategyRegex.exec(thinking)) !== null) {
+    const strategy = strategyMatch[1].trim();
+    if (strategy.length > 0) {
+      proposedStrategies.push(strategy);
+    }
+  }
+
   // 4. Compatibility fallback: JSON output
   if (!thinking && !draft && responseText.startsWith('{')) {
     try {
@@ -65,6 +78,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
         dispatchTag: null,
         offerFeelHeardCheck,
         offerReadyToShare,
+        proposedStrategies,
       };
     } catch {
       // Fall through to raw responseText
@@ -78,5 +92,6 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     dispatchTag,
     offerFeelHeardCheck,
     offerReadyToShare,
+    proposedStrategies,
   };
 }

@@ -485,6 +485,12 @@ export function UnifiedSessionScreen({
       // defined in shared/src/dto/realtime.ts SessionEventType
       const eventName = event as string;
 
+      if (eventName === 'session.needs_extracted') {
+        // My own needs have been extracted by the backend
+        console.log('[UnifiedSessionScreen] Needs extracted, refreshing cache');
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+      }
+
       if (eventName === 'partner.needs_confirmed') {
         // Partner confirmed their identified needs
         console.log('[UnifiedSessionScreen] Partner confirmed needs');
@@ -1172,7 +1178,9 @@ export function UnifiedSessionScreen({
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.confirmButton}
-                  onPress={() => handleConfirmAllNeeds(() => onStageComplete?.(Stage.NEED_MAPPING))}
+                  onPress={() => handleConfirmAllNeeds(() => {
+                    handleConsentToShareNeeds();
+                  })}
                 >
                   <Text style={styles.confirmText}>Confirm my needs</Text>
                 </TouchableOpacity>
@@ -1278,6 +1286,7 @@ export function UnifiedSessionScreen({
       handleSaveEmpathyDraft,
       handleValidatePartnerEmpathy,
       handleConfirmAllNeeds,
+      handleConsentToShareNeeds,
       handleMarkReadyToRank,
       handleRespondToShareOffer,
       sendMessage,
@@ -1430,11 +1439,9 @@ export function UnifiedSessionScreen({
                 handleMarkReadyToRank();
                 closeOverlay();
               }}
+              onClose={closeOverlay}
               isGenerating={isGenerating}
             />
-            <TouchableOpacity style={styles.closeOverlay} onPress={closeOverlay}>
-              <Text style={styles.closeOverlayText}>Close</Text>
-            </TouchableOpacity>
           </View>
         );
 

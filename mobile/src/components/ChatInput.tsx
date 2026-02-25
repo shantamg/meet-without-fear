@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { View, TextInput, TouchableOpacity, Text, type TextInput as TextInputType } from 'react-native';
+import { View, TextInput, TouchableOpacity, Text, Platform, type TextInput as TextInputType } from 'react-native';
 import { Send } from 'lucide-react-native';
 import { createStyles } from '../theme/styled';
 import { theme } from '../theme';
@@ -52,11 +52,15 @@ export function ChatInput({
     // Clear both React state and native TextInput to ensure sync
     setInput('');
     inputRef.current?.clear();
-    onSend(message);
-    // Reset flag after a short delay to allow autocorrect events to be ignored
-    setTimeout(() => {
-      justSentRef.current = false;
-    }, 500);
+    try {
+      onSend(message);
+    } finally {
+      // Reset flag after a short delay to allow autocorrect events to be ignored.
+      // Must be in finally block so the flag is always cleared even if onSend throws.
+      setTimeout(() => {
+        justSentRef.current = false;
+      }, 500);
+    }
   }, [input, canSend, onSend]);
 
   const handleChangeText = useCallback((text: string) => {
@@ -64,6 +68,14 @@ export function ChatInput({
     if (justSentRef.current) return;
     setInput(text);
   }, []);
+
+  const handleKeyPress = useCallback((e: any) => {
+    // Web only: Enter sends message, Shift+Enter adds newline
+    if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend]);
 
   return (
     <View style={styles.container}>
@@ -73,6 +85,7 @@ export function ChatInput({
           style={styles.input}
           value={input}
           onChangeText={handleChangeText}
+          onKeyPress={handleKeyPress}
           placeholder={placeholder}
           placeholderTextColor={theme.colors.textMuted}
           multiline

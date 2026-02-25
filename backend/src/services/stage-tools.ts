@@ -72,6 +72,7 @@ export interface SessionStateToolInput {
   offerReadyToShare?: boolean;
   proposedEmpathyStatement?: string;
   invitationMessage?: string;
+  proposedStrategies?: string[];
 }
 
 /**

@@ -26,6 +26,8 @@ interface StrategyPoolProps {
   onRequestMore: () => void;
   /** Callback when user is ready to rank */
   onReady: () => void;
+  /** Callback to close the overlay */
+  onClose?: () => void;
   /** Whether AI is currently generating suggestions */
   isGenerating?: boolean;
 }
@@ -46,15 +48,30 @@ export function StrategyPool({
   strategies,
   onRequestMore,
   onReady,
+  onClose,
   isGenerating = false,
 }: StrategyPoolProps) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Here is what we have come up with</Text>
-        <Text style={styles.subtitle}>
-          Strategies are shown without attribution - focus on the ideas
-        </Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>Here is what we have come up with</Text>
+            <Text style={styles.subtitle}>
+              Strategies are shown without attribution - focus on the ideas
+            </Text>
+          </View>
+          {onClose && (
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close strategy pool"
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
@@ -103,6 +120,28 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  headerText: {
+    flex: 1,
+    marginRight: 12,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.bgTertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeButtonText: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: '600',
   },
   title: {
     fontSize: 18,

@@ -53,6 +53,35 @@ function clearExtractionLock(sessionId: string, userId: string): void {
 }
 
 // ============================================================================
+// Common Ground Analysis Lock (in-memory idempotency guard)
+// ============================================================================
+
+/**
+ * Track in-progress common ground analyses to prevent concurrent AI calls.
+ * Key: sessionId, Value: timestamp when analysis started.
+ */
+const commonGroundLocks = new Map<string, number>();
+const COMMON_GROUND_LOCK_TIMEOUT_MS = 120_000; // 2 minutes max
+
+function isCommonGroundAnalysisRunning(sessionId: string): boolean {
+  const startedAt = commonGroundLocks.get(sessionId);
+  if (!startedAt) return false;
+  if (Date.now() - startedAt > COMMON_GROUND_LOCK_TIMEOUT_MS) {
+    commonGroundLocks.delete(sessionId);
+    return false;
+  }
+  return true;
+}
+
+function setCommonGroundLock(sessionId: string): void {
+  commonGroundLocks.set(sessionId, Date.now());
+}
+
+function clearCommonGroundLock(sessionId: string): void {
+  commonGroundLocks.delete(sessionId);
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -195,6 +224,18 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
       setExtractionLock(sessionId, user.id);
       try {
         needs = await extractNeedsFromConversation(sessionId, user.id);
+
+        // Notify the client that needs extraction is complete
+        if (needs.length > 0) {
+          try {
+            await publishSessionEvent(sessionId, 'session.needs_extracted' as any, {
+              userId: user.id,
+              needsCount: needs.length,
+            });
+          } catch (err) {
+            console.error('[getNeeds] Failed to publish needs extraction event:', err);
+          }
+        }
       } finally {
         clearExtractionLock(sessionId, user.id);
       }
@@ -532,14 +573,19 @@ export async function consentToShareNeeds(
 
     // If both have shared, auto-trigger common ground analysis and notify
     if (partnerShared && partnerId) {
-      // Trigger common ground analysis server-side to prevent race conditions
-      // where GET /common-ground returns empty before analysis completes
-      try {
-        await findCommonGround(sessionId, user.id, partnerId);
-        console.log('[consentToShareNeeds] Common ground analysis triggered for session', sessionId);
-      } catch (err) {
-        console.error('[consentToShareNeeds] Failed to trigger common ground analysis:', err);
-        // Non-fatal - client can still trigger via GET /common-ground
+      // Use lock to prevent concurrent findCommonGround calls from both users' consent
+      if (!isCommonGroundAnalysisRunning(sessionId)) {
+        setCommonGroundLock(sessionId);
+        try {
+          await findCommonGround(sessionId, user.id, partnerId);
+          console.log('[consentToShareNeeds] Common ground analysis triggered for session', sessionId);
+        } catch (err) {
+          console.error('[consentToShareNeeds] Failed to trigger common ground analysis:', err);
+        } finally {
+          clearCommonGroundLock(sessionId);
+        }
+      } else {
+        console.log('[consentToShareNeeds] Common ground analysis already running for session', sessionId);
       }
 
       await publishSessionEvent(sessionId, 'session.common_ground_ready', {
@@ -672,11 +718,25 @@ export async function getCommonGround(
       orderBy: { id: 'asc' },
     });
 
-    // If no common ground exists, trigger AI analysis
+    // If no common ground exists, trigger AI analysis (with lock to prevent duplicates)
     let analysisRan = false;
     if (commonGround.length === 0) {
-      commonGround = await findCommonGround(sessionId, user.id, partnerId);
-      analysisRan = true;
+      if (!isCommonGroundAnalysisRunning(sessionId)) {
+        setCommonGroundLock(sessionId);
+        try {
+          commonGround = await findCommonGround(sessionId, user.id, partnerId);
+          analysisRan = true;
+        } finally {
+          clearCommonGroundLock(sessionId);
+        }
+      }
+      // If lock was held, re-check DB (another request may have just finished)
+      if (!analysisRan) {
+        commonGround = await prisma.commonGround.findMany({
+          where: { sharedVesselId: sharedVessel.id },
+          orderBy: { id: 'asc' },
+        });
+      }
     }
 
     // Handle zero common ground (AI found no overlap)

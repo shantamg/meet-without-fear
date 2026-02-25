@@ -28,14 +28,15 @@ if (process.env.DASHBOARD_URL) {
 }
 const corsOptions: cors.CorsOptions = {
   origin: corsOrigins,
-  allowedHeaders: [
+};
+if (process.env.E2E_AUTH_BYPASS === 'true') {
+  corsOptions.allowedHeaders = '*';
+} else {
+  corsOptions.allowedHeaders = [
     'Content-Type', 'Authorization', 'Cache-Control',
     'X-Requested-With', 'x-dashboard-secret',
-    ...(process.env.E2E_AUTH_BYPASS === 'true'
-      ? ['x-e2e-user-id', 'x-e2e-user-email']
-      : []),
-  ],
-};
+  ];
+}
 app.use(cors(corsOptions));
 
 // Compression middleware - skip SSE endpoints to prevent buffering
