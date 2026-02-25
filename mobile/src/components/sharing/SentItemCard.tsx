@@ -56,19 +56,19 @@ const UNDELIVERED_STATUSES = new Set(['HELD', 'ANALYZING', 'AWAITING_SHARING', '
 function getEmpathyStatusText(status: string | undefined, partnerName: string): string | null {
   switch (status) {
     case 'HELD':
-      return `Waiting for ${partnerName} to finish reflecting`;
+      return `Your words are held safely until ${partnerName} is ready`;
     case 'ANALYZING':
-      return 'Understanding is being reviewed...';
+      return 'Taking shape...';
     case 'AWAITING_SHARING':
-      return `Gaps detected \u2014 ${partnerName} may share more context`;
+      return `Taking shape \u2014 ${partnerName} may add more`;
     case 'REFINING':
-      return `New context received \u2014 you can refine your understanding`;
+      return `New perspective received \u2014 you can revisit yours`;
     case 'READY':
-      return `Ready \u2014 waiting for ${partnerName} to finish theirs`;
+      return `Ready \u2014 ${partnerName} is still working on theirs`;
     case 'REVEALED':
       return `Shared with ${partnerName}`;
     case 'VALIDATED':
-      return `Confirmed accurate by ${partnerName}`;
+      return `${partnerName} says this feels right`;
     default:
       return null;
   }
