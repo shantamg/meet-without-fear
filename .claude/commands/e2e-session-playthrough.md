@@ -1,36 +1,23 @@
 # E2E Session Playthrough
 
-Fully automated end-to-end session playthrough. You control two independent browser windows via two Playwright MCP servers, seed test users via the API, auto-login both browsers, and roleplay as both users interacting with the app. No human intervention needed for setup or login.
+Fully automated end-to-end session playthrough. You control two independent browser sessions via the `agent-browser` CLI, seed test users via the API, auto-login both browsers, and roleplay as both users interacting with the app. No human intervention needed for setup or login.
 
 ## Architecture
 
 ```
 You (single agent)
-  ├── playwright-a MCP → Browser A (User A, left window)
-  ├── playwright-b MCP → Browser B (User B, right window)
+  ├── agent-browser --session user-a → Browser A (User A, headed window)
+  ├── agent-browser --session user-b → Browser B (User B, headed window)
   └── Bash → 3 background servers (backend, mobile web, website)
 ```
 
-- Use `mcp__playwright-a__*` tools for **User A's browser** (left window)
-- Use `mcp__playwright-b__*` tools for **User B's browser** (right window)
-- Both browsers have full first-class support: snapshots, clicks, typing, screenshots, console messages.
-
-## Prerequisites
-
-Two Playwright MCP servers must be configured in `.mcp.json`:
-```json
-{
-  "mcpServers": {
-    "playwright-a": { "command": "npx", "args": ["@playwright/mcp@latest", "--browser", "firefox", "--user-data-dir", "/tmp/mcp-browser-a"] },
-    "playwright-b": { "command": "npx", "args": ["@playwright/mcp@latest", "--browser", "firefox", "--user-data-dir", "/tmp/mcp-browser-b"] }
-  }
-}
-```
-Restart Claude Code after updating `.mcp.json` so both Playwright servers initialize.
+- Use `agent-browser --session user-a ...` for **User A's browser**
+- Use `agent-browser --session user-b ...` for **User B's browser**
+- Both sessions are fully isolated (separate cookies, localStorage, auth state).
 
 ## Instructions
 
-You MUST use the Playwright MCP tools to perform this workflow. Do NOT skip any phase. Start with Phase 0 to launch all servers.
+You MUST use the `agent-browser` CLI to perform this workflow. Do NOT skip any phase. Start with Phase 0 to launch all servers.
 
 ---
 
@@ -183,21 +170,30 @@ curl -s -X POST "http://localhost:3000/api/invitations/{INVITATION_ID}/accept" \
 
 **Important**: The E2E auth provider (`E2EAuthProvider.tsx`) reads `e2e-user-id` and `e2e-user-email` from `window.location.search` (query params). When `EXPO_PUBLIC_E2E_MODE=true`, Clerk is mocked out via metro config aliases and the E2E provider auto-logs in the user.
 
-**Browser A (User A — left window):**
+**Browser A (User A):**
 
-1. `mcp__playwright-a__browser_resize` — width: 390, height: 812
-2. `mcp__playwright-a__browser_navigate` — to `http://localhost:8081/?e2e-user-id={USER_A_ID}&e2e-user-email=alice@e2e.test`
-   (substitute `{USER_A_ID}` with the `id` from the seed response)
+```bash
+agent-browser --session user-a --headed open "http://localhost:8081/?e2e-user-id={USER_A_ID}&e2e-user-email=alice@e2e.test"
+agent-browser --session user-a set viewport 390 812
+```
+(substitute `{USER_A_ID}` with the `id` from the seed response)
 
-**Browser B (User B — right window):**
+**Browser B (User B):**
 
-1. `mcp__playwright-b__browser_resize` — width: 390, height: 812
-2. `mcp__playwright-b__browser_navigate` — to `http://localhost:8081/?e2e-user-id={USER_B_ID}&e2e-user-email=bob@e2e.test`
-   (substitute `{USER_B_ID}` with the `id` from the seed response)
+```bash
+agent-browser --session user-b --headed open "http://localhost:8081/?e2e-user-id={USER_B_ID}&e2e-user-email=bob@e2e.test"
+agent-browser --session user-b set viewport 390 812
+```
+(substitute `{USER_B_ID}` with the `id` from the seed response)
 
-3. Wait 3 seconds for the app to render, then take snapshots of both browsers to verify login:
-   - `mcp__playwright-a__browser_snapshot` — should show "Hi Alice" or the home screen
-   - `mcp__playwright-b__browser_snapshot` — should show "Hi Bob" or the home screen
+Wait 3 seconds for the app to render, then take snapshots of both browsers to verify login:
+```bash
+agent-browser --session user-a snapshot -i
+# Should show "Hi Alice" or the home screen
+
+agent-browser --session user-b snapshot -i
+# Should show "Hi Bob" or the home screen
+```
 
 **Troubleshooting login failures:**
 - If you see the **public landing page** ("Get Started", "Work through conflict together") instead of "Hi Alice"/"Hi Bob", it means `EXPO_PUBLIC_E2E_MODE=true` was NOT set when the Expo bundler started. The env var must be set BEFORE starting expo (it's baked in at bundle time via metro config). Check `/tmp/e2e-mobile.log` and verify Phase 0 started Expo with the env var.
@@ -208,7 +204,7 @@ curl -s -X POST "http://localhost:3000/api/invitations/{INVITATION_ID}/accept" \
 
 ## Phase 3: User A — Create Session & Chat (Stage 0 → Stage 1)
 
-Work in **Browser A** (`mcp__playwright-a__*` tools). You are roleplaying as Alice.
+Work in **Browser A** (`agent-browser --session user-a`). You are roleplaying as Alice.
 
 ### Your Character (Alice)
 You're frustrated with Bob. They keep making plans with you and canceling last minute — it's happened 4-5 times in the last couple months. You feel disrespected and like your time doesn't matter. You still care about the relationship but you're reaching a breaking point. Be authentic and emotional but not aggressive — you're hurt, not angry.
@@ -216,33 +212,80 @@ You're frustrated with Bob. They keep making plans with you and canceling last m
 ### Steps
 
 1. Take a snapshot to see the home screen. You should see "Hi Alice" with a "New Session" button.
+   ```bash
+   agent-browser --session user-a snapshot -i
+   ```
 2. Click the **"Start new session"** button (button with text "New Session").
+   ```bash
+   agent-browser --session user-a find text "New Session" click
+   ```
 3. On the New Session screen:
    - There's a "First Name" text field — type "Bob" into it.
+   ```bash
+   agent-browser --session user-a snapshot -i
+   agent-browser --session user-a find placeholder "First Name" fill "Bob"
+   ```
    - The "Create Session" button enables once the name is entered.
 4. Click **"Create session"** button.
+   ```bash
+   agent-browser --session user-a find text "Create session" click
+   agent-browser --session user-a wait --load networkidle
+   ```
 5. Wait for the session screen to load. Take a snapshot. You'll see the **Curiosity Compact** with a checkbox and "Begin" button.
+   ```bash
+   agent-browser --session user-a snapshot -i
+   ```
 6. Sign the compact:
    - Click the checkbox (testID: `compact-agree-checkbox`) — text says "I agree to proceed with curiosity"
    - Click the **"Begin"** button (testID: `compact-sign-button`) — note: the button text is "Begin", not "Sign"
+   ```bash
+   agent-browser --session user-a find testid "compact-agree-checkbox" click
+   agent-browser --session user-a find testid "compact-sign-button" click
+   ```
 7. A **mood check** screen appears ("How are you feeling right now?" with a slider). Click **"Continue"** (testID: `mood-check-continue-button`) to proceed with the default mood.
+   ```bash
+   agent-browser --session user-a find testid "mood-check-continue-button" click
+   ```
 8. The chat screen loads. You should see the AI's first message (e.g., "Hey Alice, what's going on with Bob?") and the chat input (textbox "Type a message...").
    - **Header check:** The header should show "Bob" on the first line and a stage name like "Your Story" on the second line (NOT an online status indicator). There should be a **BookOpen icon** (not ArrowLeftRight) on the right side for the exchange history.
+   ```bash
+   agent-browser --session user-a snapshot -i
+   ```
 9. **Chat with the AI facilitator**: Send 4-6 messages about the conflict with Bob. After each message:
-   - Click the send button (the img icon next to the textbox)
+   - Type into the chat input and click the send button
+   ```bash
+   agent-browser --session user-a find testid "chat-input" fill "Your message here"
+   agent-browser --session user-a find testid "send-button" click
+   ```
    - Wait 8-10 seconds for the AI response
+   ```bash
+   agent-browser --session user-a wait 10000
+   ```
    - Take a snapshot to read the response
+   ```bash
+   agent-browser --session user-a snapshot -i
+   ```
    - Respond naturally to what the AI says
 10. After chatting, the app will show panels or buttons. Read them and respond appropriately.
     - **Note:** Copy has been softened throughout the app. Status messages use warmer language like "Your words are held safely until Bob is ready" instead of "Waiting for Bob to finish reflecting."
 11. When you see the invitation panel with "Invite Bob" and "I've sent it - Continue":
-    - Do NOT click "Invite Bob" — it uses the native share API (`navigator.share`) which fails in Playwright/automated browsers.
+    - Do NOT click "Invite Bob" — it uses the native share API (`navigator.share`) which fails in automated browsers.
     - Instead, click **"I've sent it - Continue"** to confirm the invitation.
+    ```bash
+    agent-browser --session user-a find text "I've sent it" click
+    ```
     - **Important**: After this, you MUST run Phase 1.5 (accept invitation as Bob via API) before proceeding to Phase 4.
 12. Continue chatting until "I feel heard" appears, then click it.
+    ```bash
+    agent-browser --session user-a find text "I feel heard" click
+    ```
 13. After completing Stage 1, tell the user: "User A (Alice) has completed Stage 1 and sent the invitation. Moving to accept invitation and then User B."
 
-**Bug monitoring**: After each major step, check `mcp__playwright-a__browser_console_messages` with level `error`. Note any errors for the final report. If you see SSE or API errors, check `/tmp/e2e-backend.log` for the server-side error.
+**Bug monitoring**: After each major step, check for browser errors:
+```bash
+agent-browser --session user-a errors
+```
+Note any errors for the final report. If you see SSE or API errors, check `/tmp/e2e-backend.log` for the server-side error.
 
 **Known benign errors**: `[UserSessionUpdates] Subscription error` may appear — this is a non-blocking Ably subscription race and doesn't affect the flow.
 
@@ -250,7 +293,7 @@ You're frustrated with Bob. They keep making plans with you and canceling last m
 
 ## Phase 4: User B — Join Session & Chat (Stage 0 → Stage 1)
 
-Work in **Browser B** (`mcp__playwright-b__*` tools). You are now roleplaying as Bob.
+Work in **Browser B** (`agent-browser --session user-b`). You are now roleplaying as Bob.
 
 **Prerequisites**: Phase 1.5 must be complete (invitation accepted via API). Bob's account must be linked to the session.
 
@@ -259,17 +302,43 @@ You've been invited to this session by Alice. You know you've been canceling pla
 
 ### Steps
 
-1. Navigate Browser B directly to the session: `http://localhost:8081/session/{SESSION_ID}?e2e-user-id={USER_B_ID}&e2e-user-email=bob@e2e.test`
+1. Navigate Browser B directly to the session:
+   ```bash
+   agent-browser --session user-b open "http://localhost:8081/session/{SESSION_ID}?e2e-user-id={USER_B_ID}&e2e-user-email=bob@e2e.test"
+   ```
 2. Wait for the session to load. You should see "Alice" (not "Partner") in the header and "Accepted Invitation" indicator — this confirms Phase 1.5 worked.
    - **Header check:** The header should show "Alice" on the first line and a stage name on the second line (e.g., "Getting Started"). A **BookOpen icon** should appear on the right with a small **dot indicator** (not a number badge) if there is new activity.
+   ```bash
+   agent-browser --session user-b wait --load networkidle && agent-browser --session user-b snapshot -i
+   ```
 3. Sign the compact (same flow as User A — checkbox then "Begin" then mood check "Continue").
+   ```bash
+   agent-browser --session user-b find testid "compact-agree-checkbox" click
+   agent-browser --session user-b find testid "compact-sign-button" click
+   agent-browser --session user-b wait 2000
+   agent-browser --session user-b find testid "mood-check-continue-button" click
+   ```
 4. **Chat with the AI facilitator**: Send 4-6 messages about your perspective. After each message:
+   - Type and send the message
+   ```bash
+   agent-browser --session user-b find testid "chat-input" fill "Your message here"
+   agent-browser --session user-b find testid "send-button" click
+   ```
    - Wait 8-10 seconds for the AI response
+   ```bash
+   agent-browser --session user-b wait 10000
+   ```
    - Take a snapshot to read the response
+   ```bash
+   agent-browser --session user-b snapshot -i
+   ```
    - Respond naturally
 5. After chatting, the app will show panels or buttons. Read them and respond appropriately.
 
-**Bug monitoring**: After each major step, check `mcp__playwright-b__browser_console_messages` with level `error`.
+**Bug monitoring**: After each major step, check for browser errors:
+```bash
+agent-browser --session user-b errors
+```
 
 ---
 
@@ -285,12 +354,18 @@ After both users complete Stage 1, they enter Stage 2 (Perspective Stretch). Eac
 
 ### Phase 5a: Empathy Drafting & Sharing (Both Users)
 
-For **each user** (alternate between Browser A and Browser B):
+For **each user** (alternate between sessions user-a and user-b):
 
 1. The AI will guide the user to imagine what the other person might be going through. Chat 3-5 messages exploring the partner's perspective.
 2. After sufficient exploration, the AI proposes a draft empathy statement and a **"Review what you'll share"** button appears above the chat input (testID: `empathy-review-button`).
 3. Click the review button. A drawer opens showing the draft statement with **"Refine further"** and **"Share"** buttons.
+   ```bash
+   agent-browser --session user-a find testid "empathy-review-button" click
+   ```
 4. Click **"Share"** (testID: `share-empathy-button`) to share the empathy statement with the partner.
+   ```bash
+   agent-browser --session user-a find testid "share-empathy-button" click
+   ```
 5. An **"Empathy shared"** indicator appears in the timeline. The chat input may be hidden while waiting for the partner.
    - You may also see a **"Take a breath while you wait"** link (testID: `waiting-banner-exercise-link`) below the waiting banner. This opens breathing/grounding exercises. Optional — you can skip it for the E2E test.
 
@@ -310,7 +385,7 @@ After both users share empathy, the backend reconciler analyzes gaps between eac
    - Share offers appear in "Needs Your Attention" with two options:
      - **"Share as-is"** — shares recommended context immediately
      - **"Refine"** — opens the RefinementModalScreen (full-screen coaching chat for refining content)
-   - Close the drawer by dragging it down, tapping the dimmed backdrop, or pressing Android back.
+   - Close the drawer by pressing Escape or clicking outside it.
 4. After sharing context, the partner enters **REFINING** state. They will:
    - See a **"[Partner] shared more context"** indicator in their chat (testID: `chat-indicator-context-shared`)
    - Need to send at least 1 message reflecting on the shared context
@@ -331,11 +406,22 @@ Once both users have finalized their empathy statements, each sees the partner's
    - **"Yes, mostly"** (testID: `empathy-validation-card-yes-button`) — confirms the understanding. Card transitions to a completed state showing "You confirmed this feels right" with a green check.
    - **"Not quite yet"** (testID: `empathy-validation-card-no-button`) — opens the **ValidationCoachChat** modal for AI-mediated feedback. After completing the feedback conversation, the card transitions to "Feedback shared" state.
 3. For this E2E test, click **"Yes, mostly"** for both users to advance.
+   ```bash
+   agent-browser --session user-a wait 3000
+   agent-browser --session user-a find testid "empathy-validation-card-yes-button" click
+
+   agent-browser --session user-b wait 3000
+   agent-browser --session user-b find testid "empathy-validation-card-yes-button" click
+   ```
 4. After validation, a green **"[Partner] confirmed your understanding"** indicator appears in the other user's chat (testID: `chat-indicator-empathy-validated`).
 5. Once BOTH users validate, the app automatically transitions to Stage 3.
 6. Verify: A transition message appears ("You've validated each other's understanding...") and a new chapter marker: `——— What Matters Most ———`.
 
-**Bug monitoring**: Check console errors after validation. Check both browsers to verify real-time sync of validation events via the inline indicators.
+**Bug monitoring**: Check errors after validation. Check both browsers to verify real-time sync of validation events via the inline indicators.
+```bash
+agent-browser --session user-a errors
+agent-browser --session user-b errors
+```
 
 ---
 
@@ -350,6 +436,9 @@ Stage 3 extracts each user's underlying needs from the conversation, has them co
 3. **Polling**: The client polls `GET /sessions/:id/needs` every 3 seconds while `extracting: true`. Wait for extraction to complete (usually 5-15 seconds).
 4. A real-time event `session.needs_extracted` fires when complete.
 5. Take a snapshot — you should see a needs card (testID: `needs-section`) showing AI-extracted needs.
+   ```bash
+   agent-browser --session user-a wait 15000 && agent-browser --session user-a snapshot -i
+   ```
 
 ### Phase 6b: Confirm Needs (Both Users)
 
@@ -358,8 +447,16 @@ For **each user**:
 1. Review the extracted needs shown in the `needs-section` card.
 2. Optionally click **"Adjust"** (testID: `adjust-needs-button`) to modify needs.
 3. Click **"Confirm"** (testID: `confirm-needs-button`) to confirm the needs list.
+   ```bash
+   agent-browser --session user-a find testid "confirm-needs-button" click
+   agent-browser --session user-b find testid "confirm-needs-button" click
+   ```
 4. The backend publishes `partner.needs_confirmed` to notify the partner.
 5. After confirming, a share needs step may appear — click **"Share"** (testID: `share-needs-confirm-button`) to share needs for common ground analysis.
+   ```bash
+   agent-browser --session user-a find testid "share-needs-confirm-button" click
+   agent-browser --session user-b find testid "share-needs-confirm-button" click
+   ```
 
 ### Phase 6c: Common Ground Analysis (Automatic)
 
@@ -445,6 +542,14 @@ When the playthrough is complete (session resolved, or you decide to stop), comp
    - Softened copy in waiting banners and status text
 7. **Overall assessment**: Could two real users complete this flow successfully?
 
+### Cleanup
+
+Close both browser sessions:
+```bash
+agent-browser --session user-a close
+agent-browser --session user-b close
+```
+
 ---
 
 ## Known Issues & Gotchas
@@ -459,29 +564,27 @@ When the playthrough is complete (session resolved, or you decide to stop), comp
 
 5. **Mood check screen**: After signing the compact, a mood slider appears before the chat. You must click "Continue" to proceed — the chat input won't appear until this is dismissed.
 
-6. **Send button**: The send button has `data-testid="send-button"` on the parent container. The inner element is an `img`. Use the testID to click, or use `browser_evaluate` with `document.querySelector('[data-testid="send-button"]').click()`.
+6. **Send button**: The send button has `data-testid="send-button"`. Use `find testid "send-button" click` to click it.
 
 7. **Expo web first bundle is slow**: The first page load after `--clear` can take 15-30 seconds as Expo builds the web bundle. Be patient on the health check and browser navigate steps.
 
-8. **"Invite Bob" button fails in Playwright**: The native share API (`navigator.share`) is not available in automated browsers. Always use "I've sent it - Continue" instead, then accept the invitation via API in Phase 1.5.
+8. **"Invite Bob" button fails in automated browsers**: The native share API (`navigator.share`) is not available in automated browsers. Always use "I've sent it - Continue" instead, then accept the invitation via API in Phase 1.5.
 
 9. **Invitation must be accepted via API**: The "I've sent it - Continue" button only confirms Alice sent the invitation externally. Bob's account is NOT linked to the session until `POST /api/invitations/:id/accept` is called as Bob. Without this, Bob sees "Partner" instead of "Alice" and the session won't work correctly.
 
 10. **Mood check repeats on page reload**: Every full page reload shows the mood check slider again, even after it was already completed. This is a known UX issue — just click "Continue" again.
 
-11. **Playwright click timeouts on most elements**: Playwright MCP's `browser_click` frequently times out on buttons in this React Native Web app. **Workaround**: Use `browser_evaluate` with `document.querySelector('[data-testid="..."]').click()` or `document.querySelector('button[...]').click()`. This is more reliable than the built-in click.
+11. **Use `fill` for typing into inputs**: For React Native Web textareas, use `agent-browser fill` which types character-by-character and triggers React state updates properly.
 
-12. **Use `pressSequentially` for typing, not `fill()`**: React Native Web textareas don't hold values set via Playwright's `fill()` method — the value clears immediately. Use `browser_type` with the `pressSequentially` option (slow typing character by character) or `browser_evaluate` with `page.getByTestId('chat-input').pressSequentially('text', { delay: 30 })` to ensure React state picks up the value.
+12. **EmpathyValidationCard has a deliberate reveal delay**: The inline validation card uses a 3-phase stagger animation (~2.5 seconds total before buttons appear). Do NOT click the buttons before they're visible. After the card appears in the chat, wait at least 3 seconds before attempting to click "Yes, mostly" or "Not quite yet".
 
-13. **EmpathyValidationCard has a deliberate reveal delay**: The inline validation card uses a 3-phase stagger animation (~2.5 seconds total before buttons appear). Do NOT click the buttons before they're visible. After the card appears in the chat, wait at least 3 seconds before attempting to click "Yes, mostly" or "Not quite yet". If buttons aren't visible yet, take a snapshot to verify the animation state.
+13. **ActivityDrawer is a bottom sheet, not a modal**: The exchange history is now a bottom-sheet drawer (testID: `activity-drawer`) that slides up from the bottom. It does NOT have tabs. It shows a unified chronological timeline. To open it, click the BookOpen icon in the header.
 
-14. **ActivityDrawer is a bottom sheet, not a modal**: The exchange history is now a bottom-sheet drawer (testID: `activity-drawer`) that slides up from the bottom. It does NOT have tabs. It shows a unified chronological timeline. To open it, click the BookOpen icon in the header. To close it, drag it down or tap the dimmed backdrop. The drawer does NOT intercept FlatList scrolling inside it — only the drag handle at the top responds to swipe-down gestures.
+14. **First message send can silently fail**: The first attempt to send a message sometimes clears the textarea but doesn't actually post the message. If the message doesn't appear in the chat after sending, try typing and sending again.
 
-15. **First message send can silently fail**: The first attempt to send a message sometimes clears the textarea but doesn't actually post the message. If the message doesn't appear in the chat after sending, try typing and sending again.
+15. **Inline indicators replace all PartnerEventModal popups**: Partner events (empathy revealed, empathy validated, context shared, share suggestion) now appear as small inline indicators in the chat timeline, NOT as blocking modal dialogs. If you see a blocking modal for a partner event, that's a regression bug — report it.
 
-16. **Inline indicators replace all PartnerEventModal popups**: Partner events (empathy revealed, empathy validated, context shared, share suggestion) now appear as small inline indicators in the chat timeline, NOT as blocking modal dialogs. If you see a blocking modal for a partner event, that's a regression bug — report it.
-
-17. **Chapter markers appear at stage transitions**: When entering a new stage, a chapter marker like `——— Walking in Their Shoes ———` appears in the chat. These use em-dash delimiters and are visually distinct from regular indicators (larger font, no uppercase). The first chapter marker visible is "Your Story" (Stage 1) — the ONBOARDING stage does NOT produce a marker.
+16. **Chapter markers appear at stage transitions**: When entering a new stage, a chapter marker like `——— Walking in Their Shoes ———` appears in the chat. These use em-dash delimiters and are visually distinct from regular indicators (larger font, no uppercase). The first chapter marker visible is "Your Story" (Stage 1) — the ONBOARDING stage does NOT produce a marker.
 
 ---
 
@@ -524,18 +627,20 @@ New testIDs introduced:
 
 ---
 
-## Quick Reference: Tool Prefixes
+## Quick Reference: Commands
 
-| Action | User A (left) | User B (right) |
-|--------|---------------|-----------------|
-| Snapshot | `mcp__playwright-a__browser_snapshot` | `mcp__playwright-b__browser_snapshot` |
-| Click | `mcp__playwright-a__browser_click` | `mcp__playwright-b__browser_click` |
-| Type | `mcp__playwright-a__browser_type` | `mcp__playwright-b__browser_type` |
-| Navigate | `mcp__playwright-a__browser_navigate` | `mcp__playwright-b__browser_navigate` |
-| Screenshot | `mcp__playwright-a__browser_take_screenshot` | `mcp__playwright-b__browser_take_screenshot` |
-| Console | `mcp__playwright-a__browser_console_messages` | `mcp__playwright-b__browser_console_messages` |
-| Run code | `mcp__playwright-a__browser_run_code` | `mcp__playwright-b__browser_run_code` |
-| Resize | `mcp__playwright-a__browser_resize` | `mcp__playwright-b__browser_resize` |
+| Action | User A | User B |
+|--------|--------|--------|
+| Snapshot | `agent-browser --session user-a snapshot -i` | `agent-browser --session user-b snapshot -i` |
+| Click ref | `agent-browser --session user-a click @e1` | `agent-browser --session user-b click @e1` |
+| Click testID | `agent-browser --session user-a find testid "id" click` | `agent-browser --session user-b find testid "id" click` |
+| Type | `agent-browser --session user-a fill @e1 "text"` | `agent-browser --session user-b fill @e1 "text"` |
+| Navigate | `agent-browser --session user-a open <url>` | `agent-browser --session user-b open <url>` |
+| Screenshot | `agent-browser --session user-a screenshot path.png` | `agent-browser --session user-b screenshot path.png` |
+| Errors | `agent-browser --session user-a errors` | `agent-browser --session user-b errors` |
+| Console | `agent-browser --session user-a console` | `agent-browser --session user-b console` |
+| Eval | `agent-browser --session user-a eval 'expr'` | `agent-browser --session user-b eval 'expr'` |
+| Wait | `agent-browser --session user-a wait 5000` | `agent-browser --session user-b wait 5000` |
 
 ## Quick Reference: Server Logs
 
