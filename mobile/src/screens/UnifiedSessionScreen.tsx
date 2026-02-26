@@ -32,6 +32,7 @@ import { StrategyPool } from '../components/StrategyPool';
 import { StrategyRanking } from '../components/StrategyRanking';
 import { OverlapReveal } from '../components/OverlapReveal';
 import { AgreementCard } from '../components/AgreementCard';
+import { SessionCompletionScreen } from '../components/SessionCompletionScreen';
 // CuriosityCompactOverlay removed - now using inline approach
 import { CompactChatItem } from '../components/CompactChatItem';
 import { CompactAgreementBar } from '../components/CompactAgreementBar';
@@ -795,6 +796,8 @@ export function UnifiedSessionScreen({
   // Tracks if user has completed the mood check for this session entry
   // Resets each time the component mounts (i.e., each time user navigates to session)
   const [hasCompletedMoodCheck, setHasCompletedMoodCheck] = useState(false);
+  // When viewing a resolved session, allow toggling to chat history
+  const [viewingResolvedHistory, setViewingResolvedHistory] = useState(false);
 
   // -------------------------------------------------------------------------
   // Track Indicator Timestamps
@@ -2095,6 +2098,37 @@ export function UnifiedSessionScreen({
           setHasCompletedMoodCheck(true);
         }}
       />
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Session Completion - Full Screen (when session is resolved)
+  // -------------------------------------------------------------------------
+  if (session?.status === SessionStatus.RESOLVED && !viewingResolvedHistory) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <SessionChatHeader
+          partnerName={partnerName}
+          partnerOnline={partnerOnline}
+          connectionStatus={connectionStatus}
+          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+          onBackPress={onNavigateBack}
+          stageName="Resolved"
+          testID="session-chat-header"
+        />
+        <SessionCompletionScreen
+          partnerName={partnerName}
+          agreements={agreements.map((a) => ({
+            id: a.id,
+            experiment: a.description,
+            duration: a.duration,
+            measureOfSuccess: a.measureOfSuccess,
+            followUpDate: a.followUpDate,
+          }))}
+          onViewHistory={() => setViewingResolvedHistory(true)}
+          onReturnToSessions={() => onNavigateBack?.()}
+        />
+      </SafeAreaView>
     );
   }
 
