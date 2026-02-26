@@ -62,10 +62,10 @@ export function OverlapReveal({
       {hasOverlap && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>You Both Chose</Text>
-          {overlapping.map((strategy, index) => (
+          {overlapping.map((strategy) => (
             <View key={strategy.id}>
               <StrategyCard strategy={strategy} isOverlap />
-              {onCreateAgreement && index === 0 && (
+              {onCreateAgreement && (
                 <TouchableOpacity
                   style={styles.createAgreementButton}
                   onPress={() => onCreateAgreement({ id: strategy.id, description: strategy.description })}
