@@ -83,6 +83,7 @@ export function AgreementCard({ agreement, onConfirm }: AgreementCardProps) {
       )}
 
       <TouchableOpacity
+        testID="confirm-agreement-button"
         style={styles.confirmButton}
         onPress={onConfirm}
         accessibilityRole="button"

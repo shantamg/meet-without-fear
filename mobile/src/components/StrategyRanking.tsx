@@ -107,6 +107,7 @@ export function StrategyRanking({ strategies, onSubmit }: StrategyRankingProps) 
           {selectedIds.length}/{MAX_SELECTIONS} selected
         </Text>
         <TouchableOpacity
+          testID="submit-ranking-button"
           style={[styles.submitButton, isSubmitDisabled && styles.submitDisabled]}
           onPress={handleSubmit}
           disabled={isSubmitDisabled}

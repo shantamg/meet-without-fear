@@ -438,6 +438,9 @@ export function UnifiedSessionScreen({
             };
           });
         }
+        // Refetch full session state — if partner advanced,
+        // our own stage may have been advanced server-side too
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
         queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
@@ -553,6 +556,10 @@ export function UnifiedSessionScreen({
         queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        // Force refetch after needs cache updates so useCommonGround's enabled gate opens
+        setTimeout(() => {
+          queryClient.refetchQueries({ queryKey: stageKeys.commonGround(sessionId) });
+        }, 500);
       }
 
       if (eventName === 'partner.common_ground_confirmed') {
@@ -1442,6 +1449,7 @@ export function UnifiedSessionScreen({
                 {card.props.experiment as string}
               </Text>
               <TouchableOpacity
+                testID="agreement-review-button"
                 style={styles.primaryButton}
                 onPress={() => openOverlay('agreement-confirmation')}
               >
@@ -1718,69 +1726,6 @@ export function UnifiedSessionScreen({
     onNavigateBack,
     onStageComplete,
   ]);
-
-  // -------------------------------------------------------------------------
-  // Loading State
-  // -------------------------------------------------------------------------
-  if (isLoading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={styles.accentColor.color} />
-        <Text style={styles.loadingText}>Loading session...</Text>
-      </View>
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Session Entry Mood Check - Full Screen (before session content renders)
-  // -------------------------------------------------------------------------
-  // Shown as a full-screen view (not modal overlay) to prevent flash of
-  // session content behind it. Checks how user is feeling before they
-  // see any chat content.
-  if (shouldShowMoodCheck) {
-    return (
-      <SessionEntryMoodCheck
-        visible={true}
-        fullScreen={true}
-        initialValue={user?.lastMoodIntensity ?? 4}
-        onComplete={(intensity) => {
-          // Save to user profile (persists across sessions)
-          updateMood({ intensity });
-          // Update local user state immediately so next session uses it
-          updateUser({ lastMoodIntensity: intensity });
-          // Also update session-specific barometer
-          handleBarometerChange(intensity);
-          setHasCompletedMoodCheck(true);
-        }}
-      />
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Strategy Ranking Phase - Full Screen Overlay
-  // -------------------------------------------------------------------------
-  if (currentStage === Stage.STRATEGIC_REPAIR && strategyPhase === StrategyPhase.RANKING) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <SessionChatHeader
-          partnerName={partnerName}
-          partnerOnline={partnerOnline}
-          connectionStatus={connectionStatus}
-          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
-          onBackPress={onNavigateBack}
-          testID="session-chat-header"
-        />
-        <StrategyRanking
-          strategies={strategies.map((s) => ({
-            id: s.id,
-            description: s.description,
-            duration: s.duration || undefined,
-          }))}
-          onSubmit={handleSubmitRankings}
-        />
-      </SafeAreaView>
-    );
-  }
 
   // -------------------------------------------------------------------------
   // Render Above Input (switch on aboveInputPanel from useChatUIState)
@@ -2115,6 +2060,70 @@ export function UnifiedSessionScreen({
     onStageComplete,
     openOverlay,
   ]);
+
+  // -------------------------------------------------------------------------
+  // Loading State
+  // -------------------------------------------------------------------------
+  if (isLoading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={styles.accentColor.color} />
+        <Text style={styles.loadingText}>Loading session...</Text>
+      </View>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Session Entry Mood Check - Full Screen (before session content renders)
+  // -------------------------------------------------------------------------
+  // Shown as a full-screen view (not modal overlay) to prevent flash of
+  // session content behind it. Checks how user is feeling before they
+  // see any chat content.
+  if (shouldShowMoodCheck) {
+    return (
+      <SessionEntryMoodCheck
+        visible={true}
+        fullScreen={true}
+        initialValue={user?.lastMoodIntensity ?? 4}
+        onComplete={(intensity) => {
+          // Save to user profile (persists across sessions)
+          updateMood({ intensity });
+          // Update local user state immediately so next session uses it
+          updateUser({ lastMoodIntensity: intensity });
+          // Also update session-specific barometer
+          handleBarometerChange(intensity);
+          setHasCompletedMoodCheck(true);
+        }}
+      />
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Strategy Ranking Phase - Full Screen Overlay
+  // -------------------------------------------------------------------------
+  if (currentStage === Stage.STRATEGIC_REPAIR && strategyPhase === StrategyPhase.RANKING) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <SessionChatHeader
+          partnerName={partnerName}
+          partnerOnline={partnerOnline}
+          connectionStatus={connectionStatus}
+          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+          onBackPress={onNavigateBack}
+          stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
+          testID="session-chat-header"
+        />
+        <StrategyRanking
+          strategies={strategies.map((s) => ({
+            id: s.id,
+            description: s.description,
+            duration: s.duration || undefined,
+          }))}
+          onSubmit={handleSubmitRankings}
+        />
+      </SafeAreaView>
+    );
+  }
 
   // -------------------------------------------------------------------------
   // Main Chat Interface

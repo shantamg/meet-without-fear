@@ -42,7 +42,7 @@ export function usePendingActions(sessionId: string | undefined) {
     queryFn: () => get<PendingActionsResponse>(`/sessions/${sessionId}/pending-actions`),
     enabled: !!sessionId,
     refetchOnWindowFocus: true,
-    staleTime: 30_000, // 30s - badge events trigger invalidation for freshness
+    staleTime: 0, // Always refetch - offers become stale instantly upon consumption
   });
 }
 

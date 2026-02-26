@@ -775,19 +775,36 @@ export function ChatInterface({
       // Show pill only if target is NOT currently visible in viewport
       if (!viewableItemKeysRef.current.has(pendingPillTarget)) {
         setPillVisible(true);
+        // Re-check after a short delay: the FlatList may report the item as visible
+        // shortly after it's added (onViewableItemsChanged fires asynchronously).
+        // Without this, a race condition can cause the pill to persist even when
+        // the target item is already on screen.
+        const recheckTimer = setTimeout(() => {
+          if (viewableItemKeysRef.current.has(pendingPillTarget)) {
+            setPillVisible(false);
+            onPillDismiss?.();
+          }
+        }, 500);
+        return () => clearTimeout(recheckTimer);
+      } else {
+        // Target is already visible — don't show pill, clear parent state
+        onPillDismiss?.();
       }
     } else {
       setPillVisible(false);
     }
-  }, [pendingPillTarget]);
+  }, [pendingPillTarget, onPillDismiss]);
 
-  const handleViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: Array<{ key: string }> }) => {
+  const onPillDismissRef = useRef(onPillDismiss);
+  onPillDismissRef.current = onPillDismiss;
+
+  const handleViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: Array<{ key: string }> }) => {
     viewableItemKeysRef.current = new Set(viewableItems.map(v => v.key));
     if (pillTargetRef.current && viewableItemKeysRef.current.has(pillTargetRef.current)) {
       setPillVisible(false);
-      onPillDismiss?.();
+      onPillDismissRef.current?.();
     }
-  }, [onPillDismiss]);
+  }).current;
 
   const handlePillPress = useCallback(() => {
     if (pillTargetRef.current) {
@@ -838,6 +855,10 @@ export function ChatInterface({
         visible={pillVisible}
         partnerName={partnerName || 'Partner'}
         onPress={handlePillPress}
+        onAutoDismiss={() => {
+          setPillVisible(false);
+          onPillDismiss?.();
+        }}
       />
       <View style={styles.bottomContainer}>
         {showEmotionSlider && onEmotionChange && (

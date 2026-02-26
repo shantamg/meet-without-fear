@@ -7,7 +7,7 @@
 
 import { useMemo, useCallback, useReducer, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Stage, MessageRole, StrategyPhase, AgreementType, MemorySuggestion } from '@meet-without-fear/shared';
+import { Stage, MessageRole, StrategyPhase, AgreementType, MemorySuggestion, SessionStatus } from '@meet-without-fear/shared';
 import { useToast } from '../contexts/ToastContext';
 import { ApiClientError } from '../lib/api';
 
@@ -842,8 +842,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
         });
       }
 
-      // Agreement preview
-      if (agreements.length > 0) {
+      // Agreement preview (hide after session is resolved — no need to "Review & Confirm")
+      if (agreements.length > 0 && session?.status !== SessionStatus.RESOLVED) {
         cards.push({
           id: 'agreement-preview',
           type: 'agreement-preview',
@@ -875,6 +875,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     overlappingStrategies,
     agreements,
     partnerName,
+    session?.status,
   ]);
 
   // -------------------------------------------------------------------------

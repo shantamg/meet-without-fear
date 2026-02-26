@@ -7,6 +7,8 @@ interface NewActivityPillProps {
   visible: boolean;
   partnerName: string;
   onPress: () => void;
+  /** Called when the pill auto-dismisses after timeout, so parent can clear state */
+  onAutoDismiss?: () => void;
   testID?: string;
 }
 
@@ -14,6 +16,7 @@ export function NewActivityPill({
   visible,
   partnerName,
   onPress,
+  onAutoDismiss,
   testID = 'new-activity-pill',
 }: NewActivityPillProps) {
   const styles = useStyles();
@@ -52,7 +55,7 @@ export function NewActivityPill({
     }
   }, [visible, translateY, opacity]);
 
-  // 15s auto-dismiss: animate out after timeout
+  // 15s auto-dismiss: animate out after timeout and notify parent
   useEffect(() => {
     if (!visible) return;
     const timer = setTimeout(() => {
@@ -67,10 +70,13 @@ export function NewActivityPill({
           duration: 200,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]).start(() => {
+        // Notify parent so it can clear pendingPillTarget state
+        onAutoDismiss?.();
+      });
     }, 15000);
     return () => clearTimeout(timer);
-  }, [visible, translateY, opacity]);
+  }, [visible, translateY, opacity, onAutoDismiss]);
 
   const label = `${partnerName} shared something new`;
 

@@ -86,6 +86,7 @@ export function StrategyCard({
   if (isSelectable) {
     return (
       <TouchableOpacity
+        testID={`strategy-card-${strategy.id}`}
         style={[
           styles.card,
           selected && styles.selectedCard,
