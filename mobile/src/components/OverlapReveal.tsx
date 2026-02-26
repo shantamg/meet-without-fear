@@ -28,6 +28,8 @@ interface OverlapRevealProps {
   uniqueToPartner: Strategy[];
   /** Callback when user wants to create an agreement from a matched strategy */
   onCreateAgreement?: (strategy: { id: string; description: string }) => void;
+  /** Whether to disable the Create Agreement button (max agreements reached) */
+  disableCreate?: boolean;
 }
 
 // ============================================================================
@@ -48,6 +50,7 @@ export function OverlapReveal({
   uniqueToMe,
   uniqueToPartner,
   onCreateAgreement,
+  disableCreate,
 }: OverlapRevealProps) {
   const hasOverlap = overlapping.length > 0;
   const hasUnique = uniqueToMe.length > 0 || uniqueToPartner.length > 0;
@@ -66,15 +69,22 @@ export function OverlapReveal({
             <View key={strategy.id}>
               <StrategyCard strategy={strategy} isOverlap />
               {onCreateAgreement && (
-                <TouchableOpacity
-                  style={styles.createAgreementButton}
-                  onPress={() => onCreateAgreement({ id: strategy.id, description: strategy.description })}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Create agreement from strategy: ${strategy.description}`}
-                  testID="create-agreement-button"
-                >
-                  <Text style={styles.createAgreementText}>Create Agreement</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={[styles.createAgreementButton, disableCreate && styles.createAgreementButtonDisabled]}
+                    onPress={() => !disableCreate && onCreateAgreement({ id: strategy.id, description: strategy.description })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Create agreement from strategy: ${strategy.description}`}
+                    accessibilityState={{ disabled: disableCreate }}
+                    testID="create-agreement-button"
+                    disabled={disableCreate}
+                  >
+                    <Text style={[styles.createAgreementText, disableCreate && styles.createAgreementTextDisabled]}>Create Agreement</Text>
+                  </TouchableOpacity>
+                  {disableCreate && (
+                    <Text style={styles.maxAgreementsText}>You can create up to 2 agreements per session.</Text>
+                  )}
+                </>
               )}
             </View>
           ))}
@@ -150,6 +160,19 @@ const styles = StyleSheet.create({
     color: colors.textOnAccent,
     fontSize: 16,
     fontWeight: '600',
+  },
+  createAgreementButtonDisabled: {
+    opacity: 0.4,
+  },
+  createAgreementTextDisabled: {
+    opacity: 0.8,
+  },
+  maxAgreementsText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 12,
+    marginTop: -4,
   },
   noOverlap: {
     padding: 24,

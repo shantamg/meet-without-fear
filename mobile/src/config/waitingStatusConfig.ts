@@ -237,6 +237,17 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     showSpinner: false,
     showKeepChattingAction: false,
   },
+
+  // Stage 4: All agreements confirmed by me, waiting for partner
+  'agreement-pending': {
+    showBanner: true,
+    hideInput: false,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
+    bannerText: (p) => `Waiting for ${p} to confirm the agreement.`,
+  },
 };
 
 // ============================================================================

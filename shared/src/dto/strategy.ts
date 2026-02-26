@@ -6,6 +6,9 @@
 
 import { AgreementStatus, AgreementType } from '../enums';
 
+/** Maximum number of agreements allowed per session */
+export const MAX_AGREEMENTS = 2;
+
 // ============================================================================
 // Strategy Phase
 // ============================================================================

@@ -541,10 +541,11 @@ export function StrategicRepairScreen() {
 
   // Handle confirm agreement
   const handleConfirmAgreement = () => {
-    const agreement = agreementsData?.agreements?.[0];
-    if (sessionId && agreement) {
+    const allAgreements = agreementsData?.agreements || [];
+    const unconfirmed = allAgreements.find(a => !a.agreedByMe);
+    if (sessionId && unconfirmed) {
       confirmAgreement(
-        { sessionId, agreementId: agreement.id, confirmed: true },
+        { sessionId, agreementId: unconfirmed.id, confirmed: true },
         {
           onSuccess: (response) => {
             if (response.sessionCanResolve) {

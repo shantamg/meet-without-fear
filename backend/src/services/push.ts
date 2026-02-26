@@ -84,8 +84,8 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     body: 'A new agreement has been proposed. Review it together.',
   },
   'agreement.confirmed': {
-    title: 'Agreement confirmed',
-    body: 'Both partners have agreed. Well done!',
+    title: 'Agreement ready for review',
+    body: 'Your partner has confirmed. Take a look when you\'re ready.',
   },
   'session.paused': {
     title: 'Session paused',
@@ -97,7 +97,7 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
   },
   'session.resolved': {
     title: 'Session complete',
-    body: 'Congratulations! You have resolved this conversation.',
+    body: 'Your conversation has been resolved.',
   },
   'session.joined': {
     title: 'Partner joined',

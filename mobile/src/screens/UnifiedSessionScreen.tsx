@@ -11,7 +11,7 @@ import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 // useRouter removed - share navigation replaced by ActivityDrawer
-import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion } from '@meet-without-fear/shared';
+import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion, ConfirmAgreementResponse, MAX_AGREEMENTS } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
@@ -899,6 +899,10 @@ export function UnifiedSessionScreen({
     hasConfirmedCommonGroundLocal: completedActions.has('confirmed-common-ground'),
     strategyPhase,
     overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
+    agreements: agreements?.map(a => ({
+      agreedByMe: a.agreedByMe,
+      agreedByPartner: a.agreedByPartner,
+    })),
   });
 
   // -------------------------------------------------------------------------
@@ -1444,22 +1448,47 @@ export function UnifiedSessionScreen({
             </View>
           );
 
-        case 'agreement-preview':
+        case 'agreement-preview': {
+          const totalAgreements = card.props.totalAgreements as number;
+          const confirmedByMeCount = card.props.confirmedByMe as number;
+          const isWaitingForPartner = card.props.waitingForPartner as boolean;
+          const cardPartnerName = card.props.partnerName as string | undefined;
+
+          let statusText: string;
+          let showButton = true;
+
+          if (isWaitingForPartner) {
+            statusText = `Confirmed \u2014 waiting for ${cardPartnerName || 'partner'}`;
+            showButton = false;
+          } else if (confirmedByMeCount > 0 && confirmedByMeCount < totalAgreements) {
+            statusText = `${confirmedByMeCount}/${totalAgreements} confirmed`;
+          } else {
+            statusText = `${totalAgreements} agreement${totalAgreements > 1 ? 's' : ''} to review`;
+          }
+
           return (
-            <View style={styles.inlineCard} key={card.id}>
+            <TouchableOpacity
+              style={styles.inlineCard}
+              key={card.id}
+              onPress={() => openOverlay('agreement-confirmation')}
+              activeOpacity={0.7}
+            >
               <Text style={styles.cardTitle}>Your Agreement</Text>
               <Text style={styles.agreementExperiment}>
-                {card.props.experiment as string}
+                {statusText}
               </Text>
-              <TouchableOpacity
-                testID="agreement-review-button"
-                style={styles.primaryButton}
-                onPress={() => openOverlay('agreement-confirmation')}
-              >
-                <Text style={styles.primaryButtonText}>Review & Confirm</Text>
-              </TouchableOpacity>
-            </View>
+              {showButton && (
+                <TouchableOpacity
+                  testID="agreement-review-button"
+                  style={styles.primaryButton}
+                  onPress={() => openOverlay('agreement-confirmation')}
+                >
+                  <Text style={styles.primaryButtonText}>Review</Text>
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
           );
+        }
 
         // Note: empathy-share-suggestion is now handled via the two-phase flow:
         // Phase 1: ShareTopicPanel shows topic → opens ShareTopicDrawer
@@ -1671,6 +1700,7 @@ export function UnifiedSessionScreen({
               uniqueToMe={[]}
               uniqueToPartner={[]}
               onCreateAgreement={handleCreateAgreementFromOverlap}
+              disableCreate={agreements.length >= MAX_AGREEMENTS}
             />
             <TouchableOpacity style={styles.closeOverlay} onPress={closeOverlay}>
               <Text style={styles.closeOverlayText}>Continue</Text>
@@ -1678,28 +1708,66 @@ export function UnifiedSessionScreen({
           </View>
         );
 
-      case 'agreement-confirmation':
-        if (agreements.length === 0) return null;
+      case 'agreement-confirmation': {
+        const unconfirmedAgreements = agreements.filter(a => !a.agreedByMe);
+        const currentAgreement = unconfirmedAgreements[0];
+        const confirmedCount = agreements.length - unconfirmedAgreements.length;
+
+        if (!currentAgreement && agreements.length > 0) {
+          // All confirmed by me - check if we should show waiting message
+          const allConfirmedByPartner = agreements.every(a => a.agreedByPartner);
+          if (!allConfirmedByPartner) {
+            // Show brief waiting message then auto-close
+            return (
+              <View style={styles.overlayContainer}>
+                <Text style={styles.waitingMessageText}>
+                  {"You've confirmed your part. The agreement is now waiting for " +
+                   (partnerName || 'your partner') +
+                   ". There's nothing more you need to do right now."}
+                </Text>
+              </View>
+            );
+          }
+          return null;
+        }
+
+        if (!currentAgreement) return null;
+
         return (
           <View style={styles.overlayContainer}>
+            {agreements.length > 1 && (
+              <Text style={styles.agreementCounter}>
+                {confirmedCount + 1} of {agreements.length}
+              </Text>
+            )}
             <AgreementCard
               agreement={{
-                experiment: agreements[0].description,
-                duration: agreements[0].duration || 'To be determined',
-                successMeasure: agreements[0].measureOfSuccess || 'To be defined together',
-                checkInDate: agreements[0].followUpDate || undefined,
+                experiment: currentAgreement.description,
+                duration: currentAgreement.duration || 'To be determined',
+                successMeasure: currentAgreement.measureOfSuccess || 'To be defined together',
+                checkInDate: currentAgreement.followUpDate || undefined,
               }}
+              confirmedByMe={currentAgreement.agreedByMe}
+              confirmedByPartner={currentAgreement.agreedByPartner}
+              partnerName={partnerName}
               onConfirm={() => {
-                handleConfirmAgreement(agreements[0].id, () => {
-                  // Track session resolved
-                  trackSessionResolved(sessionId, 'agreement');
-                  handleResolveSession(() => onStageComplete?.(Stage.STRATEGIC_REPAIR));
+                handleConfirmAgreement(currentAgreement.id, (response: ConfirmAgreementResponse) => {
+                  if (response.sessionCanResolve) {
+                    trackSessionResolved(sessionId, 'agreement');
+                    handleResolveSession(() => onStageComplete?.(Stage.STRATEGIC_REPAIR));
+                    closeOverlay();
+                  } else if (unconfirmedAgreements.length <= 1) {
+                    // Last agreement confirmed but partner hasn't confirmed all
+                    // Close overlay after brief delay - user returns to chat with WaitingBanner
+                    setTimeout(() => closeOverlay(), 3000);
+                  }
+                  // If more unconfirmed remain, the filter re-derives and shows the next
                 });
-                closeOverlay();
               }}
             />
           </View>
         );
+      }
 
       // curiosity-compact is now handled as a separate overlay using CuriosityCompactOverlay
 
@@ -1715,6 +1783,7 @@ export function UnifiedSessionScreen({
     sessionId,
     isGenerating,
     styles,
+    partnerName,
     handleBarometerChange,
     handleRequestMoreStrategies,
     handleMarkReadyToRank,
@@ -2918,6 +2987,22 @@ const useStyles = () =>
     },
 
     // Overlay
+    // Agreement overlay
+    agreementCounter: {
+      fontSize: 12,
+      color: t.colors.textSecondary,
+      textAlign: 'center' as const,
+      marginBottom: 8,
+    },
+    waitingMessageText: {
+      fontSize: 15,
+      color: t.colors.textSecondary,
+      textAlign: 'center' as const,
+      paddingHorizontal: 24,
+      paddingVertical: 32,
+      lineHeight: 22,
+    },
+
     overlayContainer: {
       position: 'absolute',
       top: 0,

@@ -630,6 +630,11 @@ describe('Stage 4 API', () => {
         agreedByB: true,
         agreedAt: new Date(),
       });
+      (prisma.agreement.findMany as jest.Mock).mockResolvedValue([{
+        id: 'clagreement01',
+        agreedByA: true,
+        agreedByB: true,
+      }]);
 
       await confirmAgreement(req as Request, res as Response);
 
@@ -638,9 +643,12 @@ describe('Stage 4 API', () => {
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
-            confirmed: true,
-            partnerConfirmed: true,
-            sessionComplete: expect.any(Boolean),
+            agreement: expect.objectContaining({
+              agreedByMe: true,
+              agreedByPartner: true,
+              status: 'AGREED',
+            }),
+            sessionCanResolve: true,
           }),
         })
       );
@@ -676,10 +684,17 @@ describe('Stage 4 API', () => {
       });
       (prisma.agreement.update as jest.Mock).mockResolvedValue({
         id: 'clagreement01',
+        description: 'Weekly check-in',
+        type: 'MICRO_EXPERIMENT',
         status: 'PROPOSED', // Stays proposed for renegotiation
         agreedByA: true,
         agreedByB: false,
       });
+      (prisma.agreement.findMany as jest.Mock).mockResolvedValue([{
+        id: 'clagreement01',
+        agreedByA: true,
+        agreedByB: false,
+      }]);
 
       await confirmAgreement(req as Request, res as Response);
 
@@ -688,8 +703,12 @@ describe('Stage 4 API', () => {
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
-            confirmed: false,
-            partnerConfirmed: false,
+            agreement: expect.objectContaining({
+              agreedByMe: false,
+              agreedByPartner: true,
+              status: 'PROPOSED',
+            }),
+            sessionCanResolve: false,
           }),
         })
       );

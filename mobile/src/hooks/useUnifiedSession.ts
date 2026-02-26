@@ -7,7 +7,7 @@
 
 import { useMemo, useCallback, useReducer, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Stage, MessageRole, StrategyPhase, AgreementType, MemorySuggestion, SessionStatus } from '@meet-without-fear/shared';
+import { Stage, MessageRole, StrategyPhase, AgreementType, MemorySuggestion, SessionStatus, ConfirmAgreementResponse, MAX_AGREEMENTS } from '@meet-without-fear/shared';
 import { useToast } from '../contexts/ToastContext';
 import { ApiClientError } from '../lib/api';
 
@@ -815,8 +815,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
     // Stage 4: Strategic Repair cards
     if (currentStage === Stage.STRATEGIC_REPAIR) {
-      // Strategy pool preview
-      if (strategyPhase === StrategyPhase.COLLECTING) {
+      // Strategy pool preview (hide after session is resolved)
+      if (strategyPhase === StrategyPhase.COLLECTING && session?.status !== SessionStatus.RESOLVED) {
         cards.push({
           id: 'strategy-pool-preview',
           type: 'strategy-pool-preview',
@@ -829,8 +829,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
         });
       }
 
-      // Overlap preview after ranking
-      if (strategyPhase === StrategyPhase.REVEALING && overlappingStrategies.length > 0) {
+      // Overlap preview after ranking (hide after session is resolved)
+      if (strategyPhase === StrategyPhase.REVEALING && overlappingStrategies.length > 0 && session?.status !== SessionStatus.RESOLVED) {
         cards.push({
           id: 'overlap-preview',
           type: 'overlap-preview',
@@ -844,13 +844,21 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
       // Agreement preview (hide after session is resolved — no need to "Review & Confirm")
       if (agreements.length > 0 && session?.status !== SessionStatus.RESOLVED) {
+        const confirmedByMe = agreements.filter(a => a.agreedByMe).length;
+        const allConfirmedByMe = confirmedByMe === agreements.length;
+        const waitingForPartner = allConfirmedByMe &&
+          agreements.some(a => !a.agreedByPartner);
+
         cards.push({
           id: 'agreement-preview',
           type: 'agreement-preview',
           position: 'end',
           props: {
-            experiment: agreements[0].description,
-            duration: agreements[0].duration,
+            totalAgreements: agreements.length,
+            confirmedByMe,
+            waitingForPartner,
+            partnerName,
+            agreements,
           },
         });
       }
@@ -1188,9 +1196,12 @@ export function useUnifiedSession(sessionId: string | undefined) {
   );
 
   const handleConfirmAgreement = useCallback(
-    (agreementId: string, onSuccess?: () => void) => {
+    (agreementId: string, onSuccess?: (response: ConfirmAgreementResponse) => void) => {
       if (!sessionId) return;
-      confirmAgreement({ sessionId, agreementId, confirmed: true }, { onSuccess });
+      confirmAgreement(
+        { sessionId, agreementId, confirmed: true },
+        { onSuccess: (response) => onSuccess?.(response) }
+      );
     },
     [sessionId, confirmAgreement]
   );
@@ -1198,6 +1209,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const handleCreateAgreementFromOverlap = useCallback(
     (strategy: { id: string; description: string }) => {
       if (!sessionId) return;
+      if (agreements.length >= MAX_AGREEMENTS) return; // UI should already disable
       createAgreement({
         sessionId,
         strategyId: strategy.id,
@@ -1205,7 +1217,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
         type: AgreementType.MICRO_EXPERIMENT,
       });
     },
-    [sessionId, createAgreement]
+    [sessionId, createAgreement, agreements.length]
   );
 
   const handleResolveSession = useCallback(

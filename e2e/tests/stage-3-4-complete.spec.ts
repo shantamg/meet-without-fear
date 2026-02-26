@@ -497,13 +497,14 @@ test.describe('Stage 3-4 Complete Flow', () => {
     const agreements = finalAgreementsData.data?.agreements || [];
 
     console.log(`${elapsed()} Final agreements: ${agreements.length}`);
-    if (agreements.length > 0) {
-      const firstAgreement = agreements[0];
-      console.log(`${elapsed()} Agreement status: ${firstAgreement.status}, agreedByMe: ${firstAgreement.agreedByMe}, agreedByPartner: ${firstAgreement.agreedByPartner}`);
+    expect(agreements.length).toBeGreaterThan(0);
 
-      // Verify both parties agreed
-      expect(firstAgreement.agreedByMe).toBe(true);
-      expect(firstAgreement.agreedByPartner).toBe(true);
+    for (const agreement of agreements) {
+      console.log(`${elapsed()} Agreement ${agreement.id}: status=${agreement.status}, agreedByMe=${agreement.agreedByMe}, agreedByPartner=${agreement.agreedByPartner}`);
+
+      // Verify both parties agreed on each agreement
+      expect(agreement.agreedByMe).toBe(true);
+      expect(agreement.agreedByPartner).toBe(true);
     }
 
     // Take final screenshots

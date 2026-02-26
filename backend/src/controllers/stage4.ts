@@ -21,6 +21,7 @@ import {
   ApiResponse,
   ErrorCode,
   StrategyPhase,
+  MAX_AGREEMENTS,
 } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
@@ -602,6 +603,26 @@ export async function createAgreement(req: Request, res: Response): Promise<void
       return;
     }
 
+    // Enforce maximum agreements per session
+    const agreementCount = await prisma.agreement.count({
+      where: { sharedVessel: { sessionId } },
+    });
+    if (agreementCount >= MAX_AGREEMENTS) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Maximum of 2 agreements per session', 400);
+      return;
+    }
+
+    // Enforce uniqueness: one agreement per strategy
+    if (strategyId) {
+      const existingAgreement = await prisma.agreement.findFirst({
+        where: { sharedVessel: { sessionId }, proposalId: strategyId },
+      });
+      if (existingAgreement) {
+        errorResponse(res, 'CONFLICT', 'An agreement already exists for this strategy', 409);
+        return;
+      }
+    }
+
     // Get or verify the strategy if provided
     if (strategyId) {
       const strategy = await prisma.strategyProposal.findUnique({
@@ -805,20 +826,33 @@ export async function confirmAgreement(req: Request, res: Response): Promise<voi
       });
     }
 
-    // Check if session can be marked complete
-    const sessionComplete = bothConfirmed && updatedAgreement.status === 'AGREED';
+    // Check if ALL agreements in this session are fully confirmed
+    const allAgreements = await prisma.agreement.findMany({
+      where: { sharedVessel: { sessionId } },
+    });
+    const sessionCanResolve = allAgreements.length > 0 &&
+      allAgreements.every(a => a.agreedByA && a.agreedByB);
 
-    if (sessionComplete) {
+    if (sessionCanResolve) {
       await publishSessionEvent(sessionId, 'session.resolved', {
         agreementId: updatedAgreement.id,
       });
     }
 
     successResponse(res, {
-      confirmed,
-      confirmedAt: new Date().toISOString(),
-      partnerConfirmed: bothConfirmed,
-      sessionComplete,
+      agreement: {
+        id: updatedAgreement.id,
+        description: updatedAgreement.description,
+        type: updatedAgreement.type,
+        duration: null, // Field not in Prisma model
+        measureOfSuccess: null, // Field not in Prisma model
+        status: updatedAgreement.status,
+        agreedByMe: userSlot === 'A' ? updatedAgreement.agreedByA : updatedAgreement.agreedByB,
+        agreedByPartner: userSlot === 'A' ? updatedAgreement.agreedByB : updatedAgreement.agreedByA,
+        agreedAt: updatedAgreement.agreedAt?.toISOString() ?? null,
+        followUpDate: updatedAgreement.followUpDate?.toISOString() ?? null,
+      },
+      sessionCanResolve,
     });
   } catch (error) {
     console.error('[confirmAgreement] Error:', error);

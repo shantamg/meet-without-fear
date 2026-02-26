@@ -218,7 +218,10 @@ function computeShowEmpathyPanel(inputs: ChatUIStateInputs): boolean {
     hasSharedEmpathyLocal,
     isRefiningEmpathy,
     myAttemptContent,
+    sessionStatus,
   } = inputs;
+
+  if (sessionStatus === SessionStatus.RESOLVED) return false;
 
   const currentStage = myStage ?? Stage.ONBOARDING;
 
@@ -275,7 +278,9 @@ function computeShowFeelHeardPanel(inputs: ChatUIStateInputs): boolean {
  * Only shows during Stage 2 (Perspective Stretch).
  */
 function computeShowShareSuggestionPanel(inputs: ChatUIStateInputs): boolean {
-  const { hasShareSuggestion, hasRespondedToShareOfferLocal, myStage } = inputs;
+  const { hasShareSuggestion, hasRespondedToShareOfferLocal, myStage, sessionStatus } = inputs;
+
+  if (sessionStatus === SessionStatus.RESOLVED) return false;
 
   const currentStage = myStage ?? Stage.ONBOARDING;
 
@@ -299,7 +304,10 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
     allNeedsConfirmed,
     needsShared,
     hasConfirmedNeedsLocal,
+    sessionStatus,
   } = inputs;
+
+  if (sessionStatus === SessionStatus.RESOLVED) return false;
 
   const currentStage = myStage ?? Stage.ONBOARDING;
 
@@ -336,7 +344,10 @@ function computeShowCommonGroundPanel(inputs: ChatUIStateInputs): boolean {
     commonGroundAllConfirmedByMe,
     commonGroundAllConfirmedByBoth,
     hasConfirmedCommonGroundLocal,
+    sessionStatus,
   } = inputs;
+
+  if (sessionStatus === SessionStatus.RESOLVED) return false;
 
   const currentStage = myStage ?? Stage.ONBOARDING;
 
@@ -375,7 +386,8 @@ function computeShouldShowWaitingBanner(status: WaitingStatusState): boolean {
     status === 'reconciler-analyzing' ||
     status === 'revision-analyzing' ||
     status === 'awaiting-context-share' ||
-    status === 'awaiting-subject-decision'
+    status === 'awaiting-subject-decision' ||
+    status === 'agreement-pending'
   );
 }
 
@@ -602,6 +614,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     commonGround: { count: 0 },
     strategyPhase: 'COLLECTING',
     overlappingStrategies: { count: 0 },
+    agreements: undefined,
 
     // ChatUIStateInputs
     sessionStatus: undefined,

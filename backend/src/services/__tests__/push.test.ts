@@ -68,7 +68,7 @@ describe('Push Notification Service', () => {
 
     it('has appropriate messages for agreement events', () => {
       expect(PUSH_MESSAGES['agreement.proposed'].title).toContain('proposed');
-      expect(PUSH_MESSAGES['agreement.confirmed'].title).toContain('confirmed');
+      expect(PUSH_MESSAGES['agreement.confirmed'].title).toContain('review');
     });
 
     it('has appropriate messages for session events', () => {

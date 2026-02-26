@@ -23,6 +23,12 @@ interface AgreementCardProps {
   agreement: Agreement;
   /** Callback when the agreement is confirmed */
   onConfirm: () => void;
+  /** Whether the current user has confirmed this agreement */
+  confirmedByMe?: boolean;
+  /** Whether the partner has confirmed this agreement */
+  confirmedByPartner?: boolean;
+  /** Partner's display name */
+  partnerName?: string;
 }
 
 // ============================================================================
@@ -55,7 +61,7 @@ function formatCheckInDate(isoDate: string): string {
  * - Shows optional check-in date
  * - Provides confirmation button
  */
-export function AgreementCard({ agreement, onConfirm }: AgreementCardProps) {
+export function AgreementCard({ agreement, onConfirm, confirmedByMe, confirmedByPartner, partnerName }: AgreementCardProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Micro-Experiment Agreement</Text>
@@ -82,15 +88,33 @@ export function AgreementCard({ agreement, onConfirm }: AgreementCardProps) {
         </View>
       )}
 
-      <TouchableOpacity
-        testID="confirm-agreement-button"
-        style={styles.confirmButton}
-        onPress={onConfirm}
-        accessibilityRole="button"
-        accessibilityLabel="Confirm Agreement"
-      >
-        <Text style={styles.confirmText}>Confirm Agreement</Text>
-      </TouchableOpacity>
+      {confirmedByMe ? (
+        <>
+          <Text style={styles.confirmedBadge}>You confirmed</Text>
+          {!confirmedByPartner && (
+            <Text style={styles.waitingText}>
+              Waiting for {partnerName || 'partner'} to confirm
+            </Text>
+          )}
+        </>
+      ) : (
+        <>
+          {confirmedByPartner && (
+            <Text style={styles.partnerConfirmedIndicator}>
+              {partnerName || 'Partner'} has confirmed
+            </Text>
+          )}
+          <TouchableOpacity
+            testID="confirm-agreement-button"
+            style={styles.confirmButton}
+            onPress={onConfirm}
+            accessibilityRole="button"
+            accessibilityLabel="Confirm Agreement"
+          >
+            <Text style={styles.confirmText}>Confirm Agreement</Text>
+          </TouchableOpacity>
+        </>
+      )}
     </View>
   );
 }
@@ -142,6 +166,21 @@ const styles = StyleSheet.create({
     color: colors.textOnAccent,
     fontSize: 16,
     fontWeight: '600',
+  },
+  confirmedBadge: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 8,
+  },
+  partnerConfirmedIndicator: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  waitingText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 4,
   },
 });
 

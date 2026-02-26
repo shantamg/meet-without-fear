@@ -108,6 +108,12 @@ export interface UseChatUIStateProps {
   // Stage 4: Strategies
   strategyPhase: StrategyPhase | string;
   overlappingStrategiesCount: number;
+
+  // Stage 4: Agreements
+  agreements?: Array<{
+    agreedByMe: boolean;
+    agreedByPartner: boolean;
+  }>;
 }
 
 /**
@@ -191,6 +197,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasConfirmedCommonGroundLocal,
     strategyPhase,
     overlappingStrategiesCount,
+    agreements,
   } = props;
 
   // Track previous waiting status for transition detection
@@ -219,6 +226,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     commonGround: { count: commonGroundCount },
     strategyPhase,
     overlappingStrategies: { count: overlappingStrategiesCount },
+    agreements,
 
     // ChatUIStateInputs
     sessionStatus,
@@ -276,6 +284,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasConfirmedCommonGroundLocal,
     strategyPhase,
     overlappingStrategiesCount,
+    agreements,
     sessionStatus,
     isInviter,
     isLoading,

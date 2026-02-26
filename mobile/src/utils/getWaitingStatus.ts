@@ -35,6 +35,7 @@ export type WaitingStatusState =
   | 'subject-skipped-sharing' // Subject declined sharing (transient)
   | 'empathy-proceed' // Empathy match is good, no sharing needed (PROCEED)
   | 'refining-empathy' // Guesser is refining empathy after receiving shared context
+  | 'agreement-pending' // Stage 4: Waiting for partner to confirm agreement
   | null;
 
 /**
@@ -86,6 +87,13 @@ export interface WaitingStatusInputs {
   overlappingStrategies: {
     count: number;
   };
+
+  // Stage 4: Agreement confirmation state
+  agreements?: Array<{
+    agreedByMe: boolean;
+    agreedByPartner: boolean;
+  }>;
+  sessionStatus?: string; // SessionStatus enum value
 }
 
 // ============================================================================
@@ -118,6 +126,11 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     strategyPhase,
     overlappingStrategies,
   } = inputs;
+
+  // No waiting status when session is resolved
+  if (inputs.sessionStatus === 'RESOLVED') {
+    return null;
+  }
 
   // --- Priority 1: User Action Required (Overrides waiting) ---
 
@@ -216,6 +229,18 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
 
   if (strategyPhase === StrategyPhase.REVEALING && overlappingStrategies.count === 0) {
     return 'ranking-pending';
+  }
+
+  // --- Priority 7: Stage 4 (Agreement Confirmation) ---
+  // All agreements confirmed by me but partner hasn't confirmed all
+  if (
+    myStage === Stage.STRATEGIC_REPAIR &&
+    inputs.agreements &&
+    inputs.agreements.length > 0 &&
+    inputs.agreements.every(a => a.agreedByMe) &&
+    inputs.agreements.some(a => !a.agreedByPartner)
+  ) {
+    return 'agreement-pending';
   }
 
   // No waiting status applies
