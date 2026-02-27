@@ -1386,15 +1386,15 @@ export function useNeeds(
     },
     enabled: !!sessionId,
     staleTime: 0, // Always treat as stale so Ably event invalidation triggers fresh fetch
-    // Poll every 3s while extraction is in progress OR while no needs exist yet.
-    // The backend returns extracting: true while AI is analyzing, and extracting: false
-    // once needs are saved. We also poll if needs haven't arrived yet (race condition guard).
+    // Poll every 3s only while extraction is actively in progress.
+    // The backend returns extracting: true while AI is analyzing needs.
+    // Do NOT poll when needs are simply empty (normal state for stages before Need Mapping).
     refetchInterval: (query) => {
       const data = query.state.data as (GetNeedsResponse & { extracting?: boolean }) | undefined;
-      if (!data || data.extracting || !data.needs || data.needs.length === 0) {
-        return 3_000; // Poll every 3 seconds
+      if (data?.extracting) {
+        return 3_000; // Poll every 3 seconds while extracting
       }
-      return false; // Stop polling once needs exist
+      return false; // Stop polling otherwise
     },
     ...options,
   });
