@@ -513,7 +513,9 @@ async function buildInnerThoughtsContext(
       sessionId, // Partner session ID - linked sessions get boost
       1.3, // 30% boost
       3, // Top 3 results
-      0.5 // Threshold
+      0.5, // Threshold
+      undefined, // turnId
+      sessionId // sessionId for BrainActivity logging
     );
 
     // For each matching session, get the summary to use as reflection content

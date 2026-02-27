@@ -379,7 +379,8 @@ export async function searchInnerWorkSessionContent(
   boostFactor: number = 1.3,
   limit: number = 5,
   threshold: number = 0.5,
-  turnId?: string
+  turnId?: string,
+  sessionId?: string
 ): Promise<Array<{
   sessionId: string;
   theme: string | null;
@@ -388,7 +389,7 @@ export async function searchInnerWorkSessionContent(
 }>> {
   console.log('[Embedding] searchInnerWorkSessionContent for:', queryText.slice(0, 50));
 
-  const queryEmbedding = await getEmbedding(queryText, { turnId });
+  const queryEmbedding = await getEmbedding(queryText, { turnId, sessionId });
   if (!queryEmbedding) {
     console.warn('[Embedding] Failed to generate query embedding');
     return [];

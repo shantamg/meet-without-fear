@@ -15,6 +15,7 @@ import AnthropicBedrock from '@anthropic-ai/bedrock-sdk';
 import { extractJsonFromResponse } from '../utils/json-extractor';
 import type { PromptBlocks } from '../services/stage-prompts';
 import { brainService, BrainActivityCallType } from '../services/brain-service';
+import type { BrainActivity } from '@prisma/client';
 import { ActivityType } from '@prisma/client';
 import { recordLlmCall, getContextSizesForTurn } from '../services/llm-telemetry';
 import { getFixtureResponseByIndex, getFixtureOperationResponse } from './e2e-fixtures';
@@ -553,24 +554,29 @@ export async function getEmbedding(text: string, options?: { sessionId?: string;
 
     const startTime = Date.now();
 
-    // Start logging via BrainService
-    if (!options?.turnId) {
-      console.warn(`[Bedrock] getEmbedding called WITHOUT turnId for text: "${truncatedText.slice(0, 50)}..." (Session: ${options?.sessionId})`);
+    // Start logging via BrainService (non-blocking — don't let logging failures prevent embeddings)
+    let activity: BrainActivity | null = null;
+    if (options?.sessionId) {
+      try {
+        activity = await brainService.startActivity({
+          sessionId: options.sessionId,
+          turnId: options?.turnId,
+          activityType: ActivityType.EMBEDDING,
+          model: BEDROCK_TITAN_EMBED_MODEL_ID,
+          input: { text: truncatedText },
+        });
+      } catch (logError) {
+        console.warn('[Bedrock] Failed to log embedding activity (continuing without logging):', (logError as Error).message);
+      }
     }
-
-    const activity = await brainService.startActivity({
-      sessionId: options?.sessionId ?? 'unknown',
-      turnId: options?.turnId,
-      activityType: ActivityType.EMBEDDING,
-      model: BEDROCK_TITAN_EMBED_MODEL_ID,
-      input: { text: truncatedText },
-    });
 
     const response = await client.send(command);
     const durationMs = Date.now() - startTime;
 
     if (!response.body) {
-      await brainService.failActivity(activity.id, 'No response body from Bedrock');
+      if (activity) {
+        await brainService.failActivity(activity.id, 'No response body from Bedrock').catch(() => {});
+      }
       return null;
     }
 
@@ -583,21 +589,19 @@ export async function getEmbedding(text: string, options?: { sessionId?: string;
     // Price: $0.00002 per 1,000 tokens
     const cost = (inputTokens / 1000) * 0.00002;
 
-    await brainService.completeActivity(activity.id, {
-      output: { success: true }, // Don't log vector to avoid bloat
-      tokenCountInput: inputTokens,
-      cost,
-      durationMs,
-    });
+    if (activity) {
+      await brainService.completeActivity(activity.id, {
+        output: { success: true }, // Don't log vector to avoid bloat
+        tokenCountInput: inputTokens,
+        cost,
+        durationMs,
+      }).catch(() => {});
+    }
 
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
     return responseBody.embedding as number[];
   } catch (error) {
     console.error('[Bedrock] Failed to generate embedding:', error);
-    // We don't have activity ID here easily if it failed before creation or during creation...
-    // But if we did, we'd log fail. 
-    // In a real impl, we'd wrap creation in try/catch or move creation out.
-    // For now, simple logging errors is fine.
     return null;
   }
 }
