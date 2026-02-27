@@ -319,6 +319,27 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       }
     }
 
+    // Check for existing active session with this person
+    const existingActiveSession = await prisma.session.findFirst({
+      where: {
+        relationshipId: relationship.id,
+        status: { in: ['CREATED', 'INVITED', 'ACTIVE', 'PAUSED', 'WAITING'] },
+      },
+      select: { id: true, status: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    if (existingActiveSession) {
+      successResponse(res, {
+        existingActiveSession: {
+          id: existingActiveSession.id,
+          status: existingActiveSession.status,
+          updatedAt: existingActiveSession.updatedAt.toISOString(),
+        },
+      });
+      return;
+    }
+
     // Create session in CREATED status (becomes INVITED after message is confirmed)
     const session = await prisma.session.create({
       data: {
@@ -733,7 +754,6 @@ export async function listPeople(req: Request, res: Response): Promise<void> {
             },
             sessions: {
               orderBy: { updatedAt: 'desc' },
-              take: 1,
               select: {
                 id: true,
                 status: true,
@@ -757,7 +777,14 @@ export async function listPeople(req: Request, res: Response): Promise<void> {
         // Skip if no partner yet (invitation not accepted)
         if (!partnerMember) return null;
 
-        const latestSession = membership.relationship.sessions[0];
+        const sessions = membership.relationship.sessions;
+        const latestSession = sessions[0];
+
+        // Count active (non-terminal) sessions
+        const ACTIVE_STATUSES = ['CREATED', 'INVITED', 'ACTIVE', 'PAUSED', 'WAITING'];
+        const activeSessionCount = sessions.filter(
+          (s) => ACTIVE_STATUSES.includes(s.status)
+        ).length;
 
         // Compute display name: nickname I gave them > their first name > their full name
         const displayName = membership.nickname ||
@@ -787,6 +814,7 @@ export async function listPeople(req: Request, res: Response): Promise<void> {
                 updatedAt: latestSession.updatedAt.toISOString(),
               }
             : null,
+          activeSessionCount,
         };
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);

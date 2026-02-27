@@ -27,9 +27,9 @@ interface QuickOption {
 }
 
 const QUICK_OPTIONS: QuickOption[] = [
-  { label: 'Calm', value: 2, color: colors.calm },
-  { label: 'Mixed', value: 6, color: colors.elevated },
-  { label: 'Intense', value: 9, color: colors.intense },
+  { label: 'Low', value: 2, color: colors.calm },
+  { label: 'Medium', value: 6, color: colors.elevated },
+  { label: 'High', value: 9, color: colors.intense },
 ];
 
 /**
@@ -70,7 +70,7 @@ export interface EmotionalBarometerProps {
  */
 const INTENSITY_LEVELS: IntensityLevel[] = [
   { max: 4, label: 'Calm', color: colors.calm },
-  { max: 7, label: 'Elevated', color: colors.elevated },
+  { max: 7, label: 'Moderate', color: colors.elevated },
   { max: 10, label: 'Intense', color: colors.intense },
 ];
 
@@ -160,8 +160,11 @@ export function EmotionalBarometer({
         )}
         <View style={styles.quickButtonsRow}>
           {QUICK_OPTIONS.map((option) => {
-            const isSelected = getIntensityLevel(value).label === option.label ||
-              (option.label === 'Mixed' && getIntensityLevel(value).label === 'Elevated');
+            const currentLevel = getIntensityLevel(value);
+            const isSelected = currentLevel.label === option.label ||
+              (option.label === 'Low' && currentLevel.label === 'Calm') ||
+              (option.label === 'Medium' && currentLevel.label === 'Moderate') ||
+              (option.label === 'High' && currentLevel.label === 'Intense');
             return (
               <TouchableOpacity
                 key={option.label}
@@ -243,7 +246,7 @@ export function EmotionalBarometer({
 
       <View style={styles.labels}>
         <Text style={styles.scaleLabel}>Calm</Text>
-        <Text style={styles.scaleLabel}>Elevated</Text>
+        <Text style={styles.scaleLabel}>Moderate</Text>
         <Text style={styles.scaleLabel}>Intense</Text>
       </View>
 

@@ -10,7 +10,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { SessionSummaryDTO } from '@meet-without-fear/shared';
-import { SessionStatus } from '@meet-without-fear/shared';
+import { SessionStatus, Stage, StageStatus } from '@meet-without-fear/shared';
 import { colors } from '@/theme';
 
 // ============================================================================
@@ -58,6 +58,51 @@ function getPartnerDisplayName(session: SessionSummaryDTO): string {
 }
 
 // ============================================================================
+// Badge & Progress Helpers
+// ============================================================================
+
+interface Badge {
+  label: string;
+  color: string;
+  bgColor: string;
+}
+
+function getBadge(session: SessionSummaryDTO): Badge | null {
+  if (session.status === SessionStatus.RESOLVED) {
+    return { label: 'Complete', color: colors.success, bgColor: `${colors.success}20` };
+  }
+  if (session.status === SessionStatus.PAUSED) {
+    return { label: 'Paused', color: colors.textMuted, bgColor: `${colors.textMuted}20` };
+  }
+  if (session.status === SessionStatus.CREATED || session.status === SessionStatus.INVITED) {
+    return { label: 'New', color: colors.accent, bgColor: `${colors.accent}20` };
+  }
+  if (session.selfActionNeeded.length > 0) {
+    return { label: 'Your Turn', color: colors.warning, bgColor: `${colors.warning}20` };
+  }
+  if (session.partnerActionNeeded.length > 0) {
+    return { label: 'Waiting', color: colors.textMuted, bgColor: `${colors.textMuted}15` };
+  }
+  return null;
+}
+
+/** Stages 1-4 mapped to progress segments */
+const PROGRESS_STAGES = [Stage.WITNESS, Stage.PERSPECTIVE_STRETCH, Stage.NEED_MAPPING, Stage.STRATEGIC_REPAIR] as const;
+
+function getSegmentFill(
+  segmentStage: Stage,
+  myStage: Stage,
+  myStatus: StageStatus
+): 'complete' | 'active' | 'empty' {
+  if (segmentStage < myStage) return 'complete';
+  if (segmentStage === myStage) {
+    if (myStatus === StageStatus.COMPLETED || myStatus === StageStatus.GATE_PENDING) return 'complete';
+    if (myStatus === StageStatus.IN_PROGRESS) return 'active';
+  }
+  return 'empty';
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -76,6 +121,7 @@ export function SessionCard({ session, isHero = false, noMargin = false }: Sessi
 
   const partnerName = getPartnerDisplayName(session);
   const timeAgo = formatRelativeTime(session.updatedAt);
+  const badge = getBadge(session);
 
   // Fallback for sessions that don't have statusSummary yet (backwards compatibility)
   const statusSummary = session.statusSummary ?? {
@@ -112,7 +158,7 @@ export function SessionCard({ session, isHero = false, noMargin = false }: Sessi
       accessibilityLabel={`Session with ${partnerName}`}
       accessibilityHint="Tap to view session details"
     >
-      {/* Header: Partner name and time */}
+      {/* Header: Partner name, badge, and time */}
       <View style={styles.header}>
         <View style={styles.nameContainer}>
           {session.hasUnread && !isHero && (
@@ -124,11 +170,35 @@ export function SessionCard({ session, isHero = false, noMargin = false }: Sessi
           >
             {partnerName}
           </Text>
+          {badge && !isHero && (
+            <View style={[styles.badge, { backgroundColor: badge.bgColor }]} testID="status-badge">
+              <Text style={[styles.badgeText, { color: badge.color }]}>{badge.label}</Text>
+            </View>
+          )}
         </View>
         <Text style={[styles.timeAgo, isHero && styles.heroTimeAgo]}>
           {timeAgo}
         </Text>
       </View>
+
+      {/* Progress bar (4 segments for stages 1-4) */}
+      {!isHero && session.status !== SessionStatus.CREATED && session.status !== SessionStatus.INVITED && (
+        <View style={styles.progressBar} testID="progress-bar">
+          {PROGRESS_STAGES.map((stage) => {
+            const fill = getSegmentFill(stage, session.myProgress.stage, session.myProgress.status as StageStatus);
+            return (
+              <View
+                key={stage}
+                style={[
+                  styles.progressSegment,
+                  fill === 'complete' && styles.progressSegmentComplete,
+                  fill === 'active' && styles.progressSegmentActive,
+                ]}
+              />
+            );
+          })}
+        </View>
+      )}
 
       {/* Status summary */}
       <View style={styles.statusContainer}>
@@ -232,6 +302,37 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: colors.accent,
     marginRight: 8,
+  },
+
+  // Status badge pill
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Progress bar
+  progressBar: {
+    flexDirection: 'row',
+    gap: 3,
+    marginBottom: 8,
+  },
+  progressSegment: {
+    flex: 1,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: colors.bgTertiary,
+  },
+  progressSegmentComplete: {
+    backgroundColor: colors.success,
+  },
+  progressSegmentActive: {
+    backgroundColor: colors.accent,
   },
 
   // Partner name

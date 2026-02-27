@@ -73,7 +73,7 @@ function getGradientColor(value: number): string {
  */
 function getIntensityLabel(value: number): string {
   if (value <= 4) return 'Calm';
-  if (value <= 7) return 'Elevated';
+  if (value <= 7) return 'Moderate';
   return 'Intense';
 }
 
@@ -183,7 +183,7 @@ export function EmotionSlider({
 
       <View style={styles.labels}>
         <Text style={styles.labelText}>Calm</Text>
-        <Text style={styles.labelText}>Elevated</Text>
+        <Text style={styles.labelText}>Moderate</Text>
         <Text style={styles.labelText}>Intense</Text>
       </View>
 
@@ -192,7 +192,7 @@ export function EmotionSlider({
             style={[styles.hint, { opacity: hintOpacity }]}
             testID={`${testID}-hint`}
           >
-            Slide to update how you're feeling
+            You can update how you're feeling anytime
           </Animated.Text>
         )}
     </View>

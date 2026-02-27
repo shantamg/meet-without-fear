@@ -117,7 +117,7 @@ describe('SessionCard', () => {
       const session = createMockSession({
         statusSummary: {
           userStatus: "You've shared your story",
-          partnerStatus: 'Waiting for Alex to share',
+          partnerStatus: 'Alex is working on their story',
         },
       });
       render(<SessionCard session={session} />);
@@ -129,12 +129,12 @@ describe('SessionCard', () => {
       const session = createMockSession({
         statusSummary: {
           userStatus: "You've shared your story",
-          partnerStatus: 'Waiting for Alex to share',
+          partnerStatus: 'Alex is working on their story',
         },
       });
       render(<SessionCard session={session} />);
 
-      expect(screen.getByText('Waiting for Alex to share')).toBeTruthy();
+      expect(screen.getByText('Alex is working on their story')).toBeTruthy();
     });
 
     it('shows invitation status for INVITED sessions', () => {
@@ -142,13 +142,13 @@ describe('SessionCard', () => {
         status: SessionStatus.INVITED,
         statusSummary: {
           userStatus: 'Invitation sent',
-          partnerStatus: 'Waiting for Jane to join',
+          partnerStatus: "Jane hasn't joined yet",
         },
       });
       render(<SessionCard session={session} />);
 
       expect(screen.getByText('Invitation sent')).toBeTruthy();
-      expect(screen.getByText('Waiting for Jane to join')).toBeTruthy();
+      expect(screen.getByText("Jane hasn't joined yet")).toBeTruthy();
     });
 
     it('shows paused status for PAUSED sessions', () => {

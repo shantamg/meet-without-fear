@@ -49,6 +49,7 @@ export default function NewSessionScreen() {
 
   const [mode, setMode] = useState<'pick' | 'new'>('pick');
   const [selectedPerson, setSelectedPerson] = useState<PersonSummaryDTO | null>(null);
+  const [bypassDuplicateCheck, setBypassDuplicateCheck] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [innerThoughtsContext, setInnerThoughtsContext] = useState<GenerateContextResponse | null>(null);
@@ -108,6 +109,29 @@ export default function NewSessionScreen() {
           ...(context && { context }),
           ...(linkedInnerThoughtsId && { innerThoughtsId: linkedInnerThoughtsId }),
         });
+        // Handle existing active session response
+        if ('existingActiveSession' in response && !bypassDuplicateCheck) {
+          const existing = (response as { existingActiveSession: { id: string; status: string } }).existingActiveSession;
+          Alert.alert(
+            `Active session with ${selectedPerson.name}`,
+            'You already have an active session with this person.',
+            [
+              {
+                text: 'Continue Existing',
+                onPress: () => router.replace(`/session/${existing.id}`),
+              },
+              {
+                text: 'Start New Anyway',
+                style: 'default',
+                onPress: () => {
+                  setBypassDuplicateCheck(true);
+                  // Re-submit will bypass the check
+                },
+              },
+            ]
+          );
+          return;
+        }
         // Track session creation
         trackSessionCreated(response.session.id, selectedPerson.id);
         router.replace(`/session/${response.session.id}`);
@@ -235,7 +259,10 @@ export default function NewSessionScreen() {
                         styles.personCard,
                         selectedPerson?.id === person.id && styles.personCardSelected,
                       ]}
-                      onPress={() => setSelectedPerson(person)}
+                      onPress={() => {
+                        setSelectedPerson(person);
+                        setBypassDuplicateCheck(false);
+                      }}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: selectedPerson?.id === person.id }}
                     >
@@ -243,7 +270,14 @@ export default function NewSessionScreen() {
                         <Text style={styles.personAvatarText}>{person.initials}</Text>
                       </View>
                       <View style={styles.personInfo}>
-                        <Text style={styles.personName}>{person.name}</Text>
+                        <View style={styles.personNameRow}>
+                          <Text style={styles.personName}>{person.name}</Text>
+                          {person.activeSessionCount > 0 && (
+                            <View style={styles.activeBadge}>
+                              <Text style={styles.activeBadgeText}>Active</Text>
+                            </View>
+                          )}
+                        </View>
                         {person.lastSession && (
                           <Text style={styles.personMeta}>
                             Last session: {formatRelativeTime(person.lastSession.updatedAt)}
@@ -258,6 +292,25 @@ export default function NewSessionScreen() {
                     </TouchableOpacity>
                   ))
                 )}
+              </View>
+            )}
+
+            {/* Active Session Warning */}
+            {effectiveMode === 'pick' && selectedPerson && selectedPerson.activeSessionCount > 0 && !bypassDuplicateCheck && (
+              <View style={styles.activeWarningBanner}>
+                <Text style={styles.activeWarningText}>
+                  You have an active session with {selectedPerson.name}
+                </Text>
+                <TouchableOpacity
+                  style={styles.continueExistingButton}
+                  onPress={() => {
+                    if (selectedPerson.lastSession) {
+                      router.replace(`/session/${selectedPerson.lastSession.id}`);
+                    }
+                  }}
+                >
+                  <Text style={styles.continueExistingButtonText}>Continue Existing Session</Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -442,10 +495,26 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
   },
+  personNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   personName: {
     fontSize: 17,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  activeBadge: {
+    backgroundColor: `${colors.brandBlue}20`,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  activeBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.brandBlue,
   },
   personMeta: {
     fontSize: 13,
@@ -454,6 +523,31 @@ const styles = StyleSheet.create({
   },
   checkIcon: {
     marginLeft: 8,
+  },
+  activeWarningBanner: {
+    backgroundColor: `${colors.warning}15`,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: `${colors.warning}30`,
+    gap: 12,
+  },
+  activeWarningText: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    lineHeight: 22,
+  },
+  continueExistingButton: {
+    backgroundColor: colors.brandBlue,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  continueExistingButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
   // Input group
   inputGroup: {

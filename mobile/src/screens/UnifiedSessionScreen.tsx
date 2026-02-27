@@ -10,6 +10,7 @@ import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 // useRouter removed - share navigation replaced by ActivityDrawer
 import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion, ConfirmAgreementResponse, MAX_AGREEMENTS } from '@meet-without-fear/shared';
 
@@ -791,11 +792,26 @@ export function UnifiedSessionScreen({
   }, [myProgress?.stage]);
 
   // -------------------------------------------------------------------------
-  // Local State for Session Entry Mood Check
+  // Local State for Session Entry Mood Check (persisted per session, 2h cooldown)
   // -------------------------------------------------------------------------
-  // Tracks if user has completed the mood check for this session entry
-  // Resets each time the component mounts (i.e., each time user navigates to session)
   const [hasCompletedMoodCheck, setHasCompletedMoodCheck] = useState(false);
+  const [moodCheckLoading, setMoodCheckLoading] = useState(true);
+
+  useEffect(() => {
+    const MOOD_CHECK_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
+    const key = `mood_check_${sessionId}`;
+    AsyncStorage.getItem(key).then((stored) => {
+      if (stored) {
+        const { completedAt } = JSON.parse(stored);
+        if (Date.now() - completedAt < MOOD_CHECK_COOLDOWN_MS) {
+          setHasCompletedMoodCheck(true);
+        }
+      }
+      setMoodCheckLoading(false);
+    }).catch(() => {
+      setMoodCheckLoading(false);
+    });
+  }, [sessionId]);
   // When viewing a resolved session, allow toggling to chat history
   const [viewingResolvedHistory, setViewingResolvedHistory] = useState(false);
 
@@ -1547,19 +1563,21 @@ export function UnifiedSessionScreen({
   const shouldShowMoodCheck = useMemo(() => {
     // Don't show if still loading
     if (isLoading) return false;
+    // Don't show if still checking AsyncStorage
+    if (moodCheckLoading) return false;
     // Don't show if still loading compact data
     if (loadingCompact) return false;
     // Don't show while viewing the unsigned compact (would disrupt the flow)
-    // This allows mood check during invitation phase and after compact is signed
     if (isInOnboardingUnsigned) return false;
     // Don't show if already completed mood check this session entry
     if (hasCompletedMoodCheck) return false;
     // Don't show if currently in an exercise overlay (user will set intensity after)
     if (activeOverlay) return false;
+    // Don't show for resolved or abandoned sessions
+    if (session?.status === SessionStatus.RESOLVED || session?.status === SessionStatus.ABANDONED) return false;
 
-    // Show mood check for all other cases
     return true;
-  }, [isLoading, loadingCompact, isInOnboardingUnsigned, hasCompletedMoodCheck, activeOverlay]);
+  }, [isLoading, moodCheckLoading, loadingCompact, isInOnboardingUnsigned, hasCompletedMoodCheck, activeOverlay, session?.status]);
 
   // -------------------------------------------------------------------------
   // Memoized Empty State Element (prevents typewriter restart on re-render)
@@ -2165,6 +2183,11 @@ export function UnifiedSessionScreen({
           // Also update session-specific barometer
           handleBarometerChange(intensity);
           setHasCompletedMoodCheck(true);
+          // Persist to AsyncStorage with timestamp for 2h cooldown
+          AsyncStorage.setItem(
+            `mood_check_${sessionId}`,
+            JSON.stringify({ completedAt: Date.now() })
+          ).catch(() => {});
         }}
       />
     );

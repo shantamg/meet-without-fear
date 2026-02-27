@@ -9,6 +9,7 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Layers } from 'lucide-react-native';
 import { colors } from '@/theme';
+import { STAGE_FRIENDLY_NAMES, Stage } from '@meet-without-fear/shared';
 
 // Avatar gradient colors (purple gradient approximation)
 const AVATAR_GRADIENT_COLOR = '#7159c1'; // Middle of #667eea and #764ba2
@@ -32,14 +33,6 @@ interface WaitingRoomProps {
 // Stage Names
 // ============================================================================
 
-const STAGE_NAMES: Record<number, string> = {
-  1: 'The Witness',
-  2: 'The Mirror',
-  3: 'The Bridge',
-  4: 'The Resolution',
-  5: 'The Commitment',
-};
-
 // ============================================================================
 // Component
 // ============================================================================
@@ -54,7 +47,7 @@ export function WaitingRoom({
   onContinueInInnerThoughts,
 }: WaitingRoomProps) {
   const displayInitial = partnerInitial || (partnerName ? partnerName[0].toUpperCase() : '?');
-  const stageName = STAGE_NAMES[currentStage] || `Stage ${currentStage}`;
+  const stageName = STAGE_FRIENDLY_NAMES[currentStage as Stage] || `Stage ${currentStage}`;
 
   return (
     <View style={styles.container}>
@@ -71,7 +64,7 @@ export function WaitingRoom({
             <Text style={styles.partnerName}>{partnerName}</Text>
           )}
           <Text style={styles.stageText}>
-            Currently in Stage {currentStage}: {stageName}
+            Currently working on: {stageName}
           </Text>
         </View>
       </View>
@@ -120,7 +113,7 @@ export function WaitingRoom({
       <Text style={styles.message}>{message}</Text>
       {partnerName && (
         <Text style={styles.waitingText}>
-          Waiting for {partnerName} to complete this step
+          {partnerName} is working on this step
         </Text>
       )}
 

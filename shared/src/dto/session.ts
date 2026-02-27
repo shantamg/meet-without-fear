@@ -222,6 +222,8 @@ export interface PersonSummaryDTO {
     status: string;
     updatedAt: string;
   } | null;
+  /** Number of active (non-terminal) sessions with this person */
+  activeSessionCount: number;
 }
 
 export interface ListPeopleResponse {

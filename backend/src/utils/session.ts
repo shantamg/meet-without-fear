@@ -12,7 +12,7 @@ import {
   SessionStatus,
   Stage,
   StageStatus,
-  STAGE_NAMES,
+  STAGE_FRIENDLY_NAMES,
 } from '@meet-without-fear/shared';
 
 // Type for session with includes (from Prisma)
@@ -118,9 +118,9 @@ interface StatusSummaryOptions {
  * 2. What's happening with the partner
  *
  * Examples:
- * - "You've shared your perspective" / "Waiting for Jason to share theirs"
- * - "You're working on The Witness" / "Jason is still getting started"
- * - "Invitation sent" / "Waiting for them to join"
+ * - "You've shared your story" / "Jason is working on their story"
+ * - "Sharing your story" / "Jason is getting ready"
+ * - "Invitation sent" / "Jason hasn't joined yet"
  */
 export function generateSessionStatusSummary(
   sessionStatus: SessionStatus,
@@ -168,17 +168,17 @@ export function generateSessionStatusSummary(
             : myProgress.status === StageStatus.GATE_PENDING ||
                 myProgress.status === StageStatus.COMPLETED
               ? getCompletedStageMessage(myProgress.stage)
-              : `Ready to start ${STAGE_NAMES[myProgress.stage]}`;
+              : `Ready for ${STAGE_FRIENDLY_NAMES[myProgress.stage]}`;
 
         return {
           userStatus,
-          partnerStatus: `Waiting for ${name} to join`,
+          partnerStatus: `${name} hasn't joined yet`,
         };
       }
 
       return {
         userStatus: 'Invitation sent',
-        partnerStatus: `Waiting for ${name} to join`,
+        partnerStatus: `${name} hasn't joined yet`,
       };
     }
   }
@@ -210,14 +210,14 @@ export function generateSessionStatusSummary(
   const partnerStage = partnerProgress.stage;
   const partnerStatus = partnerProgress.status;
 
-  // Get user-friendly stage names
-  const myStageName = STAGE_NAMES[myStage];
+  // Get user-friendly stage name
+  const myFriendlyName = STAGE_FRIENDLY_NAMES[myStage];
 
   // Generate user status based on their progress
   let userStatus: string;
   switch (myStatus) {
     case StageStatus.NOT_STARTED:
-      userStatus = `Ready to start ${myStageName}`;
+      userStatus = `Ready for ${myFriendlyName}`;
       break;
     case StageStatus.IN_PROGRESS:
       userStatus = getInProgressStageMessage(myStage, options.userHasSentEmpathy);
@@ -229,7 +229,7 @@ export function generateSessionStatusSummary(
       userStatus = getCompletedStageMessage(myStage);
       break;
     default:
-      userStatus = `On ${myStageName}`;
+      userStatus = `Working on ${myFriendlyName}`;
   }
 
   // Generate partner status based on their progress
@@ -237,13 +237,13 @@ export function generateSessionStatusSummary(
 
   // If partner is behind
   if (partnerStage < myStage) {
-    const partnerStageName = STAGE_NAMES[partnerStage];
+    const partnerFriendlyName = STAGE_FRIENDLY_NAMES[partnerStage];
     if (partnerStatus === StageStatus.NOT_STARTED) {
-      partnerStatusMsg = `${name} hasn't started ${partnerStageName} yet`;
+      partnerStatusMsg = `${name} hasn't started ${partnerFriendlyName} yet`;
     } else if (partnerStatus === StageStatus.IN_PROGRESS) {
-      partnerStatusMsg = `${name} is working on ${partnerStageName}`;
+      partnerStatusMsg = `${name} is working on ${partnerFriendlyName}`;
     } else {
-      partnerStatusMsg = `Waiting for ${name} to catch up`;
+      partnerStatusMsg = `${name} is working at their own pace`;
     }
   }
   // If partner is on the same stage
@@ -252,19 +252,19 @@ export function generateSessionStatusSummary(
       // Both ready to advance
       partnerStatusMsg = `${name} is also ready`;
     } else if (partnerStatus === StageStatus.NOT_STARTED) {
-      partnerStatusMsg = `Waiting for ${name} to start`;
+      partnerStatusMsg = `${name} is getting ready`;
     } else {
       partnerStatusMsg = getWaitingForPartnerMessage(myStage, name);
     }
   }
   // If partner is ahead (user is behind)
   else {
-    partnerStatusMsg = `${name} is waiting for you`;
-    // Update user status to reflect they need to catch up
+    partnerStatusMsg = `You can continue when you're ready`;
+    // Update user status to reflect encouragement without pressure
     if (myStatus === StageStatus.NOT_STARTED) {
-      userStatus = `${name} is ahead - start ${myStageName}`;
+      userStatus = `Ready for ${myFriendlyName} when you are`;
     } else if (myStatus === StageStatus.IN_PROGRESS) {
-      userStatus = `Keep going on ${myStageName}`;
+      userStatus = `You're making progress on ${myFriendlyName}`;
     }
   }
 
@@ -282,16 +282,15 @@ export function generateSessionStatusSummary(
 function getInProgressStageMessage(stage: Stage, hasSentEmpathy?: boolean): string {
   switch (stage) {
     case Stage.ONBOARDING:
-      return "Reviewing the compact";
+      return "Reviewing the agreement";
     case Stage.WITNESS:
       return "Sharing your story";
     case Stage.PERSPECTIVE_STRETCH:
-      // If user has sent empathy, show that instead of "crafting"
-      return hasSentEmpathy ? "You've sent your empathy message" : "Crafting your empathy";
+      return hasSentEmpathy ? "You've shared your understanding" : "Working on understanding their perspective";
     case Stage.NEED_MAPPING:
-      return "Identifying your needs";
+      return "Exploring what matters to you";
     case Stage.STRATEGIC_REPAIR:
-      return "Proposing strategies";
+      return "Considering next steps";
     default:
       return 'Working on current stage';
   }
@@ -303,15 +302,15 @@ function getInProgressStageMessage(stage: Stage, hasSentEmpathy?: boolean): stri
 function getCompletedStageMessage(stage: Stage): string {
   switch (stage) {
     case Stage.ONBOARDING:
-      return "You've signed the compact";
+      return "You've signed the agreement";
     case Stage.WITNESS:
       return "You've shared your story";
     case Stage.PERSPECTIVE_STRETCH:
-      return "You've shared your empathy";
+      return "You've shared your understanding";
     case Stage.NEED_MAPPING:
-      return "You've identified your needs";
+      return "You've explored what matters to you";
     case Stage.STRATEGIC_REPAIR:
-      return "You've proposed strategies";
+      return "You've shared your ideas for next steps";
     default:
       return 'Stage complete';
   }
@@ -323,17 +322,17 @@ function getCompletedStageMessage(stage: Stage): string {
 function getWaitingForPartnerMessage(stage: Stage, partnerName: string): string {
   switch (stage) {
     case Stage.ONBOARDING:
-      return `Waiting for ${partnerName} to sign`;
+      return `${partnerName} is reviewing the agreement`;
     case Stage.WITNESS:
-      return `Waiting for ${partnerName} to share`;
+      return `${partnerName} is working on their story`;
     case Stage.PERSPECTIVE_STRETCH:
-      return `Waiting for ${partnerName}'s empathy`;
+      return `${partnerName} is working on their perspective`;
     case Stage.NEED_MAPPING:
-      return `Waiting for ${partnerName}'s needs`;
+      return `${partnerName} is exploring what matters to them`;
     case Stage.STRATEGIC_REPAIR:
-      return `Waiting for ${partnerName}'s input`;
+      return `${partnerName} is thinking about next steps`;
     default:
-      return `Waiting for ${partnerName}`;
+      return `${partnerName} is still working`;
   }
 }
 

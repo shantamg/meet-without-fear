@@ -15,35 +15,35 @@ import Slider from '@react-native-community/slider';
 import { colors, spacing, radius } from '@/theme';
 
 /**
- * Get interpolated color between green and red based on value (1-10)
- * Matches the EmotionalBarometer gradient
+ * Get interpolated color based on value (1-10)
+ * Non-judgmental gradient: teal → gray → amber (no red)
  */
 function getGradientColor(value: number): string {
   const t = (value - 1) / 9;
 
   if (t <= 0.5) {
-    // Calm (#10a37f) to Elevated (#f59e0b)
+    // Calm (#5eaaa8 teal) to Moderate (#94a3b8 gray)
     const localT = t * 2;
-    const r = Math.round(16 + (245 - 16) * localT);
-    const g = Math.round(163 + (158 - 163) * localT);
-    const b = Math.round(127 + (11 - 127) * localT);
+    const r = Math.round(94 + (148 - 94) * localT);
+    const g = Math.round(170 + (163 - 170) * localT);
+    const b = Math.round(168 + (184 - 168) * localT);
     return `rgb(${r}, ${g}, ${b})`;
   } else {
-    // Elevated (#f59e0b) to Intense (#ef4444)
+    // Moderate (#94a3b8 gray) to Intense (#f59e0b amber)
     const localT = (t - 0.5) * 2;
-    const r = Math.round(245 + (239 - 245) * localT);
-    const g = Math.round(158 + (68 - 158) * localT);
-    const b = Math.round(11 + (68 - 11) * localT);
+    const r = Math.round(148 + (245 - 148) * localT);
+    const g = Math.round(163 + (158 - 163) * localT);
+    const b = Math.round(184 + (11 - 184) * localT);
     return `rgb(${r}, ${g}, ${b})`;
   }
 }
 
 /**
- * Get intensity label for a value
+ * Get energy label for a value
  */
 function getIntensityLabel(value: number): string {
   if (value <= 4) return 'Calm';
-  if (value <= 7) return 'Elevated';
+  if (value <= 7) return 'Moderate';
   return 'Intense';
 }
 
@@ -52,7 +52,7 @@ export interface SessionEntryMoodCheckProps {
   visible: boolean;
   /** Render as full-screen view instead of modal overlay (prevents content flash) */
   fullScreen?: boolean;
-  /** Initial slider value (defaults to 4 - Calm) */
+  /** Initial slider value (defaults to 5 - neutral Moderate) */
   initialValue?: number;
   /** Callback when user completes the check */
   onComplete: (intensity: number) => void;
@@ -70,7 +70,7 @@ export interface SessionEntryMoodCheckProps {
 export function SessionEntryMoodCheck({
   visible,
   fullScreen = false,
-  initialValue = 4,
+  initialValue = 5,
   onComplete,
 }: SessionEntryMoodCheckProps) {
   const [value, setValue] = useState(initialValue);
@@ -87,9 +87,9 @@ export function SessionEntryMoodCheck({
 
   // Get a softer pastel color for the label
   const getSoftLabelColor = (label: string): string => {
-    if (label === 'Calm') return '#7dd3c0'; // Soft mint/teal
-    if (label === 'Elevated') return '#fbbf24'; // Soft amber
-    return '#f87171'; // Soft coral
+    if (label === 'Calm') return '#7dd3c0'; // Soft teal
+    if (label === 'Moderate') return '#94a3b8'; // Soft gray
+    return '#fbbf24'; // Soft amber
   };
 
   const softLabelColor = getSoftLabelColor(currentLabel);
@@ -101,6 +101,9 @@ export function SessionEntryMoodCheck({
         <View style={styles.container}>
           <View style={styles.contentArea}>
             <Text style={styles.title}>How are you feeling right now?</Text>
+            <Text style={styles.privacyText}>
+              This helps your AI guide adjust its approach. Only the AI sees this — your partner won't.
+            </Text>
 
             <View style={styles.labelContainer}>
               <Text style={[styles.emotionLabel, { color: softLabelColor }]}>
@@ -130,6 +133,15 @@ export function SessionEntryMoodCheck({
               activeOpacity={0.8}
             >
               <Text style={styles.continueButtonText}>Continue</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.skipLink}
+              onPress={() => onComplete(5)}
+              testID="mood-check-skip-button"
+              activeOpacity={0.7}
+            >
+              <Text style={styles.skipLinkText}>Skip for now</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -185,7 +197,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '500',
     color: colors.textPrimary,
-    marginBottom: spacing['3xl'],
+    marginBottom: spacing.md,
     textAlign: 'center',
     lineHeight: 32,
   },
@@ -210,10 +222,16 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 40,
   },
+  privacyText: {
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: spacing['2xl'],
+    paddingHorizontal: spacing.md,
+  },
   continueButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: 'rgba(148, 163, 184, 0.5)', // Soft muted border
+    backgroundColor: colors.accent,
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing['2xl'],
     borderRadius: radius.full,
@@ -222,10 +240,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   continueButtonText: {
-    color: colors.textPrimary,
+    color: colors.textOnAccent,
     fontSize: 18,
-    fontWeight: '500',
+    fontWeight: '600',
     letterSpacing: 0.5,
+  },
+  skipLink: {
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  skipLinkText: {
+    color: colors.textMuted,
+    fontSize: 15,
+    fontWeight: '400',
   },
 });
 

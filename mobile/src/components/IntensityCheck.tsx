@@ -39,7 +39,7 @@ function getGradientColor(value: number): string {
  */
 function getIntensityLabel(value: number): string {
   if (value <= 4) return 'Calm';
-  if (value <= 7) return 'Elevated';
+  if (value <= 7) return 'Moderate';
   return 'Intense';
 }
 
@@ -102,7 +102,7 @@ export function IntensityCheck({
 
         <View style={styles.labels}>
           <Text style={styles.scaleLabel}>Calm</Text>
-          <Text style={styles.scaleLabel}>Elevated</Text>
+          <Text style={styles.scaleLabel}>Moderate</Text>
           <Text style={styles.scaleLabel}>Intense</Text>
         </View>
       </View>

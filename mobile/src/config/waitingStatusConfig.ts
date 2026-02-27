@@ -184,7 +184,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: false,
-    bannerText: (p) => `Waiting for ${p} to confirm their needs.`,
+    bannerText: (p) => `${p} is exploring what matters to them.`,
   },
 
   // Stage 4: Waiting for partner to submit strategy rankings
@@ -195,7 +195,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: false,
-    bannerText: (p) => `Waiting for ${p} to submit their rankings.`,
+    bannerText: (p) => `${p} is considering the options.`,
   },
 
   // Transient: Partner has signed compact
@@ -246,7 +246,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: false,
-    bannerText: (p) => `Waiting for ${p} to confirm the agreement.`,
+    bannerText: (p) => `${p} is reviewing the agreement.`,
   },
 };
 

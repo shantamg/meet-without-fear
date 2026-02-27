@@ -41,31 +41,31 @@ const getStatusConfig = (
     // Waiting states (show spinner)
     case 'compact-pending':
       return {
-        message: `Waiting for ${partnerName} to sign the Curiosity Compact...`,
+        message: `${partnerName} is reviewing the agreement.`,
         isWaiting: true,
         icon: 'hourglass',
       };
     case 'witness-pending':
       return {
-        message: `${partnerName} is still in their witness session. You can continue chatting with me in the meantime.`,
+        message: `${partnerName} is still working on their story. You can continue chatting with me in the meantime.`,
         isWaiting: true,
         icon: 'hourglass',
       };
     case 'empathy-pending':
       return {
-        message: `Waiting for ${partnerName} to share their perspective on how you're feeling...`,
+        message: `${partnerName} is working on understanding your perspective.`,
         isWaiting: true,
         icon: 'hourglass',
       };
     case 'needs-pending':
       return {
-        message: `Waiting for ${partnerName} to confirm their needs. Keep chatting with me while you wait.`,
+        message: `${partnerName} is exploring what matters to them. Keep chatting with me while you wait.`,
         isWaiting: true,
         icon: 'hourglass',
       };
     case 'ranking-pending':
       return {
-        message: `Waiting for ${partnerName} to submit their strategy rankings...`,
+        message: `${partnerName} is considering the options.`,
         isWaiting: true,
         icon: 'hourglass',
       };
@@ -98,7 +98,7 @@ const getStatusConfig = (
 
     default:
       return {
-        message: `Waiting for ${partnerName}...`,
+        message: `${partnerName} is still working.`,
         isWaiting: true,
         icon: 'hourglass',
       };

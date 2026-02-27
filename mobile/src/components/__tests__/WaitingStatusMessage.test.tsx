@@ -16,7 +16,7 @@ describe('WaitingStatusMessage', () => {
     it('displays compact pending message', () => {
       render(<WaitingStatusMessage {...defaultProps} type="compact-pending" />);
 
-      expect(screen.getByText(/Waiting for Alex to sign the Curiosity Compact/)).toBeTruthy();
+      expect(screen.getByText(/Alex is reviewing the agreement/)).toBeTruthy();
       expect(screen.getByText('Status Update')).toBeTruthy();
       expect(screen.getByTestId('waiting-status-message-spinner')).toBeTruthy();
     });
@@ -24,26 +24,26 @@ describe('WaitingStatusMessage', () => {
     it('displays witness pending message', () => {
       render(<WaitingStatusMessage {...defaultProps} type="witness-pending" />);
 
-      expect(screen.getByText(/Alex is still in their witness session/)).toBeTruthy();
+      expect(screen.getByText(/Alex is still working on their story/)).toBeTruthy();
       expect(screen.getByTestId('waiting-status-message-spinner')).toBeTruthy();
     });
 
     it('displays empathy pending message', () => {
       render(<WaitingStatusMessage {...defaultProps} type="empathy-pending" />);
 
-      expect(screen.getByText(/Waiting for Alex to share their perspective/)).toBeTruthy();
+      expect(screen.getByText(/Alex is working on understanding your perspective/)).toBeTruthy();
     });
 
     it('displays needs pending message', () => {
       render(<WaitingStatusMessage {...defaultProps} type="needs-pending" />);
 
-      expect(screen.getByText(/Waiting for Alex to confirm their needs/)).toBeTruthy();
+      expect(screen.getByText(/Alex is exploring what matters to them/)).toBeTruthy();
     });
 
     it('displays ranking pending message', () => {
       render(<WaitingStatusMessage {...defaultProps} type="ranking-pending" />);
 
-      expect(screen.getByText(/Waiting for Alex to submit their strategy rankings/)).toBeTruthy();
+      expect(screen.getByText(/Alex is considering the options/)).toBeTruthy();
     });
   });
 
