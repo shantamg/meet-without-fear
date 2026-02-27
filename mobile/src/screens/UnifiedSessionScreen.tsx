@@ -2606,8 +2606,8 @@ export function UnifiedSessionScreen({
           setShowActivityMenu(false);
           setShowEmpathyDrawer(true);
         }}
-        invitationMessage={invitationMessage || undefined}
-        invitationTimestamp={invitation?.messageConfirmedAt || undefined}
+        invitationMessage={isInviter ? (invitationMessage || undefined) : undefined}
+        invitationTimestamp={isInviter ? (invitation?.messageConfirmedAt || undefined) : undefined}
         onOpenInvitationRefine={() => {
           setShowActivityMenu(false);
           setShowInvitationRefine(true);
