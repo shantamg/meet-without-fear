@@ -80,20 +80,19 @@ export function ChatBubble({
   const hasStartedRef = useRef(false);
   const messageIdRef = useRef(message.id);
 
-  // Determine initial opacity: 0 if will animate, 1 otherwise
+  // Determine if this message type uses fade-in animation (non-AI, non-USER animated messages)
   const willAnimate = !isUser && !isAI && enableTypewriter && !message.skipTypewriter;
 
   // Animated value for fade-in (non-typewriter messages)
-  // Start at 0 if this message will animate, 1 otherwise
-  const fadeAnim = useRef(new Animated.Value(willAnimate && !hasAnimatedRef.current ? 0 : 1)).current;
+  // Always start at 1 (visible) — the fade-in effect sets to 0 and animates when triggered
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   // Reset animation state if message ID changes
   if (messageIdRef.current !== message.id) {
     messageIdRef.current = message.id;
     hasAnimatedRef.current = false;
     hasStartedRef.current = false;
-    // Start hidden if this message will animate
-    fadeAnim.setValue(willAnimate ? 0 : 1);
+    fadeAnim.setValue(1);
   }
 
   // Store callbacks in refs to avoid re-triggering animation
@@ -229,20 +228,10 @@ export function ChatBubble({
     return styles.text;
   };
 
-  // Check if this message is waiting to animate (not its turn yet)
-  // For fade-in messages: willAnimate is true, hasn't started, not next in queue
-  // For typewriter messages: shouldUseTypewriter is true, hasn't started, not next in queue
-  const isWaitingToAnimate =
-    ((willAnimate || shouldUseTypewriter) && !hasStartedRef.current && !isNextToAnimate);
-
-  // Hide the entire bubble until it's this message's turn to animate
-  // This prevents showing empty bubbles or bubble containers while waiting
-  if (isWaitingToAnimate) {
-    return null;
-  }
-
-  // Check if fade-in animation is in progress (for messages currently animating)
-  const isFadeInAnimating = willAnimate && !hasAnimatedRef.current;
+  // Check if fade-in animation should be active
+  // Only animate when it's this message's turn (isNextToAnimate)
+  // Messages waiting their turn render with full opacity (never hidden)
+  const isFadeInAnimating = willAnimate && !hasAnimatedRef.current && isNextToAnimate;
 
   const renderContent = () => {
     // Empathy statements - use fade-in for new messages
@@ -323,8 +312,11 @@ export function ChatBubble({
 
     // Use typewriter effect for new AI messages - animates word-by-word at consistent pace
     // This normalizes display speed regardless of how fast streaming arrives
-    // Note: We only reach here if !isWaitingToAnimate (checked at component level)
     if (shouldUseTypewriter) {
+      if (!isNextToAnimate) {
+        // Not this message's turn — render instant text (never hide)
+        return <Text style={getTextStyle()}>{message.content}</Text>;
+      }
       return (
         <TypewriterText
           text={message.content}

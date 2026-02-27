@@ -23,42 +23,6 @@ import { createStyles } from '../theme/styled';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 
 // ============================================================================
-// Module-Level Animation Cache
-// ============================================================================
-// This cache persists animated message IDs across component remounts.
-// When ChatInterface remounts (e.g., during stage transitions), the refs are reset,
-// but this cache remembers which messages have already been animated.
-// Key: sessionId (extracted from first message), Value: Set of animated message IDs
-const animatedMessageCache = new Map<string, Set<string>>();
-
-/**
- * Get the animated message IDs for a session from the persistent cache.
- * Creates a new Set if none exists.
- */
-function getAnimatedCache(sessionId: string): Set<string> {
-  let cache = animatedMessageCache.get(sessionId);
-  if (!cache) {
-    cache = new Set<string>();
-    animatedMessageCache.set(sessionId, cache);
-  }
-  return cache;
-}
-
-/**
- * Mark a message as animated in the persistent cache.
- */
-function markAnimatedInCache(sessionId: string, messageId: string): void {
-  getAnimatedCache(sessionId).add(messageId);
-}
-
-/**
- * Check if a message has been animated (from persistent cache).
- */
-function isAnimatedInCache(sessionId: string, messageId: string): boolean {
-  return getAnimatedCache(sessionId).has(messageId);
-}
-
-// ============================================================================
 // Types
 // ============================================================================
 
@@ -364,84 +328,31 @@ export function ChatInterface({
     // DO NOT SCROLL - the newest message hasn't changed
   }, [listItems]);
 
-  // Track message IDs that should skip typewriter (existed on initial load or loaded as history)
-  const knownMessageIdsRef = useRef<Set<string>>(new Set());
+  // Snapshot boundary: captures all message IDs present on first meaningful render.
+  // Messages in the snapshot render instantly. Messages not in the snapshot may animate.
+  const mountSnapshotIdsRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
-  // Track the timestamp of when initial load completed - messages created before this are "known"
-  const initialLoadCompletedAtRef = useRef<string | null>(null);
 
   // Track previous value of customEmptyState to detect compact signing
   const prevCustomEmptyStateRef = useRef(customEmptyState);
 
-  // Synchronously capture initial message IDs on first render
-  // This ensures first render already knows these are history messages
-  // Skip this if skipInitialHistory is true AND there's only one message
+  // Capture mount snapshot: all messages present on first meaningful render
+  // Skip if skipInitialHistory is true AND there's only one message
   // (e.g., after compact signing + mood check with just the first AI message)
-  // If there are multiple messages, it's a returning session - treat as history
-  //
-  // NOTE: We mark messages as known IMMEDIATELY on first render, without waiting for
-  // lastSeenChatItemId. This prevents hot reload issues where all messages would animate.
-  // The lastSeenChatItemId is only used for the "New messages" separator, not for
-  // determining which messages to animate.
-  //
-  // RACE CONDITION FIX: When async query loads messages after first empty render,
-  // we capture the "initial load completed" timestamp. Any messages with timestamps
-  // before this are considered history and won't animate. This handles cases where
-  // messages arrive in batches or race with Ably events.
   if (isInitialLoadRef.current && messages.length > 0) {
     const shouldSkip = skipInitialHistory && messages.length === 1;
     if (!shouldSkip) {
-      // Mark ALL current messages as known on initial load
-      // New messages arriving AFTER this point will animate (not in this set)
-      messages.forEach(m => {
-        knownMessageIdsRef.current.add(m.id);
-        // Also mark AI messages in persistent cache to survive component remounts
-        // (e.g., navigating to Share screen and back)
-        if (sessionId && m.role !== MessageRole.USER) {
-          markAnimatedInCache(sessionId, m.id);
-        }
-      });
-      // Capture timestamp for race condition handling
-      if (initialLoadCompletedAtRef.current === null) {
-        initialLoadCompletedAtRef.current = new Date().toISOString();
-      }
+      messages.forEach(m => mountSnapshotIdsRef.current.add(m.id));
     }
     isInitialLoadRef.current = false;
   }
 
-  // RACE CONDITION FIX: After initial load, check incoming messages SYNCHRONOUSLY.
-  // If a message's timestamp is before initialLoadCompletedAt, it's history
-  // that arrived via async query (or refetch) and should be marked as known.
-  // This MUST run synchronously during render (not in useEffect) to prevent
-  // a race where nextAnimatableMessageId is calculated before messages are marked as known.
-  if (initialLoadCompletedAtRef.current && messages.length > 0) {
-    messages.forEach(m => {
-      // If message timestamp is before initial load completed, it's history
-      // Use <= to catch messages created at the same millisecond as initial load
-      if (m.timestamp && m.timestamp <= initialLoadCompletedAtRef.current!) {
-        knownMessageIdsRef.current.add(m.id);
-        // Also mark AI messages in persistent cache to survive component remounts
-        if (sessionId && m.role !== MessageRole.USER) {
-          markAnimatedInCache(sessionId, m.id);
-        }
-      }
-    });
-  }
-
-  // DEFENSIVE FIX: Copy animatedMessageIds to knownMessageIds synchronously.
-  // This ensures that messages which have already animated are protected from
-  // re-animation even during rapid refetches (e.g., after feel-heard confirmation).
-  // Without this, a race condition could occur where animatedMessageIdsRef contains
-  // a message ID, but due to timing of state updates during refetch, the message
-  // might slip through the checks in nextAnimatableMessageId.
-  if (animatedMessageIdsRef.current.size > 0) {
-    animatedMessageIdsRef.current.forEach(id => {
-      knownMessageIdsRef.current.add(id);
-    });
+  // Add pagination messages to snapshot (they're history, not new)
+  if (isLoadingHistoryRef.current && messages.length > 0) {
+    messages.forEach(m => mountSnapshotIdsRef.current.add(m.id));
   }
 
   // Detect when custom empty state is removed (e.g., compact was signed)
-  // Mark initial load as complete so new messages after this get typewriter effect
   useEffect(() => {
     if (prevCustomEmptyStateRef.current !== undefined && customEmptyState === undefined) {
       isInitialLoadRef.current = false;
@@ -449,32 +360,15 @@ export function ChatInterface({
     prevCustomEmptyStateRef.current = customEmptyState;
   }, [customEmptyState]);
 
-  // Also add any messages loaded as history (from pagination)
-  // This happens when isLoadingMore transitions from true to false with new messages
-  useEffect(() => {
-    if (isLoadingHistoryRef.current) {
-      // Mark all current messages as known (they're being loaded from history)
-      messages.forEach(m => {
-        knownMessageIdsRef.current.add(m.id);
-        // Also mark AI messages in persistent cache to survive component remounts
-        if (sessionId && m.role !== MessageRole.USER) {
-          markAnimatedInCache(sessionId, m.id);
-        }
-      });
-    }
-  }, [messages, sessionId]);
-
   // Auto-speech: speak new AI messages when enabled
-  // Uses the same "new message" logic as typewriter (checks knownMessageIdsRef)
   useEffect(() => {
     if (!isAutoSpeechEnabled || messages.length === 0) return;
 
-    // Find the newest AI message that is truly NEW (not from history)
-    // Same criteria as typewriter: not in knownMessageIdsRef, not optimistic, not user message
+    // Find the newest AI message that is truly NEW (not in mount snapshot)
     const newAIMessage = messages.find((m) => {
       if (m.role === MessageRole.USER) return false;
       if (m.id.startsWith('optimistic-')) return false;
-      if (knownMessageIdsRef.current.has(m.id)) return false;
+      if (mountSnapshotIdsRef.current.has(m.id)) return false;
       if (spokenMessageIdsRef.current.has(m.id)) return false;
       return true;
     });
@@ -500,11 +394,8 @@ export function ChatInterface({
   );
 
   // Find the OLDEST non-user message that should animate
-  // This creates a sequential animation effect from oldest to newest (top to bottom visually)
-  // when user returns to chat with multiple new messages
+  // Sequential animation: oldest to newest (top to bottom visually)
   const nextAnimatableMessageId = useMemo(() => {
-    // If a message is currently animating, don't start another one
-    // Wait for the current animation to complete before queueing the next
     if (animatingMessageId !== null) return null;
 
     // listItems is sorted newest first (descending by timestamp)
@@ -514,22 +405,29 @@ export function ChatInterface({
       if (isIndicator(item)) continue;
       if (isValidationCard(item)) continue;
       if (isCustomEmptyState(item)) continue;
-      // At this point, item must be a ChatMessage
       const message = item as ChatMessage;
-      // Skip user messages and optimistic messages
       if (message.role === MessageRole.USER) continue;
       if (message.id.startsWith('optimistic-')) continue;
-      // Skip known messages (history from initial load or pagination)
-      if (knownMessageIdsRef.current.has(message.id)) continue;
+      // Skip messages in the mount snapshot (present on first render)
+      if (mountSnapshotIdsRef.current.has(message.id)) continue;
       // Skip messages that have already completed animation
       if (animatedMessageIdsRef.current.has(message.id)) continue;
-      // Skip messages animated in persistent cache (survives component remounts)
-      if (sessionId && isAnimatedInCache(sessionId, message.id)) continue;
-      // This is the oldest non-user message that needs animation
+      // Skip if a user message exists after this AI message chronologically
+      // (user already saw and responded — no need to animate)
+      let hasUserResponseAfter = false;
+      for (let j = i - 1; j >= 0; j--) {
+        const laterItem = listItems[j];
+        if (isIndicator(laterItem) || isValidationCard(laterItem) || isCustomEmptyState(laterItem)) continue;
+        if ((laterItem as ChatMessage).role === MessageRole.USER) {
+          hasUserResponseAfter = true;
+          break;
+        }
+      }
+      if (hasUserResponseAfter) continue;
       return message.id;
     }
     return null;
-  }, [listItems, animatingMessageId, sessionId]);
+  }, [listItems, animatingMessageId]);
 
   // Notify parent when typewriter state changes
   useEffect(() => {
@@ -583,28 +481,16 @@ export function ChatInterface({
     // At this point, item must be a ChatMessage (we've already handled indicators, validation cards, and custom empty state)
     const message = item as ChatMessage;
     
-    // Skip typewriter for:
-    // 1. Messages from initial load or pagination (in knownMessageIdsRef)
-    // 2. Messages that have already animated (in animatedMessageIdsRef)
-    // 3. The currently animating message (use stable state, don't restart)
-    // 4. Optimistic messages (they may re-render with real IDs)
-    // 5. User messages (only AI messages get typewriter)
-    // Streaming messages also use typewriter - TypewriterText handles growing text
-    const isFromHistory = knownMessageIdsRef.current.has(message.id);
+    const isInSnapshot = mountSnapshotIdsRef.current.has(message.id);
     const hasAlreadyAnimated = animatedMessageIdsRef.current.has(message.id);
-    // Also check the persistent cache (survives component remounts)
-    const isAnimatedInPersistentCache = sessionId ? isAnimatedInCache(sessionId, message.id) : false;
     const isCurrentlyAnimating = message.id === animatingMessageId;
     const isOptimisticMessage = message.id.startsWith('optimistic-');
     const isAIMessage = message.role !== MessageRole.USER;
 
-    // Animate if: AI message, not from history, not already animated, not optimistic
-    // Check both the ref (current session) and persistent cache (survives remounts)
-    // Streaming messages also animate - TypewriterText handles text that grows over time
+    // Animate if: AI message, not in mount snapshot, not already animated, not optimistic
     const shouldAnimateTypewriter = isAIMessage &&
-      !isFromHistory &&
+      !isInSnapshot &&
       !hasAlreadyAnimated &&
-      !isAnimatedInPersistentCache &&
       !isOptimisticMessage;
 
     // Track animation for the next message in queue (oldest unanimatied)
@@ -626,12 +512,7 @@ export function ChatInterface({
           message={bubbleMessage}
           onAnimationStart={isNextAnimatable ? () => setAnimatingMessageId(message.id) : undefined}
           onAnimationComplete={(isNextAnimatable || isCurrentlyAnimating) ? () => {
-            // Mark this message as animated so it won't re-animate on future renders
             animatedMessageIdsRef.current.add(message.id);
-            // Also mark in persistent cache (survives component remounts)
-            if (sessionId) {
-              markAnimatedInCache(sessionId, message.id);
-            }
             setAnimatingMessageId(null);
             onTypewriterComplete?.();
           } : undefined}
@@ -642,7 +523,7 @@ export function ChatInterface({
         {renderMessageExtra?.(message)}
       </>
     );
-  }, [sessionId, nextAnimatableMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra, onValidateAccurate, onValidateNotQuite]);
+  }, [nextAnimatableMessageId, animatingMessageId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra, onValidateAccurate, onValidateNotQuite]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 
