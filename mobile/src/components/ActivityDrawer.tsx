@@ -18,6 +18,7 @@ import {
   StyleSheet,
   BackHandler,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { TimelineItemCard, TimelineItem } from './TimelineItemCard';
 import { useSharingStatus } from '../hooks/useSharingStatus';
@@ -57,8 +58,9 @@ export interface ActivityDrawerProps {
 // ============================================================================
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-const DRAWER_HEIGHT = SCREEN_HEIGHT * 0.65;
-const DEFAULT_POSITION = SCREEN_HEIGHT - DRAWER_HEIGHT;
+const POSITION_3Q = SCREEN_HEIGHT * 0.25; // 3/4 visible = top 25% hidden
+const SNAP_UP_THRESHOLD = 80; // px dragged up to snap to full
+const SNAP_DOWN_THRESHOLD = 100; // px dragged down to dismiss
 
 // ============================================================================
 // Data Mapping Helpers
@@ -228,6 +230,10 @@ export function ActivityDrawer({
   partnerEmpathyValidated,
   testID = 'activity-drawer',
 }: ActivityDrawerProps) {
+  const insets = useSafeAreaInsets();
+  const positionFullRef = useRef(insets.top);
+  positionFullRef.current = insets.top; // Keep in sync (rotation, etc.)
+
   const isSessionActive =
     !sessionStatus ||
     (sessionStatus !== 'RESOLVED' &&
@@ -297,25 +303,31 @@ export function ActivityDrawer({
   const drawerTranslate = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const isDragging = useRef(false);
+  const currentSnap = useRef<'3q' | 'full'>('3q');
 
   // -------------------------------------------------------------------------
-  // Open / Close animations
+  // Open / Close / Snap animations
   // -------------------------------------------------------------------------
-  const openDrawer = useCallback(() => {
+  const snapTo = useCallback((position: number, backdrop: number) => {
     Animated.parallel([
       Animated.spring(drawerTranslate, {
-        toValue: DEFAULT_POSITION,
+        toValue: position,
         damping: 20,
         stiffness: 200,
         useNativeDriver: true,
       }),
       Animated.timing(backdropOpacity, {
-        toValue: 0.4,
+        toValue: backdrop,
         duration: 200,
         useNativeDriver: true,
       }),
     ]).start();
   }, [drawerTranslate, backdropOpacity]);
+
+  const openDrawer = useCallback(() => {
+    currentSnap.current = '3q';
+    snapTo(POSITION_3Q, 0.4);
+  }, [snapTo]);
 
   const closeDrawer = useCallback(() => {
     Animated.parallel([
@@ -329,15 +341,24 @@ export function ActivityDrawer({
         duration: 200,
         useNativeDriver: true,
       }),
-    ]).start(() => onClose());
+    ]).start(() => {
+      currentSnap.current = '3q';
+      onClose();
+    });
   }, [drawerTranslate, backdropOpacity, onClose]);
 
-  // Trigger open animation when visible changes
+  // Trigger open/reset animation when visible changes
   useEffect(() => {
     if (visible) {
       openDrawer();
+    } else {
+      // Reset animated values immediately when hidden externally
+      // (e.g., when another drawer opens on top and sets visible=false directly)
+      drawerTranslate.setValue(SCREEN_HEIGHT);
+      backdropOpacity.setValue(0);
+      currentSnap.current = '3q';
     }
-  }, [visible, openDrawer]);
+  }, [visible, openDrawer, drawerTranslate, backdropOpacity]);
 
   // -------------------------------------------------------------------------
   // Android back button
@@ -352,31 +373,44 @@ export function ActivityDrawer({
   }, [visible, closeDrawer]);
 
   // -------------------------------------------------------------------------
-  // PanResponder for drag-to-dismiss
+  // PanResponder for drag handle: up to expand, down to dismiss
   // -------------------------------------------------------------------------
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dy) > 5,
       onPanResponderGrant: () => {
         isDragging.current = true;
       },
       onPanResponderMove: (_, gestureState) => {
-        // Only allow dragging downward
-        if (gestureState.dy > 0) {
-          drawerTranslate.setValue(DEFAULT_POSITION + gestureState.dy);
-        }
+        const pFull = positionFullRef.current;
+        const base = currentSnap.current === 'full' ? pFull : POSITION_3Q;
+        const newPos = base + gestureState.dy;
+        const clamped = Math.max(pFull, Math.min(newPos, SCREEN_HEIGHT));
+        drawerTranslate.setValue(clamped);
       },
       onPanResponderRelease: (_, gestureState) => {
         isDragging.current = false;
-        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
-          closeDrawer();
+        const pFull = positionFullRef.current;
+        const { dy, vy } = gestureState;
+
+        if (currentSnap.current === '3q') {
+          if (dy < -SNAP_UP_THRESHOLD || vy < -0.5) {
+            currentSnap.current = 'full';
+            snapTo(pFull, 0.6);
+          } else if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
+            closeDrawer();
+          } else {
+            snapTo(POSITION_3Q, 0.4);
+          }
         } else {
-          Animated.spring(drawerTranslate, {
-            toValue: DEFAULT_POSITION,
-            damping: 20,
-            stiffness: 200,
-            useNativeDriver: true,
-          }).start();
+          if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
+            currentSnap.current = '3q';
+            snapTo(POSITION_3Q, 0.4);
+          } else {
+            snapTo(pFull, 0.6);
+          }
         }
       },
     }),
@@ -406,7 +440,7 @@ export function ActivityDrawer({
   // -------------------------------------------------------------------------
   return (
     <View
-      style={StyleSheet.absoluteFill}
+      style={[StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]}
       pointerEvents={visible ? 'auto' : 'none'}
       testID={testID}
     >
@@ -414,7 +448,7 @@ export function ActivityDrawer({
       <Pressable
         style={styles.backdropPressable}
         onPress={() => {
-          if (!isDragging.current) onClose();
+          if (!isDragging.current) closeDrawer();
         }}
         accessibilityRole="button"
         accessibilityLabel="Close exchange history"
@@ -429,12 +463,12 @@ export function ActivityDrawer({
         style={[
           styles.drawer,
           {
-            height: DRAWER_HEIGHT,
+            height: SCREEN_HEIGHT,
             transform: [{ translateY: drawerTranslate }],
           },
         ]}
       >
-        {/* Drag handle */}
+        {/* Drag handle — captures pan gestures for up/down snapping */}
         <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
           <View style={styles.dragHandle} />
         </View>
@@ -524,10 +558,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',
+    elevation: 10,
   },
   dragHandleArea: {
     paddingTop: 12,
-    paddingBottom: 4,
+    paddingBottom: 12,
     alignItems: 'center',
   },
   dragHandle: {
