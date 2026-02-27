@@ -135,18 +135,19 @@ export function TimelineItemCard({
 
   const cardContent = (
     <>
-      {/* Header row: type label + timestamp */}
+      {/* Header row: direction + type label + timestamp */}
       <View style={styles.header}>
-        <Text style={styles.typeLabel}>{typeLabel}</Text>
+        <View style={styles.headerLeft}>
+          <Text style={[styles.directionLabel, item.direction === 'sent' ? styles.directionSent : styles.directionReceived]}>
+            {item.direction === 'sent' ? 'You' : item.partnerName || 'Partner'}
+          </Text>
+          <Text style={styles.typeLabel}>{typeLabel}</Text>
+        </View>
         <Text style={styles.timestamp}>{relativeTime}</Text>
       </View>
 
-      {/* Content (truncated to 3 lines) */}
-      <Text
-        style={styles.content}
-        numberOfLines={3}
-        ellipsizeMode="tail"
-      >
+      {/* Content */}
+      <Text style={styles.content}>
         {item.content}
       </Text>
 
@@ -245,10 +246,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  directionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  directionSent: {
+    color: colors.accent,
+  },
+  directionReceived: {
+    color: colors.success,
+  },
   typeLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.textSecondary,
+    color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
