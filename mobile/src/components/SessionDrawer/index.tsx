@@ -96,7 +96,7 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
     }
 
     const result: SessionSection[] = [];
-    if (needsAttention.length > 0) result.push({ title: 'Needs Your Attention', data: needsAttention });
+    if (needsAttention.length > 0) result.push({ title: 'Ready for you', data: needsAttention });
     if (inProgress.length > 0) result.push({ title: 'In Progress', data: inProgress });
     if (completed.length > 0) result.push({ title: 'Completed', data: completed });
     return result;

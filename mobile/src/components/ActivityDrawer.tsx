@@ -498,7 +498,7 @@ export function ActivityDrawer({
                   style={styles.sectionHeader}
                   accessibilityRole="header"
                 >
-                  Needs Your Attention
+                  Ready for you
                 </Text>
                 {attentionItems.map((item) => (
                   <TimelineItemCard
@@ -588,6 +588,10 @@ const styles = StyleSheet.create({
   },
   attentionSection: {
     marginBottom: 4,
+    backgroundColor: 'rgba(251, 191, 36, 0.04)',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
   },
   listContent: {
     paddingHorizontal: 16,

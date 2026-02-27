@@ -176,14 +176,14 @@ describe('generateSessionStatusSummary', () => {
       expect(result.partnerStatus).toBe('Alex is also ready');
     });
 
-    it('shows partner getting ready when same stage NOT_STARTED', () => {
+    it('shows partner will join when ready when same stage NOT_STARTED', () => {
       const result = generateSessionStatusSummary(
         SessionStatus.ACTIVE,
         makeProgress(Stage.WITNESS, StageStatus.IN_PROGRESS),
         makeProgress(Stage.WITNESS, StageStatus.NOT_STARTED),
         'Alex'
       );
-      expect(result.partnerStatus).toBe('Alex is getting ready');
+      expect(result.partnerStatus).toBe('Alex will join when ready');
     });
 
     it('shows stage-specific partner message when same stage IN_PROGRESS', () => {
@@ -306,7 +306,7 @@ describe('generateSessionStatusSummary', () => {
         makeProgress(Stage.WITNESS, StageStatus.NOT_STARTED),
         ''
       );
-      expect(result.partnerStatus).toBe('Partner is getting ready');
+      expect(result.partnerStatus).toBe('Partner will join when ready');
     });
   });
 });

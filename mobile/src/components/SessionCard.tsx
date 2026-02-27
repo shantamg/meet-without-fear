@@ -78,10 +78,10 @@ function getBadge(session: SessionSummaryDTO): Badge | null {
     return { label: 'New', color: colors.accent, bgColor: `${colors.accent}20` };
   }
   if (session.selfActionNeeded.length > 0) {
-    return { label: 'Your Turn', color: colors.warning, bgColor: `${colors.warning}20` };
+    return { label: 'Ready for you', color: colors.warning, bgColor: `${colors.warning}20` };
   }
   if (session.partnerActionNeeded.length > 0) {
-    return { label: 'Waiting', color: colors.textMuted, bgColor: `${colors.textMuted}15` };
+    return { label: 'In progress', color: colors.brandBlue, bgColor: `${colors.brandBlue}15` };
   }
   return null;
 }
@@ -125,8 +125,8 @@ export function SessionCard({ session, isHero = false, noMargin = false }: Sessi
 
   // Fallback for sessions that don't have statusSummary yet (backwards compatibility)
   const statusSummary = session.statusSummary ?? {
-    userStatus: session.selfActionNeeded.length > 0 ? 'Your turn' : 'In progress',
-    partnerStatus: session.partnerActionNeeded.length > 0 ? `Waiting for ${partnerName}` : '',
+    userStatus: session.selfActionNeeded.length > 0 ? 'Something is ready for you' : 'In progress',
+    partnerStatus: session.partnerActionNeeded.length > 0 ? `${partnerName} is working` : '',
   };
   const { userStatus, partnerStatus } = statusSummary;
 
@@ -324,8 +324,8 @@ const styles = StyleSheet.create({
   },
   progressSegment: {
     flex: 1,
-    height: 3,
-    borderRadius: 1.5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: colors.bgTertiary,
   },
   progressSegmentComplete: {

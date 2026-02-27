@@ -65,13 +65,13 @@ function getStatusText(status?: string): string {
 function getTypeLabel(type: string, direction: string): string {
   switch (type) {
     case 'empathy':
-      return direction === 'sent' ? 'Your understanding' : 'Their understanding';
+      return direction === 'sent' ? 'Understanding shared' : 'Understanding of you';
     case 'context':
-      return direction === 'sent' ? 'Context you shared' : 'Context from partner';
+      return direction === 'sent' ? 'Context shared' : 'Context for you';
     case 'invitation':
-      return 'Invitation';
+      return 'Invitation sent';
     case 'share_offer':
-      return 'Suggestion for sharing';
+      return 'Sharing suggestion';
     default:
       return '';
   }
@@ -257,21 +257,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   directionSent: {
-    color: colors.accent,
+    color: '#fbbf24',
   },
   directionReceived: {
-    color: colors.success,
+    color: '#34d399',
   },
   typeLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.textMuted,
+    color: colors.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
   timestamp: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: colors.textSecondary,
   },
   content: {
     fontSize: 15,
@@ -280,13 +280,13 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: colors.textSecondary,
     marginTop: 6,
     fontStyle: 'italic',
   },
   revisionNote: {
     fontSize: 12,
-    color: colors.textMuted,
+    color: colors.textSecondary,
     marginTop: 6,
     fontStyle: 'italic',
   },

@@ -239,7 +239,7 @@ export function generateSessionStatusSummary(
   if (partnerStage < myStage) {
     const partnerFriendlyName = STAGE_FRIENDLY_NAMES[partnerStage];
     if (partnerStatus === StageStatus.NOT_STARTED) {
-      partnerStatusMsg = `${name} hasn't started ${partnerFriendlyName} yet`;
+      partnerStatusMsg = `${name} will begin when ready`;
     } else if (partnerStatus === StageStatus.IN_PROGRESS) {
       partnerStatusMsg = `${name} is working on ${partnerFriendlyName}`;
     } else {
@@ -252,7 +252,7 @@ export function generateSessionStatusSummary(
       // Both ready to advance
       partnerStatusMsg = `${name} is also ready`;
     } else if (partnerStatus === StageStatus.NOT_STARTED) {
-      partnerStatusMsg = `${name} is getting ready`;
+      partnerStatusMsg = `${name} will join when ready`;
     } else {
       partnerStatusMsg = getWaitingForPartnerMessage(myStage, name);
     }
@@ -401,15 +401,26 @@ export function mapSessionToSummary(
   const selfActionNeeded: string[] = [];
   const partnerActionNeeded: string[] = [];
 
-  // Simplified action computation - could be enhanced based on gate status
+  // User hasn't started their current stage → they can act
   if (myProgress.status === StageStatus.NOT_STARTED) {
     selfActionNeeded.push('start_stage');
   }
-  if (
-    myProgress.status === StageStatus.GATE_PENDING &&
-    partnerProgress.status !== StageStatus.COMPLETED
-  ) {
-    partnerActionNeeded.push('complete_stage');
+
+  // User is actively working → they still have things to do
+  if (myProgress.status === StageStatus.IN_PROGRESS) {
+    selfActionNeeded.push('continue_stage');
+  }
+
+  // User at gate, waiting for partner to also reach gate
+  if (myProgress.status === StageStatus.GATE_PENDING) {
+    if (
+      partnerProgress.status !== StageStatus.GATE_PENDING &&
+      partnerProgress.status !== StageStatus.COMPLETED
+    ) {
+      // Partner hasn't reached the gate yet — waiting on them
+      partnerActionNeeded.push('complete_stage');
+    }
+    // If both at gate: neither has action needed (auto-advances)
   }
 
   // Get partner display name (prefer nickname, then firstName, then name)
