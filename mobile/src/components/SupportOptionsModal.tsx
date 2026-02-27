@@ -10,7 +10,7 @@
  * 5. Take a break - pause the session
  */
 
-import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, Pressable, StyleSheet, Modal } from 'react-native';
 import { colors } from '@/theme';
 
 export type SupportOption =
@@ -76,11 +76,10 @@ export function SupportOptionsModal({
       testID="support-options-modal"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <View style={styles.modal}>
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable style={styles.modal} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>
-            I can feel how intense this is. That makes complete sense given what
-            you're working through.
+            It's okay to pause and take care of yourself. What would help right now?
           </Text>
 
           <View style={styles.optionsContainer}>
@@ -97,8 +96,8 @@ export function SupportOptionsModal({
               </TouchableOpacity>
             ))}
           </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
