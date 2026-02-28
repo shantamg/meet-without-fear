@@ -120,34 +120,46 @@ export async function getPendingActionsHandler(
     }
 
     // 3. Unread shared context (SHARED_CONTEXT messages for this user)
-    const vessel = await prisma.userVessel.findUnique({
-      where: { userId_sessionId: { userId: user.id, sessionId } },
-      select: { lastViewedShareTabAt: true },
+    // Only show if user has completed Stage 1 (advanced to stage >= 2).
+    // Partner may share context before this user finishes Stage 1, but we
+    // suppress the notification until the user is ready to see it.
+    const userStageProgress = await prisma.stageProgress.findFirst({
+      where: { sessionId, userId: user.id },
+      orderBy: { stage: 'desc' },
+      select: { stage: true },
     });
+    const userMaxStage = userStageProgress?.stage ?? 0;
 
-    const unreadContext = await prisma.message.findMany({
-      where: {
-        sessionId,
-        forUserId: user.id,
-        senderId: { not: user.id },
-        role: 'SHARED_CONTEXT',
-        ...(vessel?.lastViewedShareTabAt
-          ? { timestamp: { gt: vessel.lastViewedShareTabAt } }
-          : {}),
-      },
-      orderBy: { timestamp: 'desc' },
-    });
-
-    for (const msg of unreadContext) {
-      actions.push({
-        type: 'context_received',
-        id: msg.id,
-        data: {
-          content: msg.content,
-          senderId: msg.senderId,
-          timestamp: msg.timestamp.toISOString(),
-        },
+    if (userMaxStage >= 2) {
+      const vessel = await prisma.userVessel.findUnique({
+        where: { userId_sessionId: { userId: user.id, sessionId } },
+        select: { lastViewedShareTabAt: true },
       });
+
+      const unreadContext = await prisma.message.findMany({
+        where: {
+          sessionId,
+          forUserId: user.id,
+          senderId: { not: user.id },
+          role: 'SHARED_CONTEXT',
+          ...(vessel?.lastViewedShareTabAt
+            ? { timestamp: { gt: vessel.lastViewedShareTabAt } }
+            : {}),
+        },
+        orderBy: { timestamp: 'desc' },
+      });
+
+      for (const msg of unreadContext) {
+        actions.push({
+          type: 'context_received',
+          id: msg.id,
+          data: {
+            content: msg.content,
+            senderId: msg.senderId,
+            timestamp: msg.timestamp.toISOString(),
+          },
+        });
+      }
     }
 
     // 4. Count sent tab updates (delivery/seen status changes the user hasn't been notified about)
@@ -226,23 +238,32 @@ export async function getBadgeCountHandler(
       count += unvalidatedCount;
 
       // Unread shared context messages (from partner, not self-sent)
-      const vessel = await prisma.userVessel.findUnique({
-        where: { userId_sessionId: { userId: user.id, sessionId: session.id } },
-        select: { lastViewedShareTabAt: true },
+      // Only count if user has completed Stage 1 (advanced to stage >= 2)
+      const badgeStageProgress = await prisma.stageProgress.findFirst({
+        where: { sessionId: session.id, userId: user.id },
+        orderBy: { stage: 'desc' },
+        select: { stage: true },
       });
 
-      const unreadContextCount = await prisma.message.count({
-        where: {
-          sessionId: session.id,
-          forUserId: user.id,
-          senderId: { not: user.id },
-          role: 'SHARED_CONTEXT',
-          ...(vessel?.lastViewedShareTabAt
-            ? { timestamp: { gt: vessel.lastViewedShareTabAt } }
-            : {}),
-        },
-      });
-      count += unreadContextCount;
+      if ((badgeStageProgress?.stage ?? 0) >= 2) {
+        const vessel = await prisma.userVessel.findUnique({
+          where: { userId_sessionId: { userId: user.id, sessionId: session.id } },
+          select: { lastViewedShareTabAt: true },
+        });
+
+        const unreadContextCount = await prisma.message.count({
+          where: {
+            sessionId: session.id,
+            forUserId: user.id,
+            senderId: { not: user.id },
+            role: 'SHARED_CONTEXT',
+            ...(vessel?.lastViewedShareTabAt
+              ? { timestamp: { gt: vessel.lastViewedShareTabAt } }
+              : {}),
+          },
+        });
+        count += unreadContextCount;
+      }
 
       if (count > 0) {
         bySession[session.id] = count;

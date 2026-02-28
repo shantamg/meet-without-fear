@@ -1152,12 +1152,17 @@ export function UnifiedSessionScreen({
     // Add indicators for SHARED_CONTEXT and EMPATHY_STATEMENT messages.
     // Self-authored SHARED_CONTEXT indicator is derived from mySharedAt in deriveIndicators().
     // Self-authored EMPATHY_STATEMENT indicators are included here so users see "Empathy shared" in their timeline.
+    // Partner-authored SHARED_CONTEXT is hidden until user completes Stage 1 (PERSPECTIVE_STRETCH)
+    // to avoid premature "shared something new" notifications.
+    const hasCompletedStage1 = myProgress?.stage !== undefined && myProgress.stage >= Stage.PERSPECTIVE_STRETCH;
     const sharedContentIndicators: ChatIndicatorItem[] = messages
       .filter((m) => {
         if (m.role !== MessageRole.SHARED_CONTEXT && m.role !== MessageRole.EMPATHY_STATEMENT) return false;
         const isFromMe = user?.id ? m.senderId === user.id : false;
         // Self-authored SHARED_CONTEXT is already handled by deriveIndicators (via mySharedAt)
         if (isFromMe && m.role === MessageRole.SHARED_CONTEXT) return false;
+        // Suppress partner SHARED_CONTEXT until user has completed Stage 1
+        if (!isFromMe && m.role === MessageRole.SHARED_CONTEXT && !hasCompletedStage1) return false;
         return true;
       })
       .map((m) => {
@@ -1203,7 +1208,7 @@ export function UnifiedSessionScreen({
     allIndicators.push(...chapterIndicators);
 
     return allIndicators;
-  }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion]);
+  }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
 
 
 
