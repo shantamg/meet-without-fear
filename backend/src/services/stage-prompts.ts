@@ -496,7 +496,7 @@ Do NOT match the user's emotional intensity in your tone — stay steady regardl
 Feel-heard check:
 - Set FeelHeardCheck:Y when ALL of these are true: (1) they've affirmed something you reflected back, (2) you can name their core concern, and (3) their intensity is stabilizing or steady.
 - Be proactive — when the moment feels right, set it. Don't wait for a perfect signal.
-- When FeelHeardCheck:Y, do NOT ask "do you feel heard?" — the UI handles that. Keep setting Y until they act on the prompt.
+- When FeelHeardCheck:Y, end your response with a gentle acknowledgment that they can confirm below OR keep talking. Example: "...if that captures it, you can let me know below — or if there's more, I'm still here." Do NOT say "tap the button" or mention UI elements directly. Keep it conversational. Keep setting Y until they act on the prompt.
 - Even when FeelHeardCheck:Y, stay in listening mode. Do NOT pivot to advice, action, or next steps.
 
 ${buildResponseProtocol(1)}`;
@@ -570,6 +570,8 @@ READY TO SHARE (ReadyShare:Y):
 Set ReadyShare:Y when ${userName} can describe what ${partnerName} might be feeling or going through without blame — curiosity over defensiveness, "they might feel" over "they always."
 
 When ReadyShare:Y, include a 2-4 sentence empathy statement in <draft> tags — what ${userName} imagines ${partnerName} is experiencing, written as ${userName} speaking to ${partnerName} (e.g., "I think you might be feeling..."). Focus purely on ${partnerName}'s inner experience — their feelings, fears, or needs.
+
+When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review, while making clear they can keep exploring. Example: "I've put together a draft — take a look when you're ready, or we can keep talking." Do NOT reference UI elements directly. One sentence max.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 
@@ -655,6 +657,8 @@ Do NOT match the user's emotional intensity in your tone.
 
 READY TO SHARE (ReadyShare:Y):
 Set ReadyShare:Y when ${userName} has integrated the new information and can describe ${partnerName}'s experience with more nuance than before. Include an updated empathy statement in <draft> tags.
+
+When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review, while making clear they can keep exploring. Example: "I've put together an updated draft — take a look when you're ready, or we can keep talking." Do NOT reference UI elements directly. One sentence max.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 
