@@ -20,10 +20,14 @@ const password = url.password;
 
 const env = { ...process.env, PGPASSWORD: password };
 
-// Generate timestamp for filename
+// Generate filename: optional name from CLI arg, always includes timestamp
+const name = process.argv[2];
 const now = new Date();
 const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-const snapshotFile = path.join(__dirname, `snapshot-${timestamp}.sql`);
+const filename = name
+  ? `snapshot-${name}--${timestamp}.sql`
+  : `snapshot-${timestamp}.sql`;
+const snapshotFile = path.join(__dirname, filename);
 
 // Tables to export (same as reset script, excluding reference data like Need)
 const tables = [

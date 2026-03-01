@@ -13,24 +13,43 @@ if (!dbUrl) {
 
 // Get snapshot file from command line arg or find the most recent one
 let snapshotFile = process.argv[2];
+const snapshotsDir = __dirname;
+
+const allSnapshots = fs.readdirSync(snapshotsDir)
+  .filter(f => f.startsWith('snapshot-') && f.endsWith('.sql'))
+  .sort()
+  .reverse();
+
+// --list flag: show available snapshots and exit
+if (snapshotFile === '--list') {
+  console.log('\nAvailable snapshots:\n');
+  for (const f of allSnapshots) {
+    const stats = fs.statSync(path.join(snapshotsDir, f));
+    console.log(`  ${f}  (${(stats.size / 1024).toFixed(1)} KB)`);
+  }
+  console.log(`\nTotal: ${allSnapshots.length} snapshots`);
+  console.log('Usage: npx ts-node reset-to-snapshot.ts <name-or-file>\n');
+  process.exit(0);
+}
 
 if (!snapshotFile) {
   // Find the most recent snapshot
-  const snapshotsDir = __dirname;
-  const files = fs.readdirSync(snapshotsDir)
-    .filter(f => f.startsWith('snapshot-') && f.endsWith('.sql'))
-    .sort()
-    .reverse();
-
-  if (files.length === 0) {
+  if (allSnapshots.length === 0) {
     console.error('No snapshot files found in', snapshotsDir);
     process.exit(1);
   }
 
-  snapshotFile = path.join(snapshotsDir, files[0]);
-  console.log('Using most recent snapshot:', files[0]);
+  snapshotFile = path.join(snapshotsDir, allSnapshots[0]);
+  console.log('Using most recent snapshot:', allSnapshots[0]);
 } else if (!path.isAbsolute(snapshotFile)) {
-  snapshotFile = path.join(__dirname, snapshotFile);
+  // Check if it's a name match (e.g., "03-invitation-accepted" matches "snapshot-03-invitation-accepted--2026-...sql")
+  const match = allSnapshots.find(f => f.includes(snapshotFile));
+  if (match) {
+    snapshotFile = path.join(snapshotsDir, match);
+    console.log('Matched snapshot:', match);
+  } else {
+    snapshotFile = path.join(snapshotsDir, snapshotFile);
+  }
 }
 
 if (!fs.existsSync(snapshotFile)) {
