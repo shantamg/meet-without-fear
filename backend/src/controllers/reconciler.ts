@@ -25,6 +25,9 @@ import {
   respondToShareSuggestion,
   getReconcilerStatus,
   generateReconcilerSummary,
+  generatePostShareContinuation,
+  getFallbackContinuation,
+  generateContextReceivedReflection,
 } from '../services/reconciler';
 import { successResponse, errorResponse } from '../utils/response';
 import { notifyPartner } from '../services/realtime';
@@ -889,56 +892,122 @@ export async function refinementFinalizeHandler(
     }
 
     const guesserId = shareOffer.result.guesserId;
+    const subjectName = shareOffer.result.subjectName;
+    const guesserName = shareOffer.result.guesserName;
 
-    // Update share offer
-    await prisma.reconcilerShareOffer.update({
-      where: { id: shareOffer.id },
-      data: {
-        status: 'ACCEPTED',
-        sharedContent: content,
-        refinedContent: content,
-        sharedAt: new Date(),
-      },
+    // Generate AI messages outside transaction (AI calls can be slow)
+    let subjectAckMessage: string;
+    try {
+      subjectAckMessage = await generatePostShareContinuation(
+        sessionId, user.id, subjectName, guesserName, content
+      );
+    } catch (error) {
+      console.error('[refinementFinalizeHandler] generatePostShareContinuation failed:', error);
+      const subjectProgress = await prisma.stageProgress.findFirst({
+        where: { sessionId, userId: user.id },
+        orderBy: { stage: 'desc' },
+      });
+      subjectAckMessage = getFallbackContinuation(subjectProgress?.stage ?? 2, guesserName);
+    }
+
+    const reflectionMessage = await generateContextReceivedReflection(sessionId, guesserName, subjectName);
+
+    // Get subject's current stage for the ack message
+    const subjectProgress = await prisma.stageProgress.findFirst({
+      where: { sessionId, userId: user.id },
+      orderBy: { stage: 'desc' },
+    });
+    const subjectCurrentStage = subjectProgress?.stage ?? 2;
+
+    // Wrap all DB writes in a transaction for atomicity
+    let sharedMessageId: string;
+    await prisma.$transaction(async (tx) => {
+      const now = new Date();
+
+      // Update share offer
+      await tx.reconcilerShareOffer.update({
+        where: { id: shareOffer.id },
+        data: {
+          status: 'ACCEPTED',
+          sharedContent: content,
+          refinedContent: content,
+          sharedAt: now,
+        },
+      });
+
+      // Update guesser's empathy attempt: AWAITING_SHARING → REFINING
+      await tx.empathyAttempt.updateMany({
+        where: {
+          sessionId,
+          sourceUserId: guesserId,
+          status: 'AWAITING_SHARING',
+        },
+        data: {
+          status: 'REFINING',
+          statusVersion: { increment: 1 },
+        },
+      });
+
+      // Create messages with guaranteed ordering (100ms apart)
+      const baseTime = now.getTime();
+      const sharedContextTimestamp = new Date(baseTime);
+      const reflectionTimestamp = new Date(baseTime + 100);
+      const subjectAckTimestamp = new Date(baseTime + 200);
+
+      // 1. SHARED_CONTEXT message (the actual content shared by subject)
+      // Renders as a labeled card ("NEW CONTEXT FROM {name}") in the guesser's chat
+      const sharedMessage = await tx.message.create({
+        data: {
+          sessionId,
+          senderId: user.id,
+          forUserId: guesserId,
+          role: 'SHARED_CONTEXT',
+          content,
+          stage: 2,
+          timestamp: sharedContextTimestamp,
+        },
+      });
+      sharedMessageId = sharedMessage.id;
+
+      // 2. Reflection prompt for guesser (Sonnet-generated, invites processing)
+      await tx.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          forUserId: guesserId,
+          role: 'AI',
+          content: reflectionMessage,
+          stage: 2,
+          timestamp: reflectionTimestamp,
+        },
+      });
+
+      // 3. Subject acknowledgment message
+      await tx.message.create({
+        data: {
+          sessionId,
+          senderId: null,
+          forUserId: user.id,
+          role: 'AI',
+          content: subjectAckMessage,
+          stage: subjectCurrentStage,
+          timestamp: subjectAckTimestamp,
+        },
+      });
     });
 
-    // Create SHARED_CONTEXT message (from subject to guesser)
-    const sharedMessage = await prisma.message.create({
-      data: {
-        sessionId,
-        senderId: user.id,
-        forUserId: guesserId,
-        role: 'SHARED_CONTEXT',
-        content,
-        stage: 2,
-      },
-    });
-
-    // Update guesser's empathy attempt: AWAITING_SHARING → REFINING
-    // so the guesser's UI transitions from "deciding whether to share"
-    // to the refinement prompt with the newly shared context.
-    await prisma.empathyAttempt.updateMany({
-      where: {
-        sessionId,
-        sourceUserId: guesserId,
-        status: 'AWAITING_SHARING',
-      },
-      data: {
-        status: 'REFINING',
-        statusVersion: { increment: 1 },
-      },
-    });
+    console.log(`[refinementFinalizeHandler] Share finalized for user ${user.id} (4 messages created in transaction)`);
 
     // Notify guesser via Ably
-    const partnerId = guesserId;
-    if (partnerId) {
+    if (guesserId) {
       const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
-      const partnerEmpathyStatus = await buildEmpathyExchangeStatus(sessionId, partnerId);
+      const partnerEmpathyStatus = await buildEmpathyExchangeStatus(sessionId, guesserId);
 
-      await notifyPartner(sessionId, partnerId, 'empathy.context_shared', {
+      await notifyPartner(sessionId, guesserId, 'empathy.context_shared', {
         stage: 2,
         sharedBy: user.id,
         content,
-        forUserId: partnerId,
+        forUserId: guesserId,
         empathyStatus: partnerEmpathyStatus,
         triggeredByUserId: user.id,
       }, { excludeUserId: user.id });
@@ -946,7 +1015,7 @@ export async function refinementFinalizeHandler(
 
     successResponse(res, {
       status: 'shared',
-      messageId: sharedMessage.id,
+      messageId: sharedMessageId!,
       sharedContent: content,
     });
   } catch (error) {

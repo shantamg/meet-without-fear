@@ -36,6 +36,7 @@ import {
   NeedAdjustment,
   ConfirmNeedsResponse,
   GetCommonGroundResponse,
+  GetNeedsComparisonResponse,
   ConfirmCommonGroundRequest,
   ConfirmCommonGroundResponse,
   AddNeedRequest,
@@ -1520,6 +1521,28 @@ export function useCommonGround(
     enabled: !!sessionId && allNeedsConfirmed,
     staleTime: 0,
     ...options,
+  });
+}
+
+/**
+ * Get needs comparison (side-by-side view of both users' needs + common ground).
+ *
+ * Only available after both users have shared their needs (common ground phase).
+ */
+export function useNeedsComparison(
+  sessionId: string | undefined,
+  enabled: boolean = false
+) {
+  return useQuery({
+    queryKey: stageKeys.needsComparison(sessionId || ''),
+    queryFn: async () => {
+      if (!sessionId) throw new Error('Session ID is required');
+      return get<GetNeedsComparisonResponse>(
+        `/sessions/${sessionId}/needs/comparison`
+      );
+    },
+    enabled: !!sessionId && enabled,
+    staleTime: 0,
   });
 }
 

@@ -1292,3 +1292,168 @@ export async function confirmCommonGround(
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to confirm common ground', 500);
   }
 }
+
+/**
+ * Get needs comparison (side-by-side view of both users' needs + common ground)
+ * GET /sessions/:id/needs/comparison
+ *
+ * Only available after both users have shared their needs.
+ */
+export async function getNeedsComparison(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+
+    // Check session exists and user has access
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        relationship: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+      },
+      include: {
+        relationship: {
+          include: {
+            members: true,
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+
+    if (session.status !== 'ACTIVE') {
+      successResponse(res, {
+        myNeeds: [],
+        partnerNeeds: [],
+        commonGround: [],
+        analysisComplete: false,
+        noOverlap: false,
+      });
+      return;
+    }
+
+    // Get user's stage progress
+    const progress = await prisma.stageProgress.findFirst({
+      where: { sessionId, userId: user.id },
+      orderBy: { stage: 'desc' },
+    });
+
+    const currentStage = progress?.stage ?? 0;
+    if (currentStage < 3) {
+      successResponse(res, {
+        myNeeds: [],
+        partnerNeeds: [],
+        commonGround: [],
+        analysisComplete: false,
+        noOverlap: false,
+      });
+      return;
+    }
+
+    // Get partner ID
+    const partnerId = await getPartnerUserId(sessionId, user.id);
+    if (!partnerId) {
+      errorResponse(res, 'INTERNAL_ERROR', 'Could not find partner', 500);
+      return;
+    }
+
+    // Check both users have shared needs
+    const userGates = progress?.gatesSatisfied as Record<string, unknown> | null;
+    const userShared = userGates?.needsShared === true;
+    const partnerShared = await hasPartnerSharedNeeds(sessionId, user.id);
+
+    if (!userShared || !partnerShared) {
+      successResponse(res, {
+        myNeeds: [],
+        partnerNeeds: [],
+        commonGround: [],
+        analysisComplete: false,
+        noOverlap: false,
+      });
+      return;
+    }
+
+    // Fetch both users' vessels and needs
+    const [myVessel, partnerVessel] = await Promise.all([
+      getOrCreateUserVessel(sessionId, user.id),
+      getOrCreateUserVessel(sessionId, partnerId),
+    ]);
+
+    const [myNeeds, partnerNeeds] = await Promise.all([
+      prisma.identifiedNeed.findMany({
+        where: { vesselId: myVessel.id },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.identifiedNeed.findMany({
+        where: { vesselId: partnerVessel.id },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+
+    // Get common ground
+    const sharedVessel = await prisma.sharedVessel.findUnique({
+      where: { sessionId },
+    });
+
+    let commonGround: Awaited<ReturnType<typeof prisma.commonGround.findMany>> = [];
+    let noOverlap = false;
+
+    if (sharedVessel) {
+      commonGround = await prisma.commonGround.findMany({
+        where: { sharedVesselId: sharedVessel.id },
+        orderBy: { id: 'asc' },
+      });
+
+      // If shared vessel exists but no common ground, analysis ran with no overlap
+      if (commonGround.length === 0) {
+        noOverlap = true;
+      }
+    }
+
+    // Determine A/B role for confirmedByMe/confirmedByPartner
+    const members = session.relationship.members;
+    const userIsA = members[0]?.userId === user.id;
+
+    successResponse(res, {
+      myNeeds: myNeeds.map((n) => ({
+        id: n.id,
+        category: n.category,
+        need: n.need,
+        confirmed: n.confirmed,
+      })),
+      partnerNeeds: partnerNeeds.map((n) => ({
+        id: n.id,
+        category: n.category,
+        need: n.need,
+        confirmed: n.confirmed,
+      })),
+      commonGround: commonGround.map((cg) => ({
+        id: cg.id,
+        category: cg.category,
+        need: cg.need,
+        confirmedByMe: userIsA ? cg.confirmedByA : cg.confirmedByB,
+        confirmedByPartner: userIsA ? cg.confirmedByB : cg.confirmedByA,
+      })),
+      analysisComplete: true,
+      noOverlap,
+    });
+  } catch (error) {
+    console.error('[getNeedsComparison] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to get needs comparison', 500);
+  }
+}

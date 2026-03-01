@@ -345,7 +345,7 @@ interface ReconcilerAnalysisInput {
  * Uses the actual stage prompts with justSharedWithPartner context for consistency.
  * The stage prompt handles acknowledging the share and continuing appropriately.
  */
-async function generatePostShareContinuation(
+export async function generatePostShareContinuation(
   sessionId: string,
   subjectId: string,
   subjectName: string,
@@ -482,7 +482,7 @@ async function generatePostShareContinuation(
 /**
  * Get a stage-appropriate fallback message (acknowledgment + continuation) if AI generation fails
  */
-function getFallbackContinuation(stage: number, partnerName: string): string {
+export function getFallbackContinuation(stage: number, partnerName: string): string {
   const acknowledgment = `Thank you for sharing that with ${partnerName}. They'll have the chance to refine their understanding of what you're going through.`;
 
   let continuation: string;
@@ -505,6 +505,62 @@ function getFallbackContinuation(stage: number, partnerName: string): string {
   }
 
   return `${acknowledgment}\n\n${continuation}`;
+}
+
+// ============================================================================
+// Helper: Generate Context-Received Reflection
+// ============================================================================
+
+/**
+ * Generate a reflection AI message for the guesser after they receive shared context.
+ * Placed after the SHARED_CONTEXT card to invite the guesser to process what they read.
+ *
+ * Falls back to hardcoded message on AI failure.
+ */
+export async function generateContextReceivedReflection(
+  sessionId: string,
+  guesserName: string,
+  subjectName: string,
+): Promise<string> {
+  const fallback = `Take a moment to sit with what ${subjectName} shared. What comes up for you when you read this? Is anything surprising, or does it confirm what you already sensed?`;
+
+  try {
+    const turnId = `${sessionId}-bridging-${Date.now()}`;
+    const prompt = `${guesserName}'s partner ${subjectName} just shared personal context about their experience. The shared content will be shown directly above your message in a labeled card.
+
+Generate a short message (1-3 sentences) that invites ${guesserName} to reflect on what they just read. Ask what comes up for them, what stands out, whether anything is surprising. Give permission to take their time.
+
+Tone: warm, unhurried, therapeutically attuned. This is a sensitive moment — ${subjectName} just shared something vulnerable.
+Do NOT paraphrase or reveal the shared content. Do NOT use the word "reconciler".
+
+Respond with ONLY the message text, no additional formatting.`;
+
+    const response = await getSonnetResponse({
+      systemPrompt: prompt,
+      messages: [{ role: 'user', content: 'Generate the reflection message.' }],
+      maxTokens: 256,
+      sessionId,
+      turnId,
+      operation: 'reconciler-context-reflection',
+    });
+
+    if (!response) {
+      console.warn('[Reconciler] generateContextReceivedReflection: Sonnet returned null, using fallback');
+      return fallback;
+    }
+
+    // Response should be plain text, just trim it
+    const trimmed = response.trim();
+    if (trimmed.length > 0) {
+      console.log(`[Reconciler] Generated reflection message for ${guesserName}`);
+      return trimmed;
+    }
+
+    return fallback;
+  } catch (error) {
+    console.error('[Reconciler] generateContextReceivedReflection failed:', error);
+    return fallback;
+  }
 }
 
 // ============================================================================
@@ -1312,14 +1368,11 @@ export async function respondToShareSuggestion(
   const subjectName = shareOffer.result.subjectName;
   const guesserName = shareOffer.result.guesserName;
 
-  // Generate AI acknowledgment for subject (outside transaction — AI call)
-  const subjectAckMessage = await generatePostShareContinuation(
-    sessionId,
-    userId,
-    subjectName,
-    guesserName,
-    sharedContent
-  );
+  // Generate AI messages outside transaction (AI calls can be slow)
+  const [subjectAckMessage, reflectionMessage] = await Promise.all([
+    generatePostShareContinuation(sessionId, userId, subjectName, guesserName, sharedContent),
+    generateContextReceivedReflection(sessionId, guesserName, subjectName),
+  ]);
 
   // Get subject's current stage for the message
   const subjectProgress = await prisma.stageProgress.findFirst({
@@ -1368,25 +1421,12 @@ export async function respondToShareSuggestion(
 
     // Create messages with guaranteed ordering (100ms apart)
     const baseTime = now.getTime();
-    const introTimestamp = new Date(baseTime);
-    const sharedContextTimestamp = new Date(baseTime + 100);
-    const reflectionTimestamp = new Date(baseTime + 200);
-    const subjectAckTimestamp = new Date(baseTime + 300);
-
-    // Intro message for guesser (US-7: Shared Content Label)
-    await tx.message.create({
-      data: {
-        sessionId,
-        senderId: null,
-        forUserId: shareOffer.result.guesserId,
-        role: 'AI',
-        content: `${subjectName} hasn't seen your empathy statement yet because the reconciler suggested they share more. This is what they shared:`,
-        stage: 2,
-        timestamp: introTimestamp,
-      },
-    });
+    const sharedContextTimestamp = new Date(baseTime);
+    const reflectionTimestamp = new Date(baseTime + 100);
+    const subjectAckTimestamp = new Date(baseTime + 200);
 
     // SHARED_CONTEXT message (the actual content shared by subject)
+    // Renders as a labeled card ("NEW CONTEXT FROM {name}") in the guesser's chat
     await tx.message.create({
       data: {
         sessionId,
@@ -1399,14 +1439,14 @@ export async function respondToShareSuggestion(
       },
     });
 
-    // Reflection prompt for guesser
+    // Reflection prompt for guesser (Sonnet-generated, invites processing)
     await tx.message.create({
       data: {
         sessionId,
         senderId: null,
         forUserId: shareOffer.result.guesserId,
         role: 'AI',
-        content: `How does this land for you? Take a moment to reflect on what ${subjectName} shared. Does this give you any new insight into what they might be experiencing?`,
+        content: reflectionMessage,
         stage: 2,
         timestamp: reflectionTimestamp,
       },

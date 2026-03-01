@@ -116,3 +116,30 @@ export interface ConfirmCommonGroundResponse {
   allConfirmedByBoth: boolean;
   canAdvance: boolean;
 }
+
+// ============================================================================
+// Needs Comparison (Side-by-Side View)
+// ============================================================================
+
+export interface NeedsComparisonNeedDTO {
+  id: string;
+  category: NeedCategory;
+  need: string;
+  confirmed: boolean;
+}
+
+export interface NeedsComparisonCommonGroundDTO {
+  id: string;
+  category: NeedCategory;
+  need: string;
+  confirmedByMe: boolean;
+  confirmedByPartner: boolean;
+}
+
+export interface GetNeedsComparisonResponse {
+  myNeeds: NeedsComparisonNeedDTO[];
+  partnerNeeds: NeedsComparisonNeedDTO[];
+  commonGround: NeedsComparisonCommonGroundDTO[];
+  analysisComplete: boolean;
+  noOverlap: boolean;
+}

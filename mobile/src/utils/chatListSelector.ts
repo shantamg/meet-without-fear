@@ -285,16 +285,17 @@ export function interleaveIndicators(
   // Derive indicators from session data
   const indicators = deriveIndicators(sessionData);
 
-  // Filter out SHARED_CONTEXT messages and convert them to collapsed indicators
+  // Process SHARED_CONTEXT messages:
+  // - Own messages: collapse to indicator pill only (user knows what they shared)
+  // - Partner's messages: keep inline AND create indicator pill (visual chapter marker)
   const filteredMessages: CacheMessage[] = [];
   const sharedContextIndicators: IndicatorItem[] = [];
 
   for (const message of messages) {
     if (message.role === MessageRole.SHARED_CONTEXT) {
-      // Determine if this is from the current user or partner
       const isFromMe = sessionData.currentUserId ? message.senderId === sessionData.currentUserId : false;
 
-      // Convert SHARED_CONTEXT to collapsed indicator
+      // Always create indicator pill (visual separator / chapter marker)
       sharedContextIndicators.push({
         type: 'indicator',
         indicatorType: 'context-shared',
@@ -305,6 +306,11 @@ export function interleaveIndicators(
           partnerName: sessionData.partnerName,
         },
       });
+
+      // Partner's SHARED_CONTEXT also kept as inline message so user can read content in chat
+      if (!isFromMe) {
+        filteredMessages.push(message);
+      }
     } else {
       filteredMessages.push(message);
     }
@@ -325,7 +331,14 @@ export function interleaveIndicators(
     // Primary sort: Time (newest first)
     if (bTime !== aTime) return bTime - aTime;
 
-    // Secondary sort: ID (stable tie-breaker)
+    // Secondary sort: Indicators sort after messages at the same timestamp.
+    // In inverted FlatList, higher index = renders above, so indicators
+    // appear above their corresponding inline messages (visual chapter marker).
+    const aIsIndicator = 'type' in a && (a as IndicatorItem).type === 'indicator';
+    const bIsIndicator = 'type' in b && (b as IndicatorItem).type === 'indicator';
+    if (aIsIndicator !== bIsIndicator) return aIsIndicator ? 1 : -1;
+
+    // Tertiary sort: ID (stable tie-breaker)
     return b.id.localeCompare(a.id);
   });
 

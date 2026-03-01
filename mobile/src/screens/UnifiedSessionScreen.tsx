@@ -27,8 +27,7 @@ import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
 import { ValidationCoachChat } from '../components/ValidationCoachChat';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
 import { ShareTopicPanel } from '../components/ShareTopicPanel';
-import { NeedsSection } from '../components/NeedsSection';
-import { CommonGroundCard } from '../components/CommonGroundCard';
+// NeedsSection and CommonGroundCard removed - now used inside NeedsDrawer
 import { StrategyPool } from '../components/StrategyPool';
 import { StrategyRanking } from '../components/StrategyRanking';
 import { OverlapReveal } from '../components/OverlapReveal';
@@ -42,6 +41,7 @@ import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDr
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
 import { ActivityDrawer } from '../components/ActivityDrawer';
+import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 
@@ -54,6 +54,7 @@ import { stageKeys, messageKeys, sessionKeys, notificationKeys } from '../hooks/
 import { useAIMessageHandler } from '../hooks/useMessages';
 import { useSharingStatus } from '../hooks/useSharingStatus';
 import { usePendingActions } from '../hooks/usePendingActions';
+import { useNeedsComparison } from '../hooks/useStages';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { createStyles } from '../theme/styled';
 import { WaitingBanner } from '../components/WaitingBanner';
@@ -731,6 +732,16 @@ export function UnifiedSessionScreen({
   const [refinementOfferId, setRefinementOfferId] = useState<string | null>(null);
   const [refinementInitialSuggestion, setRefinementInitialSuggestion] = useState('');
 
+  // -------------------------------------------------------------------------
+  // Needs Drawer (Stage 3)
+  // -------------------------------------------------------------------------
+  const [showNeedsDrawer, setShowNeedsDrawer] = useState(false);
+  const [needsDrawerMode, setNeedsDrawerMode] = useState<NeedsDrawerMode>('needs');
+  const { data: needsComparisonData } = useNeedsComparison(
+    sessionId,
+    showNeedsDrawer && needsDrawerMode === 'comparison',
+  );
+
   // Local latches to prevent panel flashing during server refetches.
   // Once user completes an action, the latch stays true even if server data temporarily reverts.
   type CompletedAction =
@@ -786,9 +797,10 @@ export function UnifiedSessionScreen({
       setShowFeedbackCoachChat(false);
     }
 
-    // Stage 3 drawers: share needs consent
+    // Stage 3 drawers: share needs consent, needs drawer
     if (currentStage !== undefined && currentStage !== Stage.NEED_MAPPING) {
       setShowShareNeedsConfirm(false);
+      setShowNeedsDrawer(false);
     }
   }, [myProgress?.stage]);
 
@@ -1281,12 +1293,14 @@ export function UnifiedSessionScreen({
       }
       return message;
     })
-    // Filter out SHARED_CONTEXT and EMPATHY_STATEMENT messages - they'll be shown as tappable indicators
-    // that navigate to the Partner tab when tapped
-    .filter((message) =>
-      message.role !== MessageRole.SHARED_CONTEXT &&
-      message.role !== MessageRole.EMPATHY_STATEMENT
-    );
+    // Filter out EMPATHY_STATEMENT messages (shown as tappable indicators)
+    // and own SHARED_CONTEXT messages (collapsed to indicator pills).
+    // Partner's SHARED_CONTEXT messages are kept inline so the user can read them in chat.
+    .filter((message) => {
+      if (message.role === MessageRole.EMPATHY_STATEMENT) return false;
+      if (message.role === MessageRole.SHARED_CONTEXT && message.senderId === user?.id) return false;
+      return true;
+    });
   }, [messages, empathyStatusData?.myAttempt?.content, empathyStatusData?.myAttempt?.deliveryStatus, empathyStatusData?.sharedContentDeliveryStatus]);
 
   // -------------------------------------------------------------------------
@@ -1396,51 +1410,9 @@ export function UnifiedSessionScreen({
         // Note: empathy-draft-preview case removed - users access empathy statement via the overlay drawer
         // Note: accuracy-feedback case removed - now handled by inline validation card
 
-        case 'needs-summary':
-          return (
-            <View style={styles.inlineCard} key={card.id}>
-              <Text style={styles.cardTitle}>Your Identified Needs</Text>
-              <NeedsSection
-                title="What you need most"
-                needs={card.props.needs as { id: string; category: string; description: string }[]}
-                sharedNeeds={card.props.confirmedIds as string[]}
-              />
-              <View style={styles.confirmationButtons}>
-                <TouchableOpacity
-                  style={styles.adjustButton}
-                  onPress={() => sendMessage('I would like to adjust my identified needs')}
-                >
-                  <Text style={styles.adjustText}>Adjust these</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.confirmButton}
-                  onPress={() => handleConfirmAllNeeds(() => {
-                    handleConsentToShareNeeds();
-                  })}
-                >
-                  <Text style={styles.confirmText}>Confirm my needs</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-
-        case 'common-ground-preview':
-          return (
-            <View style={styles.inlineCard} key={card.id}>
-              <CommonGroundCard
-                sharedNeeds={card.props.sharedNeeds as { category: string; description: string }[]}
-                insight="When we see our shared needs, we remember we're on the same team."
-              />
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={() => {
-                  openOverlay('needs-side-by-side');
-                }}
-              >
-                <Text style={styles.confirmText}>View Full Comparison</Text>
-              </TouchableOpacity>
-            </View>
-          );
+        // Note: needs-summary and common-ground-preview cases removed.
+        // These are now shown in the NeedsDrawer bottom sheet, opened via
+        // the above-input buttons (needs-review, common-ground-confirm).
 
         case 'strategy-pool-preview':
           return (
@@ -2046,11 +2018,8 @@ export function UnifiedSessionScreen({
               <TouchableOpacity
                 style={styles.needsReviewButton}
                 onPress={() => {
-                  markCompleted('confirmed-needs');
-                  handleConfirmAllNeeds(() => {
-                    // After confirming needs, show consent prompt
-                    setShowShareNeedsConfirm(true);
-                  });
+                  setNeedsDrawerMode('needs');
+                  setShowNeedsDrawer(true);
                 }}
                 activeOpacity={0.7}
                 testID="needs-review-button"
@@ -2091,8 +2060,8 @@ export function UnifiedSessionScreen({
                   <TouchableOpacity
                     style={styles.commonGroundButton}
                     onPress={() => {
-                      markCompleted('confirmed-common-ground');
-                      handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
+                      setNeedsDrawerMode('common-ground');
+                      setShowNeedsDrawer(true);
                     }}
                     activeOpacity={0.7}
                     testID="no-overlap-continue-button"
@@ -2106,8 +2075,8 @@ export function UnifiedSessionScreen({
                 <TouchableOpacity
                   style={styles.commonGroundButton}
                   onPress={() => {
-                    markCompleted('confirmed-common-ground');
-                    handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
+                    setNeedsDrawerMode('common-ground');
+                    setShowNeedsDrawer(true);
                   }}
                   activeOpacity={0.7}
                   testID="common-ground-confirm-button"
@@ -2605,6 +2574,51 @@ export function UnifiedSessionScreen({
           onClose={() => setShowShareTopicDrawer(false)}
         />
       )}
+
+      {/* Needs Drawer - bottom sheet for Stage 3 needs/common-ground/comparison */}
+      <NeedsDrawer
+        visible={showNeedsDrawer}
+        onClose={() => setShowNeedsDrawer(false)}
+        mode={needsDrawerMode}
+        needs={(needs ?? []).map((n) => ({
+          id: n.id,
+          category: n.category || n.need,
+          need: n.need,
+          confirmed: n.confirmed,
+        }))}
+        onAdjustNeeds={() => {
+          sendMessage('I would like to adjust my identified needs');
+        }}
+        onConfirmNeeds={() => {
+          markCompleted('confirmed-needs');
+          handleConfirmAllNeeds(() => {
+            setShowShareNeedsConfirm(true);
+          });
+        }}
+        commonGround={(commonGround ?? []).map((cg) => ({
+          id: cg.id,
+          category: cg.category || cg.need,
+          need: cg.need,
+          confirmedByMe: cg.confirmedByMe,
+          confirmedByPartner: cg.confirmedByPartner,
+        }))}
+        noOverlap={commonGroundData?.noOverlap ?? false}
+        onConfirmCommonGround={() => {
+          markCompleted('confirmed-common-ground');
+          handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
+        }}
+        onViewComparison={() => {
+          setNeedsDrawerMode('comparison');
+        }}
+        partnerNeeds={(needsComparisonData?.partnerNeeds ?? []).map((n) => ({
+          id: n.id,
+          category: String(n.category) || n.need,
+          need: n.need,
+          confirmed: n.confirmed,
+        }))}
+        partnerName={partnerName}
+        testID="needs-drawer"
+      />
 
       {/* Activity Drawer - bottom sheet with timeline items */}
       <ActivityDrawer

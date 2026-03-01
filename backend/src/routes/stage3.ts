@@ -18,6 +18,7 @@ import {
   getCommonGround,
   addCustomNeed,
   confirmCommonGround,
+  getNeedsComparison,
 } from '../controllers/stage3';
 
 const router = Router();
@@ -52,6 +53,14 @@ router.get(
   requireAuth,
   requireSessionAccess,
   asyncHandler(getCommonGround)
+);
+
+// Get needs comparison (side-by-side view of both users' needs + common ground)
+router.get(
+  '/sessions/:id/needs/comparison',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(getNeedsComparison)
 );
 
 // Add custom need

@@ -66,7 +66,6 @@ export type OverlayType =
   | 'strategy-ranking'
   | 'overlap-reveal'
   | 'agreement-confirmation'
-  | 'needs-side-by-side'
   | 'curiosity-compact'
   | 'waiting-room'
   | null;
@@ -83,8 +82,6 @@ export type InlineCardType =
   | 'ready-to-share-confirmation'
   // Stage 3: Need Mapping
   | 'need-card'
-  | 'needs-summary'
-  | 'common-ground-preview'
   // Stage 4: Strategic Repair
   | 'strategy-suggestion'
   | 'strategy-pool-preview'
@@ -778,40 +775,9 @@ export function useUnifiedSession(sessionId: string | undefined) {
     }
 
     // Stage 3: Need Mapping cards
-    if (currentStage === Stage.NEED_MAPPING) {
-      // Needs summary for review
-      if (needs.length > 0 && !allNeedsConfirmed) {
-        cards.push({
-          id: 'needs-summary',
-          type: 'needs-summary',
-          position: 'end',
-          props: {
-            needs: needs.map((n) => ({
-              id: n.id,
-              category: n.category || n.need, // Use category enum, fallback to need name
-              description: n.need, // The need text is the actual description
-            })),
-            confirmedIds: needs.filter((n) => n.confirmed).map((n) => n.id),
-          },
-        });
-      }
-
-      // Common ground preview
-      if (commonGround.length > 0 && !commonGroundComplete) {
-        cards.push({
-          id: 'common-ground-preview',
-          type: 'common-ground-preview',
-          position: 'end',
-          props: {
-            sharedNeeds: commonGround.map((cg) => ({
-              category: cg.category || cg.need, // Use category enum, fallback to need name
-              description: cg.need, // The need text is the actual description
-            })),
-            partnerName,
-          },
-        });
-      }
-    }
+    // Note: needs-summary and common-ground-preview inline cards removed.
+    // These are now shown in the NeedsDrawer bottom sheet, opened via
+    // the above-input buttons (needs-review, common-ground-confirm).
 
     // Stage 4: Strategic Repair cards
     if (currentStage === Stage.STRATEGIC_REPAIR) {
