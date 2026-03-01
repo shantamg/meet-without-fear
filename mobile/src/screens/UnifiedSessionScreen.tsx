@@ -1414,29 +1414,36 @@ export function UnifiedSessionScreen({
         // These are now shown in the NeedsDrawer bottom sheet, opened via
         // the above-input buttons (needs-review, common-ground-confirm).
 
-        case 'strategy-pool-preview':
+        case 'strategy-pool-preview': {
+          const stratCount = card.props.strategyCount as number;
           return (
             <View style={styles.inlineCard} key={card.id}>
-              <Text style={styles.cardTitle}>Strategy Pool</Text>
+              <Text style={styles.cardTitle}>Ideas So Far</Text>
               <Text style={styles.cardSubtitle}>
-                {card.props.strategyCount as number} strategies available
+                {stratCount === 0
+                  ? 'Strategies are being gathered from your conversation...'
+                  : `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} ready to review`}
               </Text>
               <View style={styles.strategyPreviewButtons}>
+                {stratCount > 0 && (
+                  <TouchableOpacity
+                    style={styles.secondaryButton}
+                    onPress={() => openOverlay('strategy-pool')}
+                  >
+                    <Text style={styles.secondaryButtonText}>View All</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() => openOverlay('strategy-pool')}
-                >
-                  <Text style={styles.secondaryButtonText}>View All</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.primaryButton}
+                  style={[styles.primaryButton, stratCount === 0 && { opacity: 0.5 }]}
                   onPress={handleMarkReadyToRank}
+                  disabled={stratCount === 0}
                 >
                   <Text style={styles.primaryButtonText}>Ready to Rank</Text>
                 </TouchableOpacity>
               </View>
             </View>
           );
+        }
 
         case 'overlap-preview':
           return (
@@ -1461,6 +1468,8 @@ export function UnifiedSessionScreen({
           const confirmedByMeCount = card.props.confirmedByMe as number;
           const isWaitingForPartner = card.props.waitingForPartner as boolean;
           const cardPartnerName = card.props.partnerName as string | undefined;
+          const cardAgreements = card.props.agreements as Array<{ experiment?: string }> | undefined;
+          const firstExperiment = cardAgreements?.[0]?.experiment;
 
           let statusText: string;
           let showButton = true;
@@ -1482,7 +1491,12 @@ export function UnifiedSessionScreen({
               activeOpacity={0.7}
             >
               <Text style={styles.cardTitle}>Your Agreement</Text>
-              <Text style={styles.agreementExperiment}>
+              {firstExperiment && (
+                <Text style={styles.agreementExperiment} numberOfLines={3}>
+                  {firstExperiment}
+                </Text>
+              )}
+              <Text style={styles.cardSubtitle}>
                 {statusText}
               </Text>
               {showButton && (

@@ -1095,12 +1095,21 @@ export function useValidateEmpathy(
 
       return { previousPartnerEmpathy };
     },
-    onSuccess: (_, { sessionId }) => {
+    onSuccess: (data, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      // When both users validated, the server triggers stage transition async.
+      // Delayed refetch ensures we pick up the new stage after the transition commits.
+      if (data.canAdvance && data.partnerValidated) {
+        setTimeout(() => {
+          queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
+          queryClient.refetchQueries({ queryKey: sessionKeys.state(sessionId) });
+        }, 2000);
+      }
     },
     // Rollback on error: restore previous cache state
     onError: (_error, { sessionId }, context) => {

@@ -89,7 +89,7 @@ export function NewActivityPill({
           opacity,
         },
       ]}
-      pointerEvents={visible ? 'auto' : 'none'}
+      pointerEvents={visible ? 'box-none' : 'none'}
     >
       <Pressable
         onPress={onPress}

@@ -100,7 +100,7 @@ export function ChatInput({
         )}
       </View>
       <TouchableOpacity
-        testID="send-button"
+        testID={canSend ? 'send-button' : undefined}
         style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
         onPress={handleSend}
         disabled={!canSend}
