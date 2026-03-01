@@ -77,6 +77,7 @@ export function ScreenHeader({
             onPress={handleBackPress}
             accessibilityRole="button"
             accessibilityLabel="Go back"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             testID={`${testID}-back-button`}
           >
             <ArrowLeft color={colors.textPrimary} size={24} />

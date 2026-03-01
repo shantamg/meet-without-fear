@@ -14,6 +14,7 @@ export const colors = {
   // Brand colors
   brandBlue: '#5ba4d9',
   brandOrange: '#f5a623',
+  brandPurple: '#9b7ddb',
   brandNavy: '#2d4a7c',
   brandCream: '#f5e6d3',
 

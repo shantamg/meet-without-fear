@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Layers, MoreVertical } from 'lucide-react-native';
+import { ArrowLeft, Layers, MoreVertical, Lock } from 'lucide-react-native';
 import { MessageRole, MemorySuggestion, SuggestedAction } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage } from '../components/ChatInterface';
@@ -171,12 +171,12 @@ export function InnerThoughtsScreen({
 
   const handleEndSession = useCallback(() => {
     Alert.alert(
-      'End Session?',
-      'Are you sure you want to end this inner thoughts session? Your reflections have been saved.',
+      'Done for now?',
+      'Your reflections have been saved.',
       [
         { text: 'Continue', style: 'cancel' },
         {
-          text: 'End Session',
+          text: 'Done',
           style: 'destructive',
           onPress: () => {
             onNavigateBack?.();
@@ -203,7 +203,7 @@ export function InnerThoughtsScreen({
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>Failed to load session</Text>
+          <Text style={styles.errorText}>We couldn't load your reflection right now</Text>
           <TouchableOpacity style={styles.backButton} onPress={handleBack}>
             <Text style={styles.backButtonText}>Go back</Text>
           </TouchableOpacity>
@@ -224,6 +224,7 @@ export function InnerThoughtsScreen({
           onPress={handleBack}
           accessibilityRole="button"
           accessibilityLabel="Go back"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <ArrowLeft color="#ececec" size={24} />
         </TouchableOpacity>
@@ -234,13 +235,19 @@ export function InnerThoughtsScreen({
             <Text style={styles.headerTitle} numberOfLines={1}>
               {title}
             </Text>
+            <Lock size={12} color={colors.textMuted} />
           </View>
           {isLinked ? (
-            <TouchableOpacity onPress={onNavigateToPartnerSession}>
-              <Text style={styles.linkedSubtitle} numberOfLines={1}>
-                ↩ Back to session with {linkedPartnerName}
+            <>
+              <TouchableOpacity onPress={onNavigateToPartnerSession}>
+                <Text style={styles.linkedSubtitle} numberOfLines={1}>
+                  ↩ Back to session with {linkedPartnerName}
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.privacyNote}>
+                Private — {linkedPartnerName} cannot see this
               </Text>
-            </TouchableOpacity>
+            </>
           ) : !isCreating && session?.theme && session?.title ? (
             <Text style={styles.headerSubtitle} numberOfLines={1}>
               {session.theme}
@@ -368,6 +375,11 @@ const useStyles = () =>
     linkedSubtitle: {
       fontSize: 12,
       color: t.colors.accent,
+      marginTop: 2,
+    },
+    privacyNote: {
+      fontSize: 11,
+      color: t.colors.textMuted,
       marginTop: 2,
     },
     memorySuggestionContainer: {

@@ -18,10 +18,10 @@ import {
   Sparkles,
   MessageCircle,
   ChevronRight,
-  TrendingUp,
   Lightbulb,
   X,
-  AlertTriangle,
+  HelpCircle,
+  Lock,
 } from 'lucide-react-native';
 
 import {
@@ -30,7 +30,7 @@ import {
   getSuggestedAction,
   calculateWellnessScore,
 } from '../hooks';
-import { InsightDTO, InsightType } from '@meet-without-fear/shared';
+import { InsightDTO, InsightType, InnerWorkOverviewDTO } from '@meet-without-fear/shared';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 
@@ -103,9 +103,9 @@ function FeatureCard({ title, subtitle, icon, stats, accentColor, onPress }: Fea
 function getInsightIcon(type: InsightType) {
   switch (type) {
     case InsightType.PATTERN:
-      return <TrendingUp size={18} color={colors.brandBlue} />;
+      return <Sparkles size={18} color={colors.brandBlue} />;
     case InsightType.CONTRADICTION:
-      return <AlertTriangle size={18} color={colors.warning} />;
+      return <HelpCircle size={18} color={colors.brandBlue} />;
     case InsightType.SUGGESTION:
       return <Lightbulb size={18} color={colors.success} />;
     default:
@@ -118,7 +118,7 @@ function getInsightAccentColor(type: InsightType): string {
     case InsightType.PATTERN:
       return colors.brandBlue;
     case InsightType.CONTRADICTION:
-      return colors.warning;
+      return colors.brandBlue;
     case InsightType.SUGGESTION:
       return colors.success;
     default:
@@ -162,6 +162,34 @@ function InsightCard({ insight, onDismiss, onLearnMore }: InsightCardProps) {
 }
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+function getWellnessSubtext(overview: InnerWorkOverviewDTO | undefined): string {
+  if (!overview) return '';
+
+  const parts: string[] = [];
+
+  if (overview.needsAssessment.baselineCompleted) {
+    const lowCount = overview.needsAssessment.lowNeedsCount;
+    if (lowCount > 0) {
+      parts.push(`${lowCount} need${lowCount > 1 ? 's' : ''} to nurture`);
+    }
+  }
+
+  if (overview.gratitude.totalEntries > 0) {
+    parts.push(`${overview.gratitude.totalEntries} gratitude entr${overview.gratitude.totalEntries === 1 ? 'y' : 'ies'}`);
+  }
+
+  if (overview.meditation.totalSessions > 0) {
+    parts.push(`${overview.meditation.totalSessions} meditation session${overview.meditation.totalSessions === 1 ? '' : 's'}`);
+  }
+
+  if (parts.length === 0) return 'You\'re getting started';
+  return parts.slice(0, 2).join(' · ');
+}
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
@@ -172,7 +200,7 @@ export function InnerWorkHubScreen({
   onNavigateToMeditation,
   onNavigateToSelfReflection,
 }: InnerWorkHubScreenProps) {
-  const { data, isLoading, error } = useInnerWorkOverview();
+  const { data, isLoading, error, refetch } = useInnerWorkOverview();
   const dismissInsight = useDismissInsight();
   const overview = data?.overview;
 
@@ -211,7 +239,7 @@ export function InnerWorkHubScreen({
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={styles.loadingText}>Loading Inner Work...</Text>
+          <Text style={styles.loadingText}>Opening your space...</Text>
         </View>
       </SafeAreaView>
     );
@@ -220,10 +248,41 @@ export function InnerWorkHubScreen({
   // Error state
   if (error) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={handleBack}
+            style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <ArrowLeft size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Inner Work</Text>
+          <View style={styles.headerRight} />
+        </View>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Something went wrong</Text>
-          <Text style={styles.errorSubtext}>Please try again later</Text>
+          <Text style={styles.errorText}>
+            We're having trouble loading your space right now.
+          </Text>
+          <Text style={styles.errorSubtext}>
+            Your reflections are safe — please try again in a moment.
+          </Text>
+          <View style={styles.errorActions}>
+            <TouchableOpacity
+              style={styles.errorRetryButton}
+              onPress={() => refetch()}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.errorRetryText}>Try Again</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.errorHomeButton}
+              onPress={handleBack}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.errorHomeText}>Go Home</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -233,10 +292,20 @@ export function InnerWorkHubScreen({
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <ArrowLeft size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Inner Work</Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>Inner Work</Text>
+          <View style={styles.privacyBadge}>
+            <Lock size={10} color={colors.textMuted} />
+            <Text style={styles.privacyText}>Your private space</Text>
+          </View>
+        </View>
         <View style={styles.headerRight} />
       </View>
 
@@ -263,11 +332,11 @@ export function InnerWorkHubScreen({
         {wellnessScore !== null && (
           <View style={styles.wellnessCard}>
             <View style={styles.wellnessHeader}>
-              <Text style={styles.wellnessLabel}>WELLNESS SCORE</Text>
-              <TrendingUp size={16} color={colors.success} />
+              <Text style={styles.wellnessLabel}>How you're doing</Text>
+              <Sparkles size={16} color={colors.brandBlue} />
             </View>
             <Text style={styles.wellnessScore}>{wellnessScore}</Text>
-            <Text style={styles.wellnessSubtext}>Based on your recent activity</Text>
+            <Text style={styles.wellnessSubtext}>{getWellnessSubtext(overview)}</Text>
           </View>
         )}
 
@@ -302,7 +371,7 @@ export function InnerWorkHubScreen({
         )}
 
         {/* Feature Cards */}
-        <Text style={styles.sectionTitle}>Pathways</Text>
+        <Text style={styles.sectionTitle}>What would you like to explore?</Text>
 
         {/* Needs Assessment */}
         <FeatureCard
@@ -318,7 +387,7 @@ export function InnerWorkHubScreen({
                     value: overview.needsAssessment.overallScore?.toFixed(1) ?? '-',
                   },
                   {
-                    label: 'Low needs',
+                    label: 'Needs to nurture',
                     value: String(overview.needsAssessment.lowNeedsCount),
                   },
                 ]
@@ -365,8 +434,8 @@ export function InnerWorkHubScreen({
         <FeatureCard
           title="Self-Reflection"
           subtitle="Private conversations to process your thoughts"
-          icon={<MessageCircle size={24} color={colors.brandOrange} />}
-          accentColor={colors.brandOrange}
+          icon={<MessageCircle size={24} color={colors.brandPurple} />}
+          accentColor={colors.brandPurple}
           onPress={() => onNavigateToSelfReflection?.()}
         />
 
@@ -406,11 +475,40 @@ const styles = createStyles((t) => ({
     fontSize: 18,
     fontWeight: '600',
     color: t.colors.textPrimary,
+    textAlign: 'center',
   },
   errorSubtext: {
     marginTop: t.spacing.sm,
     fontSize: 14,
     color: t.colors.textSecondary,
+    textAlign: 'center',
+  },
+  errorActions: {
+    flexDirection: 'row',
+    gap: t.spacing.md,
+    marginTop: t.spacing.lg,
+  },
+  errorRetryButton: {
+    paddingVertical: t.spacing.sm,
+    paddingHorizontal: t.spacing.lg,
+    backgroundColor: t.colors.accent,
+    borderRadius: t.radius.lg,
+  },
+  errorRetryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: t.colors.textOnAccent,
+  },
+  errorHomeButton: {
+    paddingVertical: t.spacing.sm,
+    paddingHorizontal: t.spacing.lg,
+    backgroundColor: t.colors.bgSecondary,
+    borderRadius: t.radius.lg,
+  },
+  errorHomeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: t.colors.textPrimary,
   },
 
   // Header
@@ -427,10 +525,23 @@ const styles = createStyles((t) => ({
   backButton: {
     padding: t.spacing.xs,
   },
+  headerTitleContainer: {
+    alignItems: 'center',
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: t.colors.textPrimary,
+  },
+  privacyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  privacyText: {
+    fontSize: 11,
+    color: t.colors.textMuted,
   },
   headerRight: {
     width: 32,
@@ -504,9 +615,8 @@ const styles = createStyles((t) => ({
     gap: t.spacing.xs,
   },
   wellnessLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: t.colors.textSecondary,
-    letterSpacing: 1,
   },
   wellnessScore: {
     fontSize: 48,

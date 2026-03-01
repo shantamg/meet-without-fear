@@ -127,7 +127,7 @@ export function getSuggestedAction(overview: InnerWorkOverviewDTO | undefined): 
       return {
         type: 'needs_checkin',
         title: 'Check In',
-        description: `You have ${overview.needsAssessment.lowNeedsCount} needs that could use attention.`,
+        description: 'Some of your needs are asking for care.',
       };
     }
   }
@@ -151,7 +151,7 @@ export function getSuggestedAction(overview: InnerWorkOverviewDTO | undefined): 
     return {
       type: 'meditation',
       title: 'Find Stillness',
-      description: 'Start or renew your meditation practice.',
+      description: 'Find a moment of stillness.',
     };
   }
 
