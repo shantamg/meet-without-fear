@@ -106,7 +106,20 @@ export function useRefinementChat(sessionId: string, offerId: string, initialSug
       );
     },
     onSuccess: () => {
-      // Invalidate relevant caches so UI updates
+      // Optimistically clear the share offer so the Activity Drawer doesn't
+      // briefly show the stale "Refine / Share as-is" UI before the refetch completes.
+      queryClient.setQueryData(stageKeys.shareOffer(sessionId), { hasSuggestion: false, suggestion: null });
+
+      // Remove the share_offer from pending actions cache immediately
+      queryClient.setQueryData(stageKeys.pendingActions(sessionId), (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          actions: (old.actions || []).filter((a: any) => a.id !== offerId),
+        };
+      });
+
+      // Invalidate to refetch authoritative data in the background
       queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.shareOffer(sessionId) });

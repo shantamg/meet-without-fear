@@ -770,6 +770,7 @@ export function UnifiedSessionScreen({
   const [pendingPillTarget, setPendingPillTarget] = useState<string | null>(null);
   const prevIndicatorCountRef = useRef(0);
   const prevValidationCardCountRef = useRef(0);
+  const prevStageForPillRef = useRef(myProgress?.stage);
 
   // Auto-dismiss stage-specific drawers when stage transitions
   // Prevents stale drawers from stacking when the session advances
@@ -1332,6 +1333,20 @@ export function UnifiedSessionScreen({
     const prevTotal = prevIndicatorCountRef.current + prevValidationCardCountRef.current;
     const currentTotal = indicatorCount + cardCount;
 
+    // When stage transitions, previously suppressed indicators become visible.
+    // Reset the baseline without triggering the pill so we don't flash
+    // "shared something new" for pre-existing content. New indicators that
+    // arrive AFTER the transition (e.g., from reconciler completing) will
+    // still trigger the pill normally.
+    const stageChanged = myProgress?.stage !== prevStageForPillRef.current;
+    prevStageForPillRef.current = myProgress?.stage;
+
+    if (stageChanged) {
+      prevIndicatorCountRef.current = indicatorCount;
+      prevValidationCardCountRef.current = cardCount;
+      return;
+    }
+
     if (currentTotal > prevTotal && prevTotal > 0) {
       // New item appeared - find the newest one
       const allItems = [...indicators, ...validationCards];
@@ -1347,7 +1362,7 @@ export function UnifiedSessionScreen({
 
     prevIndicatorCountRef.current = indicatorCount;
     prevValidationCardCountRef.current = cardCount;
-  }, [indicators, validationCards]);
+  }, [indicators, validationCards, myProgress?.stage]);
 
   // -------------------------------------------------------------------------
   // Validation Card Handlers

@@ -447,9 +447,11 @@ export function ChatInterface({
 
     // 2. Render Indicators
     if (isIndicator(item)) {
-      // Context-shared and empathy-shared indicators are tappable to navigate to Partner tab
-      const isSharedContent = item.indicatorType === 'context-shared' || item.indicatorType === 'empathy-shared';
-      const onPress = isSharedContent && onContextSharedPress
+      // Shared content and share suggestion indicators are tappable to open the Activity Drawer
+      const isTappableIndicator = item.indicatorType === 'context-shared'
+        || item.indicatorType === 'empathy-shared'
+        || item.indicatorType === 'share-suggestion-received';
+      const onPress = isTappableIndicator && onContextSharedPress
         ? () => onContextSharedPress(item.timestamp, item.metadata?.isFromMe)
         : undefined;
       return (

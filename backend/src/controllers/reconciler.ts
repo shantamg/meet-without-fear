@@ -913,6 +913,21 @@ export async function refinementFinalizeHandler(
       },
     });
 
+    // Update guesser's empathy attempt: AWAITING_SHARING → REFINING
+    // so the guesser's UI transitions from "deciding whether to share"
+    // to the refinement prompt with the newly shared context.
+    await prisma.empathyAttempt.updateMany({
+      where: {
+        sessionId,
+        sourceUserId: guesserId,
+        status: 'AWAITING_SHARING',
+      },
+      data: {
+        status: 'REFINING',
+        statusVersion: { increment: 1 },
+      },
+    });
+
     // Notify guesser via Ably
     const partnerId = guesserId;
     if (partnerId) {
