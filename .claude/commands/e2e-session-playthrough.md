@@ -5,15 +5,108 @@ Fully automated end-to-end session playthrough. You control two independent brow
 ## Architecture
 
 ```
-You (single agent)
+You (main agent)
   ├── agent-browser --session user-a → Browser A (User A, headed window)
   ├── agent-browser --session user-b → Browser B (User B, headed window)
-  └── Bash → 3 background servers (backend, mobile web, website)
+  ├── Bash → 3 background servers (backend, mobile web, website)
+  ├── Sub-agent: Issue Tracker → writes /tmp/e2e-issues.md (persistent)
+  ├── Sub-agent: UX Expert → writes /tmp/e2e-ux-review.md (clarity/blockers)
+  ├── Sub-agent: Log Analyzer → reads server logs on demand
+  └── Sub-agent: Cross-Browser Verifier → checks partner sync at key moments
 ```
 
 - Use `agent-browser --session user-a ...` for **User A's browser**
 - Use `agent-browser --session user-b ...` for **User B's browser**
 - Both sessions are fully isolated (separate cookies, localStorage, auth state).
+
+## Sub-Agent Strategy
+
+Use sub-agents to offload issue tracking, log analysis, and cross-browser verification so the main agent can focus on driving the playthrough without losing context.
+
+### Issue Tracker Sub-Agent (spawn at start, run throughout)
+
+At the start of Phase 1, spawn a background `general-purpose` sub-agent with this task:
+
+> "You are the issue tracker for an E2E session playthrough. You maintain a running log of all issues found at `/tmp/e2e-issues.md`. When I send you an issue, append it to the file with a severity (CRITICAL/WARNING/INFO), phase, description, and any relevant details (error text, screenshot path, expected vs actual behavior). Keep the file well-organized with a summary count at the top."
+
+Throughout the playthrough, whenever you encounter an error, UX confusion, or unexpected behavior, send a message to the issue tracker sub-agent describing the issue.
+
+**Issue file format** (`/tmp/e2e-issues.md`):
+
+```markdown
+# E2E Playthrough Issues
+
+**Summary**: X critical, Y warnings, Z info
+
+---
+
+## CRITICAL
+
+### [C1] Title
+- **Phase**: 5b - Shared Context
+- **Browser**: User B
+- **Expected**: Inline SHARED_CONTEXT card visible in chat
+- **Actual**: Card not rendered, only indicator pill shown
+- **Error**: (console error text if any)
+- **Screenshot**: /tmp/e2e-issue-c1.png
+
+## WARNING
+...
+
+## INFO
+...
+```
+
+### Server Log Monitor Sub-Agent (spawn on demand)
+
+When debugging a specific failure, spawn a sub-agent to analyze the server log files (`/tmp/e2e-backend.log`, `/tmp/e2e-mobile.log`) for relevant errors around the timestamp of the failure. This prevents the main agent from losing context by reading large log files directly.
+
+### Cross-Browser Verification Sub-Agent (spawn at key sync points)
+
+At critical real-time sync moments (empathy shared, context shared, validation confirmed, stage transition), spawn a sub-agent to snapshot the OTHER browser and verify the event appeared correctly. This parallelizes verification: the main agent continues the active user's flow while the sub-agent checks the partner's browser.
+
+### UX Expert Sub-Agent (spawn after each phase)
+
+At the end of each major phase (or whenever you encounter confusion), spawn a `general-purpose` sub-agent with this task:
+
+> "You are a UX expert reviewing an E2E playthrough of a conflict resolution app. I'm going to give you a screenshot and describe what just happened. Evaluate the UI from the perspective of a first-time user who has never seen this app before. Write your assessment to `/tmp/e2e-ux-review.md`, appending to the file. For each observation, note: (1) what phase/step it occurred in, (2) whether the next action was obvious or confusing, (3) any blockers where progress required non-obvious knowledge, (4) clarity of copy/labels/buttons, and (5) whether the flow felt guided or disorienting. Focus on EXPLORATION — describe what you see and what a user would naturally try, rather than checking against a specific expected outcome."
+
+This agent writes to `/tmp/e2e-ux-review.md` throughout the playthrough. The main agent reads this file during Phase 8 to compile UX findings.
+
+**Key principle**: The playthrough should favor **exploration over specific expectations**. Rather than checking "did element X appear at position Y", the main agent should describe what it sees and try to navigate naturally. When something is confusing or unclear, report it to the UX expert sub-agent with a screenshot for assessment. The UX expert evaluates whether a real user would be able to figure out what to do next.
+
+## Database Snapshots
+
+Throughout the playthrough, take numbered database snapshots at key moments so the user can restore to any point and continue manually. Use the snapshot script with a descriptive name:
+
+```bash
+cd backend && npx ts-node snapshots/create-snapshot.ts "<name>"
+```
+
+The naming convention is `NN-description` where NN is the sequence number. The script produces files like `snapshot-01-after-seed--2026-03-01T12-00-00.sql`.
+
+To restore later:
+```bash
+cd backend && npx ts-node snapshots/reset-to-snapshot.ts "01-after-seed"
+# Or list all available:
+cd backend && npx ts-node snapshots/reset-to-snapshot.ts --list
+```
+
+### Snapshot Schedule
+
+| # | When | Name | Description |
+|---|------|------|-------------|
+| 01 | After Phase 1 | `01-after-seed` | Clean slate with both test users created |
+| 02 | After Phase 3 step 11 | `02-alice-invitation-sent` | Alice finished Stage 1 chat, invitation confirmed |
+| 03 | After Phase 1.5 | `03-invitation-accepted` | Bob linked to session, ready for his Stage 0 |
+| 04 | After Phase 4 | `04-bob-stage1-complete` | Both users completed Stage 1, entering Stage 2 |
+| 05 | After Phase 5a | `05-empathy-shared` | Both users drafted and shared empathy statements |
+| 06 | After Phase 5b | `06-context-exchanged` | Reconciler ran, share offers handled |
+| 07 | After Phase 5c | `07-empathy-validated` | Both validated, entering Stage 3 |
+| 08 | After Phase 6 | `08-stage3-complete` | Needs confirmed, common ground found, entering Stage 4 |
+| 09 | After Phase 7 | `09-session-resolved` | Session fully resolved |
+
+**Take each snapshot immediately after the described milestone is confirmed** (check the browser state first). This gives the user 9 restore points covering every major phase boundary.
 
 ## Instructions
 
@@ -125,6 +218,11 @@ curl -s -X POST http://localhost:3000/api/e2e/seed \
 
 **Save the returned `id` values** — you need them for the login URLs and invitation acceptance.
 
+### Snapshot 01: After Seed
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "01-after-seed"
+```
+
 ---
 
 ## Phase 1.5: Accept Invitation as User B
@@ -163,6 +261,11 @@ curl -s -X POST "http://localhost:3000/api/invitations/{INVITATION_ID}/accept" \
 **Why this matters**: Without this step, Bob can navigate to the session URL but will see "Partner" instead of "Alice" in the header, and the backend won't properly track Bob as a participant. Real-time events and the reconciler depend on both users being linked.
 
 **Timing**: Run this step AFTER Alice clicks "I've sent it - Continue" in Phase 3 step 11, but BEFORE navigating Bob to the session in Phase 4.
+
+### Snapshot 03: Invitation Accepted
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "03-invitation-accepted"
+```
 
 ---
 
@@ -281,11 +384,16 @@ You're frustrated with Bob. They keep making plans with you and canceling last m
     ```
 13. After completing Stage 1, tell the user: "User A (Alice) has completed Stage 1 and sent the invitation. Moving to accept invitation and then User B."
 
+### Snapshot 02: Alice Stage 1 Complete
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "02-alice-invitation-sent"
+```
+
 **Bug monitoring**: After each major step, check for browser errors:
 ```bash
 agent-browser --session user-a errors
 ```
-Note any errors for the final report. If you see SSE or API errors, check `/tmp/e2e-backend.log` for the server-side error.
+If errors are found (other than known benign ones), **send them to the issue tracker sub-agent**: "Issue in Phase 3 after [step description]: [error text]. Browser: user-a. Severity: WARNING." If you see SSE or API errors, spawn a **log analyzer sub-agent** to check `/tmp/e2e-backend.log` for the server-side error around that timestamp.
 
 **Known benign errors**: `[UserSessionUpdates] Subscription error` may appear — this is a non-blocking Ably subscription race and doesn't affect the flow.
 
@@ -339,6 +447,12 @@ You've been invited to this session by Alice. You know you've been canceling pla
 ```bash
 agent-browser --session user-b errors
 ```
+If errors are found (other than known benign ones), **send them to the issue tracker sub-agent**: "Issue in Phase 4 after [step description]: [error text]. Browser: user-b. Severity: WARNING."
+
+### Snapshot 04: Bob Stage 1 Complete
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "04-bob-stage1-complete"
+```
 
 ---
 
@@ -369,6 +483,12 @@ For **each user** (alternate between sessions user-a and user-b):
 5. An **"Empathy shared"** indicator appears in the timeline. The chat input may be hidden while waiting for the partner.
    - You may also see a **"Take a breath while you wait"** link (testID: `waiting-banner-exercise-link`) below the waiting banner. This opens breathing/grounding exercises. Optional — you can skip it for the E2E test.
 
+### Snapshot 05: Empathy Shared
+After both users have shared their empathy statements:
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "05-empathy-shared"
+```
+
 **Note**: Users can share empathy at any time — the reconciler handles asymmetric timing gracefully. If User A shares before User B has completed Stage 1, the reconciler runs for the A→B direction as soon as B confirms "feel heard", and User A sees a banner like "Bob is thinking about how you might feel." The symmetric reconciler only processes directions not already handled by the asymmetric path.
 
 **Important**: The `partner_considering_share` event has been removed. You will NOT see a "partner is considering whether to share" notification — this was deleted intentionally to reduce anxiety.
@@ -386,12 +506,24 @@ After both users share empathy, the backend reconciler analyzes gaps between eac
      - **"Share as-is"** — shares recommended context immediately
      - **"Refine"** — opens the RefinementModalScreen (full-screen coaching chat for refining content)
    - Close the drawer by pressing Escape or clicking outside it.
-4. After sharing context, the partner enters **REFINING** state. They will:
-   - See a **"[Partner] shared more context"** indicator in their chat (testID: `chat-indicator-context-shared`)
-   - Need to send at least 1 message reflecting on the shared context
-   - Then see **"Revisit what you'll share"** button to revise their empathy
-5. Click **"Revisit what you'll share"** → drawer shows revised statement → click **"Resubmit"** (testID: `share-empathy-button`)
-6. Handle share offers for both users — each may get one.
+4. After sharing context, the **guesser sees it inline in chat** — no need to navigate to the ActivityDrawer to read the content. Expected rendering in chat (bottom to top in inverted FlatList):
+   - **AI reflection message** — regular chat bubble, Sonnet-generated warm therapeutic prompt (e.g., "Take a moment to sit with what {name} shared...")
+   - **Blue-bordered inline card** — header "New context from {name}" with the partner's shared text content visible
+   - **"CONTEXT FROM {NAME} →" indicator pill** — visual chapter marker/separator above the card
+5. **Spawn a cross-browser verification sub-agent** after sharing context. The sub-agent should snapshot the guesser's browser and verify:
+   - "CONTEXT FROM {NAME} →" indicator pill is visible
+   - Blue-bordered card with "New context from {name}" header and the shared text content
+   - AI reflection message below the card
+   - **Send results to the issue tracker sub-agent** — report success or any missing elements
+6. The guesser **chats naturally** about the shared content directly in the chat (1-2 messages reflecting on what they read). The chat input is NOT blocked.
+7. After chatting about the shared context, a **"Revisit what you'll share"** empathy refinement button appears → click to revise empathy → click **"Resubmit"** (testID: `share-empathy-button`)
+8. Handle share offers for both users — each may get one.
+
+### Snapshot 06: Context Exchanged
+After reconciler has run and share offers are handled for both users:
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "06-context-exchanged"
+```
 
 ### Phase 5c: Empathy Validation (Both Users)
 
@@ -421,6 +553,12 @@ Once both users have finalized their empathy statements, each sees the partner's
 ```bash
 agent-browser --session user-a errors
 agent-browser --session user-b errors
+```
+If errors are found, **send them to the issue tracker sub-agent**: "Issue in Phase 5c after empathy validation: [error text]. Browser: [user-a/user-b]. Severity: [CRITICAL/WARNING]." **Spawn a cross-browser verification sub-agent** to snapshot both browsers and confirm validation indicators appeared correctly in both.
+
+### Snapshot 07: Empathy Validated (Entering Stage 3)
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "07-empathy-validated"
 ```
 
 ---
@@ -476,6 +614,11 @@ For **each user**:
 3. Once BOTH users confirm, Stage 3 completes and Stage 4 begins automatically.
 4. Verify: A transition message appears ("You've found common ground together..." or "Even though your needs don't overlap directly...") and a chapter marker: `——— Moving Forward Together ———`.
 
+### Snapshot 08: Stage 3 Complete (Entering Stage 4)
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "08-stage3-complete"
+```
+
 ---
 
 ## Phase 7: Stage 4 — Strategies & Resolution
@@ -519,15 +662,24 @@ Stage 4 is the final stage where users propose strategies, rank them, create agr
 3. Both users see a completion/summary screen.
 4. **The session is complete!**
 
+### Snapshot 09: Session Resolved
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "09-session-resolved"
+```
+
 ---
 
 ## Phase 8: Final Report
 
-When the playthrough is complete (session resolved, or you decide to stop), compile a summary for the user:
+When the playthrough is complete (session resolved, or you decide to stop), compile a summary for the user.
+
+**First**, read `/tmp/e2e-issues.md` and `/tmp/e2e-ux-review.md` to pull in all issues and UX assessments tracked by the sub-agents throughout the playthrough. Cross-reference with any final browser errors from both sessions.
+
+Report sections:
 
 1. **Progress**: How far each user got (which stage, what was the last action).
-2. **Bugs found**: Any console errors, broken UI, or crashes — with severity (CRITICAL / WARNING / INFO). Include relevant server log excerpts from `/tmp/e2e-*.log` if applicable.
-3. **UX confusion**: Places where you (the AI) couldn't figure out what the UI wanted. These are real UX issues — if an AI can't parse it, many humans will struggle too.
+2. **Bugs found**: Compile from `/tmp/e2e-issues.md` — include all CRITICAL and WARNING issues with their details. Add any final browser errors not already tracked. Include relevant server log excerpts from `/tmp/e2e-*.log` if applicable.
+3. **UX confusion**: Compile from `/tmp/e2e-ux-review.md` — include all UX expert assessments of unclear flows, confusing transitions, non-obvious next actions, or blockers where progress required knowledge a first-time user wouldn't have. These are real UX issues — if an AI can't parse it, many humans will struggle too.
 4. **Real-time sync**: Did changes in one browser show up correctly in the other? Specifically check that inline indicators (empathy-validated, context-shared, stage-chapter) appear in both browsers at the right time.
 5. **Performance**: Any noticeably slow responses or loading screens.
 6. **New UI verification**: Verify these specific elements worked correctly:
@@ -540,6 +692,11 @@ When the playthrough is complete (session resolved, or you decide to stop), comp
    - Unified timeline (not Sent/Received tabs)
    - No PartnerEventModal popups (all events inline)
    - Softened copy in waiting banners and status text
+   - Inline SHARED_CONTEXT card renders in guesser's chat with blue border
+   - Card shows "New context from {name}" header with partner's text visible
+   - AI reflection message appears after the shared content card
+   - "CONTEXT FROM {NAME} →" indicator pill appears above the card as visual separator
+   - Guesser can chat about shared content naturally (input not blocked)
 7. **Overall assessment**: Could two real users complete this flow successfully?
 
 ### Cleanup
@@ -649,3 +806,10 @@ New testIDs introduced:
 | Backend API | `/tmp/e2e-backend.log` | 3000 |
 | Mobile web (Expo) | `/tmp/e2e-mobile.log` | 8081 |
 | Website (Next.js) | `/tmp/e2e-website.log` | 3001 |
+
+## Quick Reference: Sub-Agent Output Files
+
+| Sub-Agent | Output file | Purpose |
+|-----------|-------------|---------|
+| Issue Tracker | `/tmp/e2e-issues.md` | All bugs, errors, failures with severity |
+| UX Expert | `/tmp/e2e-ux-review.md` | UX clarity assessments, blockers, process confusion |
