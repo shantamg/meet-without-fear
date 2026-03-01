@@ -347,18 +347,13 @@ export function ActivityDrawer({
     });
   }, [drawerTranslate, backdropOpacity, onClose]);
 
-  // Trigger open/reset animation when visible changes
+  // Trigger open animation when visible changes.
+  // The else branch is unnecessary since the component returns null when !visible.
   useEffect(() => {
     if (visible) {
       openDrawer();
-    } else {
-      // Reset animated values immediately when hidden externally
-      // (e.g., when another drawer opens on top and sets visible=false directly)
-      drawerTranslate.setValue(SCREEN_HEIGHT);
-      backdropOpacity.setValue(0);
-      currentSnap.current = '3q';
     }
-  }, [visible, openDrawer, drawerTranslate, backdropOpacity]);
+  }, [visible, openDrawer]);
 
   // -------------------------------------------------------------------------
   // Android back button
@@ -438,10 +433,18 @@ export function ActivityDrawer({
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
+
+  // Don't render anything when not visible. This ensures no DOM nodes remain
+  // to intercept pointer events. On React Native Web, child Pressable components
+  // can override a parent's pointer-events:none with their own pointer-events:auto,
+  // so the only reliable way to prevent the invisible backdrop from blocking clicks
+  // is to remove it from the DOM entirely.
+  if (!visible) return null;
+
   return (
     <View
       style={[StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]}
-      pointerEvents={visible ? 'auto' : 'none'}
+      pointerEvents="auto"
       testID={testID}
     >
       {/* Backdrop */}
