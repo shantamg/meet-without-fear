@@ -62,10 +62,6 @@ export function EmpathyValidationCard({
 }: EmpathyValidationCardProps) {
   const styles = useStyles();
 
-  // Track whether content is expanded (for long text)
-  const [isExpanded, setIsExpanded] = useState(false);
-  const isLongContent = empathyContent.length > 200;
-
   // Animation values for 3-phase stagger
   const cardOpacity = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
@@ -162,20 +158,10 @@ export function EmpathyValidationCard({
     <Animated.View style={{ opacity: contentOpacity }}>
       <Text
         style={styles.empathyContent}
-        numberOfLines={status === 'pending' && !isExpanded ? 4 : undefined}
         testID={`${testID}-content`}
       >
         {empathyContent}
       </Text>
-      {status === 'pending' && isLongContent && !isExpanded && (
-        <Pressable
-          onPress={() => setIsExpanded(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Read full statement"
-        >
-          <Text style={styles.readMoreText}>Read full statement</Text>
-        </Pressable>
-      )}
     </Animated.View>
   );
 
@@ -302,12 +288,6 @@ const useStyles = () =>
       fontStyle: 'italic' as const,
       color: t.colors.textSecondary,
       lineHeight: 20,
-      marginBottom: t.spacing.sm,
-    },
-    readMoreText: {
-      fontSize: t.typography.fontSize.sm,
-      fontFamily: t.typography.fontFamily.regular,
-      color: t.colors.accent,
       marginBottom: t.spacing.sm,
     },
     questionText: {
