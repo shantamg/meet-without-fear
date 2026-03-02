@@ -331,6 +331,8 @@ export type ReconcilerShareStatus = (typeof ReconcilerShareStatus)[keyof typeof 
 
 /** Share suggestion shown to the subject */
 export interface ShareSuggestionDTO {
+  /** Database ID of the ReconcilerShareOffer (needed for refinement chat) */
+  offerId: string;
   /** Name of the person trying to understand (the guesser) */
   guesserName: string;
   /**

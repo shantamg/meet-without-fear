@@ -313,8 +313,8 @@ export function ChatBubble({
     // Use typewriter effect for new AI messages - animates word-by-word at consistent pace
     // This normalizes display speed regardless of how fast streaming arrives
     if (shouldUseTypewriter) {
-      if (!isNextToAnimate) {
-        // Not this message's turn — render instant text (never hide)
+      if (!isNextToAnimate && !hasStartedRef.current) {
+        // Not this message's turn and hasn't started yet — render instant text (never hide)
         return <Text style={getTextStyle()}>{message.content}</Text>;
       }
       return (

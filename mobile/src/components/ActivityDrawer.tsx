@@ -6,7 +6,7 @@
  * "Needs Your Attention" and "History" sections.
  */
 
-import React, { useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -305,6 +305,17 @@ export function ActivityDrawer({
   const isDragging = useRef(false);
   const currentSnap = useRef<'3q' | 'full'>('3q');
 
+  // Track the height above the FlatList (drag handle + header) so the
+  // FlatList can be constrained to the visible area of the drawer.
+  const [headerAreaHeight, setHeaderAreaHeight] = useState(0);
+  const [snapPosition, setSnapPosition] = useState<'3q' | 'full'>('3q');
+
+  // The visible height for the FlatList: screen minus snap offset minus header area
+  const listHeight = useMemo(() => {
+    const snapOffset = snapPosition === 'full' ? insets.top : POSITION_3Q;
+    return SCREEN_HEIGHT - snapOffset - headerAreaHeight;
+  }, [snapPosition, headerAreaHeight, insets.top]);
+
   // -------------------------------------------------------------------------
   // Open / Close / Snap animations
   // -------------------------------------------------------------------------
@@ -326,6 +337,7 @@ export function ActivityDrawer({
 
   const openDrawer = useCallback(() => {
     currentSnap.current = '3q';
+    setSnapPosition('3q');
     snapTo(POSITION_3Q, 0.4);
   }, [snapTo]);
 
@@ -393,6 +405,7 @@ export function ActivityDrawer({
         if (currentSnap.current === '3q') {
           if (dy < -SNAP_UP_THRESHOLD || vy < -0.5) {
             currentSnap.current = 'full';
+            setSnapPosition('full');
             snapTo(pFull, 0.6);
           } else if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
             closeDrawer();
@@ -402,6 +415,7 @@ export function ActivityDrawer({
         } else {
           if (dy > SNAP_DOWN_THRESHOLD || vy > 0.5) {
             currentSnap.current = '3q';
+            setSnapPosition('3q');
             snapTo(POSITION_3Q, 0.4);
           } else {
             snapTo(pFull, 0.6);
@@ -471,71 +485,76 @@ export function ActivityDrawer({
           },
         ]}
       >
-        {/* Drag handle — captures pan gestures for up/down snapping */}
-        <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
-          <View style={styles.dragHandle} />
+        {/* Drag handle + header — measured so FlatList height is accurate */}
+        <View onLayout={(e) => setHeaderAreaHeight(e.nativeEvent.layout.height)}>
+          <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
+            <View style={styles.dragHandle} />
+          </View>
+
+          {/* Header */}
+          <Text
+            style={styles.header}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            accessibilityLabel={`Between you and ${partnerName}`}
+            testID="activity-drawer-header"
+          >
+            Between you and {partnerName}
+          </Text>
         </View>
 
-        {/* Header */}
-        <Text
-          style={styles.header}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          accessibilityLabel={`Between you and ${partnerName}`}
-          testID="activity-drawer-header"
-        >
-          Between you and {partnerName}
-        </Text>
-
-        {/* Scrollable content */}
-        <FlatList
-          data={historyItems}
-          renderItem={renderTimelineItem}
-          keyExtractor={keyExtractor}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            attentionItems.length > 0 ? (
-              <View style={styles.attentionSection}>
-                <Text
-                  style={styles.sectionHeader}
-                  accessibilityRole="header"
-                >
-                  Ready for you
-                </Text>
-                {attentionItems.map((item) => (
-                  <TimelineItemCard
-                    key={item.id}
-                    item={item}
-                    onOpenRefinement={onOpenRefinement}
-                    onShareAsIs={onShareAsIs}
-                    onOpenEmpathyDetail={onOpenEmpathyDetail}
-                    onOpenInvitationRefine={onOpenInvitationRefine}
-                    testID={`${testID}-attention-${item.id}`}
-                  />
-                ))}
+        {/* Wrapper constrains FlatList frame to the visible drawer area */}
+        <View style={listHeight > 0 ? { height: listHeight, overflow: 'hidden' } : { flex: 1 }}>
+          <FlatList
+            style={{ flex: 1 }}
+            data={historyItems}
+            renderItem={renderTimelineItem}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={[styles.listContent, { paddingBottom: 32 + insets.bottom }]}
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={
+              attentionItems.length > 0 ? (
+                <View style={styles.attentionSection}>
+                  <Text
+                    style={styles.sectionHeader}
+                    accessibilityRole="header"
+                  >
+                    Ready for you
+                  </Text>
+                  {attentionItems.map((item) => (
+                    <TimelineItemCard
+                      key={item.id}
+                      item={item}
+                      onOpenRefinement={onOpenRefinement}
+                      onShareAsIs={onShareAsIs}
+                      onOpenEmpathyDetail={onOpenEmpathyDetail}
+                      onOpenInvitationRefine={onOpenInvitationRefine}
+                      testID={`${testID}-attention-${item.id}`}
+                    />
+                  ))}
+                  <Text
+                    style={styles.sectionHeader}
+                    accessibilityRole="header"
+                  >
+                    History
+                  </Text>
+                </View>
+              ) : (
                 <Text
                   style={styles.sectionHeader}
                   accessibilityRole="header"
                 >
                   History
                 </Text>
-              </View>
-            ) : (
-              <Text
-                style={styles.sectionHeader}
-                accessibilityRole="header"
-              >
-                History
+              )
+            }
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>
+                Nothing here yet. Items will appear as you and {partnerName} exchange.
               </Text>
-            )
-          }
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              Nothing here yet. Items will appear as you and {partnerName} exchange.
-            </Text>
-          }
-        />
+            }
+          />
+        </View>
       </Animated.View>
     </View>
   );

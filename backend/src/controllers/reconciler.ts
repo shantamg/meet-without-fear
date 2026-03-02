@@ -292,6 +292,7 @@ export async function getShareOfferHandler(
     successResponse(res, {
       hasSuggestion: true,
       suggestion: {
+        offerId: shareOffer.id,
         guesserName,
         // For the new two-phase flow: suggestedShareFocus is the topic (shown first)
         suggestedShareFocus: shareOffer.result.suggestedShareFocus || null,
@@ -825,9 +826,9 @@ WHEN NOT PROVIDING A REVISED VERSION:
       extractedContent = contentMatch[1].trim();
     }
 
-    // Strip all known content tags from visible response
+    // Strip entire content blocks (tags + content between them) from visible response
     const visibleResponse = aiResponse
-      .replace(/<\/?(?:content|revised[_ ]?text|revised|draft)>/gi, '')
+      .replace(/<(?:content|revised[_ ]?text|revised|draft)>[\s\S]*?<\/(?:content|revised[_ ]?text|revised|draft)>/gi, '')
       .trim();
 
     successResponse(res, {

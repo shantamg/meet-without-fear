@@ -159,7 +159,7 @@ export function useRefinementChat(sessionId: string, offerId: string, initialSug
       id: `refinement-initial-${Date.now()}`,
       sessionId,
       role: MessageRole.AI,
-      content: `Here's a suggestion for what you could share:\n\n"${initialSuggestionRef.current}"\n\nWould you like to adjust this, or does it feel right as-is?`,
+      content: `I've put together a suggestion for what you could share. If it feels right, you can share it as-is. Or tell me what you'd like to adjust — I'm here to help you find the right words.`,
       timestamp: new Date().toISOString(),
       senderId: null,
       stage: 2,

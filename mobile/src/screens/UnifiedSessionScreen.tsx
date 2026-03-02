@@ -2573,10 +2573,12 @@ export function UnifiedSessionScreen({
           onAccept={() => {
             setShowShareTopicDrawer(false);
             markCompleted('responded-to-share-offer');
-            // Accept triggers draft generation via chat (US-3 from spec)
-            // handleRespondToShareOffer will send hidden message to AI
-            // AI responds with draft + "Review and share" button
-            handleRespondToShareOffer('accept');
+            // Open refinement modal so user can chat about and refine the draft
+            // before sharing (same flow as ActivityDrawer's "Refine" button)
+            if (shareOfferData?.suggestion) {
+              setRefinementInitialSuggestion(shareOfferData.suggestion.suggestedContent || '');
+              setRefinementOfferId(shareOfferData.suggestion.offerId);
+            }
           }}
           onDecline={() => {
             setShowShareTopicDrawer(false);
