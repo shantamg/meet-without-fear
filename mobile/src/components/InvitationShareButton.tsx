@@ -40,8 +40,6 @@ export function InvitationShareButton({
     if (disabled) return;
 
     try {
-      // Format: "(user) would like to invite you to Meet Without Fear"
-      // Then the link, then the invitation message
       const senderDisplay = senderName || 'Someone';
       const shareMessage = `${senderDisplay} would like to invite you to Meet Without Fear\n\n${invitationUrl}\n\n${invitationMessage}`;
 

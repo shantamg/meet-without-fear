@@ -1860,7 +1860,7 @@ export function UnifiedSessionScreen({
               }],
               overflow: 'hidden',
             }}
-            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+            pointerEvents="auto"
           >
             <View style={styles.feelHeardContainer}>
               <FeelHeardConfirmation
@@ -1893,7 +1893,7 @@ export function UnifiedSessionScreen({
               }],
               overflow: 'hidden',
             }}
-            pointerEvents={!isTypewriterAnimating && !isSharingEmpathy ? 'auto' : 'none'}
+            pointerEvents={!isSharingEmpathy ? 'auto' : 'none'}
           >
             <View style={styles.empathyReviewContainer}>
               <TouchableOpacity
@@ -1927,7 +1927,7 @@ export function UnifiedSessionScreen({
               }],
               overflow: 'hidden',
             }}
-            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+            pointerEvents="auto"
           >
             {shareOfferData?.suggestion &&
              (shareOfferData.suggestion.action === 'OFFER_OPTIONAL' ||
@@ -1967,8 +1967,7 @@ export function UnifiedSessionScreen({
               // 4. Clip content while closed so padding doesn't leak space
               overflow: 'hidden',
             }}
-            // Disable touches while invisible (during typewriter animation)
-            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+            pointerEvents="auto"
           >
             {/* 5. INNER CONTAINER
            Move the styles that contain padding/bg/borders HERE.
@@ -2026,7 +2025,7 @@ export function UnifiedSessionScreen({
               }],
               overflow: 'hidden',
             }}
-            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+            pointerEvents="auto"
           >
             <View style={styles.needsReviewContainer}>
               <TouchableOpacity
@@ -2063,7 +2062,7 @@ export function UnifiedSessionScreen({
               }],
               overflow: 'hidden',
             }}
-            pointerEvents={!isTypewriterAnimating ? 'auto' : 'none'}
+            pointerEvents="auto"
           >
             <View style={styles.commonGroundContainer}>
               {commonGroundData?.noOverlap ? (

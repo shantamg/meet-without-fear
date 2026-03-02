@@ -77,8 +77,8 @@ function buildSentItems(
 ): TimelineItem[] {
   const items: TimelineItem[] = [];
 
-  // Invitation
-  if (invitationMessage) {
+  // Invitation — only show after user confirms it was sent (has timestamp)
+  if (invitationMessage && invitationTimestamp) {
     items.push({
       id: 'invitation',
       type: 'invitation',
