@@ -518,7 +518,7 @@ ${conversationText}`;
     systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
     maxTokens: 800,
-    sessionId,
+    innerWorkSessionId: sessionId,
     operation: 'inner-thoughts-summary',
     turnId,
     callType: BrainActivityCallType.SUMMARIZATION,

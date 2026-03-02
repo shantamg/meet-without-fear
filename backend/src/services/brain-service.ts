@@ -4,7 +4,8 @@ import { getAbly } from '../services/realtime';
 import { ActivityType, ActivityStatus, BrainActivity, BrainActivityCallType } from '@prisma/client';
 
 export type ActivityInput = {
-  sessionId: string;
+  sessionId?: string;
+  innerWorkSessionId?: string;
   turnId?: string;
   activityType: ActivityType;
   model: string;
@@ -37,7 +38,8 @@ export class BrainService {
     try {
       const activity = await prisma.brainActivity.create({
         data: {
-          sessionId: params.sessionId,
+          ...(params.sessionId ? { session: { connect: { id: params.sessionId } } } : {}),
+          ...(params.innerWorkSessionId ? { innerWorkSession: { connect: { id: params.innerWorkSessionId } } } : {}),
           turnId: params.turnId,
           activityType: params.activityType,
           model: params.model,

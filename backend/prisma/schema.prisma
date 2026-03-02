@@ -186,6 +186,9 @@ model InnerWorkSession {
   // Messages in this inner work session
   messages InnerWorkMessage[]
 
+  // Brain activities (LLM calls) made during this session
+  brainActivities BrainActivity[]
+
   // Link to partner session for context-aware Inner Thoughts
   // When set, AI has access to partner session context and can reference it
   linkedPartnerSession   Session? @relation("LinkedInnerThoughts", fields: [linkedPartnerSessionId], references: [id], onDelete: SetNull)
@@ -1286,8 +1289,10 @@ model SavedMeditation {
 
 model BrainActivity {
   id              String           @id @default(cuid())
-  session         Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId       String
+  session         Session?         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId       String?
+  innerWorkSession InnerWorkSession? @relation(fields: [innerWorkSessionId], references: [id], onDelete: Cascade)
+  innerWorkSessionId String?
   turnId          String?
   activityType    ActivityType
   model           String           // e.g. "claude-3-5-sonnet", "titan-embed"
@@ -1312,6 +1317,7 @@ model BrainActivity {
   completedAt     DateTime?
 
   @@index([sessionId])
+  @@index([innerWorkSessionId])
   @@index([turnId])
   @@index([activityType])
   @@index([createdAt])

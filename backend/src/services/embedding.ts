@@ -343,7 +343,7 @@ export async function embedInnerWorkSessionContent(
   const embeddingText = parts.join('\n');
 
   // Generate embedding
-  const embedding = await getEmbedding(embeddingText, { sessionId, turnId });
+  const embedding = await getEmbedding(embeddingText, { innerWorkSessionId: sessionId, turnId });
   if (!embedding) {
     console.warn(`[Embedding] Failed to generate embedding for Inner Work session ${sessionId}`);
     return false;

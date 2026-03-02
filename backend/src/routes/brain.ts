@@ -526,14 +526,14 @@ router.get('/costs/cache-heatmap', async (req, res) => {
     });
 
     // Resolve stage intervals for all sessions
-    const sessionIds = [...new Set(activities.map(a => a.sessionId))];
+    const sessionIds = [...new Set(activities.map(a => a.sessionId).filter((id): id is string => id !== null))];
     const stageIntervals = await resolveStageIntervalsForSessions(sessionIds);
 
     // Aggregate by (stage, day)
     const cellMap = new Map<string, { totalTokens: number; cacheReadTokens: number }>();
 
     for (const a of activities) {
-      const stage = resolveStageForTimestamp(stageIntervals.get(a.sessionId), a.createdAt);
+      const stage = resolveStageForTimestamp(stageIntervals.get(a.sessionId ?? ''), a.createdAt);
       const day = formatDateKey(a.createdAt);
       const key = `${stage}|${day}`;
       const { cacheRead } = extractCacheTokens(a.metadata);
@@ -586,14 +586,14 @@ router.get('/costs/by-stage', async (req, res) => {
     });
 
     // Resolve stage intervals
-    const sessionIds = [...new Set(activities.map(a => a.sessionId))];
+    const sessionIds = [...new Set(activities.map(a => a.sessionId).filter((id): id is string => id !== null))];
     const stageIntervals = await resolveStageIntervalsForSessions(sessionIds);
 
     // Aggregate by stage
     const stageMap = new Map<number, { sonnetCost: number; haikuCost: number; titanCost: number; totalCost: number }>();
 
     for (const a of activities) {
-      const stage = resolveStageForTimestamp(stageIntervals.get(a.sessionId), a.createdAt);
+      const stage = resolveStageForTimestamp(stageIntervals.get(a.sessionId ?? ''), a.createdAt);
       const modelNorm = normalizeModel(a.model);
 
       const entry = stageMap.get(stage) || { sonnetCost: 0, haikuCost: 0, titanCost: 0, totalCost: 0 };
@@ -644,7 +644,7 @@ router.get('/costs/flow', async (req, res) => {
     });
 
     // Resolve stage intervals
-    const sessionIds = [...new Set(activities.map(a => a.sessionId))];
+    const sessionIds = [...new Set(activities.map(a => a.sessionId).filter((id): id is string => id !== null))];
     const stageIntervals = await resolveStageIntervalsForSessions(sessionIds);
 
     // Build Sankey: Stage -> Model -> Call Type
@@ -667,7 +667,7 @@ router.get('/costs/flow', async (req, res) => {
     }
 
     for (const a of activities) {
-      const stage = resolveStageForTimestamp(stageIntervals.get(a.sessionId), a.createdAt);
+      const stage = resolveStageForTimestamp(stageIntervals.get(a.sessionId ?? ''), a.createdAt);
       const stageName = stageNames.get(stage) || `Stage ${stage}`;
       const modelNorm = normalizeModel(a.model);
       const modelName = modelNorm.charAt(0).toUpperCase() + modelNorm.slice(1);

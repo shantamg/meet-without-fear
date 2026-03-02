@@ -70,7 +70,7 @@ function logPromptToFile(params: {
   systemPrompt: string | PromptBlocks;
   messages: { role: string; content: string }[];
   maxTokens?: number;
-  sessionId: string;
+  sessionId?: string;
   turnId?: string;
 }): string | null {
   // Skip if env var is set to disable
@@ -233,8 +233,10 @@ export interface CompletionOptions {
   messages: SimpleMessage[];
   maxTokens?: number;
   thinkingBudget?: number;
-  /** Session ID for cost attribution - REQUIRED */
-  sessionId: string;
+  /** Session ID (partner session) for cost attribution */
+  sessionId?: string;
+  /** Inner work session ID for cost attribution */
+  innerWorkSessionId?: string;
   /** Operation name for cost breakdown (e.g., 'intent-detection', 'orchestrator-response') */
   operation: string;
   /** Turn ID to group all costs from a single user action - REQUIRED */
@@ -251,8 +253,10 @@ export interface HaikuCompletionOptions {
   systemPrompt: string;
   messages: SimpleMessage[];
   maxTokens?: number;
-  /** Session ID for cost attribution - REQUIRED */
-  sessionId: string;
+  /** Session ID (partner session) for cost attribution */
+  sessionId?: string;
+  /** Inner work session ID for cost attribution */
+  innerWorkSessionId?: string;
   /** Operation name for cost breakdown */
   operation: string;
   /** Turn ID to group all costs from a single user action - REQUIRED */
@@ -381,6 +385,7 @@ export async function getModelCompletion(
   // Start logging via BrainService
   const activity = await brainService.startActivity({
     sessionId: options.sessionId,
+    innerWorkSessionId: options.innerWorkSessionId,
     turnId: options.turnId,
     activityType: ActivityType.LLM_CALL,
     model: modelId,
@@ -531,7 +536,7 @@ export const EMBEDDING_DIMENSIONS = 1024;
  * @param text - The text to embed (max ~8000 tokens)
  * @returns Float array of embedding dimensions, or null if unavailable
  */
-export async function getEmbedding(text: string, options?: { sessionId?: string; turnId?: string }): Promise<number[] | null> {
+export async function getEmbedding(text: string, options?: { sessionId?: string; innerWorkSessionId?: string; turnId?: string }): Promise<number[] | null> {
   const client = getBedrockClient();
   if (!client) {
     return null;
@@ -556,10 +561,11 @@ export async function getEmbedding(text: string, options?: { sessionId?: string;
 
     // Start logging via BrainService (non-blocking — don't let logging failures prevent embeddings)
     let activity: BrainActivity | null = null;
-    if (options?.sessionId) {
+    if (options?.sessionId || options?.innerWorkSessionId) {
       try {
         activity = await brainService.startActivity({
           sessionId: options.sessionId,
+          innerWorkSessionId: options.innerWorkSessionId,
           turnId: options?.turnId,
           activityType: ActivityType.EMBEDDING,
           model: BEDROCK_TITAN_EMBED_MODEL_ID,
