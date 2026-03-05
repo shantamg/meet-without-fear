@@ -445,8 +445,7 @@ export function ChatInterface({
     if (isIndicator(item)) {
       // Shared content and share suggestion indicators are tappable to open the Activity Drawer
       const isTappableIndicator = item.indicatorType === 'context-shared'
-        || item.indicatorType === 'empathy-shared'
-        || item.indicatorType === 'share-suggestion-received';
+        || item.indicatorType === 'empathy-shared';
       const onPress = isTappableIndicator && onContextSharedPress
         ? () => onContextSharedPress(item.timestamp, item.metadata?.isFromMe)
         : undefined;

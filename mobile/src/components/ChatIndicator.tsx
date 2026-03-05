@@ -14,14 +14,12 @@ import { createStyles } from '../theme/styled';
 
 const INDICATOR_COLORS = {
   informational: { text: 'rgba(100, 149, 237, 0.9)', line: 'rgba(100, 149, 237, 0.2)' },
-  action: { text: 'rgba(245, 158, 11, 0.9)', line: 'rgba(245, 158, 11, 0.2)' },
   success: { text: 'rgba(34, 197, 94, 0.9)', line: 'rgba(34, 197, 94, 0.2)' },
 };
 
-function getSemanticCategory(type: ChatIndicatorType): 'informational' | 'action' | 'success' {
+function getSemanticCategory(type: ChatIndicatorType): 'informational' | 'success' {
   switch (type) {
     case 'empathy-validated': return 'success';
-    case 'share-suggestion-received': return 'action';
     case 'stage-chapter': return 'informational';
     default: return 'informational';
   }
@@ -52,7 +50,6 @@ export type ChatIndicatorType =
   | 'agreement-reached'
   // Semantic indicator types
   | 'empathy-validated'         // Partner confirmed your understanding (success)
-  | 'share-suggestion-received' // Sharing opportunity available (action)
   | 'stage-chapter';            // Stage transition chapter marker (informational)
 
 interface ChatIndicatorProps {
@@ -128,8 +125,6 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
       case 'empathy-validated':
         const validatorName = metadata?.partnerName || 'Partner';
         return `${validatorName} confirmed your understanding`;
-      case 'share-suggestion-received':
-        return 'Sharing opportunity available';
       case 'stage-chapter':
         return metadata?.stageName || 'New Chapter';
       default:
@@ -180,7 +175,6 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
         return styles.agreementReachedLine;
       // Semantic indicator types
       case 'empathy-validated':
-      case 'share-suggestion-received':
       case 'stage-chapter': {
         const category = getSemanticCategory(type);
         return { backgroundColor: INDICATOR_COLORS[category].line };
@@ -224,7 +218,6 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
         return styles.agreementReachedText;
       // Semantic indicator types
       case 'empathy-validated':
-      case 'share-suggestion-received':
       case 'stage-chapter': {
         const category = getSemanticCategory(type);
         return { color: INDICATOR_COLORS[category].text };

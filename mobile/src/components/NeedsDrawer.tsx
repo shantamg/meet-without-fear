@@ -238,8 +238,6 @@ export function NeedsDrawer({
       {needs.length === 0 && (
         <Text style={styles.emptyText}>No needs identified yet.</Text>
       )}
-
-      {renderNeedsButtons()}
     </>
   );
 
@@ -313,7 +311,6 @@ export function NeedsDrawer({
         </>
       )}
 
-      {renderCommonGroundButtons()}
     </>
   );
 
@@ -448,19 +445,23 @@ export function NeedsDrawer({
           </View>
         )}
 
-        {onBackToCommonGround && (
-          <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
-            <TouchableOpacity
-              style={[styles.secondaryButton, styles.fullWidthButton]}
-              onPress={onBackToCommonGround}
-              activeOpacity={0.7}
-              testID={`${testID}-back-to-cg`}
-            >
-              <Text style={styles.secondaryButtonText}>Back to Common Ground</Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </>
+    );
+  };
+
+  const renderComparisonButtons = () => {
+    if (!onBackToCommonGround) return null;
+    return (
+      <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
+        <TouchableOpacity
+          style={[styles.secondaryButton, styles.fullWidthButton]}
+          onPress={onBackToCommonGround}
+          activeOpacity={0.7}
+          testID={`${testID}-back-to-cg`}
+        >
+          <Text style={styles.secondaryButtonText}>Back to Common Ground</Text>
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -524,13 +525,18 @@ export function NeedsDrawer({
         {/* Scrollable content */}
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(40, insets.bottom + 24) }]}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator
         >
           {mode === 'needs' && renderNeedsMode()}
           {mode === 'common-ground' && renderCommonGroundMode()}
           {mode === 'comparison' && renderComparisonMode()}
         </ScrollView>
+
+        {/* Fixed footer buttons */}
+        {mode === 'needs' && renderNeedsButtons()}
+        {mode === 'common-ground' && renderCommonGroundButtons()}
+        {mode === 'comparison' && renderComparisonButtons()}
       </Animated.View>
     </View>
   );

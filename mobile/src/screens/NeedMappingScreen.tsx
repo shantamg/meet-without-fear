@@ -753,6 +753,8 @@ export function NeedMappingScreen() {
                   onPress={handleAdjustNeeds}
                   disabled={isConfirming}
                   testID="adjust-needs-button"
+                  accessibilityRole="button"
+                  accessibilityLabel="Adjust needs"
                 >
                   <Text style={styles.adjustTextSoft}>I want to adjust these</Text>
                 </TouchableOpacity>
@@ -762,6 +764,8 @@ export function NeedMappingScreen() {
                   onPress={handleConfirmNeeds}
                   disabled={isConfirming}
                   testID="confirm-needs-button"
+                  accessibilityRole="button"
+                  accessibilityLabel="Confirm my needs"
                 >
                   <Text style={styles.confirmTextSoft}>
                     {isConfirming ? 'Confirming...' : 'Yes, confirm my needs'}
@@ -833,6 +837,8 @@ export function NeedMappingScreen() {
                   onPress={handleConfirmCommonGround}
                   disabled={isConfirmingCommonGround}
                   testID="continue-to-strategies-button"
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue to strategies"
                 >
                   <Text style={styles.confirmTextSoft}>
                     {isConfirmingCommonGround ? 'Confirming...' : 'Continue to Strategies'}

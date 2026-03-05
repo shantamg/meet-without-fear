@@ -834,6 +834,17 @@ export async function confirmAgreement(req: Request, res: Response): Promise<voi
       allAgreements.every(a => a.agreedByA && a.agreedByB);
 
     if (sessionCanResolve) {
+      // Auto-resolve session when all agreements confirmed
+      await prisma.session.update({
+        where: { id: sessionId },
+        data: { status: 'RESOLVED', resolvedAt: new Date() },
+      });
+      // Mark all stage progress as COMPLETED
+      await prisma.stageProgress.updateMany({
+        where: { sessionId, completedAt: null },
+        data: { status: 'COMPLETED', completedAt: new Date() },
+      });
+
       await publishSessionEvent(sessionId, 'session.resolved', {
         agreementId: updatedAgreement.id,
       });

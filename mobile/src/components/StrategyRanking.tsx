@@ -5,7 +5,7 @@
  * Rankings are not visible to partner until both submit.
  */
 
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useState, useCallback } from 'react';
 import { StrategyCard } from './StrategyCard';
 import { colors } from '@/theme';
@@ -106,7 +106,7 @@ export function StrategyRanking({ strategies, onSubmit }: StrategyRankingProps) 
         <Text style={styles.count}>
           {selectedIds.length}/{MAX_SELECTIONS} selected
         </Text>
-        <TouchableOpacity
+        <Pressable
           testID="submit-ranking-button"
           style={[styles.submitButton, isSubmitDisabled && styles.submitDisabled]}
           onPress={handleSubmit}
@@ -120,7 +120,7 @@ export function StrategyRanking({ strategies, onSubmit }: StrategyRankingProps) 
           >
             Submit my ranking
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     </View>
   );

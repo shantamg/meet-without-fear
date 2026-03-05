@@ -241,7 +241,9 @@ export async function runBackgroundClassifier(
   try {
     console.log(`${logPrefix} Starting classification for session ${input.sessionId}`);
 
-    const systemPrompt = `You are an AI assistant analyzing an Inner Thoughts (self-reflection) session.
+    const systemPrompt = `CRITICAL: You are a classification engine. Output ONLY valid JSON. No conversational text, no empathy, no advice, no preamble. Your ENTIRE response must be a single JSON object.
+
+You are an AI assistant analyzing an Inner Thoughts (self-reflection) session.
 Your job is to:
 1. Extract themes and suggest session metadata
 2. Detect ONLY explicit memory requests

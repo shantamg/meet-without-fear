@@ -448,10 +448,15 @@ export function useStreamingMessage(
           // Only trigger if EventSource is still active (connection still open)
           // The timer is cleared on complete/error, so reaching here means we're stuck
           if (eventSourceRef.current) {
-            console.warn('[useStreamingMessage] 15s timeout - triggering fallback poll');
+            console.warn('[useStreamingMessage] 15s timeout - closing stuck connection');
+            // Close the stuck connection
+            eventSourceRef.current.close();
+            eventSourceRef.current = null;
             // Invalidate queries to fetch latest state from server
             queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
             queryClient.invalidateQueries({ queryKey: timelineKeys.infinite(sessionId) });
+            // Transition to idle so typing indicator disappears
+            setStatus('idle');
           }
         }, FALLBACK_TIMEOUT);
 

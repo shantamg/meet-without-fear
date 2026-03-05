@@ -48,6 +48,12 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '')
     .trim();
 
+  // 3. Fallback: if all content ended up inside tags, don't return empty
+  if (!responseText && thinking) {
+    console.warn('[micro-tag-parser] Empty response after tag stripping — using thinking fallback');
+    responseText = '[AI processing — please continue the conversation]';
+  }
+
   // 3. Extract flags from thinking string (no JSON needed!)
   const offerFeelHeardCheck = /FeelHeardCheck:\s*Y/i.test(thinking);
   const offerReadyToShare = /ReadyShare:\s*Y/i.test(thinking);

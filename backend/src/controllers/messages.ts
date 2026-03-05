@@ -1694,6 +1694,20 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       // Clean accumulated text (strip <draft> and <dispatch> tags if they leaked through)
       accumulatedText = parsed.response;
 
+      // Guard: prevent empty AI responses from being saved to DB
+      if (!accumulatedText.trim() && !isDispatchMessage) {
+        console.error(`[sendMessageStream:${requestId}] Empty AI response after tag stripping — skipping DB save`);
+        // Don't save empty message, but send error event so frontend can retry
+        if (!clientDisconnected) {
+          sendSSE(res, {
+            event: 'error',
+            data: { message: 'Empty AI response — please try again.', retryable: true },
+          });
+        }
+        res.end();
+        return;
+      }
+
       // =========================================================================
       // DISPATCH HANDLING: If dispatch tag detected, get and stream dispatched response
       // Dispatch messages are system responses - skip classifier/embeddings
@@ -1805,6 +1819,19 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       },
     });
     console.log(`[sendMessageStream:${requestId}] AI message created: ${aiMessage.id}`);
+
+    // Stage 3 safety net: if user has sent many messages but no needs extracted, trigger extraction
+    if (effectiveStage === 3 && userTurnCount >= 6) {
+      const existingNeeds = await prisma.needScore.findMany({
+        where: { userId: user.id },
+        select: { id: true },
+        take: 1,
+      });
+      if (existingNeeds.length === 0) {
+        console.warn(`[sendMessageStream:${requestId}] Stage 3 safety net: ${userTurnCount} turns but no needs extracted, notifying for refetch`);
+        await publishSessionEvent(sessionId, 'session.resumed', { userId: user.id, reason: 'needs-safety-net' });
+      }
+    }
 
     // Broadcast to Status Site
     brainService.broadcastMessage(aiMessage);

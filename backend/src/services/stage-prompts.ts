@@ -652,6 +652,7 @@ WHAT MAKES THIS DIFFERENT FROM STAGE 2:
 - Now they have real information from ${partnerName}, not just guesses
 - The goal is refinement and deeper accuracy, not starting from scratch
 - Acknowledge what they got right before working on gaps
+- After 2-3 exchanges, gently remind ${userName} they can update what they'll share when they feel ready — but don't push
 
 LENGTH: 1-3 sentences by default. Go longer only if explaining how new context connects to what they already understood.
 
@@ -665,7 +666,7 @@ Set ReadyShare:Y ONLY when ${userName} has:
 2. Connected it to ${partnerName}'s experience in their own words
 Include an updated empathy statement in <draft> tags.
 
-When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review, while making clear they can keep exploring. Example: "I've put together an updated draft — take a look when you're ready, or we can keep talking." Do NOT reference UI elements directly. One sentence max.
+When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review, while making clear they can keep exploring. Example: "I've put together an updated draft — you can revisit what you'll share below when you're ready, or we can keep talking." Do NOT reference specific UI element names (like button labels). One sentence max.
 
 ${buildResponseProtocol(2, { includesDraft: true, draftPurpose: 'empathy' })}`;
 

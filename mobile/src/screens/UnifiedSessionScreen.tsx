@@ -30,6 +30,7 @@ import { ShareTopicPanel } from '../components/ShareTopicPanel';
 import { StrategyPool } from '../components/StrategyPool';
 import { StrategyRanking } from '../components/StrategyRanking';
 import { OverlapReveal } from '../components/OverlapReveal';
+import { WaitingRoom } from '../components/WaitingRoom';
 import { AgreementCard } from '../components/AgreementCard';
 import { SessionCompletionScreen } from '../components/SessionCompletionScreen';
 // CuriosityCompactOverlay removed - now using inline approach
@@ -228,6 +229,7 @@ export function UnifiedSessionScreen({
     commonGroundComplete,
     strategyPhase,
     strategies,
+    revealData,
     overlappingStrategies,
     agreements,
     isGenerating,
@@ -1192,16 +1194,6 @@ export function UnifiedSessionScreen({
         timestamp: empathyStatusData.myAttempt.revealedAt
           || new Date().toISOString(),
         metadata: { partnerName: partnerName || 'Partner' },
-      });
-    }
-
-    // --- Share suggestion received indicator ---
-    if (shareOfferData?.hasSuggestion && shareOfferData.suggestion) {
-      allIndicators.push({
-        type: 'indicator' as const,
-        indicatorType: 'share-suggestion-received' as const,
-        id: 'share-suggestion-received',
-        timestamp: new Date().toISOString(),
       });
     }
 
@@ -2200,6 +2192,47 @@ export function UnifiedSessionScreen({
           }))}
           onSubmit={handleSubmitRankings}
         />
+      </SafeAreaView>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Strategy Revealing Phase - Full Screen Overlay
+  // -------------------------------------------------------------------------
+  if (currentStage === Stage.STRATEGIC_REPAIR && strategyPhase === StrategyPhase.REVEALING) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <SessionChatHeader
+          partnerName={partnerName}
+          partnerOnline={partnerOnline}
+          connectionStatus={connectionStatus}
+          briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+          onBackPress={onNavigateBack}
+          stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
+          testID="session-chat-header"
+        />
+        {!revealData ? (
+          <WaitingRoom
+            message="Waiting for your partner to submit their ranking"
+            partnerName={partnerName || undefined}
+          />
+        ) : overlappingStrategies.length > 0 ? (
+          <OverlapReveal
+            overlapping={overlappingStrategies.map((s) => ({
+              id: s.id,
+              description: s.description,
+              duration: s.duration || undefined,
+            }))}
+            uniqueToMe={[]}
+            uniqueToPartner={[]}
+            onCreateAgreement={handleCreateAgreementFromOverlap}
+          />
+        ) : (
+          <WaitingRoom
+            message="Your rankings didn't overlap. Return to chat to discuss next steps."
+            partnerName={partnerName || undefined}
+          />
+        )}
       </SafeAreaView>
     );
   }

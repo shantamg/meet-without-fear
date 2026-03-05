@@ -484,7 +484,19 @@ export async function getHaikuJson<T>(
   } catch (error) {
     console.error('[Bedrock] Failed to parse Haiku JSON response:', error);
     console.error('[Bedrock] Raw response:', response);
-    return null;
+    // Retry once
+    const retry = await getModelCompletion('haiku', {
+      ...options,
+      maxTokens: options.maxTokens ?? 1024,
+      operation: options.operation ? `${options.operation}-retry` : 'haiku-json-retry',
+    });
+    if (!retry) return null;
+    try {
+      return extractJsonFromResponse(retry) as T;
+    } catch {
+      console.error('[Bedrock] Retry also failed to parse Haiku JSON');
+      return null;
+    }
   }
 }
 

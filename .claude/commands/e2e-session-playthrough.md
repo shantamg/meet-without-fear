@@ -1,815 +1,947 @@
-# E2E Session Playthrough
+# E2E Session Playthrough — Multi-Agent Architecture
 
-Fully automated end-to-end session playthrough. You control two independent browser sessions via the `agent-browser` CLI, seed test users via the API, auto-login both browsers, and roleplay as both users interacting with the app. No human intervention needed for setup or login.
+Multi-agent E2E playthrough where **naive user agents** experience the app with fresh eyes while **observer agents** evaluate correctness and UX quality. User agents have zero knowledge of testIDs — they discover the UI by reading snapshots and deciding what to do, just like real users.
 
 ## Architecture
 
 ```
-You (main agent)
-  ├── agent-browser --session user-a → Browser A (User A, headed window)
-  ├── agent-browser --session user-b → Browser B (User B, headed window)
-  ├── Bash → 3 background servers (backend, mobile web, website)
-  ├── Sub-agent: Issue Tracker → writes /tmp/e2e-issues.md (persistent)
-  ├── Sub-agent: UX Expert → writes /tmp/e2e-ux-review.md (clarity/blockers)
-  ├── Sub-agent: Log Analyzer → reads server logs on demand
-  └── Sub-agent: Cross-Browser Verifier → checks partner sync at key moments
+Orchestrator (you)
+  ├── User Agent A (fresh per stage) → agent-browser --session user-a
+  │     Knows: persona, goal, summary of what happened so far
+  │     Writes: /tmp/e2e/transcripts/user-a.jsonl
+  │
+  ├── User Agent B (fresh per stage) → agent-browser --session user-b
+  │     Knows: persona, goal, summary of what happened so far
+  │     Writes: /tmp/e2e/transcripts/user-b.jsonl
+  │
+  ├── Flow Auditor (at checkpoints) → reads DB + transcripts + console
+  │     Writes: /tmp/e2e/audit-report.md
+  │
+  ├── UX Observer (at checkpoints) → reads transcripts only
+  │     Writes: /tmp/e2e/ux-report.md
+  │
+  └── Report Synthesizer (at end) → reads all files
+        Writes: /tmp/e2e/final-report.md
 ```
 
-- Use `agent-browser --session user-a ...` for **User A's browser**
-- Use `agent-browser --session user-b ...` for **User B's browser**
-- Both sessions are fully isolated (separate cookies, localStorage, auth state).
+## File Layout
 
-## Sub-Agent Strategy
-
-Use sub-agents to offload issue tracking, log analysis, and cross-browser verification so the main agent can focus on driving the playthrough without losing context.
-
-### Issue Tracker Sub-Agent (spawn at start, run throughout)
-
-At the start of Phase 1, spawn a background `general-purpose` sub-agent with this task:
-
-> "You are the issue tracker for an E2E session playthrough. You maintain a running log of all issues found at `/tmp/e2e-issues.md`. When I send you an issue, append it to the file with a severity (CRITICAL/WARNING/INFO), phase, description, and any relevant details (error text, screenshot path, expected vs actual behavior). Keep the file well-organized with a summary count at the top."
-
-Throughout the playthrough, whenever you encounter an error, UX confusion, or unexpected behavior, send a message to the issue tracker sub-agent describing the issue.
-
-**Issue file format** (`/tmp/e2e-issues.md`):
-
-```markdown
-# E2E Playthrough Issues
-
-**Summary**: X critical, Y warnings, Z info
+```
+/tmp/e2e/
+  scenario.json          # Selected scenario + personas
+  state.json             # Orchestrator state (user IDs, session ID, current stage)
+  transcripts/
+    user-a.jsonl         # User A interaction log (appended across agent spawns)
+    user-b.jsonl         # User B interaction log (appended across agent spawns)
+  screenshots/           # Named screenshots from confusion/stuck moments
+  audit-report.md        # Flow Auditor findings
+  ux-report.md           # UX Observer scores + evidence
+  final-report.md        # Synthesized report
+```
 
 ---
 
-## CRITICAL
+## Section 1: Scenario System
 
-### [C1] Title
-- **Phase**: 5b - Shared Context
-- **Browser**: User B
-- **Expected**: Inline SHARED_CONTEXT card visible in chat
-- **Actual**: Card not rendered, only indicator pill shown
-- **Error**: (console error text if any)
-- **Screenshot**: /tmp/e2e-issue-c1.png
+Parse `$ARGUMENTS` for flags:
+- `--scenario <name>` — select a built-in scenario (default: `cooperative-couple`)
+- `--start-at <stage>` — skip to a specific stage via seed-session API
+- `--user-a "..."` and `--user-b "..."` — custom persona descriptions (overrides scenario)
 
-## WARNING
-...
+### Built-in Scenarios
 
-## INFO
-...
+**cooperative-couple** (default):
+```json
+{
+  "name": "cooperative-couple",
+  "context": "Alice and Bob are a couple who had a fight about household chores. Alice feels Bob doesn't do his fair share. Bob feels Alice is too controlling about how chores are done. Both want to resolve it.",
+  "userA": {
+    "name": "Alice",
+    "email": "alice@e2e.test",
+    "persona": "You are Alice, a 32-year-old woman frustrated that your partner Bob doesn't help enough with household chores. You feel exhausted doing most of the work. You're willing to listen but need to feel heard first. You tend to be direct and sometimes come across as critical even when you don't mean to. Speak naturally — short sentences, real emotions, not therapy-speak."
+  },
+  "userB": {
+    "name": "Bob",
+    "email": "bob@e2e.test",
+    "persona": "You are Bob, a 34-year-old man who feels your partner Alice micromanages how you do chores. When you do help, she re-does it 'the right way,' which makes you stop trying. You shut down when criticized. You want things to be better but don't know how to bring it up without a fight. Speak naturally — you're not great at expressing feelings."
+  }
+}
 ```
 
-### Server Log Monitor Sub-Agent (spawn on demand)
-
-When debugging a specific failure, spawn a sub-agent to analyze the server log files (`/tmp/e2e-backend.log`, `/tmp/e2e-mobile.log`) for relevant errors around the timestamp of the failure. This prevents the main agent from losing context by reading large log files directly.
-
-### Cross-Browser Verification Sub-Agent (spawn at key sync points)
-
-At critical real-time sync moments (empathy shared, context shared, validation confirmed, stage transition), spawn a sub-agent to snapshot the OTHER browser and verify the event appeared correctly. This parallelizes verification: the main agent continues the active user's flow while the sub-agent checks the partner's browser.
-
-### UX Expert Sub-Agent (spawn after each phase)
-
-At the end of each major phase (or whenever you encounter confusion), spawn a `general-purpose` sub-agent with this task:
-
-> "You are a UX expert reviewing an E2E playthrough of a conflict resolution app. I'm going to give you a screenshot and describe what just happened. Evaluate the UI from the perspective of a first-time user who has never seen this app before. Write your assessment to `/tmp/e2e-ux-review.md`, appending to the file. For each observation, note: (1) what phase/step it occurred in, (2) whether the next action was obvious or confusing, (3) any blockers where progress required non-obvious knowledge, (4) clarity of copy/labels/buttons, and (5) whether the flow felt guided or disorienting. Focus on EXPLORATION — describe what you see and what a user would naturally try, rather than checking against a specific expected outcome."
-
-This agent writes to `/tmp/e2e-ux-review.md` throughout the playthrough. The main agent reads this file during Phase 8 to compile UX findings.
-
-**Key principle**: The playthrough should favor **exploration over specific expectations**. Rather than checking "did element X appear at position Y", the main agent should describe what it sees and try to navigate naturally. When something is confusing or unclear, report it to the UX expert sub-agent with a screenshot for assessment. The UX expert evaluates whether a real user would be able to figure out what to do next.
-
-## Database Snapshots
-
-Throughout the playthrough, take numbered database snapshots at key moments so the user can restore to any point and continue manually. Use the snapshot script with a descriptive name:
-
-```bash
-cd backend && npx ts-node snapshots/create-snapshot.ts "<name>"
+**defensive-couple**:
+```json
+{
+  "name": "defensive-couple",
+  "context": "Maria and James are a couple dealing with trust issues after James stayed out late without telling Maria. Maria feels disrespected. James feels suffocated. Both are defensive.",
+  "userA": {
+    "name": "Maria",
+    "email": "alice@e2e.test",
+    "persona": "You are Maria, 29. Your partner James stayed out until 3am without telling you where he was. You're hurt and angry. You tend to bring up past incidents when arguing. You want an apology but also want to understand why he did it. You're emotional and sometimes raise your voice (use caps or exclamation marks). You don't trust easily."
+  },
+  "userB": {
+    "name": "James",
+    "email": "bob@e2e.test",
+    "persona": "You are James, 31. You went out with friends and lost track of time. You feel guilty but also feel like Maria is overreacting. You get defensive when accused and tend to minimize problems. You love Maria but hate feeling controlled. You give short answers when frustrated."
+  }
+}
 ```
 
-The naming convention is `NN-description` where NN is the sequence number. The script produces files like `snapshot-01-after-seed--2026-03-01T12-00-00.sql`.
-
-To restore later:
-```bash
-cd backend && npx ts-node snapshots/reset-to-snapshot.ts "01-after-seed"
-# Or list all available:
-cd backend && npx ts-node snapshots/reset-to-snapshot.ts --list
+**roommate-dispute**:
+```json
+{
+  "name": "roommate-dispute",
+  "context": "Sam and Alex are roommates. Sam plays loud music late at night. Alex is a light sleeper who has early morning classes. They've been passive-aggressive about it for weeks.",
+  "userA": {
+    "name": "Sam",
+    "email": "alice@e2e.test",
+    "persona": "You are Sam, 22, a music production student. You need to work on music in the evenings — it's not just fun, it's homework. You use headphones sometimes but mixing requires speakers. You think Alex is being unreasonable — they moved in knowing you're a music student. You're friendly but firm about your right to use common spaces."
+  },
+  "userB": {
+    "name": "Alex",
+    "email": "bob@e2e.test",
+    "persona": "You are Alex, 21, a pre-med student with 7am anatomy labs. You can't sleep with bass vibrating through the walls. You've tried earplugs, white noise, everything. You like Sam as a person but you're at your breaking point. You tend to be conflict-avoidant and have been leaving passive-aggressive notes instead of talking directly."
+  }
+}
 ```
 
-### Snapshot Schedule
+### Scenario Selection Logic
 
-| # | When | Name | Description |
-|---|------|------|-------------|
-| 01 | After Phase 1 | `01-after-seed` | Clean slate with both test users created |
-| 02 | After Phase 3 step 11 | `02-alice-invitation-sent` | Alice finished Stage 1 chat, invitation confirmed |
-| 03 | After Phase 1.5 | `03-invitation-accepted` | Bob linked to session, ready for his Stage 0 |
-| 04 | After Phase 4 | `04-bob-stage1-complete` | Both users completed Stage 1, entering Stage 2 |
-| 05 | After Phase 5a | `05-empathy-shared` | Both users drafted and shared empathy statements |
-| 06 | After Phase 5b | `06-context-exchanged` | Reconciler ran, share offers handled |
-| 07 | After Phase 5c | `07-empathy-validated` | Both validated, entering Stage 3 |
-| 08 | After Phase 6 | `08-stage3-complete` | Needs confirmed, common ground found, entering Stage 4 |
-| 09 | After Phase 7 | `09-session-resolved` | Session fully resolved |
+1. If `--scenario <name>` provided → use that built-in scenario
+2. If `--user-a` and `--user-b` provided → create custom scenario with those persona descriptions, use default names/emails
+3. Otherwise → use `cooperative-couple`
 
-**Take each snapshot immediately after the described milestone is confirmed** (check the browser state first). This gives the user 9 restore points covering every major phase boundary.
+### Valid `--start-at` values
 
-## Instructions
+These map to the `targetStage` parameter of `POST /api/e2e/seed-session`:
+- `CREATED` — session just created, compact not signed
+- `EMPATHY_SHARED_A` — User A completed Stage 1 and shared empathy
+- `FEEL_HEARD_B` — User B felt heard, reconciler has run
+- `RECONCILER_SHOWN_B` — User B received share suggestion
+- `CONTEXT_SHARED_B` — User B shared context
+- `EMPATHY_REVEALED` — Both validated each other's empathy
+- `NEED_MAPPING_COMPLETE` — Stage 3: needs identified
+- `STRATEGIC_REPAIR_COMPLETE` — Stage 4: strategies collected
 
-You MUST use the `agent-browser` CLI to perform this workflow. Do NOT skip any phase. Start with Phase 0 to launch all servers.
+Write the resolved scenario to `/tmp/e2e/scenario.json`.
 
 ---
 
-## Phase 0: Start Servers & Pre-flight Checks
+## Section 2: Phase 0 — Infrastructure Setup
 
-This phase starts all three dev servers in the background, verifies they're healthy, and checks the CORS config.
+### Step 0: Verify PostgreSQL with pgvector
 
-### Step 1: Kill any existing servers on the required ports
+This project uses devenv (Nix) to run PostgreSQL 16 with pgvector. Before starting servers:
 
 ```bash
-# Kill anything on ports 3000 (backend), 3001 (website), 8081 (expo)
-lsof -ti :3000 | xargs kill -9 2>/dev/null; \
-lsof -ti :3001 | xargs kill -9 2>/dev/null; \
-lsof -ti :8081 | xargs kill -9 2>/dev/null; \
+# Check if PostgreSQL is running on port 5432
+pg_isready -h localhost -p 5432 2>&1
+```
+
+If NOT running, start it manually using the Nix store binary:
+```bash
+PG_BIN=/nix/store/60z8vahbnw8vj9y4pqdmgfq9dgjwknbh-postgresql-and-plugins-16.9/bin
+PGDATA=/Users/shantam/Software/meet-without-fear/.devenv/state/postgres
+$PG_BIN/pg_ctl -D "$PGDATA" -l /tmp/e2e/postgres.log -o "-p 5432 -k /tmp" start
+```
+
+**WARNING:** Do NOT use `devenv up` — it requires a TTY and crashes in background mode. Use `pg_ctl` directly.
+
+**WARNING:** Another project (scheduler4) may be running PostgreSQL 17.x on port 5432 WITHOUT pgvector. Check with:
+```bash
+ps aux | grep "bin/postgres" | grep -v grep
+```
+If you see a postgresql-17.x binary, kill it first — it won't have pgvector and migrations will fail with "extension vector is not available".
+
+Verify pgvector works:
+```bash
+psql -h localhost -p 5432 -U mwf_user -d meet_without_fear -c "SELECT 1;" 2>&1
+```
+
+### Step 1: Kill existing servers
+
+```bash
+lsof -ti :3000 | xargs kill -9 2>/dev/null
+lsof -ti :3001 | xargs kill -9 2>/dev/null
+lsof -ti :8081 | xargs kill -9 2>/dev/null
 echo "Ports cleared"
 ```
 
-### Step 2: Verify CORS allows all headers in E2E mode
+### Step 2: Verify environment
 
-Before starting servers, check that `backend/src/app.ts` uses a wildcard `allowedHeaders` when `E2E_AUTH_BYPASS=true`. The `react-native-sse` library sends `Cache-Control` and `X-Requested-With` headers via `XMLHttpRequest`, which trigger CORS preflight. If these aren't allowed, the browser silently strips them and all SSE streaming requests fail with "Access to this session denied" (FORBIDDEN).
+Check that `backend/.env` contains `E2E_AUTH_BYPASS=true`. If not, add it.
 
-Look for this pattern in `app.ts`:
-```typescript
-const corsOptions: cors.CorsOptions = { origin: corsOrigins };
-if (process.env.E2E_AUTH_BYPASS === 'true') {
-  corsOptions.allowedHeaders = '*';
-}
-app.use(cors(corsOptions));
-```
-
-If it uses a specific list instead of `'*'`, update it to `'*'` and tell the user what you changed.
-
-### Step 3: Verify backend .env has E2E_AUTH_BYPASS=true
-
-Check `backend/.env` for `E2E_AUTH_BYPASS=true`. If missing, add it.
-
-### Step 4: Start all three servers as background processes
-
-Use the Bash tool with `run_in_background: true` for each. Run all three in parallel:
+### Step 3: Create output directories
 
 ```bash
-# Backend API (port 3000) — uses tsx watch, so it hot-reloads
-cd /Users/shantam/Software/meet-without-fear && E2E_AUTH_BYPASS=true npm run dev:api 2>&1 | tee /tmp/e2e-backend.log
+rm -rf /tmp/e2e && mkdir -p /tmp/e2e/{transcripts,screenshots}
 ```
 
+### Step 4: Start servers in background
+
+Run all three as background tasks:
+
 ```bash
-# Mobile web app (port 8081) — EXPO_PUBLIC_E2E_MODE must be set at bundle time
-cd /Users/shantam/Software/meet-without-fear/mobile && EXPO_PUBLIC_E2E_MODE=true npx expo start --web --clear 2>&1 | tee /tmp/e2e-mobile.log
+# Backend (port 3000) — tsx without watch, no file watcher overhead
+cd /Users/shantam/Software/meet-without-fear/backend && E2E_AUTH_BYPASS=true npx tsx src/server.ts 2>&1 | tee /tmp/e2e/backend.log
+
+# Mobile web (port 8081) — --no-dev disables file watching and bundles in production mode
+cd /Users/shantam/Software/meet-without-fear/mobile && EXPO_PUBLIC_E2E_MODE=true npx expo start --web --no-dev --clear 2>&1 | tee /tmp/e2e/mobile.log
+
+# Website (port 3001) — dev mode required (no build step), file watcher overhead is minimal
+cd /Users/shantam/Software/meet-without-fear && npm run dev:website 2>&1 | tee /tmp/e2e/website.log
 ```
 
-```bash
-# Website (port 3001) — Next.js dev server
-cd /Users/shantam/Software/meet-without-fear && npm run dev:website 2>&1 | tee /tmp/e2e-website.log
-```
+### Step 5: Health check (with auth guard)
 
-### Step 5: Wait for servers to be ready
-
-Wait 10-15 seconds, then health-check each server:
+Wait 15 seconds, then verify all servers:
 
 ```bash
-# Backend health check
-curl -sf http://localhost:3000/api/e2e/cleanup -X POST -o /dev/null && echo "Backend: OK" || echo "Backend: NOT READY"
+# Backend — check E2E auth works (HARD ABORT if not)
+# IMPORTANT: Do NOT use POST /api/e2e/cleanup as health check — it deletes all E2E data!
+# Use a safe GET endpoint instead.
+BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/health 2>/dev/null || curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/api/e2e/seed -H 'Content-Type: application/json' -d '{"email":"healthcheck@e2e.test","name":"HealthCheck"}')
+if [ "$BACKEND_STATUS" = "401" ] || [ "$BACKEND_STATUS" = "403" ]; then
+  echo "FATAL: Backend returned $BACKEND_STATUS — E2E_AUTH_BYPASS is not set. Aborting."
+  exit 1
+fi
+[ "$BACKEND_STATUS" = "200" ] && echo "Backend: OK" || echo "Backend: NOT READY ($BACKEND_STATUS)"
 
-# Mobile web check
+# Mobile web
 curl -sf http://localhost:8081 -o /dev/null && echo "Mobile web: OK" || echo "Mobile web: NOT READY"
 
-# Website check
+# Website
 curl -sf http://localhost:3001 -o /dev/null && echo "Website: OK" || echo "Website: NOT READY"
 ```
 
-If any server isn't ready, wait another 10 seconds and retry. If still failing, check the log files:
-- Backend: `tail -50 /tmp/e2e-backend.log`
-- Mobile: `tail -50 /tmp/e2e-mobile.log`
-- Website: `tail -50 /tmp/e2e-website.log`
+**HARD ABORT**: If the backend returns 401 or 403 despite `E2E_AUTH_BYPASS=true`, stop the entire run immediately. Do NOT retry — this indicates a misconfigured environment and continuing would cause every API call to fail silently (auth looping). Fix the env and re-run.
 
-If backend cleanup returns 403, `E2E_AUTH_BYPASS=true` isn't set — check the backend log.
+For non-auth failures (connection refused, 500), retry up to 3 times with 10s gaps.
 
-### Log file reference
+### Step 5b: Resource guard
 
-Throughout the playthrough, if anything goes wrong you can check server logs:
-- **Backend**: `/tmp/e2e-backend.log`
-- **Mobile web**: `/tmp/e2e-mobile.log`
-- **Website**: `/tmp/e2e-website.log`
-
----
-
-## Phase 1: Seed Test Users
-
-Clean up old E2E data and create two test users via the backend API. Use Bash with curl:
+Check available memory before proceeding. Three servers + two headed browsers can use 4-6GB:
 
 ```bash
-# Clean up old E2E users
+# Check available memory (macOS)
+FREE_MB=$(vm_stat | awk '/Pages free/ {free=$3} /Pages speculative/ {spec=$3} END {printf "%d", (free+spec)*4096/1048576}')
+echo "Available memory: ${FREE_MB}MB"
+if [ "$FREE_MB" -lt 2048 ]; then
+  echo "WARNING: Less than 2GB free. E2E run may cause swapping. Consider closing other apps."
+fi
+```
+
+If memory drops below 1GB during the run, the orchestrator should kill the browsers and servers before the system starts swapping.
+
+### Step 6: Seed users and session
+
+**If `--start-at` was specified:**
+
+```bash
+curl -s -X POST http://localhost:3000/api/e2e/seed-session \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "userA": {"email": "alice@e2e.test", "name": "<User A name from scenario>"},
+    "userB": {"email": "bob@e2e.test", "name": "<User B name from scenario>"},
+    "targetStage": "<start-at value>"
+  }' | tee /tmp/e2e/seed-result.json | jq .
+```
+
+Save the returned `userA.id`, `userB.id`, `session.id`, and `pageUrls` from the response.
+
+**If starting from scratch (no `--start-at`):**
+
+```bash
+# Cleanup old E2E data
 curl -s -X POST http://localhost:3000/api/e2e/cleanup | jq .
 
 # Seed User A
 curl -s -X POST http://localhost:3000/api/e2e/seed \
   -H 'Content-Type: application/json' \
-  -d '{"email":"alice@e2e.test","name":"Alice"}' | jq .
+  -d '{"email":"alice@e2e.test","name":"<User A name>"}' | tee /tmp/e2e/user-a.json | jq .
 
 # Seed User B
 curl -s -X POST http://localhost:3000/api/e2e/seed \
   -H 'Content-Type: application/json' \
-  -d '{"email":"bob@e2e.test","name":"Bob"}' | jq .
+  -d '{"email":"bob@e2e.test","name":"<User B name>"}' | tee /tmp/e2e/user-b.json | jq .
 ```
 
-**Save the returned `id` values** — you need them for the login URLs and invitation acceptance.
+Save the returned `id` values.
 
-### Snapshot 01: After Seed
+### Step 7: Launch browsers
+
+**Browser A:**
 ```bash
-cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "01-after-seed"
+agent-browser --session user-a --headed open "http://localhost:8081/?e2e-user-id=<USER_A_ID>&e2e-user-email=alice@e2e.test"
+agent-browser --session user-a set viewport 390 812
+agent-browser --session user-a wait --load networkidle
+```
+
+**Browser B** (if `--start-at` was used, both launch now; otherwise launch later when User B is invited):
+```bash
+agent-browser --session user-b --headed open "http://localhost:8081/?e2e-user-id=<USER_B_ID>&e2e-user-email=bob@e2e.test"
+agent-browser --session user-b set viewport 390 812
+agent-browser --session user-b wait --load networkidle
+```
+
+If `--start-at` was used and `pageUrls` were returned, navigate each browser directly to their session page URL.
+
+---
+
+## Section 3: Agent Prompts
+
+### Naive User Agent Prompt
+
+Spawn as a `general-purpose` agent. Give it this prompt (fill in the `{...}` placeholders):
+
+```
+You are playing the role of a real person using a conflict resolution app for the first time.
+
+**Your persona:**
+{persona}
+
+**Your partner's name:** {partnerName}
+
+**Your goal for this session:**
+{goal}
+
+**What happened so far (if anything):**
+{previousContext}
+
+**IMPORTANT RULES:**
+1. You have NEVER used this app before. You don't know what buttons exist, what screens look like, or what the flow is. Discover everything by reading the screen.
+2. Interact ONLY through the agent-browser CLI with session `{browserSession}`. Your primary loop is: snapshot → read → think → act.
+3. Chat in-character. Write what your character would actually say — short, natural, emotional when appropriate. Do NOT write long therapeutic paragraphs.
+4. When the screen says "waiting for partner" or similar — STOP. Log a `done` entry with reason "waiting for partner" and end your session. The orchestrator will restart you when your partner is ready.
+5. End your session when: (a) your stage goal is clearly complete, (b) the screen shows you're waiting for your partner, (c) you are genuinely stuck for 3+ consecutive interactions with no progress, or (d) you've taken 25+ total actions (safety limit).
+6. **Invitation handling:** If the app shows an invitation to send to your partner, do NOT try to actually send it (SMS, email, etc). Just review the message and tap "I have sent it" / Continue / Confirm. The orchestrator handles getting your partner into the session via API. After confirming the invitation, log `done` with reason "waiting for partner".
+
+**TRANSCRIPT LOGGING:**
+After EVERY interaction, append a JSON line to `/tmp/e2e/transcripts/{browserSession}.jsonl`. Each line must be one of these types:
+
+- snapshot: `{"ts":"<ISO>","type":"snapshot","screen":"<describe what you see>","elements":"<key interactive elements with @refs>"}`
+- think: `{"ts":"<ISO>","type":"think","thought":"<your reasoning>","confidence":"high|medium|low"}`
+- action: `{"ts":"<ISO>","type":"action","action":"click|fill|scroll|navigate","target":"<what you're interacting with>","ref":"<@ref from snapshot>"}`
+- result: `{"ts":"<ISO>","type":"result","expected":"<what you thought would happen>","actual":"<what actually happened>","success":true|false}`
+- confusion: `{"ts":"<ISO>","type":"confusion","description":"<what's confusing>","screenshot":"/tmp/e2e/screenshots/<name>.png"}`
+- stuck: `{"ts":"<ISO>","type":"stuck","description":"<why you're stuck>","tried":["<things you tried>"]}`
+- done: `{"ts":"<ISO>","type":"done","reason":"<goal complete|waiting for partner|stuck|action limit>","state":"<current screen state>"}`
+
+Take a screenshot (save to /tmp/e2e/screenshots/) whenever you're confused or stuck.
+
+**CRITICAL TIPS for React Native Web:**
+- The chat send button is an SVG icon near the bottom-right. It does NOT appear in accessibility snapshots. After typing a message with `fill`, click the send button using JavaScript:
+  ```
+  agent-browser --session {browserSession} eval 'document.querySelector("[aria-label=\"Send message\"]")?.click() || document.querySelectorAll("div[tabindex]").forEach(el => { const r = el.getBoundingClientRect(); if (r.x > 300 && r.y > 700 && r.width > 20 && r.width < 60) el.click(); })'
+  ```
+- After sending a message, wait 5-10 seconds for the AI to respond before taking the next snapshot.
+- Some buttons (especially Pressable components) don't appear in snapshots. If you can see something on a screenshot but can't find it in the snapshot, use `eval` to find and click it by aria-label or position:
+  ```
+  agent-browser --session {browserSession} eval 'document.querySelector("[aria-label=\"LABEL\"]")?.click()'
+  ```
+- When a `click @ref` doesn't work on a React Native button, try using `eval` with the element's coordinates from the snapshot.
+
+**agent-browser commands:**
+- Snapshot: `agent-browser --session {browserSession} snapshot -i`
+- Click: `agent-browser --session {browserSession} click @e1`
+- Type: `agent-browser --session {browserSession} fill @e1 "text"`
+- Scroll: `agent-browser --session {browserSession} scroll down` or `scroll up`
+- Screenshot: `agent-browser --session {browserSession} screenshot /tmp/e2e/screenshots/<name>.png`
+- Wait for page: `agent-browser --session {browserSession} wait --load networkidle`
+- Wait ms: `agent-browser --session {browserSession} wait 3000`
+- Errors: `agent-browser --session {browserSession} errors`
+- Eval JS: `agent-browser --session {browserSession} eval '<js code>'`
+
+**START NOW:** Take your first snapshot and begin exploring the app.
+```
+
+### Context Summary for Fresh Agents
+
+Each time the orchestrator spawns a new user agent (for a new stage, or after a wait), it must provide `{previousContext}` — a brief summary so the agent understands where things stand. Examples:
+
+**First spawn (no context):**
+> This is your first time opening the app. No prior context.
+
+**After Stage 1 complete, starting Stage 2:**
+> You already told the AI your side of the story about the chore conflict. The AI understood that you feel exhausted and unappreciated. You confirmed you felt heard. Now the app is moving to the next phase.
+
+**After waiting for partner:**
+> You were waiting for your partner to finish their turn. They've now completed their part. Take a snapshot to see what's changed on your screen and continue from there.
+
+The orchestrator builds this summary by reading the agent's most recent transcript entries (last 5-10 lines of their JSONL file) and the current DB state.
+
+### Flow Auditor Prompt
+
+Spawn as a `general-purpose` agent at each checkpoint:
+
+```
+You are the Flow Auditor for an E2E playthrough of a conflict resolution app. You have FULL knowledge of the app's internals.
+
+**Your job:** Verify that the app is functioning correctly at this checkpoint.
+
+**Checkpoint:** {checkpointName}
+**Expected state:** {expectedState}
+
+**Check the following:**
+
+1. **Database state** — Query the database to verify session stage, message counts, empathy status, etc:
+   ```bash
+   cd /Users/shantam/Software/meet-without-fear/backend && npx tsx -e "
+   const { PrismaClient } = require('@prisma/client');
+   const p = new PrismaClient();
+   (async () => {
+     // Query relevant tables for session {sessionId}
+     const session = await p.session.findUnique({ where: { id: '{sessionId}' }, include: { stageProgress: true, messages: { orderBy: { createdAt: 'desc' }, take: 5 } } });
+     console.log(JSON.stringify(session, null, 2));
+     await p.$disconnect();
+   })();
+   "
+   ```
+
+2. **Transcript issues** — Read `/tmp/e2e/transcripts/user-a.jsonl` and `/tmp/e2e/transcripts/user-b.jsonl`. Look for:
+   - `confusion` entries (things the user found unclear)
+   - `stuck` entries (places the user couldn't proceed)
+   - `result` entries where `success: false`
+   - Sequences of 3+ actions without a successful result
+
+3. **Console errors** — Check both browsers for JavaScript errors:
+   ```bash
+   agent-browser --session user-a errors
+   agent-browser --session user-b errors
+   ```
+
+4. **Cross-browser sync** — After one user completes an action that should update the partner's view:
+   - Take snapshots of both browsers
+   - Verify the partner's UI reflects the change (e.g., stage advancement, new messages)
+
+5. **Server logs** — Check `/tmp/e2e/backend.log` for errors:
+   ```bash
+   grep -i "error\|fail\|exception\|unhandled" /tmp/e2e/backend.log | tail -20
+   ```
+
+**Output:** Write your findings to `/tmp/e2e/audit-report.md`. Append to the file (don't overwrite). Format:
+
+```markdown
+## Checkpoint: {checkpointName}
+**Time:** <timestamp>
+**DB State:** <summary>
+**Issues Found:**
+- [BUG] <description> (severity: critical/major/minor)
+- [SYNC] <description>
+- [ERROR] <description>
+**Transcript Concerns:**
+- <user>: <description of confusion/stuck pattern>
+**Status:** PASS / FAIL / WARN
+```
+```
+
+### UX Observer Prompt
+
+Spawn as a `general-purpose` agent at each checkpoint:
+
+```
+You are a UX Observer evaluating a conflict resolution app. You have NO knowledge of the app's internals — you only see what users experienced.
+
+**Read the transcripts:**
+- `/tmp/e2e/transcripts/user-a.jsonl`
+- `/tmp/e2e/transcripts/user-b.jsonl`
+
+**Read the scenario:** `/tmp/e2e/scenario.json`
+
+**Evaluate on 5 dimensions (score 1-5 each):**
+
+1. **Discoverability** — Could users find what they needed without help?
+   - Evidence: confusion entries, stuck entries, number of actions before finding the right button
+   - 5 = always obvious, 1 = users frequently lost
+
+2. **Clarity** — Was the text/microcopy clear and helpful?
+   - Evidence: confusion entries about wording, think entries showing misunderstanding
+   - 5 = crystal clear, 1 = confusing or misleading text
+
+3. **Flow** — Did the experience feel natural and well-paced?
+   - Evidence: stuck entries, long gaps between actions, unnecessary back-and-forth
+   - 5 = smooth progression, 1 = broken or confusing flow
+
+4. **Emotional Safety** — Did the app handle sensitive content appropriately?
+   - Evidence: user reactions to AI responses, any jarring or dismissive AI output
+   - 5 = empathetic and appropriate, 1 = tone-deaf or harmful
+
+5. **Confidence** — Did users feel confident about what to do and what was happening?
+   - Evidence: think entries with low confidence, confusion entries, repeated actions
+   - 5 = always confident, 1 = frequently unsure
+
+**Output:** Write to `/tmp/e2e/ux-report.md`. Append to the file. Format:
+
+```markdown
+## UX Evaluation: {checkpointName}
+
+| Dimension | Score | Evidence |
+|-----------|-------|----------|
+| Discoverability | X/5 | <specific transcript references> |
+| Clarity | X/5 | <specific transcript references> |
+| Flow | X/5 | <specific transcript references> |
+| Emotional Safety | X/5 | <specific transcript references> |
+| Confidence | X/5 | <specific transcript references> |
+
+**Overall:** X/5
+**Top Issues:**
+1. <most impactful issue with evidence>
+2. <second issue>
+3. <third issue>
+```
+```
+
+### Report Synthesizer Prompt
+
+Spawn as a `general-purpose` agent at the very end:
+
+```
+You are the Report Synthesizer. Read ALL files and produce the final E2E report.
+
+**Read these files:**
+- `/tmp/e2e/scenario.json` — scenario used
+- `/tmp/e2e/state.json` — orchestrator state INCLUDING interventions array
+- `/tmp/e2e/transcripts/user-a.jsonl` — User A's full transcript
+- `/tmp/e2e/transcripts/user-b.jsonl` — User B's full transcript
+- `/tmp/e2e/audit-report.md` — Flow Auditor findings
+- `/tmp/e2e/ux-report.md` — UX Observer scores
+
+**CRITICAL: Check `state.json` interventions array.** If it has ANY entries, the result MUST be "INTERVENED COMPLETION" — never "NATURAL COMPLETION". Also check audit-report.md for any "SILENT UI FAILURE" entries.
+
+**Produce `/tmp/e2e/final-report.md` with this structure:**
+
+```markdown
+# E2E Playthrough Report
+**Scenario:** <name>
+**Date:** <date>
+**Duration:** <start to end time>
+**Result:** NATURAL COMPLETION / INTERVENED COMPLETION / BLOCKED (at stage X)
+
+## Summary
+<2-3 sentence overview of what happened>
+
+## Completion Integrity
+**Classification:** Natural / Intervened / Blocked
+**Interventions:** <count> stage(s) required seed-session jumps
+**Silent UI Failures:** <count> buttons that appeared to work but had no backend effect
+**Sync Timeouts:** <count> times DB lagged behind UI
+
+> ⚠️ If any interventions occurred, this run does NOT prove the app works end-to-end.
+> The stages that required intervention have critical UX or functionality issues.
+
+## Intervention Audit Trail
+| # | Stage | User | Reason | Action | Screenshot |
+|---|-------|------|--------|--------|------------|
+| 1 | Stage 1 | user-a | No visible "feel heard" button | seed-session jump | hard-fail-user-a-stage1.png |
+
+## Silent UI Failures
+| # | Stage | User | Agent Claim | DB Reality |
+|---|-------|------|-------------|------------|
+| 1 | Stage 1 | user-a | "confirmed feel heard" | stageProgress still GATHERING |
+
+## Progress Timeline
+| Time | User | Event | Notes |
+|------|------|-------|-------|
+| ... | A | Created session | ... |
+| ... | A | Signed compact | ... |
+| ... | B | Joined session | ... |
+
+## Bugs Found
+| # | Severity | Description | Evidence | Stage |
+|---|----------|-------------|----------|-------|
+| 1 | critical | ... | transcript line / screenshot | ... |
+
+## UX Scores
+| Dimension | Score | Trend |
+|-----------|-------|-------|
+| Discoverability | X/5 | ... |
+| ... | | |
+
+## Confusion Heatmap
+List every confusion and stuck entry from both transcripts, grouped by screen/stage:
+- **Stage 1 (Tell Your Side):** 3 confusion moments — <summaries>
+- **Compact Screen:** 1 stuck moment — <summary>
+
+## Recommendations
+1. <highest impact recommendation with evidence>
+2. ...
+3. ...
+
+## Raw Data
+- User A transcript: /tmp/e2e/transcripts/user-a.jsonl (<N> entries)
+- User B transcript: /tmp/e2e/transcripts/user-b.jsonl (<N> entries)
+- Screenshots: /tmp/e2e/screenshots/ (<N> files)
+- Interventions: <N> (from state.json)
+```
 ```
 
 ---
 
-## Phase 1.5: Accept Invitation as User B
+## Section 4: Orchestrator Loop
 
-After Alice creates the session and confirms the invitation (Phase 3 step 11), you must accept the invitation as Bob via the API. The "I've sent it - Continue" button only marks the invitation as confirmed on Alice's side — Bob's account is NOT linked to the session until the invitation is explicitly accepted.
+You (the orchestrator) drive the overall flow. You spawn **fresh user agents for each stage** — this keeps context clean and lets you provide updated summaries of what happened so far.
 
-### Steps
+### State File: `/tmp/e2e/state.json`
 
-1. **Get the invitation ID** from the database:
-```bash
-cd backend && npx tsx -e "
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
-async function main() {
-  const inv = await prisma.invitation.findFirst({
-    where: { sessionId: '{SESSION_ID}' }
-  });
-  console.log(JSON.stringify(inv, null, 2));
-  await prisma.\$disconnect();
+The orchestrator maintains a state file that tracks IDs discovered during the run:
+
+```json
+{
+  "userA": { "id": "<from seed response>", "email": "alice@e2e.test", "name": "Alice" },
+  "userB": { "id": "<from seed response>", "email": "bob@e2e.test", "name": "Bob" },
+  "sessionId": null,
+  "invitationId": null,
+  "currentStage": "PRE_SESSION",
+  "interventions": []
 }
-main();
+```
+
+User IDs come from the seed API response (Step 6). Session ID and invitation ID are discovered later — see below.
+
+The `interventions` array tracks every time the orchestrator had to "cheat" past a blocker. Any run with interventions is flagged as **Intervened Completion** (not Natural Completion) in the final report. Each entry looks like:
+
+```json
+{
+  "type": "intervention",
+  "ts": "<ISO timestamp>",
+  "stage": "FEEL_HEARD_B",
+  "user": "user-a",
+  "reason": "stuck after diagnostic scan — no visible 'feel heard' affordance",
+  "action": "seed-session jump to next stage",
+  "screenshot": "/tmp/e2e/screenshots/stuck-user-a-stage1.png"
+}
+```
+
+### Execution Model
+
+**Step 1: Spawn User A for Stage 1** (run in background)
+
+User A creates a session, signs the compact, chats with the AI, and eventually reaches the invitation screen. When User A logs a `done` entry, the agent stops.
+
+**Step 2: Discover session ID**
+
+When User A's agent finishes (or periodically while it runs), query the DB to find the session User A created:
+
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx tsx -e "
+const { PrismaClient } = require('@prisma/client');
+const p = new PrismaClient();
+(async () => {
+  const session = await p.session.findFirst({
+    where: { userVessels: { some: { userId: '<USER_A_ID>' } } },
+    orderBy: { createdAt: 'desc' },
+    include: { invitations: true }
+  });
+  console.log(JSON.stringify({
+    sessionId: session?.id,
+    invitationId: session?.invitations?.[0]?.id,
+    status: session?.status
+  }));
+  await p.\$disconnect();
+})();
 "
 ```
-(substitute `{SESSION_ID}` with the session ID from the URL after Alice creates the session)
 
-2. **Accept the invitation as Bob**:
+Write the discovered `sessionId` and `invitationId` to `/tmp/e2e/state.json`.
+
+**Step 3: Accept invitation via API**
+
 ```bash
-curl -s -X POST "http://localhost:3000/api/invitations/{INVITATION_ID}/accept" \
+curl -s -X POST "http://localhost:3000/api/invitations/<INVITATION_ID>/accept" \
   -H 'Content-Type: application/json' \
-  -H 'x-e2e-user-id: {USER_B_ID}' \
+  -H 'x-e2e-user-id: <USER_B_ID>' \
   -H 'x-e2e-user-email: bob@e2e.test' | jq .
 ```
 
-3. Verify the response shows `"status": "ACTIVE"` with both members listed.
-
-**Why this matters**: Without this step, Bob can navigate to the session URL but will see "Partner" instead of "Alice" in the header, and the backend won't properly track Bob as a participant. Real-time events and the reconciler depend on both users being linked.
-
-**Timing**: Run this step AFTER Alice clicks "I've sent it - Continue" in Phase 3 step 11, but BEFORE navigating Bob to the session in Phase 4.
-
-### Snapshot 03: Invitation Accepted
-```bash
-cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "03-invitation-accepted"
-```
-
----
-
-## Phase 2: Launch & Auto-Login Both Browsers
-
-**Important**: The E2E auth provider (`E2EAuthProvider.tsx`) reads `e2e-user-id` and `e2e-user-email` from `window.location.search` (query params). When `EXPO_PUBLIC_E2E_MODE=true`, Clerk is mocked out via metro config aliases and the E2E provider auto-logs in the user.
-
-**Browser A (User A):**
+**Step 4: Launch Browser B and navigate to session**
 
 ```bash
-agent-browser --session user-a --headed open "http://localhost:8081/?e2e-user-id={USER_A_ID}&e2e-user-email=alice@e2e.test"
-agent-browser --session user-a set viewport 390 812
-```
-(substitute `{USER_A_ID}` with the `id` from the seed response)
-
-**Browser B (User B):**
-
-```bash
-agent-browser --session user-b --headed open "http://localhost:8081/?e2e-user-id={USER_B_ID}&e2e-user-email=bob@e2e.test"
+agent-browser --session user-b --headed open "http://localhost:8081/?e2e-user-id=<USER_B_ID>&e2e-user-email=bob@e2e.test"
 agent-browser --session user-b set viewport 390 812
+agent-browser --session user-b wait --load networkidle
 ```
-(substitute `{USER_B_ID}` with the `id` from the seed response)
 
-Wait 3 seconds for the app to render, then take snapshots of both browsers to verify login:
+Then navigate User B's browser to the session (the URL will be something like `http://localhost:8081/session/<SESSION_ID>`). Also refresh User A's browser so it picks up the partner-joined state:
+
 ```bash
-agent-browser --session user-a snapshot -i
-# Should show "Hi Alice" or the home screen
-
-agent-browser --session user-b snapshot -i
-# Should show "Hi Bob" or the home screen
+agent-browser --session user-a open "http://localhost:8081/session/<SESSION_ID>"
+agent-browser --session user-a wait --load networkidle
 ```
 
-**Troubleshooting login failures:**
-- If you see the **public landing page** ("Get Started", "Work through conflict together") instead of "Hi Alice"/"Hi Bob", it means `EXPO_PUBLIC_E2E_MODE=true` was NOT set when the Expo bundler started. The env var must be set BEFORE starting expo (it's baked in at bundle time via metro config). Check `/tmp/e2e-mobile.log` and verify Phase 0 started Expo with the env var.
-- If you see the **Clerk sign-in page** (Google/Apple buttons), same issue — Clerk wasn't mocked out.
-- Do NOT click "Get Started" — it leads to the Clerk auth page which won't work in E2E mode.
+**Step 5: Spawn User B for Stage 1** (run in background)
+
+Give User B their Stage 1 goal + persona. No previous context needed — this is their first interaction.
+
+**Step 6: Monitor and advance (Truth Arbiter)**
+
+The orchestrator is the **Truth Arbiter** — it never blindly trusts an agent's claim of success. Every `done` entry is cross-referenced with the database.
+
+The orchestrator loop:
+
+1. Wait for an agent to finish (they stop on `done` — either goal complete, waiting for partner, stuck, or action limit)
+2. Read the agent's transcript — check the last `done` entry's `reason` field
+3. **DB VERIFICATION** (mandatory before advancing):
+
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx tsx -e "
+const { PrismaClient } = require('@prisma/client');
+const p = new PrismaClient();
+(async () => {
+  const sp = await p.stageProgress.findMany({ where: { sessionId: '<SESSION_ID>' }, orderBy: { updatedAt: 'desc' } });
+  const s = await p.session.findUnique({ where: { id: '<SESSION_ID>' }, select: { status: true } });
+  const msgCount = await p.message.count({ where: { sessionId: '<SESSION_ID>' } });
+  console.log(JSON.stringify({ session: s, stages: sp, messageCount: msgCount }, null, 2));
+  await p.\$disconnect();
+})();
+"
+```
+
+   - If the agent reported "goal complete" but the DB shows no stage advancement → log a **Silent UI Failure**: the agent thinks it clicked a button that did nothing. This is a critical bug. Append to audit-report.md:
+     ```
+     ## SILENT UI FAILURE
+     **User:** user-a
+     **Stage:** Stage 1
+     **Agent claim:** "goal complete — confirmed feel heard"
+     **DB state:** stageProgress still at GATHERING, feelHeard not set
+     **Diagnosis:** Agent clicked a button that appeared to work but had no backend effect
+     ```
+   - If the agent reported "goal complete" and DB confirms → advance normally
+   - If DB is behind (agent done but stage not advanced) → wait 10 seconds and re-check once. If still behind, log a **Sync Timeout** and treat as a silent UI failure
+
+4. Run checkpoint observers (Flow Auditor + UX Observer in parallel)
+5. If both agents completed their goal AND DB confirms → advance to next stage, spawn fresh agents with new goals + context summary
+6. If one agent is waiting for partner → the partner's agent should still be running; wait for it
+7. If an agent is stuck → run Diagnostic-then-Jump protocol (see below)
+
+### If `--start-at` was used
+
+Both browsers are already open and navigated to their session URLs. The orchestrator spawns both user agents immediately with the goal for the target stage. `{previousContext}` should describe the seeded state:
+
+> The session has been set up with pre-existing data. You and your partner have already completed the earlier stages. Take a snapshot to see where things stand and continue from there.
+
+### Wait Handling
+
+When a user agent sees "waiting for partner," it **stops** (logs `done` with reason `waiting for partner`). The orchestrator then:
+
+1. Waits for the partner's agent to finish its turn
+2. Polls DB to confirm state has advanced
+3. Spawns a **fresh agent** for the waiting user with an updated context summary:
+   > You were waiting for your partner to finish. They've completed their part. Take a snapshot to see what's changed.
+
+This is simpler and more reliable than having agents poll in a loop. The orchestrator controls all the timing.
+
+### Stuck Detection: Diagnostic-then-Jump Protocol
+
+If a user agent's last `done` entry has reason `stuck`, follow this protocol **in order**:
+
+**Phase 1: Deep Scan (diagnostic)**
+
+Before giving up, force the agent to do a full-page inventory. Spawn a new agent with this goal:
+
+> You got stuck earlier. Before we skip ahead, do a thorough scan of your current screen:
+> 1. Scroll all the way to the bottom, taking a snapshot at each scroll position
+> 2. Scroll back to the top
+> 3. Describe every interactive element you see, including any that might be partially hidden, in a drawer, or behind a menu
+> 4. Take a screenshot of the full page
+> 5. If you now see something you missed before, try it. Otherwise, log `done` with reason `stuck` again.
+
+This catches the case where the affordance exists but was below the fold or in a collapsed section.
+
+**Phase 2: Escalation (directed goal)**
+
+If the Deep Scan agent is still stuck, spawn one more agent with a **more directed goal** — still no testIDs, but narrower scope:
+- Instead of "Tell the AI what happened" → "Look for a text input area at the bottom of the screen. Type what happened with the chores."
+- Instead of "Signal you feel heard" → "After reading the AI's summary, look for a button or option that lets you confirm it captured your feelings."
+
+**Phase 3: Seed-Session Jump (intervention)**
+
+If still stuck after escalation, the blocker is a genuine UX failure. The orchestrator:
+
+1. Takes a final screenshot: `agent-browser --session <session> screenshot /tmp/e2e/screenshots/hard-fail-<user>-<stage>.png`
+2. Appends an intervention to `state.json`:
+   ```json
+   {
+     "type": "intervention",
+     "ts": "<ISO timestamp>",
+     "stage": "<current stage>",
+     "user": "<user-a or user-b>",
+     "reason": "stuck after diagnostic scan + escalation — <description of what's missing>",
+     "action": "seed-session jump",
+     "screenshot": "/tmp/e2e/screenshots/hard-fail-<user>-<stage>.png"
+   }
+   ```
+3. Uses `POST /api/e2e/seed-session` to jump to the next stage
+4. Refreshes both browsers and continues the run
+
+**CRITICAL**: Any use of seed-session to skip a stage marks the entire run as **Intervened Completion**. The Report Synthesizer must flag this prominently — the test passed "technically" but the UX is broken at that stage.
+
+### Stage Transition Detection
+
+Poll the database to detect when stages advance:
+
+```bash
+cd /Users/shantam/Software/meet-without-fear/backend && npx tsx -e "
+const { PrismaClient } = require('@prisma/client');
+const p = new PrismaClient();
+(async () => {
+  const sp = await p.stageProgress.findMany({ where: { sessionId: '<SESSION_ID>' }, orderBy: { updatedAt: 'desc' } });
+  const s = await p.session.findUnique({ where: { id: '<SESSION_ID>' }, select: { status: true } });
+  console.log(JSON.stringify({ session: s, stages: sp }, null, 2));
+  await p.\$disconnect();
+})();
+"
+```
+
+### Fresh Agent Lifecycle Summary
+
+```
+Stage 1A: spawn User A agent → runs until done → orchestrator discovers session ID
+           → accepts invitation → spawns User B agent
+Stage 1B: User B agent runs → done → orchestrator checks DB
+           → User A may need re-spawn if UI changed
+Stage 2:  spawn fresh agents for both users with Stage 2 goals + context summaries
+           → agents run in parallel (background) → both finish → checkpoint
+Stage 3:  spawn fresh agents with Stage 3 goals + summaries of Stage 1-2
+Stage 4:  spawn fresh agents with Stage 4 goals + summaries of Stage 1-3
+```
+
+Each agent gets: persona (unchanged), goal (stage-specific), previousContext (built from transcript + DB).
 
 ---
 
-## Phase 3: User A — Create Session & Chat (Stage 0 → Stage 1)
+## Section 5: Checkpoints
 
-Work in **Browser A** (`agent-browser --session user-a`). You are roleplaying as Alice.
+At each checkpoint, spawn Flow Auditor and UX Observer agents (can run in parallel).
 
-### Your Character (Alice)
-You're frustrated with Bob. They keep making plans with you and canceling last minute — it's happened 4-5 times in the last couple months. You feel disrespected and like your time doesn't matter. You still care about the relationship but you're reaching a breaking point. Be authentic and emotional but not aggressive — you're hurt, not angry.
-
-### Steps
-
-1. Take a snapshot to see the home screen. You should see "Hi Alice" with a "New Session" button.
-   ```bash
-   agent-browser --session user-a snapshot -i
-   ```
-2. Click the **"Start new session"** button (button with text "New Session").
-   ```bash
-   agent-browser --session user-a find text "New Session" click
-   ```
-3. On the New Session screen:
-   - There's a "First Name" text field — type "Bob" into it.
-   ```bash
-   agent-browser --session user-a snapshot -i
-   agent-browser --session user-a find placeholder "First Name" fill "Bob"
-   ```
-   - The "Create Session" button enables once the name is entered.
-4. Click **"Create session"** button.
-   ```bash
-   agent-browser --session user-a find text "Create session" click
-   agent-browser --session user-a wait --load networkidle
-   ```
-5. Wait for the session screen to load. Take a snapshot. You'll see the **Curiosity Compact** with a checkbox and "Begin" button.
-   ```bash
-   agent-browser --session user-a snapshot -i
-   ```
-6. Sign the compact:
-   - Click the checkbox (testID: `compact-agree-checkbox`) — text says "I agree to proceed with curiosity"
-   - Click the **"Begin"** button (testID: `compact-sign-button`) — note: the button text is "Begin", not "Sign"
-   ```bash
-   agent-browser --session user-a find testid "compact-agree-checkbox" click
-   agent-browser --session user-a find testid "compact-sign-button" click
-   ```
-7. A **mood check** screen appears ("How are you feeling right now?" with a slider). Click **"Continue"** (testID: `mood-check-continue-button`) to proceed with the default mood.
-   ```bash
-   agent-browser --session user-a find testid "mood-check-continue-button" click
-   ```
-8. The chat screen loads. You should see the AI's first message (e.g., "Hey Alice, what's going on with Bob?") and the chat input (textbox "Type a message...").
-   - **Header check:** The header should show "Bob" on the first line and a stage name like "Your Story" on the second line (NOT an online status indicator). There should be a **BookOpen icon** (not ArrowLeftRight) on the right side for the exchange history.
-   ```bash
-   agent-browser --session user-a snapshot -i
-   ```
-9. **Chat with the AI facilitator**: Send 4-6 messages about the conflict with Bob. After each message:
-   - Type into the chat input and click the send button
-   ```bash
-   agent-browser --session user-a find testid "chat-input" fill "Your message here"
-   agent-browser --session user-a find testid "send-button" click
-   ```
-   - Wait 8-10 seconds for the AI response
-   ```bash
-   agent-browser --session user-a wait 10000
-   ```
-   - Take a snapshot to read the response
-   ```bash
-   agent-browser --session user-a snapshot -i
-   ```
-   - Respond naturally to what the AI says
-10. After chatting, the app will show panels or buttons. Read them and respond appropriately.
-    - **Note:** Copy has been softened throughout the app. Status messages use warmer language like "Your words are held safely until Bob is ready" instead of "Waiting for Bob to finish reflecting."
-11. When you see the invitation panel with "Invite Bob" and "I've sent it - Continue":
-    - Do NOT click "Invite Bob" — it uses the native share API (`navigator.share`) which fails in automated browsers.
-    - Instead, click **"I've sent it - Continue"** to confirm the invitation.
-    ```bash
-    agent-browser --session user-a find text "I've sent it" click
-    ```
-    - **Important**: After this, you MUST run Phase 1.5 (accept invitation as Bob via API) before proceeding to Phase 4.
-12. Continue chatting until "I feel heard" appears, then click it.
-    ```bash
-    agent-browser --session user-a find text "I feel heard" click
-    ```
-13. After completing Stage 1, tell the user: "User A (Alice) has completed Stage 1 and sent the invitation. Moving to accept invitation and then User B."
-
-### Snapshot 02: Alice Stage 1 Complete
-```bash
-cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "02-alice-invitation-sent"
-```
-
-**Bug monitoring**: After each major step, check for browser errors:
-```bash
-agent-browser --session user-a errors
-```
-If errors are found (other than known benign ones), **send them to the issue tracker sub-agent**: "Issue in Phase 3 after [step description]: [error text]. Browser: user-a. Severity: WARNING." If you see SSE or API errors, spawn a **log analyzer sub-agent** to check `/tmp/e2e-backend.log` for the server-side error around that timestamp.
-
-**Known benign errors**: `[UserSessionUpdates] Subscription error` may appear — this is a non-blocking Ably subscription race and doesn't affect the flow.
+| # | Checkpoint | Trigger | What to Verify |
+|---|-----------|---------|----------------|
+| 1 | Session Created | User A creates session | Session exists in DB, compact unsigned |
+| 2 | Compact Signed | User A signs compact | Compact record created, stage advances |
+| 3 | Stage 1A Complete | User A signals "feel heard" | Messages exist, feelHeard flag set |
+| 4 | Invitation Accepted | User B joins | Both users in session, invitation status updated |
+| 5 | Stage 1B Complete | User B signals "feel heard" | Reconciler ran, empathy generated |
+| 6 | Share Suggestion | Reconciler offers share | ReconcilerShareOffer exists, UI shows panel |
+| 7 | Context Exchanged | Both share/receive context | SHARED_CONTEXT messages exist for both |
+| 8 | Empathy Revealed | Both validate | empathyRevealed flags set |
+| 9 | Session Complete | Stage 3+ done or session ends | Final session status correct |
 
 ---
 
-## Phase 4: User B — Join Session & Chat (Stage 0 → Stage 1)
+## Section 6: Orchestrator Stage Goals Reference
 
-Work in **Browser B** (`agent-browser --session user-b`). You are now roleplaying as Bob.
+These are the goals you give to each user agent at each stage. They describe WHAT to accomplish, never HOW (no testIDs, no button names).
 
-**Prerequisites**: Phase 1.5 must be complete (invitation accepted via API). Bob's account must be linked to the session.
+### Stage 1: Tell Your Side
 
-### Your Character (Bob)
-You've been invited to this session by Alice. You know you've been canceling plans a lot lately. The truth is you've been overwhelmed — work has been brutal, you've been dealing with anxiety, and sometimes when the day arrives you just can't face going out. You feel guilty and didn't realize how much it was affecting Alice. You want to make things right. Be honest and vulnerable.
+**User A (first):**
+> You've just opened a new conflict resolution session. The app will guide you through telling your side of the story. Talk to the AI about what happened — describe the conflict from your perspective. Be honest and speak naturally as your character would.
+>
+> Early on, the app will show an invitation message for your partner (an "Invite [partner name]" button). When you see it, tap "I have sent it" or the continue/confirm button — do NOT try to actually send it via SMS/email. The orchestrator handles getting your partner into the session via API.
+>
+> Keep chatting after confirming the invitation. The AI will continue to help you process your feelings. Eventually a "feel heard" button or similar confirmation will appear — tap it when you genuinely feel the AI understands your experience. After confirming feel-heard, log `done` with reason "waiting for partner".
 
-### Steps
+**User B (after joining):**
+> You've just joined a conflict resolution session your partner started. The app will ask you to tell your side of the story. Talk to the AI about what happened from YOUR perspective. Be honest — you'll probably see things differently than your partner. When you feel like the AI understands you, look for a way to confirm that.
 
-1. Navigate Browser B directly to the session:
-   ```bash
-   agent-browser --session user-b open "http://localhost:8081/session/{SESSION_ID}?e2e-user-id={USER_B_ID}&e2e-user-email=bob@e2e.test"
-   ```
-2. Wait for the session to load. You should see "Alice" (not "Partner") in the header and "Accepted Invitation" indicator — this confirms Phase 1.5 worked.
-   - **Header check:** The header should show "Alice" on the first line and a stage name on the second line (e.g., "Getting Started"). A **BookOpen icon** should appear on the right with a small **dot indicator** (not a number badge) if there is new activity.
-   ```bash
-   agent-browser --session user-b wait --load networkidle && agent-browser --session user-b snapshot -i
-   ```
-3. Sign the compact (same flow as User A — checkbox then "Begin" then mood check "Continue").
-   ```bash
-   agent-browser --session user-b find testid "compact-agree-checkbox" click
-   agent-browser --session user-b find testid "compact-sign-button" click
-   agent-browser --session user-b wait 2000
-   agent-browser --session user-b find testid "mood-check-continue-button" click
-   ```
-4. **Chat with the AI facilitator**: Send 4-6 messages about your perspective. After each message:
-   - Type and send the message
-   ```bash
-   agent-browser --session user-b find testid "chat-input" fill "Your message here"
-   agent-browser --session user-b find testid "send-button" click
-   ```
-   - Wait 8-10 seconds for the AI response
-   ```bash
-   agent-browser --session user-b wait 10000
-   ```
-   - Take a snapshot to read the response
-   ```bash
-   agent-browser --session user-b snapshot -i
-   ```
-   - Respond naturally
-5. After chatting, the app will show panels or buttons. Read them and respond appropriately.
+### Stage 2: Empathy Exchange
 
-**Bug monitoring**: After each major step, check for browser errors:
-```bash
-agent-browser --session user-b errors
-```
-If errors are found (other than known benign ones), **send them to the issue tracker sub-agent**: "Issue in Phase 4 after [step description]: [error text]. Browser: user-b. Severity: WARNING."
+**User (receiving share suggestion):**
+> The app may suggest sharing something with your partner. Read what it's offering and decide what feels right. Follow the app's guidance — it will walk you through an exchange of perspectives.
 
-### Snapshot 04: Bob Stage 1 Complete
-```bash
-cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "04-bob-stage1-complete"
-```
+**User (receiving context from partner):**
+> Your partner has shared something with you. Read it carefully and respond honestly. The app will guide you through understanding their perspective.
+
+### Stage 2 Escalation Goals (if stuck):
+
+> Look for a panel or card that appeared on your screen — it might be asking you to share your empathy with your partner, or showing you something your partner shared. Tap on it to continue.
+
+### Stage 3: Needs Mapping
+
+**Both users:**
+> The app wants to understand what each of you needs going forward. Talk to the AI about what matters most to you in resolving this conflict. What do you need from your partner? What are you willing to offer?
+
+### Stage 4: Strategic Repair
+
+**Both users:**
+> You're in the final stage. The app is helping you and your partner find concrete solutions. Engage with whatever the app presents — it might ask you to evaluate strategies, make commitments, or agree on next steps.
+
+### Universal Escalation (for any stage):
+
+> Take a careful look at your screen. Is there a button, card, panel, or prompt you haven't interacted with yet? Sometimes the next step is in a drawer or panel that slides up from the bottom, or in a menu. Try scrolling down or looking for any highlighted/colored elements. If you see text asking you to do something, follow those instructions.
 
 ---
 
-## Phase 5: Stage 2 — Empathy Exchange & Validation
+## Section 7: Report Generation
 
-After both users complete Stage 1, they enter Stage 2 (Perspective Stretch). Each user chats with the AI to draft an empathy statement about what their partner might be feeling, then shares it for validation.
+After the session resolves (all stages complete) or the orchestrator decides to stop (agents stuck, critical error):
 
-### UI changes in Stage 2
+1. **Spawn Report Synthesizer** agent to read all files and produce `/tmp/e2e/final-report.md`
 
-- **Chapter markers**: When entering Stage 2, a chapter marker appears in the chat timeline: `——— Walking in Their Shoes ———` (testID: `chat-indicator-stage-chapter`). These are styled differently from regular indicators — larger font, no uppercase, em-dash delimiters.
-- **Header stage name**: The header subtitle updates to "Walking in Their Shoes" (testID: `session-chat-header-stage-name`).
-- **No more PartnerEventModal**: Partner events (empathy shared, context shared, etc.) now appear as **inline chat indicators** in the timeline, NOT as pop-up modals. You will NOT see modal dialogs blocking the screen for these events.
+   The synthesizer MUST read `/tmp/e2e/state.json` and check the `interventions` array. The run's result classification:
 
-### Phase 5a: Empathy Drafting & Sharing (Both Users)
+   | Interventions | Silent UI Failures | Result |
+   |---------------|-------------------|--------|
+   | 0 | 0 | **NATURAL COMPLETION** — the app works as intended |
+   | 0 | 1+ | **TECHNICALLY COMPLETE, UI FAILURES** — app works but buttons silently fail |
+   | 1+ | any | **INTERVENED COMPLETION** — test passed but only because we cheated past blockers |
+   | n/a | n/a (run stopped) | **BLOCKED** — could not complete even with intervention |
 
-For **each user** (alternate between sessions user-a and user-b):
+   The final report MUST include an **Intervention Audit Trail** section listing every intervention from state.json with screenshots. This prevents the test suite from masking critical UX issues by silently skipping past them.
 
-1. The AI will guide the user to imagine what the other person might be going through. Chat 3-5 messages exploring the partner's perspective.
-2. After sufficient exploration, the AI proposes a draft empathy statement and a **"Review what you'll share"** button appears above the chat input (testID: `empathy-review-button`).
-3. Click the review button. A drawer opens showing the draft statement with **"Refine further"** and **"Share"** buttons.
+2. **Print summary** to the user:
+   - Overall result (NATURAL COMPLETION / INTERVENED COMPLETION / BLOCKED)
+   - **If intervened**: list every stage that required intervention
+   - **If silent UI failures**: list every button that didn't work
+   - Bugs found (count + top 3)
+   - UX scores (5 dimensions)
+   - Location of full report: `/tmp/e2e/final-report.md`
+3. **Clean up browsers:**
    ```bash
-   agent-browser --session user-a find testid "empathy-review-button" click
+   agent-browser --session user-a close
+   agent-browser --session user-b close
    ```
-4. Click **"Share"** (testID: `share-empathy-button`) to share the empathy statement with the partner.
-   ```bash
-   agent-browser --session user-a find testid "share-empathy-button" click
-   ```
-5. An **"Empathy shared"** indicator appears in the timeline. The chat input may be hidden while waiting for the partner.
-   - You may also see a **"Take a breath while you wait"** link (testID: `waiting-banner-exercise-link`) below the waiting banner. This opens breathing/grounding exercises. Optional — you can skip it for the E2E test.
-
-### Snapshot 05: Empathy Shared
-After both users have shared their empathy statements:
-```bash
-cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "05-empathy-shared"
-```
-
-**Note**: Users can share empathy at any time — the reconciler handles asymmetric timing gracefully. If User A shares before User B has completed Stage 1, the reconciler runs for the A→B direction as soon as B confirms "feel heard", and User A sees a banner like "Bob is thinking about how you might feel." The symmetric reconciler only processes directions not already handled by the asymmetric path.
-
-**Important**: The `partner_considering_share` event has been removed. You will NOT see a "partner is considering whether to share" notification — this was deleted intentionally to reduce anxiety.
-
-### Phase 5b: Reconciler & Share Offers
-
-After both users share empathy, the backend reconciler analyzes gaps between each user's empathy attempt and what the partner actually expressed.
-
-1. Wait ~20 seconds for the reconciler to process.
-2. Each user may see an inline **"Sharing opportunity available"** indicator in the chat timeline (testID: `chat-indicator-share-suggestion-received`), along with the share suggestion appearing in the exchange history.
-3. To view the share offer, tap the **BookOpen icon** in the header to open the **ActivityDrawer** (testID: `activity-drawer`) — a bottom sheet that slides up from the bottom at ~60% screen height.
-   - The drawer header reads **"Between you and [Partner Name]"** (e.g., "Between you and Bob").
-   - The drawer has two sections: **"Needs Your Attention"** (pinned at top with action items) and **"History"** (chronological list below).
-   - Share offers appear in "Needs Your Attention" with two options:
-     - **"Share as-is"** — shares recommended context immediately
-     - **"Refine"** — opens the RefinementModalScreen (full-screen coaching chat for refining content)
-   - Close the drawer by pressing Escape or clicking outside it.
-4. After sharing context, the **guesser sees it inline in chat** — no need to navigate to the ActivityDrawer to read the content. Expected rendering in chat (bottom to top in inverted FlatList):
-   - **AI reflection message** — regular chat bubble, Sonnet-generated warm therapeutic prompt (e.g., "Take a moment to sit with what {name} shared...")
-   - **Blue-bordered inline card** — header "New context from {name}" with the partner's shared text content visible
-   - **"CONTEXT FROM {NAME} →" indicator pill** — visual chapter marker/separator above the card
-5. **Spawn a cross-browser verification sub-agent** after sharing context. The sub-agent should snapshot the guesser's browser and verify:
-   - "CONTEXT FROM {NAME} →" indicator pill is visible
-   - Blue-bordered card with "New context from {name}" header and the shared text content
-   - AI reflection message below the card
-   - **Send results to the issue tracker sub-agent** — report success or any missing elements
-6. The guesser **chats naturally** about the shared content directly in the chat (1-2 messages reflecting on what they read). The chat input is NOT blocked.
-7. After chatting about the shared context, a **"Revisit what you'll share"** empathy refinement button appears → click to revise empathy → click **"Resubmit"** (testID: `share-empathy-button`)
-8. Handle share offers for both users — each may get one.
-
-### Snapshot 06: Context Exchanged
-After reconciler has run and share offers are handled for both users:
-```bash
-cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "06-context-exchanged"
-```
-
-### Phase 5c: Empathy Validation (Both Users)
-
-Once both users have finalized their empathy statements, each sees the partner's attempt as an **inline interactive card** in the chat timeline and must validate it.
-
-1. An **EmpathyValidationCard** (testID: `empathy-validation-card`) appears directly in the chat FlatList, NOT in a separate modal or drawer. It has a distinct visual treatment:
-   - Full-width card with accent-colored left border
-   - Header: "[Partner Name]'s understanding" with a heart icon
-   - The empathy content reveals with a deliberate animation (card entrance → content fade-in → buttons appear, ~2.5 seconds total)
-   - For long statements, only 4 lines show initially with a "Read full statement" toggle
-2. The card asks **"Does this feel right?"** with two buttons:
-   - **"Yes, mostly"** (testID: `empathy-validation-card-yes-button`) — confirms the understanding. Card transitions to a completed state showing "You confirmed this feels right" with a green check.
-   - **"Not quite yet"** (testID: `empathy-validation-card-no-button`) — opens the **ValidationCoachChat** modal for AI-mediated feedback. After completing the feedback conversation, the card transitions to "Feedback shared" state.
-3. For this E2E test, click **"Yes, mostly"** for both users to advance.
-   ```bash
-   agent-browser --session user-a wait 3000
-   agent-browser --session user-a find testid "empathy-validation-card-yes-button" click
-
-   agent-browser --session user-b wait 3000
-   agent-browser --session user-b find testid "empathy-validation-card-yes-button" click
-   ```
-4. After validation, a green **"[Partner] confirmed your understanding"** indicator appears in the other user's chat (testID: `chat-indicator-empathy-validated`).
-5. Once BOTH users validate, the app automatically transitions to Stage 3.
-6. Verify: A transition message appears ("You've validated each other's understanding...") and a new chapter marker: `——— What Matters Most ———`.
-
-**Bug monitoring**: Check errors after validation. Check both browsers to verify real-time sync of validation events via the inline indicators.
-```bash
-agent-browser --session user-a errors
-agent-browser --session user-b errors
-```
-If errors are found, **send them to the issue tracker sub-agent**: "Issue in Phase 5c after empathy validation: [error text]. Browser: [user-a/user-b]. Severity: [CRITICAL/WARNING]." **Spawn a cross-browser verification sub-agent** to snapshot both browsers and confirm validation indicators appeared correctly in both.
-
-### Snapshot 07: Empathy Validated (Entering Stage 3)
-```bash
-cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "07-empathy-validated"
-```
 
 ---
 
-## Phase 6: Stage 3 — Needs & Common Ground
-
-Stage 3 extracts each user's underlying needs from the conversation, has them confirm/adjust, then finds common ground.
-
-### Phase 6a: Needs Extraction (Automatic)
-
-1. After entering Stage 3, needs extraction begins automatically.
-2. The AI analyzes the conversation and identifies each user's needs.
-3. **Polling**: The client polls `GET /sessions/:id/needs` every 3 seconds while `extracting: true`. Wait for extraction to complete (usually 5-15 seconds).
-4. A real-time event `session.needs_extracted` fires when complete.
-5. Take a snapshot — you should see a needs card (testID: `needs-section`) showing AI-extracted needs.
-   ```bash
-   agent-browser --session user-a wait 15000 && agent-browser --session user-a snapshot -i
-   ```
-
-### Phase 6b: Confirm Needs (Both Users)
-
-For **each user**:
-
-1. Review the extracted needs shown in the `needs-section` card.
-2. Optionally click **"Adjust"** (testID: `adjust-needs-button`) to modify needs.
-3. Click **"Confirm"** (testID: `confirm-needs-button`) to confirm the needs list.
-   ```bash
-   agent-browser --session user-a find testid "confirm-needs-button" click
-   agent-browser --session user-b find testid "confirm-needs-button" click
-   ```
-4. The backend publishes `partner.needs_confirmed` to notify the partner.
-5. After confirming, a share needs step may appear — click **"Share"** (testID: `share-needs-confirm-button`) to share needs for common ground analysis.
-   ```bash
-   agent-browser --session user-a find testid "share-needs-confirm-button" click
-   agent-browser --session user-b find testid "share-needs-confirm-button" click
-   ```
-
-### Phase 6c: Common Ground Analysis (Automatic)
-
-1. Once BOTH users share their needs, the backend analyzes common ground.
-2. Wait ~10-15 seconds for the analysis. A loading state may appear.
-3. The client calls `GET /sessions/:id/common-ground` to fetch results.
-4. Two possible outcomes:
-   - **Common ground found**: Cards showing overlapping needs appear (testID: `common-ground-card`)
-   - **No overlap**: A "no overlap" message appears
-
-### Phase 6d: Confirm Common Ground (Both Users)
-
-For **each user**:
-
-1. **If common ground exists**: Review the common ground items. Click confirm (testID: `common-ground-confirm-button`) to agree with the overlap.
-2. **If no overlap**: Click continue (testID: `no-overlap-continue-button`) to proceed anyway.
-3. Once BOTH users confirm, Stage 3 completes and Stage 4 begins automatically.
-4. Verify: A transition message appears ("You've found common ground together..." or "Even though your needs don't overlap directly...") and a chapter marker: `——— Moving Forward Together ———`.
-
-### Snapshot 08: Stage 3 Complete (Entering Stage 4)
-```bash
-cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "08-stage3-complete"
-```
-
----
-
-## Phase 7: Stage 4 — Strategies & Resolution
-
-Stage 4 is the final stage where users propose strategies, rank them, create agreements, and resolve the session.
-
-### Phase 7a: Strategy Proposals
-
-1. After entering Stage 4, both users can propose strategies.
-2. The AI may suggest strategies based on the common ground / needs.
-3. Each user can type strategy ideas in the chat. The AI will help shape them.
-4. Strategies appear in an anonymous pool — neither user knows who proposed what.
-
-### Phase 7b: Ready to Rank
-
-1. Once enough strategies are proposed, a **"Ready to rank"** button appears.
-2. Click it for each user. The backend publishes `partner.ready_to_rank`.
-3. Once BOTH users are ready, the ranking phase begins.
-
-### Phase 7c: Strategy Ranking
-
-1. A full-screen **StrategyRankingOverlay** appears showing all strategies.
-2. Each user drags strategies to rank them by preference (most preferred first).
-3. Submit the ranking. The backend publishes `partner.ranking_submitted`.
-4. Once BOTH users submit rankings, overlap is revealed:
-   - Top-3 strategies that BOTH users ranked highly are highlighted
-   - These become agreement candidates
-
-### Phase 7d: Create & Confirm Agreements
-
-1. From the overlap, create an agreement by clicking on a strategy.
-2. Fill in agreement details (description, type, duration, measure of success).
-3. Submit the agreement. The partner receives an `agreement.proposed` event.
-4. The partner reviews and confirms the agreement.
-5. Once BOTH users confirm at least one agreement, a **"Resolve"** button appears.
-
-### Phase 7e: Resolve Session
-
-1. Click **"Resolve"** to complete the session.
-2. The backend publishes `session.resolved` and updates session status to `RESOLVED`.
-3. Both users see a completion/summary screen.
-4. **The session is complete!**
-
-### Snapshot 09: Session Resolved
-```bash
-cd /Users/shantam/Software/meet-without-fear/backend && npx ts-node snapshots/create-snapshot.ts "09-session-resolved"
-```
-
----
-
-## Phase 8: Final Report
-
-When the playthrough is complete (session resolved, or you decide to stop), compile a summary for the user.
-
-**First**, read `/tmp/e2e-issues.md` and `/tmp/e2e-ux-review.md` to pull in all issues and UX assessments tracked by the sub-agents throughout the playthrough. Cross-reference with any final browser errors from both sessions.
-
-Report sections:
-
-1. **Progress**: How far each user got (which stage, what was the last action).
-2. **Bugs found**: Compile from `/tmp/e2e-issues.md` — include all CRITICAL and WARNING issues with their details. Add any final browser errors not already tracked. Include relevant server log excerpts from `/tmp/e2e-*.log` if applicable.
-3. **UX confusion**: Compile from `/tmp/e2e-ux-review.md` — include all UX expert assessments of unclear flows, confusing transitions, non-obvious next actions, or blockers where progress required knowledge a first-time user wouldn't have. These are real UX issues — if an AI can't parse it, many humans will struggle too.
-4. **Real-time sync**: Did changes in one browser show up correctly in the other? Specifically check that inline indicators (empathy-validated, context-shared, stage-chapter) appear in both browsers at the right time.
-5. **Performance**: Any noticeably slow responses or loading screens.
-6. **New UI verification**: Verify these specific elements worked correctly:
-   - BookOpen icon in header (not ArrowLeftRight)
-   - Dot badge on header icon (not numeric)
-   - Stage names in header subtitle (not online status)
-   - Chapter markers at stage transitions
-   - Inline EmpathyValidationCard with 2-step buttons
-   - ActivityDrawer bottom sheet (not full-screen modal)
-   - Unified timeline (not Sent/Received tabs)
-   - No PartnerEventModal popups (all events inline)
-   - Softened copy in waiting banners and status text
-   - Inline SHARED_CONTEXT card renders in guesser's chat with blue border
-   - Card shows "New context from {name}" header with partner's text visible
-   - AI reflection message appears after the shared content card
-   - "CONTEXT FROM {NAME} →" indicator pill appears above the card as visual separator
-   - Guesser can chat about shared content naturally (input not blocked)
-7. **Overall assessment**: Could two real users complete this flow successfully?
-
-### Cleanup
-
-Close both browser sessions:
-```bash
-agent-browser --session user-a close
-agent-browser --session user-b close
-```
-
----
-
-## Known Issues & Gotchas
-
-1. **CORS blocks SSE requests without wildcard allowedHeaders**: The `react-native-sse` library uses `XMLHttpRequest` which sends `Cache-Control` and `X-Requested-With` headers, triggering CORS preflight. If `allowedHeaders` is a specific list instead of `'*'`, Firefox blocks these headers silently → backend returns FORBIDDEN. Phase 0 Step 2 catches this. The fix is `corsOptions.allowedHeaders = '*'` in E2E mode.
-
-2. **`EXPO_PUBLIC_E2E_MODE` is bundle-time**: This env var is read by `metro.config.js` to alias `@clerk/clerk-expo` with mock modules. It must be set BEFORE starting the Expo dev server. Phase 0 handles this by passing the env var when starting Expo.
-
-3. **Backend hot-reloads with `tsx watch`**: The `dev:api` script uses `tsx watch`, so code changes in `backend/src/` are picked up automatically. However, changes to `.env` require a full restart.
-
-4. **`[UserSessionUpdates] Subscription error`**: This Ably subscription error appears intermittently during session setup. It's non-blocking — the subscription recovers automatically. Do not treat this as a test failure.
-
-5. **Mood check screen**: After signing the compact, a mood slider appears before the chat. You must click "Continue" to proceed — the chat input won't appear until this is dismissed.
-
-6. **Send button**: The send button has `data-testid="send-button"`. Use `find testid "send-button" click` to click it.
-
-7. **Expo web first bundle is slow**: The first page load after `--clear` can take 15-30 seconds as Expo builds the web bundle. Be patient on the health check and browser navigate steps.
-
-8. **"Invite Bob" button fails in automated browsers**: The native share API (`navigator.share`) is not available in automated browsers. Always use "I've sent it - Continue" instead, then accept the invitation via API in Phase 1.5.
-
-9. **Invitation must be accepted via API**: The "I've sent it - Continue" button only confirms Alice sent the invitation externally. Bob's account is NOT linked to the session until `POST /api/invitations/:id/accept` is called as Bob. Without this, Bob sees "Partner" instead of "Alice" and the session won't work correctly.
-
-10. **Mood check repeats on page reload**: Every full page reload shows the mood check slider again, even after it was already completed. This is a known UX issue — just click "Continue" again.
-
-11. **Use `fill` for typing into inputs**: For React Native Web textareas, use `agent-browser fill` which types character-by-character and triggers React state updates properly.
-
-12. **EmpathyValidationCard has a deliberate reveal delay**: The inline validation card uses a 3-phase stagger animation (~2.5 seconds total before buttons appear). Do NOT click the buttons before they're visible. After the card appears in the chat, wait at least 3 seconds before attempting to click "Yes, mostly" or "Not quite yet".
-
-13. **ActivityDrawer is a bottom sheet, not a modal**: The exchange history is now a bottom-sheet drawer (testID: `activity-drawer`) that slides up from the bottom. It does NOT have tabs. It shows a unified chronological timeline. To open it, click the BookOpen icon in the header.
-
-14. **First message send can silently fail**: The first attempt to send a message sometimes clears the textarea but doesn't actually post the message. If the message doesn't appear in the chat after sending, try typing and sending again.
-
-15. **Inline indicators replace all PartnerEventModal popups**: Partner events (empathy revealed, empathy validated, context shared, share suggestion) now appear as small inline indicators in the chat timeline, NOT as blocking modal dialogs. If you see a blocking modal for a partner event, that's a regression bug — report it.
-
-16. **Chapter markers appear at stage transitions**: When entering a new stage, a chapter marker like `——— Walking in Their Shoes ———` appears in the chat. These use em-dash delimiters and are visually distinct from regular indicators (larger font, no uppercase). The first chapter marker visible is "Your Story" (Stage 1) — the ONBOARDING stage does NOT produce a marker.
-
----
-
-## Quick Reference: TestID Changes
-
-These testIDs have changed from the previous version. If you encounter references to old testIDs, use the new ones:
-
-| Old TestID | Status | New TestID |
-|------------|--------|------------|
-| `activity-menu-modal` | REMOVED | `activity-drawer` |
-| `activity-menu-modal-tab-sent` | REMOVED | N/A (no tabs) |
-| `activity-menu-modal-tab-received` | REMOVED | N/A (no tabs) |
-| `partner-event-modal` | REMOVED | N/A (inline indicators) |
-| `accuracy-feedback-trigger` | REMOVED | `empathy-validation-card` |
-| `accuracy-accurate-button` | REMOVED | `empathy-validation-card-yes-button` |
-| `accuracy-partial-button` | REMOVED | `empathy-validation-card-yes-button` (maps to "Yes, mostly") |
-| `accuracy-inaccurate-button` | REMOVED | `empathy-validation-card-no-button` ("Not quite yet") |
-| `sent-item-card` | REMOVED | `timeline-item-card` |
-| `received-item-card` | REMOVED | `timeline-item-card` |
-
-New testIDs introduced:
-
-| TestID | Component | Description |
-|--------|-----------|-------------|
-| `empathy-validation-card` | EmpathyValidationCard | Inline validation card in chat FlatList |
-| `empathy-validation-card-yes-button` | EmpathyValidationCard | "Yes, mostly" button |
-| `empathy-validation-card-no-button` | EmpathyValidationCard | "Not quite yet" button |
-| `empathy-validation-card-content` | EmpathyValidationCard | Partner's empathy text |
-| `empathy-validation-card-completed` | EmpathyValidationCard | Completed state indicator |
-| `empathy-validation-card-superseded` | EmpathyValidationCard | Superseded state indicator |
-| `activity-drawer` | ActivityDrawer | Bottom sheet drawer |
-| `timeline-item-card` | TimelineItemCard | Unified timeline item in drawer |
-| `chat-indicator-empathy-validated` | ChatIndicator | "[Partner] confirmed your understanding" |
-| `chat-indicator-context-shared` | ChatIndicator | "[Partner] shared more context" |
-| `chat-indicator-share-suggestion-received` | ChatIndicator | "Sharing opportunity available" |
-| `chat-indicator-stage-chapter` | ChatIndicator | Stage chapter marker |
-| `session-chat-header-activity-dot` | SessionChatHeader | Dot badge on BookOpen icon |
-| `session-chat-header-stage-name` | SessionChatHeader | Stage name in header subtitle |
-| `waiting-banner-exercise-link` | WaitingBanner | "Take a breath while you wait" link |
-
----
-
-## Quick Reference: Commands
-
-| Action | User A | User B |
-|--------|--------|--------|
-| Snapshot | `agent-browser --session user-a snapshot -i` | `agent-browser --session user-b snapshot -i` |
-| Click ref | `agent-browser --session user-a click @e1` | `agent-browser --session user-b click @e1` |
-| Click testID | `agent-browser --session user-a find testid "id" click` | `agent-browser --session user-b find testid "id" click` |
-| Type | `agent-browser --session user-a fill @e1 "text"` | `agent-browser --session user-b fill @e1 "text"` |
-| Navigate | `agent-browser --session user-a open <url>` | `agent-browser --session user-b open <url>` |
-| Screenshot | `agent-browser --session user-a screenshot path.png` | `agent-browser --session user-b screenshot path.png` |
-| Errors | `agent-browser --session user-a errors` | `agent-browser --session user-b errors` |
-| Console | `agent-browser --session user-a console` | `agent-browser --session user-b console` |
-| Eval | `agent-browser --session user-a eval 'expr'` | `agent-browser --session user-b eval 'expr'` |
-| Wait | `agent-browser --session user-a wait 5000` | `agent-browser --session user-b wait 5000` |
-
-## Quick Reference: Server Logs
-
-| Server | Log file | Port |
-|--------|----------|------|
-| Backend API | `/tmp/e2e-backend.log` | 3000 |
-| Mobile web (Expo) | `/tmp/e2e-mobile.log` | 8081 |
-| Website (Next.js) | `/tmp/e2e-website.log` | 3001 |
-
-## Quick Reference: Sub-Agent Output Files
-
-| Sub-Agent | Output file | Purpose |
-|-----------|-------------|---------|
-| Issue Tracker | `/tmp/e2e-issues.md` | All bugs, errors, failures with severity |
-| UX Expert | `/tmp/e2e-ux-review.md` | UX clarity assessments, blockers, process confusion |
+## Section 8: Execution Checklist
+
+Follow this checklist when running the playthrough:
+
+- [ ] Parse arguments (scenario, start-at)
+- [ ] Kill ports, verify env, start servers
+- [ ] Health check all 3 servers
+- [ ] Create /tmp/e2e/ directory structure
+- [ ] Seed users/session, write state.json with user IDs
+- [ ] Write scenario.json
+- [ ] Launch Browser A, authenticate, wait for networkidle
+- [ ] Spawn User A agent for Stage 1 (background)
+- [ ] When User A finishes: query DB for session ID + invitation ID, update state.json
+- [ ] Accept invitation via API
+- [ ] Launch Browser B, authenticate, wait for networkidle
+- [ ] Navigate both browsers to session URL
+- [ ] Spawn User B agent for Stage 1 (background)
+- [ ] When both agents finish: run checkpoint observers, read transcripts, check DB
+- [ ] For each subsequent stage: spawn fresh agents with updated goals + context summaries
+- [ ] On `stuck`: re-spawn with escalation goal; if still stuck, skip via seed-session
+- [ ] On `waiting for partner`: wait for partner agent, then re-spawn waiting user
+- [ ] When complete/blocked: spawn Report Synthesizer
+- [ ] Print summary, clean up browsers
+
+## Key Reminders
+
+- **No testIDs in user agent prompts.** They discover the UI by reading snapshots.
+- **Use `fill` not `type`** for React Native Web text inputs (in the agent-browser commands reference).
+- **EXPO_PUBLIC_E2E_MODE must be set at bundle time** — before starting Expo, not after.
+- **Invitation acceptance is mechanical** — the orchestrator does it via API, not the user agent.
+- **Real AI responses** — no fixtures, no mocking. Tests actual Bedrock calls.
+- **Agents interact via agent-browser CLI**, not Playwright MCP tools.
+- **Never trust agent claims.** Always cross-reference `done` entries with DB state before advancing.
+- **Auth failures = hard abort.** 401/403 from backend means E2E_AUTH_BYPASS is broken — don't retry.
+- **Every seed-session jump is an intervention.** Log it, screenshot it, flag the run as Intervened.
+- **Diagnostic before jumping.** Always do a Deep Scan (full-page scroll + inventory) before skipping a stage.
+- **M4 16GB RAM constraint.** 3 servers + 2 headed browsers ≈ 4-6GB. Watch memory, kill early if swapping.
+- **NEVER use POST /api/e2e/cleanup as a health check.** It deletes all E2E data. If called while an agent is mid-session, it destroys the session and causes 403 errors on all subsequent API calls. Use a GET endpoint for health checks.
+- **React Native Web send button is invisible to snapshots.** The chat send button is a `<div tabindex=0>` with an SVG child, not an accessible button. Agents must use `eval` with coordinate-based or aria-label-based clicking to interact with it.
+- **PostgreSQL must be the Nix PG16 with pgvector.** Other PostgreSQL instances (e.g., from scheduler4 devenv) on port 5432 will lack pgvector and migrations will fail. Always verify the binary: `ps aux | grep postgres`.
+- **`devenv up` crashes without a TTY.** Use `pg_ctl` directly to start PostgreSQL in background mode.
+- **Prisma schema uses `userVessels` not `participants`.** DB queries for session membership must use `userVessels`. Invitations are `invitations` (plural array), not `invitation`.
+- **Always include E2E auth params when navigating browsers.** If you navigate to a session URL without `?e2e-user-id=X&e2e-user-email=Y`, the app loses auth context and shows a broken "Partner" compact screen. Every `agent-browser open` call must include the full auth query string.
