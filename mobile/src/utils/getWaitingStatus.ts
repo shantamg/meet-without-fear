@@ -22,6 +22,7 @@ export type WaitingStatusState =
   | 'empathy-pending' // Stage 2: Waiting for partner to share empathy
   | 'partner-considering-perspective' // Stage 2: Partner felt heard, now building empathy for you (good alignment)
   | 'needs-pending' // Stage 3: Waiting for partner to confirm needs
+  | 'common-ground-pending' // Stage 3: Waiting for partner to confirm common ground
   | 'ranking-pending' // Stage 4: Waiting for partner to submit ranking
   | 'partner-signed' // Partner has signed compact (transient)
   | 'partner-completed-witness' // Partner completed witness stage (transient)
@@ -80,6 +81,8 @@ export interface WaitingStatusInputs {
   // Stage 3: Common ground discovery
   commonGround: {
     count: number;
+    allConfirmedByMe?: boolean;
+    allConfirmedByBoth?: boolean;
   };
 
   // Stage 4: Strategy phase and overlap
@@ -223,6 +226,11 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
   // Transition: Partner confirmed needs and common ground discovered
   if (commonGround.count > 0 && previousStatus === 'needs-pending') {
     return 'partner-confirmed-needs';
+  }
+
+  // Common ground confirmed by me, waiting for partner
+  if (myStage === Stage.NEED_MAPPING && commonGround.count > 0 && commonGround.allConfirmedByMe && !commonGround.allConfirmedByBoth) {
+    return 'common-ground-pending';
   }
 
   // --- Priority 6: Stage 4 (Strategies) ---

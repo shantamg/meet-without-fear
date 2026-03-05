@@ -1581,6 +1581,7 @@ export function useConfirmCommonGround(
       queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
     },
     ...options,
   });

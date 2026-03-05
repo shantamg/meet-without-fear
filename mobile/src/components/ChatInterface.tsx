@@ -18,7 +18,6 @@ import { ChatInput } from './ChatInput';
 import { EmotionSlider } from './EmotionSlider';
 import { ChatIndicator, ChatIndicatorType } from './ChatIndicator';
 import { EmpathyValidationCard } from './EmpathyValidationCard';
-import { NewActivityPill } from './NewActivityPill';
 import { createStyles } from '../theme/styled';
 import { useSpeech, useAutoSpeech } from '../hooks/useSpeech';
 
@@ -112,6 +111,8 @@ interface ChatInterfaceProps {
   onHighEmotion?: (value: number) => void;
   compactEmotionSlider?: boolean;
   renderAboveInput?: () => React.ReactNode;
+  /** Render content above the emotion slider / input area (e.g., inline cards) */
+  renderBelowChat?: () => React.ReactNode;
   /** Render extra content below a message bubble (e.g., draft cards in refinement chat) */
   renderMessageExtra?: (message: ChatMessage) => React.ReactNode;
   onLoadMore?: () => void;
@@ -141,10 +142,6 @@ interface ChatInterfaceProps {
   onValidateAccurate?: () => void;
   /** Callback when user taps "Not quite yet" on a validation card */
   onValidateNotQuite?: () => void;
-  /** Target item ID for the new activity pill (null = no pill) */
-  pendingPillTarget?: string | null;
-  /** Callback when pill is dismissed (tapped or auto-dismissed) */
-  onPillDismiss?: () => void;
 }
 
 // ============================================================================
@@ -172,6 +169,7 @@ export function ChatInterface({
   onHighEmotion,
   compactEmotionSlider = false,
   renderAboveInput,
+  renderBelowChat,
   renderMessageExtra,
   onLoadMore,
   hasMore = false,
@@ -187,8 +185,6 @@ export function ChatInterface({
   validationCards,
   onValidateAccurate,
   onValidateNotQuite,
-  pendingPillTarget,
-  onPillDismiss,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -644,61 +640,6 @@ export function ChatInterface({
   // ---------------------------------------------------------------------------
   // New Activity Pill: floating indicator for off-screen new items
   // ---------------------------------------------------------------------------
-  const [pillVisible, setPillVisible] = useState(false);
-  const pillTargetRef = useRef<string | null>(null);
-  const viewableItemKeysRef = useRef<Set<string>>(new Set());
-
-  const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 50,
-  }).current;
-
-  useEffect(() => {
-    if (pendingPillTarget) {
-      pillTargetRef.current = pendingPillTarget;
-      // Show pill only if target is NOT currently visible in viewport
-      if (!viewableItemKeysRef.current.has(pendingPillTarget)) {
-        setPillVisible(true);
-        // Re-check after a short delay: the FlatList may report the item as visible
-        // shortly after it's added (onViewableItemsChanged fires asynchronously).
-        // Without this, a race condition can cause the pill to persist even when
-        // the target item is already on screen.
-        const recheckTimer = setTimeout(() => {
-          if (viewableItemKeysRef.current.has(pendingPillTarget)) {
-            setPillVisible(false);
-            onPillDismiss?.();
-          }
-        }, 500);
-        return () => clearTimeout(recheckTimer);
-      } else {
-        // Target is already visible — don't show pill, clear parent state
-        onPillDismiss?.();
-      }
-    } else {
-      setPillVisible(false);
-    }
-  }, [pendingPillTarget, onPillDismiss]);
-
-  const onPillDismissRef = useRef(onPillDismiss);
-  onPillDismissRef.current = onPillDismiss;
-
-  const handleViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: Array<{ key: string }> }) => {
-    viewableItemKeysRef.current = new Set(viewableItems.map(v => v.key));
-    if (pillTargetRef.current && viewableItemKeysRef.current.has(pillTargetRef.current)) {
-      setPillVisible(false);
-      onPillDismissRef.current?.();
-    }
-  }).current;
-
-  const handlePillPress = useCallback(() => {
-    if (pillTargetRef.current) {
-      const targetIndex = listItems.findIndex(item => item.id === pillTargetRef.current);
-      if (targetIndex >= 0) {
-        flatListRef.current?.scrollToIndex({ index: targetIndex, viewPosition: 0.3, animated: true });
-      }
-    }
-    setPillVisible(false);
-    onPillDismiss?.();
-  }, [listItems, onPillDismiss]);
 
   return (
     <KeyboardAvoidingView
@@ -731,19 +672,9 @@ export function ChatInterface({
         onScroll={handleScroll}
         scrollEventThrottle={16}
         onContentSizeChange={handleContentSizeChange}
-        onViewableItemsChanged={handleViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-      />
-      <NewActivityPill
-        visible={pillVisible}
-        partnerName={partnerName || 'Partner'}
-        onPress={handlePillPress}
-        onAutoDismiss={() => {
-          setPillVisible(false);
-          onPillDismiss?.();
-        }}
       />
       <View style={styles.bottomContainer}>
+        {renderBelowChat?.()}
         {showEmotionSlider && onEmotionChange && (
           <EmotionSlider
             value={emotionValue}

@@ -273,9 +273,9 @@ export function ActivityDrawer({
       partnerEmpathyValidated,
     );
 
-    // Merge and sort newest first
+    // Merge and sort oldest first (newest at bottom, like a chat)
     return [...sent, ...received].sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     );
   }, [
     sharingStatus,
@@ -514,36 +514,30 @@ export function ActivityDrawer({
             showsVerticalScrollIndicator={false}
             ListHeaderComponent={
               attentionItems.length > 0 ? (
-                <View style={styles.attentionSection}>
-                  <Text
-                    style={styles.sectionHeader}
-                    accessibilityRole="header"
-                  >
+                <>
+                  <Text style={styles.sectionHeader} accessibilityRole="header">
                     Ready for you
                   </Text>
-                  {attentionItems.map((item) => (
-                    <TimelineItemCard
-                      key={item.id}
-                      item={item}
-                      onOpenRefinement={onOpenRefinement}
-                      onShareAsIs={onShareAsIs}
-                      onOpenEmpathyDetail={onOpenEmpathyDetail}
-                      onOpenInvitationRefine={onOpenInvitationRefine}
-                      testID={`${testID}-attention-${item.id}`}
-                    />
-                  ))}
-                  <Text
-                    style={styles.sectionHeader}
-                    accessibilityRole="header"
-                  >
+                  <View style={styles.attentionSection}>
+                    {attentionItems.map((item) => (
+                      <TimelineItemCard
+                        key={item.id}
+                        item={item}
+                        centered
+                        onOpenRefinement={onOpenRefinement}
+                        onShareAsIs={onShareAsIs}
+                        onOpenEmpathyDetail={onOpenEmpathyDetail}
+                        onOpenInvitationRefine={onOpenInvitationRefine}
+                        testID={`${testID}-attention-${item.id}`}
+                      />
+                    ))}
+                  </View>
+                  <Text style={styles.sectionHeader} accessibilityRole="header">
                     History
                   </Text>
-                </View>
+                </>
               ) : (
-                <Text
-                  style={styles.sectionHeader}
-                  accessibilityRole="header"
-                >
+                <Text style={styles.sectionHeader} accessibilityRole="header">
                   History
                 </Text>
               )
@@ -601,19 +595,16 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   sectionHeader: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1.2,
+    paddingTop: 12,
     paddingBottom: 10,
   },
   attentionSection: {
     marginBottom: 4,
-    backgroundColor: 'rgba(251, 191, 36, 0.04)',
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    paddingBottom: 8,
   },
   listContent: {
     paddingHorizontal: 16,

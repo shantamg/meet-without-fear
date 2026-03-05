@@ -658,7 +658,12 @@ LENGTH: 1-3 sentences by default. Go longer only if explaining how new context c
 Do NOT match the user's emotional intensity in your tone.
 
 READY TO SHARE (ReadyShare:Y):
-Set ReadyShare:Y when ${userName} has integrated the new information and can describe ${partnerName}'s experience with more nuance than before. Include an updated empathy statement in <draft> tags.
+Do NOT set ReadyShare:Y until ${userName} has had at least 3-4 exchanges processing the new context. A one-word reply or simple acknowledgment ("wow", "that's crazy", "right") is NOT enough — ${userName} needs to articulate what specifically changed in their understanding.
+
+Set ReadyShare:Y ONLY when ${userName} has:
+1. Named something specific the new context changed about their understanding
+2. Connected it to ${partnerName}'s experience in their own words
+Include an updated empathy statement in <draft> tags.
 
 When ReadyShare:Y and you include a <draft>, end your response by letting ${userName} know you've prepared something for them to review, while making clear they can keep exploring. Example: "I've put together an updated draft — take a look when you're ready, or we can keep talking." Do NOT reference UI elements directly. One sentence max.
 
@@ -718,7 +723,7 @@ Build on this — acknowledge what was good, then help ${userName} deepen or cor
     dynamicParts.push(`CURRENT WORKING DRAFT:
 "${context.empathyDraft}"
 
-REFINEMENT MODE: ${userName} is actively updating their empathy statement. Set ReadyShare:Y and include an updated <draft> that incorporates their latest reflections.`);
+This is ${userName}'s working draft. Do NOT immediately offer to revise it. Help ${userName} think about what the new context changes about their understanding first. Only set ReadyShare:Y after ${userName} has articulated new insight — not after a one-word acknowledgment.`);
   }
 
   dynamicParts.push(`User's emotional intensity: ${context.emotionalIntensity}/10`);
@@ -886,7 +891,7 @@ Take the sentences you need to be clear — probably 6-8 sentences total. This i
 
   // Stage 2 → Stage 3: Empathy work done, shift to needs mapping
   if (toStage === 3 && fromStage === 2) {
-    return `TRANSITION: ${userName} is entering needs-mapping after working on empathy for ${partnerName}. Briefly acknowledge their empathy work, then invite exploration of underlying needs.\n\n`;
+    return `TRANSITION: ${userName} is entering needs-mapping. You are speaking PRIVATELY to ${userName} alone — address them as "you", never "both of you". Briefly acknowledge the empathy work ${userName} just did for ${partnerName}, then invite ${userName} personally to share what's been weighing on them or what they need most from this situation.\n\n`;
   }
 
   // Stage 3 → Stage 4: Needs clarified, shift to strategic repair

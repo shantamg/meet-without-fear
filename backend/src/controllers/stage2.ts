@@ -1480,56 +1480,56 @@ async function triggerStage3Transition(sessionId: string, userId: string, partne
     const nameA = userMap.get(userId) || 'User';
     const nameB = partnerId ? (userMap.get(partnerId) || 'Partner') : 'Partner';
 
-    // 2. Generate Transition Message
-    const transitionPrompt = `You are Meet Without Fear, a Process Guardian.
-${nameA} and ${nameB} have just successfully completed the Empathy Exchange (Stage 2).
-They have each guessed the other's feelings and needs, and validated those guesses (or accepted remaining differences).
+    // 2. Generate and save per-user transition messages — each user gets their own personalized message
+    const userIds = [userId, partnerId].filter((id): id is string => id !== null);
+    const messages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
+    for (const uid of userIds) {
+      const uName = userMap.get(uid) || 'User';
+      const pName = uid === userId ? nameB : nameA;
 
-Your goal is to transition them to Stage 3: Co-Creation / Strategy.
-In Stage 3, they will brainstorm solutions that meet everyone's needs.
+      const transitionPrompt = `You are Meet Without Fear, a Process Guardian.
+You are speaking PRIVATELY to ${uName} alone. Address them as "you" — never "both of you" or any group language.
+${uName} has just completed the Empathy Exchange (Stage 2), where they worked to understand ${pName}'s experience.
 
-Generate a warm, encouraging transition message (2-3 sentences) that:
-1. Celebrates their success in hearing each other.
-2. Pivots to the future: "Now that we understand each other, let's find a way forward together."
-3. Introduces Stage 3: Strategy & Solutions.
+Your goal is to transition ${uName} into Stage 3: Needs Mapping.
+In Stage 3, ${uName} will explore what they themselves need most from this situation.
+
+Generate a warm, personal transition message (2-3 sentences) that:
+1. Acknowledges the effort ${uName} put into understanding ${pName}.
+2. Invites ${uName} personally to now turn inward and share what they need most.
 
 Respond in JSON format:
 \`\`\`json
 {
-  "response": "Your transition message addressed to both of them"
+  "response": "Your message addressed to ${uName} personally, using 'you'"
 }
 \`\`\``;
 
-    const turnId = `${sessionId}-stage3-transition-${Date.now()}`;
-    // We can't use updateContext here easily as it's async background, but we can pass turnId to services
+      const turnId = `${sessionId}-stage3-transition-${uid}-${Date.now()}`;
 
-    const aiResponse = await getSonnetResponse({
-      systemPrompt: transitionPrompt,
-      messages: [{ role: 'user', content: 'Generate transition message.' }],
-      maxTokens: 512,
-      sessionId,
-      operation: 'stage3-transition',
-      turnId,
-      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
-    });
+      const aiResponse = await getSonnetResponse({
+        systemPrompt: transitionPrompt,
+        messages: [{ role: 'user', content: 'Generate transition message.' }],
+        maxTokens: 512,
+        sessionId,
+        operation: 'stage3-transition',
+        turnId,
+        callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
+      });
 
-    let content = `Congratulations ${nameA} and ${nameB}! You've successfully built a foundation of understanding. Now it's time to move to Stage 3, where you'll co-create solutions that work for everyone.`;
+      let content = `${uName}, you did something meaningful — you really tried to understand ${pName}'s experience. Now it's your turn: let's explore what you need most from this situation.`;
 
-    if (aiResponse) {
-      try {
-        const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
-        if (typeof parsed.response === 'string') {
-          content = parsed.response;
+      if (aiResponse) {
+        try {
+          const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
+          if (typeof parsed.response === 'string') {
+            content = parsed.response;
+          }
+        } catch (e) {
+          console.warn('Failed to parse transition AI response', e);
         }
-      } catch (e) {
-        console.warn('Failed to parse transition AI response', e);
       }
-    }
 
-    // 3. Save per-user transition messages (each user must have their own with forUserId)
-    const userIds = [userId, partnerId].filter((id): id is string => id !== null);
-    const messages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
-    for (const uid of userIds) {
       const msg = await prisma.message.create({
         data: {
           sessionId,
@@ -1537,7 +1537,7 @@ Respond in JSON format:
           forUserId: uid,
           role: 'AI',
           content,
-          stage: 3, // Start of stage 3
+          stage: 3,
         }
       });
       messages.push({ id: msg.id, content: msg.content, timestamp: msg.timestamp, forUserId: uid });
@@ -1581,6 +1581,15 @@ Respond in JSON format:
       });
     }
 
+    // Expire any outstanding share offers — Stage 2 sharing window is closed
+    await prisma.reconcilerShareOffer.updateMany({
+      where: {
+        result: { sessionId },
+        status: { in: ['OFFERED', 'PENDING'] },
+      },
+      data: { status: 'EXPIRED' },
+    });
+
     // 5. Notify Realtime
     // Notify session channel that stage changed
     if (partnerId && message) {
@@ -1599,7 +1608,8 @@ Respond in JSON format:
 
     // Embed session content (non-blocking)
     // Per fact-ledger architecture, we embed at session level
-    embedSessionContent(sessionId, userId, turnId).catch((err: unknown) =>
+    const embedTurnId = `${sessionId}-stage3-transition-${Date.now()}`;
+    embedSessionContent(sessionId, userId, embedTurnId).catch((err: unknown) =>
       console.warn('[Stage2] Failed to embed session content:', err)
     );
 

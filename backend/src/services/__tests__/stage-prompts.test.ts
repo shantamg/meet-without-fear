@@ -247,9 +247,9 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('empathy');
       expect(prompt).toContain('need');
       expect(prompt).toContain('Partner');
+      expect(prompt).toContain('PRIVATELY');
       // Regular Stage 3 prompt content
       expect(prompt).toContain('Need Mapping');
-      expect(prompt).toContain('underlying needs');
     });
 
     it('returns transition injection + regular Stage 4 prompt for Stage 3 → Stage 4', () => {

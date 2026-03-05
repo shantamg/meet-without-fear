@@ -223,7 +223,11 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
       hasSuggestion: shareOfferData.hasSuggestion,
     } : undefined,
     needs: { allConfirmed: allNeedsConfirmed },
-    commonGround: { count: commonGroundCount },
+    commonGround: {
+      count: commonGroundCount,
+      allConfirmedByMe: commonGroundAllConfirmedByMe,
+      allConfirmedByBoth: commonGroundAllConfirmedByBoth,
+    },
     strategyPhase,
     overlappingStrategies: { count: overlappingStrategiesCount },
     agreements,

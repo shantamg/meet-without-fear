@@ -33,6 +33,7 @@ export interface TimelineItem {
 
 export interface TimelineItemCardProps {
   item: TimelineItem;
+  centered?: boolean;
   onOpenRefinement?: (offerId: string, suggestion: string) => void;
   onShareAsIs?: (offerId: string) => void;
   onOpenEmpathyDetail?: (attemptId: string, content: string) => void;
@@ -96,6 +97,7 @@ function formatRelativeTimestamp(iso: string): string {
 
 export function TimelineItemCard({
   item,
+  centered = false,
   onOpenRefinement,
   onShareAsIs,
   onOpenEmpathyDetail,
@@ -104,7 +106,10 @@ export function TimelineItemCard({
   testID,
 }: TimelineItemCardProps) {
   const resolvedTestID = testID || `timeline-item-${item.id}`;
-  const borderColor = item.direction === 'sent' ? colors.accent : colors.success;
+  const isSent = item.direction === 'sent';
+  const bubbleStyle = centered
+    ? styles.bubbleCentered
+    : isSent ? styles.bubbleSent : styles.bubbleReceived;
   const typeLabel = getTypeLabel(item.type, item.direction);
   const statusText = getStatusText(item.deliveryStatus);
   const relativeTime = formatRelativeTimestamp(item.timestamp);
@@ -135,14 +140,9 @@ export function TimelineItemCard({
 
   const cardContent = (
     <>
-      {/* Header row: direction + type label + timestamp */}
+      {/* Header row: type label + timestamp */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={[styles.directionLabel, item.direction === 'sent' ? styles.directionSent : styles.directionReceived]}>
-            {item.direction === 'sent' ? 'You' : item.partnerName || 'Partner'}
-          </Text>
-          <Text style={styles.typeLabel}>{typeLabel}</Text>
-        </View>
+        <Text style={styles.typeLabel}>{typeLabel}</Text>
         <Text style={styles.timestamp}>{relativeTime}</Text>
       </View>
 
@@ -205,7 +205,7 @@ export function TimelineItemCard({
   if (isTappable) {
     return (
       <Pressable
-        style={[styles.card, { borderLeftColor: borderColor }]}
+        style={[styles.card, bubbleStyle]}
         onPress={handleCardPress}
         accessibilityRole="button"
         accessibilityLabel={`${typeLabel}: ${item.content.substring(0, 80)}`}
@@ -218,7 +218,7 @@ export function TimelineItemCard({
 
   return (
     <View
-      style={[styles.card, { borderLeftColor: borderColor }]}
+      style={[styles.card, bubbleStyle]}
       testID={resolvedTestID}
     >
       {cardContent}
@@ -232,35 +232,30 @@ export function TimelineItemCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.bgSecondary,
     borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderLeftWidth: 3,
+    padding: 14,
     marginBottom: 10,
+  },
+  bubbleSent: {
+    backgroundColor: '#1c3a5c', // dark brandBlue — "sent out"
+    marginLeft: 48,
+    marginRight: 0,
+  },
+  bubbleReceived: {
+    backgroundColor: '#1a1f2e', // near-black dark grey
+    marginLeft: 0,
+    marginRight: 48,
+  },
+  bubbleCentered: {
+    backgroundColor: '#1e2d40',
+    marginLeft: 0,
+    marginRight: 0,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  directionLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  directionSent: {
-    color: '#fbbf24',
-  },
-  directionReceived: {
-    color: '#34d399',
   },
   typeLabel: {
     fontSize: 12,

@@ -496,16 +496,14 @@ const useStyles = () =>
       marginVertical: t.spacing.md,
     },
     sharedContextBubble: {
-      backgroundColor: '#F0F4F8',
+      backgroundColor: '#1a1f2e',
       borderRadius: 12,
       padding: 16,
-      borderLeftWidth: 4,
-      borderLeftColor: '#005AC1',
     },
     sharedContextLabel: {
       fontSize: 10,
       fontWeight: '700',
-      color: '#005AC1',
+      color: t.colors.textSecondary,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       marginBottom: 6,
@@ -513,7 +511,7 @@ const useStyles = () =>
     sharedContextText: {
       fontSize: t.typography.fontSize.md,
       lineHeight: 22,
-      color: '#1e293b', // Dark text for light background
+      color: t.colors.textPrimary,
       fontFamily: t.typography.fontFamily.regular,
     },
     // Share suggestion: what user will share (from reconciler)

@@ -187,6 +187,17 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     bannerText: (p) => `${p} is exploring what matters to them.`,
   },
 
+  // Stage 3: Waiting for partner to confirm common ground
+  'common-ground-pending': {
+    showBanner: true,
+    hideInput: false,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
+    bannerText: (p) => `${p} is reviewing common ground.`,
+  },
+
   // Stage 4: Waiting for partner to submit strategy rankings
   'ranking-pending': {
     showBanner: true,

@@ -22,7 +22,6 @@ import { GroundingExercise } from '../components/GroundingExercise';
 import { BodyScanExercise } from '../components/BodyScanExercise';
 import { SupportOptionsModal, SupportOption } from '../components/SupportOptionsModal';
 import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
-// WaitingStatusMessage removed - we no longer show "waiting for partner" messages
 import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
 import { ValidationCoachChat } from '../components/ValidationCoachChat';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
@@ -233,7 +232,7 @@ export function UnifiedSessionScreen({
     agreements,
     isGenerating,
     isSharingEmpathy,
-    waitingStatus,
+    isConfirmingNeeds,
 
     // Memory suggestion
     memorySuggestion,
@@ -388,10 +387,10 @@ export function UnifiedSessionScreen({
               ...old,
               progress: old.progress ? {
                 ...old.progress,
-                myProgress: old.progress.myProgress ? {
-                  ...old.progress.myProgress,
+                partnerProgress: old.progress.partnerProgress ? {
+                  ...old.progress.partnerProgress,
                   stage: data.currentStage,
-                } : old.progress.myProgress,
+                } : old.progress.partnerProgress,
               } : old.progress,
             };
           });
@@ -559,10 +558,7 @@ export function UnifiedSessionScreen({
         queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-        // Force refetch after needs cache updates so useCommonGround's enabled gate opens
-        setTimeout(() => {
-          queryClient.refetchQueries({ queryKey: stageKeys.commonGround(sessionId) });
-        }, 500);
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
 
       if (eventName === 'partner.common_ground_confirmed') {
@@ -739,7 +735,7 @@ export function UnifiedSessionScreen({
   const [needsDrawerMode, setNeedsDrawerMode] = useState<NeedsDrawerMode>('needs');
   const { data: needsComparisonData } = useNeedsComparison(
     sessionId,
-    showNeedsDrawer && needsDrawerMode === 'comparison',
+    showNeedsDrawer && (needsDrawerMode === 'comparison' || needsDrawerMode === 'common-ground'),
   );
 
   // Local latches to prevent panel flashing during server refetches.
@@ -774,14 +770,7 @@ export function UnifiedSessionScreen({
   const isEmpathyValidated = completedActions.has('validated-empathy');
   const isEmpathyShared = completedActions.has('shared-empathy');
 
-  // Consent modal for sharing needs with partner (shown after needs are confirmed)
-  const [showShareNeedsConfirm, setShowShareNeedsConfirm] = useState(false);
 
-  // New activity pill: floating indicator when new indicators/cards appear off-screen
-  const [pendingPillTarget, setPendingPillTarget] = useState<string | null>(null);
-  const prevIndicatorCountRef = useRef(0);
-  const prevValidationCardCountRef = useRef(0);
-  const prevStageForPillRef = useRef(myProgress?.stage);
 
   // Auto-dismiss stage-specific drawers when stage transitions
   // Prevents stale drawers from stacking when the session advances
@@ -797,9 +786,8 @@ export function UnifiedSessionScreen({
       setShowFeedbackCoachChat(false);
     }
 
-    // Stage 3 drawers: share needs consent, needs drawer
+    // Stage 3 drawers: needs drawer
     if (currentStage !== undefined && currentStage !== Stage.NEED_MAPPING) {
-      setShowShareNeedsConfirm(false);
       setShowNeedsDrawer(false);
     }
   }, [myProgress?.stage]);
@@ -860,6 +848,7 @@ export function UnifiedSessionScreen({
   // No latch refs needed - if API fails, onError rolls back the cache and panel reappears.
   const isInviter = invitation?.isInviter ?? true;
   const {
+    waitingStatus,
     shouldShowWaitingBanner,
     shouldHideInput: derivedShouldHideInput,
     isInOnboardingUnsigned,
@@ -1339,44 +1328,6 @@ export function UnifiedSessionScreen({
   }, [partnerEmpathyData, myProgress?.stage, partnerName, isEmpathyValidated, completedActions]);
 
   // -------------------------------------------------------------------------
-  // New Activity Pill: detect when new indicators/cards appear
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    const indicatorCount = indicators.length;
-    const cardCount = validationCards.length;
-    const prevTotal = prevIndicatorCountRef.current + prevValidationCardCountRef.current;
-    const currentTotal = indicatorCount + cardCount;
-
-    // When stage transitions, previously suppressed indicators become visible.
-    // Reset the baseline without triggering the pill so we don't flash
-    // "shared something new" for pre-existing content. New indicators that
-    // arrive AFTER the transition (e.g., from reconciler completing) will
-    // still trigger the pill normally.
-    const stageChanged = myProgress?.stage !== prevStageForPillRef.current;
-    prevStageForPillRef.current = myProgress?.stage;
-
-    if (stageChanged) {
-      prevIndicatorCountRef.current = indicatorCount;
-      prevValidationCardCountRef.current = cardCount;
-      return;
-    }
-
-    if (currentTotal > prevTotal && prevTotal > 0) {
-      // New item appeared - find the newest one
-      const allItems = [...indicators, ...validationCards];
-      const newest = allItems.sort((a, b) => {
-        const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return bTime - aTime;
-      })[0];
-      if (newest) {
-        setPendingPillTarget(newest.id);
-      }
-    }
-
-    prevIndicatorCountRef.current = indicatorCount;
-    prevValidationCardCountRef.current = cardCount;
-  }, [indicators, validationCards, myProgress?.stage]);
 
   // -------------------------------------------------------------------------
   // Validation Card Handlers
@@ -2326,6 +2277,21 @@ export function UnifiedSessionScreen({
             isInOnboardingUnsigned ? compactEmptyStateElement : undefined
           }
           renderAboveInput={aboveInputPanel ? renderAboveInput : undefined}
+          renderBelowChat={(inlineCards.length > 0 || memorySuggestion) ? () => (
+            <>
+              {inlineCards.map((card) => renderInlineCard(card))}
+              {memorySuggestion && (
+                <MemorySuggestionCard
+                  suggestion={memorySuggestion}
+                  onDismiss={clearMemorySuggestion}
+                  onApproved={() => {
+                    // Optional: could show a toast here for feedback
+                  }}
+                  testID="memory-suggestion-card"
+                />
+              )}
+            </>
+          ) : undefined}
           hideInput={
             // Use derived hideInput logic from useChatUIState
             // Never hide when empathy review panel is showing (user still needs to interact)
@@ -2335,30 +2301,13 @@ export function UnifiedSessionScreen({
           validationCards={validationCards}
           onValidateAccurate={handleValidationAccurate}
           onValidateNotQuite={handleValidationNotQuite}
-          pendingPillTarget={pendingPillTarget}
-          onPillDismiss={() => setPendingPillTarget(null)}
         />
 
         {/* Waiting banner removed - now handled in renderAboveInput */}
 
         {/* Note: Compact is now rendered via renderCustomEmptyState in ChatInterface */}
 
-        {/* Render inline cards - always render to maintain layout stability */}
-        {/* Removing the isTypewriterAnimating check prevents layout jumps when cards unmount/remount */}
-        {inlineCards.map((card) => renderInlineCard(card))}
-
-        {/* Memory suggestion card - shown when AI detects a "remember this" intent */}
-        {/* Always render to maintain layout stability */}
-        {memorySuggestion && (
-          <MemorySuggestionCard
-            suggestion={memorySuggestion}
-            onDismiss={clearMemorySuggestion}
-            onApproved={() => {
-              // Optional: could show a toast here for feedback
-            }}
-            testID="memory-suggestion-card"
-          />
-        )}
+        {/* Inline cards and memory suggestion now rendered via renderBelowChat prop in ChatInterface */}
       </View>
       )}
 
@@ -2404,46 +2353,6 @@ export function UnifiedSessionScreen({
                 }}
               >
                 <Text style={styles.primaryButtonText}>Send now</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Share Needs Consent Modal */}
-      <Modal
-        visible={showShareNeedsConfirm}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowShareNeedsConfirm(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>
-              {partnerName
-                ? `Share your needs with ${partnerName}?`
-                : 'Share your needs with your partner?'}
-            </Text>
-            <Text style={styles.modalSubtitle}>
-              Your confirmed needs will be shared so you can discover common ground together.
-            </Text>
-            <View style={styles.shareActions}>
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={() => setShowShareNeedsConfirm(false)}
-                testID="share-needs-cancel-button"
-              >
-                <Text style={styles.secondaryButtonText}>Not yet</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={() => {
-                  handleConsentToShareNeeds();
-                  setShowShareNeedsConfirm(false);
-                }}
-                testID="share-needs-confirm-button"
-              >
-                <Text style={styles.primaryButtonText}>Share</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2605,11 +2514,12 @@ export function UnifiedSessionScreen({
           sendMessage('I would like to adjust my identified needs');
         }}
         onConfirmNeeds={() => {
-          markCompleted('confirmed-needs');
           handleConfirmAllNeeds(() => {
-            setShowShareNeedsConfirm(true);
+            markCompleted('confirmed-needs');
+            setShowNeedsDrawer(false);
           });
         }}
+        isConfirming={isConfirmingNeeds}
         commonGround={(commonGround ?? []).map((cg) => ({
           id: cg.id,
           category: cg.category || cg.need,
@@ -2624,6 +2534,9 @@ export function UnifiedSessionScreen({
         }}
         onViewComparison={() => {
           setNeedsDrawerMode('comparison');
+        }}
+        onBackToCommonGround={() => {
+          setNeedsDrawerMode('common-ground');
         }}
         partnerNeeds={(needsComparisonData?.partnerNeeds ?? []).map((n) => ({
           id: n.id,

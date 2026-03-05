@@ -55,6 +55,7 @@ export interface NeedsDrawerProps {
   needs?: NeedItem[];
   onAdjustNeeds?: () => void;
   onConfirmNeeds?: () => void;
+  isConfirming?: boolean;
   // Common Ground mode
   commonGround?: CommonGroundItem[];
   noOverlap?: boolean;
@@ -63,6 +64,7 @@ export interface NeedsDrawerProps {
   // Comparison mode
   partnerNeeds?: NeedItem[];
   partnerName?: string;
+  onBackToCommonGround?: () => void;
   testID?: string;
 }
 
@@ -88,10 +90,12 @@ export function NeedsDrawer({
   onConfirmNeeds,
   commonGround = [],
   noOverlap = false,
+  isConfirming = false,
   onConfirmCommonGround,
   onViewComparison,
   partnerNeeds = [],
   partnerName = 'Partner',
+  onBackToCommonGround,
   testID = 'needs-drawer',
 }: NeedsDrawerProps) {
   const insets = useSafeAreaInsets();
@@ -234,6 +238,8 @@ export function NeedsDrawer({
       {needs.length === 0 && (
         <Text style={styles.emptyText}>No needs identified yet.</Text>
       )}
+
+      {renderNeedsButtons()}
     </>
   );
 
@@ -241,7 +247,7 @@ export function NeedsDrawer({
     const hasButtons = onAdjustNeeds || onConfirmNeeds;
     if (!hasButtons) return null;
     return (
-      <View style={styles.fixedButtonArea}>
+      <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
         <View style={styles.buttonRow}>
           {onAdjustNeeds && (
             <TouchableOpacity
@@ -258,15 +264,17 @@ export function NeedsDrawer({
           )}
           {onConfirmNeeds && (
             <TouchableOpacity
-              style={styles.primaryButton}
+              style={[styles.primaryButton, isConfirming && styles.primaryButtonDisabled]}
               onPress={() => {
-                onConfirmNeeds();
-                closeDrawer();
+                if (!isConfirming) onConfirmNeeds();
               }}
               activeOpacity={0.7}
+              disabled={isConfirming}
               testID={`${testID}-confirm`}
             >
-              <Text style={styles.primaryButtonText}>Confirm my needs</Text>
+              <Text style={styles.primaryButtonText}>
+                {isConfirming ? 'Sharing...' : 'Confirm my needs'}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
@@ -304,13 +312,15 @@ export function NeedsDrawer({
           )}
         </>
       )}
+
+      {renderCommonGroundButtons()}
     </>
   );
 
   const renderCommonGroundButtons = () => {
     if (noOverlap) {
       return onConfirmCommonGround ? (
-        <View style={styles.fixedButtonArea}>
+        <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
           <TouchableOpacity
             style={[styles.primaryButton, styles.fullWidthButton]}
             onPress={() => {
@@ -328,7 +338,7 @@ export function NeedsDrawer({
     const hasButtons = onViewComparison || onConfirmCommonGround;
     if (!hasButtons) return null;
     return (
-      <View style={styles.fixedButtonArea}>
+      <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
         <View style={styles.buttonRow}>
           {onViewComparison && (
             <TouchableOpacity
@@ -364,7 +374,6 @@ export function NeedsDrawer({
 
     return (
       <>
-        <Text style={styles.sectionTitle}>Needs Comparison</Text>
         <Text style={styles.sectionSubtitle}>
           Side-by-side view of both your needs.
         </Text>
@@ -438,6 +447,19 @@ export function NeedsDrawer({
             </Text>
           </View>
         )}
+
+        {onBackToCommonGround && (
+          <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
+            <TouchableOpacity
+              style={[styles.secondaryButton, styles.fullWidthButton]}
+              onPress={onBackToCommonGround}
+              activeOpacity={0.7}
+              testID={`${testID}-back-to-cg`}
+            >
+              <Text style={styles.secondaryButtonText}>Back to Common Ground</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </>
     );
   };
@@ -502,17 +524,13 @@ export function NeedsDrawer({
         {/* Scrollable content */}
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(40, insets.bottom + 24) }]}
           showsVerticalScrollIndicator
         >
           {mode === 'needs' && renderNeedsMode()}
           {mode === 'common-ground' && renderCommonGroundMode()}
           {mode === 'comparison' && renderComparisonMode()}
         </ScrollView>
-
-        {/* Fixed buttons at bottom — outside ScrollView to avoid overflow issues */}
-        {mode === 'needs' && renderNeedsButtons()}
-        {mode === 'common-ground' && renderCommonGroundButtons()}
       </Animated.View>
     </View>
   );
@@ -563,7 +581,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 0,
-    paddingBottom: 40,
+    paddingBottom: 24,
   },
 
   // Section text
@@ -590,7 +608,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
 
-  // Fixed button area at bottom of drawer (outside ScrollView)
+  // Fixed button area at bottom of drawer
   fixedButtonArea: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.1)',
@@ -598,6 +616,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 16,
+    marginTop: 8,
   },
   // Buttons
   buttonRow: {
@@ -610,6 +629,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.7,
   },
   primaryButtonText: {
     color: colors.textOnAccent,

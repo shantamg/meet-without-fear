@@ -177,6 +177,7 @@ describe('Stage 3 API', () => {
       (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
       (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue({ id: mockVesselId });
       (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValue([]); // No needs yet
+      (prisma.message.count as jest.Mock).mockResolvedValue(1); // User has sent Stage 3 messages
 
       (needsService.extractNeedsFromConversation as jest.Mock).mockResolvedValue(mockExtractedNeeds);
 

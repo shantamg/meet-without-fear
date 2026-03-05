@@ -43,8 +43,6 @@ export { CompactTerms } from './CompactTerms';
 export { CuriosityCompact } from './CuriosityCompact';
 export { CuriosityCompactOverlay } from './CuriosityCompactOverlay';
 export { WaitingRoom } from './WaitingRoom';
-export { WaitingStatusMessage } from './WaitingStatusMessage';
-export type { WaitingStatusType, WaitingStatusMessageProps } from './WaitingStatusMessage';
 export { InvitationShareButton } from './InvitationShareButton';
 export { RefineInvitationDrawer } from './RefineInvitationDrawer';
 

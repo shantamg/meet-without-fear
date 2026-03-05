@@ -211,6 +211,16 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
 
     // If no needs exist, trigger AI extraction (with idempotency guard)
     if (needs.length === 0) {
+      // Only auto-extract after the user has engaged in Stage 3 chat.
+      // Prevents needs from appearing before any conversation in Stage 3.
+      const stage3UserMessageCount = await prisma.message.count({
+        where: { sessionId, stage: 3, senderId: user.id, role: 'USER' },
+      });
+      if (stage3UserMessageCount === 0) {
+        successResponse(res, { needs: [], extracting: false, synthesizedAt: null });
+        return;
+      }
+
       if (isExtractionRunning(sessionId, user.id)) {
         // Another request is already extracting - return loading state
         successResponse(res, {

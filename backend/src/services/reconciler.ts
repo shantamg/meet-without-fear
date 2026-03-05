@@ -1368,9 +1368,23 @@ export async function respondToShareSuggestion(
   const subjectName = shareOffer.result.subjectName;
   const guesserName = shareOffer.result.guesserName;
 
+  // Check if this is a subsequent share (subject has already shared context before)
+  const priorShareCount = await prisma.message.count({
+    where: {
+      sessionId,
+      senderId: userId,
+      role: 'SHARED_CONTEXT',
+    },
+  });
+
   // Generate AI messages outside transaction (AI calls can be slow)
+  // For subsequent shares, use a short static ack to avoid repetitive messages
+  const subjectAckPromise = priorShareCount > 0
+    ? Promise.resolve(`Thanks for sharing that additional context with ${guesserName}.`)
+    : generatePostShareContinuation(sessionId, userId, subjectName, guesserName, sharedContent);
+
   const [subjectAckMessage, reflectionMessage] = await Promise.all([
-    generatePostShareContinuation(sessionId, userId, subjectName, guesserName, sharedContent),
+    subjectAckPromise,
     generateContextReceivedReflection(sessionId, guesserName, subjectName),
   ]);
 

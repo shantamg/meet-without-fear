@@ -379,16 +379,7 @@ function computeShowCommonGroundPanel(inputs: ChatUIStateInputs): boolean {
  * Determines which waiting statuses should show a banner.
  */
 function computeShouldShowWaitingBanner(status: WaitingStatusState): boolean {
-  return (
-    status === 'witness-pending' ||
-    status === 'empathy-pending' ||
-    status === 'partner-considering-perspective' ||
-    status === 'reconciler-analyzing' ||
-    status === 'revision-analyzing' ||
-    status === 'awaiting-context-share' ||
-    status === 'awaiting-subject-decision' ||
-    status === 'agreement-pending'
-  );
+  return getWaitingStatusConfig(status).showBanner;
 }
 
 /**

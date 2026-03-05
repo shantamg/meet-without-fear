@@ -896,19 +896,33 @@ export async function refinementFinalizeHandler(
     const subjectName = shareOffer.result.subjectName;
     const guesserName = shareOffer.result.guesserName;
 
+    // Check if this is a subsequent share (subject has already shared context before)
+    const priorShareCount = await prisma.message.count({
+      where: {
+        sessionId,
+        senderId: user.id,
+        role: 'SHARED_CONTEXT',
+      },
+    });
+
     // Generate AI messages outside transaction (AI calls can be slow)
     let subjectAckMessage: string;
-    try {
-      subjectAckMessage = await generatePostShareContinuation(
-        sessionId, user.id, subjectName, guesserName, content
-      );
-    } catch (error) {
-      console.error('[refinementFinalizeHandler] generatePostShareContinuation failed:', error);
-      const subjectProgress = await prisma.stageProgress.findFirst({
-        where: { sessionId, userId: user.id },
-        orderBy: { stage: 'desc' },
-      });
-      subjectAckMessage = getFallbackContinuation(subjectProgress?.stage ?? 2, guesserName);
+    if (priorShareCount > 0) {
+      // Subsequent share — short static ack to avoid repetitive LLM-generated messages
+      subjectAckMessage = `Thanks for sharing that additional context with ${guesserName}.`;
+    } else {
+      try {
+        subjectAckMessage = await generatePostShareContinuation(
+          sessionId, user.id, subjectName, guesserName, content
+        );
+      } catch (error) {
+        console.error('[refinementFinalizeHandler] generatePostShareContinuation failed:', error);
+        const subjectProgress = await prisma.stageProgress.findFirst({
+          where: { sessionId, userId: user.id },
+          orderBy: { stage: 'desc' },
+        });
+        subjectAckMessage = getFallbackContinuation(subjectProgress?.stage ?? 2, guesserName);
+      }
     }
 
     const reflectionMessage = await generateContextReceivedReflection(sessionId, guesserName, subjectName);
@@ -936,12 +950,14 @@ export async function refinementFinalizeHandler(
         },
       });
 
-      // Update guesser's empathy attempt: AWAITING_SHARING → REFINING
+      // Update guesser's empathy attempt to REFINING so they can
+      // chat and refine with the new context. No status filter — after
+      // multiple reconciler cycles the guesser may be in READY, HELD,
+      // or another status, not just AWAITING_SHARING.
       await tx.empathyAttempt.updateMany({
         where: {
           sessionId,
           sourceUserId: guesserId,
-          status: 'AWAITING_SHARING',
         },
         data: {
           status: 'REFINING',

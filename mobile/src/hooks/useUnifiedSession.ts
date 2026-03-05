@@ -96,13 +96,9 @@ export interface InlineChatCard {
   dismissible?: boolean;
 }
 
-// Re-export WaitingStatusType from the component for external use
-export type { WaitingStatusType } from '../components/WaitingStatusMessage';
-
 // Re-export WaitingStatusState from the new pure derivation module
 // This maintains backward compatibility while centralizing the type definition
 export type { WaitingStatusState } from '../utils/getWaitingStatus';
-import type { WaitingStatusState } from '../utils/getWaitingStatus';
 
 interface UnifiedSessionState {
   activeOverlay: OverlayType;
@@ -114,8 +110,6 @@ interface UnifiedSessionState {
   pendingConfirmation: boolean;
   hasConfirmedHeard: boolean; // Tracks if user confirmed they feel heard
   followUpDate: Date | null;
-  waitingStatus: WaitingStatusState;
-  previousWaitingStatus: WaitingStatusState; // Track previous to detect changes
 }
 
 // ============================================================================
@@ -140,7 +134,6 @@ type SessionAction =
   | { type: 'SHOW_FINAL_CHECK'; payload: boolean }
   | { type: 'SET_PENDING_CONFIRMATION'; payload: boolean }
   | { type: 'SET_HAS_CONFIRMED_HEARD'; payload: boolean }
-  | { type: 'SET_WAITING_STATUS'; payload: WaitingStatusState }
   | { type: 'RESET_STATE' };
 
 function sessionReducer(
@@ -171,12 +164,6 @@ function sessionReducer(
       return { ...state, pendingConfirmation: action.payload };
     case 'SET_HAS_CONFIRMED_HEARD':
       return { ...state, hasConfirmedHeard: action.payload };
-    case 'SET_WAITING_STATUS':
-      return {
-        ...state,
-        previousWaitingStatus: state.waitingStatus,
-        waitingStatus: action.payload,
-      };
     case 'RESET_STATE':
       return initialState;
     default:
@@ -194,8 +181,6 @@ const initialState: UnifiedSessionState = {
   pendingConfirmation: false,
   hasConfirmedHeard: false,
   followUpDate: null,
-  waitingStatus: null,
-  previousWaitingStatus: null,
 };
 
 // ============================================================================
@@ -316,7 +301,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   });
   const { mutate: validateEmpathy } = useValidateEmpathy();
   const { mutate: resubmitEmpathy } = useResubmitEmpathy();
-  const { mutate: confirmNeeds } = useConfirmNeeds();
+  const { mutate: confirmNeeds, isPending: isConfirmingNeeds } = useConfirmNeeds();
   const { mutate: consentShareNeeds } = useConsentShareNeeds();
   const { mutate: confirmCommonGroundMutation } = useConfirmCommonGround();
   const { mutate: proposeStrategy, isPending: isProposing } = useProposeStrategy();
@@ -546,122 +531,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
     }
   }, [userMessageCount, state.lastBarometerMessageCount, currentStage]);
 
-  // -------------------------------------------------------------------------
-  // Waiting Status Effect
-  // -------------------------------------------------------------------------
-  // Compute and update waiting status based on session state
-  useEffect(() => {
-    let newWaitingStatus: WaitingStatusState = null;
-
-    // Note: We intentionally don't show compact-pending status during Stage 0.
-    // The user should focus on the invitation phase after signing the compact,
-    // not on waiting for their partner.
-
-    // Stage 1: Waiting for partner to complete witness
-    // Only show this AFTER user has shared their empathy - before sharing, user should
-    // be able to work on their empathy draft without waiting
-    if (
-      myProgress?.stage === Stage.PERSPECTIVE_STRETCH &&
-      partnerProgress?.stage === Stage.WITNESS &&
-      empathyDraftData?.alreadyConsented
-    ) {
-      newWaitingStatus = 'witness-pending';
-    }
-    // Stage 1: Partner just completed witness (transition)
-    else if (
-      myProgress?.stage === Stage.PERSPECTIVE_STRETCH &&
-      partnerProgress?.stage === Stage.PERSPECTIVE_STRETCH &&
-      state.previousWaitingStatus === 'witness-pending'
-    ) {
-      newWaitingStatus = 'partner-completed-witness';
-    }
-    // Stage 2: Guesser's empathy has gaps, waiting for subject to decide whether to share
-    // This happens when: reconciler found gaps, created a share suggestion for subject,
-    // and we're waiting for subject to respond (share or skip).
-    // Guesser should see waiting banner but can keep chatting.
-    else if (empathyStatusData?.awaitingSharing && !empathyStatusData?.hasNewSharedContext) {
-      newWaitingStatus = 'awaiting-subject-decision';
-    }
-    // Stage 2: Guesser received new shared context from subject
-    // CHECK THIS FIRST - when user has new shared context, they should be able to chat
-    // immediately (no waiting banner). The "Revisit what you'll share" button will appear
-    // after they've sent at least one message.
-    // Note: We intentionally do NOT set a waiting status here - user can chat freely.
-    else if (empathyStatusData?.hasNewSharedContext) {
-      // No waiting status - user should be able to chat immediately
-      newWaitingStatus = null;
-    }
-    // Stage 2: Partner is now considering your perspective (good alignment found)
-    // This happens when: reconciler ran, found good alignment, so my empathy was REVEALED,
-    // and partner (the subject who felt heard) is now working on their empathy for me
-    else if (
-      empathyStatusData?.myAttempt?.status === 'REVEALED' &&
-      !partnerEmpathy &&
-      !empathyStatusData?.analyzing
-    ) {
-      newWaitingStatus = 'partner-considering-perspective';
-    }
-    // Stage 2: Waiting for partner to share empathy (still waiting for partner to feel heard)
-    else if (empathyDraftData?.alreadyConsented && !partnerEmpathy && !empathyStatusData?.analyzing && !empathyStatusData?.awaitingSharing) {
-      newWaitingStatus = 'empathy-pending';
-    }
-    // Stage 2: Reconciler is analyzing
-    else if (empathyStatusData?.analyzing) {
-      // For revisions (revisionCount > 0), use a different status with no spinner
-      const revisionCount = empathyStatusData?.myAttempt?.revisionCount ?? 0;
-      newWaitingStatus = revisionCount > 0 ? 'revision-analyzing' : 'reconciler-analyzing';
-    }
-    // Stage 2: Waiting for user to respond to share suggestion (Subject)
-    else if (shareOfferData?.hasSuggestion) {
-      newWaitingStatus = 'awaiting-context-share';
-    }
-    // Stage 2: Partner just shared empathy (transition)
-    else if (
-      partnerEmpathy &&
-      state.previousWaitingStatus === 'empathy-pending'
-    ) {
-      newWaitingStatus = 'partner-shared-empathy';
-    }
-    // Stage 3: Waiting for partner to confirm needs
-    else if (allNeedsConfirmed && !commonGround.length) {
-      newWaitingStatus = 'needs-pending';
-    }
-    // Stage 3: Partner confirmed needs (transition)
-    else if (
-      commonGround.length > 0 &&
-      state.previousWaitingStatus === 'needs-pending'
-    ) {
-      newWaitingStatus = 'partner-confirmed-needs';
-    }
-    // Stage 4: Waiting for partner to rank
-    else if (strategyPhase === StrategyPhase.REVEALING && !overlappingStrategies.length) {
-      newWaitingStatus = 'ranking-pending';
-    }
-
-    // Only update if status changed
-    if (newWaitingStatus !== state.waitingStatus) {
-      dispatch({ type: 'SET_WAITING_STATUS', payload: newWaitingStatus });
-    }
-  }, [
-    currentStage,
-    compactData?.mySigned,
-    compactData?.partnerSigned,
-    myProgress?.stage,
-    partnerProgress?.stage,
-    empathyDraftData?.alreadyConsented,
-    partnerEmpathy,
-    allNeedsConfirmed,
-    commonGround.length,
-    strategyPhase,
-    overlappingStrategies.length,
-    state.waitingStatus,
-    state.previousWaitingStatus,
-    empathyStatusData?.analyzing,
-    empathyStatusData?.awaitingSharing,
-    empathyStatusData?.hasNewSharedContext,
-    empathyStatusData?.myAttempt?.status,
-    shareOfferData?.hasSuggestion,
-  ]);
+  // Waiting status is now computed purely via useChatUIState → computeWaitingStatus.
+  // The imperative useEffect was removed to eliminate dual computation.
 
   // -------------------------------------------------------------------------
   // Initialize Empathy State from Database Effect
@@ -1255,7 +1126,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
     showFinalCheck: state.showFinalCheck,
     pendingConfirmation: state.pendingConfirmation,
     followUpDate: state.followUpDate,
-    waitingStatus: state.waitingStatus,
 
     // Memory suggestion
     memorySuggestion,
@@ -1298,6 +1168,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     isGenerating,
     isSharingEmpathy,
     isProposing,
+    isConfirmingNeeds,
 
     // Actions
     sendMessage: handleSendMessage,
