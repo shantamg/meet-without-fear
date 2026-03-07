@@ -15,8 +15,8 @@
 
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
-import { notifyPartner, publishSessionEvent } from '../services/realtime';
+import { ApiResponse, ErrorCode, MessageRole, Stage } from '@meet-without-fear/shared';
+import { notifyPartner, publishSessionEvent, publishMessageAIResponse, publishMessageError } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
@@ -1032,59 +1032,6 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
       previousStage: 0,
     };
 
-    // Generate transition message
-    let transitionMessage: { id: string; content: string; timestamp: string } | undefined;
-    try {
-      // Add a synthetic trigger message to signal the transition
-      // This tells the AI that the invitation was sent and the user is ready to continue
-      const historyWithTrigger = [
-        ...history.map((m) => ({
-          role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
-          content: m.content,
-        })),
-        { role: 'user' as const, content: '[I just sent the invitation and am ready to continue.]' },
-      ];
-
-      const orchestratorResult = await getOrchestratedResponse(
-        historyWithTrigger,
-        aiContext
-      );
-
-      // getOrchestratedResponse already extracts the response from JSON
-      const aiResponseContent = orchestratorResult.response;
-
-      // Save the transition message
-      const aiMessage = await prisma.message.create({
-        data: {
-          sessionId,
-          senderId: null,
-          forUserId: user.id, // Track which user this AI response is for (data isolation)
-          role: 'AI',
-          content: aiResponseContent,
-          stage: 1,
-        },
-      });
-
-      // Summarize and embed session content for cross-session retrieval (non-blocking)
-      // Per fact-ledger architecture, we embed at session level after summary updates
-      updateSessionSummary(sessionId, user.id, turnId)
-        .then(() => embedSessionContent(sessionId, user.id, turnId))
-        .catch((err: unknown) =>
-          console.warn('[confirmInvitationMessage] Failed to update summary/embedding:', err)
-        );
-
-      transitionMessage = {
-        id: aiMessage.id,
-        content: aiMessage.content,
-        timestamp: aiMessage.timestamp.toISOString(),
-      };
-
-      console.log('[confirmInvitationMessage] Generated transition message:', aiMessage.id);
-    } catch (err) {
-      console.warn('[confirmInvitationMessage] Failed to generate transition message:', err);
-      // Non-fatal - continue without transition message
-    }
-
     // Notify session that invitation was confirmed
     await publishSessionEvent(sessionId, 'invitation.confirmed', {
       confirmedBy: user.id,
@@ -1092,6 +1039,8 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
       timestamp: new Date().toISOString(),
     });
 
+    // Return HTTP response IMMEDIATELY — don't block on AI generation.
+    // The transition message will arrive via Ably (message.ai_response event).
     successResponse(res, {
       confirmed: true,
       invitation: {
@@ -1101,8 +1050,64 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
         messageConfirmedAt: updatedInvitation.messageConfirmedAt?.toISOString() ?? null,
       },
       advancedToStage: 1,
-      transitionMessage,
     });
+
+    // Generate transition message in background (fire-and-forget)
+    // The AI message will be delivered to the client via Ably's message.ai_response event,
+    // which the mobile app already handles via useAIMessageHandler.addAIMessage.
+    (async () => {
+      try {
+        const historyWithTrigger = [
+          ...history.map((m) => ({
+            role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+            content: m.content,
+          })),
+          { role: 'user' as const, content: '[I just sent the invitation and am ready to continue.]' },
+        ];
+
+        const orchestratorResult = await getOrchestratedResponse(
+          historyWithTrigger,
+          aiContext
+        );
+
+        const aiResponseContent = orchestratorResult.response;
+
+        const aiMessage = await prisma.message.create({
+          data: {
+            sessionId,
+            senderId: null,
+            forUserId: user.id,
+            role: 'AI',
+            content: aiResponseContent,
+            stage: 1,
+          },
+        });
+
+        console.log('[confirmInvitationMessage] Generated transition message:', aiMessage.id);
+
+        // Deliver via Ably so the mobile client picks it up
+        await publishMessageAIResponse(sessionId, user.id, {
+          id: aiMessage.id,
+          sessionId,
+          senderId: null,
+          role: MessageRole.AI,
+          content: aiMessage.content,
+          stage: Stage.WITNESS,
+          timestamp: aiMessage.timestamp.toISOString(),
+        });
+
+        // Summarize and embed (non-blocking)
+        updateSessionSummary(sessionId, user.id, turnId)
+          .then(() => embedSessionContent(sessionId, user.id, turnId))
+          .catch((err: unknown) =>
+            console.warn('[confirmInvitationMessage] Failed to update summary/embedding:', err)
+          );
+      } catch (err) {
+        console.error('[confirmInvitationMessage] Failed to generate transition message:', err);
+        // Notify client of the error so they can retry
+        await publishMessageError(sessionId, user.id, '', 'Failed to generate transition message', true).catch(() => {});
+      }
+    })();
   } catch (error) {
     console.error('[confirmInvitationMessage] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to confirm invitation message', 500);

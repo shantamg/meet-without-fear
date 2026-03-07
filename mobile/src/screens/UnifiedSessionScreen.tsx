@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -450,15 +450,45 @@ export function UnifiedSessionScreen({
 
       if (event === 'partner.signed_compact') {
         console.log('[UnifiedSessionScreen] Partner signed compact');
-        // Refetch session state to update compact status UI
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        // Update compact status directly — invalidateQueries can race with optimistic updates
+        queryClient.setQueryData(sessionKeys.state(sessionId), (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            compact: old.compact ? {
+              ...old.compact,
+              partnerSigned: true,
+              partnerSignedAt: data.timestamp || new Date().toISOString(),
+            } : old.compact,
+          };
+        });
       }
 
       if (event === 'invitation.confirmed') {
-        console.log('[UnifiedSessionScreen] Invitation confirmed');
-        // Refetch session state and invitation data
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-        queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
+        console.log('[UnifiedSessionScreen] Invitation confirmed by partner');
+        // Use setQueryData to merge — invalidateQueries can overwrite optimistic updates
+        queryClient.setQueryData(sessionKeys.state(sessionId), (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            invitation: old.invitation ? {
+              ...old.invitation,
+              messageConfirmed: true,
+              messageConfirmedAt: data.timestamp || new Date().toISOString(),
+            } : old.invitation,
+          };
+        });
+        queryClient.setQueryData(sessionKeys.sessionInvitation(sessionId), (old: any) => {
+          if (!old?.invitation) return old;
+          return {
+            ...old,
+            invitation: {
+              ...old.invitation,
+              messageConfirmed: true,
+              messageConfirmedAt: data.timestamp || new Date().toISOString(),
+            },
+          };
+        });
       }
 
       if (event === 'partner.empathy_shared') {
@@ -793,6 +823,23 @@ export function UnifiedSessionScreen({
       setShowNeedsDrawer(false);
     }
   }, [myProgress?.stage]);
+
+  // -------------------------------------------------------------------------
+  // App State Recovery: refetch critical data when returning from background
+  // This ensures the UI shows correct state after Ably events were missed while backgrounded.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        // Invalidate session state — the primary source of truth for the UI.
+        // React Query's focusManager also triggers stale refetches, but this
+        // ensures immediate refresh even within the 30s staleTime window.
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
+      }
+    });
+    return () => subscription.remove();
+  }, [sessionId, queryClient]);
 
   // -------------------------------------------------------------------------
   // Local State for Session Entry Mood Check (persisted per session, 2h cooldown)

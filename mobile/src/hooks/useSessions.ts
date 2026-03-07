@@ -27,22 +27,17 @@ import {
   DeclineInvitationResponse,
   InvitationDTO,
   Stage,
-  GetMessagesResponse,
-  MessageRole,
   SessionStateResponse,
   TimelineResponse,
   ChatItemType,
   IndicatorType,
   IndicatorItem,
-  AIMessageItem,
-  AIMessageStatus,
 } from '@meet-without-fear/shared';
 
 // Import query keys from centralized file to avoid circular dependencies
 import {
   sessionKeys,
   stageKeys,
-  messageKeys,
   timelineKeys,
   notificationKeys,
 } from './queryKeys';
@@ -687,110 +682,13 @@ export function useConfirmInvitationMessage(
         queryKey: stageKeys.progress(sessionId),
       });
 
-      // NOTE: We do NOT invalidate messages queries here!
-      // Instead, we add the transition message directly to the cache below.
-      // This prevents refetching all messages and avoids re-animation issues.
+      // NOTE: Transition message is NO LONGER in the HTTP response.
+      // It arrives via Ably (message.ai_response event) after background AI generation.
+      // The mobile app handles this via useAIMessageHandler.addAIMessage, which
+      // writes the message to messageKeys.infinite and messageKeys.list caches.
+      // This eliminates the 2-10s race window that caused the invitation panel bug.
 
-      // If we received a transition message, add it to the messages cache
-      if (data.transitionMessage && data.advancedToStage === Stage.WITNESS) {
-        const transitionMsg = {
-          id: data.transitionMessage.id,
-          sessionId,
-          senderId: null,
-          role: MessageRole.AI,
-          content: data.transitionMessage.content,
-          stage: Stage.WITNESS,
-          timestamp: data.transitionMessage.timestamp,
-        };
-
-        // Add to the non-stage-filtered message cache (regular query)
-        queryClient.setQueryData<{ messages: typeof transitionMsg[]; hasMore: boolean }>(
-          messageKeys.list(sessionId),
-          (old) => {
-            if (!old) return { messages: [transitionMsg], hasMore: false };
-            // Append the transition message if not already present
-            const exists = old.messages.some(m => m.id === transitionMsg.id);
-            if (exists) return old;
-            return { ...old, messages: [...old.messages, transitionMsg] };
-          }
-        );
-
-        // Also add to the infinite query cache (what useUnifiedSession uses)
-        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
-          messageKeys.infinite(sessionId),
-          (old) => {
-            if (!old || old.pages.length === 0) {
-              // Create initial structure for infinite query
-              return {
-                pages: [{ messages: [transitionMsg], hasMore: false }],
-                pageParams: [undefined],
-              };
-            }
-            // Append to the first page (newest messages)
-            const firstPage = old.pages[0];
-            const exists = firstPage.messages.some(m => m.id === transitionMsg.id);
-            if (exists) {
-              return old;
-            }
-            const updatedPages = [...old.pages];
-            updatedPages[0] = {
-              ...firstPage,
-              messages: [...firstPage.messages, transitionMsg],
-            };
-            return { ...old, pages: updatedPages };
-          }
-        );
-
-        // Also add to the timeline cache (for ChatTimeline component)
-        const aiMessageItem: AIMessageItem = {
-          type: ChatItemType.AI_MESSAGE,
-          id: data.transitionMessage.id,
-          timestamp: data.transitionMessage.timestamp,
-          content: data.transitionMessage.content,
-          status: AIMessageStatus.SENT,
-        };
-
-        queryClient.setQueryData<InfiniteData<TimelineResponse, string | undefined>>(
-          timelineKeys.infinite(sessionId),
-          (oldData): InfiniteData<TimelineResponse, string | undefined> | undefined => {
-            if (!oldData || oldData.pages.length === 0) {
-              return {
-                pages: [{ items: [aiMessageItem], hasMore: false }],
-                pageParams: [undefined],
-              };
-            }
-
-            // Check if message already exists
-            const exists = oldData.pages.some(page =>
-              page.items.some(item => item.id === aiMessageItem.id)
-            );
-            if (exists) return oldData;
-
-            // Add to first page
-            const newPages = oldData.pages.map((page, index) => {
-              if (index === 0) {
-                return {
-                  ...page,
-                  items: [aiMessageItem, ...page.items],
-                };
-              }
-              return page;
-            });
-
-            return { ...oldData, pages: newPages };
-          }
-        );
-      }
-
-      // FINAL DEBUG: Log cache state at the very end of onSuccess
-      const finalState = queryClient.getQueryData<SessionStateResponse>(sessionKeys.state(sessionId));
-      console.log('[confirmInvitation:onSuccess] === COMPLETED SUCCESS HANDLER ===');
-      console.log('[confirmInvitation:onSuccess] FINAL cache state:', {
-        hasState: !!finalState,
-        hasInvitation: !!finalState?.invitation,
-        messageConfirmedAt: finalState?.invitation?.messageConfirmedAt,
-        stage: finalState?.progress?.myProgress?.stage,
-      });
+      console.log('[confirmInvitation:onSuccess] Invitation confirmed, AI message will arrive via Ably');
     },
 
     // =========================================================================
@@ -929,27 +827,32 @@ export function useSessionState(
       if (!sessionId) throw new Error('Session ID is required');
       const data = await get<SessionStateResponse>(`/sessions/${sessionId}/state`);
 
-      // Hydrate individual query caches from consolidated response
-      // This ensures subsequent hook calls get cache hits
-      queryClient.setQueryData(sessionKeys.detail(sessionId), {
-        session: data.session,
-      });
+      // Hydrate individual query caches from consolidated response.
+      // GUARD: Only hydrate if no existing data (initial load).
+      // After initial load, these caches are updated by mutations and Ably events.
+      // Blindly overwriting them here can undo optimistic updates.
+      if (!queryClient.getQueryData(sessionKeys.detail(sessionId))) {
+        queryClient.setQueryData(sessionKeys.detail(sessionId), {
+          session: data.session,
+        });
+      }
 
-      queryClient.setQueryData(stageKeys.progress(sessionId), data.progress);
+      if (!queryClient.getQueryData(stageKeys.progress(sessionId))) {
+        queryClient.setQueryData(stageKeys.progress(sessionId), data.progress);
+      }
 
-      // Hydrate messages as infinite query format
-      queryClient.setQueryData(messageKeys.list(sessionId), {
-        pages: [data.messages],
-        pageParams: [undefined],
-      });
+      // Don't hydrate messageKeys.list — UI reads from messageKeys.infinite,
+      // and overwriting here can clobber optimistic transition messages.
 
-      if (data.invitation) {
+      if (data.invitation && !queryClient.getQueryData(sessionKeys.sessionInvitation(sessionId))) {
         queryClient.setQueryData(sessionKeys.sessionInvitation(sessionId), {
           invitation: data.invitation,
         });
       }
 
-      queryClient.setQueryData(stageKeys.compact(sessionId), data.compact);
+      if (!queryClient.getQueryData(stageKeys.compact(sessionId))) {
+        queryClient.setQueryData(stageKeys.compact(sessionId), data.compact);
+      }
 
       return data;
     },
