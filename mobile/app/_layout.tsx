@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 
 import { SessionDrawerProvider } from '@/src/hooks/useSessionDrawer';
+import { useInvitationLink } from '@/src/hooks/useInvitation';
 import { QueryProvider } from '@/src/providers/QueryProvider';
 import { ToastProvider } from '@/src/contexts/ToastContext';
 import { MixpanelInitializer } from '@/src/components/MixpanelInitializer';
@@ -30,6 +31,9 @@ function HideSplashOnReady() {
  * Common app shell - UI container shared between Clerk and E2E modes
  */
 function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
+  // Capture invitation deep links to AsyncStorage (backup for home screen pickup)
+  useInvitationLink();
+
   return (
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaProvider>

@@ -30,7 +30,7 @@ export function InvitationRedirect() {
         // Clear it immediately to prevent redirect loops
         sessionStorage.removeItem(PENDING_INVITATION_KEY);
         // Redirect back to invitation page to complete acceptance
-        router.replace(`/invitation/${pendingInvitation}`);
+        router.replace(`/invitation/${pendingInvitation}?returning=1`);
       }
     }
   }, [isLoaded, isSignedIn, pathname, router]);

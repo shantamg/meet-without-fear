@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useState, useRef } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useUser, useClerk, SignIn } from "@clerk/nextjs";
 import Link from "next/link";
 import {
@@ -35,9 +35,21 @@ type InvitationState =
   | "error";
 
 export default function InvitationPage() {
+  return (
+    <Suspense fallback={<LoadingState />}>
+      <InvitationPageInner />
+    </Suspense>
+  );
+}
+
+function InvitationPageInner() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const invitationId = params.id as string;
+
+  // Detect if user just returned from OAuth redirect (query param survives cross-domain redirects on mobile)
+  const isReturningFromOAuth = searchParams.get("returning") === "1";
 
   const { isSignedIn, isLoaded: isAuthLoaded, getToken } = useAuth();
   const { user } = useUser();
@@ -65,9 +77,10 @@ export default function InvitationPage() {
         return;
       }
 
-      // Check if user just returned from OAuth - if so, don't sign them out
+      // Check if user just returned from OAuth - if so, don't sign them out.
+      // Use URL query param (survives mobile cross-domain redirects) with sessionStorage as fallback.
       const pendingInvitation = sessionStorage.getItem(PENDING_INVITATION_KEY);
-      if (pendingInvitation === invitationId && isSignedIn) {
+      if ((isReturningFromOAuth || pendingInvitation === invitationId) && isSignedIn) {
         console.log("[Invitation] User returned from OAuth, keeping signed in to accept");
         setHasSignedOut(true);
         return;
@@ -91,7 +104,7 @@ export default function InvitationPage() {
     }
 
     ensureSignedOut();
-  }, [isAuthLoaded, isSignedIn, signOut, hasSignedOut, invitationId]);
+  }, [isAuthLoaded, isSignedIn, signOut, hasSignedOut, invitationId, isReturningFromOAuth]);
 
   // Fetch invitation details (only after we've handled sign-out)
   useEffect(() => {
@@ -458,7 +471,7 @@ function AuthRequiredState({
             socialButtonsVariant: "blockButton",
           },
         }}
-        forceRedirectUrl={`/invitation/${invitationId}`}
+        forceRedirectUrl={`/invitation/${invitationId}?returning=1`}
       />
     </main>
   );

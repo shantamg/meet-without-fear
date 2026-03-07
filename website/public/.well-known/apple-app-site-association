@@ -1,0 +1,19 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["446P429C8Q.com.galuten.meetwithoutfear"],
+        "components": [
+          {
+            "/": "/invitation/*",
+            "comment": "Invitation deep links"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["446P429C8Q.com.galuten.meetwithoutfear"]
+  }
+}
