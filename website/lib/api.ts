@@ -19,7 +19,22 @@ export interface InvitationDetails {
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
-  error?: string;
+  error?: string | { code?: string; message?: string; details?: unknown };
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const message = "message" in error ? error.message : null;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+
+  return fallback;
 }
 
 /**
@@ -68,7 +83,10 @@ export async function acceptInvitation(
     const data = await response.json();
 
     if (!response.ok) {
-      return { success: false, error: data.error || "Failed to accept invitation" };
+      return {
+        success: false,
+        error: getErrorMessage(data.error, "Failed to accept invitation"),
+      };
     }
 
     return { success: true, sessionId: data.data?.session?.id };
