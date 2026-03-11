@@ -14,7 +14,6 @@
 - **Shared types in `shared/`** - All DTOs, contracts, and cross-workspace types
 - **Small, testable functions** - Each function does one thing
 - **Logic separate from views** - Mobile: hooks/services for logic, components for UI
-- **Reusable code** - Extract common patterns to shared or workspace-level utilities
 
 ### Verification Before Completion
 
@@ -34,21 +33,10 @@ npm run test    # Tests across all workspaces
 
 - **Never use `prisma db push`** - Always create proper migrations
 - Use `npx prisma migrate dev --name <description>` to create migrations
-- Migration files are tracked in git and applied consistently across environments
 
 ### Database Queries
 
 To run ad-hoc Prisma queries, create a temp file in `backend/src/` that imports from `./lib/prisma` and run with `npx ts-node`.
-
-## Project Structure
-
-- `shared/` - Types, DTOs, contracts shared between backend and mobile
-- `backend/` - Express API, Prisma, business logic
-- `mobile/` - Expo React Native app
-- `docs/` - Living documentation (see Doc Routing Table below)
-- `docs/mvp-planning/` - Product design specs (published docs site)
-- `docs/archive/` - Historical/completed documentation
-- `.planning/` - Active planning and research (not published)
 
 ## Documentation
 
@@ -62,154 +50,36 @@ When working on a task, consult the relevant docs first:
 | **Backend architecture** | `docs/architecture/backend-overview.md` | `docs/architecture/structure.md` |
 | **Backend prompting / AI** | `docs/backend/prompting-architecture.md` | `docs/backend/prompt-caching.md` |
 | **Reconciler / empathy** | `docs/backend/reconciler-flow.md` | `docs/diagrams/reconciler-paths.md` |
-| **Mobile architecture** | `docs/architecture/structure.md` | `CLAUDE.md` (State Management section below) |
+| **Mobile architecture** | `docs/architecture/structure.md` | |
 | **Database / Prisma** | `docs/architecture/backend-overview.md` | `backend/prisma/schema.prisma` |
 | **Testing** | `docs/architecture/testing.md` | `docs/e2e-testing/architecture.md` |
 | **Integrations (Ably, Clerk, Bedrock)** | `docs/architecture/integrations.md` | |
 | **Code conventions** | `docs/architecture/conventions.md` | |
 | **Tech stack** | `docs/architecture/stack.md` | |
-| **Deployment** | `docs/deployment/index.md` | `.planning/architecture/production-deployment-strategy.md` |
+| **Deployment** | `docs/deployment/index.md` | |
 | **Stage 2B / Redesign** | `.planning/BACKEND_ARCHITECTURE_PROPOSAL.md` | `.planning/designs/SHARE-REDESIGN.md` |
 | **Stage 3 work** | `.planning/STAGE3_INTEGRATION_PLAN.md` | `.planning/STAGE3_UX_SYNTHESIS.md` |
 | **Known concerns / tech debt** | `docs/architecture/concerns.md` | |
 | **Historical plans/specs** | `docs/archive/index.md` | |
 
-**Fallback**: If no route matches, check `docs/index.md`, search the codebase, or note the gap for documentation.
+**Fallback**: If no route matches, check `docs/index.md` or search the codebase.
 
-### Documentation Conventions
+### Documentation Rules
 
 - **Living docs** (`docs/` except `archive/`): Always reflect current state. Update when code changes.
-- **Archive docs** (`docs/archive/`): Read-only historical reference. Never update.
-- **Planning docs** (`.planning/`): Working documents. May be stale. Not published.
-- **New docs**: Place in the appropriate `docs/` subdirectory. Add YAML frontmatter. Update the section's `index.md`.
-- **Frontmatter**: Every doc in `docs/` should have:
-  ```yaml
-  ---
-  created: YYYY-MM-DD
-  updated: YYYY-MM-DD
-  status: living | reference | archived
-  ---
-  ```
-- **Naming**: Use lowercase-kebab-case for filenames. Be descriptive (e.g., `prompting-architecture.md` not `prompts.md`).
+- **Archive docs** (`docs/archive/`): Read-only. Never update.
+- **Planning docs** (`.planning/`): Working documents. May be stale.
 
 ## State Management Architecture
 
-The mobile app follows a **Cache-First** (Single Source of Truth) pattern using React Query. This architecture ensures consistent UI behavior and eliminates bugs caused by state synchronization issues.
+The mobile app uses **Cache-First** (Single Source of Truth) via React Query.
 
-### Golden Rule: If It's on Screen, It's in Cache
+### Rules
 
-All UI state should be derived from the React Query cache. Never use local state (`useState`, `useRef`) to bridge the gap between user actions and server responses.
-
-### Core Principles
-
-1. **Optimistic Updates**: Use `onMutate` in mutations to immediately write expected results to cache
-2. **Rollback on Error**: The `onError` handler restores previous cache state if the API call fails
-3. **Derive UI State**: Compute UI visibility/state from cached data, not local variables
-4. **Indicators are Data**: Timeline indicators (e.g., "Invitation Sent") are derived from timestamps in cache
-
-### Mutation Pattern
-
-```typescript
-useMutation({
-  mutationFn: async (params) => {
-    return post('/api/endpoint', params);
-  },
-
-  // 1. OPTIMISTIC UPDATE: Write to cache immediately
-  onMutate: async (params) => {
-    await queryClient.cancelQueries({ queryKey: someKeys.data(id) });
-    const previousData = queryClient.getQueryData(someKeys.data(id));
-
-    // Write optimistic result to cache
-    queryClient.setQueryData(someKeys.data(id), (old) => ({
-      ...old,
-      someField: true,
-      someFieldTimestamp: new Date().toISOString(),
-    }));
-
-    return { previousData };
-  },
-
-  // 2. REPLACE: Server response overwrites optimistic data
-  onSuccess: (data, params) => {
-    queryClient.invalidateQueries({ queryKey: someKeys.data(id) });
-  },
-
-  // 3. ROLLBACK: Restore previous state on error
-  onError: (error, params, context) => {
-    if (context?.previousData) {
-      queryClient.setQueryData(someKeys.data(id), context.previousData);
-    }
-  },
-});
-```
-
-### Deriving UI State
-
-```typescript
-// BAD: Local state bridging user action to server response
-const [showPanel, setShowPanel] = useState(true);
-const handleConfirm = () => {
-  setShowPanel(false); // Local state → out of sync on reload
-  mutate();
-};
-
-// GOOD: Derive from cache
-const { data } = useSessionState(sessionId);
-const showPanel = !data?.invitation?.messageConfirmed; // Derived from cache
-const handleConfirm = () => {
-  mutate(); // onMutate sets messageConfirmed: true in cache → panel hides
-};
-```
-
-### Timeline Indicators
-
-Indicators (e.g., "Invitation Sent", "Compact Signed") are derived from timestamps in the cache using `deriveIndicators()` in `chatListSelector.ts`:
-
-```typescript
-// Indicators appear based on cached timestamps
-if (invitation?.messageConfirmedAt) {
-  indicators.push({
-    type: 'indicator',
-    indicatorType: 'invitation-sent',
-    timestamp: invitation.messageConfirmedAt,
-  });
-}
-```
-
-### Typing Indicator (Ghost Dots)
-
-The typing indicator is derived from the last message role, not a boolean state:
-
-```typescript
-// In ChatInterface.tsx
-const isWaitingForAI = messages.length > 0 &&
-  messages[messages.length - 1]?.role === MessageRole.USER;
-```
-
-- When user sends message → added to cache → last message is USER → dots show
-- When AI response arrives (via Ably) → added to cache → last message is AI → dots hide
-
-### Query Key Organization
-
-Query keys are centralized in `mobile/src/hooks/queryKeys.ts` to avoid circular dependencies. All hooks import keys from there:
-
-```typescript
-// In queryKeys.ts
-export const sessionKeys = {
-  state: (id: string) => ['sessions', id, 'state'] as const,
-  // ...
-};
-
-// In hooks
-import { sessionKeys } from './queryKeys';
-```
-
-### Key Files
-
-- `mobile/src/hooks/queryKeys.ts` - Centralized query key definitions
-- `mobile/src/utils/chatListSelector.ts` - Pure functions for deriving indicators
-- `mobile/src/hooks/useChatUIState.ts` - Derives UI visibility from cache data
-- `mobile/src/hooks/useMessages.ts` - Message mutations with optimistic updates
-- `mobile/src/hooks/useSessions.ts` - Session/invitation mutations
-- `mobile/src/hooks/useStages.ts` - Stage-specific mutations (compact, feel-heard)
+1. **If it's on screen, it's in cache** — Never use `useState`/`useRef` to bridge user actions to server responses. Derive UI state from cache.
+2. **Optimistic updates via `onMutate`** — Write expected results to cache immediately, rollback in `onError`.
+3. **Indicators are data** — Timeline indicators derived from timestamps in cache via `deriveIndicators()` in `chatListSelector.ts`.
+4. **Typing indicator derived from last message role** — `role === USER` means waiting for AI, not a boolean flag.
+5. **Query keys centralized** in `mobile/src/hooks/queryKeys.ts`. All hooks import from there.
+6. **Never `invalidateQueries` on a key with optimistic updates in-flight** — Use `setQueryData` instead.
+7. **Ably event handlers use `setQueryData`** to merge updates, not `invalidateQueries` (prevents refetch races).
