@@ -268,14 +268,18 @@ await feelHeardYes.click();
 
 ### Current State Factory Stages
 
-The `SessionBuilder` supports 4 stages:
+The `SessionBuilder` supports 8 stages:
 
 | Stage | Description | Usage |
 |-------|-------------|-------|
 | `CREATED` | Session created, compact not signed | Not used in tests |
 | `EMPATHY_SHARED_A` | User A done with Stage 1, User B at Stage 0 | Used by partner-journey, all reconciler tests |
 | `FEEL_HEARD_B` | User B completed feel-heard | **Not used** |
+| `RECONCILER_SHOWN_B` | User B felt heard, reconciler ran with significant gaps, share offer is OFFERED | **Not used** |
 | `CONTEXT_SHARED_B` | User B has shared context | Used by share-tab-rendering |
+| `EMPATHY_REVEALED` | Both users shared empathy and validated each other | Used by needs-confirmation-visual, needs-tab-visual, stage-3-4-complete, two-browser-stage-3 |
+| `NEED_MAPPING_COMPLETE` | Stage 3: Both users identified needs and confirmed common ground | Used by two-browser-stage-4 |
+| `STRATEGIC_REPAIR_COMPLETE` | Stage 4: Strategies collected, ranked, and agreement created | Not used in tests |
 
 ---
 
@@ -333,15 +337,15 @@ test.describe('after User B feels heard', () => {
 
 ### 4. State Factory Improvements
 
-**Q4.1:** Should we add more granular stages to the StateFactory? For example:
+**Q4.1:** Should we add more granular stages to the StateFactory? Note that `FEEL_HEARD_B` and `RECONCILER_SHOWN_B` already exist in state-factory.ts (see table above) but are not yet used by any tests. `RECONCILER_SHOWN_B` serves the same purpose as the proposed `SHARE_SUGGESTION_SHOWN_B` below. Remaining candidates:
 
-| Proposed Stage | Description | Would Skip |
-|----------------|-------------|------------|
-| `INVITATION_SENT_A` | User A sent invitation | Compact signing |
-| `COMPACT_SIGNED_B` | User B signed compact | Compact flow |
-| `FEEL_HEARD_B` | Already exists | 4 chat exchanges |
-| `SHARE_SUGGESTION_SHOWN_B` | Reconciler ran, modal visible | Reconciler wait |
-| `SHARE_DECLINED_B` | User B declined | Decision flow |
+| Proposed Stage | Description | Would Skip | Status |
+|----------------|-------------|------------|--------|
+| `INVITATION_SENT_A` | User A sent invitation | Compact signing | Not yet implemented |
+| `COMPACT_SIGNED_B` | User B signed compact | Compact flow | Not yet implemented |
+| `FEEL_HEARD_B` | User B completed feel-heard | 4 chat exchanges | **Already exists** (unused by tests) |
+| `RECONCILER_SHOWN_B` | Reconciler ran, share offer shown | Reconciler wait | **Already exists** (unused by tests) |
+| `SHARE_DECLINED_B` | User B declined | Decision flow | Not yet implemented |
 
 **Q4.2:** The StateFactory creates all data in the database. Should we also seed specific UI state (e.g., "modal is already dismissed")?
 
@@ -370,8 +374,8 @@ test.describe('after User B feels heard', () => {
 Based on this audit, here are potential improvements ranked by impact:
 
 ### High Impact
-1. **Use `FEEL_HEARD_B` stage** for reconciler tests to eliminate 11 instances of repeated chat flows
-2. **Add `SHARE_SUGGESTION_SHOWN_B` stage** to start tests right at the modal decision point
+1. **Use `FEEL_HEARD_B` stage** for reconciler tests to eliminate 11 instances of repeated chat flows (stage already exists in state-factory.ts, just not used by tests)
+2. **Use `RECONCILER_SHOWN_B` stage** to start tests right at the share offer decision point (stage already exists in state-factory.ts as `RECONCILER_SHOWN_B`, just not used by tests)
 
 ### Medium Impact
 3. **Extract common helper** for the share suggestion flow (navigate to share screen, find buttons, etc.)

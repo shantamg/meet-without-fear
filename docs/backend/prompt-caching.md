@@ -80,7 +80,7 @@ On Bedrock, prompt caches are **isolated per session/prefix**. There is no cross
 | Cache read (hit) | $0.30 |
 | Output | $15.00 |
 
-**The savings**: Cache reads are **10x cheaper** than normal input. Even accounting for the 1.25x write premium on the first request, you break even after just **2 cache hits**, and every hit after that saves 90%.
+**The savings**: Cache reads are **10x cheaper** than normal input. Even accounting for the 1.25x write premium on the first request, you break even by the **3rd cache hit**, and every hit after that saves 90%.
 
 ---
 

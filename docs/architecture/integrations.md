@@ -19,7 +19,9 @@ status: living
 
 **AI & Large Language Models:**
 - AWS Bedrock - Claude models for AI responses
-  - SDK: `@anthropic-ai/bedrock-sdk` (Messages API)
+  - SDKs:
+    - `@anthropic-ai/bedrock-sdk` (AnthropicBedrock client) — used for Claude model interactions (Sonnet, Haiku) via Messages API
+    - `@aws-sdk/client-bedrock-runtime` (BedrockRuntimeClient) — used only for Titan embeddings via InvokeModelCommand
   - Models:
     - Claude Sonnet 4.5 (`global.anthropic.claude-sonnet-4-5-20250929-v1:0`) — user-facing responses, empathetic dialogue
     - Claude Haiku 4.5 (`global.anthropic.claude-haiku-4-5-20251001-v1:0`) — internal mechanics: intent detection, classification, planning

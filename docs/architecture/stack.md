@@ -23,7 +23,7 @@ status: living
 
 **Environment:**
 - Node.js >= 20.0 (specified in `docs-site/package.json` engines)
-- Expo 54.0.33 - Mobile framework for iOS/Android development
+- Expo 54.0.32 - Mobile framework for iOS/Android development
 - React Native 0.81.5 - Cross-platform mobile framework
 - React 19.1.0 - Web and mobile UI framework
 
@@ -34,7 +34,7 @@ status: living
 ## Frameworks
 
 **Core:**
-- Express 4.22.1 - Backend HTTP server (`backend/`)
+- Express 4.21.0 - Backend HTTP server (`backend/`)
 - Expo Router 6.0.22 - Mobile navigation and deep linking (`mobile/`)
 - Next.js 16.1.6 - Marketing website (`website/`)
 - Docusaurus 3.9.2 - Documentation site (`docs-site/`)
@@ -84,28 +84,28 @@ status: living
 - tsc-alias - Path alias resolution for compiled output
 - Expo CLI - Mobile build and deployment via EAS (Expo Application Services)
 - Metro - React Native bundler
-- Babel 7.29.0 - JSX/TypeScript transpilation
+- Babel 7.25.2 - JSX/TypeScript transpilation
 
 **Security:**
-- Helmet 8.1.0 - HTTP security headers middleware
+- Helmet 8.0.0 - HTTP security headers middleware
 - CORS 2.8.6 - Cross-origin request handling
 - Compression 1.8.1 - Gzip compression (with SSE bypass)
-- Clerk 1.7.73 (backend) / 2.19.26 (mobile) / 6.38.1 (website) - Authentication provider
+- Clerk 1.7.60 (backend) / 2.19.14 (mobile) / 6.12.0 (website) - Authentication provider
 
 **Analytics & Logging:**
-- Mixpanel 3.3.0 (mobile) / 2.74.0 (web) - Event analytics
+- Mixpanel 3.1.3 (mobile) / 2.73.0 (web) - Event analytics
 - Winston 3.19.0 - Structured logging framework (backend)
 
 **External AI Models:**
 - AWS Bedrock SDK `@anthropic-ai/bedrock-sdk` 0.26.4 (Messages API)
-  - Legacy: `@aws-sdk/client-bedrock-runtime` 3.995.0 (still in dependencies)
+  - Legacy: `@aws-sdk/client-bedrock-runtime` 3.958.0 (still in dependencies)
   - Note: Migrated from `@aws-sdk/client-bedrock-runtime` (Converse API) to `@anthropic-ai/bedrock-sdk` (Messages API)
   - Claude Sonnet 4.5 (user-facing, empathetic responses)
   - Claude Haiku 4.5 (internal mechanics: classification, detection, planning)
   - Amazon Titan Embed Text v2 (vector embeddings)
 
 **Email & Push Notifications:**
-- Resend 6.9.2 - Transactional email service
+- Resend 6.6.0 - Transactional email service
 - Expo Push SDK 4.0.0 - Push notifications to mobile devices
 - Expo Notifications 0.32.16 - Mobile push notification handling
 

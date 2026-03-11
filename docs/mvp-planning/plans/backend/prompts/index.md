@@ -122,10 +122,10 @@ interface ContextBundle {
 
 | Stage | Recent Turns Included | Rationale |
 |-------|----------------------|-----------|
-| Stage 1 | Last 6 turns | Deep witnessing needs thread memory |
-| Stage 2 | Last 4 turns | Empathy building is more structured |
-| Stage 3 | Last 4 turns | Need confirmation is procedural |
-| Stage 4 | Last 8 turns | Negotiation requires full context |
+| Stage 1 | Last 10 turns | Deep witnessing needs thread memory |
+| Stage 2 | Last 8 turns | Empathy building is more structured |
+| Stage 3 | Last 8 turns | Need confirmation is procedural |
+| Stage 4 | Last 10 turns | Negotiation requires full context |
 
 ### 2. Emotional Thread Tracking
 

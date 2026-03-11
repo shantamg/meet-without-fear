@@ -8,7 +8,7 @@ status: living
 
 System architecture documentation for Meet Without Fear. These docs describe the current state of the codebase.
 
-**Source of truth**: These are published copies of `.planning/codebase/` files. When codebase research updates those files, sync changes here.
+**Source of truth**: These `docs/architecture/` files are the authoritative versions. The `.planning/codebase/` copies are older (Feb 2026) and should not be treated as upstream.
 
 ## Documents
 

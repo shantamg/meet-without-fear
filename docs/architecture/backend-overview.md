@@ -48,18 +48,18 @@ status: living
 **Session Creation & Invitation:**
 
 1. User A creates session via mobile → `POST /sessions` → Backend creates Session row + Invitation row
-2. Backend publishes `invitation.sent` event to Ably channel `meetwithoutfear:session:${sessionId}`
+2. Backend publishes `session-created` event to Ably `ai-audit-stream` channel via `publishSessionCreated` (for monitoring dashboard)
 3. Mobile's `useRealtime` hook receives event → invalidates sessionKeys cache → UI refreshes
 4. User A sends invitation message via mobile → `POST /sessions/{id}/messages` with `messageType: 'invitation'`
 5. Backend streams response via SSE; `handleMetadata` callback updates cache directly
 6. User B receives invite link, clicks → `POST /sessions/{id}/invitations/accept`
-7. Backend creates Invitation acceptance record; publishes `invitation.accepted` event
+7. Backend creates Invitation acceptance record; publishes `session.joined` event
 8. Both users' `sessionKeys.state` cache updates; chat UI becomes available
 
 **Message Flow (Chat & AI):**
 
 1. User sends message → Mobile optimistically adds to `messageKeys.list` cache
-2. Mobile: `POST /sessions/{id}/messages` (SSE streaming endpoint)
+2. Mobile: `POST /sessions/{id}/messages/stream` (SSE streaming endpoint)
 3. Backend streams chunks:
    - `chunk` events (partial AI response text)
    - `metadata` event (emotional intensity, turn summary, memory snapshots)

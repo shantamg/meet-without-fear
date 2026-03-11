@@ -136,7 +136,7 @@ project-root/
 - Contains: 109 component files organized by feature
 - Key components:
   - `ChatInterface.tsx` - Main chat UI (29KB; messages, input, streaming)
-  - `ChatBubble.tsx` - Single message bubble (19KB, handles AI streaming animation)
+  - `ChatBubble.tsx` - Single message bubble (20KB, handles AI streaming animation)
   - `EmotionalBarometer.tsx` - Emotion slider UI
   - Stage 2 components are integrated into UnifiedSessionScreen.tsx and its sub-components in `components/sharing/` and `components/SessionDrawer/`
   - `NeedCard.tsx`, `StrategyCard.tsx` - Stage 3-4 components
@@ -145,14 +145,14 @@ project-root/
 
 **`hooks/`**
 - Purpose: React Query + custom logic hooks; data layer
-- Contains: 31 hooks organizing all server communication + state management
+- Contains: 30 hooks organizing all server communication + state management
 - Key hooks:
   - `queryKeys.ts` - Centralized query key definitions (prevents circular dependencies)
   - `useUnifiedSession.ts` - Orchestrates all session data (45KB); gathers state, messages, realtime events
   - `useMessages.ts` - Message querying + mutations (30KB); optimistic updates + streaming
-  - `useSessions.ts` - Session CRUD + list (34KB)
-  - `useStages.ts` - Stage mutations + gate validation (62KB)
-  - `useRealtime.ts` - Ably subscription setup (27KB); listens to session events
+  - `useSessions.ts` - Session CRUD + list (32KB)
+  - `useStages.ts` - Stage mutations + gate validation (64KB)
+  - `useRealtime.ts` - Ably subscription setup (29KB); listens to session events
   - `useStreamingMessage.ts` - SSE streaming setup + metadata handling (27KB)
   - `useChatUIState.ts` - Derives UI state from cache values (9KB wrapper around `utils/chatUIState.ts`)
   - Stage-specific: `useInnerThoughts.ts`, `useGratitude.ts`, `useMeditation.ts`, `useNeedsAssessment.ts`, etc.

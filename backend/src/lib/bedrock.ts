@@ -158,7 +158,7 @@ export const BEDROCK_SONNET_MODEL_ID =
   process.env.BEDROCK_SONNET_MODEL_ID || 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
 
 // Titan: Embedding model for semantic search
-// Outputs 1536-dimensional vectors for similarity matching
+// Outputs 1024-dimensional vectors for similarity matching
 export const BEDROCK_TITAN_EMBED_MODEL_ID =
   process.env.BEDROCK_TITAN_EMBED_MODEL_ID || 'amazon.titan-embed-text-v2:0';
 

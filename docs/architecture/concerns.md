@@ -14,7 +14,7 @@ status: living
 - Issue: Multiple components exceed 1500+ lines of code, making them difficult to maintain and test
 - Files:
   - `mobile/src/screens/UnifiedSessionScreen.tsx` (3096 lines)
-  - `backend/src/controllers/stage2.ts` (2261 lines)
+  - `backend/src/controllers/stage2.ts` (2268 lines)
   - `backend/src/services/reconciler.ts` (2320 lines)
   - `mobile/src/hooks/useUnifiedSession.ts` (1218 lines)
 - Impact: Increased bug risk, harder to test individual features, cognitive load for future developers
@@ -82,7 +82,7 @@ status: living
 - Fix approach: Introduce log levels or structured logging; remove debug-only logs before production
 
 **State Management Explosion in useStages.ts:**
-- Issue: 104+ direct `queryClient.setQueryData()` calls with no type-safe wrapper
+- Issue: 29 direct `queryClient.setQueryData()` calls with no type-safe wrapper
 - Files: `mobile/src/hooks/useStages.ts`
 - Impact: Cache key typos or shape mismatches cause silent failures
 - Fix approach: Create typed cache mutation helpers that enforce key/shape consistency
@@ -126,19 +126,18 @@ status: living
 
 **Critical Services Lack Unit Tests:**
 - Issue: Major backend services have no dedicated test files
+- Tested services (14): ai, context-assembler, dispatch-handler, memory-detector, memory-intent, memory-validator, partner-session-classifier, people-extractor, push, realtime, reconciler-offer-optional, semantic-router-integration, stage-prompts, stage-tools
 - Untested files (high-impact):
   - `backend/src/services/ai-orchestrator.ts` (26.6KB) - Routes AI requests to appropriate models; core system
-  - `backend/src/services/ai.ts` (6.6KB) - LLM interaction wrapper
-  - `backend/src/services/context-assembler.ts` (18.3KB) - Builds prompt context; high complexity
   - `backend/src/services/context-retriever.ts` (28KB) - Fetches session context; core data service
   - `backend/src/services/reconciler.ts` (2320 lines) - Reconciliation logic; no tests (critical gap) — route-level tests mock the service entirely, and `reconciler-offer-optional.test.ts` only tests mirrored helper logic, not reconciler.ts itself
   - `backend/src/services/embedding.ts` (16.4KB) - Vector embedding service
   - `backend/src/services/conversation-summarizer.ts` (22.5KB) - Session summarization
-  - `backend/src/services/needs.ts`, `backend/src/services/memory-*.ts` (multiple 10-14KB files)
-- Total untested services: 40+ files
+  - `backend/src/services/needs.ts` (session needs logic)
+- Total untested services: ~27 files
 - Impact: Bugs in these services may go undetected; regressions from refactoring not caught
 - Risk: High priority changes to reconciliation, context assembly, or AI orchestration have no automated safety net
-- Fix approach: Create integration test suite for critical paths (e.g., "Stage 1 → Stage 2 → reconciler runs → gaps detected" flow). Prioritize tests for ai-orchestrator, context-assembler, reconciler.
+- Fix approach: Create integration test suite for critical paths (e.g., "Stage 1 → Stage 2 → reconciler runs → gaps detected" flow). Prioritize tests for ai-orchestrator, context-retriever, reconciler.
 
 **Mobile E2E Test Brittleness:**
 - Issue: Live AI E2E test (`e2e/tests/live-ai-full-flow.spec.ts`) depends on external service health (partner-session-classifier circuit breaker adds 20s timeout per response per MEMORY.md)

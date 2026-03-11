@@ -15,7 +15,7 @@ Production deployment targets and distribution options for the Meet Without Fear
 The Express API is deployed to Render.com as a web service. Configuration is defined in `render.yaml` at the repository root.
 
 - **Service name**: `meet-without-fear-api`
-- **Runtime**: Node.js (20.x)
+- **Runtime**: Node.js (20.x per `package.json` engines; `render.yaml` specifies `runtime: node`)
 - **Plan**: Starter
 - **Branch**: `main`
 - **Build command**: `npm install && npm run prisma:generate --workspace=backend && npm run build --workspace=backend`

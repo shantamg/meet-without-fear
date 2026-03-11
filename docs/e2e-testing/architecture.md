@@ -357,6 +357,7 @@ Enabled only when `E2E_AUTH_BYPASS=true`:
 | `POST /api/e2e/cleanup` | Delete all `@e2e.test` users and related data |
 | `POST /api/e2e/seed` | Create a test user |
 | `POST /api/e2e/seed-session` | Create session at specific stage |
+| `POST /api/e2e/trigger-reconciler` | Manually trigger reconciler for a session |
 
 ## Key Design Decisions
 
