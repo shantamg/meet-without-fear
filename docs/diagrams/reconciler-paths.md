@@ -1,3 +1,9 @@
+---
+created: 2026-03-11
+updated: 2026-03-11
+status: living
+---
+
 # Reconciler Outcome Paths - State Diagrams
 
 This document provides state diagrams for all reconciler outcome paths from both user perspectives (guesser and subject). These diagrams document the complete flow for PROCEED, OFFER_OPTIONAL, OFFER_SHARING, refinement loops, accuracy feedback, and acceptance checks.
@@ -10,9 +16,11 @@ When the reconciler finds no significant gaps between the guesser's empathy atte
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFTING: Building empathy statement
-
-    DRAFTING --> HELD: Consents to share
+    [*] --> HELD: Empathy statement submitted
+    note right of HELD
+        Note: DRAFTING is a UI-only state.
+        EmpathyAttempt starts at HELD in the database.
+    end note
     note right of HELD
         UI: "Waiting for partner to<br/>finish sharing their experience"
         Banner: Waiting status
@@ -87,9 +95,11 @@ When the reconciler detects moderate gaps, it suggests the subject MIGHT CONSIDE
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFTING: Building empathy statement
-
-    DRAFTING --> HELD: Consents to share
+    [*] --> HELD: Empathy statement submitted
+    note right of HELD
+        Note: DRAFTING is a UI-only state.
+        EmpathyAttempt starts at HELD in the database.
+    end note
     note right of HELD
         UI: "Waiting for partner"
         Banner: Waiting status
@@ -193,9 +203,11 @@ When the reconciler detects significant gaps, it strongly suggests the subject s
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFTING: Building empathy statement
-
-    DRAFTING --> HELD: Consents to share
+    [*] --> HELD: Empathy statement submitted
+    note right of HELD
+        Note: DRAFTING is a UI-only state.
+        EmpathyAttempt starts at HELD in the database.
+    end note
 
     HELD --> ANALYZING: Partner completes Stage 1
 
@@ -303,6 +315,21 @@ stateDiagram-v2
     ANALYZING --> READY: Guard intercepts or PROCEED
     note right of READY
         hasContextAlreadyBeenShared guard<br/>prevents infinite loops<br/>Marks as READY regardless
+    end note
+
+    note right of ANALYZING
+        Context guard: hasContextAlreadyBeenShared
+        (reconciler.ts:912-922) prevents infinite
+        loops by checking if context was already
+        shared in this direction. If so, forces READY.
+    end note
+
+    ANALYZING --> READY: Circuit breaker (max 3 attempts)
+    note right of READY
+        Circuit breaker (reconciler.ts:843-857):
+        RefinementAttemptCounter tracks attempts per
+        direction. After 3 full analyses, forces READY
+        regardless of gap severity.
     end note
 
     REFINING --> ACCEPTANCE_CHECK: Taps "Skip refinement"
@@ -469,12 +496,17 @@ stateDiagram-v2
 stateDiagram-v2
     [*] --> REVEALED: Empathy shared with partner
 
-    REVEALED --> NEEDS_WORK: Partner marks inaccurate
-    note right of NEEDS_WORK
-        UI: Feedback message in chat<br/>"Partner shared feedback"<br/>Shows partner's feedback
+    REVEALED --> REVEALED: Partner marks inaccurate
+    note right of REVEALED
+        NEEDS_WORK is legacy/deprecated in Prisma schema.
+        When validated=false, status stays REVEALED
+        (no transition occurs in current code).
+        UI: Feedback message in chat
+        "Partner shared feedback"
+        Shows partner's feedback
     end note
 
-    NEEDS_WORK --> REFINE_DECISION: Reviews feedback
+    REVEALED --> REFINE_DECISION: Reviews feedback
     note right of REFINE_DECISION
         UI: "Refine your statement" option<br/>OR<br/>"Skip refinement" option
     end note
@@ -536,6 +568,10 @@ stateDiagram-v2
     SKIP_REFINEMENT --> ACCEPTANCE_QUESTION: AI presents question
     note right of ACCEPTANCE_QUESTION
         UI: AI presents context:<br/>"You said [Original empathy]"<br/>"They shared [Context/Feedback]"<br/><br/>"Are you willing to accept<br/>this as their experience?"
+    end note
+    note right of ACCEPTANCE_QUESTION
+        In code: called skipRefinement
+        (stage2.ts:1200, POST /empathy/skip-refinement)
     end note
 
     ACCEPTANCE_QUESTION --> ACCEPT_YES: "Yes, I accept"
@@ -633,6 +669,6 @@ These diagrams are implemented across:
 - **Shared**: `shared/src/dto/reconciler.ts` (types and contracts)
 
 For detailed specs, see:
-- `docs/specs/when-the-reconciler-responds-with-offeroptional-we-need-to-implement-this.md`
-- `docs/user-flows/accuracy-feedback-flow.md`
-- `docs/plans/2026-01-08-stage2-reconciler-flow-design.md`
+- `docs/archive/specs/when-the-reconciler-responds-with-offeroptional-we-need-to-implement-this.md`
+- `docs/diagrams/accuracy-feedback-flow.md`
+- `docs/archive/plans/2026-01-08-stage2-reconciler-flow-design.md`

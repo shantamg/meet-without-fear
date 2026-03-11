@@ -1,6 +1,20 @@
+---
+created: 2026-03-11
+updated: 2026-03-11
+status: living
+---
+
 # Accuracy Feedback Flow
 
 This document describes how users validate their partner's empathy attempt, including the UI component behavior and API interactions.
+
+> **WARNING (2026-03-11 Audit):** The accuracy feedback UI exists in code but is currently
+> **unreachable at runtime**. The `AccuracyFeedbackDrawer` component is declared
+> (UnifiedSessionScreen.tsx:2502-2523) and its state variable exists (line 748), but
+> `setShowAccuracyFeedbackDrawer(true)` is **never called anywhere** in the codebase.
+> The `skipRefinement` endpoint also exists but is never called from mobile.
+>
+> This document describes the *intended* behavior. Implementation is required to make it work.
 
 ## Overview
 
@@ -157,9 +171,10 @@ If the Guesser cannot/will not refine their statement to match the Subject's fee
 **Request:**
 ```typescript
 {
-  validated: boolean;              // Overall validation (true for accurate/partial)
-  rating: 'accurate' | 'partially_accurate' | 'inaccurate';
-  feedback?: string;               // Optional for accurate/partial, required for inaccurate
+  validated: boolean;     // true for accurate/partially_accurate, false for inaccurate
+  feedback?: string;      // Optional text feedback
+  // Note: there is NO "rating" field in the actual API.
+  // "Partially Accurate" and "Accurate" both send validated: true (no distinction).
 }
 ```
 
@@ -178,9 +193,9 @@ If the Guesser cannot/will not refine their statement to match the Subject's fee
 
 | Current Status | Validation Result | New Status |
 |---------------|-------------------|------------|
-| REVEALED | Accurate | VALIDATED |
-| REVEALED | Partially accurate | VALIDATED |
-| REVEALED | Inaccurate | NEEDS_WORK |
+| REVEALED | Accurate (validated: true) | VALIDATED |
+| REVEALED | Partially accurate (validated: true) | VALIDATED |
+| REVEALED | Inaccurate (validated: false) | Status stays REVEALED (NEEDS_WORK is legacy/deprecated) |
 
 ### What Happens Next
 
@@ -211,8 +226,14 @@ const shouldShowValidationPanel =
 
 After validation:
 ```typescript
-queryClient.invalidateQueries(['partnerEmpathy', sessionId]);
-queryClient.invalidateQueries(['empathyStatus', sessionId]);
+// Actual implementation invalidates 7 query key families:
+queryClient.invalidateQueries(stageKeys.empathyStatus(sessionId));
+queryClient.invalidateQueries(stageKeys.shareOffer(sessionId));
+queryClient.invalidateQueries(stageKeys.empathyDraft(sessionId));
+queryClient.invalidateQueries(sessionKeys.state(sessionId));
+queryClient.invalidateQueries(sessionKeys.detail(sessionId));
+queryClient.invalidateQueries(messageKeys.list(sessionId));
+queryClient.invalidateQueries(messageKeys.timeline(sessionId));
 ```
 
 ### Panel Visibility Logic

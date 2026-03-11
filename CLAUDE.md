@@ -45,8 +45,52 @@ To run ad-hoc Prisma queries, create a temp file in `backend/src/` that imports 
 - `shared/` - Types, DTOs, contracts shared between backend and mobile
 - `backend/` - Express API, Prisma, business logic
 - `mobile/` - Expo React Native app
-- `implementation/` - Executable implementation plans (not deployed)
-- `docs/mvp-planning/` - Planning docs (deployed to docs site)
+- `docs/` - Living documentation (see Doc Routing Table below)
+- `docs/mvp-planning/` - Product design specs (published docs site)
+- `docs/archive/` - Historical/completed documentation
+- `.planning/` - Active planning and research (not published)
+
+## Documentation
+
+### Doc Routing Table
+
+When working on a task, consult the relevant docs first:
+
+| Task Area | Primary Doc | Secondary |
+|-----------|-------------|-----------|
+| **Product design / stages** | `docs/mvp-planning/index.md` | `docs/mvp-planning/plans/stages/` |
+| **Backend architecture** | `docs/architecture/backend-overview.md` | `docs/architecture/structure.md` |
+| **Backend prompting / AI** | `docs/backend/prompting-architecture.md` | `docs/backend/prompt-caching.md` |
+| **Reconciler / empathy** | `docs/backend/reconciler-flow.md` | `docs/diagrams/reconciler-paths.md` |
+| **Mobile architecture** | `docs/architecture/structure.md` | `CLAUDE.md` (State Management section below) |
+| **Database / Prisma** | `docs/architecture/backend-overview.md` | `backend/prisma/schema.prisma` |
+| **Testing** | `docs/architecture/testing.md` | `docs/e2e-testing/architecture.md` |
+| **Integrations (Ably, Clerk, Bedrock)** | `docs/architecture/integrations.md` | |
+| **Code conventions** | `docs/architecture/conventions.md` | |
+| **Tech stack** | `docs/architecture/stack.md` | |
+| **Deployment** | `docs/deployment/index.md` | `.planning/architecture/production-deployment-strategy.md` |
+| **Stage 2B / Redesign** | `.planning/BACKEND_ARCHITECTURE_PROPOSAL.md` | `.planning/designs/SHARE-REDESIGN.md` |
+| **Stage 3 work** | `.planning/STAGE3_INTEGRATION_PLAN.md` | `.planning/STAGE3_UX_SYNTHESIS.md` |
+| **Known concerns / tech debt** | `docs/architecture/concerns.md` | |
+| **Historical plans/specs** | `docs/archive/index.md` | |
+
+**Fallback**: If no route matches, check `docs/index.md`, search the codebase, or note the gap for documentation.
+
+### Documentation Conventions
+
+- **Living docs** (`docs/` except `archive/`): Always reflect current state. Update when code changes.
+- **Archive docs** (`docs/archive/`): Read-only historical reference. Never update.
+- **Planning docs** (`.planning/`): Working documents. May be stale. Not published.
+- **New docs**: Place in the appropriate `docs/` subdirectory. Add YAML frontmatter. Update the section's `index.md`.
+- **Frontmatter**: Every doc in `docs/` should have:
+  ```yaml
+  ---
+  created: YYYY-MM-DD
+  updated: YYYY-MM-DD
+  status: living | reference | archived
+  ---
+  ```
+- **Naming**: Use lowercase-kebab-case for filenames. Be descriptive (e.g., `prompting-architecture.md` not `prompts.md`).
 
 ## State Management Architecture
 

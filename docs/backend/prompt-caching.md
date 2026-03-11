@@ -1,3 +1,9 @@
+---
+created: 2026-03-11
+updated: 2026-03-11
+status: living
+---
+
 # Prompt Caching Strategy for Meet Without Fear
 
 ## Purpose
@@ -39,11 +45,25 @@ The cache is **refreshed on every hit** at no extra cost. So if a user sends a m
 
 ### Minimum Cacheable Size
 
-For Sonnet 4.6: **1,024 tokens minimum**. Content blocks shorter than this are processed normally even if marked with `cache_control`. This is the key constraint driving our design.
+For Sonnet 4.5: **1,024 tokens minimum**. Content blocks shorter than this are processed normally even if marked with `cache_control`. This is the key constraint driving our design.
 
 ### Important: Bedrock Limitations
 
 We use `@anthropic-ai/bedrock-sdk`. As of Feb 2026, **automatic caching** (top-level `cache_control` on the request) is NOT available on Bedrock -- only explicit block-level breakpoints work. This is what we already use.
+
+> **WARNING:** As of Feb 2026, Claude Sonnet 4.6 does NOT support prompt caching on Bedrock.
+> The API silently ignores `cache_control`. Do NOT upgrade to Sonnet 4.6 until AWS enables
+> caching support. See `.planning/research/PROMPT_CACHING_AUDIT.md` for details.
+
+### Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `BEDROCK_SONNET_MODEL_ID` | `global.anthropic.claude-sonnet-4-5-20250929-v1:0` | Override Sonnet model ID |
+| `BEDROCK_HAIKU_MODEL_ID` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Override Haiku model ID |
+| `BEDROCK_TITAN_EMBED_MODEL_ID` | `amazon.titan-embed-text-v2:0` | Override Titan embedding model ID |
+| `DISABLE_PROMPT_LOGGING` | `false` | Disable prompt debug logging to filesystem |
+| `ENABLE_AUDIT_STREAM` | `false` | Enable AI audit stream channel for monitoring |
 
 ### Cross-User Caching
 
@@ -51,7 +71,7 @@ On Bedrock, prompt caches are **isolated per session/prefix**. There is no cross
 
 ---
 
-## Pricing Impact (Sonnet 4.6)
+## Pricing Impact (Sonnet 4.5)
 
 | Token Type | Cost per 1M tokens |
 |-----------|-------------------|
@@ -128,7 +148,7 @@ The ~135 tokens of dynamic content that change every turn **invalidate the cache
 
 ### Design Decision
 
-The original proposal had 3 blocks (universal, stage-specific, dynamic). However, expert review identified that the universal block (~445 tokens) falls below the **1,024 token minimum** for Sonnet 4.6 caching. Splitting into 3 blocks would mean Block 1 never actually caches.
+The original proposal had 3 blocks (universal, stage-specific, dynamic). However, expert review identified that the universal block (~445 tokens) falls below the **1,024 token minimum** for Sonnet 4.5 caching. Splitting into 3 blocks would mean Block 1 never actually caches.
 
 **Solution: Merge universal + stage-specific into one "static" block.** This gives us:
 
@@ -290,6 +310,8 @@ Over a full session (20-30 turns across 4 stages), the savings compound. The con
 6. If any stage's static block is under 1,024 tokens, expand with useful few-shot examples
 7. Update cost tracking to correctly attribute cached vs uncached system tokens
 8. Test that `cache_read_input_tokens` shows hits on turn 2+ within a stage
+9. Verify `cache_read_input_tokens` and `cache_creation_input_tokens` are correctly extracted from the SDK response object's `usage` field
+10. Confirm streaming responses (`getSonnetStreamingResponse`) also use the 2-block system prompt architecture
 
 ### What We're NOT Changing
 

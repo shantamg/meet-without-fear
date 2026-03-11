@@ -1,3 +1,9 @@
+---
+created: 2026-03-11
+updated: 2026-03-11
+status: living
+---
+
 # Backend Prompting Architecture Audit
 
 **Last Updated:** 2026-01-18
@@ -21,8 +27,8 @@ This document provides a comprehensive overview of how prompting works in the Me
 
 The backend uses a **two-model stratification** approach:
 
-- **Haiku (Claude 3.5 Haiku)**: Fast, structured output for mechanical tasks (classification, detection, planning)
-- **Sonnet (Claude 3.5 Sonnet)**: Empathetic responses for user-facing interactions
+- **Haiku (Claude Haiku 4.5)**: Fast, structured output for mechanical tasks (classification, detection, planning)
+- **Sonnet (Claude Sonnet 4.5)**: Empathetic responses for user-facing interactions
 
 The system follows a **decision-first architecture** where a "decider" (Memory Intent Layer) determines what kind of remembering is appropriate before any retrieval occurs.
 
@@ -33,8 +39,8 @@ The system follows a **decision-first architecture** where a "decider" (Memory I
 ```mermaid
 graph TB
     subgraph "AWS Bedrock Models"
-        HAIKU["Claude 3.5 Haiku<br/>Fast & Cheap<br/>~3x faster than Sonnet"]
-        SONNET["Claude 3.5 Sonnet<br/>Empathetic & Nuanced<br/>Better conversation"]
+        HAIKU["Claude Haiku 4.5<br/>Fast & Cheap<br/>~3x faster than Sonnet"]
+        SONNET["Claude Sonnet 4.5<br/>Empathetic & Nuanced<br/>Better conversation"]
         TITAN["Amazon Titan Embed<br/>Vector Embeddings<br/>1024 dimensions"]
     end
 
@@ -238,7 +244,7 @@ graph TD
 Each intent gets stage-specific thresholds:
 
 - **Stage 1**: threshold=0.65, maxCrossSession=0-3, surfaceStyle='silent'
-- **Stage 2**: threshold=0.55, maxCrossSession=5, surfaceStyle='tentative'
+- **Stage 2**: threshold=0.55, maxCrossSession=0 (cross-session retrieval disabled), surfaceStyle='tentative'
 - **Stage 3-4**: threshold=0.50, maxCrossSession=10, surfaceStyle='explicit'
 
 **Key File:** `backend/src/services/memory-intent.ts`
@@ -339,7 +345,7 @@ Memory detection only runs when:
 
 **Key Files:**
 
-- `backend/src/services/memory-detector.ts` - Detection logic
+- `backend/src/services/partner-session-classifier.ts` - Memory detection consolidated into partner session classifier
 - `backend/src/services/chat-router/session-processor.ts` - Detection trigger
 
 ---
@@ -776,6 +782,44 @@ sequenceDiagram
 ```
 
 **Key File:** `backend/src/services/reconciler.ts`
+
+---
+
+### Prompt Caching Architecture
+
+The system uses a 2-block architecture for system prompt caching:
+
+1. **Static block** (cached, ~1,024+ tokens): Universal guidance + stage-specific rules that don't change within a stage
+2. **Dynamic block** (uncached, ~80-135 tokens): Per-turn context (emotional intensity, turn count, phase guidance)
+
+Plus a message-level breakpoint on the second-to-last conversation message.
+
+**Cache control placement:**
+- System block 1: `cache_control: { type: 'ephemeral' }` (Breakpoint 1)
+- System block 2: No cache_control (changes every turn)
+- Second-to-last message: `cache_control: { type: 'ephemeral' }` (Breakpoint 2)
+
+Streaming responses (`getSonnetStreamingResponse`) also use the same 2-block architecture.
+
+**Key File:** `docs/backend/prompt-caching.md` (detailed strategy)
+
+### Model Routing
+
+The `routeModel()` function in `backend/src/services/model-router.ts` determines which model handles a request based on:
+- Task type (classification vs. user-facing response)
+- Ambiguity scoring via `scoreAmbiguity()`
+- Stage context (some stages always use Sonnet)
+
+**Key File:** `backend/src/services/model-router.ts`
+
+### Token Budget Management
+
+The `buildBudgetedContext()` function in `backend/src/utils/token-budget.ts` manages the token budget:
+- Enforces maximum context window size
+- Calls `trimConversationHistory()` to truncate older messages when budget exceeded
+- Prioritizes: system prompt > recent messages > retrieved context > older history
+
+**Key File:** `backend/src/utils/token-budget.ts`
 
 ---
 

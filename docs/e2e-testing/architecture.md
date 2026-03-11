@@ -1,3 +1,9 @@
+---
+created: 2026-03-11
+updated: 2026-03-11
+status: living
+---
+
 # E2E Testing Architecture
 
 This document describes the end-to-end testing approach used in Meet Without Fear.
@@ -218,9 +224,9 @@ To avoid navigating through the entire UI flow, tests can create sessions at spe
 ```typescript
 // In test
 await new SessionBuilder(request)
-  .withUserA('alice@e2e.test', 'Alice')
-  .withUserB('bob@e2e.test', 'Bob')
-  .atStage('FEEL_HEARD_B')
+  .userA('alice@e2e.test', 'Alice')
+  .userB('bob@e2e.test', 'Bob')
+  .startingAt('FEEL_HEARD_B')
   .build();
 ```
 
@@ -283,7 +289,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'npm run dev:api',
-      port: 3002,
+      port: 3000,
       env: {
         E2E_AUTH_BYPASS: 'true',
         MOCK_LLM: 'true',
@@ -384,3 +390,30 @@ Enabled only when `E2E_AUTH_BYPASS=true`:
 | `backend/src/routes/e2e.ts` | E2E helper endpoints |
 | `backend/src/testing/state-factory.ts` | Session stage creation |
 | `mobile/src/providers/E2EAuthProvider.tsx` | Mobile auth bypass |
+
+## Two-Browser Testing
+
+Two-browser tests simulate both users simultaneously in separate browser contexts:
+
+**Configuration:** `e2e/playwright.two-browser.config.ts`
+- Timeout: 900 seconds (vs 120s for single-browser)
+- Uses real Ably for real-time event verification between browsers
+- `TwoBrowserHarness` manages two browser contexts with separate auth headers
+
+**E2E Helper Endpoints:**
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/e2e/cleanup` | Delete all test data |
+| `POST /api/e2e/seed` | Create a test user |
+| `POST /api/e2e/seed-session` | Create session at specific stage |
+| `POST /api/e2e/trigger-reconciler` | Manually trigger reconciler for a session |
+
+**Additional Test Helpers:**
+- `waitForAnyAIResponse()` — waits for any AI response to appear
+- `sendAndWaitForPanel()` — sends message and waits for panel to appear
+- `signCompact()` — helper to sign compact agreement
+- `confirmFeelHeard()` — helper to confirm feel-heard
+
+**Fixture Operations Registry:**
+Each fixture can define `operations` for non-streaming AI responses (reconciler analysis, share suggestions). The registry maps operation names to fixture response objects.
