@@ -8,7 +8,7 @@ status: living
 
 ## Purpose
 
-This document describes how Anthropic's prompt caching works, how we currently use it, and the optimization plan to split our system prompts into static and dynamic blocks for better cache hit rates and lower costs.
+This document describes how Anthropic's prompt caching works and how we implement it. Our system prompts are split into static and dynamic blocks (the "2-block" architecture) for better cache hit rates and lower costs. This optimization is fully implemented in production.
 
 ---
 
@@ -84,35 +84,11 @@ On Bedrock, prompt caches are **isolated per session/prefix**. There is no cross
 
 ---
 
-## Our Current Implementation
+## Current Implementation: 2-Block System Prompt
 
-### What We Send to Claude
+### Background: The Previous Approach
 
-Each API request has two parts:
-
-**1. System prompt** (one block, one cache breakpoint):
-```
-system: [{
-  type: 'text',
-  text: <entire stage prompt as a single string>,
-  cache_control: { type: 'ephemeral' }
-}]
-```
-
-**2. Messages** (conversation history, one cache breakpoint on second-to-last message):
-```
-messages: [
-  { role: 'user', content: 'message 1' },
-  { role: 'assistant', content: 'response 1' },
-  { role: 'user', content: [{ type: 'text', text: 'message 2', cache_control: { type: 'ephemeral' } }] },
-  { role: 'assistant', content: 'response 2' },
-  { role: 'user', content: 'message 3 (latest)' },
-]
-```
-
-### The Problem
-
-Our system prompt is built as **one giant string** that mixes static and dynamic content. Here's what goes into a Stage 1 prompt:
+Previously, our system prompt was built as **one giant string** that mixed static and dynamic content. Here's what went into a Stage 1 prompt:
 
 | Content | Changes When? | ~Token Size |
 |---------|--------------|-------------|
@@ -132,37 +108,25 @@ Our system prompt is built as **one giant string** that mixes static and dynamic
 | Feel-heard check section | **Every turn** (depends on turnCount) | ~60 |
 | High intensity flag | **Every turn** (depends on intensity) | ~15 |
 
-**Estimated total: ~1,050 tokens** (varies by stage and conditionals).
-
-The ~135 tokens of dynamic content that change every turn **invalidate the cache for the entire ~1,050 token system prompt**. Since the cache requires an exact prefix match, even changing `Turn: 3` to `Turn: 4` means the whole system prompt is a cache miss.
-
-### What Currently Gets Cached Well
-
-**Conversation history**: The second-to-last message breakpoint works correctly. On turn N, messages 1 through N-2 are cache hits, and only the last assistant + user messages are new. This saves significant tokens as conversations grow longer.
-
-**System prompt**: Almost never gets a cache hit because it changes every turn.
-
----
-
-## The Plan: 2-Block System Prompt
+The ~135 tokens of dynamic content that change every turn **invalidated the cache for the entire system prompt**. Since the cache requires an exact prefix match, even changing `Turn: 3` to `Turn: 4` meant the whole system prompt was a cache miss. The system prompt almost never got a cache hit.
 
 ### Design Decision
 
 The original proposal had 3 blocks (universal, stage-specific, dynamic). However, expert review identified that the universal block (~445 tokens) falls below the **1,024 token minimum** for Sonnet 4.5 caching. Splitting into 3 blocks would mean Block 1 never actually caches.
 
-**Solution: Merge universal + stage-specific into one "static" block.** This gives us:
+**Solution: Merge universal + stage-specific into one "static" block.** This is how the system works today:
 
 ```typescript
 system: [
   // Block 1: Static content (universal guidance + stage rules)
-  // ~915-1,050 tokens — cached, breakpoint here
+  // ~1,219-1,678 tokens — cached, breakpoint here
   {
     type: 'text',
     text: STATIC_CONTENT,
     cache_control: { type: 'ephemeral' }   // Breakpoint 1
   },
   // Block 2: Dynamic per-turn context
-  // ~80-135 tokens — NOT cached, changes every turn
+  // ~10-70 tokens — NOT cached, changes every turn
   {
     type: 'text',
     text: DYNAMIC_CONTENT
@@ -173,11 +137,23 @@ system: [
 
 Plus the existing message-level breakpoint (Breakpoint 2). Uses **2 of 4 available breakpoints**.
 
-### Crossing the 1,024 Token Threshold
+### Measured Static Block Sizes
 
-The merged block is ~915-950 tokens for some stages — still below 1,024. To reliably cross the threshold, we can expand existing guidance slightly (e.g., add 1-2 few-shot examples of ideal responses to stages that run short). This is natural content that improves quality, not arbitrary padding.
+All stages exceed Sonnet's 1,024-token caching threshold (measured Feb 2026, see `.planning/research/PROMPT_CACHING_AUDIT.md`):
 
-### Block 1: Static Content (~1,024+ tokens, cached)
+| Stage | Static Block | Dynamic Block | Total | Cacheable? |
+|-------|-------------|---------------|-------|------------|
+| Onboarding | ~1,410 tok | ~70 tok | ~1,480 tok | YES |
+| Invitation | ~1,410 tok | ~70 tok | ~1,480 tok | YES |
+| Stage 1 (Feel Heard) | ~1,410 tok | ~70 tok | ~1,480 tok | YES |
+| Stage 2 (Perspective) | ~1,678 tok | ~10 tok | ~1,688 tok | YES |
+| Stage 2B (Refinement) | ~1,415 tok | ~10 tok | ~1,425 tok | YES |
+| Stage 3 (Needs) | ~1,219 tok | ~10 tok | ~1,229 tok | YES |
+| Stage 4 (Resolution) | ~1,269 tok | ~10 tok | ~1,279 tok | YES |
+
+**Stage 3 is the closest to the threshold at ~1,219 tokens.** If the prompt is trimmed in the future, it could drop below 1,024.
+
+### Block 1: Static Content (~1,219-1,678 tokens, cached)
 
 Everything that does NOT change within a stage:
 
@@ -203,7 +179,7 @@ Response protocol              (~100 tokens)
 
 **What about `userName` and `partnerName`?** These are session-stable (never change within a conversation) and caches are per-user anyway on Bedrock, so including them in the static block is fine. They don't bust the cache.
 
-### Block 2: Dynamic Turn Context (~80-135 tokens, NOT cached)
+### Block 2: Dynamic Turn Context (~10-70 tokens, NOT cached)
 
 Everything that changes every turn:
 
@@ -218,100 +194,78 @@ Post-share context                        (~varies)     Only after sharing event
 Transition injection                      (~varies)     Only on stage transitions
 ```
 
+### What We Send to Claude
+
+Each API request has two parts:
+
+**1. System prompt** (two blocks, one cache breakpoint on the static block):
+```
+system: [
+  {
+    type: 'text',
+    text: <static block from PromptBlocks>,
+    cache_control: { type: 'ephemeral' }
+  },
+  {
+    type: 'text',
+    text: <dynamic block from PromptBlocks>
+  }
+]
+```
+
+When the system prompt is passed as a plain string (legacy callers), it falls back to the single-block format with one cache breakpoint on the entire string.
+
+**2. Messages** (conversation history, one cache breakpoint on second-to-last message):
+```
+messages: [
+  { role: 'user', content: 'message 1' },
+  { role: 'assistant', content: 'response 1' },
+  { role: 'user', content: [{ type: 'text', text: 'message 2', cache_control: { type: 'ephemeral' } }] },
+  { role: 'assistant', content: 'response 2' },
+  { role: 'user', content: 'message 3 (latest)' },
+]
+```
+
 ### Cache Behavior Per Turn
 
 | Event | Block 1 (static) | Block 2 (dynamic) | History |
 |-------|-----------------|-------------------|---------|
-| First message in stage | Write (~1,024) | Uncached (~100) | Write |
-| Subsequent turns (same stage) | **Read** (~1,024) | Uncached (~100) | Read prefix + write new |
-| Stage transition | Write (~1,024, new stage) | Uncached (~100) | Read prefix + write new |
-
-### What This Changes in the Code
-
-`buildStagePrompt()` currently returns a single `string`. It will return a **structured object**:
-
-```typescript
-interface PromptBlocks {
-  staticBlock: string;   // Universal + stage rules (cached)
-  dynamicBlock: string;  // Per-turn context (not cached)
-}
-```
-
-`bedrock.ts` will construct the system array from these blocks:
-
-```typescript
-const system = [
-  {
-    type: 'text',
-    text: promptBlocks.staticBlock,
-    cache_control: { type: 'ephemeral' },
-  },
-  {
-    type: 'text',
-    text: promptBlocks.dynamicBlock,
-  },
-];
-```
+| First message in stage | Write (~1,219-1,678) | Uncached (~10-70) | Write |
+| Subsequent turns (same stage) | **Read** (~1,219-1,678) | Uncached (~10-70) | Read prefix + write new |
+| Stage transition | Write (new stage content) | Uncached (~10-70) | Read prefix + write new |
 
 ---
 
-## Expected Savings
+## Verification: All Implementation Items Complete
 
-### Example: 10-turn Stage 1 Conversation
+All items from the original implementation plan are complete and in production. Code references:
 
-**Current approach** (system prompt always cache-miss):
+1. **`PromptBlocks` interface defined** -- `stage-prompts.ts:324-327`. Exported and imported by `bedrock.ts`.
 
-| Turn | System (write) | System (read) | History (write) | History (read) | New msg |
-|------|---------------|--------------|----------------|---------------|---------|
-| 1 | 1,050 | 0 | 0 | 0 | 50 |
-| 2 | 1,050 | 0 | 100 | 0 | 50 |
-| 3 | 1,050 | 0 | 100 | 100 | 50 |
-| ... | ... | ... | ... | ... | ... |
-| 10 | 1,050 | 0 | 100 | 800 | 50 |
+2. **All `buildStageXPrompt()` functions return `PromptBlocks`** -- Each returns `{ staticBlock, dynamicBlock }`:
+   - `buildOnboardingPrompt()` (line 405)
+   - `buildInvitationPrompt()` (line 431)
+   - `buildStage1Prompt()` (line 482)
+   - `buildStage2Prompt()` (line 539)
+   - `buildStage2BPrompt()` (line 633)
+   - `buildStage3Prompt()` (line 740)
+   - `buildStage4Prompt()` (line 797)
 
-System tokens written: 1,050 x 10 = **10,500 tokens at cache-write price** ($3.75/MTok)
-System tokens read: **0**
+3. **`buildStagePrompt()` returns `PromptBlocks`** -- `stage-prompts.ts:1599`. The main entry point returns `PromptBlocks`, not a string.
 
-**Optimized approach** (2-block split):
+4. **`buildStagePromptString()` backward compatibility** -- `stage-prompts.ts:1668-1671`. Joins both blocks into a single string for callers that don't need cache optimization (e.g., one-shot calls, test tooling).
 
-| Turn | Static block | Dynamic block | History (write) | History (read) | New msg |
-|------|-------------|--------------|----------------|---------------|---------|
-| 1 | write 1,024 | 100 (uncached) | 0 | 0 | 50 |
-| 2 | read 1,024 | 100 | write 100 | 0 | 50 |
-| 3 | read 1,024 | 100 | write 100 | 100 | 50 |
-| ... | ... | ... | ... | ... | ... |
-| 10 | read 1,024 | 100 | write 100 | 800 | 50 |
+5. **`bedrock.ts` handles `PromptBlocks` in both streaming and non-streaming paths**:
+   - `getModelCompletion()` (lines 373-380): Constructs 2-block system array when given `PromptBlocks`, single-block when given a plain string.
+   - `getSonnetStreamingResponse()` (lines 742-749): Same logic for the streaming path.
+   - `CompletionOptions.systemPrompt` typed as `string | PromptBlocks` (line 232).
+   - `SonnetStreamingOptions.systemPrompt` typed as `string | PromptBlocks` (line 665).
 
-System tokens written: **1,024 tokens once** ($3.75/MTok)
-System tokens read: 1,024 x 9 = **9,216 tokens at cache-read price** ($0.30/MTok)
-Dynamic tokens: 100 x 10 = **1,000 tokens at normal input price** ($3.00/MTok)
+6. **Cache tokens extracted correctly** -- Both `getModelCompletion()` and `getSonnetStreamingResponse()` read `cache_read_input_tokens` and `cache_creation_input_tokens` from the SDK response's `usage` field (lines 408-409, 835-836). These are recorded in BrainActivity metadata and LLM telemetry.
 
-### Cost Comparison (10-turn conversation, system prompt only)
+7. **Cost tracking accounts for cached tokens** -- Pricing table at lines 27-35 includes `cacheRead` and `cacheWrite` rates. Cost formulas at lines 415-419 and 841-846 correctly attribute cached vs. uncached system tokens. Note: `input_tokens` from the Bedrock SDK already excludes cache tokens, so no double-subtraction.
 
-| | Current | Optimized |
-|---|---------|----------|
-| Cache writes | 10,500 x $3.75/M = $0.0394 | 1,024 x $3.75/M = $0.0038 |
-| Cache reads | 0 | 9,216 x $0.30/M = $0.0028 |
-| Uncached input | 0 | 1,000 x $3.00/M = $0.0030 |
-| **Total (system)** | **$0.0394** | **$0.0096** |
-| **Savings** | | **~76% reduction** |
-
-Over a full session (20-30 turns across 4 stages), the savings compound. The conversation history caching (which already works) is unaffected.
-
----
-
-## Implementation Checklist
-
-1. Define `PromptBlocks` interface in `stage-prompts.ts`
-2. Refactor each `buildStageXPrompt()` to separate static vs dynamic content
-3. Update `buildStagePrompt()` to return `PromptBlocks` instead of `string`
-4. Update `bedrock.ts` (`getSonnetStreamingResponse` and `getModelCompletion`) to accept and use multi-block system prompts
-5. Ensure dynamic block doesn't accidentally include stable content (watch for whitespace)
-6. If any stage's static block is under 1,024 tokens, expand with useful few-shot examples
-7. Update cost tracking to correctly attribute cached vs uncached system tokens
-8. Test that `cache_read_input_tokens` shows hits on turn 2+ within a stage
-9. Verify `cache_read_input_tokens` and `cache_creation_input_tokens` are correctly extracted from the SDK response object's `usage` field
-10. Confirm streaming responses (`getSonnetStreamingResponse`) also use the 2-block system prompt architecture
+8. **All static blocks exceed 1,024 tokens** -- Measured in the prompt caching audit. Stage 3 is the smallest at ~1,219 tokens, still comfortably above threshold.
 
 ### What We're NOT Changing
 
@@ -322,8 +276,54 @@ Over a full session (20-30 turns across 4 stages), the savings compound. The con
 
 ---
 
+## Cost Savings
+
+### Example: 10-turn Stage 1 Conversation
+
+**Previous approach** (single-string system prompt, always cache-miss):
+
+| Turn | System (write) | System (read) | History (write) | History (read) | New msg |
+|------|---------------|--------------|----------------|---------------|---------|
+| 1 | 1,480 | 0 | 0 | 0 | 50 |
+| 2 | 1,480 | 0 | 100 | 0 | 50 |
+| 3 | 1,480 | 0 | 100 | 100 | 50 |
+| ... | ... | ... | ... | ... | ... |
+| 10 | 1,480 | 0 | 100 | 800 | 50 |
+
+System tokens written: 1,480 x 10 = **14,800 tokens at cache-write price** ($3.75/MTok)
+System tokens read: **0**
+
+**Current approach** (2-block split, static block ~1,410 tokens for Stage 1):
+
+| Turn | Static block | Dynamic block | History (write) | History (read) | New msg |
+|------|-------------|--------------|----------------|---------------|---------|
+| 1 | write 1,410 | 70 (uncached) | 0 | 0 | 50 |
+| 2 | read 1,410 | 70 | write 100 | 0 | 50 |
+| 3 | read 1,410 | 70 | write 100 | 100 | 50 |
+| ... | ... | ... | ... | ... | ... |
+| 10 | read 1,410 | 70 | write 100 | 800 | 50 |
+
+System tokens written: **1,410 tokens once** ($3.75/MTok)
+System tokens read: 1,410 x 9 = **12,690 tokens at cache-read price** ($0.30/MTok)
+Dynamic tokens: 70 x 10 = **700 tokens at normal input price** ($3.00/MTok)
+
+### Cost Comparison (10-turn conversation, system prompt only)
+
+| | Previous (single string) | Current (2-block split) |
+|---|---------|----------|
+| Cache writes | 14,800 x $3.75/M = $0.0555 | 1,410 x $3.75/M = $0.0053 |
+| Cache reads | 0 | 12,690 x $0.30/M = $0.0038 |
+| Uncached input | 0 | 700 x $3.00/M = $0.0021 |
+| **Total (system)** | **$0.0555** | **$0.0112** |
+| **Savings** | | **~80% reduction** |
+
+Over a full session (20-30 turns across 4 stages), the savings compound. The conversation history caching (which also works) is unaffected.
+
+---
+
 ## References
 
 - [Anthropic Prompt Caching Docs](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)
 - [Bedrock Prompt Caching Docs](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html)
 - [Claude on Amazon Bedrock](https://platform.claude.com/docs/en/build-with-claude/claude-on-amazon-bedrock)
+- `.planning/research/PROMPT_CACHING_AUDIT.md` -- Measured token counts and model compatibility test results

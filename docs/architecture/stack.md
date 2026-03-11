@@ -6,7 +6,7 @@ status: living
 
 # Technology Stack
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-03-11
 
 ## Languages
 
@@ -23,7 +23,7 @@ status: living
 
 **Environment:**
 - Node.js >= 20.0 (specified in `docs-site/package.json` engines)
-- Expo 54.0.32 - Mobile framework for iOS/Android development
+- Expo 54.0.33 - Mobile framework for iOS/Android development
 - React Native 0.81.5 - Cross-platform mobile framework
 - React 19.1.0 - Web and mobile UI framework
 
@@ -34,9 +34,9 @@ status: living
 ## Frameworks
 
 **Core:**
-- Express 4.21.0 - Backend HTTP server (`backend/`)
+- Express 4.22.1 - Backend HTTP server (`backend/`)
 - Expo Router 6.0.22 - Mobile navigation and deep linking (`mobile/`)
-- Next.js 16.1.1 - Marketing website (`website/`)
+- Next.js 16.1.6 - Marketing website (`website/`)
 - Docusaurus 3.9.2 - Documentation site (`docs-site/`)
 
 **Mobile UI:**
@@ -50,21 +50,21 @@ status: living
 - Lucide React 0.469.0 - Icon library for web
 
 **State Management:**
-- React Query (TanStack Query) 5.90.12 - Server state management (`mobile/`)
+- React Query (TanStack Query) 5.90.21 - Server state management (`mobile/`)
 - React hooks + custom hooks - Local state (no Redux/Zustand)
 - AsyncLocalStorage - Request context propagation (backend)
 
 **Realtime Communication:**
-- Ably 2.16.0 - WebSocket-based pub/sub for real-time session events and messaging
+- Ably 2.17.1 - WebSocket-based pub/sub for real-time session events and messaging
   - Backend: Publishes session events, message updates
   - Mobile: Subscribes to partner events and AI message streams
 
 **Data Layer:**
-- Prisma 6.1.0 - ORM for PostgreSQL with migrations
+- Prisma 6.19.2 - ORM for PostgreSQL with migrations
   - Config: `backend/prisma/schema.prisma`
   - Client: `@prisma/client`
 - PostgreSQL (datasource) - Primary database via `DATABASE_URL`
-- Zod 3.23.8 / 4.2.1 - Runtime type validation and schema validation
+- Zod 3.25.76 (backend) / 4.3.6 (shared) - Runtime type validation and schema validation
 
 **Testing:**
 - Jest 29.7.0 - Unit/integration test runner
@@ -84,27 +84,28 @@ status: living
 - tsc-alias - Path alias resolution for compiled output
 - Expo CLI - Mobile build and deployment via EAS (Expo Application Services)
 - Metro - React Native bundler
-- Babel 7.25.2 - JSX/TypeScript transpilation
+- Babel 7.29.0 - JSX/TypeScript transpilation
 
 **Security:**
-- Helmet 8.0.0 - HTTP security headers middleware
-- CORS 2.8.5 - Cross-origin request handling
+- Helmet 8.1.0 - HTTP security headers middleware
+- CORS 2.8.6 - Cross-origin request handling
 - Compression 1.8.1 - Gzip compression (with SSE bypass)
-- Clerk 1.7.60 (backend) / 2.19.14 (mobile) / 6.12.0 (website) - Authentication provider
+- Clerk 1.7.73 (backend) / 2.19.26 (mobile) / 6.38.1 (website) - Authentication provider
 
 **Analytics & Logging:**
-- Mixpanel 3.1.3 (mobile) / 2.73.0 (web) - Event analytics
+- Mixpanel 3.3.0 (mobile) / 2.74.0 (web) - Event analytics
 - Winston 3.19.0 - Structured logging framework (backend)
 
 **External AI Models:**
-- AWS Bedrock SDK `@anthropic-ai/bedrock-sdk` (Messages API)
+- AWS Bedrock SDK `@anthropic-ai/bedrock-sdk` 0.26.4 (Messages API)
+  - Legacy: `@aws-sdk/client-bedrock-runtime` 3.995.0 (still in dependencies)
   - Note: Migrated from `@aws-sdk/client-bedrock-runtime` (Converse API) to `@anthropic-ai/bedrock-sdk` (Messages API)
   - Claude Sonnet 4.5 (user-facing, empathetic responses)
   - Claude Haiku 4.5 (internal mechanics: classification, detection, planning)
   - Amazon Titan Embed Text v2 (vector embeddings)
 
 **Email & Push Notifications:**
-- Resend 6.6.0 - Transactional email service
+- Resend 6.9.2 - Transactional email service
 - Expo Push SDK 4.0.0 - Push notifications to mobile devices
 - Expo Notifications 0.32.16 - Mobile push notification handling
 
@@ -119,6 +120,7 @@ status: living
 - better-sqlite3 - SQLite library (root level, used for local tooling)
 
 **Additional Mobile Dependencies:**
+- axios 1.13.5 - HTTP client for API requests
 - react-native-web - Used for Expo Web / E2E testing
 - react-native-sse - Server-Sent Events client for streaming AI responses
 - react-native-svg - SVG rendering for charts/icons
@@ -134,6 +136,13 @@ status: living
 - expo-linking - Deep linking support
 - expo-secure-store - Secure credential storage
 - expo-notifications - Push notification handling
+
+**Status Dashboard (`tools/status-dashboard/`):**
+- Vite 7.3.1 - Build tool and dev server
+- react-router-dom 7.13.0 - Client-side routing
+- recharts 3.7.0 - Chart library for data visualization
+- react-window 1.8.11 - Virtualized list rendering
+- @clerk/clerk-react 5.61.1 - Authentication provider
 
 **Website Build:**
 - autoprefixer - CSS vendor prefix automation
@@ -205,7 +214,7 @@ status: living
 
 **Website:**
 - Deployment: Vercel (see `website/vercel.json`)
-- Next.js 16.1.1 with auto-scaling
+- Next.js 16.1.6 with auto-scaling
 
 **Documentation Site:**
 - Deployment: Vercel via `docs-site/vercel.json`
@@ -213,4 +222,4 @@ status: living
 
 ---
 
-*Stack analysis: 2026-02-14*
+*Stack analysis: 2026-03-11*

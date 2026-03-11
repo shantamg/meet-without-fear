@@ -6,7 +6,7 @@ status: living
 
 # External Integrations
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-03-11
 
 ## APIs & External Services
 
@@ -27,14 +27,15 @@ status: living
   - Model overrides: `BEDROCK_SONNET_MODEL_ID`, `BEDROCK_HAIKU_MODEL_ID`, `BEDROCK_TITAN_EMBED_MODEL_ID`
   - Auth: `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
   - Files: `backend/src/lib/bedrock.ts` (client setup), `backend/src/services/ai.ts` (high-level API)
-  - Pricing: Sonnet 4.5 — $3.00/MTok input, $15.00/MTok output; Haiku 4.5 — $0.80/MTok input, $4.00/MTok output
+  - Pricing: Sonnet 4.5 — $3.00/MTok input, $15.00/MTok output; Haiku 4.5 — $0.80/MTok input, $4.00/MTok output. Prices shown per 1M tokens (code constants in `bedrock.ts` and `brain.ts` are per 1K tokens)
+  - Prompt caching: System prompts use 2-block architecture — a static block with `cache_control: { type: 'ephemeral' }` that is reused across turns within a stage, and a dynamic per-turn block that is not cached (see `stage-prompts.ts`)
 
 **Real-time Communication:**
 - Ably - WebSocket-based pub/sub messaging
   - SDK: `ably` (backend and mobile)
   - Auth: `ABLY_API_KEY`
   - Channel format: `meetwithoutfear:session:${sessionId}` and `meetwithoutfear:user:${userId}` (see `shared/src/dto/realtime.ts`)
-  - 56+ event types across session, user, empathy, and system events
+  - 46 event types (43 SessionEventType + 3 UserEventType) across session, user, empathy, and system events
   - Audit stream channel: `ai-audit-stream` (when `ENABLE_AUDIT_STREAM=true`)
   - Fire-and-forget message patterns for non-blocking event publishing
   - Files: `backend/src/services/realtime.ts`, `shared/src/dto/realtime.ts` (channel names + event types)
@@ -167,7 +168,7 @@ status: living
 - `DATABASE_URL` - PostgreSQL connection
 - `ABLY_API_KEY` - Real-time messaging
 - `CLERK_SECRET_KEY` - Auth verification
-- `AWS_REGION` - AWS region for Bedrock (e.g., us-west-2)
+- `AWS_REGION` - AWS region for Bedrock (default: us-east-1)
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` - AWS credentials
 - `BEDROCK_HAIKU_MODEL_ID`, `BEDROCK_SONNET_MODEL_ID` - Claude model IDs
 - `RESEND_API_KEY` - Email service
@@ -181,6 +182,10 @@ status: living
 - `DISABLE_PROMPT_LOGGING` - Disable prompt debug logging
 - `ENABLE_AUDIT_STREAM` - Enable AI audit stream channel for monitoring
 - `BEDROCK_TITAN_EMBED_MODEL_ID` - Override Titan embedding model ID
+- `OPENAI_API_KEY` - OpenAI API key (for voice preview generation in `tts.ts` and `generate-voice-previews.ts`)
+- `TWILIO_ACCOUNT_SID` - Twilio account SID (SMS/phone integration)
+- `TWILIO_AUTH_TOKEN` - Twilio auth token
+- `TWILIO_PHONE_NUMBER` - Twilio sender phone number
 
 **Required env vars (Mobile):**
 - `EXPO_PUBLIC_API_URL` - Backend API base URL
@@ -212,4 +217,4 @@ status: living
 
 ---
 
-*Integration audit: 2026-02-14*
+*Integration audit: 2026-03-11*

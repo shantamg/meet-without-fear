@@ -6,7 +6,7 @@ status: living
 
 # Codebase Concerns
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-03-11
 
 ## Tech Debt
 
@@ -16,7 +16,7 @@ status: living
   - `mobile/src/screens/UnifiedSessionScreen.tsx` (3096 lines)
   - `backend/src/controllers/stage2.ts` (2261 lines)
   - `backend/src/services/reconciler.ts` (2320 lines)
-  - `mobile/src/hooks/useUnifiedSession.ts` (1303 lines)
+  - `mobile/src/hooks/useUnifiedSession.ts` (1218 lines)
 - Impact: Increased bug risk, harder to test individual features, cognitive load for future developers
 - Fix approach: Break into smaller domain-focused components/hooks. Consider extracting stage-specific logic into separate files (e.g., `useStage2Logic`, `useStage3Logic`)
 
@@ -131,7 +131,7 @@ status: living
   - `backend/src/services/ai.ts` (6.6KB) - LLM interaction wrapper
   - `backend/src/services/context-assembler.ts` (18.3KB) - Builds prompt context; high complexity
   - `backend/src/services/context-retriever.ts` (28KB) - Fetches session context; core data service
-  - `backend/src/services/reconciler.ts` (2187 lines) - Reconciliation logic; some integration tests but no unit tests
+  - `backend/src/services/reconciler.ts` (2320 lines) - Reconciliation logic; no tests (critical gap) — route-level tests mock the service entirely, and `reconciler-offer-optional.test.ts` only tests mirrored helper logic, not reconciler.ts itself
   - `backend/src/services/embedding.ts` (16.4KB) - Vector embedding service
   - `backend/src/services/conversation-summarizer.ts` (22.5KB) - Session summarization
   - `backend/src/services/needs.ts`, `backend/src/services/memory-*.ts` (multiple 10-14KB files)
@@ -237,6 +237,40 @@ status: living
 - Impact: Hard to understand why certain requests route to certain models
 - Recommendation: Add docstring explaining routing decision logic; document model cost/latency tradeoffs
 
+**Model Router Has Undocumented Magic Numbers:**
+- Issue: `scoreAmbiguity()` uses hardcoded weights (0.2, 0.15) and `routeModel()` uses a threshold of `>= 4` to decide Sonnet vs Haiku, with additive scoring (+4 for mediate, +3 for high-intensity, etc.) — none of these values are documented or justified
+- Files: `backend/src/services/model-router.ts` (25-78)
+- Impact: Impossible to tune routing behavior without understanding the scoring model; magic numbers make cost/quality tradeoffs opaque
+- Fix approach: Add docstring explaining scoring rationale; consider extracting thresholds to named constants
+
+**Scattered TODOs Across Critical Paths:**
+- Issue: Incomplete implementations marked with TODO comments in production code
+- Files:
+  - `backend/src/controllers/people.ts` (128) — `TODO: sum all counts` for frequent sort
+  - `backend/src/services/context-assembler.ts` (427) — `TODO: Extract from UserVessel` (themes always empty array)
+  - `mobile/src/screens/UnifiedSessionScreen.tsx` (686) — `TODO: Show error toast or UI indicator`
+- Impact: Missing functionality silently degrades behavior (e.g., empty themes array in context assembly)
+- Fix approach: Triage TODOs — implement or create tracked issues; remove stale ones
+
+**Reconciler Has 85 Console Statements With No Structured Logging:**
+- Issue: `reconciler.ts` contains 85 console.log/warn/error calls with no log levels, no structured format, and no ability to filter
+- Files: `backend/src/services/reconciler.ts`
+- Impact: Log noise in production; no way to trace reconciler operations without reading raw stdout; performance cost of string interpolation on every call
+- Fix approach: Replace with structured logger (e.g., pino/winston) with log levels; use TurnTrace context for correlation
+
+**Query Key Type-Safety Gap:**
+- Issue: Query keys in `queryKeys.ts` are string arrays (`['sessions', id, 'state'] as const`). Nothing prevents a `setQueryData` call from using a key that differs by one segment from what `useQuery` reads — these mismatches cause silent cache misses
+- Files: `mobile/src/hooks/queryKeys.ts`, all hooks using `queryClient.setQueryData()`
+- Impact: Bugs from key mismatches are invisible at compile time and hard to detect at runtime
+- Fix approach: Consider typed query key factory pattern or wrapper functions that enforce key/value type consistency
+
+**Reconciler Service (2320 lines) Has No Direct Test Coverage:**
+- Issue: `reconciler.ts` is the most complex backend service but has zero direct unit or integration tests. Route-level tests (`reconciler.test.ts`) mock the service entirely. `reconciler-offer-optional.test.ts` tests mirrored helper logic, not the actual service code
+- Files: `backend/src/services/reconciler.ts` (2320 lines, 85 console statements, complex state machine)
+- Impact: Any refactoring of reconciler internals has no automated safety net; state machine transitions, gap analysis, circuit breaker logic, and share offer generation are all untested
+- Risk: Critical — this is the core empathy exchange engine; bugs here affect both users in a session
+- Fix approach: Create integration tests for key flows (feel-heard → reconciler runs → share offer generated); add unit tests for state transition functions
+
 ---
 
 ## Dependencies at Risk
@@ -292,4 +326,4 @@ status: living
 
 ---
 
-*Concerns audit: 2026-02-14*
+*Concerns audit: 2026-03-11*

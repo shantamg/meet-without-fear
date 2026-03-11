@@ -1,6 +1,7 @@
 ---
 created: 2026-03-11
 updated: 2026-03-11
+analysis-date: 2026-03-11
 status: living
 ---
 
@@ -41,7 +42,7 @@ The test suite has **35 tests** across **25 spec files**. The tests exercise the
 |------|---------|----------|
 | `User B sees shared context correctly without duplicates` | Verifies no duplicate cards in Share tab | ~1.6s |
 | `User A sees received context correctly` | Verifies User A's view of shared content | ~1.5s |
-| `Share tab loads correctly after page refresh` | Direct URL load test | ~1s |
+| `Share tab loads correctly when opened from chat header` | Direct URL load test | ~1s |
 
 **Setup Method:** `SessionBuilder.startingAt('CONTEXT_SHARED_B')` - starts at end state, **no chat UI interactions**
 

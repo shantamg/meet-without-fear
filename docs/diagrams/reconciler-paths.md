@@ -1,12 +1,37 @@
 ---
 created: 2026-03-11
 updated: 2026-03-11
+analysis-date: 2026-03-11
 status: living
 ---
 
 # Reconciler Outcome Paths - State Diagrams
 
 This document provides state diagrams for all reconciler outcome paths from both user perspectives (guesser and subject). These diagrams document the complete flow for PROCEED, OFFER_OPTIONAL, OFFER_SHARING, refinement loops, accuracy feedback, and acceptance checks.
+
+## Reconciler Trigger Timing
+
+The reconciler runs **asymmetrically**: it is triggered when a user calls `confirmFeelHeard` (Stage 1 completion), and only if the partner already has a HELD empathy attempt. This means the reconciler runs for a **single direction** (e.g., A->B) the first time, not when both users share empathy simultaneously.
+
+- **Trigger**: `confirmFeelHeard()` in `messages.ts` calls `runReconcilerForDirection(sessionId, guesserId, subjectId)`
+- **Condition**: Only runs if the partner (guesser) has a HELD empathy attempt
+- **Direction**: Evaluates guesser's empathy against the subject's actual feelings (one direction at a time)
+- **Second direction**: Runs when the other user later confirms feel-heard (if their partner also has HELD empathy)
+
+## NEEDS_WORK Status (Legacy/Deprecated)
+
+The `NEEDS_WORK` status exists in the Prisma schema but is **legacy and unreachable** from the reconciler. When `validated: false` is submitted, the empathy status stays at `REVEALED` -- no transition to `NEEDS_WORK` occurs in current code. All flow descriptions in this document reflect this: validation with `validated: false` does not change the EmpathyAttempt status.
+
+## Ably Event Payloads
+
+Key reconciler-related events and their routing:
+
+| Event | Delivery | `forUserId` | Notes |
+|-------|----------|-------------|-------|
+| `empathy.status_updated` | `publishSessionEvent` (broadcast to session) OR `notifyPartner` (targeted) | Yes, when targeted via `notifyPartner`; absent when broadcast via `publishSessionEvent` | Broadcast variant includes `empathyStatuses` map for all users. Targeted variant (e.g., after validation) includes `forUserId` for filtering. |
+| `empathy.share_suggestion` | `notifyPartner` (targeted to subject) | Yes (`forUserId` = subject's user ID) | Only the subject should see the ShareTopicPanel. Mobile filters on `data.forUserId === user?.id`. |
+| `empathy.revealed` | `publishSessionEvent` (broadcast) | No | Both users receive; UI shows partner's empathy. |
+| `empathy.context_shared` | `notifyPartner` (targeted to guesser) | Yes | Guesser receives SHARED_CONTEXT notification. |
 
 ## 1. PROCEED Path (No Gaps Found)
 
@@ -396,7 +421,7 @@ stateDiagram-v2
 
 ## 5. Accuracy Feedback Paths (Post-Reveal)
 
-After mutual reveal, the subject validates the guesser's empathy attempt. There are three paths based on accuracy rating.
+After mutual reveal, the subject validates the guesser's empathy attempt. There are three paths based on the subject's accuracy assessment.
 
 ### 5.1 Subject Perspective (Accurate Feedback)
 
@@ -431,7 +456,7 @@ stateDiagram-v2
 
     FEEDBACK_OPTIONAL --> VALIDATED: Submits (with or without note)
     note right of VALIDATED
-        API: validated: true<br/>rating: 'partially_accurate'<br/>Panel closes<br/>Both proceed to Stage 3
+        API: validated: true, feedback: 'optional note'<br/>Panel closes<br/>Both proceed to Stage 3
     end note
 
     VALIDATED --> [*]

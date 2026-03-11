@@ -1,6 +1,7 @@
 ---
 created: 2026-03-11
 updated: 2026-03-11
+analysis-date: 2026-03-11
 status: living
 ---
 
@@ -104,7 +105,7 @@ sequenceDiagram
 
     alt Accurate
         User->>Panel: Taps "Accurate"
-        Panel->>API: POST /empathy/validate<br/>{validated: true, rating: "accurate"}
+        Panel->>API: POST /empathy/validate<br/>{validated: true}
         API->>API: Status → VALIDATED
         API-->>Panel: Success
         Panel->>User: Shows confirmation
@@ -113,7 +114,7 @@ sequenceDiagram
         User->>Panel: Taps "Partially"
         Panel->>User: Shows feedback input (optional)
         User->>Panel: Adds feedback (optional)
-        Panel->>API: POST /empathy/validate<br/>{validated: true, rating: "partially_accurate"}
+        Panel->>API: POST /empathy/validate<br/>{validated: true, feedback: "optional note"}
         API->>API: Status → VALIDATED
         API-->>Panel: Success
     else Inaccurate
@@ -121,15 +122,16 @@ sequenceDiagram
         Panel->>User: Shows input for initial thoughts
         User->>Panel: Submits initial thoughts
         Panel->>User: Closes panel, opens Chat
-        Note over User: Enters Refinement Chat (Subject)
-        
+        Note over User: Enters Feedback Coach Chat (Subject)
+        Note over User: **Design Intent — Not Yet Fully Implemented.**<br/>FeedbackCoachChat component exists but<br/>backend flow to deliver feedback to partner is incomplete.
+
         User->>AI: Chat to refine feedback
         AI->>User: Helps craft constructive feedback
         User->>AI: Approves final feedback message
-        
-        AI->>API: POST /empathy/validate<br/>{validated: false, rating: "inaccurate", feedback: "final message"}
+
+        AI->>API: POST /empathy/validate<br/>{validated: false, feedback: "final message"}
         API->>Partner: Notify "Partner shared feedback"
-        
+
         Note over Partner: Enters Refinement Chat (Guesser)
         alt Refines
             Partner->>API: Resubmits revised empathy
@@ -152,6 +154,11 @@ sequenceDiagram
 ```
 
 ## AI Feedback Coach (Subject's Experience)
+
+> **Design Intent — Not Yet Fully Implemented.** The `FeedbackCoachChat` component exists in
+> the mobile codebase, but the backend flow to deliver the crafted feedback to the partner is
+> incomplete. The end-to-end flow described below is the intended behavior.
+
 This flow mirrors the **Reconciler Share Suggestion** flow...
 
 [... standard feedback coach details ...]
@@ -202,7 +209,7 @@ If the Guesser cannot/will not refine their statement to match the Subject's fee
 | New Status | For Subject | For Guesser |
 |------------|-------------|-------------|
 | VALIDATED | Panel closes, can proceed | Can proceed to Stage 3 |
-| NEEDS_WORK | Panel closes | Sees refinement prompt, must revise |
+| REVEALED (unchanged) | Panel closes (validated: false submitted) | Feedback coach flow begins (design intent, not yet fully implemented) |
 
 ## Frontend Implementation
 

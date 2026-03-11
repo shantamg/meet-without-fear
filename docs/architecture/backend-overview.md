@@ -6,7 +6,7 @@ status: living
 
 # Architecture
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-03-11
 
 ## Pattern Overview
 
@@ -101,7 +101,7 @@ status: living
 ## Key Abstractions
 
 **Stage Abstraction:**
-- Purpose: Encapsulates all logic for a conversation stage (0=Onboarding, 1=Witnessing, 2=Empathy, 3=Needs, 4=Strategies)
+- Purpose: Encapsulates all logic for a conversation stage (0=ONBOARDING, 1=WITNESS, 2=PERSPECTIVE_STRETCH, 3=NEED_MAPPING, 4=STRATEGIC_REPAIR)
 - Examples: `backend/src/services/stage-prompts.ts`, `mobile/src/hooks/useStages.ts`
 - Pattern: Each stage has UI (screen component), controllers (route handlers), services (business logic), mutations (cache updates), validation gates
 
@@ -194,7 +194,7 @@ status: living
 - Mobile: Zod schemas in shared contracts; React Hook Form for UI validation
 
 **Authentication:**
-- Backend: Clerk JWT in `Authorization: Bearer` header; middleware extracts + verifies with `getAuth()`
+- Backend: Clerk JWT in `Authorization: Bearer` header; middleware extracts + verifies with `verifyToken()` (from @clerk/express)
 - Mobile: Clerk Expo SDK manages tokens; `useAuth()` hook provides `token` for API calls; E2E mode uses custom headers for testing
 
 **Rate Limiting:**
@@ -206,4 +206,4 @@ status: living
 
 ---
 
-*Architecture analysis: 2026-02-14*
+*Architecture analysis: 2026-03-11*

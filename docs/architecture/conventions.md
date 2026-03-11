@@ -6,7 +6,7 @@ status: living
 
 # Coding Conventions
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-03-11
 
 ## Naming Patterns
 
@@ -77,14 +77,18 @@ Mobile (`tsconfig.json` + `jest.config.js`):
 - `@/theme/*` → `src/theme/*` - Theming files
 - `@/*` → `src/*` or `./` - Component tree
 
-**Import pattern (no wildcard imports):**
+**Import pattern (no wildcard imports from internal modules):**
 ```typescript
 // GOOD - Named imports
 import { Stage, MessageRole } from '@meet-without-fear/shared';
 import { computeWaitingStatus } from '../utils/getWaitingStatus';
 
-// AVOID - Wildcard imports
+// AVOID - Wildcard imports from internal modules
 import * as shared from '@meet-without-fear/shared';
+
+// OK - Wildcard imports from Node.js stdlib and external packages are acceptable
+import * as path from 'path';
+import * as dotenv from 'dotenv';
 ```
 
 ## Error Handling
@@ -219,7 +223,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
 **Exports:**
 - One primary export per file (default or named)
 - Helper exports grouped: `export { Helper1, Helper2 }`
-- No star exports (`export *`) except barrel files
+- No star exports (`export *`) except barrel files (`index.ts`), main package entry points (`shared/src/index.ts`), and type-only re-exports in service modules
 
 **Barrel Files** (index.ts):
 - Used for organizing related modules
@@ -301,4 +305,4 @@ Convention says `T | null` for explicit null handling. In practice, some code us
 
 ---
 
-*Convention analysis: 2026-02-14*
+*Convention analysis: 2026-03-11*

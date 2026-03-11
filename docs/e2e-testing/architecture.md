@@ -1,6 +1,7 @@
 ---
 created: 2026-03-11
 updated: 2026-03-11
+analysis-date: 2026-03-11
 status: living
 ---
 
@@ -200,10 +201,18 @@ All fixtures are registered in `backend/src/fixtures/index.ts`:
 
 ```typescript
 export const fixtureRegistry: Record<string, E2EFixture> = {
+  'flat-array-fixture': flatArrayFixture,
+  homepage,
+  'reconciler-circuit-breaker': reconcilerCircuitBreaker,
+  'reconciler-no-gaps': reconcilerNoGaps,
+  'reconciler-offer-optional': reconcilerOfferOptional,
+  'reconciler-offer-sharing': reconcilerOfferSharing,
+  'reconciler-refinement': reconcilerRefinement,
+  'stage-3-needs': stage3Needs,
+  'stage-4-strategies': stage4Strategies,
+  'test-fixture': testFixture,
   'user-a-full-journey': userAFullJourney,
   'user-b-partner-journey': userBPartnerJourney,
-  'reconciler-no-gaps': reconcilerNoGaps,
-  homepage,
 };
 ```
 
@@ -237,7 +246,11 @@ await new SessionBuilder(request)
 | `CREATED` | Session created, compact not signed |
 | `EMPATHY_SHARED_A` | User A completed Stage 1 |
 | `FEEL_HEARD_B` | User B felt heard, reconciler ready |
+| `RECONCILER_SHOWN_B` | User B felt heard, reconciler ran with significant gaps, share offer is OFFERED |
 | `CONTEXT_SHARED_B` | Both users active, context shared |
+| `EMPATHY_REVEALED` | Both users shared empathy and validated each other (empathy reveal complete) |
+| `NEED_MAPPING_COMPLETE` | Stage 3: Both users identified needs and confirmed common ground |
+| `STRATEGIC_REPAIR_COMPLETE` | Stage 4: Strategies collected, ranked, and agreement created |
 
 ### Implementation
 
@@ -296,11 +309,8 @@ export default defineConfig({
       },
     },
     {
-      command: 'npm run start:e2e',
+      command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082',
       port: 8082,
-      env: {
-        EXPO_PUBLIC_E2E_MODE: 'true',
-      },
     },
   ],
 });
@@ -380,6 +390,7 @@ Enabled only when `E2E_AUTH_BYPASS=true`:
 | File | Purpose |
 |------|---------|
 | `e2e/playwright.config.ts` | Playwright configuration |
+| `e2e/playwright.live-ai.config.ts` | Playwright config for live AI tests (real LLM, no mocking) |
 | `e2e/global-setup.ts` | Pre-test database cleanup |
 | `e2e/helpers/` | Test utilities (SessionBuilder, headers) |
 | `backend/src/fixtures/` | TypeScript fixture definitions |
@@ -409,11 +420,12 @@ Two-browser tests simulate both users simultaneously in separate browser context
 | `POST /api/e2e/seed-session` | Create session at specific stage |
 | `POST /api/e2e/trigger-reconciler` | Manually trigger reconciler for a session |
 
-**Additional Test Helpers:**
-- `waitForAnyAIResponse()` — waits for any AI response to appear
+**Additional Test Helpers** (defined in `e2e/helpers/test-utils.ts`):
+- `handleMoodCheck(page)` — handles the mood check prompt if it appears
+- `signCompact(page)` — helper to sign compact agreement
+- `confirmFeelHeard(page)` — helper to confirm feel-heard
+- `waitForAnyAIResponse(page)` — waits for any AI response to appear in chat
 - `sendAndWaitForPanel()` — sends message and waits for panel to appear
-- `signCompact()` — helper to sign compact agreement
-- `confirmFeelHeard()` — helper to confirm feel-heard
 
 **Fixture Operations Registry:**
 Each fixture can define `operations` for non-streaming AI responses (reconciler analysis, share suggestions). The registry maps operation names to fixture response objects.

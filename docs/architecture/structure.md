@@ -6,7 +6,7 @@ status: living
 
 # Codebase Structure
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-03-11
 
 ## Directory Layout
 
@@ -60,7 +60,6 @@ project-root/
 ├── website/                    # Marketing website
 ├── tools/status-dashboard/    # Internal status monitoring
 ├── docs/                       # Planning + implementation docs
-├── implementation/             # Executable implementation plans
 └── package.json              # Root monorepo manifest
 
 ```
@@ -71,7 +70,7 @@ project-root/
 
 **`routes/`**
 - Purpose: Feature-organized route modules; each mounts on main router
-- Contains: `auth.ts`, `chat.ts`, `sessions.ts`, `stage0.ts`, `stage2.ts`, `stage3.ts`, `stage4.ts`, `messages.ts`, `invitations.ts`, `needs-assessment.ts`, `meditation.ts`, `gratitude.ts`, `memories.ts`, `reconciler.ts`, `people.ts`, `emotions.ts`, `inner-thoughts.ts`, `consent.ts`, `e2e.ts`
+- Contains: `auth.ts`, `brain.ts`, `chat.ts`, `sessions.ts`, `stage0.ts`, `stage2.ts`, `stage3.ts`, `stage4.ts`, `messages.ts`, `invitations.ts`, `needs-assessment.ts`, `meditation.ts`, `gratitude.ts`, `memories.ts`, `reconciler.ts`, `people.ts`, `emotions.ts`, `inner-thoughts.ts`, `notifications.ts`, `tts.ts`, `consent.ts`, `e2e.ts`
 - Key files: `index.ts` mounts all routes; routes are organized by feature (not by HTTP verb)
 - Mount point: `router.use('/chat', chatRoutes)` style
 
@@ -83,17 +82,19 @@ project-root/
 
 **`services/`**
 - Purpose: Core business logic; service layer between controllers and data access
-- Contains: ~40 files including AI orchestration, context assembly, messaging, session management, stage-specific logic
+- Contains: ~45 files (39 top-level + chat-router/ subpackage with 6 files)
 - Key services:
   - `ai-orchestrator.ts` - Main AI message routing logic
-  - `messages.ts` - Message creation, retrieval, streaming
-  - `sessions.ts` - Session CRUD + state management
   - `stage-prompts.ts` - Stage-specific LLM instructions (~87KB / 1928 lines, comprehensive prompts)
   - `context-retriever.ts`, `context-assembler.ts` - LLM context building
   - `realtime.ts` - Ably event publishing
-  - `stage2.ts`, `stage3.ts`, `stage4.ts` - Stage-specific business logic
-  - `chat-router/` - Subpackage with intent detection, response generation, session processing
   - `reconciler.ts` - Post-stage empathy gap analysis + share suggestions
+  - `chat-router/` - Subpackage with intent detection, response generation, session processing
+- AI services: `ai.ts`, `model-router.ts`, `dispatch-handler.ts`
+- Memory services: `memory-service.ts`, `memory-intent.ts`, `memory-detector.ts`, `memory-validator.ts`, `memory-formatter.ts`, `global-memory.ts`
+- Context services: `cross-feature-context.ts`, `context-formatters.ts`
+- Conversation: `conversation-summarizer.ts`
+- Other services: `surfacing-policy.ts`, `timeline-aggregator.ts`, `llm-telemetry.ts`, `empathy-status.ts`, `push.ts`, `email.ts`, `brain-service.ts`, `partner-session-classifier.ts`, `background-classifier.ts`, `needs.ts`, `shared-context.ts`, `embedding.ts`, `witnessing.ts`, `people-extractor.ts`, `attacking-language.ts`, `retrieval-planner.ts`, `stage-tools.ts`, `account-deletion.ts`, `session-deletion.ts`
 
 **`middleware/`**
 - Purpose: Express middleware for cross-cutting concerns
@@ -132,10 +133,10 @@ project-root/
 
 **`components/`**
 - Purpose: Reusable UI components (not full screens)
-- Contains: 75+ component files organized by feature
+- Contains: 109 component files organized by feature
 - Key components:
-  - `ChatInterface.tsx` - Main chat UI (messages, input, streaming)
-  - `ChatBubble.tsx` - Single message bubble (20KB, handles AI streaming animation)
+  - `ChatInterface.tsx` - Main chat UI (29KB; messages, input, streaming)
+  - `ChatBubble.tsx` - Single message bubble (19KB, handles AI streaming animation)
   - `EmotionalBarometer.tsx` - Emotion slider UI
   - Stage 2 components are integrated into UnifiedSessionScreen.tsx and its sub-components in `components/sharing/` and `components/SessionDrawer/`
   - `NeedCard.tsx`, `StrategyCard.tsx` - Stage 3-4 components
@@ -144,10 +145,10 @@ project-root/
 
 **`hooks/`**
 - Purpose: React Query + custom logic hooks; data layer
-- Contains: 32 hooks organizing all server communication + state management
+- Contains: 31 hooks organizing all server communication + state management
 - Key hooks:
   - `queryKeys.ts` - Centralized query key definitions (prevents circular dependencies)
-  - `useUnifiedSession.ts` - Orchestrates all session data (62KB); gathers state, messages, realtime events
+  - `useUnifiedSession.ts` - Orchestrates all session data (45KB); gathers state, messages, realtime events
   - `useMessages.ts` - Message querying + mutations (30KB); optimistic updates + streaming
   - `useSessions.ts` - Session CRUD + list (34KB)
   - `useStages.ts` - Stage mutations + gate validation (62KB)
@@ -277,7 +278,7 @@ project-root/
 ### Core Logic
 
 **Message Flow:**
-- Backend: `backend/src/routes/messages.ts` (HTTP routes) → `backend/src/controllers/messages.ts` (request handler) → `backend/src/services/messages.ts` (business logic + streaming)
+- Backend: `backend/src/routes/messages.ts` (HTTP routes) → `backend/src/controllers/messages.ts` (request handler) → `backend/src/services/ai-orchestrator.ts` (AI routing) → `backend/src/services/chat-router/` (intent detection, context assembly)
 - Mobile: `mobile/src/hooks/useMessages.ts` (mutations + queries) → `mobile/src/lib/api.ts` (HTTP client) → backend
 
 **AI Processing:**
@@ -285,11 +286,11 @@ project-root/
 - Mobile: `mobile/src/hooks/useStreamingMessage.ts` (listens to SSE) → `mobile/src/hooks/useRealtime.ts` (listens to Ably events) → cache updates via React Query
 
 **Session State:**
-- Backend: `backend/src/services/sessions.ts` (session CRUD) → Prisma → `backend/src/services/realtime.ts` (publishes events)
+- Backend: `backend/src/routes/sessions.ts` (HTTP routes) → `backend/src/controllers/sessions.ts` (session CRUD) → Prisma → `backend/src/services/realtime.ts` (publishes events)
 - Mobile: `mobile/src/hooks/useSessions.ts` (queries/mutations) → `mobile/src/lib/ably.ts` (realtime subscription) → React Query cache
 
 **Stage Progression:**
-- Backend: `backend/src/services/stage0.ts`, `stage2.ts`, `stage3.ts`, `stage4.ts` (stage-specific business logic) → `backend/src/routes/stage{N}.ts` (HTTP handlers) → database updates
+- Backend: `backend/src/routes/stage0.ts`, `stage2.ts`, `stage3.ts`, `stage4.ts` (HTTP routes) → `backend/src/controllers/stage0.ts`, `stage2.ts`, `stage3.ts`, `stage4.ts` (request handlers) → `backend/src/services/` (business logic) → database updates
 - Mobile: `mobile/src/hooks/useStages.ts` (mutations that call backend) → `mobile/src/screens/UnifiedSessionScreen.tsx` (all stage UI in unified screen)
 
 ### Testing
@@ -422,4 +423,4 @@ project-root/
 
 ---
 
-*Structure analysis: 2026-02-14*
+*Structure analysis: 2026-03-11*

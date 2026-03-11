@@ -55,19 +55,24 @@ The `ReconcilerShareOffer` tracks the suggestion lifecycle:
 
 ```mermaid
 stateDiagram-v2
+    [*] --> NOT_OFFERED: No offer made (legacy/default)
     [*] --> PENDING: Reconciler creates offer
 
     PENDING --> OFFERED: User fetches offer (GET /reconciler/share-offer)
     PENDING --> OFFERED: User responds before fetching
     PENDING --> ACCEPTED: User accepts (from drawer without GET)
+    PENDING --> EXPIRED: Offer times out
 
     OFFERED --> ACCEPTED: User accepts suggestion
     OFFERED --> DECLINED: User declines to share
-    OFFERED --> SKIPPED: System skips (edge case)
+    OFFERED --> EXPIRED: Offer times out
+    OFFERED --> SKIPPED: System skips (legacy edge case)
 
     ACCEPTED --> [*]: Context shared with partner
     DECLINED --> [*]: Empathy revealed without context
+    EXPIRED --> [*]
     SKIPPED --> [*]
+    NOT_OFFERED --> [*]
 ```
 
 ## Reconciler Flow
@@ -190,7 +195,7 @@ sequenceDiagram
 
     alt Minor/No Gaps (PROCEED/OFFER_OPTIONAL)
         System->>A: "B is now considering your perspective"
-        System->>System: Update status to REVEALED
+        System->>System: Update status to READY
     else Significant Gaps (OFFER_SHARING)
         System->>B: Share suggestion panel appears
         alt B shares context
@@ -206,13 +211,13 @@ sequenceDiagram
     end
 
     System->>B: Show A's empathy statement
-    B->>System: Validate (accurate/partially/inaccurate)
+    B->>System: Validate (validated: true/false, optional feedback)
 
     alt Validated as accurate
         System->>System: Status → VALIDATED
     else Validated as inaccurate
-        System->>System: Status → NEEDS_WORK
-        System->>A: "B provided feedback, please revise"
+        System->>System: Status stays REVEALED (no status change)
+        Note over System: NEEDS_WORK exists in schema for legacy<br/>compatibility but is never set by current code
     end
 ```
 
@@ -230,26 +235,25 @@ sequenceDiagram
     Sub->>UI: Opens validation panel
     UI->>Sub: Shows partner's empathy statement
 
-    Sub->>UI: Provides accuracy rating<br/>(Accurate / Partially / Inaccurate)
+    Sub->>UI: Validates empathy (yes/no)
 
     alt Optional feedback
         Sub->>UI: Adds text feedback
     end
 
-    UI->>API: POST /empathy/validate<br/>{ validated, rating, feedback }
+    UI->>API: POST /empathy/validate<br/>{ validated: boolean, feedback?: string }
 
-    alt Validated (accurate or partially)
+    alt Validated (validated=true)
         API->>API: Status → VALIDATED
         API->>Sub: Success response
         Note over Sub,Guesser: Both can proceed to Stage 3
-    else Not validated (inaccurate)
-        API->>API: Status stays REVEALED (NEEDS_WORK is legacy/deprecated)
-        API->>Guesser: Notification to revise
-        Note over Guesser: Enters refinement flow
+    else Not validated (validated=false)
+        API->>API: Status stays REVEALED (no status change)
+        Note over API: NEEDS_WORK exists in schema for legacy<br/>compatibility but is never set by current code
     end
 ```
 
-### Refinement Flow (When NEEDS_WORK)
+### Refinement Flow (When Validation is Inaccurate)
 
 ```mermaid
 sequenceDiagram
@@ -359,12 +363,17 @@ Only one panel shows at a time, in this priority order:
   id: string;
   sessionId: string;
   sourceUserId: string;       // The guesser
+  draftId: string | null;     // FK to EmpathyDraft (the source draft)
+  consentRecordId: string | null; // FK to ConsentRecord (consent to share)
   content: string;            // The empathy statement
   status: 'HELD' | 'ANALYZING' | 'AWAITING_SHARING' | 'REFINING' |
           'READY' | 'REVEALED' | 'VALIDATED' | 'NEEDS_WORK';
   // READY = reconciler complete, waiting for partner to also complete Stage 2
+  // NEEDS_WORK exists for legacy compatibility but is never set by current code
+  statusVersion: number;      // Incremented on every status change for event ordering
   sharedAt: Date;             // When initially shared
   revealedAt: Date | null;    // When revealed to subject (after mutual reveal)
+  revisionCount: number;      // Number of times empathy was revised
   deliveryStatus: 'PENDING' | 'DELIVERED' | 'SEEN';
   deliveredAt: Date | null;
   seenAt: Date | null;
@@ -381,12 +390,38 @@ Only one panel shows at a time, in this priority order:
   subjectId: string;
   guesserName: string;
   subjectName: string;
-  alignmentScore: number;     // 0-100
+
+  // Alignment Analysis
+  alignmentScore: number;       // 0-100
+  alignmentSummary: string;     // Text summary of alignment
+  correctlyIdentified: string[]; // Feelings/needs correctly identified
+
+  // Gap Analysis
   gapSeverity: 'none' | 'minor' | 'moderate' | 'significant';
-  recommendedAction: 'PROCEED' | 'OFFER_OPTIONAL' | 'OFFER_SHARING';
+  gapSummary: string;
+  missedFeelings: string[];     // Feelings/needs that were missed
+  misattributions: string[];    // Incorrect assumptions made
   mostImportantGap: string | null;
+
+  // Recommendation
+  recommendedAction: 'PROCEED' | 'OFFER_OPTIONAL' | 'OFFER_SHARING';
+  rationale: string;
+  sharingWouldHelp: boolean;
+  suggestedShareFocus: string | null;
+
+  // Abstract guidance for refinement (no specific partner content)
+  areaHint: string | null;      // e.g., "work and effort"
+  guidanceType: string | null;  // e.g., "explore_deeper_feelings"
+  promptSeed: string | null;    // e.g., "what might be underneath"
+
+  // Suggestion for subject to share (generated when gaps are significant)
   suggestedShareContent: string | null;   // From generateShareSuggestion
   suggestedShareReason: string | null;
+
+  // Reconciler loop tracking
+  iteration: number;              // Which iteration produced this result (1 = first run)
+  wasCircuitBreakerTrip: boolean; // Whether circuit breaker forced READY
+  supersededAt: Date | null;      // When superseded by a newer analysis
 }
 ```
 
@@ -397,14 +432,30 @@ Only one panel shows at a time, in this priority order:
   id: string;
   resultId: string;           // FK to ReconcilerResult
   userId: string;             // The subject who can share
-  status: 'PENDING' | 'OFFERED' | 'ACCEPTED' | 'DECLINED' | 'SKIPPED';
+  status: 'PENDING' | 'OFFERED' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'NOT_OFFERED' | 'SKIPPED';
+  // NOT_OFFERED = legacy, no offer was made
+  // EXPIRED = offer expired (timeout)
+  // SKIPPED = legacy, user skipped without responding
   suggestedContent: string | null;        // AI-generated suggestion
   suggestedReason: string | null;
-  customContent: string | null;           // User's refined content
+  offerMessage: string | null;            // AI-generated message shown to user
+  refinedContent: string | null;          // User's edited version of suggestion
+  sharedContent: string | null;           // Final content that was shared
   deliveryStatus: 'PENDING' | 'DELIVERED' | 'SEEN';
+  deliveredAt: Date | null;
+  seenAt: Date | null;
   createdAt: Date;
   sharedAt: Date | null;
   declinedAt: Date | null;
+  skippedAt: Date | null;
+
+  // Reconciler loop tracking
+  iteration: number;                      // Which iteration this offer belongs to
+  refinementChatUsed: boolean;            // Whether refinement chat was used before responding
+
+  // Notification tracking
+  lastDeliveryNotifiedAt: Date | null;    // Last notified about delivery status change
+  lastSeenNotifiedAt: Date | null;        // Last notified about seen status change
 }
 ```
 
@@ -413,11 +464,12 @@ Only one panel shows at a time, in this priority order:
 ```typescript
 {
   id: string;
-  empathyAttemptId: string;
+  attemptId: string;          // FK to EmpathyAttempt
+  sessionId: string;
   userId: string;             // The validator (subject)
-  validated: boolean;         // Overall validation
-  rating: 'accurate' | 'partially_accurate' | 'inaccurate';
+  validated: boolean;         // Overall validation (true/false, no rating scale)
   feedback: string | null;    // Optional text feedback
+  feedbackShared: boolean;    // Whether feedback was shared with guesser
   validatedAt: Date;
 }
 ```

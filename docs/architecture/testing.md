@@ -6,7 +6,7 @@ status: living
 
 # Testing Patterns
 
-**Analysis Date:** 2026-02-14
+**Analysis Date:** 2026-03-11
 
 ## Test Framework
 
@@ -267,7 +267,7 @@ test.describe('Reconciler: No Gaps Detected → Proceed Directly', () => {
     await userAContext?.close();
   });
 
-  test('shows no share suggestion when reconciler finds no gaps', async () => {
+  test('No share suggestion shown → Both users proceed to empathy reveal', async ({ request }) => {
     await userAPage.goto(`${APP_BASE_URL}`);
     await expect(userAPage.getByText('No gaps')).toBeVisible();
   });
@@ -386,7 +386,7 @@ it('shows active session indicator', () => {
 ```
 
 **E2E Fixtures:**
-Located in `e2e/helpers.ts`:
+Located in `e2e/helpers/` (directory with index.ts re-export):
 - `getE2EHeaders()` - Returns X-E2E-User-ID/Email headers for auth bypass
 - `SessionBuilder` - Orchestrates setup via REST API
 - `cleanupE2EData()` - Clears DB between tests
@@ -598,4 +598,4 @@ npm run e2e
 
 ---
 
-*Testing analysis: 2026-02-14*
+*Testing analysis: 2026-03-11*

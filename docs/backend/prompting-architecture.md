@@ -6,7 +6,7 @@ status: living
 
 # Backend Prompting Architecture Audit
 
-**Last Updated:** 2026-01-18
+**Last Updated:** 2026-03-11
 
 This document provides a comprehensive overview of how prompting works in the Meet Without Fear backend, including prompt construction, model usage, parallel vs sequential operations, and memory handling.
 
@@ -243,9 +243,11 @@ graph TD
 **Stage-Aware Configuration:**
 Each intent gets stage-specific thresholds:
 
-- **Stage 1**: threshold=0.65, maxCrossSession=0-3, surfaceStyle='silent'
-- **Stage 2**: threshold=0.55, maxCrossSession=0 (cross-session retrieval disabled), surfaceStyle='tentative'
-- **Stage 3-4**: threshold=0.50, maxCrossSession=10, surfaceStyle='explicit'
+- **Stage 1**: threshold=0.65, maxCrossSession=0, allowCrossSession=false, surfaceStyle='silent' (maxCrossSession increases to 3 after turn 3, but cross-session remains disabled)
+- **Stage 2**: threshold=0.55, maxCrossSession=0, allowCrossSession=false, surfaceStyle='tentative'
+- **Stage 3-4**: threshold=0.50, maxCrossSession=0, allowCrossSession=false, surfaceStyle='explicit'
+
+> **Note:** Cross-session retrieval is currently disabled across all stages pending consent UI implementation. The code has `allowCrossSession: false` and `maxCrossSession: 0` for Stages 2-4 (with comments like `// was 5`, `// was 10` indicating the originally intended values).
 
 **Key File:** `backend/src/services/memory-intent.ts`
 
@@ -337,11 +339,7 @@ graph TB
 ```
 
 **Memory Detection Gating:**
-Memory detection only runs when:
-
-- `userTurnCount >= 3` (let user settle in first)
-- `emotionalIntensity <= 7` (skip during high emotional moments)
-- `!isStageTransition` (skip during stage transitions)
+Memory detection (via the Partner Session Classifier) runs unconditionally on every user message as a fire-and-forget background task. There are no gating conditions -- the classifier processes every message regardless of turn count, emotional intensity, or stage transitions.
 
 **Key Files:**
 
@@ -636,7 +634,7 @@ graph TD
 
 ```mermaid
 graph TD
-    START[AI Response Saved] --> CHECK{Message Count >= 30?}
+    START[AI Response Saved] --> CHECK{Message Count >= 40?}
     CHECK -->|No| SKIP[Skip Summarization]
     CHECK -->|Yes| CHECK_INTERVAL{Time to<br/>Summarize?}
     CHECK_INTERVAL -->|No| SKIP
@@ -650,9 +648,9 @@ graph TD
 
 **Summarization Strategy:**
 
-- **Threshold:** Kicks in at 30+ messages
-- **Re-summarize:** Every 20 messages after threshold
-- **Keeps recent:** Last 15 messages always in full
+- **Threshold:** Kicks in at 40+ messages (`minMessagesForSummary: 40`)
+- **Re-summarize:** Every 25 messages after threshold (`resummaryInterval: 25`)
+- **Keeps recent:** Last 20 messages always in full (`recentMessagesToKeep: 20`)
 - **Summarizes:** Older messages condensed by Haiku
 - **Non-blocking:** Fire-and-forget, doesn't delay response
 - **Output:** Summary text, key themes, emotional journey, unresolved topics
@@ -867,7 +865,7 @@ The `buildBudgetedContext()` function in `backend/src/utils/token-budget.ts` man
 | Background Classification               | Haiku              | Memory detection + categorized facts | After every AI response (fire-and-forget) |
 | Global Facts Consolidation              | Haiku              | Merge session facts into user profile | Stage 1 → Stage 2 transition       |
 | Session Embedding                       | Titan              | Embed session content              | After classification               |
-| Conversation Summarization              | Haiku              | Summarize older messages           | When message count >= 30           |
+| Conversation Summarization              | Haiku              | Summarize older messages           | When message count >= 40           |
 | Response Generation                     | Sonnet             | User-facing responses              | Every message                      |
 | Witnessing                              | Sonnet             | Pre-session witnessing             | Pre-session messages               |
 | Reconciler                              | Sonnet             | Analyze empathy gaps               | Post-Stage 2                       |

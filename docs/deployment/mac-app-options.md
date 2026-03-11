@@ -1,10 +1,12 @@
 ---
 created: 2026-03-11
 updated: 2026-03-11
-status: living
+status: reference
 ---
 
 # Mac App Distribution Options
+
+> **Note:** None of these options have been implemented. This document captures research into potential Mac app packaging approaches.
 
 ## Option 1: Expo Web + Tauri (Recommended)
 
