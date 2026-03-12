@@ -120,3 +120,20 @@ export const takeawayKeys = {
   list: (sessionId: string) => [...takeawayKeys.all, sessionId] as const,
 };
 
+// ============================================================================
+// Knowledge Base Query Keys
+// ============================================================================
+// NOTE: Top-level key ['knowledge-base'] is intentionally separate from
+// ['inner-thoughts'] to avoid cross-invalidation (see Phase 18 Research, Pitfall 3).
+// Knowledge base queries are NOT invalidated by inner-thoughts mutations.
+
+export const knowledgeBaseKeys = {
+  all: ['knowledge-base'] as const,
+  topics: () => [...knowledgeBaseKeys.all, 'topics'] as const,
+  people: () => [...knowledgeBaseKeys.all, 'people'] as const,
+  themes: () => [...knowledgeBaseKeys.all, 'themes'] as const,
+  topicDetail: (slug: string) => [...knowledgeBaseKeys.all, 'topic', slug] as const,
+  personDetail: (id: string) => [...knowledgeBaseKeys.all, 'person', id] as const,
+  themeDetail: (id: string) => [...knowledgeBaseKeys.all, 'theme', id] as const,
+};
+
