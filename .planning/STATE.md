@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Inner Thoughts Journal
 status: executing
-stopped_at: Completed 15-02-PLAN.md — Distillation service, HTTP endpoint, fire-and-forget hook
-last_updated: "2026-03-12T08:31:33.020Z"
+stopped_at: Completed 16-01-PLAN.md — RecurringTheme schema, knowledge base DTOs, PersonDetailDTO extension
+last_updated: "2026-03-12T08:50:05.268Z"
 last_activity: 2026-03-12 — Phase 15 Plan 01 complete — SessionTakeaway schema, distillation DTOs, Prisma mock
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 12
-  completed_plans: 5
+  completed_plans: 6
   percent: 68
 ---
 
@@ -55,6 +55,7 @@ Progress: [███████░░░] 68%
 | Phase 14-foundation P03 | 8 | 2 tasks | 8 files |
 | Phase 15-distillation-backend P01 | 8 | 2 tasks | 7 files |
 | Phase 15 P02 | 12 | 2 tasks | 5 files |
+| Phase 16-knowledge-base-backend P01 | 8 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ Recent decisions affecting current work:
 - [Phase 15]: normalizeTakeaways handles both { takeaways: [] } and top-level array fallback — Haiku output format varies
 - [Phase 15]: streamingRateLimit applied to distill endpoint — LLM-backed, same cost profile as message endpoint
 - [Phase 15]: USER takeaways preserved via source=AI filter in deleteMany during re-distillation (DIST-03)
+- [Phase 16-01]: Migration created manually (DB not accessible in dev) — consistent with Phase 15-01 pattern
+- [Phase 16-01]: sessions: [] placeholder in getPerson controller keeps type checks passing between plans
 
 ### Pending Todos
 
@@ -103,6 +106,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T08:31:33.018Z
-Stopped at: Completed 15-02-PLAN.md — Distillation service, HTTP endpoint, fire-and-forget hook
+Last session: 2026-03-12T08:50:05.266Z
+Stopped at: Completed 16-01-PLAN.md — RecurringTheme schema, knowledge base DTOs, PersonDetailDTO extension
 Resume file: None

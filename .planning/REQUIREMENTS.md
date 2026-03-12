@@ -28,16 +28,16 @@ Requirements for the Inner Thoughts Journal milestone. Each maps to roadmap phas
 
 ### Knowledge Base
 
-- [ ] **KNOW-01**: User can browse sessions and takeaways grouped by topic/tag
+- [x] **KNOW-01**: User can browse sessions and takeaways grouped by topic/tag
 - [ ] **KNOW-02**: User can browse by person mentioned across sessions
 - [ ] **KNOW-03**: User can view entries on a topic arranged chronologically (timeline)
-- [ ] **KNOW-04**: User can reach any content within 2 taps from the knowledge base entry point
+- [x] **KNOW-04**: User can reach any content within 2 taps from the knowledge base entry point
 
 ### Cross-Session Intelligence
 
-- [ ] **INTEL-01**: System organically recognizes recurring themes across sessions
+- [x] **INTEL-01**: System organically recognizes recurring themes across sessions
 - [ ] **INTEL-02**: System builds a running understanding of relationships and issues over time
-- [ ] **INTEL-03**: User can see and browse recognized themes and patterns
+- [x] **INTEL-03**: User can see and browse recognized themes and patterns
 
 ### Voice Input
 
@@ -105,13 +105,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIST-01 | Phase 15 | Complete |
 | DIST-02 | Phase 15 | Complete |
 | DIST-03 | Phase 15 | Complete |
-| KNOW-01 | Phase 16 | Pending |
+| KNOW-01 | Phase 16 | Complete |
 | KNOW-02 | Phase 16 | Pending |
 | KNOW-03 | Phase 16 | Pending |
-| KNOW-04 | Phase 16 | Pending |
-| INTEL-01 | Phase 16 | Pending |
+| KNOW-04 | Phase 16 | Complete |
+| INTEL-01 | Phase 16 | Complete |
 | INTEL-02 | Phase 16 | Pending |
-| INTEL-03 | Phase 16 | Pending |
+| INTEL-03 | Phase 16 | Complete |
 | DIST-04 | Phase 17 | Pending |
 | DIST-05 | Phase 17 | Pending |
 | DIST-06 | Phase 17 | Pending |

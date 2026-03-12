@@ -143,8 +143,8 @@ Note: Phase 17 depends on Phase 15 only; Phase 18 depends on both 16 and 17.
 | 12. Visual Baselines                         | v1.1      | 2/2            | Complete    | 2026-02-18 |
 | 13. Full Session E2E                         | v1.1      | 4/4            | Complete    | 2026-02-19 |
 | 14. Foundation                               | 3/3 | Complete    | 2026-03-12 | -          |
-| 15. Distillation Backend                     | 2/2 | Complete   | 2026-03-12 | -          |
-| 16. Knowledge Base Backend                   | v1.2      | 0/3            | Planned     | -          |
+| 15. Distillation Backend                     | 2/2 | Complete    | 2026-03-12 | -          |
+| 16. Knowledge Base Backend                   | 1/3 | In Progress|  | -          |
 | 17. Session List + Distillation UI + Voice   | v1.2      | 0/2            | Planned     | -          |
 | 18. Knowledge Base UI + Export               | v1.2      | 0/2            | Planned     | -          |
 
