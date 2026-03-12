@@ -1,441 +1,219 @@
-# Technology Stack: Playwright Screenshot Verification & Reconciler Testing
-
-**Project:** Meet Without Fear - Subsequent Milestone
-**Researched:** 2026-02-15
-**Focus:** Stack additions for Playwright screenshot capture, visual verification, and reconciler state machine testing
-
-## Executive Summary
-
-**Verdict:** NO new dependencies required. Playwright 1.50.0 already includes all necessary capabilities for screenshot capture, visual comparison, and state transition testing.
-
-**Key Finding:** The project already has the complete stack for the new features. Playwright's built-in `toHaveScreenshot()` API, existing test helpers, and two-browser harness provide everything needed for visual regression testing and reconciler edge case coverage.
-
-## Recommended Stack (Existing - No Changes)
-
-### Visual Testing
-
-| Technology | Current Version | Purpose | Why No Change Needed |
-|------------|-----------------|---------|---------------------|
-| Playwright | 1.50.0 | E2E test runner with built-in visual testing | Already includes `toHaveScreenshot()`, `page.screenshot()`, pixelmatch comparison, and all necessary configuration options |
-| Pixelmatch | (bundled) | Pixel comparison engine | Automatically used by Playwright's `toHaveScreenshot()` - no separate installation needed |
-
-### State Machine Testing
-
-| Technology | Current Version | Purpose | Why No Change Needed |
-|------------|-----------------|---------|---------------------|
-| TypeScript | 5.7-5.9 | Type-safe state transitions | Existing type system already enforces reconciler state machine transitions |
-| Playwright | 1.50.0 | Async state transition verification | Built-in auto-waiting and assertion retries handle async state changes |
-| Jest | 29.7.0 | Unit test state machine logic | Backend unit tests can verify reconciler state transitions in isolation |
-
-### Test Infrastructure (Already Exists)
-
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| Two-Browser Harness | `e2e/helpers/two-browser-harness.ts` | Parallel user contexts for reconciler testing |
-| SessionBuilder | `e2e/helpers/session-builder.ts` | State factory for starting at specific reconciler states |
-| Test Fixtures | `e2e/helpers/*.ts` | Mocked LLM responses for deterministic reconciler outcomes |
-| Screenshot Directory | `e2e/test-results/` (existing), `e2e/screenshots/` (can be added) | Screenshot storage |
-
-## What NOT to Add
-
-### ❌ Avoid These Tools
-
-| Tool | Why NOT Needed |
-|------|---------------|
-| Percy | Third-party visual testing SaaS - Playwright's built-in comparison is sufficient for this project's needs |
-| Applitools | Another SaaS visual testing tool - overkill for internal E2E tests with controlled fixtures |
-| BackstopJS | Separate visual regression tool - redundant with Playwright's native capabilities |
-| Chromatic | Storybook-based visual testing - project doesn't use Storybook, Playwright handles visual testing |
-| jest-image-snapshot | Jest plugin for screenshots - E2E tests use Playwright, not Jest |
-| XState | State machine library - reconciler state machine is simple (4 outcomes), doesn't need a full library |
-| robot3 | State machine library - same reason as XState |
-| TypeState | TypeScript FSM library - reconciler logic is already type-safe, adding FSM library is over-engineering |
-
-### Why Built-In Playwright is Sufficient
-
-1. **Already Installed**: Playwright 1.50.0 is in `e2e/package.json`
-2. **Feature-Complete**: Includes screenshot capture, pixel comparison, baseline management, and diff generation
-3. **No External Dependencies**: Everything runs locally, no third-party services required
-4. **Version Controlled**: Baseline images stored in git alongside tests
-5. **Integrated Workflow**: Works seamlessly with existing two-browser test harness
-
-## Playwright Visual Testing Capabilities (Built-In)
-
-### Screenshot Capture API
-
-```typescript
-// Full page screenshot
-await page.screenshot({ path: 'test-results/my-screenshot.png' });
-
-// Element screenshot
-await locator.screenshot({ path: 'test-results/element.png' });
-
-// With custom styling (hide dynamic elements)
-await page.screenshot({
-  path: 'test-results/masked.png',
-  mask: [page.locator('.timestamp'), page.locator('.animation')],
-  animations: 'disabled',
-});
-```
-
-**Available Options** (all built-in to Playwright 1.50.0):
-- `animations`: `"disabled"` | `"allow"` - Stops CSS animations/transitions (default: `"disabled"`)
-- `caret`: `"hide"` | `"initial"` - Hides text caret (default: `"hide"`)
-- `clip`: `{ x, y, width, height }` - Capture specific region
-- `fullPage`: boolean - Capture entire scrollable page (default: `false`)
-- `mask`: Locator[] - Elements to overlay with mask color
-- `maskColor`: string - CSS color for masks (default: `"#FF00FF"`)
-- `omitBackground`: boolean - Remove white background for transparency
-- `scale`: `"css"` | `"device"` - Pixel density
-- `stylePath`: string | string[] - Apply custom CSS during capture (NEW in 1.50)
-- `style`: string - Inline CSS to apply (NEW in 1.50)
-
-### Visual Comparison API
-
-```typescript
-// Visual regression assertion
-await expect(page).toHaveScreenshot('validation-buttons.png', {
-  maxDiffPixels: 100,           // Allow up to 100 different pixels
-  threshold: 0.2,               // YIQ color difference tolerance (0-1)
-  animations: 'disabled',       // Stop animations before capture
-  mask: [page.locator('.timestamp')], // Hide dynamic content
-});
-
-// Element-level comparison
-await expect(page.locator('.share-tab')).toHaveScreenshot('share-tab.png');
-```
-
-**Tolerance Configuration Options**:
-- `maxDiffPixels`: number - Acceptable pixel difference count
-- `maxDiffPixelRatio`: number - Acceptable difference ratio (0-1)
-- `threshold`: number - YIQ color space tolerance (0 = strict, 1 = lax, default: 0.2)
-
-### Baseline Management
-
-**First Run:** Generates baseline in `<test-file>-snapshots/` directory
-```
-e2e/tests/stage-2-empathy/reconciler/no-gaps-screenshot.spec.ts
-e2e/tests/stage-2-empathy/reconciler/no-gaps-screenshot.spec.ts-snapshots/
-  └── validation-buttons-chromium-darwin.png
-```
-
-**Update Baselines:**
-```bash
-# Regenerate all baselines
-npx playwright test --update-snapshots
-
-# Update specific test
-npx playwright test no-gaps-screenshot --update-snapshots
-```
-
-**Cross-Platform Handling:** Playwright automatically manages separate baselines per browser-platform combination (e.g., `chromium-darwin.png`, `chromium-linux.png`).
-
-### Diff Generation (Automatic)
-
-When visual tests fail, Playwright automatically generates:
-1. **Actual screenshot** - Current test run output
-2. **Expected screenshot** - Baseline image
-3. **Diff image** - Highlighted differences in red
-
-All saved to `test-results/` and viewable in Playwright's HTML report.
-
-## Configuration for Visual Testing
-
-### Playwright Config Updates (Recommended)
-
-Add to `e2e/playwright.config.ts`:
-
-```typescript
-export default defineConfig({
-  // ... existing config
-
-  expect: {
-    timeout: 10000,
-    toHaveScreenshot: {
-      // Global defaults for visual comparisons
-      maxDiffPixels: 100,          // Allow minor rendering differences
-      threshold: 0.2,              // Default YIQ tolerance
-      animations: 'disabled',      // Always disable animations
-      caret: 'hide',               // Hide text cursor
-    },
-  },
-
-  use: {
-    screenshot: 'only-on-failure', // Capture on failure for debugging
-    video: 'retain-on-failure',    // Keep videos only when tests fail
-    viewport: { width: 375, height: 667 }, // iPhone 12 (already configured)
-    trace: 'on',                   // Already configured
-  },
-});
-```
-
-**Note:** Current config already has `screenshot: 'on'` and `video: 'on'`. For visual regression tests, change to `'only-on-failure'` to reduce storage.
-
-### Snapshot Directory Organization
-
-```
-e2e/
-├── tests/
-│   └── stage-2-empathy/reconciler/
-│       ├── no-gaps-screenshot.spec.ts
-│       └── no-gaps-screenshot.spec.ts-snapshots/
-│           └── empathy-validation-buttons-chromium-darwin.png
-├── screenshots/          # Manual screenshots (e.g., no-gaps-screenshot.spec.ts uses this)
-│   └── empathy-validation-buttons.png
-└── test-results/         # Test run artifacts (actual/diff images on failure)
-    ├── no-gaps-screenshot-chromium/
-    │   ├── empathy-validation-buttons-actual.png
-    │   ├── empathy-validation-buttons-expected.png
-    │   └── empathy-validation-buttons-diff.png
-    └── *.png             # Ad-hoc screenshots from page.screenshot()
-```
-
-**Recommendation:** Use `toHaveScreenshot()` for visual regression (baselines in `-snapshots/` dir) instead of manual `page.screenshot()` (outputs to `test-results/`).
-
-## Reconciler State Machine Testing Patterns
-
-### State Transitions (No New Tools Needed)
-
-The reconciler has 4 outcomes based on LLM analysis:
-
-```typescript
-type ReconcilerAction =
-  | 'PROCEED'           // NO_GAPS - advance to next stage
-  | 'OFFER_OPTIONAL'    // MINOR gaps - optional context sharing
-  | 'OFFER_SHARING'     // SIGNIFICANT gaps - recommend sharing
-
-type ShareOfferStatus =
-  | 'NOT_OFFERED'
-  | 'OFFERED'
-  | 'ACCEPTED'         // User shares context → guesser refines empathy
-  | 'DECLINED'         // User declines → empathy revealed as-is
-  | 'SKIPPED'
-```
-
-### Test Coverage Strategy (Using Existing Tools)
-
-**E2E Tests** (via Playwright + Two-Browser Harness):
-```typescript
-// e2e/tests/stage-2-empathy/reconciler/
-├── no-gaps-proceed-directly.spec.ts          // PROCEED path
-├── gaps-detected-share-accepted.spec.ts      // OFFER_SHARING → ACCEPTED
-├── gaps-detected-share-declined.spec.ts      // OFFER_SHARING → DECLINED
-└── gaps-detected-share-refined.spec.ts       // ACCEPTED → refine → resubmit
-```
-
-**Unit Tests** (via Jest on backend):
-```typescript
-// backend/src/services/__tests__/reconciler.test.ts
-describe('Reconciler State Machine', () => {
-  it('returns PROCEED when alignment >= 80', async () => {
-    // Test reconciler logic directly
-  });
-
-  it('returns OFFER_SHARING when gaps.severity === SIGNIFICANT', async () => {
-    // Test state transitions in isolation
-  });
-
-  it('prevents infinite loop when context already shared', async () => {
-    // Test hasContextAlreadyBeenShared guard
-  });
-});
-```
-
-### Async State Transition Testing (Playwright's Built-In Capabilities)
-
-Playwright's **auto-waiting** handles async state changes automatically:
-
-```typescript
-// Wait for reconciler to process and update UI
-await expect(page.getByTestId('share-suggestion-modal')).toBeVisible({ timeout: 15000 });
-
-// Verify state transition via API
-const response = await request.get(`/api/sessions/${sessionId}/reconciler`);
-const data = await response.json();
-expect(data.recommendation.action).toBe('OFFER_SHARING');
-```
-
-**Key Playwright Features for State Testing**:
-- **Auto-waiting**: Assertions retry until condition is true or timeout
-- **Network idle**: `page.waitForLoadState('networkidle')` waits for async operations
-- **API assertions**: Use `request` fixture to verify backend state
-- **Conditional visibility**: `expect(locator).toBeVisible()` handles eventual visibility
-
-## Integration with Existing Infrastructure
-
-### Two-Browser Harness (Already Exists)
-
-The `TwoBrowserHarness` class already supports reconciler testing:
-
-```typescript
-// e2e/helpers/two-browser-harness.ts
-const harness = new TwoBrowserHarness({
-  userA: { email: 'alice@e2e.test', name: 'Alice' },
-  userB: { email: 'bob@e2e.test', name: 'Bob' },
-  startingState: 'EMPATHY_SHARED_A',
-  fixtureId: 'reconciler-gaps-detected',
-});
-
-await harness.setup(browser, request);
-
-// Both users' pages are available
-await harness.userAPage.screenshot({ path: 'user-a.png' });
-await harness.userBPage.screenshot({ path: 'user-b.png' });
-
-// Visual regression on both sides
-await expect(harness.userBPage).toHaveScreenshot('share-suggestion.png');
-```
-
-### SessionBuilder State Factories (Already Exists)
-
-```typescript
-// Start at specific reconciler state
-const setup = await new SessionBuilder()
-  .userA('alice@e2e.test', 'Alice')
-  .userB('bob@e2e.test', 'Bob')
-  .startingAt('EMPATHY_SHARED_A')  // User A shared empathy, User B ready to trigger reconciler
-  .setup(request);
-```
-
-**Available Starting States** (from existing implementation):
-- `CREATED` - Session created, no progress
-- `COMPACT_SIGNED` - Both signed compact
-- `FEEL_HEARD_A` - User A confirmed feel-heard
-- `FEEL_HEARD_BOTH` - Both confirmed feel-heard
-- `EMPATHY_SHARED_A` - User A shared empathy (reconciler can trigger when B completes Stage 1)
-- `EMPATHY_REVEALED` - Both empathy attempts validated (Stage 3 ready)
-
-### Test Fixture Pattern (Already Exists)
-
-Deterministic reconciler outcomes via mocked LLM responses:
-
-```typescript
-// backend/src/fixtures/reconciler-no-gaps.ts
-export const reconcilerNoGapsFixture = {
-  recommendation: {
-    action: 'PROCEED',
-    rationale: 'Excellent alignment',
-    sharingWouldHelp: false,
-  },
-  gaps: {
-    severity: 'none',
-    summary: 'No gaps detected',
-    missedFeelings: [],
-    misattributions: [],
-  },
-};
-```
-
-**Usage in Tests**:
-```typescript
-// Test passes fixture ID via header
-const FIXTURE_ID = 'reconciler-no-gaps';
-
-const context = await browser.newContext({
-  extraHTTPHeaders: getE2EHeaders(userEmail, userId, FIXTURE_ID),
-});
-```
-
-Backend reads `X-E2E-Fixture-ID` header and returns fixture instead of calling LLM.
-
-## Installation (None Required)
-
-**Current Package Versions** (from `e2e/package.json`):
-```json
-{
-  "devDependencies": {
-    "@playwright/test": "^1.50.0",  // ✅ Already includes visual testing
-    "@types/node": "^22.10.0",
-    "dotenv": "^16.4.0",
-    "typescript": "^5.6.0"
-  }
-}
-```
-
-**No new packages needed.** All capabilities are built-in.
-
-## Workflow for Adding Visual Tests
-
-### 1. Create Baseline Screenshots
-
-```bash
-# First run generates baselines
-cd e2e
-npx playwright test no-gaps-screenshot.spec.ts
-```
-
-Baselines are saved to `<test-file>-snapshots/` directory and should be committed to git.
-
-### 2. Write Visual Assertions
-
-```typescript
-// e2e/tests/stage-2-empathy/reconciler/no-gaps-screenshot.spec.ts
-test('shows validation buttons after no-gaps reconciler', async ({ page }) => {
-  // Navigate to Share page
-  await navigateToShareFromSession(page, APP_BASE_URL, sessionId, userId);
-
-  // Wait for reconciler to complete
-  await expect(page.getByTestId('empathy-validation-accurate')).toBeVisible();
-
-  // Visual regression assertion
-  await expect(page).toHaveScreenshot('empathy-validation-buttons.png', {
-    clip: { x: 0, y: 0, width: 375, height: 200 }, // Capture top portion only
-    mask: [page.locator('.timestamp')],            // Hide dynamic timestamp
-  });
-});
-```
-
-### 3. Update Baselines When UI Changes
-
-```bash
-# After intentional UI changes
-npx playwright test --update-snapshots
-```
-
-### 4. Review Diffs in CI/Local
-
-```bash
-# View HTML report with visual diffs
-npx playwright show-report
-```
-
-## Reconciler Edge Cases to Cover
-
-Based on existing tests and implementation:
-
-| Test Case | File | Coverage |
-|-----------|------|----------|
-| **NO_GAPS** - Proceed directly | `no-gaps-proceed-directly.spec.ts` | ✅ Exists |
-| **GAPS_FOUND** - Share accepted | `gaps-detected-share-accepted.spec.ts` | ✅ Exists |
-| **GAPS_FOUND** - Share declined | `gaps-detected-share-declined.spec.ts` | ✅ Exists |
-| **GAPS_FOUND** - Refine empathy | `gaps-detected-share-refined.spec.ts` | ✅ Exists |
-| **Visual verification** - Validation buttons | `no-gaps-screenshot.spec.ts` | ✅ Exists |
-| **State machine loop prevention** | Backend unit test | ⚠️ TODO |
-| **Concurrent refinement handling** | E2E test | ⚠️ TODO |
-| **Share offer timeout** | E2E test | ⚠️ TODO |
-
-**Recommendation:** Add backend unit tests for state machine guards (e.g., `hasContextAlreadyBeenShared`) to prevent infinite loops.
-
-## Sources
-
-### Official Documentation
-- [Playwright Visual Comparisons](https://playwright.dev/docs/test-snapshots)
-- [Playwright SnapshotAssertions API](https://playwright.dev/docs/api/class-snapshotassertions)
-- [Playwright PageAssertions API](https://playwright.dev/docs/api/class-pageassertions)
-
-### Implementation Guides (2026)
-- [Visual Regression Testing with Playwright Snapshots](https://nareshit.com/blogs/visual-regression-testing-with-playwright-snapshots)
-- [How to Implement Playwright Visual Testing](https://oneuptime.com/blog/post/2026-01-27-playwright-visual-testing/view)
-- [Playwright Visual Testing: A Complete Guide](https://testdino.com/blog/playwright-visual-testing/)
-- [Snapshot Testing with Playwright in 2026](https://www.browserstack.com/guide/playwright-snapshot-testing)
-- [Mastering Visual Testing with Playwright](https://jignect.tech/mastering-visual-testing-with-playwright-a-step-by-step-guide/)
-
-### State Machine Testing
-- [Composable State Machines in TypeScript](https://medium.com/@MichaelVD/composable-state-machines-in-typescript-type-safe-predictable-and-testable-5e16574a6906)
-- [How to Build Type-Safe State Machines in TypeScript](https://oneuptime.com/blog/post/2026-01-30-typescript-type-safe-state-machines/view)
-- [Guide to Playwright end-to-end testing in 2026](https://www.deviqa.com/blog/guide-to-playwright-end-to-end-testing-in-2025/)
-- [How to Configure E2E Testing with Playwright](https://oneuptime.com/blog/post/2026-01-25-e2e-testing-with-playwright/view)
+# Stack Research
+
+**Domain:** Inner Thoughts Journal — topic tagging, knowledge base, distillation, browsable insights
+**Researched:** 2026-03-11
+**Confidence:** HIGH (all new additions verified against existing stack, versions checked against npm)
 
 ---
 
-**Summary:** The existing stack is complete. Playwright 1.50.0's built-in visual testing capabilities, combined with the project's two-browser harness and fixture system, provide everything needed for screenshot verification and reconciler state machine testing. No new dependencies required.
+## What the Existing Stack Already Handles
+
+These capabilities are already production-ready in the codebase. Do NOT re-implement or add competing libraries.
+
+| Capability | Existing Solution | Location |
+|------------|------------------|----------|
+| Session-level semantic search | pgvector + Amazon Titan embeddings | `embedding.ts` — `searchInnerWorkSessionContent()` |
+| Session embedding pipeline | `embedInnerWorkSessionContent()` | `embedding.ts` |
+| Cross-session rolling summaries | `updateInnerThoughtsSummary()` | `conversation-summarizer.ts` |
+| keyThemes extracted per session | Already in `SummarizationResult.keyThemes[]` | `conversation-summarizer.ts` |
+| People extraction and tracking | Haiku + `Person` / `PersonMention` models | `people-extractor.ts`, schema.prisma |
+| Global fact consolidation | Haiku + `User.globalFacts` | `global-memory.ts` |
+| AI JSON extraction (Haiku) | `getHaikuJson<T>()` wrapper | `bedrock.ts` |
+| SSE streaming for AI responses | Already in inner-thoughts chat | `stage0.ts` |
+| React Query cache-first state | `useInfiniteQuery`, `useQuery`, `setQueryData` | mobile hooks |
+| Ably realtime events | Inner work session publishing | `realtime.ts` |
+| Circuit breaker for Haiku | `withHaikuCircuitBreaker()` | `circuit-breaker.ts` |
+| Prisma migrations | Already established workflow | `backend/prisma/` |
+
+---
+
+## Recommended Stack: New Additions Only
+
+### Core Technologies — No New Additions Needed
+
+The backend AI pipeline (Haiku for extraction, Sonnet for distillation), Prisma/PostgreSQL for storage, and Bedrock embeddings are all present. The feature requirements map onto existing service patterns with schema additions only.
+
+### New Database Capabilities
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| PostgreSQL `tsvector` GIN index | (built-in, no version change) | Full-text keyword search across takeaways and tags | Hybrid with pgvector: keyword search for exact tag/topic lookup, vector for semantic. GIN is 3x faster than GiST for read-heavy workloads. Already using PostgreSQL — no new dependency. |
+| PostgreSQL `text[]` array with GIN | (built-in) | Tag storage on `InnerWorkSession.tags` | Prisma `String[]` maps directly; GIN index on array enables `@>` containment queries (find sessions with tag "anxiety"). Zero-overhead addition to schema. |
+
+These are SQL features on the existing Postgres instance. No new service or library is required.
+
+### New Mobile Library: List Performance
+
+| Library | Version | Purpose | Why |
+|---------|---------|---------|-----|
+| `@shopify/flash-list` | `^2.3.0` | Browsable sessions list and knowledge base feed | The `InnerWorkSession` list will grow unboundedly. React Native's built-in `FlatList` forces full re-renders on every scroll event. FlashList v2 recycles item components, maintains 60fps on thousands of items, and requires no `getItemLayout`. The project already has `newArchEnabled: true` (Expo 54, RN 0.84) — FlashList v2 requires New Architecture and will work immediately. |
+
+**FlashList v2 compatibility confirmed:** Expo 54 + `newArchEnabled: true` in `mobile/app.json` = New Architecture enabled. FlashList v2.3.0 (latest as of 2026-03-11) runs on new arch only. No native build steps — JS-only library.
+
+### Supporting Libraries — No New Additions Needed
+
+| Requirement | Existing Solution | Rationale |
+|-------------|------------------|-----------|
+| Swipe-to-delete / swipe actions on insights | `react-native-gesture-handler` `ReanimatedSwipeable` | Already in the project at v2.28.0. Import from `react-native-gesture-handler/ReanimatedSwipeable`. No new package. |
+| Animated expand/collapse for distillation UI | `react-native-reanimated` `useAnimatedStyle` + `withSpring` | Already at v4.1.1. Layout animations via `itemLayoutAnimation={LinearTransition}` on FlashList. |
+| Infinite scroll pagination | TanStack Query `useInfiniteQuery` | Already in the project (React Query v5.90.21). Cursor-based pagination with `getNextPageParam`. No new package. |
+| Date grouping in session list | Standard `Date` JS APIs | Session list groups by date. No library needed — `toLocaleDateString()` with Intl is sufficient. |
+| Search input debounce | `useCallback` + `setTimeout` | No library. 300ms debounce before triggering query. Already done elsewhere in the codebase pattern. |
+
+---
+
+## Installation
+
+```bash
+# In mobile/ workspace — only new dependency
+cd mobile
+npm install @shopify/flash-list@^2.3.0
+
+# No backend dependency changes needed
+# No new Prisma schema packages needed
+# No new AI model clients needed
+```
+
+---
+
+## Schema Additions Required (via Prisma Migration)
+
+These are schema changes, not new libraries. Documented here because they are stack-level decisions that affect every phase.
+
+### `InnerWorkSession` additions
+
+```prisma
+model InnerWorkSession {
+  // ... existing fields ...
+
+  // New fields for v1.2 Journal feature
+  tags              String[]    @default([])         // AI-extracted + user-edited topic tags
+  takeaways         Json?                            // DistillationResult: { items: TakeawayItem[] }
+  distilledAt       DateTime?                        // When last distillation ran
+  sessionDate       DateTime    @default(now())      // Explicit date for "dated journal" display (may differ from createdAt if session spans midnight)
+  messageCount      Int         @default(0)          // Denormalized for list queries (avoid COUNT join)
+}
+```
+
+### New `JournalTakeaway` model (alternative to JSON)
+
+The `takeaways Json?` approach keeps retrieval simple (single row fetch). The alternative normalized table enables user editing of individual takeaways. Use normalized table — it supports the "user can edit, merge, reorganize" requirement without JSON patch gymnastics.
+
+```prisma
+model JournalTakeaway {
+  id          String           @id @default(cuid())
+  session     InnerWorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId   String
+  content     String           @db.Text         // The takeaway text
+  category    String?                           // "insight", "pattern", "action", "question"
+  order       Int              @default(0)      // User-controlled ordering
+  editedByUser Boolean         @default(false)  // Track if user modified AI output
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([sessionId, order])
+}
+```
+
+### `User` model addition
+
+```prisma
+model User {
+  // ... existing fields ...
+  journalThemes     Json?   // Accumulated theme graph: { [theme: string]: { count: int, lastSeen: string } }
+}
+```
+
+This single JSON column on User avoids a separate `Theme` table. It accumulates theme frequency across sessions for the "organic recognition" feature. Merged and pruned by the same Haiku consolidation pattern already used in `global-memory.ts`.
+
+### Indexes to add
+
+```sql
+-- Fast tag lookup: "show all sessions tagged 'anxiety'"
+CREATE INDEX "InnerWorkSession_tags_gin" ON "InnerWorkSession" USING GIN (tags);
+
+-- Fast date-ordered list per user
+CREATE INDEX "InnerWorkSession_userId_sessionDate" ON "InnerWorkSession" ("userId", "sessionDate" DESC);
+
+-- Full-text on tags + theme for keyword search (optional, pgvector handles semantic)
+CREATE INDEX "InnerWorkSession_tags_tsvector" ON "InnerWorkSession" USING GIN (to_tsvector('english', array_to_string(tags, ' ')));
+```
+
+---
+
+## Alternatives Considered
+
+| Recommended | Alternative | Why Not |
+|-------------|-------------|---------|
+| `@shopify/flash-list` v2 | `react-native` FlatList | FlatList degrades with 50+ sessions (blank frames, re-renders on scroll). FlashList v2 handles thousands. |
+| `@shopify/flash-list` v2 | FlashList v1 (1.x) | v1 requires `estimatedItemSize` tuning and has known blank-space issues. v2 is JS-only, auto-sizes, and is the maintained path. |
+| PostgreSQL `text[]` + GIN | Separate `Tag` table with FK | Separate table adds joins for every list query. Array column + GIN index is a well-established Postgres pattern for this scale. |
+| `User.journalThemes` JSON column | Separate `JournalTheme` table | Separate table with upserts per tag is correct at high volume but adds complexity at this scale (single user, <1000 sessions). JSON column is simpler, adequate, and consistent with `globalFacts` pattern already in use. |
+| Haiku for tag extraction | Sonnet for tag extraction | Haiku is 10-20x cheaper for short structured extraction tasks. Tag extraction is classification, not generation — Haiku is sufficient. |
+| `ReanimatedSwipeable` (existing) | `react-native-swipeable-item` | An additional dependency when the existing gesture handler already provides this. |
+
+---
+
+## What NOT to Use
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| ElasticSearch / OpenSearch | External service, operational overhead, not needed at this scale. pgvector + PostgreSQL FTS handles semantic + keyword search in the existing database. | pgvector (existing) + PostgreSQL `tsvector` GIN index |
+| Redis for tag caching | Overkill. Tag/theme queries on indexed Postgres will be <10ms at any realistic journal size. | Direct Prisma queries with GIN indexes |
+| GraphQL / DataLoader for knowledge base | Introduces new API layer. Existing REST + React Query patterns are sufficient. | Existing Express REST + `useInfiniteQuery` |
+| `fuse.js` for client-side search | Client-side search of unbounded session history is unreliable. Server-side pgvector + FTS is correct. | Server-side search endpoint |
+| `react-native-calendars` for date navigation | Heavy dependency for what amounts to a date-grouped section list. FlatList + section headers or FlashList with sticky headers handles this. | FlatList `SectionList` or FlashList with sticky header support |
+
+---
+
+## Stack Patterns for This Feature
+
+**If rendering a list of past journal sessions (browsable knowledge base):**
+- Use `@shopify/flash-list` with `estimatedItemSize` omitted (v2 auto-sizes)
+- Backend: cursor pagination via `useInfiniteQuery`, cursor = `sessionDate` ISO string
+- Group by date in `getNextPageParam` response or client-side section extraction
+- Filter by tag: `WHERE tags @> ARRAY['anxiety']::text[]` — uses GIN index
+
+**If rendering distilled takeaways for a single session:**
+- Use a simple `FlatList` (short list, no perf concern) with `ReanimatedSwipeable` for swipe-to-edit/delete
+- Backend: `GET /inner-work/sessions/:id/takeaways` returning `JournalTakeaway[]` ordered by `order`
+
+**If searching across all sessions:**
+- Backend: hybrid query — pgvector cosine similarity (`searchInnerWorkSessionContent`) merged with PostgreSQL `tsvector` keyword match
+- RRF (Reciprocal Rank Fusion) scoring unnecessary at this scale; prefer vector results, fall back to keyword if vector returns empty
+- Mobile: single `useQuery` on debounced search string, show results in FlashList
+
+**If displaying the "themes/people" knowledge graph:**
+- Read from `User.journalThemes` JSON (theme frequencies) + `Person` records (already populated by `people-extractor.ts`)
+- No separate endpoint — append to existing user profile response or add lightweight `/inner-work/knowledge-base` endpoint
+- Mobile: simple `FlatList` (bounded data, no infinite scroll needed)
+
+---
+
+## Version Compatibility
+
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| `@shopify/flash-list@^2.3.0` | Expo 54 (`newArchEnabled: true`), RN 0.84 | New Architecture only. Project already enabled. Confirmed compatible. |
+| `@shopify/flash-list@^2.3.0` | `react-native-reanimated@4.1.1` | FlashList v2 integrates with Reanimated for `itemLayoutAnimation`. Official guide documented. |
+| `@shopify/flash-list@^2.3.0` | `react-native-gesture-handler@2.28.0` | No direct dependency, but both work together in list + swipe patterns. |
+| PostgreSQL `tsvector` GIN | Prisma 6.19.2 | Prisma does not manage raw GIN indexes for computed columns — must be in migration SQL directly (not via `schema.prisma`). Established pattern in this codebase (see `$executeRaw` in `embedding.ts`). |
+
+---
+
+## Sources
+
+- `mobile/app.json` — `newArchEnabled: true` confirmed (Expo 54, RN 0.84)
+- [FlashList v2 blog post](https://shopify.engineering/flashlist-v2) — v2 new arch requirement, JS-only, no size estimates
+- [@shopify/flash-list npm](https://www.npmjs.com/package/@shopify/flash-list) — v2.3.0 latest as of 2026-03-11
+- [Expo FlashList docs](https://docs.expo.dev/versions/latest/sdk/flash-list/) — MEDIUM confidence (confirms Expo compatibility)
+- [ReanimatedSwipeable docs](https://docs.swmansion.com/react-native-gesture-handler/docs/components/reanimated_swipeable/) — existing package, no new install
+- [TanStack Query infinite queries](https://tanstack.com/query/latest/docs/framework/react/guides/infinite-queries) — `useInfiniteQuery` cursor pattern
+- [PostgreSQL GIN indexes for arrays](https://pganalyze.com/blog/gin-index) — MEDIUM confidence (indexing arrays pattern)
+- [Hybrid search pgvector + FTS](https://dev.to/lpossamai/building-hybrid-search-for-rag-combining-pgvector-and-full-text-search-with-reciprocal-rank-fusion-6nk) — MEDIUM confidence (RRF not needed at this scale)
+- Existing codebase: `embedding.ts`, `people-extractor.ts`, `global-memory.ts`, `conversation-summarizer.ts` — HIGH confidence (directly inspected)
+
+---
+
+*Stack research for: Inner Thoughts Journal — topic tagging, knowledge base, distillation, browsable insights*
+*Researched: 2026-03-11*

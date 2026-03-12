@@ -1,240 +1,238 @@
 # Project Research Summary
 
-**Project:** Meet Without Fear - v1.1 Milestone
-**Domain:** E2E Test Infrastructure + Reconciler State Machine + Stage 3-4 Integration
-**Researched:** 2026-02-15
+**Project:** Meet Without Fear — Inner Thoughts Journal (v1.2 milestone)
+**Domain:** AI-guided therapy-prep journaling with distillation, topic tagging, and browsable knowledge base
+**Researched:** 2026-03-11
 **Confidence:** HIGH
 
 ## Executive Summary
 
-The v1.1 milestone focuses on three integrated areas: reconciler edge cases, Stage 3-4 reliability, and visual verification. Research reveals a critical finding: the codebase does NOT use GAPS_FOUND or NEEDS_WORK as active database statuses. Instead, the reconciler uses AWAITING_SHARING and REFINING statuses with reconciler actions (PROCEED, OFFER_OPTIONAL, OFFER_SHARING). This suggests the milestone requirements may reference legacy terminology or require clarification.
+The Inner Thoughts Journal milestone adds a knowledge layer on top of a fully functional inner thoughts chat system. The existing codebase already contains the core primitives — session embeddings, rolling conversation summaries with `keyThemes`, people extraction, and global fact consolidation — meaning this milestone is primarily a UI and pipeline wiring problem, not a data infrastructure build. The key architectural insight from research is that distillation (extracting user-facing takeaways from a completed session) must be treated as a distinct lifecycle event, entirely separate from the existing message-response path. It reads the already-computed `conversationSummary`, calls Haiku once, and writes to new knowledge-base tables that are explicitly namespaced away from the partner-session context chain.
 
-The existing architecture is mature and complete. Playwright 1.50.0 already includes all necessary capabilities for screenshot verification—no new dependencies required. Stage 3-4 backend and mobile code is fully implemented with DTOs, hooks, components, and Ably events. The primary work is extending E2E tests to cover reconciler edge cases and Stage 3-4 flows, capturing screenshots at checkpoints, and verifying cache invalidation patterns.
+The recommended approach is to build in five sequential phases: schema first (new models depend on the migration being complete), then shared types, then the distillation service, then knowledge-base browse endpoints, then the mobile UI. Only one new mobile dependency is needed (`@shopify/flash-list@^2.3.0` for the session list), and no new backend services or AI models are required. Every new AI call uses Haiku 4.5, the same model already used for structured extraction throughout the codebase. The build order is dictated by hard dependencies — nothing in phases 3-5 can be tested without the migration from phase 1.
 
-The main risk is baseline corruption from unreviewed visual test updates. Prevention requires strict PR review of all baseline changes, descriptive naming conventions, and two-phase verification (API state + UI state + screenshot). Additional risks include infinite refinement loops (needs circuit breaker after 3 attempts) and cache staleness from missing Ably invalidation handlers.
+The highest-risk pitfall is namespace pollution: journal distillation data must never flow into `User.globalFacts` or the partner-session context retrieval path. Research confirms this is a privacy-level trust violation, not just a technical mistake. The second-highest risk is tone: LLM distillation defaults to interpretation ("you have an anxious attachment pattern") rather than organization ("you mentioned feeling overlooked in three sessions this week"). Both risks have explicit mitigations — one is a code boundary enforced with a test, the other is a prompt constraint that must be validated against real journaling conversations before shipping.
+
+---
 
 ## Key Findings
 
 ### Recommended Stack
 
-NO new dependencies required. Playwright 1.50.0 already includes all necessary capabilities for the milestone.
+The backend requires no new services, AI models, or libraries. The distillation pipeline maps directly onto existing patterns: Haiku for structured JSON extraction, Titan Embed v2 for pgvector embeddings, Prisma for all persistence. Two PostgreSQL capabilities are used as new additions — `text[]` array columns with GIN indexes for tag lookup, and `tsvector` GIN indexes for keyword search — but both are native to the existing Postgres instance and require no dependency changes. On mobile, `@shopify/flash-list@^2.3.0` is the single new dependency, required because the inner thoughts session list is unbounded. The project already has `newArchEnabled: true` (Expo 54, RN 0.84), satisfying FlashList v2's new-architecture requirement. All animation, swipe, and pagination needs are covered by libraries already installed.
 
 **Core technologies:**
-- **Playwright 1.50.0**: Built-in visual testing with toHaveScreenshot(), pixel comparison, and baseline management—no external services needed
-- **TypeScript 5.7-5.9**: Type-safe state machine transitions already enforced by existing type system
-- **React Query + Ably**: Cache-first architecture with real-time invalidation handles async state transitions
-- **Jest 29.7.0**: Backend unit tests for reconciler state machine logic isolation
+- `@shopify/flash-list@^2.3.0` (mobile only): Unbounded session list rendering — FlatList degrades at 50+ sessions; FlashList v2 recycles items and maintains 60fps at any scale.
+- PostgreSQL `text[]` + GIN index: Tag storage and `@>` containment queries — zero new infrastructure, directly mapped by Prisma `String[]`.
+- PostgreSQL `tsvector` GIN: Keyword search fallback alongside pgvector semantic search — must be added via raw migration SQL, not `schema.prisma`.
+- AWS Haiku 4.5 (existing): Single distillation call per session — 10-20x cheaper than Sonnet for structured classification; same model as `conversation-summarizer.ts`.
+- TanStack Query `useInfiniteQuery` (existing): Cursor-based pagination for session list — already in project at v5.90.21.
 
-**Existing infrastructure (no additions):**
-- TwoBrowserHarness: Parallel user contexts for reconciler testing
-- SessionBuilder: State factory for starting at specific states
-- Test Fixtures: Mocked LLM responses for deterministic outcomes
-- Screenshot Directory: test-results/ for visual verification
+See `.planning/research/STACK.md` for schema additions, version compatibility matrix, and installation instructions.
 
 ### Expected Features
 
-**Already built (verify functionality):**
-- AWAITING_SHARING flow: Share suggestion generation, context sharing, status transitions
-- REFINING flow: Empathy attempt refinement with new context
-- Stage 3 needs: AI extraction, confirmation, consent, common ground matching
-- Stage 4 strategies: Proposal, anonymous pool, ranking, overlap calculation, agreement
+The milestone adds to an already-working chat surface. Research across Rosebud, Mindsera, Grow Therapy, Reflectly, and clinical literature identifies clear table-stakes expectations and several genuine first-mover differentiators. Three features are explicitly anti-patterns for a therapeutic context: streaks/gamification, real-time theme detection during chat, and automatic therapist sharing.
 
-**Build next (missing E2E coverage):**
-1. **Reconciler edge case tests**
-   - OFFER_OPTIONAL path (accept/decline/refine)
-   - OFFER_SHARING path (same flow, different UI tone)
-   - Circuit breaker after 3 refinement attempts
-   - Context already shared detection
-   - Visual regression: share suggestion panels, refinement prompts, validation buttons
+**Must have (table stakes):**
+- Dated session list with date prominent — every journaling tool shows this; `createdAt` exists, display work only.
+- AI-generated session title and summary on close — users refuse to name entries; `title` and `summary` fields exist but need reliable population.
+- Post-vent distillation trigger — explicit "want a summary?" step at session end; Grow Therapy, Rosebud, and clinical research validate this as the core therapy-prep primitive.
+- Editable takeaways — users must be able to correct AI output; trust is built through control, not accuracy.
+- Topic tag per session (AI-generated, user-editable) — `theme` field exists but needs reliable population; needed before browse view is useful.
+- Session browse by topic and person — without this, accumulated sessions are inaccessible.
+- People mentioned list — extraction infrastructure exists; only aggregation query and UI are new.
 
-2. **Stage 3-4 E2E tests**
-   - Needs extraction and confirmation
-   - Common ground analysis and mutual consent
-   - Strategy collection and anonymous pool display
-   - Ranking submission and overlap reveal
-   - Agreement creation and mutual confirmation
+**Should have (differentiators):**
+- Organic cross-session theme clustering — "work stress has come up in 4 sessions over 3 weeks"; no competitor does cross-session grouping without pre-defined categories.
+- Dedicated people view — Rosebud mentions relationship patterns but has no person-centric view; people extraction already runs, making this a first-mover advantage.
+- Linked partner session badge in journal — no competitor bridges private journaling to relational conflict prep; infrastructure exists.
+- Inline edit UX for takeaways — Grow Therapy found that client autonomy over AI summaries is critical for adoption.
 
-3. **Screenshot checkpoints**
-   - Empathy validation buttons (post-reconciler)
-   - Share suggestion drawer (AWAITING_SHARING)
-   - Refinement prompt (REFINING)
-   - Needs panel (Stage 3)
-   - Common ground visualization (Stage 3)
-   - Strategy pool (Stage 4)
-   - Overlap reveal (Stage 4)
-   - Agreement confirmation (Stage 4)
+**Defer (v2+):**
+- Person profile page with mention timeline and co-occurring themes.
+- Export / therapy-prep print view (premature before content is trusted by users).
+- Semantic embedding-based theme clustering (string-match grouping is sufficient at launch volume).
+- Multiple tags per session (single primary tag is sufficient to validate browse patterns first).
 
-**Defer:**
-- Refinement timeout/escalation flows
-- Visual regression for all UI components (focus on reconciler and Stage 3-4 only)
-- Cross-browser testing beyond Chromium
+See `.planning/research/FEATURES.md` for prioritization matrix, dependency graph, competitor analysis, and UX principles.
 
 ### Architecture Approach
 
-The reconciler uses a state machine (HELD → ANALYZING → AWAITING_SHARING/READY → REFINING → REVEALED) with asymmetric processing (A understanding B, B understanding A run independently). React Query cache-first pattern ensures UI derives from cache, not local state. Ably events trigger cache invalidation for partner updates. Playwright screenshots integrate via two-browser E2E tests at key checkpoints.
+The architecture is an additive layer on top of the existing inner-work system. The distillation pipeline is a new service (`distillation-service.ts`) that reads the already-computed `conversationSummary` from `InnerWorkSession`, makes a single Haiku call to extract takeaways and topics, writes to three new models (`JournalTakeaway`, `JournalTopic`, `RecurringTheme`) in a Prisma transaction, and then fires embedding and theme-detection as background calls. The knowledge base is a set of read-optimized browse endpoints under `/inner-thoughts/knowledge/` that aggregate across the new tables. The mobile layer adds a `KnowledgeBaseScreen` and `DistillationReviewSheet`, both backed by React Query hooks following the existing cache-first pattern.
 
 **Major components:**
-1. **Reconciler Service** (backend/src/services/reconciler.ts) — Analyzes empathy gaps, generates share suggestions, manages refinement loops
-2. **React Query Hooks** (mobile/src/hooks/useStages.ts) — Optimistic updates for all mutations, cache invalidation on Ably events
-3. **Ably Event System** (backend/src/services/realtime.ts) — Publishes empathy.status_updated, empathy.revealed, partner.* events for cross-user synchronization
-4. **TwoBrowserHarness** (e2e/helpers/two-browser-harness.ts) — Parallel user contexts for reconciler and Stage 3-4 testing
-5. **Screenshot Capture** (Playwright page.screenshot()) — Visual verification at reconciler checkpoints and stage transitions
+1. `distillation-service.ts` (new) — Core pipeline: cooldown guard, summary read, Haiku extraction, Prisma transaction, fire-and-forget enrichment.
+2. `JournalTakeaway` model (new) — User-editable extracted insights per session; includes `contentEmbedding` for KB semantic search; soft-delete with `isDeleted`.
+3. `JournalTopic` model + join tables (new) — Normalized deduplicatable topic tags; tracks `sessionCount` and `takeawayCount` as denormalized counters updated at write time.
+4. `RecurringTheme` model (new) — Cross-session patterns that only emerge after 3+ sessions; distinct from `JournalTopic` (topics are labels, themes are organic patterns).
+5. Knowledge base endpoints (new) — `GET /inner-thoughts/knowledge` aggregate, plus per-dimension detail endpoints (topics, themes, people, takeaways); lazy cross-session summary generation on first theme detail request.
+6. `KnowledgeBaseScreen` + `DistillationReviewSheet` (new mobile) — Browse with tab navigation; post-distillation inline editing surface.
+
+Five critical patterns govern implementation: (1) always read `conversationSummary` before calling Haiku; (2) fire embedding and theme detection as background calls after returning the response; (3) deduplicate topics via Levenshtein normalization before creating new records; (4) maintain denormalized `sessionCount` on `JournalTopic` at write time; (5) guard all distillation runs with `distilledAt` cooldown for idempotency.
+
+See `.planning/research/ARCHITECTURE.md` for full data models, API contracts, build order, and anti-patterns.
 
 ### Critical Pitfalls
 
-1. **Baseline Corruption from Unreviewed Updates** — Developer runs --update-snapshots without reviewing diffs, commits wrong baselines, future regressions pass as "expected." Prevention: All baseline updates require manual review in PR with descriptive commit messages. Use npx playwright show-report before updating baselines.
+1. **Breaking existing inner thoughts chat** — Distillation added to the message response path causes timeouts for existing users. Prevention: distillation must be fire-and-forget from day one; measure message response time before and after; it must be unchanged.
 
-2. **Flaky Tests from Dynamic Content** — Timestamps, typing indicators, animations cause screenshots to differ between runs. Prevention: Always mask dynamic elements (timestamps, typing indicators, Ably presence) using data-testid attributes. Disable animations and wait for them to settle before screenshots.
+2. **Namespace collision with globalFacts** — Journal distillation data written into `User.globalFacts` causes the partner session AI to reference inner thoughts content. Prevention: audit `context-retriever.ts` and `context-assembler.ts` before writing any journal knowledge storage; write an explicit test that partner session context contains no inner thoughts content.
 
-3. **Stale Cache Causing State Mismatches** — Test verifies reconciler state via API (REFINING) but UI shows old state (HELD) because Ably event didn't invalidate cache. Prevention: Always invalidate cache on Ably events. Use two-phase verification: API assertion → UI assertion → screenshot.
+3. **AI distillation that tells users how they feel** — LLMs default to interpretation ("you have an anxious attachment pattern") when the product needs organization ("you mentioned feeling overlooked"). Prevention: explicit prompt constraints — "quote or closely paraphrase," "use language the user themselves used," "do not infer psychological patterns from a single session." Validate against real venting conversations before shipping.
 
-4. **Infinite Reconciler Loop Without Circuit Breaker** — User A refines empathy, reconciler still finds gaps, suggests sharing again, loop repeats indefinitely. Prevention: Add backend counter for refinement attempts, force READY status after 3 attempts.
+4. **Tag explosion from over-categorization** — Unconstrained topic extraction produces 40+ tags after one month of journaling, making the browse view unusable. Prevention: cap extraction to 3 primary topics per session; require 3+ session recurrence before promoting a topic to the knowledge base; apply the same consolidation pattern used by `global-memory.ts`.
 
-5. **Full-Page Screenshots Causing Baseline Explosion** — Every UI change anywhere on page causes visual test to fail, baselines become unmaintainable. Prevention: Use element-level screenshots (locator.screenshot()) instead of page screenshots. Test UI components, not layouts.
+5. **Distillation timing broken for long sessions** — Users who vent for 30+ messages wait 30-60 seconds for distillation and see "no takeaways yet" when they return. Prevention: cap distillation input at last 30 messages plus existing summary; trigger incremental distillation at session milestones (10 messages, then every 15), not only on close.
+
+6. **Crossing the therapy boundary via accumulated pattern language** — Cross-session synthesis starts using clinical vocabulary ("attachment style," "avoidance behavior"), making the app feel like a diagnosis tool. Prevention: frame all cross-session observations as "what you've written"; require 3+ sessions before surfacing any pattern; include persistent UI copy framing patterns as "bring these to your therapist to explore."
+
+See `.planning/research/PITFALLS.md` for full prevention strategies, recovery costs, and a verification checklist.
+
+---
 
 ## Implications for Roadmap
 
 Based on research, suggested phase structure:
 
-### Phase 1: Reconciler Edge Case E2E Tests
-**Rationale:** Build on existing two-browser test infrastructure. AWAITING_SHARING and REFINING flows already implemented in backend, need E2E verification.
+### Phase 1: Schema, Migration, and Integration Audit
 
-**Delivers:** Complete E2E coverage for reconciler state machine with visual verification
+**Rationale:** Every subsequent phase depends on the migration being complete. More critically, the namespace isolation audit (verifying `context-retriever.ts` excludes `InnerWorkSession` from partner session context) must happen before any journal knowledge storage is written. This phase has zero user-visible output but maximum downstream impact.
 
-**Implements:**
-- Tests for OFFER_OPTIONAL path (accept/decline)
-- Tests for OFFER_SHARING path (accept/decline)
-- Refinement flow test (REFINING → resubmit → reconciler re-runs)
-- Screenshot capture at checkpoints (share suggestion drawer, refinement prompt, validation buttons)
-- Fixture creation for deterministic reconciler outcomes
+**Delivers:** Prisma migration with `JournalTakeaway`, `JournalTopic`, `SessionTopicLink`, `TakeawayTopicLink`, `RecurringTheme` models; `distilledAt` on `InnerWorkSession`; GIN indexes on tags; shared DTO types in `shared/src/dto/journal.ts`; confirmed namespace isolation with a passing test.
 
-**Avoids:**
-- Pitfall 3: Two-phase verification (API + UI + screenshot) prevents stale cache issues
-- Pitfall 2: Mask timestamps and animations in share suggestion panels
-- Pitfall 5: Use element-level screenshots for validation buttons, not full page
+**Addresses:** Dated session list (add `sessionDate` display field), reliable title/summary population (wire `updateSessionMetadata` to fire consistently on session close).
 
-**Estimated effort:** 4-6 hours (existing harness simplifies setup)
+**Avoids:** Namespace collision pitfall (Pitfall 6 in PITFALLS.md), breaking existing chat (Pitfall 1) — both verified at this phase before any logic is written.
 
-### Phase 2: Circuit Breaker Implementation
-**Rationale:** Prevents infinite refinement loops discovered in research. Backend unit tests verify logic before E2E integration.
+**Research flag:** Standard patterns. Prisma migration workflow, pgvector indexing, and context-scoping are all well-documented in the existing codebase. The integration audit is a code-read task, not a research task.
 
-**Delivers:** Safety mechanism limiting refinement attempts to 3 per direction
+---
 
-**Implements:**
-- Backend counter for refinement attempts (prisma query count)
-- Force READY status after 3 attempts with system message
-- Backend unit tests for circuit breaker logic
-- E2E test verifying loop prevention
+### Phase 2: Distillation Service and Post-Session Trigger
 
-**Avoids:**
-- Pitfall 4: Infinite reconciler loop (critical for production reliability)
+**Rationale:** The distillation service is the core new capability and the prerequisite for all knowledge-base content. Without it, the browse views have nothing to show. The prompt design requires testing against real venting conversations — this phase should not be considered complete until real data has been used to validate that takeaway tone is organizational, not interpretive.
 
-**Estimated effort:** 2-3 hours (straightforward counter logic)
+**Delivers:** `distillation-service.ts` with Haiku extraction, topic deduplication, and Prisma transaction; `POST /inner-thoughts/:id/distill` endpoint; `PATCH /inner-thoughts/knowledge/takeaways/:id` for user edits; auto-distill trigger on session close; incremental distillation milestones (10-message threshold, 15-message cadence); fire-and-forget embedding of takeaways.
 
-### Phase 3: Stage 3-4 E2E Extension
-**Rationale:** Backend and mobile code complete (DTOs, hooks, components exist). Needs E2E verification with screenshot checkpoints.
+**Addresses:** Post-vent distillation trigger (P1), editable takeaways (P1), topic tags per session (P1), reliable AI-generated title/summary (P1).
 
-**Delivers:** Full flow test from Stage 0 → Stage 4 (session resolution)
+**Avoids:** AI tone pitfall — prompt must be validated; distillation timing pitfall — incremental triggers required; tag explosion — 3-topic cardinality cap enforced in prompt.
 
-**Implements:**
-- Extend existing two-browser full-flow test to Stage 3
-- Needs extraction, confirmation, common ground
-- Stage 4 strategy collection, ranking, overlap reveal
-- Agreement creation and mutual confirmation
-- Screenshot checkpoints at each stage transition
+**Research flag:** The distillation prompt design is the highest-risk element of this phase. It needs testing against real journaling conversations before launch. No additional research tool call needed, but plan for iteration cycles on the prompt before calling this phase done.
 
-**Avoids:**
-- Pitfall 3: Verify Ably events trigger cache invalidation for partner.needs_shared, partner.ranking_submitted
-- Pitfall 2: Mask dynamic content in needs and strategy panels
+---
 
-**Estimated effort:** 6-8 hours (follows existing test plan in implementation/stage-3-4-e2e-completion-plan.md)
+### Phase 3: Knowledge Base Browse Backend
 
-### Phase 4: Visual Regression Baseline Setup
-**Rationale:** Establish baseline images with proper masking and tolerance configuration. Must be done after E2E tests verify correct UI states.
+**Rationale:** Once distillation is writing data, browse endpoints can be built against real records. Building browse endpoints before distillation exists means building against empty tables. Recurring theme detection logic also belongs here because it reads accumulated topic data from phase 2.
 
-**Delivers:** Baseline screenshots for all reconciler and Stage 3-4 checkpoints
+**Delivers:** `GET /inner-thoughts/knowledge` aggregate endpoint; topic, theme, and people browse endpoints; people aggregation query (`Person` + `PersonMention` scoped to inner thoughts); lazy cross-session summary generation for theme detail; `RecurringTheme` creation from `updateRecurringThemes()` fire-and-forget.
 
-**Implements:**
-- Replace page.screenshot() with toHaveScreenshot() assertions
-- Configure playwright.config.ts with tolerance (maxDiffPixels: 100, threshold: 0.2)
-- Generate baselines on macOS and Linux (cross-platform)
-- Document baseline update process in PR template
+**Addresses:** Session browse by topic (P1), people mentioned list (P1), cross-session theme clustering (P2), linked partner session badge (P2).
 
-**Avoids:**
-- Pitfall 1: Baseline corruption (strict PR review process)
-- Pitfall 4: Platform differences (separate baselines per OS)
+**Avoids:** Knowledge base navigation collapse — define information architecture with max-2-tap depth before building screens; therapy boundary pitfall — 3-session minimum for `RecurringTheme` creation enforced here.
 
-**Estimated effort:** 3-4 hours (configuration + baseline generation)
+**Research flag:** Standard REST patterns. The aggregation queries are straightforward Prisma queries. Lazy theme summary generation follows the established `withHaikuCircuitBreaker` pattern.
+
+---
+
+### Phase 4: Mobile UI — Session List and Distillation Review
+
+**Rationale:** The distillation review sheet and updated session list are the first things users will see. Ship these together — the dated session list is table-stakes, and users who tap into a session need the distillation review immediately available.
+
+**Delivers:** `@shopify/flash-list` installed; dated session list with visible date header grouping; `DistillationReviewSheet` component with inline editing; `useDistillation` mutation hook; `useJournalTakeaways` CRUD hook; query keys added to `queryKeys.ts`; React Query cache updated via `setQueryData` on distillation completion (no `invalidateQueries`).
+
+**Addresses:** Dated session list (P1), distillation trigger and review UI (P1), editable takeaways UI (P1).
+
+**Avoids:** Cache invalidation race condition (use `setQueryData`, not `invalidateQueries`); UX pitfall of "no takeaways yet" with no progress indicator; broken inline edit (edit must ship with distillation in v1 — never ship a read-only distillation view).
+
+**Research flag:** Standard patterns. FlashList v2 integration, React Query mutation patterns, and `ReanimatedSwipeable` for swipe-to-delete are documented and the project already satisfies compatibility requirements.
+
+---
+
+### Phase 5: Mobile UI — Knowledge Base Browse Screen
+
+**Rationale:** The browse screen depends on real data accumulated from phases 2-3 and on the session list UI patterns established in phase 4. It should ship after the distillation flow is stable so the browse UI reflects accurate data from the start.
+
+**Delivers:** `KnowledgeBaseScreen` with tab navigation (Time / Topic / Person / Theme); topic detail screen; people list; theme detail screen; `useKnowledgeBase` React Query hooks; FlashList-based lists with sticky tab headers; "pinned for therapy" workflow for designating specific takeaways; curated default view (3-5 themes, 3 recent sessions) rather than flat browse.
+
+**Addresses:** Browse by topic/date (P1), people view (P1), cross-session theme view (P2), linked partner session badge display (P2), keyword search (P2 — add after validation of browse patterns).
+
+**Avoids:** Knowledge base navigation collapse — curated default view rather than flat browse; surveillance feel — all AI-generated content labeled "Based on what you wrote in X sessions"; knowledge base not as default view (default is new/continue session).
+
+**Research flag:** The information architecture of the browse screen is the design decision most likely to need iteration. The 2-tap depth limit is a hard constraint. Consider a lightweight wireframe review before building the full screen. No research tool call needed.
+
+---
 
 ### Phase Ordering Rationale
 
-- **Phase 1 first** because it extends existing two-browser tests with minimal new infrastructure. Verifies backend reconciler logic through E2E paths.
-- **Phase 2 second** because circuit breaker is independent, can be developed in parallel with Phase 1. Backend unit tests provide quick validation before E2E integration.
-- **Phase 3 third** because it builds on Phase 1 patterns (two-browser harness, screenshot capture). Stage 3-4 code already exists, just needs test coverage.
-- **Phase 4 last** because visual baselines must be established AFTER E2E tests verify correct UI states. Premature baseline generation leads to corruption.
-
-**Dependencies:**
-- Phase 3 depends on Phase 1 (same test harness patterns)
-- Phase 4 depends on Phases 1+3 (needs correct UI states)
-- Phase 2 is independent (can run parallel to Phase 1)
+- Schema must precede all other phases because `JournalTakeaway`, `JournalTopic`, and `RecurringTheme` have no fallback representations.
+- The integration audit belongs in Phase 1 because retrofitting namespace isolation after distillation data is written is a HIGH recovery cost (schema migration + backfill script + partner session testing).
+- Distillation service precedes browse backend because all browse queries depend on `JournalTakeaway` and `JournalTopic` records existing.
+- Mobile session list ships before the full knowledge base because it is table-stakes and can be validated immediately with real user data.
+- Full knowledge base browse ships last because it benefits from real accumulated data and from the session list patterns being stable.
 
 ### Research Flags
 
-**Needs research:**
-- **None** — All patterns well-documented in existing codebase. Playwright visual testing is standard, reconciler state machine is simple (4 outcomes).
+Phases likely needing validation during planning or implementation:
+- **Phase 2 (distillation prompt):** Not a research tool call, but a mandatory testing gate. The distillation prompt must be tested against real venting conversations before phase 2 is considered complete. No standard reference resolves this — it requires empirical iteration.
+- **Phase 5 (browse information architecture):** The 2-tap depth constraint and curated default view design benefit from lightweight wireframe review before implementation. Low cost to prototype, high cost to restructure after mobile screens are built.
 
-**Standard patterns (skip research-phase):**
-- **Phase 1-3** — Follow existing two-browser test patterns from e2e/tests/two-browser-*.spec.ts
-- **Phase 4** — Use Playwright official docs for toHaveScreenshot() configuration
+Phases with standard patterns (skip additional research):
+- **Phase 1 (schema/migration):** Prisma migration workflow and pgvector indexing are established patterns in this codebase.
+- **Phase 3 (browse backend):** Prisma aggregation queries and Haiku JSON extraction follow patterns already present in `conversation-summarizer.ts` and `global-memory.ts`.
+- **Phase 4 (mobile session list + distillation sheet):** FlashList v2 and React Query mutation patterns are documented and the project already satisfies all compatibility requirements.
 
-**Clarification needed:**
-- **GAPS_FOUND and NEEDS_WORK statuses** — Are these legacy references or new features? Current codebase uses AWAITING_SHARING and REFINING. Recommend clarifying with product owner before Phase 1.
+---
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Verified in package.json. Playwright 1.50.0 capabilities confirmed via official docs + 2026 implementation guides. No new dependencies needed. |
-| Features | HIGH | Backend and mobile code already exists for reconciler (services/reconciler.ts) and Stage 3-4 (services/needs.ts, strategies.ts). Only E2E tests missing. |
-| Architecture | HIGH | Cache-first React Query pattern documented in CLAUDE.md memory. Ably event system verified in codebase. Two-browser harness patterns established in existing tests. |
-| Pitfalls | HIGH | Based on Playwright official docs, 2026 best practices guides, and project-specific patterns (cache invalidation, two-phase verification from existing tests). |
+| Stack | HIGH | Single new dependency (FlashList v2) verified against `mobile/app.json`; all other decisions grounded in direct codebase inspection. No speculative library choices. |
+| Features | HIGH | Competitor analysis covers major players (Rosebud, Mindsera, Grow Therapy, Reflectly); clinical research sources cited; anti-feature reasoning grounded in domain literature and research studies. |
+| Architecture | HIGH | Grounded in direct analysis of existing schema, services, and controllers. Build order reflects actual code dependencies, not inference. |
+| Pitfalls | HIGH | Integration pitfalls grounded in existing codebase and actual code boundaries. UX and boundary pitfalls corroborated by clinical literature and domain research. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-**Critical terminology clarification:**
-- **GAPS_FOUND and NEEDS_WORK** — Milestone requirements use these terms but codebase uses AWAITING_SHARING and REFINING. Recommend treating as legacy references and mapping to current statuses in documentation.
+- **Distillation prompt tone validation:** Research identifies the interpretive-vs-organizational risk clearly, but the correct prompt formulation can only be validated empirically against real journaling content. Plan for 2-3 prompt iterations before phase 2 ships.
+- **Incremental distillation milestone thresholds:** Research recommends 10-message first trigger, 15-message cadence, but optimal values depend on actual user session lengths in production. Start with research values; adjust after first week of data.
+- **Topic deduplication quality at scale:** Levenshtein distance 2 is the recommended strategy for fewer than 100 topics per user. If users accumulate significantly more, `pg_trgm` similarity indexing in the database is the upgrade path. Monitor topic fragmentation rate in the first month.
+- **Knowledge base default view curation:** Research recommends curated highlights over flat browse, but the exact composition (3 themes vs. 5, recent vs. most-mentioned people) needs product validation. Build with configurable limits rather than hardcoded values.
 
-**Open questions:**
-- **Screenshot retention policy** — Should baselines be archived for visual regression history or only kept temporarily? Current: test-results/ gitignored, baselines committed. Recommend: Keep baselines in git, archive test-results/ on CI.
-- **Mood check appearing in tests** — Workaround exists (click through), but root cause unknown. Low priority for v1.1 but should investigate before v2.0.
-
-**Validation during implementation:**
-- Verify circuit breaker counter logic doesn't conflict with asymmetric reconciler (A→B and B→A tracked separately)
-- Confirm Ably event subscriptions exist for all Stage 3-4 partner actions (needs_shared, ranking_submitted, agreement_confirmed)
-- Test baseline cross-platform differences (macOS vs Linux CI) before committing final baselines
+---
 
 ## Sources
 
-### Primary (HIGH confidence)
-- `backend/src/services/reconciler.ts` — Reconciler state machine implementation
-- `shared/src/dto/empathy.ts` — EmpathyStatus enum (confirms AWAITING_SHARING/REFINING, not GAPS_FOUND/NEEDS_WORK)
-- `mobile/src/hooks/useStages.ts` — React Query hooks for all stages
-- `e2e/tests/two-browser-stage-2.spec.ts` — Screenshot capture patterns
-- `CLAUDE.md` — Cache-first architecture, panel display patterns
-- [Playwright Visual Comparisons](https://playwright.dev/docs/test-snapshots) — Official docs
-- [Playwright SnapshotAssertions API](https://playwright.dev/docs/api/class-snapshotassertions) — Official API reference
+### Primary (HIGH confidence — direct codebase analysis)
+- `backend/prisma/schema.prisma` — existing models, relations, and fields
+- `backend/src/services/conversation-summarizer.ts` — `SummarizationResult` type, `keyThemes`, triggers
+- `backend/src/services/embedding.ts` — `embedInnerWorkSessionContent`, `searchInnerWorkSessionContent`, `vectorToSql`
+- `backend/src/services/people-extractor.ts` — `extractAndTrackPeople`, `sourceType` filter pattern
+- `backend/src/services/global-memory.ts` — `globalFacts` consolidation pattern, 50-fact cap
+- `backend/src/services/crisis-detector.ts` — crisis detection scope
+- `backend/src/controllers/inner-work.ts` — existing message handler, fire-and-forget pattern
+- `mobile/app.json` — `newArchEnabled: true` confirmed (Expo 54, RN 0.84)
 
-### Secondary (MEDIUM confidence)
-- `implementation/stage-3-4-e2e-completion-plan.md` — Stage 3-4 architecture overview (planned, not yet implemented in E2E)
-- [Visual Regression Testing with Playwright Snapshots](https://nareshit.com/blogs/visual-regression-testing-with-playwright-snapshots) — 2026 implementation guide
-- [How to Implement Playwright Visual Testing](https://oneuptime.com/blog/post/2026-01-27-playwright-visual-testing/view) — 2026 best practices
-- [Snapshot Testing with Playwright in 2026](https://www.browserstack.com/guide/playwright-snapshot-testing) — Baseline management patterns
+### Secondary (MEDIUM confidence — official product and library documentation)
+- [@shopify/flash-list npm](https://www.npmjs.com/package/@shopify/flash-list) — v2.3.0 latest, new arch requirement
+- [FlashList v2 Shopify Engineering blog](https://shopify.engineering/flashlist-v2) — JS-only, auto-sizing, no `estimatedItemSize` required
+- [Grow Therapy AI reflections announcement](https://growtherapy.com/blog/grow-therapy-unveils-ai-powered-between-session-reflections-to-deepen-therapy-insights/) — client autonomy over AI summaries finding
+- [Journaling with LLMs (Frontiers 2025)](https://pmc.ncbi.nlm.nih.gov/articles/PMC12234568/) — decouple journaling from AI; no real-time analysis during venting
+- [TanStack Query infinite queries](https://tanstack.com/query/latest/docs/framework/react/guides/infinite-queries) — cursor-based pagination pattern
 
-### Tertiary (LOW confidence)
-- None — All findings verified against primary sources (codebase + official docs)
+### Tertiary (MEDIUM confidence — domain and research literature)
+- [Gamification backfire (Consumer Psychology Review 2026)](https://myscp.onlinelibrary.wiley.com/doi/10.1002/arcp.70004) — therapeutic context gamification harm
+- [PKM over-tagging patterns (Forte Labs)](https://fortelabs.com/blog/a-complete-guide-to-tagging-for-personal-knowledge-management/) — collection vs. connection problem
+- [Hidden dangers of AI therapy tools (Healio 2025)](https://www.healio.com/news/psychiatry/20250915/the-hidden-dangers-of-ai-therapy-tools-what-clinicians-need-to-know) — clinical boundary risks
+- [Contextual AI Journaling: MindScape (PMC/NCBI)](https://pmc.ncbi.nlm.nih.gov/articles/PMC11275533/) — reflective vs. prescriptive AI design
+- [PostgreSQL GIN indexes for arrays (pganalyze)](https://pganalyze.com/blog/gin-index) — `@>` containment query pattern
 
 ---
-*Research completed: 2026-02-15*
+
+*Research completed: 2026-03-11*
 *Ready for roadmap: yes*

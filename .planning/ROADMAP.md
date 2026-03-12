@@ -4,6 +4,7 @@
 
 - ✅ **v1.0 Session Reliability** — Phases 1-7 (shipped 2026-02-15)
 - ✅ **v1.1 Full Session Completion** — Phases 8-13 (completed 2026-02-19)
+- 🚧 **v1.2 Inner Thoughts Journal** — Phases 14-18 (in progress)
 
 ## Phases
 
@@ -22,125 +23,118 @@ See: `milestones/v1.0-ROADMAP.md` for full details.
 
 </details>
 
-### ✅ v1.1 Full Session Completion (Completed 2026-02-19)
+<details>
+<summary>✅ v1.1 Full Session Completion (Phases 8-13) — COMPLETED 2026-02-19</summary>
 
-**Milestone Goal:** All reconciler patterns (NO_GAPS, OFFER_OPTIONAL, OFFER_SHARING, refinement) work correctly for both users with visual proof, plus Stage 3-4 reliability — so both users can complete an entire session end-to-end.
+- [x] Phase 8: Reconciler Documentation & Edge Cases (4/4 plans) — completed 2026-02-16
+- [x] Phase 9: Circuit Breaker Implementation (2/2 plans) — completed 2026-02-17
+- [x] Phase 10: Stage 3 (Needs) Verification (2/2 plans) — completed 2026-02-17
+- [x] Phase 11: Stage 4 (Strategies) Verification (2/2 plans) — completed 2026-02-17
+- [x] Phase 12: Visual Regression Baselines (2/2 plans) — completed 2026-02-18
+- [x] Phase 13: Full Session E2E Verification (4/4 plans) — completed 2026-02-19
 
-#### Phase 8: Reconciler Documentation & Edge Cases
-**Goal:** All reconciler patterns (OFFER_OPTIONAL, OFFER_SHARING, refinement) are documented and verified with E2E tests
-**Depends on:** Phase 7 (v1.0 complete)
-**Requirements:** RECON-DOC-01, RECON-DOC-02, RECON-EC-01, RECON-EC-02, RECON-EC-03, RECON-EC-05, RECON-VIS-01, RECON-VIS-02
+</details>
+
+### 🚧 v1.2 Inner Thoughts Journal (In Progress)
+
+**Milestone Goal:** Simplify Inner Work to focus solely on Inner Thoughts chat — adding dated sessions with topic tagging, voice input via real-time transcription, AI-guided distillation of venting into organized takeaways, and a browsable knowledge base of accumulated themes, people, and insights.
+
+- [ ] **Phase 14: Foundation** - Schema migration, namespace isolation audit, UI cleanup of unbuilt pathways, and AssemblyAI voice backend
+- [ ] **Phase 15: Distillation Backend** - Service that extracts user-language takeaways from sessions via Haiku
+- [ ] **Phase 16: Knowledge Base Backend** - Browse endpoints and cross-session theme recognition
+- [ ] **Phase 17: Session List, Distillation UI, and Voice Input** - Dated session list, takeaway review/edit surface, and voice transcription drawer
+- [ ] **Phase 18: Knowledge Base UI and Export** - Browse screen and OS share sheet export
+
+## Phase Details
+
+### Phase 14: Foundation
+**Goal**: The codebase is ready for journal knowledge storage — schema deployed, namespace isolation confirmed, Inner Work UI cleaned up so only Inner Thoughts chat is visible, and the AssemblyAI WebSocket backend is available for voice transcription
+**Depends on**: Phase 13 (v1.1 complete)
+**Requirements**: CLEAN-01, CLEAN-02, SESS-01, SESS-02, VOICE-05
 **Success Criteria** (what must be TRUE):
-  1. State diagrams document both user perspectives for OFFER_OPTIONAL and OFFER_SHARING outcomes
-  2. E2E tests verify OFFER_OPTIONAL path (accept/decline/refine)
-  3. E2E tests verify OFFER_SHARING path (share context, receive context, refine)
-  4. Playwright screenshots capture share suggestion panels and refinement prompts
-  5. Context-already-shared guard prevents duplicate shares
-**Plans:** 4 plans
-
+  1. User opens the Inner Work hub and sees only the Inner Thoughts chat — no needs assessment, gratitude, or meditation pathway cards
+  2. User sees inner thoughts sessions listed from most recent to oldest, each showing the session date prominently
+  3. Each session in the list displays an AI-generated topic tag (set when session closes)
+  4. A passing automated test confirms that partner session context retrieval includes no inner thoughts content
+  5. A backend token endpoint exists that the mobile app can call to obtain a short-lived AssemblyAI session token for WebSocket streaming
+**Plans**: 3 plans
 Plans:
-- [ ] 08-01-PLAN.md -- State diagrams + reconciler fixtures (OFFER_OPTIONAL, OFFER_SHARING, refinement)
-- [ ] 08-02-PLAN.md -- ShareTopicDrawer + decline dialog + chat re-animation bug fix
-- [ ] 08-03-PLAN.md -- Accuracy feedback inaccurate path + guesser refinement UI + acceptance check
-- [ ] 08-04-PLAN.md -- E2E tests for all reconciler paths with Playwright screenshots
+- [ ] 14-01-PLAN.md — Hub cleanup and session list UI (CLEAN-01, SESS-01, SESS-02)
+- [ ] 14-02-PLAN.md — Namespace isolation fix and documentation updates (CLEAN-02)
+- [ ] 14-03-PLAN.md — AssemblyAI voice token endpoint (VOICE-05)
 
-#### Phase 9: Circuit Breaker Implementation
-**Goal:** Refinement loops are bounded with automatic safety mechanism
-**Depends on:** Phase 8 (can run in parallel)
-**Requirements:** RECON-EC-04
+### Phase 15: Distillation Backend
+**Goal**: The backend can extract concise, user-language takeaways from a session via a single Haiku call, store them in the new knowledge-base tables, and expose endpoints for triggering and editing takeaways
+**Depends on**: Phase 14
+**Requirements**: DIST-01, DIST-02, DIST-03
 **Success Criteria** (what must be TRUE):
-  1. Backend tracks refinement attempts per direction (A→B, B→A separately)
-  2. After 3 refinement attempts, reconciler forces READY status
-  3. E2E test verifies loop prevention (4th attempt skips reconciler)
-**Plans:** 2 plans
+  1. A completed session triggers automatic distillation on close without increasing chat message response time
+  2. User can request distillation mid-session via an explicit button, receiving results without waiting for session end
+  3. User can re-distill a session after writing more messages and receives updated takeaways that reflect the new content
+  4. Distilled takeaways use the user's own words and phrases, not clinical interpretations or psychological labels
+**Plans**: TBD
 
-Plans:
-- [ ] 09-01-PLAN.md -- Database model + circuit breaker logic + unit tests (TDD)
-- [ ] 09-02-PLAN.md -- E2E fixture + two-browser circuit breaker test with screenshots
-
-#### Phase 10: Stage 3 (Needs) Verification
-**Goal:** Both users can complete needs extraction, consent, and common ground analysis
-**Depends on:** Phase 8 (test patterns established)
-**Requirements:** NEEDS-01, NEEDS-02, NEEDS-03, NEEDS-04
+### Phase 16: Knowledge Base Backend
+**Goal**: The backend exposes browse endpoints for topics, people, and recurring themes, and the system organically detects cross-session patterns once enough data accumulates
+**Depends on**: Phase 15
+**Requirements**: KNOW-01, KNOW-02, KNOW-03, KNOW-04, INTEL-01, INTEL-02, INTEL-03
 **Success Criteria** (what must be TRUE):
-  1. Both users can view AI-extracted needs and confirm/edit them
-  2. Both users complete mutual consent flow for needs sharing
-  3. Common ground analysis runs and displays matched needs to both users
-  4. Playwright screenshots capture needs panel and common ground visualization
-**Plans:** 2/2 plans complete
+  1. User can browse all their sessions and takeaways grouped by topic tag via a single API endpoint
+  2. User can browse all people mentioned across sessions, with each person showing the sessions where they appear
+  3. User can view all entries for a given topic arranged in chronological order
+  4. After 3 or more sessions share a recurring topic, the system surfaces it as a recognized theme with a cross-session summary
+  5. The browse endpoints return results within 500ms for a user with 30 sessions and 150 takeaways
+**Plans**: TBD
 
-Plans:
-- [ ] 10-01-PLAN.md -- Add testIDs to Stage 3 UI components + create stage-3-needs fixture
-- [ ] 10-02-PLAN.md -- Two-browser E2E test for complete Stage 3 flow with screenshots
-
-#### Phase 11: Stage 4 (Strategies) Verification
-**Goal:** Both users can complete strategy collection, ranking, and agreement
-**Depends on:** Phase 10
-**Requirements:** STRAT-01, STRAT-02, STRAT-03, STRAT-04, STRAT-05
+### Phase 17: Session List, Distillation UI, and Voice Input
+**Goal**: The mobile app shows a dated session list, gives users a surface to review, edit, and delete distilled takeaways, and provides a mic button that opens a real-time transcription drawer for hands-free chat input
+**Depends on**: Phase 15
+**Requirements**: DIST-04, DIST-05, DIST-06, VOICE-01, VOICE-02, VOICE-03, VOICE-04
 **Success Criteria** (what must be TRUE):
-  1. Both users can contribute strategy suggestions to anonymous pool
-  2. Both users can rank strategies independently
-  3. Overlap reveal shows agreed strategies to both users
-  4. Both users confirm final agreement
-  5. Playwright screenshots capture strategy pool, ranking interface, and agreement states
-**Plans:** 2/2 plans complete
+  1. User opens a completed session and sees distilled takeaways displayed in a review sheet
+  2. User can tap any takeaway to edit its text inline and see the change saved immediately
+  3. User can swipe or tap to delete an individual takeaway and it disappears without a full reload
+  4. User taps the mic button on the chat input and a transcription drawer slides up from the bottom showing real-time transcribed text as they speak
+  5. User taps "Stop and Send" in the drawer and the transcribed text appears as their chat message
+**Plans**: TBD
 
-Plans:
-- [ ] 11-01-PLAN.md -- Stage 4 fixture creation and registration
-- [ ] 11-02-PLAN.md -- Two-browser E2E test for complete Stage 4 flow with screenshots
-
-#### Phase 12: Visual Regression Baselines
-**Goal:** Visual regression testing infrastructure established with proper baselines
-**Depends on:** Phases 8, 10, 11 (needs correct UI states)
-**Requirements:** RECON-VIS-03, RECON-VIS-04, E2E-03
+### Phase 18: Knowledge Base UI and Export
+**Goal**: The mobile app exposes a browsable knowledge base reachable from the home screen, and users can export or share a curated selection of their takeaways via the OS share sheet
+**Depends on**: Phase 16, Phase 17
+**Requirements**: SHARE-01, SHARE-02
 **Success Criteria** (what must be TRUE):
-  1. All reconciler screenshots use toHaveScreenshot() assertions with tolerance configuration
-  2. All Stage 3-4 screenshots use toHaveScreenshot() assertions
-  3. Baseline images committed with proper masking for dynamic content
-  4. Documentation exists for baseline update process
-**Plans:** 2/2 plans complete
-
-Plans:
-- [ ] 12-01-PLAN.md -- Playwright config + reconciler screenshot conversions (RECON-VIS-03, RECON-VIS-04)
-- [ ] 12-02-PLAN.md -- Stage 3-4 screenshot conversions + baseline update documentation (E2E-03)
-
-#### Phase 13: Full Session E2E Verification
-**Goal:** Complete two-user session flow verified from start to Stage 4 completion
-**Depends on:** Phases 8-12 (all components verified)
-**Requirements:** E2E-01, E2E-02
-**Success Criteria** (what must be TRUE):
-  1. Two-browser E2E test completes full session (Stage 0 → Stage 4) for both users
-  2. E2E tests pass for all reconciler edge cases (OFFER_OPTIONAL, OFFER_SHARING)
-  3. Test suite runs reliably without flakiness (3 consecutive passes)
-**Plans:** 4/4 plans complete
-
-Plans:
-- [x] 13-01-PLAN.md -- Extend full-flow test to cover Stages 0-4 (E2E-01)
-- [x] 13-02-PLAN.md -- Verify reconciler edge case tests pass reliably (E2E-02) [deferred: stability issues]
-- [x] 13-03-PLAN.md -- Fix test helper timing issues and verify full-flow test (E2E-01, gap closure)
-- [x] 13-04-PLAN.md -- Stabilize reconciler E2E tests and complete visual baselines (E2E-02, gap closure)
+  1. User can reach any takeaway or theme within 2 taps from the knowledge base entry point
+  2. User can select a set of takeaways or session summaries and export them as readable text
+  3. User tapping "Share" on an export sees the standard iOS/Android share sheet with the exported content pre-populated
+**Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 8 → 9 → 10 → 11 → 12 → 13
+Phases execute in numeric order: 14 → 15 → 16 → 17 → 18
+Note: Phase 17 depends on Phase 15 only; Phase 18 depends on both 16 and 17.
 
-| Phase                  | Milestone | Plans Complete | Status       | Completed  |
-|------------------------|-----------|----------------|--------------|------------|
-| 1. Audit               | v1.0      | 4/4            | Complete     | 2026-02-14 |
-| 2. Test Infra          | v1.0      | 2/2            | Complete     | 2026-02-14 |
-| 3. Stage 0-1           | v1.0      | 1/1            | Complete     | 2026-02-14 |
-| 4. Stage 2             | v1.0      | 1/1            | Complete     | 2026-02-14 |
-| 5. Transitions         | v1.0      | 2/2            | Complete     | 2026-02-15 |
-| 6. Reconciler          | v1.0      | 2/2            | Complete     | 2026-02-15 |
-| 7. E2E Verify          | v1.0      | 1/1            | Complete     | 2026-02-15 |
-| 8. Reconciler Patterns | v1.1      | 0/4            | Planning     | -          |
-| 9. Circuit Breaker     | v1.1      | 0/TBD          | Not started  | -          |
-| 10. Stage 3 Needs      | v1.1      | Complete    | 2026-02-17 | -          |
-| 11. Stage 4 Strategies | v1.1      | Complete    | 2026-02-17 | -          |
-| 12. Visual Baselines   | v1.1      | Complete    | 2026-02-18 | -          |
-| 13. Full Session E2E   | v1.1      | 4/4            | Complete     | 2026-02-19 |
+| Phase                                        | Milestone | Plans Complete | Status      | Completed  |
+|----------------------------------------------|-----------|----------------|-------------|------------|
+| 1. Audit                                     | v1.0      | 4/4            | Complete    | 2026-02-14 |
+| 2. Test Infra                                | v1.0      | 2/2            | Complete    | 2026-02-14 |
+| 3. Stage 0-1                                 | v1.0      | 1/1            | Complete    | 2026-02-14 |
+| 4. Stage 2                                   | v1.0      | 1/1            | Complete    | 2026-02-14 |
+| 5. Transitions                               | v1.0      | 2/2            | Complete    | 2026-02-15 |
+| 6. Reconciler                                | v1.0      | 2/2            | Complete    | 2026-02-15 |
+| 7. E2E Verify                                | v1.0      | 1/1            | Complete    | 2026-02-15 |
+| 8. Reconciler Patterns                       | v1.1      | 4/4            | Complete    | 2026-02-16 |
+| 9. Circuit Breaker                           | v1.1      | 2/2            | Complete    | 2026-02-17 |
+| 10. Stage 3 Needs                            | v1.1      | 2/2            | Complete    | 2026-02-17 |
+| 11. Stage 4 Strategies                       | v1.1      | 2/2            | Complete    | 2026-02-17 |
+| 12. Visual Baselines                         | v1.1      | 2/2            | Complete    | 2026-02-18 |
+| 13. Full Session E2E                         | v1.1      | 4/4            | Complete    | 2026-02-19 |
+| 14. Foundation                               | v1.2      | 0/3            | Planned     | -          |
+| 15. Distillation Backend                     | v1.2      | 0/TBD          | Not started | -          |
+| 16. Knowledge Base Backend                   | v1.2      | 0/TBD          | Not started | -          |
+| 17. Session List + Distillation UI + Voice   | v1.2      | 0/TBD          | Not started | -          |
+| 18. Knowledge Base UI + Export               | v1.2      | 0/TBD          | Not started | -          |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-19 (v1.1 milestone complete)*
+*Last updated: 2026-03-11 (Phase 14 planned — 3 plans in 1 wave)*

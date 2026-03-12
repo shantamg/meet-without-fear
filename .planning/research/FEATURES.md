@@ -1,260 +1,230 @@
-# Feature Landscape
+# Feature Research
 
-**Domain:** Reconciler patterns (GAPS_FOUND/NEEDS_WORK) and Needs/Strategy stages for conflict resolution
-**Researched:** 2026-02-15
+**Domain:** Therapy-prep journaling with AI — Inner Thoughts Journal milestone
+**Researched:** 2026-03-11
+**Confidence:** MEDIUM-HIGH (ecosystem well-researched; some anti-feature reasoning is inference from patterns)
 
-## Table Stakes
+---
 
-Features users expect. Missing = product feels incomplete.
+## Context: What Already Exists
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Share suggestion when gaps found** | Standard mediation pattern — when one party misunderstands, the subject shares clarifying context | Medium | Already partially built (asymmetric reconciler). Need UI/UX refinement |
-| **Refinement loop with new context** | Users expect to incorporate shared context, not just ignore it | Medium | Backend supports REFINING status. Need mobile UI for context consumption |
-| **Needs identification from conversation** | NVC/mediation framework core — surface underlying needs before solving | High | Already built (Stage 3 controller uses AI extraction). Need verification/adjustment UI |
-| **Collaborative needs confirmation** | Both parties must confirm own needs before seeing common ground | Low | Already built (consent flow in Stage 3). Standard mutual consent pattern |
-| **Common ground visualization** | Users expect to see overlapping needs before strategies | Low | Already built (findCommonGround service). Venn diagram or list UI needed |
-| **Strategy proposal collection** | Anonymous pool prevents "my idea vs yours" dynamic | Medium | Already built (Stage 4 controller). Need "add strategy" UI |
-| **Mutual ranking** | Standard mutual-gains approach — both rank independently, reveal together | Medium | Already built (ranking submission + overlap calculation). Need drag-and-drop UI |
-| **Agreement formalization** | Final step must create clear commitment with follow-up | Low | Already built (Agreement model + confirmation flow). Need contract-style UI |
+The following infrastructure is already built and must be treated as a foundation, not as features to
+build. The new milestone adds a layer on top.
 
-## Differentiators
+| Existing capability | Location | Notes |
+|---------------------|----------|-------|
+| Inner Thoughts chat sessions (solo AI chat) | `InnerWorkSession` model, `inner-work.ts` controller | CRUD + messaging fully working |
+| Rolling conversation summaries per session | `conversation-summarizer.ts`, `conversationSummary` field | Fire-and-forget, triggers at 25+ messages |
+| Memory detection and intentional saves | `memory-detector.ts` | Very conservative: only explicit "remember that..." |
+| Notable facts across sessions (global memory) | `global-memory.ts`, `User.globalFacts` | Up to 50 categorized facts, consolidated via Haiku |
+| People extraction and mention tracking | `people-extractor.ts`, `Person` + `PersonMention` models | Extracts names, tracks per-source counts, supports merge |
+| Semantic embeddings for session retrieval | `embedding.ts`, `InnerWorkSession.contentEmbedding` | Session-level vector(1024) on theme+summary |
+| Linking inner thoughts to partner sessions | `linkedPartnerSessionId` field | Stage + trigger tracking |
 
-Features that set product apart. Not expected, but valued.
+The milestone adds: dated sessions with topic summaries/tags, AI-guided distillation into takeaways,
+organic theme/person recognition surfaced in UI, and a browsable accumulated knowledge view.
+
+---
+
+## Feature Landscape
+
+### Table Stakes (Users Expect These)
+
+Features users assume exist in any journaling or therapy-prep tool. Missing these makes the product
+feel unfinished.
+
+| Feature | Why Expected | Complexity | Existing foundation? |
+|---------|--------------|------------|----------------------|
+| Session list sorted by date with visible date | Every journal shows date; "dated sessions" is explicitly the milestone goal | LOW | Sessions have `createdAt`; list endpoint exists. Add date display only. |
+| AI-generated session title or summary line | Users don't want to name every entry; every AI journal (Rosebud, Reflectly, Mindsera) auto-titles | LOW | `InnerWorkSession.title` and `.summary` fields exist. Need to populate reliably on session close. |
+| Post-vent distillation: "here's what I heard" summary | Core milestone goal. Grow Therapy, Rosebud, and clinical research all validate this as the key therapy-prep primitive. Users need a condensed version to take to therapy. | MEDIUM | Conversation summarizer produces `keyThemes` + `unresolvedTopics`. Need to surface these as explicit "takeaways" — a distillation step after venting. |
+| Editable takeaways / user can correct AI output | Grow Therapy explicitly lets patients edit AI-generated themes before sharing. Users distrust AI accuracy on personal content without edit control. | MEDIUM | No editing surface for AI output currently. New UI + endpoint needed. |
+| Topic/theme tag visible on each session in list | Every journaling app (Reflectly, Mindsera, Clearful) tags or categorizes entries. Users scan by topic, not just by date. | LOW | `InnerWorkSession.theme` field exists (single string). Need reliable population + display. |
+| Navigate sessions by date or topic | Table-stakes navigation. Without it, accumulated sessions become unusable. | MEDIUM | List endpoint has filter support but no topic grouping. |
+| Persist insights across sessions (not per-session only) | Users expect "the app remembers me" from Rosebud, Mindsera, etc. Global facts already exist; they need to be visible. | MEDIUM | `globalFacts` exists but is invisible to user currently. |
+
+### Differentiators (Competitive Advantage)
+
+Features that set this product apart from generic journaling apps, or that specifically serve the
+"therapy prep" use case and the user's "flexible and organic" vision.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Abstract hints during refinement** | Unlike direct feedback, prevents "you missed X" blame dynamic. Guides discovery instead | High | Designed in reconciler (areaHint, promptSeed). Need conversational AI coach implementation |
-| **Two-phase share flow** | Topic suggestion first ("you might want to share about X"), THEN AI helps craft message | Medium | Partially built (suggestedShareFocus + generateShareDraft). Innovative UX pattern |
-| **Empathy resubmission circuit breaker** | Prevents infinite refinement loops — after N attempts, force acceptance or escalation | Medium | NOT YET BUILT. Important safeguard against stuck sessions |
-| **Context already shared detection** | Prevents redundant sharing requests when subject already provided clarification | Low | Already built (hasContextAlreadyBeenShared check). Quality-of-life improvement |
-| **NVC needs categorization** | 9 Marshall Rosenberg categories (Connection, Autonomy, Meaning, etc.) guide extraction | Medium | Already built (NeedCategory enum). Helps users recognize patterns |
-| **Separate user/shared vessels** | Individual needs stay private until consent, then merge to common ground | Low | Already built (UserVessel + SharedVessel). Privacy-first architecture |
-| **Anonymous strategy pool** | Strategies presented without author attribution until after ranking | Low | Already built (createdByUserId not exposed in GET). Reduces positional bias |
-| **Ranking overlap algorithm** | Surfaces top-3 overlap, falls back to top choices when no overlap | Low | Already built (getOverlap controller). Smart conflict resolution when preferences diverge |
+| Organic people recognition with cross-session timeline | Rosebud mentions relationship patterns but doesn't expose a people-centric view. Showing "here are the 3 people you've talked about most, and the themes that appear with each" is genuinely novel for therapy prep. | HIGH | `people-extractor.ts` + `PersonMention` already exist. New UI and a "person profile" aggregation query needed. |
+| Distillation as a distinct explicit step (not automatic) | Most apps silently summarize in the background. Making distillation a named, intentional moment ("want to distill this session?") mirrors how therapy prep actually works: vent first, organize after. Gives users agency. | MEDIUM | Requires a post-session or mid-session trigger. UI flow design needed. |
+| Themes surfaced organically from accumulated sessions, not just per-session tags | Mindsera tracks topics; Rosebud tracks patterns. But both are per-session. Cross-session theme clustering that shows "work stress has come up in 4 sessions over 3 weeks" is what the user explicitly asked for. | HIGH | Requires cross-session aggregation (semantic clustering or tag grouping). Existing embeddings + keyThemes could seed this. |
+| Linking inner journal to partner session as therapy-prep context | No competitor does this. The ability to say "I'm preparing for a conversation with my partner about X — here's what came up in my private reflection" bridges private journaling and relational work. | LOW | Infrastructure exists. Needs visible UX to highlight linked sessions in the journal view. |
+| Easy to modify — user-editable insights, not locked AI output | Grow Therapy found that client autonomy over AI summaries is critical for trust and adoption. For therapy prep specifically, users want to curate what they bring. | MEDIUM | Inline editing of takeaways and tags. Merge/rename people. |
 
-## Anti-Features
+### Anti-Features (Commonly Requested, Often Problematic)
 
-Features to explicitly NOT build.
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Streaks, badges, journaling habit tracking | Every mainstream journaling app does this (Reflectly, Jour). Users have seen it. | Research (2026 Wiley Consumer Psychology Review) found gamification backfires in therapeutic contexts: users optimize for the streak rather than authentic reflection. Misaligns with this app's purpose. | Let the content itself be the reward. Show "you've had 8 sessions this month" as a neutral stat, not a congratulatory badge. |
+| Daily prompts / push nudges to journal | Reflectly and Rosebud both use daily prompts as a retention mechanic. | Journaling about a conflict or emotional issue should happen when the user needs it, not on a schedule. Forced prompts at the wrong time feel intrusive and can surface anxiety without support. | Let the app be a pull tool, not a push tool. If reminders exist, make them fully user-controlled and opt-in, not a default engagement loop. |
+| Real-time theme detection during chat | Technically feasible. Mindsera shows analysis during entry. | Seeing "you are talking about: anxiety, work, resentment" while venting breaks the venting flow. Research (Frontiers 2025) found decoupling core journaling from AI is a principle for avoiding overwhelm. | Run theme detection after the session closes (or explicitly triggered). Never interrupt the chat flow. |
+| Mood tracking with emoji/scale | Every journaling app has this. Users expect it. | This app is not a mood tracker — it's a reflection and therapy-prep tool. Adding a mood scale at session start/end creates a form-filling expectation that conflicts with freeform venting. It also generates data the app can't act on without a dedicated analytics screen. | If mood is relevant, let the AI detect emotional tone from the conversation and include it in the summary. Don't ask the user to rate their mood explicitly. |
+| Full knowledge graph / bidirectional links | Obsidian, Roam Research. Power users want this. | Extreme complexity, small audience, and risk of making the product feel like a note-taking productivity tool rather than an emotionally safe space. Defeats "easy to navigate" goal. | Flat, simple browsing by person/theme/date is sufficient for therapy prep. A graph is a v2+ feature at most. |
+| Automatic sharing with therapist | Grow Therapy uses this with full patient consent controls. | Without a therapist integration partner, this is a privacy liability. User trust in this app depends on the journal being private and portable. | Provide a clean "prepare for therapy" export/copy: a formatted list of today's takeaways. User manually brings it to session. |
+| Per-message annotations or highlights | Obsidian-style markup during journaling. | Interrupts the flow of venting. Annotation-during-capture is the wrong moment for reflection in a therapeutic context. | Highlight extraction should be AI-driven post-session, surfaced in takeaways. |
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Direct gap disclosure to guesser** | Telling User A "you missed their sadness about X" creates shame/defensiveness | Use abstract hints (areaHint: "deeper emotional experiences") that guide discovery |
-| **Unlimited refinement attempts** | Stuck sessions drain engagement. Some empathy gaps are acceptable with consent | After 2-3 refinement cycles, offer "accept difference" or "request mediated help" |
-| **Showing who proposed which strategy** | Attribution bias — users favor own ideas or discount partner's ideas | Keep pool anonymous until after ranking. Attribution only matters for implementation accountability |
-| **AI-only needs identification** | Users must validate/adjust AI suggestions or feel unheard | Always present as "suggested needs" with edit/add/remove controls |
-| **Automatic agreement without confirmation** | Even with ranking overlap, explicit mutual consent prevents misunderstanding | Require both parties to confirm agreement text before marking AGREED |
-| **Synchronous strategy collection** | Waiting for partner to finish brainstorming blocks progress | Allow independent collection, signal "ready to rank" when satisfied with pool |
-| **Text-match common ground detection** | AI semantic matching prevents missing synonyms ("respect" vs "dignity") | Use embedding similarity + LLM comparison for fuzzy matching |
+---
 
 ## Feature Dependencies
 
 ```
-Stage 2 (Empathy) completion → Stage 3 (Needs) starts
-Both users consent to share empathy → Reconciler runs
-Reconciler result = GAPS_FOUND → Subject receives share suggestion
-Subject shares context → Guesser status = REFINING
-Guesser resubmits empathy → Reconciler re-runs
-Reconciler result = NO_GAPS or READY → Both empathy attempts REVEALED
-Both empathy VALIDATED → Stage 3 starts
+[Dated sessions with date display]
+    (already exists structurally — display work only)
 
-Both users confirm needs → Both consent to share
-Both consent to share needs → Common ground analysis runs
-Common ground confirmed → Stage 4 (Strategy) starts
+[Post-session distillation step]
+    └──requires──> [Conversation summary with keyThemes + unresolvedTopics]  (EXISTS)
+    └──requires──> [UI trigger: "distill this session" or auto on close]      (new)
+    └──produces──> [Editable takeaway list per session]                        (new storage + UI)
 
-Stage 4 starts → Users propose strategies
-User marks "ready to rank" → Waits for partner
-Both ready → Rankings submitted independently
-Both rankings submitted → Overlap revealed
-Agreement created → Awaits partner confirmation
-Both confirm agreement → Session RESOLVED
+[Editable takeaways]
+    └──requires──> [Post-session distillation step]
+    └──enhances──> [AI-generated session title/summary]  (user can override)
+
+[Topic tags on sessions]
+    └──requires──> [InnerWorkSession.theme field reliably populated]           (field EXISTS, population needs work)
+    └──enhances──> [Navigate by topic]
+
+[Navigate by topic/date]
+    └──requires──> [Topic tags]
+    └──requires──> [Session list endpoint with topic filter]                   (filter exists, topic grouping is new)
+
+[Cross-session theme clustering]
+    └──requires──> [Topic tags on enough sessions to cluster]
+    └──OR uses──>  [InnerWorkSession.contentEmbedding for semantic grouping]   (EXISTS)
+    └──produces──> [Browsable themes view]
+
+[People profile / cross-session person view]
+    └──requires──> [People extraction already running on sessions]             (EXISTS)
+    └──requires──> [New aggregation query: sessions x person x themes]
+    └──produces──> [Browsable people view]
+
+[Linked session context in journal view]
+    └──requires──> [linkedPartnerSessionId field]                              (EXISTS)
+    └──requires──> [UI to surface the link visibly]                           (new display)
+
+[Browsable knowledge base]
+    └──requires──> [Cross-session theme clustering]
+    └──requires──> [People profile view]
+    └──requires──> [Navigate by topic/date]
 ```
 
-## MVP Recommendation
+### Dependency Notes
 
-**Already built (verify functionality):**
-1. GAPS_FOUND flow: Share suggestion generation, context sharing, status transitions
-2. NEEDS_WORK flow: Empathy attempt status = NEEDS_WORK (same as GAPS_FOUND with higher severity)
-3. Stage 3 needs: AI extraction, confirmation, consent, common ground
-4. Stage 4 strategies: Proposal, ranking, overlap, agreement
+- **Distillation requires conversation summarizer output:** The existing `SummarizationResult` type already includes `keyThemes`, `unresolvedTopics`, `emotionalJourney`. The distillation step is primarily a prompt to synthesize these into a user-facing "what I want to bring to therapy" list.
+- **People view requires no new extraction work:** The `people-extractor.ts` is already called on inner thoughts sessions. The gap is the aggregation query and the UI, not the data pipeline.
+- **Cross-session theme clustering is the highest-effort feature:** It either needs a new aggregation model (group sessions by `theme` string similarity) or a semantic clustering pass over `contentEmbedding`. Start with simple string-based grouping; migrate to semantic later.
+- **Topic tags and distillation are mutually reinforcing:** Distillation produces themes that become tags; tags feed the browsable view. Build them together.
 
-**Build next (missing mobile UI or incomplete flows):**
-1. **Share suggestion panels** (reconciler edge cases)
-   - ShareTopicDrawer: "You might want to share about [topic]"
-   - ShareDraftReview: Review AI-generated draft, refine, send
-   - ContextSharedConfirmation: "Context sent to [partner]"
+---
 
-2. **Refinement conversation UI** (REFINING status)
-   - "New context from [partner]" notification
-   - Context display panel before empathy resubmit
-   - Refinement chat interface with abstract hints (if gaps still present)
+## MVP Definition
 
-3. **Needs panels** (Stage 3)
-   - NeedsReview: AI-suggested needs with edit/add/remove
-   - NeedsConfirmation: Confirm before sharing
-   - CommonGroundVisualization: Overlapping needs display
-   - CommonGroundConfirmation: Mutual agreement on shared needs
+### Launch With (v1.2 — this milestone)
 
-4. **Strategy panels** (Stage 4)
-   - StrategyCollection: Add/edit proposals
-   - ReadyToRankSignal: Signal completion to partner
-   - StrategyRanking: Drag-and-drop preference ordering
-   - OverlapReveal: Show top-3 overlaps
-   - AgreementDrafting: Create binding agreement from strategy
-   - AgreementConfirmation: Mutual consent to final agreement
+The minimum that validates "therapy-prep journal with accumulated knowledge."
 
-**Defer:**
-- Refinement circuit breaker (after 3+ attempts)
-- Mediated help escalation (when acceptance fails)
-- Follow-up scheduling (post-agreement check-ins)
+- [ ] Dated session list — display `createdAt` prominently as the primary session identifier
+- [ ] Reliable AI-generated title + summary for every session on close
+- [ ] Topic tag per session — single primary theme, AI-generated, user-editable
+- [ ] Post-vent distillation trigger — explicit step at session end: "want a summary of what came up?"
+- [ ] Editable takeaway list — 3-7 bullet points from the distillation, user can delete/reword
+- [ ] Basic browsable view — sessions grouped by tag/theme + sessions grouped by person mentioned
+- [ ] People mentioned list — shows people extracted across all sessions, with session count
 
-## Reconciler Flow States
+### Add After Validation (v1.x)
 
-### NO_GAPS (already verified in E2E)
-```
-Reconciler analyzes A's empathy about B
-alignment.score >= 80% AND gaps.severity = "none"
-→ A's attempt status = READY
-(Wait for B's attempt to also be READY)
-→ Both READY → Both REVEALED simultaneously
-```
+Features to add once the core browsing/distillation loop is validated.
 
-### GAPS_FOUND (needs verification)
-```
-Reconciler analyzes A's empathy about B
-alignment.score 60-79% AND gaps.severity = "moderate"
-recommendedAction = "OFFER_OPTIONAL"
-→ A's attempt status = AWAITING_SHARING
-→ Generate share suggestion for B (subject) to help A (guesser)
-→ B sees ShareTopicDrawer with suggestedShareFocus
-→ B chooses: Accept (share context) or Decline (skip)
+- [ ] Cross-session theme clustering with trend view — "work stress has come up 4 times this month" — add when users have accumulated 10+ sessions
+- [ ] Linked partner session surfaced in journal — visible badge or label when a session was linked to a conflict session
+- [ ] Session search by keyword — straightforward; add when users report difficulty finding past entries
 
-IF B accepts:
-  → Generate AI draft from B's conversation history
-  → B reviews/edits draft
-  → B sends refined content
-  → A's attempt status = REFINING
-  → A sees "New context from B" notification
-  → A can resubmit empathy attempt
-  → Reconciler re-runs for A→B direction
-  LOOP until NO_GAPS or circuit breaker
+### Future Consideration (v2+)
 
-IF B declines:
-  → A's attempt status = READY (proceed despite gaps)
-```
+Features to defer until product-market fit is established.
 
-### NEEDS_WORK (needs verification)
-```
-Reconciler analyzes A's empathy about B
-alignment.score < 60% AND gaps.severity = "significant"
-recommendedAction = "OFFER_SHARING" (stronger language)
-→ A's attempt status = NEEDS_WORK (same flow as GAPS_FOUND but different UI tone)
-→ Generate share suggestion for B (subject)
-→ B sees ShareTopicDrawer with urgent framing
-→ Same accept/decline flow as GAPS_FOUND
-```
+- [ ] Person profile page — timeline of mentions, sentiment trend, themes that co-occur with this person. High value but requires significant UI surface area. Defer until people browsing is validated.
+- [ ] Export / therapy-prep print view — formatted PDF or clipboard of session takeaways. Valid and useful, but exporting is premature before the content itself is trusted.
+- [ ] Semantic similarity grouping of themes — upgrade from string-match clustering to embedding-based clustering once the data volume justifies it.
+- [ ] Multiple tags per session — single tag is sufficient to start; multi-tag adds UI complexity before browsing patterns are understood.
 
-**Key insight from research:** The distinction between GAPS_FOUND and NEEDS_WORK is severity/tone, not different flows. Both use the same refinement loop pattern.
+---
 
-## Stage 3 Flow States
+## Feature Prioritization Matrix
 
-### Needs Identification
-```
-User enters Stage 3
-→ AI extracts needs from conversation (extractNeedsFromConversation)
-→ Categorizes by NVC framework (Connection, Autonomy, Meaning, etc.)
-→ User reviews, edits, adds custom needs
-→ User confirms selected needs
-→ User consents to share with partner
-```
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Dated session list with visible date | HIGH | LOW | P1 |
+| AI-generated session title/summary on close | HIGH | LOW | P1 |
+| Post-vent distillation trigger + editable takeaways | HIGH | MEDIUM | P1 |
+| Topic tag per session (AI-generated, editable) | HIGH | LOW-MEDIUM | P1 |
+| Browsable people mentioned across sessions | HIGH | MEDIUM | P1 |
+| Basic theme/tag grouping in session list | MEDIUM | LOW-MEDIUM | P1 |
+| Cross-session theme trend view | HIGH | HIGH | P2 |
+| Linked partner session badge in journal | MEDIUM | LOW | P2 |
+| Session keyword search | MEDIUM | LOW | P2 |
+| Person profile page with timeline | HIGH | HIGH | P3 |
+| Export / print-ready takeaways | MEDIUM | LOW | P3 |
 
-### Common Ground
-```
-Both users consent to share needs
-→ AI runs findCommonGround (semantic matching + LLM comparison)
-→ Identifies overlapping/compatible needs
-→ Both users review common ground independently
-→ Both users confirm common ground
-→ Stage 3 complete → Stage 4 starts
-```
+---
 
-## Stage 4 Flow States
+## Competitor Feature Analysis
 
-### Strategy Collection (Asynchronous)
-```
-User enters Stage 4
-→ Sees empty strategy pool (or AI suggestions)
-→ Adds proposed strategies addressing common ground
-→ Partner independently adds strategies
-→ Strategies added to anonymous pool (no attribution)
-→ User marks "ready to rank" when satisfied
-→ Waits for partner to mark ready
-```
+| Feature | Rosebud | Mindsera | Grow Therapy | Reflectly | Our Approach |
+|---------|---------|---------|--------------|-----------|--------------|
+| Post-session distillation | Background AI insights, not explicit step | Mental model templates structure output | AI theme extraction after entry, user edits and shares | AI prompts guide structure during entry | Explicit distillation step post-vent; user-triggered or end-of-session. Preserves venting flow. |
+| People / relationship tracking | Pattern recognition mentions people but no dedicated view | Not present | Not present | Not present | Dedicated people view; already have extraction infrastructure. First-mover advantage here. |
+| Cross-session theme clustering | Weekly growth insights | Topic view with recurring themes | Not present (single session) | Mood trends only | Cross-session grouping by tag + people; organic emergence, not forced categories. |
+| Browsable knowledge base | Premium "Bloom" feature with pattern history | Chat with your journal via AI | Not applicable (clinical tool) | Not present | Flat browsing by theme/person/date. Simple over clever. |
+| Editability of AI output | Limited | Not present | User can edit/delete before sharing | Not applicable | Full edit of takeaways and tags. Trust through control. |
+| Gamification | Streaks, growth scores | Progress tracking | Not present | Streaks, mood streaks | None. Therapeutic context; engagement through utility. |
+| Therapy-session link | Not present | Not present | Explicit clinical integration | Not present | Implicit link via partner session context. No direct therapist sharing (privacy first). |
 
-### Ranking (Independent then Reveal)
-```
-Both users ready
-→ Each user sees full anonymous pool
-→ Each user drag-and-drop ranks preferences
-→ Rankings submitted independently
-→ Both submit → Overlap calculated
-→ Top-3 overlap revealed (or top choices if no overlap)
-```
+---
 
-### Agreement (Mutual Consent)
-```
-User selects strategy from overlap
-→ Drafts agreement with specifics (type, duration, follow-up)
-→ Partner receives agreement proposal
-→ Partner confirms or declines
-→ Both confirm → Agreement AGREED, session RESOLVED
-```
+## UX Principles (From Research)
 
-## Complexity Notes
+These patterns emerged consistently across competitor analysis and clinical research and should inform
+implementation decisions.
 
-**Low complexity:**
-- UI flows for existing backend (needs, strategies, ranking)
-- State transitions already built
-- Consent patterns established
+**1. Decouple journaling from AI.** The venting chat must work with zero AI interpretation visible.
+AI only surfaces after the user is done talking or explicitly asks. (Frontiers 2025, Grow Therapy)
 
-**Medium complexity:**
-- Share suggestion UX (two-phase: topic → draft)
-- Refinement conversation with abstract hints
-- Common ground visualization with semantic grouping
-- Drag-and-drop ranking interface
+**2. AI outputs are suggestions, not verdicts.** Every AI-generated takeaway, tag, and theme must be
+editable. Trust is built through control, not accuracy. (Grow Therapy, clinical research)
 
-**High complexity:**
-- Abstract hint generation (avoid direct disclosure)
-- Refinement circuit breaker logic (when to stop loop)
-- AI needs extraction accuracy (must feel representative)
-- Semantic needs matching (avoid false negatives)
+**3. Organic emergence over pre-defined categories.** Don't present a taxonomy of "relationships /
+work / health" buckets to fill. Let themes name themselves from what the user actually says. Present
+them after they've accumulated, not before. (User's explicit "flexible and organic" requirement)
 
-## Research Confidence
+**4. Flat navigation over depth.** A simple list grouped by tag and by person is better than a
+hierarchical knowledge graph. Every additional click is friction between the user and their memory.
 
-| Area | Confidence | Reason |
-|------|------------|--------|
-| Reconciler patterns | HIGH | Mediation literature + NVC looping techniques well-documented. Existing codebase has strong foundation |
-| Needs identification | HIGH | NVC framework widely adopted. Marshall Rosenberg's 9 categories standard. AI extraction feasible with conversation context |
-| Strategy collection | MEDIUM | Mutual gains approach well-researched. Anonymous pool pattern less common but logical. Ranking overlap algorithm straightforward |
-| Refinement loop | MEDIUM | Empathy loop technique documented (mirror → validate → refine). Abstract hints pattern from therapist training, less common in apps |
+**5. No interruption during venting.** Never show pattern detection, theme labels, or "you've said
+this before" notices during the chat. The chat is a safe space. Analysis is post-session only.
+
+**6. Therapy prep is about what to bring, not what to review.** The distillation output should be
+framed as "things I want to think about" — a short, scannable list. Not a report. Not a score.
+
+---
 
 ## Sources
 
-**Mediation patterns:**
-- [Imago Couple's Dialogue: Mirroring, Validation, and Empathy](https://www.mergemediation.com/imago-technique-in-mediation-mirroring-validation-and-empathy/)
-- [PON Empathy Loop](https://www.pon.harvard.edu/glossary/empathy-loop/)
-- [Looping: Listening to Understand](https://understandinginconflict.org/looping/)
+- [Rosebud AI Journal — pattern recognition and memory system](https://www.rosebud.app/)
+- [Rosebud: AI Journaling App Review (Bustle)](https://www.bustle.com/wellness/rosebud-therapy-app-review-features-price)
+- [Grow Therapy: AI-powered between-session reflections](https://growtherapy.com/blog/grow-therapy-unveils-ai-powered-between-session-reflections-to-deepen-therapy-insights/)
+- [Mindsera — topic tracking and mental models](https://www.mindsera.com/)
+- [AI Journaling Apps Compared: Reflection vs Rosebud vs Mindsera (2026)](https://www.reflection.app/blog/ai-journaling-apps-compared)
+- [Journaling with LLMs: novel UX paradigm for personal health (Frontiers 2025)](https://pmc.ncbi.nlm.nih.gov/articles/PMC12234568/)
+- [Gamification backfire research: Consumer Psychology Review 2026](https://myscp.onlinelibrary.wiley.com/doi/10.1002/arcp.70004)
+- [7 Best Journaling Apps for Mental Health 2026 (therapist-reviewed)](https://blog.mylifenote.ai/best-journaling-apps-mental-health-2026-edition/)
+- [Reflectly App Review 2025](https://ikanabusinessreview.com/2025/10/reflectly-app-review-2025-guided-journaling-for-wellbeing/)
 
-**Needs identification:**
-- [NVC Feelings and Needs List — Sociocracy For All](https://www.sociocracyforall.org/nvc-feelings-and-needs-list/)
-- [Categorizing Needs — Rhys Lindmark](https://www.rhyslindmark.com/personal-wednesday-categorizing-needs/)
-- [iGrok NVC App](https://apps.apple.com/us/app/igrok/id352477754)
-
-**Strategy generation:**
-- [Mutual Gains Approach — CBI](https://www.cbi.org/article/mutual-gains-approach/)
-- [Mutual Gains Approach — Wikipedia](https://en.wikipedia.org/wiki/Mutual_Gains_Approach)
-- [Conflict Resolution and Mutual Gains — PON](https://www.pon.harvard.edu/daily/conflict-resolution/conflict-resolution-and-opportunities-for-mutual-gains-in-negotiation-key-concepts-from-getting-to-yes/)
-
-**Perspective-taking:**
-- [The Effect of Perspective-Taking on Trust and Understanding in Mediation](https://link.springer.com/article/10.1007/s10726-020-09698-8)
-- [I-language and Communicating Perspective During Conflict](https://pmc.ncbi.nlm.nih.gov/articles/PMC5961625/)
+---
+*Feature research for: Inner Thoughts Journal milestone (v1.2)*
+*Researched: 2026-03-11*
