@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Inner Thoughts Journal
 status: executing
-stopped_at: Completed 17-02-PLAN.md — expo-audio install, useVoiceInput hook, TranscriptionDrawer, mic button in ChatInput/ChatInterface/InnerThoughtsScreen
-last_updated: "2026-03-12T09:49:29.298Z"
+stopped_at: Completed 18-01-PLAN.md — knowledgeBaseKeys, 6 React Query hooks, export utility with tests, Expo Router knowledge-base routes, Browse Knowledge Base button
+last_updated: "2026-03-12T10:05:01.518Z"
 last_activity: 2026-03-12 — Phase 15 Plan 01 complete — SessionTakeaway schema, distillation DTOs, Prisma mock
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 11
   percent: 68
 ---
 
@@ -60,6 +60,7 @@ Progress: [███████░░░] 68%
 | Phase 16-knowledge-base-backend P03 | 6 | 2 tasks | 3 files |
 | Phase 17-session-list-distillation-ui-and-voice-input P01 | 16 | 2 tasks | 9 files |
 | Phase 17-session-list-distillation-ui-and-voice-input P02 | 25 | 2 tasks | 7 files |
+| Phase 18-knowledge-base-ui-and-export P01 | 7 | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,8 @@ Recent decisions affecting current work:
 - [Phase 17-01]: Created takeaway CRUD backend endpoints as part of mobile UI plan — Phase 15 did not ship GET/PATCH/DELETE takeaway routes, only POST /distill
 - [Phase 17-01]: TakeawayReviewSheet uses parent-controlled mounting (visible prop) instead of __getValue() internal API for show/hide logic
 - [Phase 17-02]: expo-audio 1.1.1 AudioRecorder lacks real-time PCM frame callbacks — implemented post-recording transcription via AssemblyAI WebSocket; onVoicePress prop optional on ChatInput/ChatInterface ensuring mic button only on Inner Thoughts sessions
+- [Phase 18-knowledge-base-ui-and-export]: knowledgeBaseKeys uses ['knowledge-base'] top-level key, NOT nested under inner-thoughts — prevents cross-invalidation from Phase 17 mutations
+- [Phase 18-knowledge-base-ui-and-export]: Phase 16 DTOs defined locally in useKnowledgeBase.ts as placeholders until Phase 16 ships shared contracts
 
 ### Pending Todos
 
@@ -119,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T09:49:29.296Z
-Stopped at: Completed 17-02-PLAN.md — expo-audio install, useVoiceInput hook, TranscriptionDrawer, mic button in ChatInput/ChatInterface/InnerThoughtsScreen
+Last session: 2026-03-12T10:05:01.516Z
+Stopped at: Completed 18-01-PLAN.md — knowledgeBaseKeys, 6 React Query hooks, export utility with tests, Expo Router knowledge-base routes, Browse Knowledge Base button
 Resume file: None
