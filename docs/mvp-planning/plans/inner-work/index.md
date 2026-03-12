@@ -1,8 +1,10 @@
 # Inner Work Implementation Plans
 
+> **v1.2 Status:** The Inner Work hub currently shows only one active pathway — Inner Thoughts (Talk it Out). Needs Assessment, Gratitude Practice, and Meditation are **deferred to a future milestone** and are not part of v1.2. See each plan for the DEFERRED status banner.
+
 Implementation roadmap for expanding Inner Work (Inner Thoughts) from a single chat pathway to the full four-pathway system described in the [Inner Work Spec](../../inner-work-spec.md).
 
-## Current State
+## Current State (v1.2)
 
 We have built **"Talk it Out"** (renamed to "Inner Thoughts"):
 - Solo self-reflection chat sessions
@@ -11,13 +13,15 @@ We have built **"Talk it Out"** (renamed to "Inner Thoughts"):
 - Memory detection and suggestions
 - Semantic embeddings for retrieval
 
-## Target State
+The Inner Work hub shows a session list for Inner Thoughts only. The other three pathways are not exposed in the UI.
+
+## Target State (Future Milestones)
 
 Four distinct pathways within Inner Work:
-1. **Talk it Out** (Inner Thoughts) - ✅ Built
-2. **See the Positive** (Gratitude Practice) - 🔲 Not built
-3. **Am I OK?** (Needs Assessment) - 🔲 Not built
-4. **Develop Loving Awareness** (Meditation) - 🔲 Not built
+1. **Talk it Out** (Inner Thoughts) - Active in v1.2
+2. **See the Positive** (Gratitude Practice) - [DEFERRED] Future milestone
+3. **Am I OK?** (Needs Assessment) - [DEFERRED] Future milestone
+4. **Develop Loving Awareness** (Meditation) - [DEFERRED] Future milestone
 
 Plus supporting infrastructure:
 - **People Tracking** - Track people mentioned across all features
@@ -25,7 +29,7 @@ Plus supporting infrastructure:
 
 ---
 
-## Implementation Priority Order
+## Implementation Priority Order (When Resumed)
 
 Based on value/complexity analysis:
 
@@ -33,21 +37,21 @@ Based on value/complexity analysis:
 
 | Plan | Complexity | Value | Rationale |
 |------|------------|-------|-----------|
-| [Needs Assessment](./needs-assessment.md) | Medium | High | Enables cross-feature intelligence, core to spec vision |
+| [Needs Assessment](./needs-assessment.md) [DEFERRED] | Medium | High | Enables cross-feature intelligence, core to spec vision |
 | [People Tracking](./people-tracking.md) | Low | Medium | Simple to build, enables pattern recognition |
 
 ### Phase 2: Engagement Features
 
 | Plan | Complexity | Value | Rationale |
 |------|------------|-------|-----------|
-| [Gratitude Practice](./gratitude-practice.md) | Low | High | Quick win, adds daily engagement touchpoint |
+| [Gratitude Practice](./gratitude-practice.md) [DEFERRED] | Low | High | Quick win, adds daily engagement touchpoint |
 | [Cross-Feature Intelligence](./cross-feature-intelligence.md) | High | High | The "magic" - connects all features together |
 
 ### Phase 3: Advanced Features
 
 | Plan | Complexity | Value | Rationale |
 |------|------------|-------|-----------|
-| [Meditation](./meditation.md) | High | Medium | Requires TTS, audio, offline support |
+| [Meditation](./meditation.md) [DEFERRED] | High | Medium | Requires TTS, audio, offline support |
 
 ---
 

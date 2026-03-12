@@ -136,7 +136,7 @@ project-root/
   - `session/` - Extracted session sub-components: `SessionAboveInputPanel.tsx`, `SessionOverlays.tsx`, `SessionDrawers.tsx`
   - `NeedMappingScreen.tsx` - Stage 3 needs
   - `StrategicRepairScreen.tsx` - Stage 4 strategies
-  - `NeedsAssessmentScreen.tsx`, `InnerWorkHubScreen.tsx`, `InnerThoughtsScreen.tsx`, `MeditationScreen.tsx`, etc.
+  - `InnerWorkHubScreen.tsx`, `InnerThoughtsScreen.tsx` - Inner Work hub (v1.2: session list only; Needs Assessment, Gratitude, and Meditation pathways deferred to future milestone)
 - Pattern: Each screen uses hooks to fetch data + mutations to update state; renders components
 
 **`components/`**
