@@ -41,7 +41,7 @@ See: `milestones/v1.0-ROADMAP.md` for full details.
 
 - [x] **Phase 14: Foundation** - Schema migration, namespace isolation audit, UI cleanup of unbuilt pathways, and AssemblyAI voice backend (completed 2026-03-12)
 - [x] **Phase 15: Distillation Backend** - Service that extracts user-language takeaways from sessions via Haiku (completed 2026-03-12)
-- [ ] **Phase 16: Knowledge Base Backend** - Browse endpoints and cross-session theme recognition
+- [x] **Phase 16: Knowledge Base Backend** - Browse endpoints and cross-session theme recognition (completed 2026-03-12)
 - [ ] **Phase 17: Session List, Distillation UI, and Voice Input** - Dated session list, takeaway review/edit surface, and voice transcription drawer
 - [ ] **Phase 18: Knowledge Base UI and Export** - Browse screen and OS share sheet export
 
@@ -144,7 +144,7 @@ Note: Phase 17 depends on Phase 15 only; Phase 18 depends on both 16 and 17.
 | 13. Full Session E2E                         | v1.1      | 4/4            | Complete    | 2026-02-19 |
 | 14. Foundation                               | 3/3 | Complete    | 2026-03-12 | -          |
 | 15. Distillation Backend                     | 2/2 | Complete    | 2026-03-12 | -          |
-| 16. Knowledge Base Backend                   | 2/3 | In Progress|  | -          |
+| 16. Knowledge Base Backend                   | 3/3 | Complete   | 2026-03-12 | -          |
 | 17. Session List + Distillation UI + Voice   | v1.2      | 0/2            | Planned     | -          |
 | 18. Knowledge Base UI + Export               | v1.2      | 0/2            | Planned     | -          |
 
