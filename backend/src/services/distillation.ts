@@ -145,15 +145,12 @@ export async function distillSession({
   });
 
   // 2. Guard: sparse session (< 2 user messages)
-  // Use `as any` for fields added by pending migration (distilledAt, BrainActivityCallType.DISTILLATION)
-  // that are not yet reflected in the generated Prisma client types.
-  const prismaAny = prisma as any;
   const userMessages = messages.filter((m) => m.role === 'USER');
   if (userMessages.length < 2) {
     logger.info(
       `[Distillation] Skipping Haiku — session ${sessionId} has only ${userMessages.length} user message(s)`,
     );
-    await prismaAny.innerWorkSession.update({
+    await prisma.innerWorkSession.update({
       where: { id: sessionId },
       data: { distilledAt: new Date() },
     });
@@ -161,8 +158,6 @@ export async function distillSession({
   }
 
   // 3. Call Haiku with circuit breaker
-  // BrainActivityCallType.DISTILLATION is added by the pending migration; use `as any` to bypass
-  // the generated client types until `prisma generate` runs after the migration is applied.
   const raw = await withHaikuCircuitBreaker(
     async () =>
       getHaikuJson<{ takeaways: Array<{ content: string; theme?: string }> }>({
@@ -173,7 +168,7 @@ export async function distillSession({
         innerWorkSessionId: sessionId,
         turnId,
         operation: 'distillation',
-        callType: 'DISTILLATION' as unknown as BrainActivityCallType,
+        callType: BrainActivityCallType.DISTILLATION,
       }),
     null,
     'distillation',
@@ -185,7 +180,7 @@ export async function distillSession({
   // 5. Empty after normalization — just update distilledAt
   if (normalized.length === 0) {
     logger.info(`[Distillation] No valid takeaways from Haiku for session ${sessionId}`);
-    await prismaAny.innerWorkSession.update({
+    await prisma.innerWorkSession.update({
       where: { id: sessionId },
       data: { distilledAt: new Date() },
     });
@@ -194,10 +189,10 @@ export async function distillSession({
 
   // 6. Atomic transaction: replace AI takeaways, update distilledAt
   await prisma.$transaction([
-    prismaAny.sessionTakeaway.deleteMany({
+    prisma.sessionTakeaway.deleteMany({
       where: { sessionId, source: 'AI' },
     }),
-    prismaAny.sessionTakeaway.createMany({
+    prisma.sessionTakeaway.createMany({
       data: normalized.map((t, i) => ({
         sessionId,
         content: t.content,
@@ -206,14 +201,14 @@ export async function distillSession({
         position: i,
       })),
     }),
-    prismaAny.innerWorkSession.update({
+    prisma.innerWorkSession.update({
       where: { id: sessionId },
       data: { distilledAt: new Date() },
     }),
   ]);
 
   // 7. Fetch and return all takeaways (preserves USER-origin alongside new AI ones)
-  const allTakeaways = await prismaAny.sessionTakeaway.findMany({
+  const allTakeaways = await prisma.sessionTakeaway.findMany({
     where: { sessionId },
     orderBy: { position: 'asc' },
   });
