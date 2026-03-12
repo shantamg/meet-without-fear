@@ -20,16 +20,19 @@ import stage2Routes from './stage2';
 import stage3Routes from './stage3';
 import stage4Routes from './stage4';
 import ttsRoutes from './tts';
+import voiceRoutes from './voice';
 import e2eRoutes from './e2e';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
-console.log('[Routes] Loading main router...');
+logger.info('[Routes] Loading main router...');
 
 // Mount all route modules
 router.use('/brain', brainRoutes);
 router.use('/auth', authRoutes);
 router.use('/tts', ttsRoutes);
+router.use(voiceRoutes); // Voice transcription token endpoint
 router.use('/e2e', e2eRoutes); // E2E testing helpers - must be BEFORE routers with global auth middleware
 router.use(chatRoutes); // Unified chat router
 router.use(invitationsRoutes); // Must be before innerWorkRoutes (has public endpoints)

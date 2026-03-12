@@ -32,6 +32,7 @@ export * from './dto/gratitude';
 export * from './dto/meditation';
 export * from './dto/cross-feature';
 export * from './dto/chat-item';
+export * from './dto/voice';
 
 // Validation schemas
 export * from './validation';
