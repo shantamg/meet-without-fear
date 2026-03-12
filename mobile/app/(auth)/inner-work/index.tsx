@@ -1,11 +1,7 @@
 /**
  * Inner Work Hub Route
  *
- * Main landing page for all Inner Work features:
- * - Self-Reflection (formerly Inner Thoughts)
- * - Needs Assessment
- * - Gratitude Practice
- * - Meditation
+ * Landing page for the Inner Work hub: shows the Inner Thoughts session list.
  */
 
 import { useRouter } from 'expo-router';
@@ -17,9 +13,6 @@ export default function InnerWorkHubRoute() {
   return (
     <InnerWorkHubScreen
       onNavigateToSelfReflection={() => router.push('/inner-work/self-reflection')}
-      onNavigateToNeedsAssessment={() => router.push('/inner-work/needs')}
-      onNavigateToGratitude={() => router.push('/inner-work/gratitude')}
-      onNavigateToMeditation={() => router.push('/inner-work/meditation')}
       onBack={() => router.back()}
     />
   );

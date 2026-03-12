@@ -72,7 +72,10 @@ Plans:
   2. User can request distillation mid-session via an explicit button, receiving results without waiting for session end
   3. User can re-distill a session after writing more messages and receives updated takeaways that reflect the new content
   4. Distilled takeaways use the user's own words and phrases, not clinical interpretations or psychological labels
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 15-01-PLAN.md — Schema migration, shared DTOs, and type contracts (DIST-01)
+- [ ] 15-02-PLAN.md — Distillation service, endpoint, and fire-and-forget hook (DIST-01, DIST-02, DIST-03)
 
 ### Phase 16: Knowledge Base Backend
 **Goal**: The backend exposes browse endpoints for topics, people, and recurring themes, and the system organically detects cross-session patterns once enough data accumulates
@@ -96,7 +99,10 @@ Plans:
   3. User can swipe or tap to delete an individual takeaway and it disappears without a full reload
   4. User taps the mic button on the chat input and a transcription drawer slides up from the bottom showing real-time transcribed text as they speak
   5. User taps "Stop and Send" in the drawer and the transcribed text appears as their chat message
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 17-01-PLAN.md — Distillation review UI: hook, review sheet, inline edit, swipe delete (DIST-04, DIST-05, DIST-06)
+- [ ] 17-02-PLAN.md — Voice input: expo-audio, recording hook, transcription drawer, mic button (VOICE-01, VOICE-02, VOICE-03, VOICE-04)
 
 ### Phase 18: Knowledge Base UI and Export
 **Goal**: The mobile app exposes a browsable knowledge base reachable from the home screen, and users can export or share a curated selection of their takeaways via the OS share sheet
@@ -106,7 +112,10 @@ Plans:
   1. User can reach any takeaway or theme within 2 taps from the knowledge base entry point
   2. User can select a set of takeaways or session summaries and export them as readable text
   3. User tapping "Share" on an export sees the standard iOS/Android share sheet with the exported content pre-populated
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 18-01-PLAN.md — Infrastructure: query keys, hooks, routes, export utility, entry point (SHARE-01)
+- [ ] 18-02-PLAN.md — Browse index screen, topic detail screen with multi-select + Share (SHARE-01, SHARE-02)
 
 ## Progress
 
@@ -130,11 +139,11 @@ Note: Phase 17 depends on Phase 15 only; Phase 18 depends on both 16 and 17.
 | 12. Visual Baselines                         | v1.1      | 2/2            | Complete    | 2026-02-18 |
 | 13. Full Session E2E                         | v1.1      | 4/4            | Complete    | 2026-02-19 |
 | 14. Foundation                               | v1.2      | 0/3            | Planned     | -          |
-| 15. Distillation Backend                     | v1.2      | 0/TBD          | Not started | -          |
+| 15. Distillation Backend                     | v1.2      | 0/2            | Planned     | -          |
 | 16. Knowledge Base Backend                   | v1.2      | 0/TBD          | Not started | -          |
-| 17. Session List + Distillation UI + Voice   | v1.2      | 0/TBD          | Not started | -          |
-| 18. Knowledge Base UI + Export               | v1.2      | 0/TBD          | Not started | -          |
+| 17. Session List + Distillation UI + Voice   | v1.2      | 0/2            | Planned     | -          |
+| 18. Knowledge Base UI + Export               | v1.2      | 0/2            | Planned     | -          |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-03-11 (Phase 14 planned — 3 plans in 1 wave)*
+*Last updated: 2026-03-12 (Phase 17 planned — 2 plans in 2 waves)*
