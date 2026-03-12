@@ -7,3 +7,7 @@ use devenv
 
 # Optional: Override DATABASE_URL if using external database
 # export DATABASE_URL="postgresql://user:password@host:5432/listen_well"
+
+# AssemblyAI — real-time voice transcription (used by /voice/token endpoint)
+# Get your API key from: https://www.assemblyai.com/app/account
+# export ASSEMBLYAI_API_KEY="your-api-key-here"

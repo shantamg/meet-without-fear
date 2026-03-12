@@ -1,6 +1,6 @@
 ---
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-03-12
 status: living
 ---
 
@@ -42,6 +42,17 @@ status: living
   - Fire-and-forget message patterns for non-blocking event publishing
   - Circuit breaker integration: `ablyCircuitBreaker` in `publishSessionEvent()` and `publishUserEvent()` — fast-fails when Ably is in OPEN state, records success/failure for state tracking
   - Files: `backend/src/services/realtime.ts`, `shared/src/dto/realtime.ts` (channel names + event types)
+
+**Voice Transcription:**
+- AssemblyAI - Real-time voice-to-text streaming
+  - SDK: None — direct HTTP and WebSocket (no npm package required)
+  - Auth: `ASSEMBLYAI_API_KEY`
+  - Token endpoint: `GET https://streaming.assemblyai.com/v3/token?expires_in_seconds=300` (backend fetches token)
+  - Backend route: `POST /api/v1/voice/token` — proxies token request, returns `{ token, expiresInSeconds: 300 }`
+  - Mobile usage (Phase 17): Mobile uses token to open WebSocket at `wss://streaming.assemblyai.com/v3/ws?token=<token>&sample_rate=16000` for real-time transcription
+  - Rate limit: `authRateLimit` (30 req/min per user)
+  - Implementation: `backend/src/controllers/voice.ts`, `backend/src/routes/voice.ts`
+  - Error handling: 500 if `ASSEMBLYAI_API_KEY` unset, 502 if AssemblyAI returns non-200
 
 **Email Service:**
 - Resend - Transactional email delivery
@@ -180,6 +191,7 @@ status: living
 - `PORT` - Server port (default: 3000)
 
 **Optional env vars (Backend):**
+- `ASSEMBLYAI_API_KEY` - AssemblyAI key for voice transcription (required for `/voice/token` endpoint)
 - `MOCK_LLM=true` - Toggle mock LLM responses for E2E testing
 - `E2E_AUTH_BYPASS=true` - Bypass auth for E2E tests
 - `E2E_FIXTURE_ID` - Use pre-canned responses for E2E tests
@@ -222,4 +234,4 @@ status: living
 
 ---
 
-*Integration audit: 2026-03-11*
+*Integration audit: 2026-03-12*
