@@ -20,8 +20,8 @@ Requirements for the Inner Thoughts Journal milestone. Each maps to roadmap phas
 ### Distillation
 
 - [x] **DIST-01**: User can trigger distillation after finishing a session (AI extracts concise takeaways in user's own language)
-- [ ] **DIST-02**: User can trigger distillation mid-session via an on-demand button
-- [ ] **DIST-03**: User can re-distill a session as the conversation grows (incremental update)
+- [x] **DIST-02**: User can trigger distillation mid-session via an on-demand button
+- [x] **DIST-03**: User can re-distill a session as the conversation grows (incremental update)
 - [ ] **DIST-04**: User can review distilled takeaways after extraction
 - [ ] **DIST-05**: User can edit, correct, or refine distilled takeaways that were extracted incorrectly
 - [ ] **DIST-06**: User can delete individual takeaways
@@ -103,8 +103,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SESS-02 | Phase 14 | Complete |
 | VOICE-05 | Phase 14 | Complete |
 | DIST-01 | Phase 15 | Complete |
-| DIST-02 | Phase 15 | Pending |
-| DIST-03 | Phase 15 | Pending |
+| DIST-02 | Phase 15 | Complete |
+| DIST-03 | Phase 15 | Complete |
 | KNOW-01 | Phase 16 | Pending |
 | KNOW-02 | Phase 16 | Pending |
 | KNOW-03 | Phase 16 | Pending |
