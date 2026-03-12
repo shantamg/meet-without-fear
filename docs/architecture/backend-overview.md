@@ -102,7 +102,7 @@ status: living
 
 **Stage Abstraction:**
 - Purpose: Encapsulates all logic for a conversation stage (0=ONBOARDING, 1=WITNESS, 2=PERSPECTIVE_STRETCH, 3=NEED_MAPPING, 4=STRATEGIC_REPAIR)
-- Examples: `backend/src/services/stage-prompts.ts`, `mobile/src/hooks/useStages.ts`
+- Examples: `backend/src/services/stage-prompts.ts`, `backend/src/services/needs-prompts.ts` (Stage 3-4 prompt generation: needs check-in, baseline assessment, common ground, strategy generation, strategy ranking), `mobile/src/hooks/useStages.ts`
 - Pattern: Each stage has UI (screen component), controllers (route handlers), services (business logic), mutations (cache updates), validation gates
 
 **Service Orchestrator (AI Flow):**
@@ -143,9 +143,9 @@ status: living
 - Responsibilities: Centralizes route mounting; documents mount order and dependencies
 
 **Chat Unified Screen (Mobile):**
-- Location: `mobile/src/screens/UnifiedSessionScreen.tsx`
+- Location: `mobile/src/screens/UnifiedSessionScreen.tsx` (2722 lines, with sub-components extracted to `mobile/src/screens/session/`)
 - Triggers: User taps session in home screen
-- Responsibilities: Main chat interface; orchestrates all hooks (messages, realtime, stages); renders chat UI and stage panels
+- Responsibilities: Main chat interface; orchestrates hooks via `useUnifiedSession` (which delegates to `useEmpathyActions`, `useNeedsActions`, `useStrategyActions`, `useSessionEventHandler`); renders chat UI and stage panels
 
 ## Additional Backend Services
 
@@ -186,7 +186,7 @@ status: living
 ## Cross-Cutting Concerns
 
 **Logging:**
-- Backend: Console logs on request/response (method, path, status); error logger includes stack trace
+- Backend: Winston structured logger (`backend/src/lib/logger.ts`) with JSON output in production, pretty-print in development; automatically injects request context (turnId, sessionId, userId, requestId); Sentry transport forwards error-level logs
 - Mobile: Handled by error tracking provider (Sentry integration possible); development console logs
 
 **Validation:**
@@ -198,10 +198,14 @@ status: living
 - Mobile: Clerk Expo SDK manages tokens; `useAuth()` hook provides `token` for API calls; E2E mode uses custom headers for testing
 
 **Rate Limiting:**
-- Not currently implemented; can be added via express-rate-limit middleware in API layer
+- Implemented via `backend/src/middleware/rate-limit.ts` with three tiers:
+  - `streamingRateLimit`: 10 req/min (LLM-backed streaming endpoints)
+  - `empathyRateLimit`: 20 req/min (reconciler endpoints)
+  - `authRateLimit`: 30 req/min (auth token endpoints)
+- Global fallback: 100 req/min; skipped during E2E tests
 
 **AI Safety Gates:**
-- Backend: Circuit breaker pattern prevents LLM spam; stage validators check user progress before AI prompts
+- Backend: Three service-level circuit breakers (`bedrockCircuitBreaker`, `embeddingCircuitBreaker`, `ablyCircuitBreaker`) with states CLOSED/OPEN/HALF_OPEN prevent cascading failures; stage validators check user progress before AI prompts; crisis detector (`backend/src/services/crisis-detector.ts`) provides pattern-based safety net for suicide/self-harm, domestic violence, imminent danger, and child abuse; input sanitizer (`backend/src/services/input-sanitizer.ts`) wraps user input in XML delimiters to defend against prompt injection
 - Mobile: UI gates prevent advancing stages until requirements met (compact signed, invitation confirmed, etc.)
 
 ---

@@ -82,30 +82,37 @@ project-root/
 
 **`services/`**
 - Purpose: Core business logic; service layer between controllers and data access
-- Contains: ~45 files (39 top-level + chat-router/ subpackage with 6 files)
+- Contains: ~48 files (42 top-level + chat-router/ subpackage with 6 files)
 - Key services:
   - `ai-orchestrator.ts` - Main AI message routing logic
   - `stage-prompts.ts` - Stage-specific LLM instructions (~87KB / 1928 lines, comprehensive prompts)
   - `context-retriever.ts`, `context-assembler.ts` - LLM context building
-  - `realtime.ts` - Ably event publishing
-  - `reconciler.ts` - Post-stage empathy gap analysis + share suggestions
+  - `realtime.ts` - Ably event publishing (with circuit breaker integration)
+  - `reconciler/` - Modular empathy gap analysis + share suggestions (split into `index.ts`, `state.ts`, `analysis.ts`, `sharing.ts`, `circuit-breaker.ts`)
   - `chat-router/` - Subpackage with intent detection, response generation, session processing
+  - `crisis-detector.ts` - Pattern-based safety detection (suicide/self-harm, domestic violence, imminent danger, child abuse)
+  - `empathy-state-machine.ts` - Formal EmpathyAttempt status transition validation
+  - `input-sanitizer.ts` - Prompt injection defense via XML delimiters
+  - `encryption-service.ts` - Higher-level helpers for Prisma field encryption
+  - `data-retention.ts` - Two-phase retention policy for BrainActivity records
 - AI services: `ai.ts`, `model-router.ts`, `dispatch-handler.ts`
 - Memory services: `memory-service.ts`, `memory-intent.ts`, `memory-detector.ts`, `memory-validator.ts`, `memory-formatter.ts`, `global-memory.ts`
 - Context services: `cross-feature-context.ts`, `context-formatters.ts`
 - Conversation: `conversation-summarizer.ts`
-- Other services: `surfacing-policy.ts`, `timeline-aggregator.ts`, `llm-telemetry.ts`, `empathy-status.ts`, `push.ts`, `email.ts`, `brain-service.ts`, `partner-session-classifier.ts`, `background-classifier.ts`, `needs.ts`, `shared-context.ts`, `embedding.ts`, `witnessing.ts`, `people-extractor.ts`, `attacking-language.ts`, `retrieval-planner.ts`, `stage-tools.ts`, `account-deletion.ts`, `session-deletion.ts`
+- Other services: `surfacing-policy.ts`, `timeline-aggregator.ts`, `llm-telemetry.ts`, `empathy-status.ts`, `push.ts`, `email.ts`, `brain-service.ts`, `partner-session-classifier.ts`, `background-classifier.ts`, `needs.ts`, `needs-prompts.ts`, `shared-context.ts`, `embedding.ts`, `witnessing.ts`, `people-extractor.ts`, `attacking-language.ts`, `retrieval-planner.ts`, `stage-tools.ts`, `account-deletion.ts`, `session-deletion.ts`
 
 **`middleware/`**
 - Purpose: Express middleware for cross-cutting concerns
-- Contains: `auth.ts` (Clerk JWT verification), `errors.ts` (error handler), `request-context.ts` (AsyncLocalStorage for turnId)
-- Key: Error handler registered last; auth middleware protects most routes; request context captures request-scoped data
+- Contains: `auth.ts` (Clerk JWT verification), `errors.ts` (error handler), `request-context.ts` (AsyncLocalStorage for turnId), `e2e-auth.ts` (extracted E2E test auth bypass, conditionally imported), `rate-limit.ts` (per-user/IP rate limiting with three tiers)
+- Key: Error handler registered last; auth middleware protects most routes; request context captures request-scoped data; E2E auth is only loaded when NODE_ENV !== 'production'
 
 **`lib/`**
 - Purpose: Infrastructure + third-party clients
 - Contains:
   - `prisma.ts` - Singleton Prisma client
-  - `bedrock.ts` - AWS Bedrock LLM client
+  - `prisma-rls.ts` - PostgreSQL Row Level Security helper (`withUserContext()` sets `app.current_user_id` session variable)
+  - `bedrock.ts` - AWS Bedrock LLM client (with circuit breaker integration)
+  - `logger.ts` - Winston structured logger with JSON output in production, pretty-print in dev; auto-injects request context; Sentry transport for errors
   - Note: Ably client is in `backend/src/services/realtime.ts`, not a separate lib file
   - `e2e-fixtures.ts` - Testing helpers
   - `request-context.ts` - AsyncLocalStorage initialization
@@ -125,7 +132,8 @@ project-root/
 **`screens/`**
 - Purpose: Full-screen components; one per major feature/stage
 - Contains:
-  - `UnifiedSessionScreen.tsx` - Main chat interface (~121KB / 3096 lines, most complex)
+  - `UnifiedSessionScreen.tsx` - Main chat interface (~2722 lines, reduced from 3096 via component extraction)
+  - `session/` - Extracted session sub-components: `SessionAboveInputPanel.tsx`, `SessionOverlays.tsx`, `SessionDrawers.tsx`
   - `NeedMappingScreen.tsx` - Stage 3 needs
   - `StrategicRepairScreen.tsx` - Stage 4 strategies
   - `NeedsAssessmentScreen.tsx`, `InnerWorkHubScreen.tsx`, `InnerThoughtsScreen.tsx`, `MeditationScreen.tsx`, etc.
@@ -133,7 +141,7 @@ project-root/
 
 **`components/`**
 - Purpose: Reusable UI components (not full screens)
-- Contains: 109 component files organized by feature
+- Contains: 90 component files organized by feature
 - Key components:
   - `ChatInterface.tsx` - Main chat UI (29KB; messages, input, streaming)
   - `ChatBubble.tsx` - Single message bubble (20KB, handles AI streaming animation)
@@ -145,16 +153,31 @@ project-root/
 
 **`hooks/`**
 - Purpose: React Query + custom logic hooks; data layer
-- Contains: 30 hooks organizing all server communication + state management
+- Contains: 38 hooks organizing all server communication + state management
 - Key hooks:
   - `queryKeys.ts` - Centralized query key definitions (prevents circular dependencies)
-  - `useUnifiedSession.ts` - Orchestrates all session data (45KB); gathers state, messages, realtime events
+  - `useUnifiedSession.ts` - Orchestrates all session data (~711 lines, reduced from ~1218 via hook extraction); gathers state, messages, realtime events
+  - `useSessionEventHandler.ts` - Centralized Ably real-time event handling with cache updates (extracted from useUnifiedSession)
+  - `useEmpathyActions.ts` - Empathy mutations: save draft, share, resubmit, validate, respond to share offer
+  - `useNeedsActions.ts` - Stage 3 needs/common-ground mutations with auto-consent logic
+  - `useStrategyActions.ts` - Stage 4 strategy/agreement mutations
+  - `cacheHelpers.ts` - Type-safe React Query cache mutation helpers (`typedSetQueryData`, `typedGetQueryData`)
   - `useMessages.ts` - Message querying + mutations (30KB); optimistic updates + streaming
   - `useSessions.ts` - Session CRUD + list (32KB)
   - `useStages.ts` - Stage mutations + gate validation (64KB)
   - `useRealtime.ts` - Ably subscription setup (29KB); listens to session events
   - `useStreamingMessage.ts` - SSE streaming setup + metadata handling (27KB)
   - `useChatUIState.ts` - Derives UI state from cache values (9KB wrapper around `utils/chatUIState.ts`)
+  - `useAnimationQueue.ts` - Animation sequencing for chat UI
+  - `useConsent.ts` - Consent state management
+  - `useEmotions.ts` - Emotion data queries + mutations
+  - `useInnerWorkOverview.ts` - Inner work hub data fetching
+  - `useProfile.ts` - User profile queries + mutations
+  - `useRefinementChat.ts` - Refinement chat flow handling
+  - `useRouterChat.ts` - Router-level chat orchestration
+  - `usePendingActions.ts` - Pending action tracking
+  - `useUnreadSessionCount.ts` - Unread session badge count
+  - `useSharingStatus.ts` - Share offer status tracking
   - Stage-specific: `useInnerThoughts.ts`, `useGratitude.ts`, `useMeditation.ts`, `useNeedsAssessment.ts`, etc.
   - Auth: `useAuth.ts`, `useAuthProviderClerk.ts`, `useBiometricAuth.ts`
   - Timeline: `useTimeline.ts` (13KB)

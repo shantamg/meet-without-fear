@@ -130,12 +130,14 @@ throw new ValidationError('Invalid input', { field: ['error message'] });
 
 ## Logging
 
-**Framework:** console.log/warn/error (no structured logging library)
+**Framework:** Winston structured logger (`backend/src/lib/logger.ts`)
 
 **Backend Patterns:**
-- Request logging in `app.ts`: `[ISO timestamp] METHOD /path (auth: boolean)`
-- Response logging: `[ISO timestamp] METHOD /path -> statusCode`
-- Scope-tagged logs: `[ControllerName]`, `[ServiceName]`, `[Middleware]`
+- All logging uses `import { logger } from '../lib/logger'` — never direct `console.*()` calls
+- JSON output in production, pretty-print with colors in development
+- Automatic request context injection: turnId, sessionId, userId, requestId
+- Sentry transport forwards error-level logs
+- Log levels: `logger.info()`, `logger.warn()`, `logger.error()`, `logger.debug()`
 - Silent mode in tests: Jest config has `silent: true`, use `--verbose` flag to debug
 - Debug logs use pattern matching to silence expected noise (see `backend/src/__tests__/setup.ts`)
 

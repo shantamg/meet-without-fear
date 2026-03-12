@@ -23,7 +23,7 @@ Start here to find what you need.
 - [Deployment](deployment/index.md) -- Deployment strategies and distribution options
 
 ### For planning work
-- `.planning/` -- Active planning directory (not in docs/)
+- `.planning/` -- Active planning directory (not in docs/). Documents have varying ages and may be stale; check file dates and cross-reference with current code before relying on them.
   - `.planning/codebase/` -- Codebase reference docs (architecture, stack, conventions)
   - `.planning/research/` -- Research and analysis documents
   - `.planning/designs/` -- Active design work

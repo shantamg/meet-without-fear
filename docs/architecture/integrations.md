@@ -37,9 +37,10 @@ status: living
   - SDK: `ably` (backend and mobile)
   - Auth: `ABLY_API_KEY`
   - Channel format: `meetwithoutfear:session:${sessionId}` and `meetwithoutfear:user:${userId}` (see `shared/src/dto/realtime.ts`)
-  - 46 event types (43 SessionEventType + 3 UserEventType) across session, user, empathy, and system events
+  - 47 event types (44 SessionEventType + 3 UserEventType) across session, user, empathy, and system events (added `session.abandoned`)
   - Audit stream channel: `ai-audit-stream` (when `ENABLE_AUDIT_STREAM=true`)
   - Fire-and-forget message patterns for non-blocking event publishing
+  - Circuit breaker integration: `ablyCircuitBreaker` in `publishSessionEvent()` and `publishUserEvent()` — fast-fails when Ably is in OPEN state, records success/failure for state tracking
   - Files: `backend/src/services/realtime.ts`, `shared/src/dto/realtime.ts` (channel names + event types)
 
 **Email Service:**
@@ -120,16 +121,17 @@ status: living
 ## Monitoring & Observability
 
 **Error Tracking:**
-- Console logging with scope tags (e.g., `[Reconciler]`, `[Orchestrator]`)
+- Winston structured logger (`backend/src/lib/logger.ts`) with JSON output in production, pretty-print in development
+- Automatic request context injection: turnId, sessionId, userId, requestId
+- Sentry transport: error-level logs forwarded to Sentry via custom SentryTransport
 - LLM telemetry: `llm-telemetry.ts` tracks token usage, cost, duration per turn
 - Brain Activity: Stored in `BrainActivity` table for audit and cost analysis (brain service)
 - TurnTrace: Request-scoped logging via AsyncLocalStorage captures `turnId` for correlating logs
-- No external error tracking service (Sentry/Rollbar) currently configured
 
 **Logs:**
-- Backend: Console output (logs to stdout for container/platform capture)
+- Backend: Winston structured logger outputs JSON to stdout in production (container/platform capture), pretty-print in development
 - Mobile: Mixpanel events for user actions; optional debug logs in development
-- No centralized log aggregation detected
+- No centralized log aggregation detected (beyond container stdout capture)
 
 **Telemetry:**
 - LLM Call Telemetry: `backend/src/services/llm-telemetry.ts` tracks token usage, cost, duration per turn
@@ -160,7 +162,7 @@ status: living
 - Files: `scripts/deploy-*.js`, `scripts/update-build-number.js`
 
 **CI Pipeline:**
-- Not detected - No GitHub Actions, GitLab CI, CircleCI, or Travis CI configuration
+- GitHub Actions workflows configured in `.github/workflows/`
 - E2E tests: Manual via `npm run e2e` (Playwright against live backend/mobile)
 - Test & type check via `npm run test` and `npm run check` (monorepo-wide)
 
@@ -185,9 +187,10 @@ status: living
 - `ENABLE_AUDIT_STREAM` - Enable AI audit stream channel for monitoring
 - `BEDROCK_TITAN_EMBED_MODEL_ID` - Override Titan embedding model ID
 - `OPENAI_API_KEY` - OpenAI API key (for voice preview generation in `tts.ts` and `generate-voice-previews.ts`)
-- `TWILIO_ACCOUNT_SID` - Twilio account SID (SMS/phone integration)
-- `TWILIO_AUTH_TOKEN` - Twilio auth token
-- `TWILIO_PHONE_NUMBER` - Twilio sender phone number
+- `TWILIO_ACCOUNT_SID` - **Planned / Not yet implemented** — no code references exist
+- `TWILIO_AUTH_TOKEN` - **Planned / Not yet implemented** — no code references exist
+- `TWILIO_PHONE_NUMBER` - **Planned / Not yet implemented** — no code references exist
+- `FIELD_ENCRYPTION_KEY` - AES-256 key for application-level field encryption (optional, graceful degradation if not set)
 
 **Required env vars (Mobile):**
 - `EXPO_PUBLIC_API_URL` - Backend API base URL
@@ -215,7 +218,7 @@ status: living
 **Realtime Event Subscriptions:**
 - Ably channels subscribe on mobile and backend
 - Event types: Partner session events, message updates, empathy submissions, stage completions
-- Consumers: `mobile/src/hooks/useUnifiedSession.ts` subscribes to Ably for UI updates
+- Consumers: `mobile/src/hooks/useSessionEventHandler.ts` handles Ably events with cache updates (extracted from useUnifiedSession)
 
 ---
 

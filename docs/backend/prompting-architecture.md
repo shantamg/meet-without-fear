@@ -634,7 +634,7 @@ graph TD
 
 ```mermaid
 graph TD
-    START[AI Response Saved] --> CHECK{Message Count >= 40?}
+    START[AI Response Saved] --> CHECK{Message Count >= 25?}
     CHECK -->|No| SKIP[Skip Summarization]
     CHECK -->|Yes| CHECK_INTERVAL{Time to<br/>Summarize?}
     CHECK_INTERVAL -->|No| SKIP
@@ -648,9 +648,9 @@ graph TD
 
 **Summarization Strategy:**
 
-- **Threshold:** Kicks in at 40+ messages (`minMessagesForSummary: 40`)
+- **Threshold:** Kicks in at 25+ messages (`minMessagesForSummary: 25`)
 - **Re-summarize:** Every 25 messages after threshold (`resummaryInterval: 25`)
-- **Keeps recent:** Last 20 messages always in full (`recentMessagesToKeep: 20`)
+- **Keeps recent:** Last 15 messages always in full (`recentMessagesToKeep: 15`)
 - **Summarizes:** Older messages condensed by Haiku
 - **Non-blocking:** Fire-and-forget, doesn't delay response
 - **Output:** Summary text, key themes, emotional journey, unresolved topics
@@ -779,7 +779,7 @@ sequenceDiagram
     Reconciler-->>Controller: ReconcilerResult
 ```
 
-**Key File:** `backend/src/services/reconciler.ts`
+**Key File:** `backend/src/services/reconciler/` (modular directory: `analysis.ts`, `state.ts`, `sharing.ts`)
 
 ---
 
@@ -865,7 +865,7 @@ The `buildBudgetedContext()` function in `backend/src/utils/token-budget.ts` man
 | Background Classification               | Haiku              | Memory detection + categorized facts | After every AI response (fire-and-forget) |
 | Global Facts Consolidation              | Haiku              | Merge session facts into user profile | Stage 1 → Stage 2 transition       |
 | Session Embedding                       | Titan              | Embed session content              | After classification               |
-| Conversation Summarization              | Haiku              | Summarize older messages           | When message count >= 40           |
+| Conversation Summarization              | Haiku              | Summarize older messages           | When message count >= 25           |
 | Response Generation                     | Sonnet             | User-facing responses              | Every message                      |
 | Witnessing                              | Sonnet             | Pre-session witnessing             | Pre-session messages               |
 | Reconciler                              | Sonnet             | Analyze empathy gaps               | Post-Stage 2                       |
@@ -910,7 +910,9 @@ The `buildBudgetedContext()` function in `backend/src/utils/token-budget.ts` man
 
 - `backend/src/services/chat-router/intent-detector.ts` - Intent classification
 - `backend/src/services/witnessing.ts` - Pre-session witnessing
-- `backend/src/services/reconciler.ts` - Empathy gap analysis
+- `backend/src/services/reconciler/` - Empathy gap analysis (modular: `analysis.ts`, `state.ts`, `sharing.ts`, `circuit-breaker.ts`)
+- `backend/src/services/crisis-detector.ts` - Pattern-based safety detection (additive safety net alongside LLM prompts)
+- `backend/src/services/input-sanitizer.ts` - Prompt injection defense (XML delimiters + pattern detection)
 - `backend/src/services/needs.ts` - Need extraction
 
 ---

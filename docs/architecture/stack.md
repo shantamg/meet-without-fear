@@ -23,8 +23,8 @@ status: living
 
 **Environment:**
 - Node.js >= 20.0 (specified in `docs-site/package.json` engines)
-- Expo 54.0.32 - Mobile framework for iOS/Android development
-- React Native 0.81.5 - Cross-platform mobile framework
+- Expo 54.0.33 - Mobile framework for iOS/Android development
+- React Native 0.84.0 - Cross-platform mobile framework
 - React 19.1.0 - Web and mobile UI framework
 
 **Package Manager:**
@@ -34,7 +34,7 @@ status: living
 ## Frameworks
 
 **Core:**
-- Express 4.21.0 - Backend HTTP server (`backend/`)
+- Express 4.22.1 - Backend HTTP server (`backend/`)
 - Expo Router 6.0.22 - Mobile navigation and deep linking (`mobile/`)
 - Next.js 16.1.6 - Marketing website (`website/`)
 - Docusaurus 3.9.2 - Documentation site (`docs-site/`)
@@ -90,11 +90,13 @@ status: living
 - Helmet 8.0.0 - HTTP security headers middleware
 - CORS 2.8.6 - Cross-origin request handling
 - Compression 1.8.1 - Gzip compression (with SSE bypass)
-- Clerk 1.7.60 (backend) / 2.19.14 (mobile) / 6.12.0 (website) - Authentication provider
+- express-rate-limit 8.3.1 - Per-user/IP rate limiting (3 tiers: streaming 10/min, empathy 20/min, auth 30/min)
+- Clerk 1.7.73 (backend) / 2.19.26 (mobile) / 6.38.1 (website) - Authentication provider
 
 **Analytics & Logging:**
 - Mixpanel 3.1.3 (mobile) / 2.73.0 (web) - Event analytics
 - Winston 3.19.0 - Structured logging framework (backend)
+- @sentry/node 10.43.0 - Error tracking and monitoring (used in logger.ts)
 
 **External AI Models:**
 - AWS Bedrock SDK `@anthropic-ai/bedrock-sdk` 0.26.4 (Messages API)
@@ -111,7 +113,7 @@ status: living
 
 **Development Tools:**
 - ESLint 8.57.0 / 9.17.0 - Code linting
-- Prettier 3.4.2 - Code formatting
+- Prettier 3.8.1 - Code formatting
 - TypeScript ESLint - TypeScript linting rules
 - Concurrently 9.2.1 - Run multiple processes in parallel
 

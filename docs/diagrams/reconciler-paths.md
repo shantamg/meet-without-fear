@@ -51,13 +51,14 @@ stateDiagram-v2
         Banner: Waiting status
     end note
 
-    HELD --> ANALYZING: Partner completes Stage 1
-    note right of ANALYZING
-        UI: "Analyzing your empathy attempt..."
-        Banner: Analysis status
+    HELD --> READY: Reconciler finds no gaps (direct)
+    note right of HELD
+        Note: The ANALYZING state exists in
+        empathy-state-machine.ts but is never
+        triggered. The reconciler transitions
+        directly from HELD to READY or
+        AWAITING_SHARING.
     end note
-
-    ANALYZING --> READY: Reconciler finds no gaps
     note right of READY
         UI: Positive feedback message<br/>"Your attempt was quite accurate"
         Banner: "Partner is now considering<br/>how you might feel"
@@ -130,12 +131,7 @@ stateDiagram-v2
         Banner: Waiting status
     end note
 
-    HELD --> ANALYZING: Partner completes Stage 1
-    note right of ANALYZING
-        UI: "Analyzing your empathy attempt..."
-    end note
-
-    ANALYZING --> AWAITING_SHARING: Moderate gaps detected
+    HELD --> AWAITING_SHARING: Moderate gaps detected (direct)
     note right of AWAITING_SHARING
         UI: "Waiting for partner to respond..."
         Banner: "Partner is considering<br/>a suggestion to share more"
@@ -153,7 +149,8 @@ stateDiagram-v2
         Information boundary preserved
     end note
 
-    REFINING --> ANALYZING: Resubmits empathy (reconciler re-runs)
+    REFINING --> READY: Resubmits empathy (reconciler re-runs, transitions directly)
+    REFINING --> AWAITING_SHARING: Resubmits empathy (reconciler re-runs, gaps still found)
 
     READY --> REVEALED: Both directions READY
     note right of REVEALED
@@ -234,9 +231,7 @@ stateDiagram-v2
         EmpathyAttempt starts at HELD in the database.
     end note
 
-    HELD --> ANALYZING: Partner completes Stage 1
-
-    ANALYZING --> AWAITING_SHARING: Significant gaps detected
+    HELD --> AWAITING_SHARING: Significant gaps detected (direct)
     note right of AWAITING_SHARING
         UI: "Waiting for partner to respond..."
         Banner: "Partner considering suggestion"
@@ -253,7 +248,8 @@ stateDiagram-v2
         UI: No indication of decline
     end note
 
-    REFINING --> ANALYZING: Resubmits (reconciler re-runs)
+    REFINING --> READY: Resubmits (reconciler re-runs, transitions directly)
+    REFINING --> AWAITING_SHARING: Resubmits (reconciler re-runs, gaps still found)
 
     READY --> REVEALED: Both directions READY
 
@@ -332,29 +328,20 @@ stateDiagram-v2
         UI: "Review and resubmit" button<br/>Can edit or accept
     end note
 
-    RESUBMIT --> ANALYZING: Resubmits to reconciler
-    note right of ANALYZING
-        UI: "Re-analyzing..."<br/>Reconciler re-runs with context guard
+    RESUBMIT --> READY: Resubmits to reconciler (transitions directly)
+    note right of RESUBMIT
+        Reconciler re-runs with context guard.
+        Transitions directly from HELD to READY
+        (no intermediate ANALYZING state).
     end note
 
-    ANALYZING --> READY: Guard intercepts or PROCEED
     note right of READY
-        hasContextAlreadyBeenShared guard<br/>prevents infinite loops<br/>Marks as READY regardless
-    end note
-
-    note right of ANALYZING
         Context guard: hasContextAlreadyBeenShared
-        (reconciler.ts:912-922) prevents infinite
+        (reconciler/circuit-breaker.ts) prevents infinite
         loops by checking if context was already
         shared in this direction. If so, forces READY.
-    end note
-
-    ANALYZING --> READY: Circuit breaker (max 3 attempts)
-    note right of READY
-        Circuit breaker (reconciler.ts:843-857):
-        RefinementAttemptCounter tracks attempts per
-        direction. After 3 full analyses, forces READY
-        regardless of gap severity.
+        Circuit breaker: after 3 full analyses,
+        forces READY regardless of gap severity.
     end note
 
     REFINING --> ACCEPTANCE_CHECK: Taps "Skip refinement"
@@ -688,10 +675,13 @@ E2E tests validate persistence by:
 ## Implementation Reference
 
 These diagrams are implemented across:
-- **Backend**: `backend/src/services/reconciler.ts` (reconciler logic)
+- **Backend**: `backend/src/services/reconciler/` (modular reconciler: `state.ts`, `analysis.ts`, `sharing.ts`, `circuit-breaker.ts`)
+- **Backend**: `backend/src/services/empathy-state-machine.ts` (formal status transition validation)
 - **Mobile**: `mobile/src/components/` (panels and drawers)
-- **Mobile**: `mobile/src/hooks/` (mutations and cache updates)
+- **Mobile**: `mobile/src/hooks/useEmpathyActions.ts` (empathy mutations)
 - **Shared**: `shared/src/dto/reconciler.ts` (types and contracts)
+
+> **Note on ANALYZING state:** The `ANALYZING` status and its transitions (`HELD → ANALYZING` via `START_ANALYSIS`, `ANALYZING → READY` via `NO_SIGNIFICANT_GAPS`, `ANALYZING → AWAITING_SHARING` via `GAPS_DETECTED`) are defined in `empathy-state-machine.ts` but are never triggered by the reconciler code. The reconciler in `reconciler/state.ts` updates the database status directly from `HELD` to `READY` or `AWAITING_SHARING`, bypassing the `ANALYZING` state. The state machine definition retains `ANALYZING` for potential future use.
 
 For detailed specs, see:
 - `docs/archive/specs/when-the-reconciler-responds-with-offeroptional-we-need-to-implement-this.md`

@@ -10,25 +10,24 @@ status: living
 
 ## Tech Debt
 
-**Large, Monolithic Components:**
+**Large, Monolithic Components (Partially Resolved):**
 - Issue: Multiple components exceed 1500+ lines of code, making them difficult to maintain and test
 - Files:
-  - `mobile/src/screens/UnifiedSessionScreen.tsx` (3096 lines)
+  - `mobile/src/screens/UnifiedSessionScreen.tsx` (2722 lines, reduced from 3096 — extracted `session/SessionAboveInputPanel.tsx`, `session/SessionOverlays.tsx`, `session/SessionDrawers.tsx`)
   - `backend/src/controllers/stage2.ts` (2268 lines)
-  - `backend/src/services/reconciler.ts` (2320 lines)
-  - `mobile/src/hooks/useUnifiedSession.ts` (1218 lines)
-- Impact: Increased bug risk, harder to test individual features, cognitive load for future developers
-- Fix approach: Break into smaller domain-focused components/hooks. Consider extracting stage-specific logic into separate files (e.g., `useStage2Logic`, `useStage3Logic`)
+  - ~~`backend/src/services/reconciler.ts` (2320 lines)~~ — **Resolved**: refactored into `reconciler/` directory with `state.ts` (544), `analysis.ts` (610), `sharing.ts` (1173), `circuit-breaker.ts` (102)
+  - ~~`mobile/src/hooks/useUnifiedSession.ts` (1218 lines)~~ — **Resolved**: reduced to 711 lines by extracting `useEmpathyActions.ts`, `useNeedsActions.ts`, `useStrategyActions.ts`, `useSessionEventHandler.ts`
+- Impact: Reduced but stage2.ts controller still large
+- Remaining: `stage2.ts` controller is the last major monolith
 
-**Legacy/Deprecated Code Still Active:**
+**Legacy/Deprecated Code Still Active (Partially Resolved):**
 - Issue: Deprecated endpoints and old patterns coexist with new ones, creating confusion and maintenance burden
 - Files:
   - `backend/src/controllers/messages.ts` (105) - `sendMessage` endpoint marked DEPRECATED with fire-and-forget pattern still in use
-  - `backend/src/services/stage-prompts-legacy.ts` (1899 lines) - Full legacy prompting system still exists
+  - ~~`backend/src/services/stage-prompts-legacy.ts` (1899 lines)~~ — **Resolved**: deleted, only `stage-prompts.ts` remains
   - Multiple deprecated test routes in `backend/src/routes/__tests__/messages.test.ts`
-  - `backend/src/services/stage-prompts.ts` (1928 lines) and `backend/src/services/stage-prompts-legacy.ts` (1899 lines) coexist — nearly 4,000 lines of prompt logic
-- Impact: New developers may implement using deprecated patterns; code reviewers must check compatibility
-- Fix approach: Schedule removal of deprecated endpoints (sendMessage) after ensuring all clients migrated to `/messages/stream`. Archive stage-prompts-legacy once stage-prompts.ts is fully validated.
+- Impact: Reduced — only the deprecated sendMessage endpoint remains
+- Fix approach: Schedule removal of deprecated sendMessage endpoint after ensuring all clients migrated to `/messages/stream`.
 
 **Unused/Partially Implemented Features:**
 - Issue: Features stubbed out or marked for future implementation
@@ -54,19 +53,17 @@ status: living
 - Risk: This pattern is not type-safe; easy to miss cache update when adding new stage mutations
 - Fix approach: Consider creating a wrapper mutation hook that enforces cache update pattern, or use React Query's `onSuccess` with `invalidateQueries` to auto-refresh
 
-**Reconciler Race Conditions:**
-- Issue: Reconciler service has manual retry logic (3 attempts with 100ms delays) to handle database visibility issues after record creation
-- Files: `backend/src/services/reconciler.ts` (792-813) - "handle potential race condition where the record might not be immediately visible after creation"
-- Symptoms: Reconciliation may fail silently if database replication/indexing is slow
-- Impact: Empathy gap analysis might not run when it should
-- Fix approach: Use database-level guarantees (read-after-write consistency, explicit transaction isolation) instead of polling. Consider using Prisma transactions to ensure atomicity.
+**Reconciler Race Conditions (Partially Resolved):**
+- Issue: Reconciler service previously had manual retry logic to handle database visibility issues
+- Files: `backend/src/services/reconciler/state.ts` - `checkAndRevealBothIfReady()` now uses serializable transactions to prevent race conditions on mutual reveal
+- Progress: Modular refactor introduced explicit state machine (`empathy-state-machine.ts`) and serializable transactions for critical paths
+- Remaining: Some retry logic may still exist in share suggestion generation flow (`reconciler/sharing.ts`)
 
-**Reconciliation State Machine Complexity:**
+**Reconciliation State Machine Complexity (Partially Resolved):**
 - Issue: Reconciler manages complex state transitions (HELD → AWAITING_SHARING → REFINING → REVEALED) with multiple database tables (ReconcilerResult, ReconcilerShareOffer, EmpathyStatus)
-- Files: `backend/src/services/reconciler.ts` (entire file), `backend/src/controllers/stage2.ts`
-- Impact: Logic to prevent looping (e.g., `hasContextAlreadyBeenShared`) added as workarounds, suggests underlying state machine is fragile
-- Risk: Adding new reconciliation features requires careful consideration of state transitions
-- Fix approach: Create formal state diagram and consider using explicit state machine library (e.g., XState) to enforce valid transitions
+- Files: `backend/src/services/reconciler/` (modular directory), `backend/src/services/empathy-state-machine.ts`, `backend/src/controllers/stage2.ts`
+- Progress: Formal state machine implemented in `empathy-state-machine.ts` with explicit transition table, `canTransition()`, and `validEventsFor()` — prevents invalid state changes. Loop prevention formalized in `reconciler/circuit-breaker.ts` (max 3 attempts per direction)
+- Remaining: State machine is custom (not using XState); adding new reconciliation features still requires careful consideration
 
 **Type-Safety Gaps in useStages.ts:**
 - Issue: `useStages.ts` has `@typescript-eslint/no-explicit-any` escapes and circular dependency runtime guards
@@ -75,31 +72,24 @@ status: living
 - Risk: Refactoring may introduce silent regressions
 - Fix approach: Replace `any` escapes with proper generics; resolve circular dependencies at the module level
 
-**Console Logging Explosion:**
-- Issue: 85+ console.log/warn/error statements in `reconciler.ts` alone
-- Files: `backend/src/services/reconciler.ts`
-- Impact: Log noise in production; performance cost of string interpolation
-- Fix approach: Introduce log levels or structured logging; remove debug-only logs before production
+**Console Logging Explosion (Resolved):**
+- ~~Issue: 85+ console.log/warn/error statements in `reconciler.ts` alone~~
+- **Resolved**: All `console.*()` calls across the backend replaced with Winston structured logger (`backend/src/lib/logger.ts`). Logger provides log levels, JSON output in production, request context injection, and Sentry transport for errors.
 
-**State Management Explosion in useStages.ts:**
+**State Management Explosion in useStages.ts (Partially Resolved):**
 - Issue: 29 direct `queryClient.setQueryData()` calls with no type-safe wrapper
 - Files: `mobile/src/hooks/useStages.ts`
-- Impact: Cache key typos or shape mismatches cause silent failures
-- Fix approach: Create typed cache mutation helpers that enforce key/shape consistency
+- Progress: Typed cache helpers created in `mobile/src/hooks/cacheHelpers.ts` — `typedSetQueryData()` and `typedGetQueryData()` provide compile-time key-to-value-type enforcement. New extracted hooks (`useEmpathyActions.ts`, `useNeedsActions.ts`, `useStrategyActions.ts`) use these helpers.
+- Remaining: `useStages.ts` itself still has direct `setQueryData` calls that could be migrated to the typed helpers
 
-**Circuit Breaker Timeout Comment Discrepancy:**
-- Issue: `HAIKU_TIMEOUT_MS = 20000` (20 seconds) but the comment says "Default timeout: 10 seconds"
-- Files: `backend/src/utils/circuit-breaker.ts` line 38
-- Impact: Misleading for developers; actual timeout is 2x what comment says
-- Fix approach: Update the comment to say "Default timeout: 20 seconds" or align the value with the comment
-
-**Circuit Breaker Timing (Performance):**
-- Issue: Haiku circuit breaker timeout increased to 20 seconds (HAIKU_TIMEOUT_MS = 20000) from previous 1.5s/3s attempts, indicating service is slow but needed room for cold starts
-- Files: `backend/src/utils/circuit-breaker.ts` (38)
-- Impact: E2E test runs can take 8-12 minutes when hitting Haiku timeouts (documented in MEMORY.md)
+**Circuit Breaker Pattern (Rewritten):**
+- The circuit breaker utility (`backend/src/utils/circuit-breaker.ts`) has been completely rewritten with a full 3-state pattern (CLOSED → OPEN → HALF_OPEN)
+- Three service-level instances: `bedrockCircuitBreaker`, `embeddingCircuitBreaker`, `ablyCircuitBreaker`
+- Configuration: failureThreshold (5), cooldownMs (30s), timeoutMs (20s)
+- Methods: `execute()`, `executeWithFallback()`, `recordSuccess()`, `recordFailure()`, `getStats()`
+- Impact: E2E test runs can still take 8-12 minutes when hitting LLM timeouts
 - Risk: E2E tests may fail intermittently based on LLM service health
-- Mitigation: Circuit breaker has fallback values; tests gracefully degrade
-- Recommendation: Monitor Haiku latency; consider caching responses or pre-warming service
+- Mitigation: Circuit breaker provides fallback values; fast-fail when OPEN state prevents cascading failures
 
 ---
 
@@ -115,7 +105,7 @@ status: living
 
 **N+1 Query Risk in Reconciler:**
 - Issue: Reconciler builds context by fetching user messages, themes, empathy statements separately. If session has many messages, could cause multiple database round-trips
-- Files: `backend/src/services/reconciler.ts` - buildReconcilerPrompt, buildShareOfferPrompt
+- Files: `backend/src/services/reconciler/analysis.ts` - `getWitnessingContent`, `extractThemes`, `analyzeEmpathyGap`
 - Risk: Higher latency with larger sessions
 - Mitigation: Prisma relations are properly defined; queries use includes/selects when needed
 - Recommendation: Monitor slow query logs; consider pagination if sessions grow beyond 1000 messages
@@ -127,17 +117,22 @@ status: living
 **Critical Services Lack Unit Tests:**
 - Issue: Major backend services have no dedicated test files
 - Tested services (14): ai, context-assembler, dispatch-handler, memory-detector, memory-intent, memory-validator, partner-session-classifier, people-extractor, push, realtime, reconciler-offer-optional, semantic-router-integration, stage-prompts, stage-tools
-- Untested files (high-impact):
-  - `backend/src/services/ai-orchestrator.ts` (26.6KB) - Routes AI requests to appropriate models; core system
-  - `backend/src/services/context-retriever.ts` (28KB) - Fetches session context; core data service
-  - `backend/src/services/reconciler.ts` (2320 lines) - Reconciliation logic; no tests (critical gap) — route-level tests mock the service entirely, and `reconciler-offer-optional.test.ts` only tests mirrored helper logic, not reconciler.ts itself
+- Newly added tests:
+  - `backend/src/services/__tests__/ai-orchestrator.test.ts`
+  - `backend/src/services/__tests__/context-retriever.test.ts`
+  - `backend/src/services/__tests__/crisis-detector.test.ts`
+  - `backend/src/services/__tests__/empathy-state-machine.test.ts`
+  - `backend/src/services/__tests__/input-sanitizer.test.ts`
+  - `backend/src/services/__tests__/reconciler.test.ts`
+  - `backend/src/utils/__tests__/circuit-breaker.test.ts`
+  - `backend/src/utils/__tests__/field-encryption.test.ts`
+  - `backend/src/lib/__tests__/bedrock-streaming.test.ts`
+- Still untested (high-impact):
   - `backend/src/services/embedding.ts` (16.4KB) - Vector embedding service
   - `backend/src/services/conversation-summarizer.ts` (22.5KB) - Session summarization
   - `backend/src/services/needs.ts` (session needs logic)
-- Total untested services: ~27 files
-- Impact: Bugs in these services may go undetected; regressions from refactoring not caught
-- Risk: High priority changes to reconciliation, context assembly, or AI orchestration have no automated safety net
-- Fix approach: Create integration test suite for critical paths (e.g., "Stage 1 → Stage 2 → reconciler runs → gaps detected" flow). Prioritize tests for ai-orchestrator, context-retriever, reconciler.
+- Impact: Core services now have test coverage; remaining gaps are lower priority
+- Fix approach: Continue adding tests for embedding, summarizer, and needs services
 
 **Mobile E2E Test Brittleness:**
 - Issue: Live AI E2E test (`e2e/tests/live-ai-full-flow.spec.ts`) depends on external service health (partner-session-classifier circuit breaker adds 20s timeout per response per MEMORY.md)
@@ -175,13 +170,10 @@ status: living
 
 ## Security Considerations
 
-**E2E Auth Bypass Active in Production Code:**
+**E2E Auth Bypass (Not Resolved):**
 - Issue: E2E auth bypass (`E2E_AUTH_BYPASS=true` environment variable) is built into production auth middleware
-- Files: `backend/src/middleware/auth.ts` (75-120) - Accepts `x-e2e-user-id` and `x-e2e-user-email` headers
-- Risk: If E2E_AUTH_BYPASS is accidentally set to true in production, anyone can impersonate any user
-- Mitigation: Code checks `process.env.E2E_AUTH_BYPASS !== 'true'` before accepting headers; should only be enabled in test environments
-- Recommendation: Extract E2E auth into separate test-only middleware file; never include in production auth chain. Add startup warning if detected in non-test environment.
-- Additional mitigation (added 2026): CORS restrictions + route-level guards reduce exposure surface
+- Status: `backend/src/middleware/e2e-auth.ts` was created but is **never imported** anywhere. The bypass logic (`handleE2EAuthBypass()`, lines 74-121) still lives inline in `backend/src/middleware/auth.ts`. The bypass was duplicated to a separate file but not actually extracted from `auth.ts` — production auth middleware still contains E2E bypass logic.
+- Remaining mitigation: Environment variable check still needed; CORS restrictions + route-level guards provide additional protection
 
 **No Input Validation on Controller Parameters:**
 - Issue: Controllers receive route parameters directly without schema validation; request bodies validated but route params may not be
@@ -204,19 +196,19 @@ status: living
   4. Test reload/refresh to ensure derived UI state matches server truth
 
 **Reconciler Empathy Status Machine:**
-- Files: `backend/src/services/reconciler.ts`, `backend/src/controllers/stage2.ts`, `backend/src/services/empathy-status.ts`
+- Files: `backend/src/services/reconciler/` (modular directory), `backend/src/services/empathy-state-machine.ts`, `backend/src/controllers/stage2.ts`, `backend/src/services/empathy-status.ts`
 - Fragility: Multiple tables track related state; cascading deletes may orphan records
 - Safe modification:
-  1. Understand full state diagram before changing ReconcilerResult status
+  1. Use `empathy-state-machine.ts` transition table to validate state changes — `canTransition()` prevents invalid transitions
   2. Check both ReconcilerResult and EmpathyStatus when changing empathy state
-  3. Run existing reconciler tests after changes
-  4. Test with database snapshots (`backend/snapshots/`) to validate data consistency
+  3. Run reconciler tests (`services/__tests__/reconciler.test.ts`, `services/__tests__/empathy-state-machine.test.ts`) after changes
+  4. Reconciler circuit breaker (`reconciler/circuit-breaker.ts`) limits refinement loops to max 3 per direction
 
 **Stage Prompts System:**
-- Files: `backend/src/services/stage-prompts.ts`, `backend/src/services/stage-prompts-legacy.ts`
+- Files: `backend/src/services/stage-prompts.ts` (legacy file deleted)
 - Fragility: Stage-specific instructions embedded in prompt templates; changes affect AI behavior globally
 - Safe modification:
-  1. Make prompt changes in stage-prompts.ts only (not legacy)
+  1. Make prompt changes in stage-prompts.ts (the only prompts file now)
   2. Test with prompt-test scripts before committing
   3. Run live AI E2E test to validate AI still understands stage intent
   4. Document any new prompt tags in comments (e.g., `<thinking>`, `<draft>`)
@@ -251,11 +243,9 @@ status: living
 - Impact: Missing functionality silently degrades behavior (e.g., empty themes array in context assembly)
 - Fix approach: Triage TODOs — implement or create tracked issues; remove stale ones
 
-**Reconciler Has 85 Console Statements With No Structured Logging:**
-- Issue: `reconciler.ts` contains 85 console.log/warn/error calls with no log levels, no structured format, and no ability to filter
-- Files: `backend/src/services/reconciler.ts`
-- Impact: Log noise in production; no way to trace reconciler operations without reading raw stdout; performance cost of string interpolation on every call
-- Fix approach: Replace with structured logger (e.g., pino/winston) with log levels; use TurnTrace context for correlation
+**Reconciler Logging (Resolved):**
+- ~~Issue: `reconciler.ts` contains 85 console.log/warn/error calls with no structured format~~
+- **Resolved**: All logging migrated to Winston structured logger. Reconciler modules (`reconciler/state.ts`, `reconciler/analysis.ts`, `reconciler/sharing.ts`) use `logger.info/warn/error` with automatic request context injection (turnId, sessionId, userId).
 
 **Query Key Type-Safety Gap:**
 - Issue: Query keys in `queryKeys.ts` are string arrays (`['sessions', id, 'state'] as const`). Nothing prevents a `setQueryData` call from using a key that differs by one segment from what `useQuery` reads — these mismatches cause silent cache misses
@@ -263,12 +253,9 @@ status: living
 - Impact: Bugs from key mismatches are invisible at compile time and hard to detect at runtime
 - Fix approach: Consider typed query key factory pattern or wrapper functions that enforce key/value type consistency
 
-**Reconciler Service (2320 lines) Has No Direct Test Coverage:**
-- Issue: `reconciler.ts` is the most complex backend service but has zero direct unit or integration tests. Route-level tests (`reconciler.test.ts`) mock the service entirely. `reconciler-offer-optional.test.ts` tests mirrored helper logic, not the actual service code
-- Files: `backend/src/services/reconciler.ts` (2320 lines, 85 console statements, complex state machine)
-- Impact: Any refactoring of reconciler internals has no automated safety net; state machine transitions, gap analysis, circuit breaker logic, and share offer generation are all untested
-- Risk: Critical — this is the core empathy exchange engine; bugs here affect both users in a session
-- Fix approach: Create integration tests for key flows (feel-heard → reconciler runs → share offer generated); add unit tests for state transition functions
+**Reconciler Test Coverage (Resolved):**
+- ~~Issue: `reconciler.ts` (2320 lines) had zero direct unit or integration tests~~
+- **Resolved**: Reconciler refactored into modular `reconciler/` directory and now has direct test coverage via `backend/src/services/__tests__/reconciler.test.ts`. Empathy state machine transitions tested in `backend/src/services/__tests__/empathy-state-machine.test.ts`. Route-level tests also updated in `backend/src/routes/__tests__/reconciler.test.ts`.
 
 ---
 
@@ -313,9 +300,9 @@ status: living
 
 **Database Transaction Usage (Partially Resolved):**
 - Issue: Multi-step operations historically lacked explicit transactions
-- Progress: Transactions now used in critical reconciler paths (reconciler.ts lines 1284-1317, 1399-1450)
+- Progress: Transactions now used in critical reconciler paths — `reconciler/state.ts` uses serializable transactions in `checkAndRevealBothIfReady()` to prevent race conditions on mutual reveal
 - Remaining: Some non-critical multi-step operations still lack explicit transactions
-- Files: `backend/src/services/reconciler.ts`
+- Files: `backend/src/services/reconciler/state.ts`
 - Mitigation: Cascading deletes defined in Prisma schema handle cleanup
 
 **Migration Files Not Audited:**

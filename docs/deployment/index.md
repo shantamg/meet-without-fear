@@ -39,6 +39,19 @@ Mobile builds and submissions use Expo Application Services (EAS). The following
 
 The iOS production build uses `--auto-submit` to push directly to App Store Connect. Build numbers are auto-incremented via `scripts/update-build-number.js`.
 
+#### EAS Build Profiles
+
+Build profiles are defined in `mobile/eas.json`. Each profile configures its own Clerk keys, API URL, and Mixpanel token.
+
+| Profile | Purpose |
+|---------|---------|
+| `development` | Local dev build pointing at `http://localhost:3000` |
+| `development-production` | Dev client against production API (`https://api.meetwithoutfear.com`) |
+| `development-simulator` | iOS simulator build for local development |
+| `preview` | Internal staging distribution build |
+| `production` | App Store / Play Store release build |
+| `android-apk` | Standalone APK build for sideloading |
+
 ### Website & Docs: Vercel
 
 | Target | Workspace | Deploy Command |
@@ -46,6 +59,22 @@ The iOS production build uses `--auto-submit` to push directly to App Store Conn
 | Website | `website/` | `npm run website:deploy` (runs `cd website && vercel --prod`) |
 | Docs site | `docs-site/` | `npm run docs:deploy` (runs Vercel deploy in docs-site workspace) |
 | Status dashboard | `tools/status-dashboard/` | `npm run deploy:status` (runs `cd tools/status-dashboard && vercel --prod`) |
+
+## CI/CD Pipeline
+
+GitHub Actions runs on every push to `main` and every pull request targeting `main`. The workflow is defined in `.github/workflows/ci.yml`.
+
+**Steps:**
+
+1. Starts a PostgreSQL 16 service container (health-checked with `pg_isready`)
+2. Checks out the repository and sets up Node.js 20 with npm caching
+3. Installs dependencies (`npm ci`)
+4. Generates the Prisma client (`npx prisma generate` in `backend/`)
+5. Runs database migrations (`npx prisma migrate deploy` in `backend/`)
+6. Runs type checking across all workspaces (`npm run check`)
+7. Runs tests across all workspaces (`npm run test`)
+
+The pipeline uses a dedicated test database (`meetwithoutfear_test`) with `NODE_ENV=test`. All steps must pass before a PR can be merged.
 
 ## Key Environment Variables
 
@@ -61,7 +90,32 @@ The backend requires the following environment variables (see `backend/.env.exam
 | `APP_URL` | Public-facing app URL (e.g., `https://meetwithoutfear.com`) |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | AI services (AWS Bedrock) |
 
-Optional variables include Twilio SMS credentials, Neural Monitor dashboard settings (`DASHBOARD_API_SECRET`, `DASHBOARD_ALLOWED_EMAILS`, `DASHBOARD_URL`), and model ID overrides (`BEDROCK_MODEL_ID`).
+Optional variables include Twilio SMS credentials, Neural Monitor dashboard settings (`DASHBOARD_API_SECRET`, `DASHBOARD_ALLOWED_EMAILS`, `DASHBOARD_URL`), model ID overrides (`BEDROCK_MODEL_ID`), and `FIELD_ENCRYPTION_KEY` (AES-256 key for application-level field encryption — gracefully degrades if not set).
+
+### Testing & Development
+
+| Variable | Purpose |
+|----------|---------|
+| `MOCK_LLM` | Mock LLM responses in tests (boolean) |
+| `RUN_DB_TESTS` | Enable database integration tests (boolean) |
+| `E2E_AUTH_BYPASS` | Bypass Clerk authentication for E2E tests (boolean) |
+| `E2E_ADMIN_KEY` | Admin key for E2E test endpoints (default: `e2e-test-admin-key`) |
+| `SHADOW_DATABASE_URL` | Shadow database for safe Prisma migrations |
+
+### Model Configuration
+
+| Variable | Purpose |
+|----------|---------|
+| `BEDROCK_HAIKU_MODEL_ID` | Override Haiku model ID (default: `global.anthropic.claude-haiku-4-5-20251001-v1:0`) |
+| `BEDROCK_SONNET_MODEL_ID` | Override Sonnet model ID (default: `global.anthropic.claude-sonnet-4-5-20250929-v1:0`) |
+| `BEDROCK_TITAN_EMBED_MODEL_ID` | Override embedding model (default: `amazon.titan-embed-text-v2:0`) |
+
+### Observability
+
+| Variable | Purpose |
+|----------|---------|
+| `SENTRY_DSN` | Sentry error tracking DSN |
+| `DISABLE_PROMPT_LOGGING` | Disable prompt/completion logging (boolean) |
 
 ## Documents
 

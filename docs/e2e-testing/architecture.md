@@ -428,5 +428,11 @@ Two-browser tests simulate both users simultaneously in separate browser context
 - `waitForAnyAIResponse(page)` — waits for any AI response to appear in chat
 - `sendAndWaitForPanel()` — sends message and waits for panel to appear
 
+**Stage Flow Helpers** (defined in `e2e/helpers/stage-flows.ts`):
+- Composite flow helpers to reduce test boilerplate across E2E tests
+- Shared fixture messages: `USER_A_STAGE1_MESSAGES`, `USER_A_STAGE2_MESSAGES`, etc.
+- Helper functions: `completeStage0ForBothUsers()`, `completeUserAWitnessing()`, `shareEmpathy()`
+- Used by two-browser tests and reconciler tests to avoid duplicating setup code
+
 **Fixture Operations Registry:**
 Each fixture can define `operations` for non-streaming AI responses (reconciler analysis, share suggestions). The registry maps operation names to fixture response objects.

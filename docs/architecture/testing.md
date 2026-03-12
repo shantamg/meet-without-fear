@@ -53,10 +53,19 @@ npm run test -- --coverage --workspace=backend
 
 ## Test File Organization
 
-**Location:**
+**Location (key test files; 47 backend, 42 mobile total):**
 - Backend: `src/__tests__/` directory alongside source code
   - `src/__tests__/prisma-schema.test.ts` - Schema validation
   - `src/routes/__tests__/reconciler.test.ts` - Route-specific tests
+  - `src/services/__tests__/ai-orchestrator.test.ts` - AI orchestrator tests
+  - `src/services/__tests__/context-retriever.test.ts` - Context retrieval tests
+  - `src/services/__tests__/crisis-detector.test.ts` - Crisis detection tests
+  - `src/services/__tests__/empathy-state-machine.test.ts` - State machine transition tests
+  - `src/services/__tests__/input-sanitizer.test.ts` - Input sanitizer tests
+  - `src/services/__tests__/reconciler.test.ts` - Reconciler service tests
+  - `src/utils/__tests__/circuit-breaker.test.ts` - Circuit breaker pattern tests
+  - `src/utils/__tests__/field-encryption.test.ts` - Field encryption tests
+  - `src/lib/__tests__/bedrock-streaming.test.ts` - Bedrock streaming tests
 - Mobile: `src/**/__tests__/` co-located with source
   - `src/utils/__tests__/chatUIState.test.ts` - Utility function tests
   - `src/components/__tests__/EmotionalBarometer.test.tsx` - Component tests
@@ -64,6 +73,7 @@ npm run test -- --coverage --workspace=backend
 - E2E: `e2e/tests/` flat with organized subdirectories
   - `e2e/tests/stage-2-empathy/reconciler/*.spec.ts` - Feature paths
   - `e2e/tests/homepage.spec.ts`, `single-user-journey.spec.ts` - Top-level flows
+  - `e2e/helpers/stage-flows.ts` - Composite flow helpers with shared fixture messages (reduces test boilerplate)
 
 **Naming:**
 - Backend: `*.test.ts` (single-test-per-file preferred)
@@ -592,7 +602,7 @@ npm run e2e
 ```
 
 **CI Pipeline:**
-- GitHub Actions runs `npm run check` and `npm run test` on each PR
+- GitHub Actions workflows in `.github/workflows/` run `npm run check` and `npm run test` on each PR
 - E2E tests run on merge to main (slower, separate job)
 - Live AI tests optional (manual trigger)
 
