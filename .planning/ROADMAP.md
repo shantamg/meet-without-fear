@@ -39,7 +39,7 @@ See: `milestones/v1.0-ROADMAP.md` for full details.
 
 **Milestone Goal:** Simplify Inner Work to focus solely on Inner Thoughts chat — adding dated sessions with topic tagging, voice input via real-time transcription, AI-guided distillation of venting into organized takeaways, and a browsable knowledge base of accumulated themes, people, and insights.
 
-- [ ] **Phase 14: Foundation** - Schema migration, namespace isolation audit, UI cleanup of unbuilt pathways, and AssemblyAI voice backend
+- [x] **Phase 14: Foundation** - Schema migration, namespace isolation audit, UI cleanup of unbuilt pathways, and AssemblyAI voice backend (completed 2026-03-12)
 - [ ] **Phase 15: Distillation Backend** - Service that extracts user-language takeaways from sessions via Haiku
 - [ ] **Phase 16: Knowledge Base Backend** - Browse endpoints and cross-session theme recognition
 - [ ] **Phase 17: Session List, Distillation UI, and Voice Input** - Dated session list, takeaway review/edit surface, and voice transcription drawer
@@ -142,7 +142,7 @@ Note: Phase 17 depends on Phase 15 only; Phase 18 depends on both 16 and 17.
 | 11. Stage 4 Strategies                       | v1.1      | 2/2            | Complete    | 2026-02-17 |
 | 12. Visual Baselines                         | v1.1      | 2/2            | Complete    | 2026-02-18 |
 | 13. Full Session E2E                         | v1.1      | 4/4            | Complete    | 2026-02-19 |
-| 14. Foundation                               | 1/3 | In Progress|  | -          |
+| 14. Foundation                               | 3/3 | Complete   | 2026-03-12 | -          |
 | 15. Distillation Backend                     | v1.2      | 0/2            | Planned     | -          |
 | 16. Knowledge Base Backend                   | v1.2      | 0/3            | Planned     | -          |
 | 17. Session List + Distillation UI + Voice   | v1.2      | 0/2            | Planned     | -          |

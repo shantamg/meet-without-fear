@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Inner Thoughts Journal
 status: planning
-stopped_at: Completed 14-foundation/14-01-PLAN.md
-last_updated: "2026-03-12T07:52:11.556Z"
+stopped_at: Completed 14-02-PLAN.md
+last_updated: "2026-03-12T07:57:20.090Z"
 last_activity: 2026-03-11 — Roadmap revised for v1.2 — VOICE-01 through VOICE-05 added; 24 requirements mapped across 5 phases
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 12
-  completed_plans: 1
+  completed_plans: 3
   percent: 68
 ---
 
@@ -51,6 +51,8 @@ Progress: [███████░░░] 68%
 
 **Recent Trend:** v1.1 complete — all 12 plans shipped, all reconciler + Stage 3-4 paths verified.
 | Phase 14-foundation P01 | 12 | 1 tasks | 2 files |
+| Phase 14-foundation P02 | 25 | 2 tasks | 9 files |
+| Phase 14-foundation P03 | 8 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -70,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 13-04]: `evaluate((el) => el.click())` required for React Native Web click bypass
 - [Phase 14-foundation]: Removed onNavigateToNeedsAssessment/Gratitude/Meditation props from InnerWorkHubScreen — hub is fully redirected to session list, no backward compat needed
 - [Phase 14-foundation]: Hub-as-list pattern: Inner Work hub is now a session list, not a feature directory; theme tag shown only when non-null
+- [Phase 14-foundation]: Partner session context retrieval must never include inner thoughts content — enforced via removing includeInnerThoughts: true from ai-orchestrator.ts (defaults to false)
+- [Phase 14-foundation]: Needs Assessment, Gratitude Practice, and Meditation deferred to future milestones — not part of v1.2 Inner Thoughts Journal (CLEAN-02)
 
 ### Pending Todos
 
@@ -88,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T07:52:11.554Z
-Stopped at: Completed 14-foundation/14-01-PLAN.md
+Last session: 2026-03-12T07:56:38.165Z
+Stopped at: Completed 14-02-PLAN.md
 Resume file: None

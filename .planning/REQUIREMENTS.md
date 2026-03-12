@@ -10,7 +10,7 @@ Requirements for the Inner Thoughts Journal milestone. Each maps to roadmap phas
 ### Cleanup
 
 - [x] **CLEAN-01**: User no longer sees needs assessment, gratitude, or meditation pathways in the Inner Work hub
-- [ ] **CLEAN-02**: Documentation marks unbuilt pathways as deferred/archived
+- [x] **CLEAN-02**: Documentation marks unbuilt pathways as deferred/archived
 
 ### Sessions
 
@@ -98,7 +98,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | CLEAN-01 | Phase 14 | Complete |
-| CLEAN-02 | Phase 14 | Pending |
+| CLEAN-02 | Phase 14 | Complete |
 | SESS-01 | Phase 14 | Complete |
 | SESS-02 | Phase 14 | Complete |
 | VOICE-05 | Phase 14 | Pending |
