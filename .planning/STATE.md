@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Inner Thoughts Journal
 status: planning
-stopped_at: Completed 14-02-PLAN.md
-last_updated: "2026-03-12T07:57:20.090Z"
+stopped_at: Completed 14-03-PLAN.md — AssemblyAI voice token endpoint
+last_updated: "2026-03-12T07:57:41.178Z"
 last_activity: 2026-03-11 — Roadmap revised for v1.2 — VOICE-01 through VOICE-05 added; 24 requirements mapped across 5 phases
 progress:
   total_phases: 5
@@ -74,6 +74,8 @@ Recent decisions affecting current work:
 - [Phase 14-foundation]: Hub-as-list pattern: Inner Work hub is now a session list, not a feature directory; theme tag shown only when non-null
 - [Phase 14-foundation]: Partner session context retrieval must never include inner thoughts content — enforced via removing includeInnerThoughts: true from ai-orchestrator.ts (defaults to false)
 - [Phase 14-foundation]: Needs Assessment, Gratitude Practice, and Meditation deferred to future milestones — not part of v1.2 Inner Thoughts Journal (CLEAN-02)
+- [Phase 14-foundation]: Read ASSEMBLYAI_API_KEY inside handler (not module level) — allows jest.resetModules() to work correctly in tests
+- [Phase 14-foundation]: Voice token endpoint uses plain async function instead of asyncHandler wrapper — asyncHandler returns sync void making test awaiting unreliable
 
 ### Pending Todos
 
@@ -92,6 +94,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T07:56:38.165Z
-Stopped at: Completed 14-02-PLAN.md
+Last session: 2026-03-12T07:57:41.176Z
+Stopped at: Completed 14-03-PLAN.md — AssemblyAI voice token endpoint
 Resume file: None
