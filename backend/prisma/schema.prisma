@@ -173,6 +173,7 @@ model InnerWorkSession {
   status    InnerWorkStatus     @default(ACTIVE)
   createdAt DateTime            @default(now())
   updatedAt DateTime            @updatedAt
+  distilledAt DateTime?         // Set when distillation has been run on this session
 
   // Rolling conversation summary for long sessions (like partner session vessels)
   // Stores JSON: { text, keyThemes, emotionalJourney, unresolvedTopics, messageCount, generatedAt }
@@ -185,6 +186,8 @@ model InnerWorkSession {
 
   // Messages in this inner work session
   messages InnerWorkMessage[]
+  // Distilled takeaways from this session
+  takeaways SessionTakeaway[]
 
   // Brain activities (LLM calls) made during this session
   brainActivities BrainActivity[]
@@ -207,6 +210,11 @@ enum InnerWorkStatus {
   ARCHIVED  // User archived this session
 }
 
+enum TakeawaySource {
+  AI    // Distilled by AI
+  USER  // Added or edited by user
+}
+
 model InnerWorkMessage {
   id        String           @id @default(cuid())
   session   InnerWorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -219,6 +227,20 @@ model InnerWorkMessage {
   // Session-level contentEmbedding on InnerWorkSession is used instead
 
   @@index([sessionId, timestamp])
+}
+
+model SessionTakeaway {
+  id        String           @id @default(cuid())
+  session   InnerWorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  content   String           @db.Text
+  theme     String?
+  source    TakeawaySource   @default(AI)
+  position  Int              @default(0)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([sessionId, position])
 }
 
 // ============================================================================
@@ -1341,6 +1363,7 @@ enum BrainActivityCallType {
   MEMORY_FORMATTING
   THEME_EXTRACTION
   GLOBAL_MEMORY_CONSOLIDATION
+  DISTILLATION
 }
 
 enum ActivityType {
