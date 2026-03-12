@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Inner Thoughts Journal
 status: executing
-stopped_at: Completed 17-01-PLAN.md — distillation review UI, TakeawayRow, TakeawayReviewSheet, backend CRUD endpoints
-last_updated: "2026-03-12T09:25:44.587Z"
+stopped_at: Completed 17-02-PLAN.md — expo-audio install, useVoiceInput hook, TranscriptionDrawer, mic button in ChatInput/ChatInterface/InnerThoughtsScreen
+last_updated: "2026-03-12T09:49:29.298Z"
 last_activity: 2026-03-12 — Phase 15 Plan 01 complete — SessionTakeaway schema, distillation DTOs, Prisma mock
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
   percent: 68
 ---
 
@@ -59,6 +59,7 @@ Progress: [███████░░░] 68%
 | Phase 16-knowledge-base-backend P02 | 4 | 2 tasks | 5 files |
 | Phase 16-knowledge-base-backend P03 | 6 | 2 tasks | 3 files |
 | Phase 17-session-list-distillation-ui-and-voice-input P01 | 16 | 2 tasks | 9 files |
+| Phase 17-session-list-distillation-ui-and-voice-input P02 | 25 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,7 @@ Recent decisions affecting current work:
 - [Phase 16-03]: Theme detector always regenerates Haiku summary on every trigger above threshold (always-fresh)
 - [Phase 17-01]: Created takeaway CRUD backend endpoints as part of mobile UI plan — Phase 15 did not ship GET/PATCH/DELETE takeaway routes, only POST /distill
 - [Phase 17-01]: TakeawayReviewSheet uses parent-controlled mounting (visible prop) instead of __getValue() internal API for show/hide logic
+- [Phase 17-02]: expo-audio 1.1.1 AudioRecorder lacks real-time PCM frame callbacks — implemented post-recording transcription via AssemblyAI WebSocket; onVoicePress prop optional on ChatInput/ChatInterface ensuring mic button only on Inner Thoughts sessions
 
 ### Pending Todos
 
@@ -117,6 +119,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T09:25:44.585Z
-Stopped at: Completed 17-01-PLAN.md — distillation review UI, TakeawayRow, TakeawayReviewSheet, backend CRUD endpoints
+Last session: 2026-03-12T09:49:29.296Z
+Stopped at: Completed 17-02-PLAN.md — expo-audio install, useVoiceInput hook, TranscriptionDrawer, mic button in ChatInput/ChatInterface/InnerThoughtsScreen
 Resume file: None

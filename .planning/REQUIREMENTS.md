@@ -41,10 +41,10 @@ Requirements for the Inner Thoughts Journal milestone. Each maps to roadmap phas
 
 ### Voice Input
 
-- [ ] **VOICE-01**: User can tap a microphone button on the chat input to start voice recording
-- [ ] **VOICE-02**: Tapping the mic opens a transcription drawer that slides up, showing real-time transcription in a large readable area
-- [ ] **VOICE-03**: User sees their speech transcribed in real-time as they speak (via AssemblyAI streaming)
-- [ ] **VOICE-04**: User can stop recording and send the transcribed text as a chat message
+- [x] **VOICE-01**: User can tap a microphone button on the chat input to start voice recording
+- [x] **VOICE-02**: Tapping the mic opens a transcription drawer that slides up, showing real-time transcription in a large readable area
+- [x] **VOICE-03**: User sees their speech transcribed in real-time as they speak (via AssemblyAI streaming)
+- [x] **VOICE-04**: User can stop recording and send the transcribed text as a chat message
 - [x] **VOICE-05**: Backend streams audio to AssemblyAI for real-time transcription via WebSocket
 
 ### Export & Sharing
@@ -115,10 +115,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIST-04 | Phase 17 | Complete |
 | DIST-05 | Phase 17 | Complete |
 | DIST-06 | Phase 17 | Complete |
-| VOICE-01 | Phase 17 | Pending |
-| VOICE-02 | Phase 17 | Pending |
-| VOICE-03 | Phase 17 | Pending |
-| VOICE-04 | Phase 17 | Pending |
+| VOICE-01 | Phase 17 | Complete |
+| VOICE-02 | Phase 17 | Complete |
+| VOICE-03 | Phase 17 | Complete |
+| VOICE-04 | Phase 17 | Complete |
 | SHARE-01 | Phase 18 | Pending |
 | SHARE-02 | Phase 18 | Pending |
 
