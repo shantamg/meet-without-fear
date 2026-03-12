@@ -87,7 +87,11 @@ Plans:
   3. User can view all entries for a given topic arranged in chronological order
   4. After 3 or more sessions share a recurring topic, the system surfaces it as a recognized theme with a cross-session summary
   5. The browse endpoints return results within 500ms for a user with 30 sessions and 150 takeaways
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 16-01-PLAN.md — Schema migration (RecurringTheme), shared DTOs, PersonDetailDTO extension (KNOW-01, KNOW-04, INTEL-01, INTEL-03)
+- [ ] 16-02-PLAN.md — Browse endpoints (topics, timeline, themes), people extension, route wiring (KNOW-01, KNOW-02, KNOW-03, KNOW-04, INTEL-02, INTEL-03)
+- [ ] 16-03-PLAN.md — Theme detection service and fire-and-forget distillation integration (INTEL-01, INTEL-02)
 
 ### Phase 17: Session List, Distillation UI, and Voice Input
 **Goal**: The mobile app shows a dated session list, gives users a surface to review, edit, and delete distilled takeaways, and provides a mic button that opens a real-time transcription drawer for hands-free chat input
@@ -138,12 +142,12 @@ Note: Phase 17 depends on Phase 15 only; Phase 18 depends on both 16 and 17.
 | 11. Stage 4 Strategies                       | v1.1      | 2/2            | Complete    | 2026-02-17 |
 | 12. Visual Baselines                         | v1.1      | 2/2            | Complete    | 2026-02-18 |
 | 13. Full Session E2E                         | v1.1      | 4/4            | Complete    | 2026-02-19 |
-| 14. Foundation                               | v1.2      | 0/3            | Planned     | -          |
+| 14. Foundation                               | 1/3 | In Progress|  | -          |
 | 15. Distillation Backend                     | v1.2      | 0/2            | Planned     | -          |
-| 16. Knowledge Base Backend                   | v1.2      | 0/TBD          | Not started | -          |
+| 16. Knowledge Base Backend                   | v1.2      | 0/3            | Planned     | -          |
 | 17. Session List + Distillation UI + Voice   | v1.2      | 0/2            | Planned     | -          |
 | 18. Knowledge Base UI + Export               | v1.2      | 0/2            | Planned     | -          |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-03-12 (Phase 17 planned — 2 plans in 2 waves)*
+*Last updated: 2026-03-12 (Phase 16 planned — 3 plans in 2 waves)*
