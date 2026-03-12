@@ -130,6 +130,8 @@ interface ChatInterfaceProps {
   skipInitialHistory?: boolean;
   /** Partner's name for personalized messages */
   partnerName?: string;
+  /** Optional voice press handler -- passed through to ChatInput; renders mic button when provided */
+  onVoicePress?: () => void;
   /** ID of the last chat item the user has seen - used to show "New messages" separator */
   lastSeenChatItemId?: string | null;
   /** Callback when "Context shared" indicator is tapped - navigates to Sharing Status
@@ -185,6 +187,7 @@ export function ChatInterface({
   validationCards,
   onValidateAccurate,
   onValidateNotQuite,
+  onVoicePress,
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
@@ -685,7 +688,11 @@ export function ChatInterface({
         )}
         {renderAboveInput?.()}
         {!hideInput && (
-          <ChatInput onSend={onSendMessage} disabled={disabled || isInputDisabled || isLoading} />
+          <ChatInput
+            onSend={onSendMessage}
+            disabled={disabled || isInputDisabled || isLoading}
+            onVoicePress={onVoicePress}
+          />
         )}
       </View>
     </KeyboardAvoidingView>

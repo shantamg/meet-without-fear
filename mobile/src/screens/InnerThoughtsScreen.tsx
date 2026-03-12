@@ -17,7 +17,9 @@ import { ChatInterface, ChatMessage } from '../components/ChatInterface';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 import { SuggestedActionButtons } from '../components/SuggestedActionButtons';
 import { TakeawayReviewSheet } from '../components/TakeawayReviewSheet';
+import { TranscriptionDrawer } from '../components/TranscriptionDrawer';
 import { useInnerThoughtsSession, useSendInnerThoughtsMessage } from '../hooks';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
 
@@ -61,6 +63,10 @@ export function InnerThoughtsScreen({
 
   // Takeaways review sheet state
   const [showTakeaways, setShowTakeaways] = useState(false);
+
+  // Voice input state
+  const voice = useVoiceInput();
+  const [showVoiceDrawer, setShowVoiceDrawer] = useState(false);
 
   // Memory suggestion state
   const [memorySuggestion, setMemorySuggestion] = useState<MemorySuggestion | null>(null);
@@ -190,6 +196,26 @@ export function InnerThoughtsScreen({
     );
   }, [onNavigateBack]);
 
+  // ---- Voice input handlers ------------------------------------------------
+
+  const handleVoicePress = useCallback(async () => {
+    setShowVoiceDrawer(true);
+    await voice.start();
+  }, [voice]);
+
+  const handleVoiceStopAndSend = useCallback(async () => {
+    const transcript = await voice.stopAndGetTranscript();
+    setShowVoiceDrawer(false);
+    if (transcript.trim()) {
+      handleSendMessage(transcript.trim());
+    }
+  }, [voice, handleSendMessage]);
+
+  const handleVoiceCancel = useCallback(() => {
+    voice.cancel();
+    setShowVoiceDrawer(false);
+  }, [voice]);
+
   // Loading state - but NOT when creating (we show typing indicator instead)
   if (isLoading && !isCreating) {
     return (
@@ -293,6 +319,7 @@ export function InnerThoughtsScreen({
         disabled={isCreating || sendMessage.isPending}
         emptyStateTitle="Inner Thoughts"
         emptyStateMessage="A private space for reflection. Share what's on your mind."
+        onVoicePress={handleVoicePress}
       />
 
       {/* Suggested Action Buttons - shown when AI suggests next steps */}
@@ -323,6 +350,17 @@ export function InnerThoughtsScreen({
           onClose={() => setShowTakeaways(false)}
         />
       )}
+
+      {/* Voice transcription drawer */}
+      <TranscriptionDrawer
+        visible={showVoiceDrawer}
+        displayTranscript={voice.displayTranscript}
+        phase={voice.phase}
+        elapsedSeconds={voice.elapsedSeconds}
+        error={voice.error}
+        onStopAndSend={handleVoiceStopAndSend}
+        onCancel={handleVoiceCancel}
+      />
     </SafeAreaView>
   );
 }

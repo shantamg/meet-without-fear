@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { View, TextInput, TouchableOpacity, Text, Platform, type TextInput as TextInputType } from 'react-native';
-import { Send } from 'lucide-react-native';
+import { Send, Mic } from 'lucide-react-native';
 import { createStyles } from '../theme/styled';
 import { theme } from '../theme';
 
@@ -14,6 +14,8 @@ interface ChatInputProps {
   placeholder?: string;
   maxLength?: number;
   showCharacterCount?: boolean;
+  /** Optional voice press handler -- when provided, renders a mic button */
+  onVoicePress?: () => void;
 }
 
 // ============================================================================
@@ -33,6 +35,7 @@ export function ChatInput({
   placeholder = 'Type a message...',
   maxLength = DEFAULT_MAX_LENGTH,
   showCharacterCount = false,
+  onVoicePress,
 }: ChatInputProps) {
   const styles = useStyles();
   const [input, setInput] = useState('');
@@ -99,6 +102,17 @@ export function ChatInput({
           </Text>
         )}
       </View>
+      {onVoicePress && (
+        <TouchableOpacity
+          style={styles.micButton}
+          onPress={onVoicePress}
+          accessibilityRole="button"
+          accessibilityLabel="Voice input"
+          testID="voice-input-button"
+        >
+          <Mic color={theme.colors.textMuted} size={20} />
+        </TouchableOpacity>
+      )}
       <TouchableOpacity
         testID={canSend ? 'send-button' : undefined}
         style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
@@ -152,6 +166,15 @@ const useStyles = () =>
     },
     characterCountWarning: {
       color: t.colors.warning,
+    },
+    micButton: {
+      width: 40,
+      height: 40,
+      marginLeft: t.spacing.xs,
+      backgroundColor: 'transparent',
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     sendButton: {
       width: 40,
