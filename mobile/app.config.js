@@ -23,5 +23,5 @@ module.exports = ({ config }) => {
     }),
   };
 
-  return withPlugins(config, ['expo-secure-store']);
+  return withPlugins(config, ['expo-secure-store', 'expo-audio']);
 };
