@@ -50,7 +50,7 @@ Requirements for the Inner Thoughts Journal milestone. Each maps to roadmap phas
 ### Export & Sharing
 
 - [x] **SHARE-01**: User can export a selection of takeaways or session summaries (e.g., for therapy prep)
-- [ ] **SHARE-02**: User can share exported content via standard OS share sheet
+- [x] **SHARE-02**: User can share exported content via standard OS share sheet
 
 ## Future Requirements
 
@@ -120,7 +120,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VOICE-03 | Phase 17 | Complete |
 | VOICE-04 | Phase 17 | Complete |
 | SHARE-01 | Phase 18 | Complete |
-| SHARE-02 | Phase 18 | Pending |
+| SHARE-02 | Phase 18 | Complete |
 
 **Coverage:**
 - v1.2 requirements: 24 total
