@@ -13,6 +13,7 @@
  * 4. Generate response using Sonnet
  */
 
+import { logger } from '../lib/logger';
 import { getModelCompletion, BrainActivityCallType } from '../lib/bedrock';
 import { prisma } from '../lib/prisma';
 import {
@@ -55,6 +56,7 @@ import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from '.
 import { getFixtureResponseByIndex } from '../lib/e2e-fixtures';
 import { getE2EFixtureId } from '../lib/request-context';
 import type { TraceStep, TurnTrace } from '../types/turn-trace';
+import { detectCrisis } from './crisis-detector';
 // publishUserEvent and memoryService imports removed - handled in partner-session-classifier.ts
 
 // ============================================================================
@@ -143,7 +145,7 @@ async function getUserMemoryPreferences(userId: string): Promise<MemoryPreferenc
     });
     return (user?.memoryPreferences as MemoryPreferencesDTO | null) ?? DEFAULT_MEMORY_PREFERENCES;
   } catch (error) {
-    console.warn('[AI Orchestrator] Failed to fetch memory preferences, using defaults:', error);
+    logger.warn('[AI Orchestrator] Failed to fetch memory preferences, using defaults:', error);
     return DEFAULT_MEMORY_PREFERENCES;
   }
 }
@@ -166,9 +168,18 @@ export async function orchestrateResponse(
   // Use turnId from context for grouping all logs/costs from this message processing cycle
   const { turnId } = context;
 
-  // Broadcast user message as the first event in this turn
-  // Broadcast user message as the first event in this turn - captured in overarching activity or via specific USER event?
-  // Ideally, the Orchestrator itself can be wrapped in a "Turn" activity, but for now we are removing AuditLog.
+  // Step 0: Crisis/safety detection (runs before everything else)
+  const crisisResult = detectCrisis(context.userMessage);
+  traceSteps.push({
+    name: 'Crisis Detection',
+    type: 'decision',
+    startMs: 0,
+    durationMs: 0,
+    result: crisisResult.detected
+      ? `severity=${crisisResult.severity}, categories=${crisisResult.categories.join(',')}`
+      : 'none',
+    status: 'success',
+  });
 
   // Step 1: Determine memory intent (DECISION LAYER - Time to Decision)
   const memoryIntentContext: MemoryIntentContext = {
@@ -190,15 +201,15 @@ export async function orchestrateResponse(
     result: `${memoryIntent.intent} (${memoryIntent.depth})`,
     status: 'success',
   });
-  console.log(`[AI Orchestrator] Memory intent: ${memoryIntent.intent} (${memoryIntent.depth}) [Decision: ${decisionTime}ms]`);
+  logger.info(`[AI Orchestrator] Memory intent: ${memoryIntent.intent} (${memoryIntent.depth}) [Decision: ${decisionTime}ms]`);
 
   if (decisionTime > 1000) {
-    console.warn(`[AI Orchestrator] Decision layer took ${decisionTime}ms (>1s) - consider optimization`);
+    logger.warn(`[AI Orchestrator] Decision layer took ${decisionTime}ms (>1s) - consider optimization`);
   }
 
   // PARALLEL PRE-PROCESSING: Run context assembly and retrieval in parallel
   // Memory detection moved to fire-and-forget (partner-session-classifier.ts)
-  console.log(`[AI Orchestrator] Starting parallel pre-processing (Intent: ${memoryIntent.intent})...`);
+  logger.info(`[AI Orchestrator] Starting parallel pre-processing (Intent: ${memoryIntent.intent})...`);
   const parallelStartTime = Date.now();
 
   const [userPrefs, contextBundle, retrievedContext, sharedContentHistory, milestoneContext] = await Promise.all([
@@ -217,22 +228,21 @@ export async function orchestrateResponse(
       includePreSession: true,
       maxCrossSessionMessages: 10,
       similarityThreshold: 0.4,
-      includeInnerThoughts: true,
       skipDetection: true, // Detection moved to fire-and-forget (partner-session-classifier.ts)
     }).catch((err: Error) => {
-      console.warn('[AI Orchestrator] Context retrieval failed (parallel):', err);
+      logger.warn('[AI Orchestrator] Context retrieval failed (parallel):', err);
       return undefined;
     }),
     // Stage gate: no shared content should exist for Stages 0-1 (witnessing).
     // Defense-in-depth: even if the query has user isolation, skip entirely for early stages.
     context.stage >= 2
       ? getSharedContentContext(context.sessionId, context.userId).catch((err: Error) => {
-          console.warn('[AI Orchestrator] Shared content context fetch failed:', err);
+          logger.warn('[AI Orchestrator] Shared content context fetch failed:', err);
           return null;
         })
       : Promise.resolve(null),
     getMilestoneContext(context.sessionId, context.userId).catch((err: Error) => {
-      console.warn('[AI Orchestrator] Milestone context fetch failed:', err);
+      logger.warn('[AI Orchestrator] Milestone context fetch failed:', err);
       return null;
     })
   ]);
@@ -245,7 +255,7 @@ export async function orchestrateResponse(
     { name: 'Shared Content', type: 'retrieval', startMs: parallelStartMs, durationMs: parallelTime, result: sharedContentHistory ? 'loaded' : 'none', status: 'success' },
     { name: 'Milestones', type: 'retrieval', startMs: parallelStartMs, durationMs: parallelTime, result: milestoneContext ? 'loaded' : 'none', status: 'success' },
   );
-  console.log(`[AI Orchestrator] Parallel pre-processing completed in ${parallelTime}ms`);
+  logger.info(`[AI Orchestrator] Parallel pre-processing completed in ${parallelTime}ms`);
 
   // Publish context.updated event for Neural Monitor dashboard (fire-and-forget)
   publishContextUpdated(
@@ -253,19 +263,19 @@ export async function orchestrateResponse(
     context.userId,
     contextBundle.assembledAt
   ).catch((err) => {
-    console.warn('[AI Orchestrator] Failed to publish context.updated event:', err);
+    logger.warn('[AI Orchestrator] Failed to publish context.updated event:', err);
   });
 
   // Memory detection and validation moved to fire-and-forget (partner-session-classifier.ts)
   // This reduces blocking latency for the user response
 
   // Log progress for parallel steps
-  console.log(`[AI Orchestrator] Context assembled: ${contextBundle.conversationContext.turnCount} turns`);
+  logger.info(`[AI Orchestrator] Context assembled: ${contextBundle.conversationContext.turnCount} turns`);
   // Determine intent via BrainService monitoring (optional: log as separate activity or just console)
   // For now, we'll just log to console as the main response activity will capture the intent in metadata
 
   if (retrievedContext) {
-    console.log(`[AI Orchestrator] Context retrieved: ${retrievedContext.retrievalSummary}`);
+    logger.info(`[AI Orchestrator] Context retrieved: ${retrievedContext.retrievalSummary}`);
   }
 
   // Step 2.6: Apply surfacing policy
@@ -285,7 +295,7 @@ export async function orchestrateResponse(
     result: `shouldSurface=${surfacingDecision.shouldSurface}, style=${surfacingDecision.style}`,
     status: 'success',
   });
-  console.log(`[AI Orchestrator] Surfacing decision: shouldSurface=${surfacingDecision.shouldSurface}, style=${surfacingDecision.style}`);
+  logger.info(`[AI Orchestrator] Surfacing decision: shouldSurface=${surfacingDecision.shouldSurface}, style=${surfacingDecision.style}`);
 
   // Step 3: Plan retrieval (for full depth, use Haiku)
   let retrievalPlan: RetrievalPlan | undefined;
@@ -316,7 +326,7 @@ export async function orchestrateResponse(
         result: `${retrievalPlan.queries.length} queries`,
         status: 'success',
       });
-      console.log(`[AI Orchestrator] Retrieval planned: ${retrievalPlan.queries.length} queries`);
+      logger.info(`[AI Orchestrator] Retrieval planned: ${retrievalPlan.queries.length} queries`);
     } catch (error) {
       traceSteps.push({
         name: 'Retrieval Planning',
@@ -326,7 +336,7 @@ export async function orchestrateResponse(
         result: 'failed, using mock',
         status: 'error',
       });
-      console.warn('[AI Orchestrator] Retrieval planning failed, using mock plan:', error);
+      logger.warn('[AI Orchestrator] Retrieval planning failed, using mock plan:', error);
       retrievalPlan = getMockRetrievalPlan(context.stage, context.userId);
     }
   } else {
@@ -395,7 +405,7 @@ export async function orchestrateResponse(
   });
 
   // Debug: Log formatted context length and snippet
-  console.log(`[AI Orchestrator] Formatted context: ${formattedContextBundle.length} chars, starts with: "${formattedContextBundle.slice(0, 100).replace(/\n/g, '\\n')}..."`);
+  logger.info(`[AI Orchestrator] Formatted context: ${formattedContextBundle.length} chars, starts with: "${formattedContextBundle.slice(0, 100).replace(/\n/g, '\\n')}..."`);
 
   // Merge retrieved context with context bundle
   let fullContext = formattedContextBundle;
@@ -409,6 +419,11 @@ export async function orchestrateResponse(
     }
   }
 
+  // Inject crisis resources if safety signal detected
+  if (crisisResult.resourceMessage) {
+    fullContext = `[SAFETY ALERT: Crisis signals detected in this message. Include the following resources naturally in your response.]\n${crisisResult.resourceMessage}\n\n${fullContext}`;
+  }
+
   // Apply token budget management to avoid exceeding context limits
   const tokenBudgetStart = Date.now();
   const summaryExists = Boolean(contextBundle.sessionSummary?.currentFocus);
@@ -418,7 +433,7 @@ export async function orchestrateResponse(
   );
 
   if (truncated > 0) {
-    console.log(`[AI Orchestrator] Trimmed ${truncated} old messages (summaryExists=${summaryExists})`);
+    logger.info(`[AI Orchestrator] Trimmed ${truncated} old messages (summaryExists=${summaryExists})`);
   }
 
   const budgetedContext = buildBudgetedContext(
@@ -428,13 +443,13 @@ export async function orchestrateResponse(
   );
 
   if (budgetedContext.truncated > 0) {
-    console.log(
+    logger.info(
       `[AI Orchestrator] Token budget applied: included ${budgetedContext.conversationMessages.length} of ${context.conversationHistory.length} messages, ${budgetedContext.truncated} truncated`
     );
   }
 
   // Debug: Log the context that will be injected
-  console.log(`[AI Orchestrator] Context for injection: ${budgetedContext.retrievedContext.length} chars, will inject: ${budgetedContext.retrievedContext.trim().length > 0}`);
+  logger.info(`[AI Orchestrator] Context for injection: ${budgetedContext.retrievedContext.length} chars, will inject: ${budgetedContext.retrievedContext.trim().length > 0}`);
 
   const messagesWithContext = buildMessagesWithContext(
     budgetedContext.conversationMessages,
@@ -499,7 +514,7 @@ export async function orchestrateResponse(
     result: `model=${routingDecision.model}, score=${routingDecision.score}`,
     status: 'success',
   });
-  console.log(`[AI Orchestrator] Routing decision: model=${routingDecision.model}, score=${routingDecision.score}, reasons=${routingDecision.reasons.join(',')}`);
+  logger.info(`[AI Orchestrator] Routing decision: model=${routingDecision.model}, score=${routingDecision.score}, reasons=${routingDecision.reasons.join(',')}`);
 
   // Time to First Byte (response generation)
   const responseStartTime = Date.now();
@@ -528,12 +543,12 @@ export async function orchestrateResponse(
       result: modelResponse ? `${routingDecision.model}, ${modelResponse.length} chars` : 'null response',
       status: modelResponse ? 'success' : 'error',
     });
-    console.log(`[AI Orchestrator] Response generated in ${responseTime}ms [Time to First Byte]`);
+    logger.info(`[AI Orchestrator] Response generated in ${responseTime}ms [Time to First Byte]`);
 
     if (modelResponse) {
       // Debug: log raw response for Stage 2
       if (context.stage === 2) {
-        console.log(`[AI Orchestrator] Stage 2 raw response: ${modelResponse.substring(0, 500)}...`);
+        logger.info(`[AI Orchestrator] Stage 2 raw response: ${modelResponse.substring(0, 500)}...`);
       }
 
       // Parse semantic tag response (micro-tag format)
@@ -550,7 +565,7 @@ export async function orchestrateResponse(
 
       // Check for dispatch (off-ramp)
       if (parsed.dispatchTag) {
-        console.log(`[AI Orchestrator] Dispatch triggered: ${parsed.dispatchTag}`);
+        logger.info(`[AI Orchestrator] Dispatch triggered: ${parsed.dispatchTag}`);
 
         // Build dispatch context for conversation-aware handling
         const dispatchContext: DispatchContext = {
@@ -567,7 +582,7 @@ export async function orchestrateResponse(
 
         // If dispatch handler returned null (unknown tag), fall through to normal response flow
         if (dispatchedResponse === null) {
-          console.log(`[AI Orchestrator] Unknown dispatch tag "${parsed.dispatchTag}" — using original AI response`);
+          logger.info(`[AI Orchestrator] Unknown dispatch tag "${parsed.dispatchTag}" — using original AI response`);
           traceSteps.push({
             name: `Dispatch (ignored): ${parsed.dispatchTag}`,
             type: 'dispatch',
@@ -593,7 +608,7 @@ export async function orchestrateResponse(
           // If AI provided an initial response along with dispatch, return both
           // This enables two-message flow: acknowledgment first, then detailed response
           if (parsed.response && parsed.response.trim()) {
-            console.log(`[AI Orchestrator] Two-message dispatch flow: initial="${parsed.response.substring(0, 50)}..."`);
+            logger.info(`[AI Orchestrator] Two-message dispatch flow: initial="${parsed.response.substring(0, 50)}..."`);
             finalizeTurnMetrics(context.turnId);
             // Store trace on the ORCHESTRATED_RESPONSE activity via brain service
             storeTurnTrace(context.sessionId, turnId, turnTrace);
@@ -656,11 +671,11 @@ export async function orchestrateResponse(
 
       // Debug logging for Stage 2 readiness signal
       if (context.stage === 2) {
-        console.log(`[AI Orchestrator] Stage 2 - Turn ${context.turnCount}, offerReadyToShare: ${offerReadyToShare}, proposedEmpathyStatement: ${proposedEmpathyStatement ? 'present' : 'null'}`);
+        logger.info(`[AI Orchestrator] Stage 2 - Turn ${context.turnCount}, offerReadyToShare: ${offerReadyToShare}, proposedEmpathyStatement: ${proposedEmpathyStatement ? 'present' : 'null'}`);
       }
 
       if (parsed.thinking) {
-        console.log(`[AI Orchestrator] Thinking: ${parsed.thinking.substring(0, 100)}...`);
+        logger.info(`[AI Orchestrator] Thinking: ${parsed.thinking.substring(0, 100)}...`);
       }
     } else {
       response = getMockResponse(context);
@@ -675,13 +690,13 @@ export async function orchestrateResponse(
       result: String(error),
       status: 'error',
     });
-    console.error('[AI Orchestrator] Response generation failed:', error);
+    logger.error('[AI Orchestrator] Response generation failed:', error);
     response = getMockResponse(context);
     usedMock = true;
   }
 
   const totalDuration = Date.now() - startTime;
-  console.log(`[AI Orchestrator] Total: ${totalDuration}ms | Decision: ${decisionTime}ms | Mock: ${usedMock}`);
+  logger.info(`[AI Orchestrator] Total: ${totalDuration}ms | Decision: ${decisionTime}ms | Mock: ${usedMock}`);
   finalizeTurnMetrics(context.turnId);
 
   // Store turn trace on the ORCHESTRATED_RESPONSE activity
@@ -690,7 +705,7 @@ export async function orchestrateResponse(
 
   // Log latency breakdown for monitoring
   if (totalDuration > 3000) {
-    console.warn(`[AI Orchestrator] Slow response: ${totalDuration}ms total (Decision: ${decisionTime}ms)`);
+    logger.warn(`[AI Orchestrator] Slow response: ${totalDuration}ms total (Decision: ${decisionTime}ms)`);
   }
 
   return {
@@ -768,7 +783,7 @@ function storeTurnTrace(sessionId: string, turnId: string, turnTrace: TurnTrace)
       },
     });
   }).catch((err) => {
-    console.warn('[AI Orchestrator] Failed to store turn trace:', err);
+    logger.warn('[AI Orchestrator] Failed to store turn trace:', err);
   });
 }
 
@@ -791,14 +806,14 @@ function getMockResponse(context: OrchestratorContext): string {
       // Response index = number of user messages sent (turnCount is 1-based, so use turnCount - 1)
       // We subtract 1 because fixture indices are 0-based
       const responseIndex = Math.max(0, context.turnCount - 1);
-      console.log(`[AI Orchestrator] Using fixture ${fixtureId}, index ${responseIndex}`);
+      logger.info(`[AI Orchestrator] Using fixture ${fixtureId}, index ${responseIndex}`);
       const rawFixture = getFixtureResponseByIndex(fixtureId, responseIndex);
 
       // Parse the fixture response to strip <thinking> tags, just like real AI responses
       const parsed = parseMicroTagResponse(rawFixture);
       return parsed.response || rawFixture; // Fallback to raw if parsing fails
     } catch (error) {
-      console.warn(`[AI Orchestrator] Fixture response failed, falling back to default mock:`, error);
+      logger.warn(`[AI Orchestrator] Fixture response failed, falling back to default mock:`, error);
       // Fall through to default mock response
     }
   }

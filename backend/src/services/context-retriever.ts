@@ -12,6 +12,7 @@
  * It's the "memory backbone" that ensures nothing is forgotten.
  */
 
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { getHaikuJson } from '../lib/bedrock';
 import { MemoryIntentResult } from './memory-intent';
@@ -455,7 +456,7 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
       });
       relationshipId = session?.relationshipId;
     } catch (error) {
-      console.warn('[ContextRetriever] Failed to fetch session relationship:', error);
+      logger.warn('[ContextRetriever] Failed to fetch session relationship:', error);
     }
   }
 
@@ -474,9 +475,9 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
         where: { id: userId },
         select: { memoryPreferences: true },
       });
-      effectiveUserPrefs = (user?.memoryPreferences as MemoryPreferencesDTO | null) ?? undefined;
+      effectiveUserPrefs = (user?.memoryPreferences as unknown as MemoryPreferencesDTO | null) ?? undefined;
     } catch (error) {
-      console.warn('[ContextRetriever] Failed to fetch user preferences:', error);
+      logger.warn('[ContextRetriever] Failed to fetch user preferences:', error);
     }
   }
 
@@ -658,7 +659,7 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
   }
 
   const duration = Date.now() - startTime;
-  console.log(`[ContextRetriever] Retrieved in ${duration}ms: ${parts.join(', ') || 'no additional context'}`);
+  logger.info(`[ContextRetriever] Retrieved in ${duration}ms: ${parts.join(', ') || 'no additional context'}`);
 
   // Generate recency guidance for retrieved content
   const allTimestamps = [
