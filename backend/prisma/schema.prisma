@@ -76,6 +76,9 @@ model User {
 
   // Inner Work: Cross-Feature Intelligence
   insights            Insight[]
+
+  // Inner Work: Recurring Themes (Knowledge Base)
+  recurringThemes RecurringTheme[]
 }
 
 model Relationship {
@@ -1153,6 +1156,25 @@ enum InsightType {
 }
 
 // ============================================================================
+// Inner Work: Recurring Themes (Knowledge Base)
+// ============================================================================
+
+model RecurringTheme {
+  id           String   @id @default(cuid())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  tag          String   // The theme tag (matches InnerWorkSession.theme)
+  sessionCount Int      // How many sessions share this theme (updated each time)
+  summary      String   @db.Text  // Haiku-generated cross-session summary
+  summaryAt    DateTime // When summary was last generated
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, tag])
+  @@index([userId, sessionCount])
+}
+
+// ============================================================================
 // Inner Work: Gratitude Practice ("See the Positive")
 // ============================================================================
 
@@ -1364,6 +1386,7 @@ enum BrainActivityCallType {
   THEME_EXTRACTION
   GLOBAL_MEMORY_CONSOLIDATION
   DISTILLATION
+  CROSS_SESSION_THEME
 }
 
 enum ActivityType {
