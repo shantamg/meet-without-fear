@@ -35,6 +35,8 @@ import {
   getInsights,
   dismissInsight,
 } from '../controllers/inner-work';
+import { distillInnerWorkSession } from '../controllers/distillation';
+import { streamingRateLimit } from '../middleware/rate-limit';
 
 const router = Router();
 
@@ -79,6 +81,13 @@ router.get('/inner-thoughts/:id', getInnerWorkSession);
  * @access Private
  */
 router.post('/inner-thoughts/:id/messages', sendInnerWorkMessage);
+
+/**
+ * @route POST /api/v1/inner-thoughts/:id/distill
+ * @description Run on-demand distillation and return takeaways (synchronous, rate limited)
+ * @access Private
+ */
+router.post('/inner-thoughts/:id/distill', streamingRateLimit, distillInnerWorkSession);
 
 /**
  * @route PATCH /api/v1/inner-thoughts/:id
@@ -131,6 +140,7 @@ router.get('/inner-work', listInnerWorkSessions);
 router.get('/inner-work/overview', getInnerWorkOverview); // Must be before /:id
 router.get('/inner-work/:id', getInnerWorkSession);
 router.post('/inner-work/:id/messages', sendInnerWorkMessage);
+router.post('/inner-work/:id/distill', streamingRateLimit, distillInnerWorkSession);
 router.patch('/inner-work/:id', updateInnerWorkSession);
 router.delete('/inner-work/:id', archiveInnerWorkSession);
 

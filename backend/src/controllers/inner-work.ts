@@ -14,8 +14,10 @@
  */
 
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
+import { distillSession } from '../services/distillation';
 import { getUser, AuthUser } from '../middleware/auth';
 import { asyncHandler, ValidationError } from '../middleware/errors';
 import {
@@ -959,6 +961,15 @@ export const updateInnerWorkSession = asyncHandler(
         _count: { select: { messages: true } },
       },
     });
+
+    // Fire-and-forget distillation on session close (DIST-01)
+    // CRITICAL: Never await — must not slow down PATCH response
+    if (status === 'COMPLETED') {
+      const distillTurnId = crypto.randomUUID();
+      distillSession({ sessionId, userId: user.id, turnId: distillTurnId }).catch(
+        (err: unknown) => logger.warn('[InnerWork] Auto-distillation failed:', err),
+      );
+    }
 
     const response: ApiResponse<UpdateInnerWorkSessionResponse> = {
       success: true,
