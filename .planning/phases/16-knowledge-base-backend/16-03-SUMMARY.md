@@ -81,7 +81,7 @@ Each task was committed atomically:
 2. **Task 1 GREEN: Implement theme-detector.ts** - `d34e789` (feat)
 3. **Task 2: Wire fire-and-forget into distillation** - `39a620a` (feat)
 
-**Plan metadata:** (docs: complete plan — pending)
+**Plan metadata:** `e6c047e` (docs: complete plan)
 
 _Note: TDD task has two commits (RED test → GREEN implementation)_
 
