@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Inner Thoughts Journal
 status: executing
-stopped_at: Completed 16-01-PLAN.md — RecurringTheme schema, knowledge base DTOs, PersonDetailDTO extension
-last_updated: "2026-03-12T08:50:05.268Z"
+stopped_at: Completed 16-02-PLAN.md — Knowledge base browse endpoints, people controller session context
+last_updated: "2026-03-12T08:59:02.436Z"
 last_activity: 2026-03-12 — Phase 15 Plan 01 complete — SessionTakeaway schema, distillation DTOs, Prisma mock
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 12
-  completed_plans: 6
+  completed_plans: 7
   percent: 68
 ---
 
@@ -56,6 +56,7 @@ Progress: [███████░░░] 68%
 | Phase 15-distillation-backend P01 | 8 | 2 tasks | 7 files |
 | Phase 15 P02 | 12 | 2 tasks | 5 files |
 | Phase 16-knowledge-base-backend P01 | 8 | 2 tasks | 7 files |
+| Phase 16-knowledge-base-backend P02 | 4 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,9 @@ Recent decisions affecting current work:
 - [Phase 15]: USER takeaways preserved via source=AI filter in deleteMany during re-distillation (DIST-03)
 - [Phase 16-01]: Migration created manually (DB not accessible in dev) — consistent with Phase 15-01 pattern
 - [Phase 16-01]: sessions: [] placeholder in getPerson controller keeps type checks passing between plans
+- [Phase 16-02]: Application-layer Map grouping for listTopics — Prisma groupBy does not support include
+- [Phase 16-02]: decodeURIComponent applied before DB query in getTopicTimeline — handles spaces and special characters in theme tags
+- [Phase 16-02]: PersonMention lookup scoped to INNER_THOUGHTS sourceType only — other sourceTypes reference different entity types
 
 ### Pending Todos
 
@@ -106,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T08:50:05.266Z
-Stopped at: Completed 16-01-PLAN.md — RecurringTheme schema, knowledge base DTOs, PersonDetailDTO extension
+Last session: 2026-03-12T08:59:02.434Z
+Stopped at: Completed 16-02-PLAN.md — Knowledge base browse endpoints, people controller session context
 Resume file: None
