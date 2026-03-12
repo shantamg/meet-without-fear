@@ -197,6 +197,29 @@ export const getPerson = asyncHandler(async (req: Request, res: Response) => {
     })
   );
 
+  // Fetch sessions where this person is mentioned (KNOW-02, INTEL-02)
+  const innerThoughtsMentions = await prisma.personMention.findMany({
+    where: {
+      personId: id,
+      sourceType: 'INNER_THOUGHTS',
+    },
+    select: { sourceId: true },
+  });
+
+  const sessionIds = [...new Set(innerThoughtsMentions.map((m) => m.sourceId))];
+  const mentionedSessions =
+    sessionIds.length > 0
+      ? await prisma.innerWorkSession.findMany({
+          where: {
+            id: { in: sessionIds },
+            userId: user.id,
+            status: { not: 'ARCHIVED' },
+          },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, title: true, theme: true, createdAt: true },
+        })
+      : [];
+
   const detailDTO: PersonDetailDTO = {
     ...toPersonDTO(person),
     recentMentions: recentMentions.map(toPersonMentionDTO),
@@ -205,7 +228,12 @@ export const getPerson = asyncHandler(async (req: Request, res: Response) => {
       needsConnections,
       averageSentiment: avgSentiment,
     },
-    sessions: [], // Populated with real data in Phase 16 Plan 02
+    sessions: mentionedSessions.map((s) => ({
+      sessionId: s.id,
+      title: s.title,
+      theme: s.theme,
+      createdAt: s.createdAt.toISOString(),
+    })),
   };
 
   const response: ApiResponse<GetPersonResponse> = {
