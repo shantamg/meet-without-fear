@@ -12,10 +12,12 @@
  * Re-distillation: replaces all AI-origin takeaways, preserves USER-origin.
  */
 
+import crypto from 'crypto';
 import { logger } from '../lib/logger';
 import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 import { prisma } from '../lib/prisma';
+import { detectRecurringTheme } from './theme-detector';
 import type { TakeawayDTO } from '@meet-without-fear/shared';
 
 // ============================================================================
@@ -133,7 +135,7 @@ Output ONLY valid JSON in this exact shape:
 
 export async function distillSession({
   sessionId,
-  userId: _userId,
+  userId,
   turnId,
 }: DistillSessionInput): Promise<TakeawayDTO[]> {
   logger.info(`[Distillation] Starting distillation for session ${sessionId}`);
@@ -206,6 +208,17 @@ export async function distillSession({
       data: { distilledAt: new Date() },
     }),
   ]);
+
+  // Fire-and-forget theme detection — check for recurring themes across sessions (INTEL-01)
+  // CRITICAL: Trigger AFTER transaction commits so theme detector sees the new takeaways
+  // CRITICAL: Never await — must not slow down distillation response
+  detectRecurringTheme({
+    sessionId,
+    userId,
+    turnId: crypto.randomUUID(),
+  }).catch(
+    (err: unknown) => logger.warn('[Distillation] Fire-and-forget theme detection failed:', err),
+  );
 
   // 7. Fetch and return all takeaways (preserves USER-origin alongside new AI ones)
   const allTakeaways = await prisma.sessionTakeaway.findMany({
