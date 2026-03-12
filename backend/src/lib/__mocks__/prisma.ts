@@ -21,6 +21,7 @@ export const prisma = {
   session: createMockModel(),
   innerWorkSession: createMockModel(),
   innerWorkMessage: createMockModel(),
+  sessionTakeaway: createMockModel(),
   stageProgress: createMockModel(),
   userVessel: createMockModel(),
   userEvent: createMockModel(),
@@ -61,9 +62,18 @@ export const prisma = {
   savedMeditation: createMockModel(),
   insight: createMockModel(),
   auditLog: createMockModel(),
+  brainActivity: createMockModel(),
+  refinementAttemptCounter: createMockModel(),
+  conversationSummary: createMockModel(),
   $executeRaw: jest.fn(() => Promise.resolve(0)),
   $queryRaw: jest.fn(() => Promise.resolve([])),
-  $transaction: jest.fn((p: any) => Promise.all(Array.isArray(p) ? p : [])),
+  $transaction: jest.fn((p: any) => {
+    // Handle both array-based (batched) and callback-based (interactive) transactions.
+    // For callbacks, pass `prisma` itself as the tx so model mocks are reused.
+    if (Array.isArray(p)) return Promise.all(p);
+    if (typeof p === 'function') return p(prisma);
+    return Promise.resolve();
+  }),
 };
 
 export default prisma;

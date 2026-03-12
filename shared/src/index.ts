@@ -24,6 +24,7 @@ export * from './dto/empathy';
 export * from './dto/realtime';
 export * from './dto/chat-router';
 export * from './dto/inner-work';
+export * from './dto/distillation';
 export * from './dto/reconciler';
 export * from './dto/memory';
 export * from './dto/needs-assessment';

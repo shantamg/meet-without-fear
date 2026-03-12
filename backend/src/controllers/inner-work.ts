@@ -14,6 +14,7 @@
  */
 
 import { Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { getUser, AuthUser } from '../middleware/auth';
 import { asyncHandler, ValidationError } from '../middleware/errors';
@@ -69,6 +70,7 @@ function mapSessionToSummary(
     status: string;
     createdAt: Date;
     updatedAt: Date;
+    distilledAt?: Date | null;
     linkedPartnerSessionId?: string | null;
     _count?: { messages: number };
   }
@@ -81,6 +83,7 @@ function mapSessionToSummary(
     status: session.status as InnerWorkStatus,
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
+    distilledAt: session.distilledAt?.toISOString() ?? null,
     messageCount: session._count?.messages ?? 0,
     linkedPartnerSessionId: session.linkedPartnerSessionId ?? null,
   };
@@ -168,7 +171,7 @@ async function updateSessionMetadata(sessionId: string, turnId: string): Promise
       });
     }
   } catch (error) {
-    console.error('[Inner Work] Failed to update metadata:', error);
+    logger.error('[Inner Work] Failed to update metadata:', error);
     // Non-fatal - don't throw
   }
 }
@@ -293,7 +296,7 @@ async function fetchLinkedPartnerSessionContext(
       sessionTopic,
     };
   } catch (error) {
-    console.error('[Inner Thoughts] Failed to fetch partner context:', error);
+    logger.error('[Inner Thoughts] Failed to fetch partner context:', error);
     return null;
   }
 }
@@ -383,7 +386,7 @@ export const createInnerWorkSession = asyncHandler(
         similarityThreshold: 0.4,
         includePreSession: false,
       }).catch((err) => {
-        console.warn('[Inner Work] Initial retrieval failed:', err);
+        logger.warn('[Inner Work] Initial retrieval failed:', err);
         return null;
       });
 
@@ -423,7 +426,7 @@ export const createInnerWorkSession = asyncHandler(
         });
 
         if (formattedContext.trim()) {
-          console.log(`[Inner Work] Injecting ${retrievedContext.relevantFromOtherSessions.length} retrieved messages into initial context`);
+          logger.info(`[Inner Work] Injecting ${retrievedContext.relevantFromOtherSessions.length} retrieved messages into initial context`);
           messagesForLLM = [{
             role: 'user' as const,
             content: `[Retrieved context:\n${formattedContext}]\n\n${initialMessage}`
@@ -464,12 +467,12 @@ export const createInnerWorkSession = asyncHandler(
       // Embed session content (non-blocking)
       // Per fact-ledger architecture, we embed at session level
       embedInnerWorkSessionContent(session.id, turnId).catch((err: unknown) =>
-        console.warn('[Inner Work] Failed to embed session content:', err)
+        logger.warn('[Inner Work] Failed to embed session content:', err)
       );
 
       // Update session metadata (non-blocking)
       updateSessionMetadata(session.id, turnId).catch((err) =>
-        console.warn('[Inner Work] Failed to update metadata:', err)
+        logger.warn('[Inner Work] Failed to update metadata:', err)
       );
 
       // Validate and map suggested actions from AI response
@@ -541,7 +544,7 @@ export const createInnerWorkSession = asyncHandler(
     // Embed session content (non-blocking)
     // Per fact-ledger architecture, we embed at session level
     embedInnerWorkSessionContent(session.id, turnId).catch((err: unknown) =>
-      console.warn('[Inner Work] Failed to embed session content:', err)
+      logger.warn('[Inner Work] Failed to embed session content:', err)
     );
 
     const response: ApiResponse<CreateInnerWorkSessionResponse> = {
@@ -795,7 +798,7 @@ export const sendInnerWorkMessage = asyncHandler(
 
       // Inject context before the current user message
       if (formattedContext.trim()) {
-        console.log(`[Inner Thoughts] Injecting ${retrievedContext.relevantFromOtherSessions.length} retrieved messages into context`);
+        logger.info(`[Inner Thoughts] Injecting ${retrievedContext.relevantFromOtherSessions.length} retrieved messages into context`);
         messagesForLLM = [
           ...history,
           { role: 'user' as const, content: `[Retrieved context:\n${formattedContext}]\n\n${content}` },
@@ -848,7 +851,7 @@ export const sendInnerWorkMessage = asyncHandler(
 
     // Update session metadata with Haiku (non-blocking, runs on every message)
     updateSessionMetadata(sessionId, turnId).catch((err: unknown) =>
-      console.warn('[Inner Work] Failed to update metadata:', err)
+      logger.warn('[Inner Work] Failed to update metadata:', err)
     );
 
     // Update conversation summary and embed session content (non-blocking)
@@ -856,33 +859,33 @@ export const sendInnerWorkMessage = asyncHandler(
     updateInnerThoughtsSummary(sessionId, turnId)
       .then(() => embedInnerWorkSessionContent(sessionId, turnId))
       .catch((err: unknown) =>
-        console.warn('[Inner Work] Failed to update summary/embedding:', err)
+        logger.warn('[Inner Work] Failed to update summary/embedding:', err)
       );
 
     // Run memory detection on user message
     // For Inner Thoughts, we allow detection from turn 2+ (more relaxed than partner sessions)
     let memorySuggestion: MemorySuggestion | null = null;
     if (totalTurnCount >= 2) {
-      console.log(`[Inner Thoughts] Running memory detection (turn ${totalTurnCount})`);
+      logger.info(`[Inner Thoughts] Running memory detection (turn ${totalTurnCount})`);
       try {
         // Include recent conversation history for context (last 5 messages to resolve pronouns/references)
         const recentMessagesForMemory = history.slice(-5);
         const memoryResult = await detectMemoryIntent(content, sessionId, undefined, 'inner-thoughts', recentMessagesForMemory);
         if (memoryResult.hasMemoryIntent && memoryResult.suggestions.length > 0) {
           memorySuggestion = memoryResult.suggestions[0];
-          console.log(`[Inner Thoughts] Memory suggestion detected:`, {
+          logger.info(`[Inner Thoughts] Memory suggestion detected:`, {
             category: memorySuggestion.category,
             content: memorySuggestion.suggestedContent,
             confidence: memorySuggestion.confidence,
           });
         } else {
-          console.log(`[Inner Thoughts] No memory intent detected`);
+          logger.info(`[Inner Thoughts] No memory intent detected`);
         }
       } catch (err) {
-        console.warn('[Inner Thoughts] Memory detection failed:', err);
+        logger.warn('[Inner Thoughts] Memory detection failed:', err);
       }
     } else {
-      console.log(`[Inner Thoughts] Skipping memory detection (turn ${totalTurnCount} < 2)`);
+      logger.info(`[Inner Thoughts] Skipping memory detection (turn ${totalTurnCount} < 2)`);
     }
 
     // Validate and map suggested actions from AI response

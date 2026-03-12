@@ -27,7 +27,9 @@ export interface InnerWorkSessionSummaryDTO {
   theme: string | null;
   status: InnerWorkStatus;
   createdAt: string; // ISO 8601
-  updatedAt: string;
+  updatedAt: string; // ISO 8601
+  /** Timestamp when distillation was last run, null if never distilled */
+  distilledAt: string | null;
   messageCount: number;
   /** If linked to a partner session, the session ID */
   linkedPartnerSessionId: string | null;
