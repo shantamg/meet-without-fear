@@ -61,6 +61,7 @@ export const prisma = {
   meditationPreferences: createMockModel(),
   savedMeditation: createMockModel(),
   insight: createMockModel(),
+  recurringTheme: createMockModel(),
   auditLog: createMockModel(),
   brainActivity: createMockModel(),
   refinementAttemptCounter: createMockModel(),

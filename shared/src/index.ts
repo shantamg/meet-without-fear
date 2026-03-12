@@ -29,6 +29,7 @@ export * from './dto/reconciler';
 export * from './dto/memory';
 export * from './dto/needs-assessment';
 export * from './dto/people-tracking';
+export * from './dto/knowledge-base';
 export * from './dto/gratitude';
 export * from './dto/meditation';
 export * from './dto/cross-feature';

@@ -205,6 +205,7 @@ export const getPerson = asyncHandler(async (req: Request, res: Response) => {
       needsConnections,
       averageSentiment: avgSentiment,
     },
+    sessions: [], // Populated with real data in Phase 16 Plan 02
   };
 
   const response: ApiResponse<GetPersonResponse> = {

@@ -33,6 +33,13 @@ export interface PersonDetailDTO extends PersonDTO {
     needsConnections: { needName: string; count: number }[];
     averageSentiment: number | null;
   };
+  // Sessions where this person is mentioned (KNOW-02)
+  sessions: Array<{
+    sessionId: string;
+    title: string | null;
+    theme: string | null;
+    createdAt: string; // ISO 8601
+  }>;
 }
 
 // ============================================================================
