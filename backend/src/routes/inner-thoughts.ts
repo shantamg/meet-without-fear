@@ -36,6 +36,7 @@ import {
   dismissInsight,
 } from '../controllers/inner-work';
 import { distillInnerWorkSession } from '../controllers/distillation';
+import { getTakeaways, updateTakeaway, deleteTakeaway } from '../controllers/takeaways';
 import { streamingRateLimit } from '../middleware/rate-limit';
 
 const router = Router();
@@ -81,6 +82,27 @@ router.get('/inner-thoughts/:id', getInnerWorkSession);
  * @access Private
  */
 router.post('/inner-thoughts/:id/messages', sendInnerWorkMessage);
+
+/**
+ * @route GET /api/v1/inner-thoughts/:id/takeaways
+ * @description List all takeaways for a distilled session (DIST-04)
+ * @access Private
+ */
+router.get('/inner-thoughts/:id/takeaways', getTakeaways);
+
+/**
+ * @route PATCH /api/v1/inner-thoughts/:id/takeaways/:takeawayId
+ * @description Update takeaway content (marks source as USER) (DIST-05)
+ * @access Private
+ */
+router.patch('/inner-thoughts/:id/takeaways/:takeawayId', updateTakeaway);
+
+/**
+ * @route DELETE /api/v1/inner-thoughts/:id/takeaways/:takeawayId
+ * @description Delete a single takeaway (DIST-06)
+ * @access Private
+ */
+router.delete('/inner-thoughts/:id/takeaways/:takeawayId', deleteTakeaway);
 
 /**
  * @route POST /api/v1/inner-thoughts/:id/distill

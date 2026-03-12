@@ -387,6 +387,17 @@ export {
 } from './useSpeech';
 
 // ============================================================================
+// Distillation (Takeaway Review, Edit, Delete)
+// ============================================================================
+
+export {
+  // Hooks
+  useTakeaways,
+  useUpdateTakeaway,
+  useDeleteTakeaway,
+} from './useDistillation';
+
+// ============================================================================
 // Session Drawer (Hamburger Menu Navigation)
 // ============================================================================
 

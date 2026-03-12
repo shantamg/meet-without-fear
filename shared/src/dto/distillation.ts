@@ -31,10 +31,30 @@ export interface DistillSessionResponse {
 }
 
 // ============================================================================
-// Get Takeaways (GET /inner-work/:id/takeaways)
+// Get Takeaways (GET /inner-thoughts/:id/takeaways)
 // ============================================================================
 
 export interface GetTakeawaysResponse {
   takeaways: TakeawayDTO[];
   distilledAt: string | null;
+}
+
+// ============================================================================
+// Update Takeaway (PATCH /inner-thoughts/:id/takeaways/:takeawayId)
+// ============================================================================
+
+export interface UpdateTakeawayRequest {
+  content: string;
+}
+
+export interface UpdateTakeawayResponse {
+  takeaway: TakeawayDTO;
+}
+
+// ============================================================================
+// Delete Takeaway (DELETE /inner-thoughts/:id/takeaways/:takeawayId)
+// ============================================================================
+
+export interface DeleteTakeawayResponse {
+  success: true;
 }

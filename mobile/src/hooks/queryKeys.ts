@@ -111,3 +111,12 @@ export const timelineKeys = {
   infinite: (sessionId: string) => [...timelineKeys.all, 'infinite', sessionId] as const,
 };
 
+// ============================================================================
+// Takeaway Query Keys
+// ============================================================================
+
+export const takeawayKeys = {
+  all: ['takeaways'] as const,
+  list: (sessionId: string) => [...takeawayKeys.all, sessionId] as const,
+};
+
