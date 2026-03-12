@@ -1,13 +1,14 @@
 /**
- * Inner Thoughts Layout
+ * Knowledge Base Layout
  *
- * Stack navigator for Inner Thoughts screens.
+ * Nested Stack navigator for knowledge base sub-screens.
+ * Follows the same pattern as the parent inner-thoughts/_layout.tsx.
  */
 
 import { Stack } from 'expo-router';
 import { colors } from '@/theme';
 
-export default function InnerThoughtsLayout() {
+export default function KnowledgeBaseLayout() {
   return (
     <Stack
       screenOptions={{
@@ -33,15 +34,9 @@ export default function InnerThoughtsLayout() {
         }}
       />
       <Stack.Screen
-        name="[id]"
+        name="[topic]"
         options={{
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="knowledge-base"
-        options={{
-          headerShown: false, // knowledge-base has its own nested Stack with custom headers
+          headerShown: false, // Using custom header in the screen
         }}
       />
     </Stack>

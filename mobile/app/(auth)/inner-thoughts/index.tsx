@@ -11,7 +11,7 @@
 import { useMemo, useCallback, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, Animated, Pressable, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Plus, Layers, ChevronRight, Link, Trash2 } from 'lucide-react-native';
+import { Plus, Layers, ChevronRight, Link, Trash2, BookOpen } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Swipeable } from 'react-native-gesture-handler';
 
@@ -322,6 +322,20 @@ export default function InnerThoughtsListScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScreenHeader {...headerConfig} />
 
+      <TouchableOpacity
+        style={styles.knowledgeBaseCard}
+        onPress={() => router.push('/inner-thoughts/knowledge-base')}
+        accessibilityRole="button"
+        accessibilityLabel="Browse Knowledge Base"
+      >
+        <BookOpen size={20} color={colors.accent} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.knowledgeBaseTitle}>Browse Knowledge Base</Text>
+          <Text style={styles.knowledgeBaseSubtitle}>Topics, people, and themes</Text>
+        </View>
+        <ChevronRight color={colors.textMuted} size={18} />
+      </TouchableOpacity>
+
       {sessions.length === 0 && !isLoading ? (
         <View style={styles.emptyContainer}>
           <Layers color="#666" size={48} />
@@ -442,5 +456,26 @@ const useStyles = () =>
     footerLoader: {
       paddingVertical: t.spacing.lg,
       alignItems: 'center',
+    },
+    knowledgeBaseCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: t.colors.bgSecondary,
+      borderRadius: t.radius.lg,
+      padding: t.spacing.lg,
+      marginHorizontal: t.spacing.lg,
+      marginTop: t.spacing.md,
+      marginBottom: t.spacing.sm,
+    },
+    knowledgeBaseTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: t.colors.textPrimary,
+    },
+    knowledgeBaseSubtitle: {
+      fontSize: 13,
+      color: t.colors.textSecondary,
+      marginTop: 2,
     },
   }));
