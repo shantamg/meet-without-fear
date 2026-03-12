@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Inner Thoughts Journal
 status: executing
-stopped_at: Completed 16-03-PLAN.md — theme-detector service, fire-and-forget wiring into distillation
-last_updated: "2026-03-12T09:00:29.314Z"
+stopped_at: Completed 17-01-PLAN.md — distillation review UI, TakeawayRow, TakeawayReviewSheet, backend CRUD endpoints
+last_updated: "2026-03-12T09:25:44.587Z"
 last_activity: 2026-03-12 — Phase 15 Plan 01 complete — SessionTakeaway schema, distillation DTOs, Prisma mock
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 12
-  completed_plans: 8
+  completed_plans: 9
   percent: 68
 ---
 
@@ -58,6 +58,7 @@ Progress: [███████░░░] 68%
 | Phase 16-knowledge-base-backend P01 | 8 | 2 tasks | 7 files |
 | Phase 16-knowledge-base-backend P02 | 4 | 2 tasks | 5 files |
 | Phase 16-knowledge-base-backend P03 | 6 | 2 tasks | 3 files |
+| Phase 17-session-list-distillation-ui-and-voice-input P01 | 16 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,8 @@ Recent decisions affecting current work:
 - [Phase 16-03]: 3-session threshold is hard constraint — never lower it (fire-and-forget theme detection)
 - [Phase 16-03]: detectRecurringTheme triggered AFTER distillation $transaction commits so new takeaways are visible
 - [Phase 16-03]: Theme detector always regenerates Haiku summary on every trigger above threshold (always-fresh)
+- [Phase 17-01]: Created takeaway CRUD backend endpoints as part of mobile UI plan — Phase 15 did not ship GET/PATCH/DELETE takeaway routes, only POST /distill
+- [Phase 17-01]: TakeawayReviewSheet uses parent-controlled mounting (visible prop) instead of __getValue() internal API for show/hide logic
 
 ### Pending Todos
 
@@ -114,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T09:00:29.312Z
-Stopped at: Completed 16-03-PLAN.md — theme-detector service, fire-and-forget wiring into distillation
+Last session: 2026-03-12T09:25:44.585Z
+Stopped at: Completed 17-01-PLAN.md — distillation review UI, TakeawayRow, TakeawayReviewSheet, backend CRUD endpoints
 Resume file: None
