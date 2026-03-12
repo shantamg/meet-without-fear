@@ -10,12 +10,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Layers, MoreVertical, Lock } from 'lucide-react-native';
+import { ArrowLeft, Layers, MoreVertical, Lock, Sparkles } from 'lucide-react-native';
 import { MessageRole, MemorySuggestion, SuggestedAction } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage } from '../components/ChatInterface';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 import { SuggestedActionButtons } from '../components/SuggestedActionButtons';
+import { TakeawayReviewSheet } from '../components/TakeawayReviewSheet';
 import { useInnerThoughtsSession, useSendInnerThoughtsMessage } from '../hooks';
 import { createStyles } from '../theme/styled';
 import { colors } from '../theme';
@@ -57,6 +58,9 @@ export function InnerThoughtsScreen({
 }: InnerThoughtsScreenProps) {
   const styles = useStyles();
   const router = useRouter();
+
+  // Takeaways review sheet state
+  const [showTakeaways, setShowTakeaways] = useState(false);
 
   // Memory suggestion state
   const [memorySuggestion, setMemorySuggestion] = useState<MemorySuggestion | null>(null);
@@ -255,6 +259,18 @@ export function InnerThoughtsScreen({
           ) : null}
         </View>
 
+        {/* Takeaways review button — only when distillation has run */}
+        {!isCreating && session?.distilledAt && (
+          <TouchableOpacity
+            style={styles.headerMenuButton}
+            onPress={() => setShowTakeaways(true)}
+            accessibilityRole="button"
+            accessibilityLabel="View takeaways"
+          >
+            <Sparkles color={colors.brandBlue} size={20} />
+          </TouchableOpacity>
+        )}
+
         {/* End Session button */}
         {!isCreating && (
           <TouchableOpacity
@@ -297,6 +313,15 @@ export function InnerThoughtsScreen({
             onApproved={handleDismissMemorySuggestion}
           />
         </View>
+      )}
+
+      {/* Takeaway review sheet — conditionally mounted when a session has been distilled */}
+      {session?.distilledAt && (
+        <TakeawayReviewSheet
+          sessionId={sessionId}
+          visible={showTakeaways}
+          onClose={() => setShowTakeaways(false)}
+        />
       )}
     </SafeAreaView>
   );
