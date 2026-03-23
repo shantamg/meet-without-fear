@@ -1,0 +1,16 @@
+{
+  "sentry": {
+    "org": "meet-without-fear",
+    "projects": {
+      "backend": {
+        "slug": "mwf-backend",
+        "id": "4511090865274880"
+      },
+      "mobile": {
+        "slug": "mwf-mobile",
+        "id": "4511090865930240"
+      }
+    },
+    "dashboard": "https://meet-without-fear.sentry.io/"
+  }
+}

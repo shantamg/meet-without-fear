@@ -26,6 +26,7 @@
     "@clerk/express": "^1.7.60",
     "@prisma/client": "^6.1.0",
     "@react-native-community/netinfo": "^11.4.1",
+    "@sentry/node": "^10.45.0",
     "@types/ably": "^1.0.0",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",
@@ -43,10 +44,12 @@
     "tsc-alias": "^1.8.16",
     "typescript": "^5.7.2",
     "winston": "^3.19.0",
+    "ws": "^8.19.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",
     "eslint": "^8.57.0",

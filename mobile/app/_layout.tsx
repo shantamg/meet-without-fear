@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
+import * as Sentry from '@sentry/react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -13,6 +14,12 @@ import { QueryProvider } from '@/src/providers/QueryProvider';
 import { ToastProvider } from '@/src/contexts/ToastContext';
 import { MixpanelInitializer } from '@/src/components/MixpanelInitializer';
 import { E2EAuthProvider, isE2EMode } from '@/src/providers/E2EAuthProvider';
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? '',
+  tracesSampleRate: 1.0,
+  enabled: !__DEV__,
+});
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
@@ -56,7 +63,7 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
 /**
  * Root layout component
  */
-export default function RootLayout() {
+function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({});
 
   // Keep showing splash screen until fonts are loaded
@@ -89,6 +96,8 @@ export default function RootLayout() {
     </ClerkAuthFlow>
   );
 }
+
+export default Sentry.wrap(RootLayout);
 
 const styles = StyleSheet.create({
   container: {

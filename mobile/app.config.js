@@ -23,5 +23,15 @@ module.exports = ({ config }) => {
     }),
   };
 
-  return withPlugins(config, ['expo-secure-store', 'expo-audio']);
+  return withPlugins(config, [
+    'expo-secure-store',
+    'expo-audio',
+    [
+      '@sentry/react-native/expo',
+      {
+        organization: 'meet-without-fear',
+        project: 'mwf-mobile',
+      },
+    ],
+  ]);
 };
