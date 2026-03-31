@@ -18,7 +18,7 @@
  *   - Flushes remaining buffer on client disconnect
  */
 
-import WebSocket, { WebSocketServer } from 'ws';
+import WebSocket from 'ws';
 import { Server } from 'http';
 import { logger } from '../lib/logger';
 
@@ -34,7 +34,7 @@ const MIN_CHUNK_SIZE = 1600;
  * Call this from server.ts after creating the HTTP server.
  */
 export function attachRealtimeWebSocket(server: Server): void {
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocket.Server({ noServer: true });
 
   server.on('upgrade', (request, socket, head) => {
     const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
