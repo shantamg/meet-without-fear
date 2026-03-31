@@ -18,7 +18,7 @@
  *   - Flushes remaining buffer on client disconnect
  */
 
-import { WebSocket, WebSocketServer } from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 import { Server } from 'http';
 import { logger } from '../lib/logger';
 
@@ -40,14 +40,14 @@ export function attachRealtimeWebSocket(server: Server): void {
     const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
 
     if (pathname === '/realtime') {
-      wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
         wss.emit('connection', ws, request);
       });
     }
     // Non-/realtime upgrades are ignored (other middleware may handle them)
   });
 
-  wss.on('connection', async (clientWs, request) => {
+  wss.on('connection', async (clientWs: WebSocket, request: import('http').IncomingMessage) => {
     logger.info('[Realtime] Client connected');
 
     if (!ASSEMBLYAI_API_KEY) {
@@ -110,7 +110,7 @@ export function attachRealtimeWebSocket(server: Server): void {
         logger.info('[Realtime] Connected to AssemblyAI');
       });
 
-      assemblyAiWs.on('message', (data) => {
+      assemblyAiWs.on('message', (data: WebSocket.Data) => {
         try {
           const message = JSON.parse(data.toString());
 
@@ -160,7 +160,7 @@ export function attachRealtimeWebSocket(server: Server): void {
         }
       });
 
-      assemblyAiWs.on('error', (error) => {
+      assemblyAiWs.on('error', (error: Error) => {
         logger.error('[Realtime] AssemblyAI WebSocket error:', error.message);
         clientWs.send(JSON.stringify({ type: 'error', data: 'AssemblyAI connection error' }));
       });
@@ -170,7 +170,7 @@ export function attachRealtimeWebSocket(server: Server): void {
       });
 
       // 4. Handle incoming audio from mobile client
-      clientWs.on('message', (data) => {
+      clientWs.on('message', (data: WebSocket.Data) => {
         if (!assemblyAiWs || assemblyAiWs.readyState !== WebSocket.OPEN) return;
 
         try {
