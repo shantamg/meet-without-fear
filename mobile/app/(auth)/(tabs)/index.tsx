@@ -260,7 +260,7 @@ export default function HomeScreen() {
             <View style={styles.chatInputSection}>
               <ChatInput
                 onSend={handleHomeChat}
-                placeholder="What's on your mind?"
+                placeholder="What's on your mind? (OTA v1)"
               />
             </View>
         </KeyboardAvoidingView>
