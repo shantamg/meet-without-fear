@@ -15,6 +15,7 @@
   "scripts": {
     "deploy:mobile:ios": "node scripts/update-build-number.js && cd mobile && EXPO_NO_CAPABILITY_SYNC=1 eas build --platform ios --profile production --auto-submit",
     "deploy:mobile:android": "node scripts/update-build-number.js && cd mobile && eas build --platform android --profile android-apk",
+    "deploy:mobile:ota": "cd mobile && ./scripts/publish-ota.sh",
     "deploy:ios:prepare": "node scripts/deploy-ios-prepare.js",
     "deploy:ios:release": "node scripts/deploy-ios-release.js",
     "deploy:android:prepare": "node scripts/deploy-android-prepare.js",
