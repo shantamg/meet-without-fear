@@ -4,6 +4,7 @@
  * Export all handlers and register them with the registry.
  */
 
+import { logger } from '../../../lib/logger';
 import { registerHandler } from '../registry';
 import { sessionCreationHandler } from './session-creation';
 import { sessionSwitchHandler } from './session-switch';
@@ -38,5 +39,5 @@ export function registerBuiltInHandlers(): void {
   registerHandler(witnessingHandler); // Handles pre-session witnessing/Inner Work
   registerHandler(helpHandler); // Lowest priority fallback
 
-  console.log('[ChatRouter] Registered all built-in handlers');
+  logger.info('[ChatRouter] Registered all built-in handlers');
 }

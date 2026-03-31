@@ -7,6 +7,7 @@
  */
 
 import { Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { successResponse, errorResponse } from '../utils/response';
 
@@ -177,7 +178,7 @@ export async function getPendingActionsHandler(
 
     successResponse(res, { actions, sentTabUpdates });
   } catch (error) {
-    console.error('[getPendingActionsHandler] Error:', error);
+    logger.error('[getPendingActionsHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get pending actions', 500);
   }
 }
@@ -273,7 +274,7 @@ export async function getBadgeCountHandler(
 
     successResponse(res, { count: total, bySession });
   } catch (error) {
-    console.error('[getBadgeCountHandler] Error:', error);
+    logger.error('[getBadgeCountHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get badge count', 500);
   }
 }

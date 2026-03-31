@@ -1,4 +1,5 @@
 
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { getAbly } from '../services/realtime';
 import { ActivityType, ActivityStatus, BrainActivity, BrainActivityCallType } from '@prisma/client';
@@ -57,7 +58,7 @@ export class BrainService {
       this.broadcastUpdate(activity);
       return activity;
     } catch (error) {
-      console.error('[BrainService] Failed to start activity:', error);
+      logger.error('[BrainService] Failed to start activity:', error);
       // Return a temporary object if DB fails so flow doesn't break, 
       // though ideally we want to fail hard or handle gracefully.
       // For now, rethrow to ensure visibility during dev.
@@ -103,7 +104,7 @@ export class BrainService {
       this.broadcastUpdate(activity);
       return activity;
     } catch (error) {
-      console.error(`[BrainService] Failed to complete activity ${activityId}:`, error);
+      logger.error(`[BrainService] Failed to complete activity ${activityId}:`, error);
       return null;
     }
   }
@@ -125,7 +126,7 @@ export class BrainService {
       this.broadcastUpdate(activity);
       return activity;
     } catch (e) {
-      console.error(`[BrainService] Failed to fail activity ${activityId}:`, e);
+      logger.error(`[BrainService] Failed to fail activity ${activityId}:`, e);
       return null;
     }
   }
@@ -142,7 +143,7 @@ export class BrainService {
     const channel = ably.channels.get(this.CHANNEL_NAME);
     // We publish 'brain-activity' event. Status site will need to listen for this.
     channel.publish('brain-activity', activity).catch((err: any) => {
-      console.warn('[BrainService] Telemetry push failed:', err.message);
+      logger.warn('[BrainService] Telemetry push failed:', err.message);
     });
   }
 
@@ -167,7 +168,7 @@ export class BrainService {
       timestamp: message.timestamp,
     };
     channel.publish('new-message', payload).catch((err: any) => {
-      console.warn('[BrainService] Message push failed:', err.message);
+      logger.warn('[BrainService] Message push failed:', err.message);
     });
   }
 }

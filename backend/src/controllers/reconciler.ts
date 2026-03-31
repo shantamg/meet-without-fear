@@ -10,6 +10,7 @@
  */
 
 import { Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import {
   runReconcilerRequestSchema,
@@ -149,7 +150,7 @@ export async function runReconcilerHandler(
 
     successResponse(res, response);
   } catch (error) {
-    console.error('[runReconcilerHandler] Error:', error);
+    logger.error('[runReconcilerHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to run reconciler', 500);
   }
 }
@@ -212,7 +213,7 @@ export async function getReconcilerStatusHandler(
 
     successResponse(res, response);
   } catch (error) {
-    console.error('[getReconcilerStatusHandler] Error:', error);
+    logger.error('[getReconcilerStatusHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get reconciler status', 500);
   }
 }
@@ -286,7 +287,7 @@ export async function getShareOfferHandler(
         where: { id: shareOffer.id },
         data: { status: 'OFFERED' },
       });
-      console.log(`[Reconciler] Marked share offer ${shareOffer.id} as OFFERED for user ${user.id}`);
+      logger.info(`[Reconciler] Marked share offer ${shareOffer.id} as OFFERED for user ${user.id}`);
     }
 
     successResponse(res, {
@@ -305,7 +306,7 @@ export async function getShareOfferHandler(
       }
     });
   } catch (error) {
-    console.error('[getShareOfferHandler] Error:', error);
+    logger.error('[getShareOfferHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get share offer', 500);
   }
 }
@@ -401,7 +402,7 @@ export async function respondToShareOfferHandler(
       errorResponse(res, 'CONFLICT', 'Share offer has already been processed', 409);
       return;
     }
-    console.error('[respondToShareOfferHandler] Error:', error);
+    logger.error('[respondToShareOfferHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to respond to share offer', 500);
   }
 }
@@ -468,7 +469,7 @@ export async function getReconcilerSummaryHandler(
 
     successResponse(res, summary);
   } catch (error) {
-    console.error('[getReconcilerSummaryHandler] Error:', error);
+    logger.error('[getReconcilerSummaryHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get reconciler summary', 500);
   }
 }
@@ -524,7 +525,7 @@ export async function skipShareOfferHandler(
       message: 'Share offer skipped. You can proceed to the next stage.',
     });
   } catch (error) {
-    console.error('[skipShareOfferHandler] Error:', error);
+    logger.error('[skipShareOfferHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to skip share offer', 500);
   }
 }
@@ -708,7 +709,7 @@ Respond with ONLY the message text, no additional formatting or explanation.`;
       rewriteNote: rewriteResult?.needsRewrite ? rewriteResult.note : null,
     });
   } catch (error) {
-    console.error('[generateShareDraftHandler] Error:', error);
+    logger.error('[generateShareDraftHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to generate share draft', 500);
   }
 }
@@ -836,7 +837,7 @@ WHEN NOT PROVIDING A REVISED VERSION:
       proposedContent: extractedContent,
     });
   } catch (error) {
-    console.error('[refinementChatMessageHandler] Error:', error);
+    logger.error('[refinementChatMessageHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to process refinement message', 500);
   }
 }
@@ -916,7 +917,7 @@ export async function refinementFinalizeHandler(
           sessionId, user.id, subjectName, guesserName, content
         );
       } catch (error) {
-        console.error('[refinementFinalizeHandler] generatePostShareContinuation failed:', error);
+        logger.error('[refinementFinalizeHandler] generatePostShareContinuation failed:', error);
         const subjectProgress = await prisma.stageProgress.findFirst({
           where: { sessionId, userId: user.id },
           orderBy: { stage: 'desc' },
@@ -1013,7 +1014,7 @@ export async function refinementFinalizeHandler(
       });
     });
 
-    console.log(`[refinementFinalizeHandler] Share finalized for user ${user.id} (4 messages created in transaction)`);
+    logger.info(`[refinementFinalizeHandler] Share finalized for user ${user.id} (4 messages created in transaction)`);
 
     // Notify guesser via Ably
     if (guesserId) {
@@ -1036,7 +1037,7 @@ export async function refinementFinalizeHandler(
       sharedContent: content,
     });
   } catch (error) {
-    console.error('[refinementFinalizeHandler] Error:', error);
+    logger.error('[refinementFinalizeHandler] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to finalize refinement', 500);
   }
 }

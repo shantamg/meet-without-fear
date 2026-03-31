@@ -18,6 +18,7 @@
  */
 
 import { Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { ErrorCode } from '@meet-without-fear/shared';
 import { successResponse, errorResponse } from '../utils/response';
@@ -298,7 +299,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
       compact: compactResponse,
     });
   } catch (error) {
-    console.error('[getSessionState] Error:', error);
+    logger.error('[getSessionState] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to get session state', 500);
   }
 }

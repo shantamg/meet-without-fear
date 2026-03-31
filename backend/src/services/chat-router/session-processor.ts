@@ -6,6 +6,7 @@
  * when a message needs to be processed in a session.
  */
 
+import { logger } from '../../lib/logger';
 import { prisma } from '../../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../ai';
 import { getPartnerUserId } from '../../utils/session';
@@ -253,7 +254,7 @@ export async function processSessionMessage(
   };
 
   if (isStageTransition) {
-    console.log(
+    logger.info(
       `[SessionProcessor] Stage transition detected: ${previousStage ?? 'unknown'} → ${currentStage}`
     );
   }
@@ -267,7 +268,7 @@ export async function processSessionMessage(
     aiContext
   );
 
-  console.log(
+  logger.info(
     `[SessionProcessor] Stage ${currentStage}, intent=${orchestratorResult.memoryIntent.intent}, mock=${orchestratorResult.usedMock}`
   );
 
@@ -296,7 +297,7 @@ export async function processSessionMessage(
       return embedSessionContent(sessionId, userId, turnId);
     })
     .catch((err: unknown) =>
-      console.warn('[SessionProcessor] Failed to update session summary/embedding:', err)
+      logger.warn('[SessionProcessor] Failed to update session summary/embedding:', err)
     );
 
   // NOTE: Memory detection is handled by ai-orchestrator.ts, not here.
@@ -327,9 +328,9 @@ export async function processSessionMessage(
           version: { increment: 1 },
         },
       });
-      console.log(`[SessionProcessor] Stage 2: Auto-saved empathy draft for user ${userId}`);
+      logger.info(`[SessionProcessor] Stage 2: Auto-saved empathy draft for user ${userId}`);
     } catch (err) {
-      console.error('[SessionProcessor] Failed to auto-save empathy draft:', err);
+      logger.error('[SessionProcessor] Failed to auto-save empathy draft:', err);
     }
   }
 
@@ -340,7 +341,7 @@ export async function processSessionMessage(
       sessionId,
       stage: currentStage,
     }).catch((err) =>
-      console.warn('[SessionProcessor] Failed to publish user event:', err)
+      logger.warn('[SessionProcessor] Failed to publish user event:', err)
     );
   }
 

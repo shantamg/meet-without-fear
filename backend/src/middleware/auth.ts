@@ -10,6 +10,7 @@ import { UnauthorizedError, ForbiddenError } from './errors';
 import { prisma } from '../lib/prisma';
 import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
 import { Prisma } from '@prisma/client';
+import { logger } from '../lib/logger';
 
 // ============================================================================
 // Types
@@ -62,7 +63,7 @@ async function verifyClerkToken(req: Request): Promise<string | null> {
     return session.sub;
   } catch (error) {
     if (process.env.NODE_ENV !== 'test') {
-      console.error('[Auth] Clerk token verification failed:', error);
+      logger.error('[Auth] Clerk token verification failed:', error);
     }
     return null;
   }

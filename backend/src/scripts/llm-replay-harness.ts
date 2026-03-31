@@ -1,8 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { buildStagePrompt as buildLegacyStagePrompt } from '../services/stage-prompts-legacy';
 import { buildStagePromptString } from '../services/stage-prompts';
-import { formatContextForPrompt, formatContextForPromptLegacy } from '../services/context-formatters';
+import { formatContextForPrompt } from '../services/context-formatters';
 import type { ContextBundle } from '../services/context-assembler';
 import { estimateMessagesTokens, estimateTokens, trimConversationHistory, CONTEXT_WINDOW } from '../utils/token-budget';
 import { determineMemoryIntent } from '../services/memory-intent';
@@ -73,15 +72,12 @@ function buildBundle(fixture: Fixture, useSummary: boolean): ContextBundle {
 function buildMessagesWithContext(
   history: FixtureMessage[],
   contextText: string,
-  mode: 'legacy' | 'optimized'
 ): FixtureMessage[] {
   if (history.length === 0) return [];
   const base = history.slice(0, -1);
   const current = history[history.length - 1];
   const prefix = contextText.trim()
-    ? mode === 'legacy'
-      ? `[Context for this turn:\n${contextText}]\n\n${current.content}`
-      : `Context:\n${contextText}\n\nUser message: ${current.content}`
+    ? `Context:\n${contextText}\n\nUser message: ${current.content}`
     : current.content;
   return [...base, { role: 'user', content: prefix }];
 }
@@ -90,46 +86,34 @@ function estimateTurnTokens(systemPrompt: string, messages: FixtureMessage[]): n
   return estimateTokens(systemPrompt) + estimateMessagesTokens(messages);
 }
 
-function simulateFixture(fixture: Fixture, mode: 'legacy' | 'optimized') {
+function simulateFixture(fixture: Fixture) {
   let totalTokens = 0;
   let totalCalls = 0;
   let turnCount = 0;
 
-  const useSummary = mode === 'optimized' && Boolean(fixture.summary);
+  const useSummary = Boolean(fixture.summary);
   const bundle = buildBundle(fixture, useSummary);
 
   for (let i = 0; i < fixture.messages.length; i++) {
     if (fixture.messages[i].role !== 'user') continue;
     const history = fixture.messages.slice(0, i + 1);
 
-    const prompt = mode === 'legacy'
-      ? buildLegacyStagePrompt(fixture.stage, {
-          userName: fixture.userName,
-          partnerName: fixture.partnerName,
-          turnCount: i + 1,
-          emotionalIntensity: fixture.emotionalIntensity,
-          contextBundle: bundle,
-        })
-      : buildStagePromptString(fixture.stage, {
-          userName: fixture.userName,
-          partnerName: fixture.partnerName,
-          turnCount: i + 1,
-          emotionalIntensity: fixture.emotionalIntensity,
-          contextBundle: bundle,
-        });
+    const prompt = buildStagePromptString(fixture.stage, {
+      userName: fixture.userName,
+      partnerName: fixture.partnerName,
+      turnCount: i + 1,
+      emotionalIntensity: fixture.emotionalIntensity,
+      contextBundle: bundle,
+    });
 
-    const contextText = mode === 'legacy'
-      ? formatContextForPromptLegacy(bundle)
-      : formatContextForPrompt(bundle);
+    const contextText = formatContextForPrompt(bundle);
 
-    const { trimmed } = mode === 'optimized'
-      ? trimConversationHistory(
-          history.map((m) => ({ role: m.role, content: m.content })),
-          useSummary ? CONTEXT_WINDOW.recentTurnsWithSummary : CONTEXT_WINDOW.recentTurnsWithoutSummary
-        )
-      : { trimmed: history };
+    const { trimmed } = trimConversationHistory(
+      history.map((m) => ({ role: m.role, content: m.content })),
+      useSummary ? CONTEXT_WINDOW.recentTurnsWithSummary : CONTEXT_WINDOW.recentTurnsWithoutSummary
+    );
 
-    const messagesWithContext = buildMessagesWithContext(trimmed, contextText, mode);
+    const messagesWithContext = buildMessagesWithContext(trimmed, contextText);
     const tokens = estimateTurnTokens(prompt, messagesWithContext);
 
     const intent = determineMemoryIntent({
@@ -157,19 +141,13 @@ function simulateFixture(fixture: Fixture, mode: 'legacy' | 'optimized') {
 function main() {
   const fixtures = loadFixtures();
   const results = fixtures.map((fixture) => {
-    const legacy = simulateFixture(fixture, 'legacy');
-    const optimized = simulateFixture(fixture, 'optimized');
-    return { fixture: fixture.id, legacy, optimized };
+    const stats = simulateFixture(fixture);
+    return { fixture: fixture.id, stats };
   });
 
   for (const result of results) {
     console.log(`\nFixture: ${result.fixture}`);
-    console.log(`Legacy → avg tokens/turn: ${result.legacy.averageTokens}, avg calls/turn: ${result.legacy.averageCalls}`);
-    console.log(`Optimized → avg tokens/turn: ${result.optimized.averageTokens}, avg calls/turn: ${result.optimized.averageCalls}`);
-    const tokenReduction = result.legacy.averageTokens
-      ? Math.round(((result.legacy.averageTokens - result.optimized.averageTokens) / result.legacy.averageTokens) * 100)
-      : 0;
-    console.log(`Estimated token reduction: ${tokenReduction}%`);
+    console.log(`  avg tokens/turn: ${result.stats.averageTokens}, avg calls/turn: ${result.stats.averageCalls}`);
   }
 }
 

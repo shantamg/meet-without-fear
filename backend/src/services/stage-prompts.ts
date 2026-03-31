@@ -11,6 +11,7 @@
  * See docs/mvp-planning/plans/backend/prompts/ for full prompt documentation.
  */
 
+import { logger } from '../lib/logger';
 import { type ContextBundle } from './context-assembler';
 import { type SurfaceStyle } from './memory-intent';
 
@@ -1653,7 +1654,7 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
       blocks = buildStage2BPrompt(context);
       break;
     default:
-      console.warn(`[Stage Prompts] Unknown stage ${stage}, using Stage 1 prompt`);
+      logger.warn(`[Stage Prompts] Unknown stage ${stage}, using Stage 1 prompt`);
       blocks = buildStage1Prompt(context);
       break;
   }

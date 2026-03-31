@@ -589,9 +589,10 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
       }
     }
 
-    // Log search results via BrainService
-    await brainService.startActivity({
-      sessionId: currentSessionId || 'unknown',
+    // Log search results via BrainService (fire-and-forget — telemetry must not block AI response)
+    brainService.startActivity({
+      ...(currentSessionId ? { sessionId: currentSessionId } : {}),
+      ...(excludeInnerThoughtsSessionId ? { innerWorkSessionId: excludeInnerThoughtsSessionId } : {}),
       turnId,
       activityType: ActivityType.RETRIEVAL,
       model: 'system-retrieval',
@@ -628,7 +629,7 @@ export async function retrieveContext(options: RetrievalOptions): Promise<Retrie
         },
         durationMs: 0 // Already elapsed in search time effectively
       });
-    });
+    }).catch((err) => logger.warn('[ContextRetriever] Brain activity logging failed:', err));
 
     // Sort by similarity and limit
     relevantFromOtherSessions = relevantFromOtherSessions

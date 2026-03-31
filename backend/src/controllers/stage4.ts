@@ -12,6 +12,7 @@
 
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import {
   proposeStrategyRequestSchema,
@@ -180,7 +181,7 @@ export async function getStrategies(req: Request, res: Response): Promise<void> 
       aiSuggestionsAvailable: false,
     });
   } catch (error) {
-    console.error('[getStrategies] Error:', error);
+    logger.error('[getStrategies] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get strategies', 500);
   }
 }
@@ -286,7 +287,7 @@ export async function proposeStrategy(req: Request, res: Response): Promise<void
       201
     );
   } catch (error) {
-    console.error('[proposeStrategy] Error:', error);
+    logger.error('[proposeStrategy] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to propose strategy', 500);
   }
 }
@@ -410,7 +411,7 @@ export async function submitRanking(req: Request, res: Response): Promise<void> 
       canReveal,
     });
   } catch (error) {
-    console.error('[submitRanking] Error:', error);
+    logger.error('[submitRanking] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to submit ranking', 500);
   }
 }
@@ -524,7 +525,7 @@ export async function getOverlap(req: Request, res: Response): Promise<void> {
       agreementCandidates,
     });
   } catch (error) {
-    console.error('[getOverlap] Error:', error);
+    logger.error('[getOverlap] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get overlap', 500);
   }
 }
@@ -685,7 +686,7 @@ export async function createAgreement(req: Request, res: Response): Promise<void
       201
     );
   } catch (error) {
-    console.error('[createAgreement] Error:', error);
+    logger.error('[createAgreement] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to create agreement', 500);
   }
 }
@@ -866,7 +867,7 @@ export async function confirmAgreement(req: Request, res: Response): Promise<voi
       sessionCanResolve,
     });
   } catch (error) {
-    console.error('[confirmAgreement] Error:', error);
+    logger.error('[confirmAgreement] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to confirm agreement', 500);
   }
 }
@@ -944,7 +945,7 @@ export async function requestSuggestions(req: Request, res: Response): Promise<v
       count: suggestions.length,
     });
   } catch (error) {
-    console.error('[requestSuggestions] Error:', error);
+    logger.error('[requestSuggestions] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to request suggestions', 500);
   }
 }
@@ -1049,7 +1050,7 @@ export async function markReady(req: Request, res: Response): Promise<void> {
       canStartRanking,
     });
   } catch (error) {
-    console.error('[markReady] Error:', error);
+    logger.error('[markReady] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to mark ready', 500);
   }
 }
@@ -1130,7 +1131,7 @@ export async function getAgreements(req: Request, res: Response): Promise<void> 
       })),
     });
   } catch (error) {
-    console.error('[getAgreements] Error:', error);
+    logger.error('[getAgreements] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get agreements', 500);
   }
 }

@@ -9,6 +9,7 @@ import { prisma } from '../lib/prisma';
 import { loadFixture } from '../lib/e2e-fixtures';
 import { StateFactory, TargetStage } from '../testing/state-factory';
 import { runReconcilerForDirection } from '../services/reconciler';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
@@ -297,7 +298,7 @@ export async function seedE2ESession(
       data: result,
     });
   } catch (error) {
-    console.error('[seedE2ESession] Error:', error);
+    logger.error('[seedE2ESession] Error:', error);
     next(error);
   }
 }
@@ -371,7 +372,7 @@ export async function triggerE2EReconciler(
       },
     });
   } catch (error) {
-    console.error('[triggerE2EReconciler] Error:', error);
+    logger.error('[triggerE2EReconciler] Error:', error);
     next(error);
   }
 }

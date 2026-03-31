@@ -222,4 +222,106 @@ describe('getSonnetStreamingResponse', () => {
       usage: { inputTokens: 0, outputTokens: 0 },
     });
   });
+
+  it('should yield done with error flag instead of throwing when stream fails', async () => {
+    // Simulate the Anthropic stream throwing mid-iteration
+    const streamObj = {
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Partial' } };
+        throw new Error('Connection reset by peer');
+      },
+      finalMessage: jest.fn(),
+    };
+
+    mockStream.mockReturnValue(streamObj);
+
+    const events: StreamEvent[] = [];
+    // Should NOT throw — the generator catches errors and yields a done event
+    for await (const event of getSonnetStreamingResponse({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'Test' }],
+      sessionId: 'test-session',
+      turnId: 'test-turn',
+      operation: 'test',
+    })) {
+      events.push(event);
+    }
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toEqual({ type: 'text', text: 'Partial' });
+    expect(events[1]).toEqual({
+      type: 'done',
+      usage: { inputTokens: 0, outputTokens: 0 },
+      error: 'Connection reset by peer',
+    });
+  });
+
+  it('should yield done with error flag when finalMessage() rejects', async () => {
+    // Stream iterates fine but finalMessage() throws (e.g., incomplete response)
+    const mockEvents = [
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hello' } },
+    ];
+
+    const streamObj = {
+      [Symbol.asyncIterator]: async function* () {
+        for (const event of mockEvents) {
+          yield event;
+        }
+      },
+      finalMessage: jest.fn().mockRejectedValue(new Error('Stream ended unexpectedly')),
+    };
+
+    mockStream.mockReturnValue(streamObj);
+
+    const events: StreamEvent[] = [];
+    for await (const event of getSonnetStreamingResponse({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'Test' }],
+      sessionId: 'test-session',
+      turnId: 'test-turn',
+      operation: 'test',
+    })) {
+      events.push(event);
+    }
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toEqual({ type: 'text', text: 'Hello' });
+    expect(events[1]).toEqual({
+      type: 'done',
+      usage: { inputTokens: 0, outputTokens: 0 },
+      error: 'Stream ended unexpectedly',
+    });
+  });
+
+  it('should include error flag that consumer can use to detect failures', async () => {
+    // Verify the consumer pattern: check event.error to distinguish success from failure
+    const streamObj = {
+      [Symbol.asyncIterator]: async function* () {
+        throw new Error('Bedrock throttling');
+      },
+      finalMessage: jest.fn(),
+    };
+
+    mockStream.mockReturnValue(streamObj);
+
+    const events: StreamEvent[] = [];
+    for await (const event of getSonnetStreamingResponse({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'Test' }],
+      sessionId: 'test-session',
+      turnId: 'test-turn',
+      operation: 'test',
+    })) {
+      events.push(event);
+    }
+
+    // Consumer can check for error on done event
+    const doneEvent = events.find(e => e.type === 'done');
+    expect(doneEvent).toBeDefined();
+    expect(doneEvent!.type).toBe('done');
+    if (doneEvent!.type === 'done') {
+      expect(doneEvent!.error).toBe('Bedrock throttling');
+      expect(doneEvent!.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    }
+  });
 });

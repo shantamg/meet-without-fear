@@ -27,6 +27,7 @@ jest.mock('../../lib/bedrock');
 // Mock embedding service
 jest.mock('../../services/embedding', () => ({
   embedInnerWorkSessionContent: jest.fn().mockResolvedValue(true),
+  searchTakeaways: jest.fn().mockResolvedValue([]),
 }));
 
 // Mock conversation summarizer

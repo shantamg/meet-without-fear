@@ -186,6 +186,20 @@ function mockShareOffer(overrides: Record<string, unknown> = {}) {
 describe('Reconciler API', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Reset $transaction to default: pass prisma as tx for callback-style,
+    // or Promise.all for array-style.
+    (prisma.$transaction as jest.Mock).mockImplementation((p: any) => {
+      if (Array.isArray(p)) return Promise.all(p);
+      if (typeof p === 'function') return p(prisma);
+      return Promise.resolve();
+    });
+
+    // Default updateMany to return { count: 1 } (success) so transaction
+    // idempotency guards pass. Tests that need { count: 0 } can override.
+    (prisma.reconcilerShareOffer.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+    (prisma.empathyAttempt.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+    (prisma.message.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
   });
 
   describe('POST /sessions/:id/reconciler/run (runReconcilerHandler)', () => {

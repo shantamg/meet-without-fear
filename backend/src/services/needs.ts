@@ -6,6 +6,7 @@
  */
 
 import { getCompletion, resetBedrockClient } from '../lib/bedrock';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { NeedCategory } from '@meet-without-fear/shared';
 import { getCurrentUserId } from '../lib/request-context';
@@ -219,7 +220,7 @@ export async function extractNeedsFromConversation(
       extractedNeeds = parseNeedsResponse(response);
     }
   } catch (error) {
-    console.error('[Needs Service] Error extracting needs:', error);
+    logger.error('[Needs Service] Error extracting needs:', error);
     extractedNeeds = getMockExtractedNeeds();
   }
 
@@ -330,7 +331,7 @@ export async function findCommonGround(
       commonGroundItems = parseCommonGroundResponse(response);
     }
   } catch (error) {
-    console.error('[Needs Service] Error finding common ground:', error);
+    logger.error('[Needs Service] Error finding common ground:', error);
     commonGroundItems = getMockCommonGround();
   }
 
@@ -372,7 +373,7 @@ function parseNeedsResponse(response: string): ExtractedNeed[] {
     // Extract JSON from response (may be wrapped in markdown)
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error('[Needs Service] No JSON found in response');
+      logger.error('[Needs Service] No JSON found in response');
       return getMockExtractedNeeds();
     }
 
@@ -391,7 +392,7 @@ function parseNeedsResponse(response: string): ExtractedNeed[] {
         aiConfidence: typeof n.aiConfidence === 'number' ? Math.min(1, Math.max(0, n.aiConfidence)) : 0.7,
       }));
   } catch (error) {
-    console.error('[Needs Service] Error parsing needs response:', error);
+    logger.error('[Needs Service] Error parsing needs response:', error);
     return getMockExtractedNeeds();
   }
 }
@@ -405,7 +406,7 @@ function parseCommonGroundResponse(
   try {
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error('[Needs Service] No JSON found in common ground response');
+      logger.error('[Needs Service] No JSON found in common ground response');
       return getMockCommonGround();
     }
 
@@ -424,7 +425,7 @@ function parseCommonGroundResponse(
         insight: c.insight || '',
       }));
   } catch (error) {
-    console.error('[Needs Service] Error parsing common ground response:', error);
+    logger.error('[Needs Service] Error parsing common ground response:', error);
     return getMockCommonGround();
   }
 }

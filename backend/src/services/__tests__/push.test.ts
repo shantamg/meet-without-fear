@@ -112,8 +112,6 @@ describe('Push Notification Service', () => {
       });
       ((Expo as unknown as { isExpoPushToken: jest.Mock }).isExpoPushToken).mockReturnValue(false);
 
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-
       const result = await sendPushNotification(
         testUserId,
         'partner.signed_compact',
@@ -122,11 +120,6 @@ describe('Push Notification Service', () => {
       );
 
       expect(result).toBe(false);
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid push token')
-      );
-
-      consoleSpy.mockRestore();
     });
 
     it('sends notification with correct message template', async () => {
@@ -181,8 +174,6 @@ describe('Push Notification Service', () => {
         { status: 'error', message: 'Push failed' },
       ]);
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
       const result = await sendPushNotification(
         testUserId,
         'session.paused',
@@ -191,9 +182,6 @@ describe('Push Notification Service', () => {
       );
 
       expect(result).toBe(false);
-      expect(consoleSpy).toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
     });
 
     it('clears invalid token when device is not registered', async () => {
@@ -208,17 +196,12 @@ describe('Push Notification Service', () => {
         },
       ]);
 
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-      jest.spyOn(console, 'error').mockImplementation();
-
       await sendPushNotification(testUserId, 'session.resumed', {}, testSessionId);
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: testUserId },
         data: { pushToken: null },
       });
-
-      consoleSpy.mockRestore();
     });
 
     it('handles exception during send', async () => {
@@ -226,8 +209,6 @@ describe('Push Notification Service', () => {
         pushToken: validPushToken,
       });
       mockSendPushNotificationsAsync.mockRejectedValue(new Error('Network error'));
-
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
 
       const result = await sendPushNotification(
         testUserId,
@@ -237,12 +218,6 @@ describe('Push Notification Service', () => {
       );
 
       expect(result).toBe(false);
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Error sending notification'),
-        expect.any(Error)
-      );
-
-      consoleSpy.mockRestore();
     });
   });
 

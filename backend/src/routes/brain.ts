@@ -7,6 +7,7 @@ import { assembleContextBundle, type ContextBundle } from '../services/context-a
 import { determineMemoryIntent } from '../services/memory-intent';
 import { resolveStageIntervalsForSessions, resolveStageForTimestamp } from '../utils/stage-resolver';
 import { verifyToken } from '@clerk/express';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
@@ -25,9 +26,12 @@ async function requireDashboardAuth(req: Request, res: Response, next: NextFunct
   const dashboardSecret = process.env.DASHBOARD_API_SECRET;
   const clerkSecretKey = process.env.CLERK_SECRET_KEY;
 
-  // Dev mode: no auth configured, skip
+  // If no auth configured: allow in development, reject in production
   if (!dashboardSecret && !clerkSecretKey) {
-    console.warn('[Dashboard Auth] No auth configured — running in dev mode without authentication');
+    if (process.env.NODE_ENV === 'production') {
+      errorResponse(res, 'FORBIDDEN', 'Dashboard auth not configured', 403);
+      return;
+    }
     next();
     return;
   }
@@ -277,7 +281,7 @@ router.get('/dashboard', async (req, res) => {
       recentSessions,
     });
   } catch (error) {
-    console.error('[BrainRoutes] Failed to fetch dashboard:', error);
+    logger.error('[BrainRoutes] Failed to fetch dashboard:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch dashboard metrics', 500);
   }
 });
@@ -499,7 +503,7 @@ router.get('/costs', async (req, res) => {
       sessionCosts,
     });
   } catch (error) {
-    console.error('[BrainRoutes] Failed to fetch costs:', error);
+    logger.error('[BrainRoutes] Failed to fetch costs:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch cost analytics', 500);
   }
 });
@@ -559,7 +563,7 @@ router.get('/costs/cache-heatmap', async (req, res) => {
 
     return successResponse(res, { cells });
   } catch (error) {
-    console.error('[BrainRoutes] Failed to fetch cache heatmap:', error);
+    logger.error('[BrainRoutes] Failed to fetch cache heatmap:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch cache heatmap', 500);
   }
 });
@@ -616,7 +620,7 @@ router.get('/costs/by-stage', async (req, res) => {
 
     return successResponse(res, { stages });
   } catch (error) {
-    console.error('[BrainRoutes] Failed to fetch cost by stage:', error);
+    logger.error('[BrainRoutes] Failed to fetch cost by stage:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch cost by stage', 500);
   }
 });
@@ -696,7 +700,7 @@ router.get('/costs/flow', async (req, res) => {
 
     return successResponse(res, { nodes, links });
   } catch (error) {
-    console.error('[BrainRoutes] Failed to fetch cost flow:', error);
+    logger.error('[BrainRoutes] Failed to fetch cost flow:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch cost flow', 500);
   }
 });
@@ -841,7 +845,7 @@ router.get('/activity/:activityId/prompt', async (req, res) => {
       } : {}),
     });
   } catch (error) {
-    console.error('[BrainRoutes] Failed to fetch prompt detail:', error);
+    logger.error('[BrainRoutes] Failed to fetch prompt detail:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch prompt detail', 500);
   }
 });
@@ -903,7 +907,7 @@ router.get('/activity/:sessionId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[BrainRoutes] Failed to fetch activities:', error);
+    logger.error('[BrainRoutes] Failed to fetch activities:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch session activity', 500);
   }
 });
@@ -992,7 +996,7 @@ router.get('/sessions/:sessionId/context', async (req, res) => {
               context,
             };
           } catch (error) {
-            console.error(`[BrainRoutes] Failed to assemble context for user ${member.userId}:`, error);
+            logger.error(`[BrainRoutes] Failed to assemble context for user ${member.userId}:`, error);
             // Return placeholder for failed user
             return {
               userId: member.userId,
@@ -1071,7 +1075,7 @@ router.get('/sessions/:sessionId/context', async (req, res) => {
     return errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
 
   } catch (error) {
-    console.error('[BrainRoutes] Failed to fetch session context:', error);
+    logger.error('[BrainRoutes] Failed to fetch session context:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch session context', 500);
   }
 });
@@ -1105,7 +1109,7 @@ router.get('/turn/:turnId/trace', async (req, res) => {
 
     return successResponse(res, turnTrace);
   } catch (error) {
-    console.error('[BrainRoutes] Failed to fetch turn trace:', error);
+    logger.error('[BrainRoutes] Failed to fetch turn trace:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch turn trace', 500);
   }
 });
@@ -1331,7 +1335,7 @@ router.get('/sessions', async (req, res) => {
       nextCursor,
     });
   } catch (error) {
-    console.error('[BrainRoutes] Failed to fetch sessions:', error);
+    logger.error('[BrainRoutes] Failed to fetch sessions:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch sessions', 500);
   }
 });
@@ -1429,7 +1433,7 @@ router.get('/sessions/:sessionId', async (req, res) => {
 
     return errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
   } catch (error) {
-    console.error('[BrainRoutes] Failed to fetch session:', error);
+    logger.error('[BrainRoutes] Failed to fetch session:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to fetch session', 500);
   }
 });
@@ -1454,7 +1458,7 @@ router.get('/ably-token', async (_req, res) => {
 
     return successResponse(res, tokenRequest);
   } catch (error) {
-    console.error('[BrainRoutes] Failed to create Ably token:', error);
+    logger.error('[BrainRoutes] Failed to create Ably token:', error);
     return errorResponse(res, 'INTERNAL_ERROR', 'Failed to create Ably token', 500);
   }
 });

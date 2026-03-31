@@ -10,6 +10,7 @@
 
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { extractNeedsFromConversation, findCommonGround } from '../services/needs';
 import { confirmNeedsRequestSchema, ConsentContentType } from '@meet-without-fear/shared';
@@ -243,7 +244,7 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
               needsCount: needs.length,
             });
           } catch (err) {
-            console.error('[getNeeds] Failed to publish needs extraction event:', err);
+            logger.error('[getNeeds] Failed to publish needs extraction event:', err);
           }
         }
       } finally {
@@ -266,7 +267,7 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
       synthesizedAt: needs[0]?.createdAt.toISOString() ?? new Date().toISOString(),
     });
   } catch (error) {
-    console.error('[getNeeds] Error:', error);
+    logger.error('[getNeeds] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get needs', 500);
   }
 }
@@ -430,7 +431,7 @@ export async function confirmNeeds(req: Request, res: Response): Promise<void> {
       canAdvance: false, // Need to share needs first
     });
   } catch (error) {
-    console.error('[confirmNeeds] Error:', error);
+    logger.error('[confirmNeeds] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to confirm needs', 500);
   }
 }
@@ -588,14 +589,14 @@ export async function consentToShareNeeds(
         setCommonGroundLock(sessionId);
         try {
           await findCommonGround(sessionId, user.id, partnerId);
-          console.log('[consentToShareNeeds] Common ground analysis triggered for session', sessionId);
+          logger.info('[consentToShareNeeds] Common ground analysis triggered for session', sessionId);
         } catch (err) {
-          console.error('[consentToShareNeeds] Failed to trigger common ground analysis:', err);
+          logger.error('[consentToShareNeeds] Failed to trigger common ground analysis:', err);
         } finally {
           clearCommonGroundLock(sessionId);
         }
       } else {
-        console.log('[consentToShareNeeds] Common ground analysis already running for session', sessionId);
+        logger.info('[consentToShareNeeds] Common ground analysis already running for session', sessionId);
       }
 
       await publishSessionEvent(sessionId, 'session.common_ground_ready', {
@@ -611,7 +612,7 @@ export async function consentToShareNeeds(
       commonGroundReady: partnerShared,
     });
   } catch (error) {
-    console.error('[consentToShareNeeds] Error:', error);
+    logger.error('[consentToShareNeeds] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to consent to share needs', 500);
   }
 }
@@ -784,7 +785,7 @@ export async function getCommonGround(
       noOverlap: false,
     });
   } catch (error) {
-    console.error('[getCommonGround] Error:', error);
+    logger.error('[getCommonGround] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get common ground', 500);
   }
 }
@@ -884,7 +885,7 @@ export async function addCustomNeed(req: Request, res: Response): Promise<void> 
       },
     }, 201);
   } catch (error) {
-    console.error('[addCustomNeed] Error:', error);
+    logger.error('[addCustomNeed] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to add custom need', 500);
   }
 }
@@ -1007,7 +1008,7 @@ export async function confirmCommonGround(
 
     if (isNoOverlap) {
       // noOverlap case: no common ground to confirm, proceed directly to stage transition
-      console.log('[confirmCommonGround] noOverlap case - advancing Stage 3->4 for session', sessionId);
+      logger.info('[confirmCommonGround] noOverlap case - advancing Stage 3->4 for session', sessionId);
 
       // Mark this user's Stage 3 as having confirmed (even though there's nothing to confirm)
       const gatesSatisfied = {
@@ -1116,7 +1117,7 @@ export async function confirmCommonGround(
           noOverlap: true,
         });
 
-        console.log('[confirmCommonGround] noOverlap Stage 3->4 transition completed for session', sessionId);
+        logger.info('[confirmCommonGround] noOverlap Stage 3->4 transition completed for session', sessionId);
       }
 
       successResponse(res, {
@@ -1283,9 +1284,9 @@ export async function confirmCommonGround(
             : undefined,
         });
 
-        console.log('[confirmCommonGround] Stage 3->4 transition completed for session', sessionId);
+        logger.info('[confirmCommonGround] Stage 3->4 transition completed for session', sessionId);
       } catch (err) {
-        console.error('[confirmCommonGround] Failed to trigger Stage 3->4 transition:', err);
+        logger.error('[confirmCommonGround] Failed to trigger Stage 3->4 transition:', err);
         // Non-fatal - the transition can be triggered manually
       }
     }
@@ -1298,7 +1299,7 @@ export async function confirmCommonGround(
       canAdvance: allConfirmedByBoth,
     });
   } catch (error) {
-    console.error('[confirmCommonGround] Error:', error);
+    logger.error('[confirmCommonGround] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to confirm common ground', 500);
   }
 }
@@ -1463,7 +1464,7 @@ export async function getNeedsComparison(
       noOverlap,
     });
   } catch (error) {
-    console.error('[getNeedsComparison] Error:', error);
+    logger.error('[getNeedsComparison] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get needs comparison', 500);
   }
 }

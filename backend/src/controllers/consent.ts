@@ -9,6 +9,7 @@
  */
 
 import { Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { ErrorCode, ConsentDecision } from '@meet-without-fear/shared';
 import { notifyPartner } from '../services/realtime';
@@ -53,7 +54,7 @@ export async function getPendingConsents(req: Request, res: Response): Promise<v
       })),
     });
   } catch (error) {
-    console.error('[getPendingConsents] Error:', error);
+    logger.error('[getPendingConsents] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to get pending consents', 500);
   }
 }
@@ -96,39 +97,49 @@ export async function decideConsent(req: Request, res: Response): Promise<void> 
 
     const now = new Date();
 
-    // Update the consent record
-    const updatedConsent = await prisma.consentRecord.update({
-      where: { id: consentRequestId },
-      data: {
-        decision: decision as ConsentDecision,
-        decidedAt: now,
-      },
-    });
-
-    let sharedContent = null;
-
-    // If granted, create consented content in the shared vessel
-    if (decision === 'GRANTED') {
-      // Get or create shared vessel
-      const sharedVessel = await prisma.sharedVessel.upsert({
-        where: { sessionId },
-        create: { sessionId },
-        update: {},
-      });
-
-      // Create consented content entry
-      sharedContent = await prisma.consentedContent.create({
+    // Wrap all DB writes in a transaction for atomicity.
+    // When GRANTED, the consent record update, shared vessel upsert, and
+    // consented content creation must all succeed or all fail together.
+    const { updatedConsent, sharedContent } = await prisma.$transaction(async (tx) => {
+      // Update the consent record
+      const updated = await tx.consentRecord.update({
+        where: { id: consentRequestId },
         data: {
-          sharedVesselId: sharedVessel.id,
-          sourceUserId: user.id,
-          transformedContent: editedContent || '', // Content transformation handled by AI
-          consentRecordId: consentRequestId,
-          consentedAt: now,
-          consentActive: true,
+          decision: decision as ConsentDecision,
+          decidedAt: now,
         },
       });
 
-      // Notify partner
+      let content = null;
+
+      // If granted, create consented content in the shared vessel
+      if (decision === 'GRANTED') {
+        // Get or create shared vessel
+        const sharedVessel = await tx.sharedVessel.upsert({
+          where: { sessionId },
+          create: { sessionId },
+          update: {},
+        });
+
+        // Create consented content entry
+        content = await tx.consentedContent.create({
+          data: {
+            sharedVesselId: sharedVessel.id,
+            sourceUserId: user.id,
+            transformedContent: editedContent || '', // Content transformation handled by AI
+            consentRecordId: consentRequestId,
+            consentedAt: now,
+            consentActive: true,
+          },
+        });
+      }
+
+      return { updatedConsent: updated, sharedContent: content };
+    });
+
+    // Notification stays outside the transaction to avoid holding the DB
+    // connection open during network I/O.
+    if (decision === 'GRANTED') {
       const partnerId = await getPartnerUserId(sessionId, user.id);
       if (partnerId) {
         await notifyPartner(sessionId, partnerId, 'partner.consent_granted', {
@@ -158,7 +169,7 @@ export async function decideConsent(req: Request, res: Response): Promise<void> 
         : null,
     });
   } catch (error) {
-    console.error('[decideConsent] Error:', error);
+    logger.error('[decideConsent] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to record consent decision', 500);
   }
 }
@@ -196,22 +207,28 @@ export async function revokeConsent(req: Request, res: Response): Promise<void> 
 
     const now = new Date();
 
-    // Update consent record to revoked
-    await prisma.consentRecord.update({
-      where: { id: consentRecordId },
-      data: { revokedAt: now },
+    // Wrap the consent revocation and content deactivation in a transaction.
+    // Both must succeed together — revoking consent without deactivating
+    // content would leave stale shared data visible to the partner.
+    await prisma.$transaction(async (tx) => {
+      // Update consent record to revoked
+      await tx.consentRecord.update({
+        where: { id: consentRecordId },
+        data: { revokedAt: now },
+      });
+
+      // Mark all related consented content as inactive
+      await tx.consentedContent.updateMany({
+        where: { consentRecordId },
+        data: {
+          consentActive: false,
+          revokedAt: now,
+        },
+      });
     });
 
-    // Mark all related consented content as inactive
-    await prisma.consentedContent.updateMany({
-      where: { consentRecordId },
-      data: {
-        consentActive: false,
-        revokedAt: now,
-      },
-    });
-
-    // Notify partner
+    // Notification stays outside the transaction to avoid holding the DB
+    // connection open during network I/O.
     const partnerId = await getPartnerUserId(sessionId, user.id);
     if (partnerId) {
       await notifyPartner(sessionId, partnerId, 'partner.consent_revoked', {
@@ -225,7 +242,7 @@ export async function revokeConsent(req: Request, res: Response): Promise<void> 
       revokedAt: now.toISOString(),
     });
   } catch (error) {
-    console.error('[revokeConsent] Error:', error);
+    logger.error('[revokeConsent] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to revoke consent', 500);
   }
 }
@@ -265,7 +282,7 @@ export async function getConsentHistory(req: Request, res: Response): Promise<vo
       })),
     });
   } catch (error) {
-    console.error('[getConsentHistory] Error:', error);
+    logger.error('[getConsentHistory] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to get consent history', 500);
   }
 }

@@ -5,6 +5,7 @@
  * and processes the message within that session's context.
  */
 
+import { logger } from '../../../lib/logger';
 import { ChatIntent } from '@meet-without-fear/shared';
 import { prisma } from '../../../lib/prisma';
 import { mapSessionToSummary } from '../../../utils/session';
@@ -33,7 +34,7 @@ export const sessionSwitchHandler: IntentHandler = {
   async handle(context: IntentHandlerContext): Promise<IntentHandlerResult> {
     const { userId, intent, message } = context;
 
-    console.log('[SessionSwitch] Handling switch:', {
+    logger.info('[SessionSwitch] Handling switch:', {
       intentSessionId: intent.sessionId,
       person: intent.person,
     });
@@ -69,7 +70,7 @@ export const sessionSwitchHandler: IntentHandler = {
     // If not found by ID, try by partner name
     if (!session && intent.person?.firstName) {
       const partnerName = intent.person.firstName.toLowerCase();
-      console.log('[SessionSwitch] Searching by partner name:', partnerName);
+      logger.info('[SessionSwitch] Searching by partner name:', partnerName);
 
       const sessions = await prisma.session.findMany({
         where: {
@@ -108,12 +109,12 @@ export const sessionSwitchHandler: IntentHandler = {
       });
 
       if (session) {
-        console.log('[SessionSwitch] Found session by name:', session.id);
+        logger.info('[SessionSwitch] Found session by name:', session.id);
       }
     }
 
     if (!session) {
-      console.log('[SessionSwitch] No session found');
+      logger.info('[SessionSwitch] No session found');
       // No session found - offer to create one
       const personName = intent.person?.firstName || 'that person';
 
@@ -152,16 +153,16 @@ export const sessionSwitchHandler: IntentHandler = {
 
     const summary = mapSessionToSummary(session, userId);
 
-    console.log('[SessionSwitch] Switching to session:', session.id, 'with', partnerName);
+    logger.info('[SessionSwitch] Switching to session:', session.id, 'with', partnerName);
 
     // Convert any pre-session messages to session messages
     try {
       const preSessionCount = await convertPreSessionToSessionMessages(userId, session.id);
       if (preSessionCount > 0) {
-        console.log('[SessionSwitch] Converted pre-session messages:', preSessionCount);
+        logger.info('[SessionSwitch] Converted pre-session messages:', preSessionCount);
       }
     } catch (err) {
-      console.warn('[SessionSwitch] Failed to convert pre-session messages:', err);
+      logger.warn('[SessionSwitch] Failed to convert pre-session messages:', err);
     }
 
     // Get user info for AI context
@@ -180,7 +181,7 @@ export const sessionSwitchHandler: IntentHandler = {
       content: message,
     });
 
-    console.log('[SessionSwitch] Processed message in session, AI responded');
+    logger.info('[SessionSwitch] Processed message in session, AI responded');
 
     return {
       actionType: 'SWITCH_SESSION',

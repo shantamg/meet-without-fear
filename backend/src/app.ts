@@ -5,6 +5,7 @@ import compression from 'compression';
 import routes from './routes';
 import { requestContextMiddleware } from './middleware/request-context';
 import { errorHandler, notFoundHandler } from './middleware/errors';
+import { logger } from './lib/logger';
 
 const app = express();
 
@@ -64,11 +65,11 @@ app.use(requestContextMiddleware);
 // Request logging
 app.use((req, res, next) => {
   const hasAuth = !!req.headers.authorization;
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} (auth: ${hasAuth})`);
+  logger.info(`[${new Date().toISOString()}] ${req.method} ${req.path} (auth: ${hasAuth})`);
 
   // Log response status
   res.on('finish', () => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} -> ${res.statusCode}`);
+    logger.info(`[${new Date().toISOString()}] ${req.method} ${req.path} -> ${res.statusCode}`);
   });
   next();
 });

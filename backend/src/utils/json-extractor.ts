@@ -9,6 +9,8 @@
 // Types
 // ============================================================================
 
+import { logger } from '../lib/logger';
+
 export interface ExtractJsonOptions {
   /** Whether to log parsing attempts for debugging */
   debug?: boolean;
@@ -89,7 +91,7 @@ export function extractJsonFromResponse(
   const { debug = false } = options;
 
   if (debug) {
-    console.log('[JSON Extractor] Raw response:', response);
+    logger.info('[JSON Extractor] Raw response:', response);
   }
 
   // Strategy 1: Extract JSON from code blocks
@@ -97,10 +99,10 @@ export function extractJsonFromResponse(
   if (jsonBlockMatch) {
     try {
       const result = parseCleanJson(jsonBlockMatch[1].trim());
-      if (debug) console.log('[JSON Extractor] Extracted from code block');
+      if (debug) logger.info('[JSON Extractor] Extracted from code block');
       return result;
     } catch (e) {
-      if (debug) console.log('[JSON Extractor] Code block parse failed:', e);
+      if (debug) logger.info('[JSON Extractor] Code block parse failed:', e);
     }
   }
 
@@ -109,10 +111,10 @@ export function extractJsonFromResponse(
   if (jsonObjectMatch) {
     try {
       const result = parseCleanJson(jsonObjectMatch[0]);
-      if (debug) console.log('[JSON Extractor] Extracted raw JSON object');
+      if (debug) logger.info('[JSON Extractor] Extracted raw JSON object');
       return result;
     } catch (e) {
-      if (debug) console.log('[JSON Extractor] Object parse failed:', e);
+      if (debug) logger.info('[JSON Extractor] Object parse failed:', e);
     }
   }
 
@@ -121,10 +123,10 @@ export function extractJsonFromResponse(
   if (jsonArrayMatch) {
     try {
       const result = parseCleanJson(jsonArrayMatch[0]);
-      if (debug) console.log('[JSON Extractor] Extracted raw JSON array');
+      if (debug) logger.info('[JSON Extractor] Extracted raw JSON array');
       return result;
     } catch (e) {
-      if (debug) console.log('[JSON Extractor] Array parse failed:', e);
+      if (debug) logger.info('[JSON Extractor] Array parse failed:', e);
     }
   }
 
@@ -137,10 +139,10 @@ export function extractJsonFromResponse(
 
   try {
     const result = parseCleanJson(cleanedContent);
-    if (debug) console.log('[JSON Extractor] Parsed cleaned full response');
+    if (debug) logger.info('[JSON Extractor] Parsed cleaned full response');
     return result;
   } catch (error) {
-    if (debug) console.log('[JSON Extractor] Full response parse failed:', error);
+    if (debug) logger.info('[JSON Extractor] Full response parse failed:', error);
   }
 
   throw new Error(`Failed to extract JSON from LLM response: ${response.substring(0, 200)}...`);
@@ -158,7 +160,7 @@ export function extractJsonSafe<T>(
   try {
     return extractJsonFromResponse(response, options) as T;
   } catch (error) {
-    console.warn('[JSON Extractor] Using fallback:', error);
+    logger.warn('[JSON Extractor] Using fallback:', error);
     return fallback;
   }
 }
@@ -188,7 +190,7 @@ export function extractInvitationResponse(
     const parsed = extractJsonFromResponse(rawResponse, { debug });
 
     if (typeof parsed !== 'object' || parsed === null) {
-      console.warn('[JSON Extractor] Invitation response not an object');
+      logger.warn('[JSON Extractor] Invitation response not an object');
       return fallback;
     }
 
@@ -205,7 +207,7 @@ export function extractInvitationResponse(
 
     return { response, invitationMessage };
   } catch (error) {
-    console.warn('[JSON Extractor] Failed to extract invitation response:', error);
+    logger.warn('[JSON Extractor] Failed to extract invitation response:', error);
     return fallback;
   }
 }

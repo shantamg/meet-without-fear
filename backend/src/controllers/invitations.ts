@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { notifyPartner, notifyPartnerWithFallback, publishSessionCreated } from '../services/realtime';
 import { z } from 'zod';
@@ -246,7 +247,7 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
       cursor: hasMore ? items[items.length - 1]?.id : undefined,
     });
   } catch (error) {
-    console.error('[listSessions] Error:', error);
+    logger.error('[listSessions] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to list sessions', 500);
   }
 }
@@ -358,9 +359,9 @@ export async function createSession(req: Request, res: Response): Promise<void> 
             linkedTrigger: 'suggestion_start',
           },
         });
-        console.log(`[createSession] Linked session ${session.id} to origin inner thoughts ${innerThoughtsId}`);
+        logger.info(`[createSession] Linked session ${session.id} to origin inner thoughts ${innerThoughtsId}`);
       } catch (err) {
-        console.warn(`[createSession] Failed to link inner thoughts session:`, err);
+        logger.warn(`[createSession] Failed to link inner thoughts session:`, err);
       }
     }
 
@@ -434,7 +435,7 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       201
     );
   } catch (error) {
-    console.error('[createSession] Error:', error);
+    logger.error('[createSession] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to create session', 500);
   }
 }
@@ -489,7 +490,7 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
       },
     });
   } catch (error) {
-    console.error('[getInvitation] Error:', error);
+    logger.error('[getInvitation] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get invitation', 500);
   }
 }
@@ -647,7 +648,7 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
       },
     });
   } catch (error) {
-    console.error('[acceptInvitation] Error:', error);
+    logger.error('[acceptInvitation] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to accept invitation', 500);
   }
 }
@@ -717,7 +718,7 @@ export async function declineInvitation(req: Request, res: Response): Promise<vo
 
     successResponse(res, { declined: true });
   } catch (error) {
-    console.error('[declineInvitation] Error:', error);
+    logger.error('[declineInvitation] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to decline invitation', 500);
   }
 }
@@ -821,7 +822,7 @@ export async function listPeople(req: Request, res: Response): Promise<void> {
 
     successResponse(res, { people });
   } catch (error) {
-    console.error('[listPeople] Error:', error);
+    logger.error('[listPeople] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to list people', 500);
   }
 }
@@ -880,7 +881,7 @@ export async function archiveSession(req: Request, res: Response): Promise<void>
       archivedAt: updatedSession.updatedAt.toISOString(),
     });
   } catch (error) {
-    console.error('[archiveSession] Error:', error);
+    logger.error('[archiveSession] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to archive session', 500);
   }
 }
@@ -932,7 +933,7 @@ export async function updateNickname(req: Request, res: Response): Promise<void>
       nickname: updatedMember.nickname,
     });
   } catch (error) {
-    console.error('[updateNickname] Error:', error);
+    logger.error('[updateNickname] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to update nickname', 500);
   }
 }
@@ -1022,7 +1023,7 @@ export async function acknowledgeInvitation(req: Request, res: Response): Promis
       },
     });
   } catch (error) {
-    console.error('[acknowledgeInvitation] Error:', error);
+    logger.error('[acknowledgeInvitation] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to acknowledge invitation', 500);
   }
 }
@@ -1059,7 +1060,7 @@ export async function deleteSession(req: Request, res: Response): Promise<void> 
       summary,
     });
   } catch (error) {
-    console.error('[deleteSession] Error:', error);
+    logger.error('[deleteSession] Error:', error);
     if (error instanceof Error && error.message === 'Session not found or access denied') {
       errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
       return;

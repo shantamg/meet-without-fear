@@ -47,7 +47,7 @@ import {
 import { getSonnetResponse, getHaikuJson, getCompletion, BrainActivityCallType } from '../lib/bedrock';
 import { buildInnerWorkPrompt, buildInnerWorkInitialMessagePrompt, buildLinkedInnerThoughtsInitialMessagePrompt, buildInnerWorkSummaryPrompt, buildLinkedInnerThoughtsPrompt, LinkedPartnerSessionContext, PromptBlocks } from '../services/stage-prompts';
 import { extractJsonSafe } from '../utils/json-extractor';
-import { embedInnerWorkSessionContent } from '../services/embedding';
+import { embedInnerWorkSessionContent, searchTakeaways } from '../services/embedding';
 import {
   updateInnerThoughtsSummary,
   getInnerThoughtsSummary,
@@ -720,6 +720,7 @@ export const sendInnerWorkMessage = asyncHandler(
       recentThemes,
       linkedContext,
       retrievedContext,
+      priorTakeaways,
     ] = await Promise.all([
       // 1. Get conversation summary if it exists
       getInnerThoughtsSummary(sessionId),
@@ -742,6 +743,8 @@ export const sendInnerWorkMessage = asyncHandler(
         includePreSession: false,
         similarityThreshold: 0.4,
       }),
+      // 5. Search prior takeaways relevant to the current message (Phase 23 — CONTEXT-01)
+      searchTakeaways(user.id, content, 5, 0.45, turnId).catch(() => []),
     ]);
 
     const conversationSummaryText = summaryData
@@ -789,8 +792,19 @@ export const sendInnerWorkMessage = asyncHandler(
       });
     }
 
+    // Build context prefix with prior takeaways and retrieved context
+    let contextPrefix = '';
+
+    // Inject prior takeaways (Phase 23 — CONTEXT-01)
+    if (priorTakeaways.length > 0) {
+      const takeawayLines = priorTakeaways
+        .map((t) => `- ${t.content.slice(0, 200)}${t.theme ? ` (${t.theme})` : ''}`)
+        .join('\n');
+      contextPrefix += `[YOUR PRIOR INSIGHTS:\n${takeawayLines}]\n\n`;
+      logger.info(`[Inner Thoughts] Injecting ${priorTakeaways.length} prior takeaways into context`);
+    }
+
     // Inject retrieved context into history if we have relevant results
-    let messagesForLLM = [...history, { role: 'user' as const, content }];
     if (retrievedContext && retrievedContext.relevantFromOtherSessions.length > 0) {
       const formattedContext = formatRetrievedContext({
         ...retrievedContext,
@@ -798,15 +812,15 @@ export const sendInnerWorkMessage = asyncHandler(
         preSessionMessages: [],
       });
 
-      // Inject context before the current user message
       if (formattedContext.trim()) {
+        contextPrefix += `[Retrieved context:\n${formattedContext}]\n\n`;
         logger.info(`[Inner Thoughts] Injecting ${retrievedContext.relevantFromOtherSessions.length} retrieved messages into context`);
-        messagesForLLM = [
-          ...history,
-          { role: 'user' as const, content: `[Retrieved context:\n${formattedContext}]\n\n${content}` },
-        ];
       }
     }
+
+    let messagesForLLM = contextPrefix
+      ? [...history, { role: 'user' as const, content: `${contextPrefix}${content}` }]
+      : [...history, { role: 'user' as const, content }];
     // Update request context so all downstream code can access this turnId
     updateContext({ turnId, sessionId, userId: user.id });
 

@@ -8,6 +8,8 @@
  * Conservative estimate: 4 characters ≈ 1 token
  */
 
+import { logger } from '../lib/logger';
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -268,7 +270,7 @@ export function buildBudgetedContext<T extends { role: 'user' | 'assistant'; con
   const totalTruncated = evictableMessages.length - includedOlderMessages.length + truncatedConversation;
 
   if (totalTruncated > 0 || truncatedRetrieved) {
-    console.log(
+    logger.info(
       `[TokenBudget] Truncated: ${totalTruncated} conversation messages, ` +
       `${truncatedRetrieved ? 'retrieved context' : 'none'} | ` +
       `Protected: ${protectedMessages.length} messages (last ${PROTECTED_TURNS} turns)`

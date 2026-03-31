@@ -12,5 +12,23 @@
       }
     },
     "dashboard": "https://meet-without-fear.sentry.io/"
+  },
+  "render": {
+    "service": {
+      "name": "meet-without-fear-api",
+      "id": "srv-d58bj73uibrs73akacd0"
+    },
+    "envGroup": {
+      "name": "be-heard-api-env",
+      "id": "evg-d58bivruibrs73aka8qg"
+    },
+    "dashboard": "https://dashboard.render.com/web/srv-d58bj73uibrs73akacd0"
+  },
+  "mixpanel": {
+    "project_token": "bde416691ec555209e6949a2aec8abec",
+    "dashboard": "https://mixpanel.com"
+  },
+  "github": {
+    "repo": "shantamg/meet-without-fear"
   }
 }

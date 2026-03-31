@@ -14,6 +14,7 @@
 
 import { randomUUID } from 'crypto';
 import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
+import { logger } from '../lib/logger';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 import { prisma } from '../lib/prisma';
 import { embedSessionContent } from './embedding';
@@ -506,7 +507,7 @@ export async function runPartnerSessionClassifier(
   const logPrefix = '[PartnerSessionClassifier]';
 
   try {
-    console.log(`${logPrefix} Starting classification for session ${input.sessionId}`);
+    logger.info(`${logPrefix} Starting classification for session ${input.sessionId}`);
 
     const systemPrompt = `You are an AI assistant analyzing a conversation about interpersonal dynamics.
 Your job is to extract and maintain notable facts about the user's situation.
@@ -539,7 +540,7 @@ Output only valid JSON.`;
     );
 
     if (!result) {
-      console.warn(`${logPrefix} Haiku timed out or returned null`);
+      logger.warn(`${logPrefix} Haiku timed out or returned null`);
       return fallback;
     }
 
@@ -560,7 +561,7 @@ Output only valid JSON.`;
       // New diff-based format: apply reconciliation
       const existingFactsWithIds = input.existingFactsWithIds || [];
       factsToSave = applyFactUpdates(existingFactsWithIds, normalized.factUpdates);
-      console.log(`${logPrefix} Diff-based classification complete:`, {
+      logger.info(`${logPrefix} Diff-based classification complete:`, {
         topicContext: normalized.topicContext?.substring(0, 50),
         upsertCount: normalized.factUpdates.upsert.length,
         deleteCount: normalized.factUpdates.delete.length,
@@ -570,7 +571,7 @@ Output only valid JSON.`;
       // Legacy format: full replacement (backward compatibility)
       // Assign IDs to facts for future diff-based updates
       factsToSave = ensureFactIds(normalized.notableFacts);
-      console.log(`${logPrefix} Legacy classification complete:`, {
+      logger.info(`${logPrefix} Legacy classification complete:`, {
         topicContext: normalized.topicContext?.substring(0, 50),
         factsCount: factsToSave.length,
       });
@@ -593,22 +594,22 @@ Output only valid JSON.`;
           },
         });
         if (updateResult.count > 0) {
-          console.log(`${logPrefix} Saved ${factsToSave.length} notable facts to UserVessel (${updateResult.count} row(s) updated)`);
+          logger.info(`${logPrefix} Saved ${factsToSave.length} notable facts to UserVessel (${updateResult.count} row(s) updated)`);
 
           // Trigger session content embedding (fire-and-forget)
           // Per fact-ledger architecture, we embed at session level after facts update
           embedSessionContent(input.sessionId, input.userId, input.turnId).catch((err: unknown) =>
-            console.warn(`${logPrefix} Failed to embed session content:`, err)
+            logger.warn(`${logPrefix} Failed to embed session content:`, err)
           );
         } else {
-          console.warn(`${logPrefix} No UserVessel found to update for session=${input.sessionId}, user=${input.userId}. Facts not saved.`);
+          logger.warn(`${logPrefix} No UserVessel found to update for session=${input.sessionId}, user=${input.userId}. Facts not saved.`);
         }
       } catch (err) {
-        console.error(`${logPrefix} Failed to save notable facts:`, err);
+        logger.error(`${logPrefix} Failed to save notable facts:`, err);
       }
     } else if (normalized.usedDiffFormat && factsToSave?.length === 0) {
       // Diff format with no changes - still a valid response, preserve existing
-      console.log(`${logPrefix} Diff-based update with no changes, preserving existing facts`);
+      logger.info(`${logPrefix} Diff-based update with no changes, preserving existing facts`);
     }
 
     // For API compatibility, also return notableFacts in the result
@@ -620,7 +621,7 @@ Output only valid JSON.`;
       notableFacts: resultNotableFacts,
     };
   } catch (error) {
-    console.error(`${logPrefix} Classification failed:`, error);
+    logger.error(`${logPrefix} Classification failed:`, error);
     return null;
   }
 }

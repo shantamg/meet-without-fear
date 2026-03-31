@@ -1,4 +1,5 @@
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import type { SessionEvent } from './realtime';
 
@@ -174,13 +175,13 @@ export async function sendPushNotification(
     });
 
     if (!user?.pushToken) {
-      console.log(`[Push] No push token for user ${userId}`);
+      logger.info(`[Push] No push token for user ${userId}`);
       return false;
     }
 
     // Validate the push token format
     if (!Expo.isExpoPushToken(user.pushToken)) {
-      console.warn(`[Push] Invalid push token format for user ${userId}: ${user.pushToken}`);
+      logger.warn(`[Push] Invalid push token format for user ${userId}: ${user.pushToken}`);
       return false;
     }
 
@@ -210,19 +211,19 @@ export async function sendPushNotification(
     // Check if the notification was sent successfully
     const ticket = tickets[0];
     if (ticket.status === 'ok') {
-      console.log(`[Push] Sent ${event} notification to user ${userId}`);
+      logger.info(`[Push] Sent ${event} notification to user ${userId}`);
       return true;
     } else {
       // Handle error cases
       if (ticket.status === 'error') {
-        console.error(`[Push] Failed to send notification to user ${userId}:`, ticket.message);
+        logger.error(`[Push] Failed to send notification to user ${userId}:`, ticket.message);
 
         // If token is invalid, we could clean it up here
         if (
           ticket.details?.error === 'DeviceNotRegistered' ||
           ticket.details?.error === 'InvalidCredentials'
         ) {
-          console.log(`[Push] Clearing invalid token for user ${userId}`);
+          logger.info(`[Push] Clearing invalid token for user ${userId}`);
           await prisma.user.update({
             where: { id: userId },
             data: { pushToken: null },
@@ -232,7 +233,7 @@ export async function sendPushNotification(
       return false;
     }
   } catch (error) {
-    console.error(`[Push] Error sending notification to user ${userId}:`, error);
+    logger.error(`[Push] Error sending notification to user ${userId}:`, error);
     return false;
   }
 }

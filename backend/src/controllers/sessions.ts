@@ -14,6 +14,7 @@
  */
 
 import { Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { ApiResponse, ErrorCode, MessageRole, Stage } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent, publishMessageAIResponse, publishMessageError } from '../services/realtime';
@@ -125,7 +126,7 @@ export async function getSession(req: Request, res: Response): Promise<void> {
       },
     });
   } catch (error) {
-    console.error('[getSession] Error:', error);
+    logger.error('[getSession] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to get session', 500);
   }
 }
@@ -193,7 +194,7 @@ export async function pauseSession(req: Request, res: Response): Promise<void> {
       status: updatedSession.status,
     });
   } catch (error) {
-    console.error('[pauseSession] Error:', error);
+    logger.error('[pauseSession] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to pause session', 500);
   }
 }
@@ -261,7 +262,7 @@ export async function resumeSession(req: Request, res: Response): Promise<void> 
       status: updatedSession.status,
     });
   } catch (error) {
-    console.error('[resumeSession] Error:', error);
+    logger.error('[resumeSession] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to resume session', 500);
   }
 }
@@ -380,7 +381,7 @@ export async function getProgress(req: Request, res: Response): Promise<void> {
       milestones,
     });
   } catch (error) {
-    console.error('[getProgress] Error:', error);
+    logger.error('[getProgress] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to get progress', 500);
   }
 }
@@ -494,7 +495,7 @@ export async function resolveSession(req: Request, res: Response): Promise<void>
       followUpScheduled,
     });
   } catch (error) {
-    console.error('[resolveSession] Error:', error);
+    logger.error('[resolveSession] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to resolve session', 500);
   }
 }
@@ -702,7 +703,7 @@ export async function advanceStage(req: Request, res: Response): Promise<void> {
       advancedAt: now.toISOString(),
     });
   } catch (error) {
-    console.error('[advanceStage] Error:', error);
+    logger.error('[advanceStage] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to advance stage', 500);
   }
 }
@@ -772,7 +773,7 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
       },
     });
   } catch (error) {
-    console.error('[getInvitation] Error:', error);
+    logger.error('[getInvitation] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to get invitation', 500);
   }
 }
@@ -853,7 +854,7 @@ export async function updateInvitationMessage(req: Request, res: Response): Prom
       },
     });
   } catch (error) {
-    console.error('[updateInvitationMessage] Error:', error);
+    logger.error('[updateInvitationMessage] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to update invitation message', 500);
   }
 }
@@ -1083,7 +1084,7 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
           },
         });
 
-        console.log('[confirmInvitationMessage] Generated transition message:', aiMessage.id);
+        logger.info('[confirmInvitationMessage] Generated transition message:', aiMessage.id);
 
         // Deliver via Ably so the mobile client picks it up
         await publishMessageAIResponse(sessionId, user.id, {
@@ -1100,16 +1101,16 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
         updateSessionSummary(sessionId, user.id, turnId)
           .then(() => embedSessionContent(sessionId, user.id, turnId))
           .catch((err: unknown) =>
-            console.warn('[confirmInvitationMessage] Failed to update summary/embedding:', err)
+            logger.warn('[confirmInvitationMessage] Failed to update summary/embedding:', err)
           );
       } catch (err) {
-        console.error('[confirmInvitationMessage] Failed to generate transition message:', err);
+        logger.error('[confirmInvitationMessage] Failed to generate transition message:', err);
         // Notify client of the error so they can retry
         await publishMessageError(sessionId, user.id, '', 'Failed to generate transition message', true).catch(() => {});
       }
     })();
   } catch (error) {
-    console.error('[confirmInvitationMessage] Error:', error);
+    logger.error('[confirmInvitationMessage] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to confirm invitation message', 500);
   }
 }
@@ -1169,7 +1170,7 @@ export async function markSessionViewed(req: Request, res: Response): Promise<vo
           empathyStatuses: allStatuses,
         }, user.id);
       } catch (err) {
-        console.error('[markSessionViewed] Failed to publish session_viewed event:', err);
+        logger.error('[markSessionViewed] Failed to publish session_viewed event:', err);
       }
     })();
 
@@ -1179,7 +1180,7 @@ export async function markSessionViewed(req: Request, res: Response): Promise<vo
       lastSeenChatItemId: userVessel.lastSeenChatItemId,
     });
   } catch (error) {
-    console.error('[markSessionViewed] Error:', error);
+    logger.error('[markSessionViewed] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to mark session as viewed', 500);
   }
 }
@@ -1232,7 +1233,7 @@ export async function markShareTabViewed(req: Request, res: Response): Promise<v
           empathyStatuses: allStatuses,
         }, user.id);
       } catch (err) {
-        console.error('[markShareTabViewed] Failed to publish share_tab_viewed event:', err);
+        logger.error('[markShareTabViewed] Failed to publish share_tab_viewed event:', err);
       }
     })();
 
@@ -1241,7 +1242,7 @@ export async function markShareTabViewed(req: Request, res: Response): Promise<v
       lastViewedShareTabAt: userVessel.lastViewedShareTabAt?.toISOString() ?? now.toISOString(),
     });
   } catch (error) {
-    console.error('[markShareTabViewed] Error:', error);
+    logger.error('[markShareTabViewed] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to mark share tab as viewed', 500);
   }
 }
@@ -1305,7 +1306,7 @@ export async function getUnreadSessionCount(req: Request, res: Response): Promis
 
     successResponse(res, { count: unreadCount });
   } catch (error) {
-    console.error('[getUnreadSessionCount] Error:', error);
+    logger.error('[getUnreadSessionCount] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to get unread count', 500);
   }
 }

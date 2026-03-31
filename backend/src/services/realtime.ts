@@ -1,5 +1,10 @@
 import Ably from 'ably';
+import { logger } from '../lib/logger';
+import { ablyCircuitBreaker } from '../utils/circuit-breaker';
 import { sendPushNotification } from './push';
+
+// Re-export for monitoring endpoints
+export { ablyCircuitBreaker };
 import {
   SessionEventType,
   SessionEventData,
@@ -139,6 +144,13 @@ export async function publishSessionEvent(
   data: Record<string, unknown>,
   excludeUserId?: string
 ): Promise<void> {
+  // Circuit breaker fast-fail: skip publish if Ably is in OPEN state
+  const cbStats = ablyCircuitBreaker.getStats();
+  if (cbStats.state === 'OPEN') {
+    logger.warn(`[Realtime] Ably circuit breaker OPEN - skipping ${event} publish for session ${sessionId}`);
+    return;
+  }
+
   const ably = getAbly();
 
   const eventData: SessionEventData = {
@@ -151,18 +163,20 @@ export async function publishSessionEvent(
   try {
     const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
     await channel.publish(event, eventData);
-    console.log(`[Realtime] Published ${event} to session ${sessionId}`);
+    ablyCircuitBreaker.recordSuccess();
+    logger.info(`[Realtime] Published ${event} to session ${sessionId}`);
 
     // Automatically notify session members for non-transient events
     // This updates their session list without requiring each caller to remember
     if (!TRANSIENT_EVENTS.has(event)) {
       // Fire and forget - don't block on user channel updates
       notifySessionMembers(sessionId, excludeUserId).catch((err) =>
-        console.warn(`[Realtime] Failed to notify session members:`, err)
+        logger.warn(`[Realtime] Failed to notify session members:`, err)
       );
     }
   } catch (error) {
-    console.error(`[Realtime] Failed to publish ${event} to session ${sessionId}:`, error);
+    ablyCircuitBreaker.recordFailure('publishSessionEvent');
+    logger.error(`[Realtime] Failed to publish ${event} to session ${sessionId}:`, error);
     throw error;
   }
 }
@@ -181,6 +195,13 @@ export async function publishUserEvent(
   event: UserEventType,
   data: { sessionId: string;[key: string]: unknown }
 ): Promise<void> {
+  // Circuit breaker fast-fail
+  const userCbStats = ablyCircuitBreaker.getStats();
+  if (userCbStats.state === 'OPEN') {
+    logger.warn(`[Realtime] Ably circuit breaker OPEN - skipping ${event} publish for user ${userId}`);
+    return;
+  }
+
   const ably = getAbly();
 
   const eventData: UserEventData = {
@@ -191,9 +212,11 @@ export async function publishUserEvent(
   try {
     const channel = ably.channels.get(REALTIME_CHANNELS.user(userId));
     await channel.publish(event, eventData);
-    console.log(`[Realtime] Published ${event} to user ${userId} for session ${data.sessionId}`);
+    ablyCircuitBreaker.recordSuccess();
+    logger.info(`[Realtime] Published ${event} to user ${userId} for session ${data.sessionId}`);
   } catch (error) {
-    console.error(`[Realtime] Failed to publish ${event} to user ${userId}:`, error);
+    ablyCircuitBreaker.recordFailure('publishUserEvent');
+    logger.error(`[Realtime] Failed to publish ${event} to user ${userId}:`, error);
     // Don't throw - user channel failures shouldn't break operations
   }
 }
@@ -210,7 +233,7 @@ export async function notifySessionMembers(
   sessionId: string,
   excludeUserId?: string
 ): Promise<void> {
-  console.log(`[notifySessionMembers] Called for session ${sessionId}, excludeUserId=${excludeUserId}`);
+  logger.info(`[notifySessionMembers] Called for session ${sessionId}, excludeUserId=${excludeUserId}`);
   try {
     // Import prisma here to avoid circular dependency
     const { prisma } = await import('../lib/prisma');
@@ -218,7 +241,7 @@ export async function notifySessionMembers(
     // Touch session.updatedAt so unread count calculation picks up the change
     // Also fetch session members in the same query
     const now = new Date();
-    console.log(`[notifySessionMembers] Updating session.updatedAt to ${now.toISOString()}`);
+    logger.info(`[notifySessionMembers] Updating session.updatedAt to ${now.toISOString()}`);
 
     const session = await prisma.session.update({
       where: { id: sessionId },
@@ -235,10 +258,10 @@ export async function notifySessionMembers(
       },
     });
 
-    console.log(`[notifySessionMembers] Session updated, new updatedAt: ${session.updatedAt.toISOString()}`);
+    logger.info(`[notifySessionMembers] Session updated, new updatedAt: ${session.updatedAt.toISOString()}`);
 
     if (!session?.relationship?.members) {
-      console.warn(`[notifySessionMembers] Session ${sessionId} not found or has no members`);
+      logger.warn(`[notifySessionMembers] Session ${sessionId} not found or has no members`);
       return;
     }
 
@@ -247,7 +270,7 @@ export async function notifySessionMembers(
       .map((m) => m.userId)
       .filter((id) => id !== excludeUserId);
 
-    console.log(`[notifySessionMembers] Publishing to ${memberIds.length} members: ${memberIds.join(', ')}`);
+    logger.info(`[notifySessionMembers] Publishing to ${memberIds.length} members: ${memberIds.join(', ')}`);
 
     await Promise.all(
       memberIds.map((userId) =>
@@ -255,9 +278,9 @@ export async function notifySessionMembers(
       )
     );
 
-    console.log(`[notifySessionMembers] Notified ${memberIds.length} members of session ${sessionId}`);
+    logger.info(`[notifySessionMembers] Notified ${memberIds.length} members of session ${sessionId}`);
   } catch (error) {
-    console.error('[notifySessionMembers] Error:', error);
+    logger.error('[notifySessionMembers] Error:', error);
     // Don't throw - notification failures shouldn't break the main operation
   }
 }
@@ -283,7 +306,7 @@ export async function isUserPresent(sessionId: string, userId: string): Promise<
     const members = presenceResult.items || [];
     return members.some((m: Ably.PresenceMessage) => m.clientId === userId);
   } catch (error) {
-    console.error(`[Realtime] Failed to check presence for user ${userId}:`, error);
+    logger.error(`[Realtime] Failed to check presence for user ${userId}:`, error);
     return false;
   }
 }
@@ -303,7 +326,7 @@ export async function getSessionPresence(sessionId: string): Promise<string[]> {
     const members = presenceResult.items || [];
     return members.map((m: Ably.PresenceMessage) => m.clientId).filter(Boolean) as string[];
   } catch (error) {
-    console.error(`[Realtime] Failed to get presence for session ${sessionId}:`, error);
+    logger.error(`[Realtime] Failed to get presence for session ${sessionId}:`, error);
     return [];
   }
 }
@@ -637,10 +660,10 @@ export async function publishSessionCreated(
       timestamp: Date.now(),
       ...sessionData,
     });
-    console.log(`[Realtime] Published session-created to audit stream for ${sessionId}`);
+    logger.info(`[Realtime] Published session-created to audit stream for ${sessionId}`);
   } catch (error) {
     // Don't throw - audit stream failures shouldn't break session creation
-    console.warn(`[Realtime] Failed to publish session-created to audit stream:`, error);
+    logger.warn(`[Realtime] Failed to publish session-created to audit stream:`, error);
   }
 }
 
@@ -682,15 +705,15 @@ export async function publishMessageAIResponse(
   try {
     const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
     await channel.publish('message.ai_response', payload);
-    console.log(`[Realtime] Published message.ai_response to session ${sessionId} for user ${forUserId}`);
+    logger.info(`[Realtime] Published message.ai_response to session ${sessionId} for user ${forUserId}`);
 
     // Also notify session members for list updates (but exclude the user who sent the message
     // since they're already subscribed to the session channel)
     notifySessionMembers(sessionId).catch((err) =>
-      console.warn(`[Realtime] Failed to notify session members after AI response:`, err)
+      logger.warn(`[Realtime] Failed to notify session members after AI response:`, err)
     );
   } catch (error) {
-    console.error(`[Realtime] Failed to publish message.ai_response to session ${sessionId}:`, error);
+    logger.error(`[Realtime] Failed to publish message.ai_response to session ${sessionId}:`, error);
     throw error;
   }
 }
@@ -726,9 +749,9 @@ export async function publishMessageError(
   try {
     const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
     await channel.publish('message.error', payload);
-    console.log(`[Realtime] Published message.error to session ${sessionId} for user ${forUserId}`);
+    logger.info(`[Realtime] Published message.error to session ${sessionId} for user ${forUserId}`);
   } catch (error) {
-    console.error(`[Realtime] Failed to publish message.error to session ${sessionId}:`, error);
+    logger.error(`[Realtime] Failed to publish message.error to session ${sessionId}:`, error);
     // Don't throw - we don't want to lose error notifications due to Ably issues
   }
 }
@@ -762,14 +785,14 @@ export async function publishChatItemNew(
   try {
     const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
     await channel.publish('chat-item:new', payload);
-    console.log(`[Realtime] Published chat-item:new (${item.type}) to session ${sessionId}`);
+    logger.info(`[Realtime] Published chat-item:new (${item.type}) to session ${sessionId}`);
 
     // Notify session members for list updates
     notifySessionMembers(sessionId).catch((err) =>
-      console.warn(`[Realtime] Failed to notify session members after chat-item:new:`, err)
+      logger.warn(`[Realtime] Failed to notify session members after chat-item:new:`, err)
     );
   } catch (error) {
-    console.error(`[Realtime] Failed to publish chat-item:new to session ${sessionId}:`, error);
+    logger.error(`[Realtime] Failed to publish chat-item:new to session ${sessionId}:`, error);
     throw error;
   }
 }
@@ -802,9 +825,9 @@ export async function publishChatItemUpdate(
   try {
     const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
     await channel.publish('chat-item:update', payload);
-    console.log(`[Realtime] Published chat-item:update for ${itemId} to session ${sessionId}`);
+    logger.info(`[Realtime] Published chat-item:update for ${itemId} to session ${sessionId}`);
   } catch (error) {
-    console.error(`[Realtime] Failed to publish chat-item:update to session ${sessionId}:`, error);
+    logger.error(`[Realtime] Failed to publish chat-item:update to session ${sessionId}:`, error);
     throw error;
   }
 }
@@ -879,9 +902,9 @@ export async function publishContextUpdated(
   try {
     const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
     await channel.publish('context.updated', payload);
-    console.log(`[Realtime] Published context.updated for user ${userId} to session ${sessionId}`);
+    logger.info(`[Realtime] Published context.updated for user ${userId} to session ${sessionId}`);
   } catch (error) {
-    console.error(`[Realtime] Failed to publish context.updated to session ${sessionId}:`, error);
+    logger.error(`[Realtime] Failed to publish context.updated to session ${sessionId}:`, error);
     // Don't throw - this is a non-critical event for dashboard monitoring only
   }
 }

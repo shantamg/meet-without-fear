@@ -5,6 +5,7 @@
  * Handlers are registered at startup and matched based on intent and priority.
  */
 
+import { logger } from '../../lib/logger';
 import { ChatIntent } from '@meet-without-fear/shared';
 import { IntentHandler, IntentHandlerRegistry, IntentDetectionPlugin, IntentDetectionHint } from './types';
 
@@ -14,10 +15,10 @@ class HandlerRegistry implements IntentHandlerRegistry {
 
   register(handler: IntentHandler): void {
     if (this.handlers.has(handler.id)) {
-      console.warn(`[ChatRouter] Handler ${handler.id} already registered, replacing`);
+      logger.warn(`[ChatRouter] Handler ${handler.id} already registered, replacing`);
     }
     this.handlers.set(handler.id, handler);
-    console.log(`[ChatRouter] Registered handler: ${handler.name} (${handler.id})`);
+    logger.info(`[ChatRouter] Registered handler: ${handler.name} (${handler.id})`);
   }
 
   unregister(handlerId: string): void {
@@ -40,10 +41,10 @@ class HandlerRegistry implements IntentHandlerRegistry {
   // Plugin management
   registerPlugin(plugin: IntentDetectionPlugin): void {
     if (this.plugins.has(plugin.id)) {
-      console.warn(`[ChatRouter] Plugin ${plugin.id} already registered, replacing`);
+      logger.warn(`[ChatRouter] Plugin ${plugin.id} already registered, replacing`);
     }
     this.plugins.set(plugin.id, plugin);
-    console.log(`[ChatRouter] Registered detection plugin: ${plugin.id}`);
+    logger.info(`[ChatRouter] Registered detection plugin: ${plugin.id}`);
   }
 
   unregisterPlugin(pluginId: string): void {

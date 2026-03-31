@@ -11,6 +11,7 @@
  */
 
 import { getSonnetResponse, getHaikuJson, getEmbedding } from '../lib/bedrock';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { MessageRole, BrainActivityCallType } from '@prisma/client';
 import { createStateStore } from './chat-router/types';
@@ -135,7 +136,7 @@ async function loadPreSessionHistory(userId: string): Promise<void> {
         : undefined,
     });
 
-    console.log('[Witnessing] Loaded', history.length, 'messages from DB for user', userId);
+    logger.info('[Witnessing] Loaded', history.length, 'messages from DB for user', userId);
   }
 }
 
@@ -481,7 +482,7 @@ export async function storePreSessionMessage(
 
   // Generate embedding asynchronously (don't block message storage)
   embedPreSessionMessage(message.id, content).catch((err) =>
-    console.warn('[Witnessing] Failed to embed pre-session message:', err)
+    logger.warn('[Witnessing] Failed to embed pre-session message:', err)
   );
 
   return message.id;
@@ -493,7 +494,7 @@ export async function storePreSessionMessage(
 async function embedPreSessionMessage(messageId: string, content: string): Promise<void> {
   const embedding = await getEmbedding(content);
   if (!embedding) {
-    console.warn('[Witnessing] Failed to generate embedding for message:', messageId);
+    logger.warn('[Witnessing] Failed to generate embedding for message:', messageId);
     return;
   }
 
@@ -505,7 +506,7 @@ async function embedPreSessionMessage(messageId: string, content: string): Promi
     WHERE id = ${messageId}
   `;
 
-  console.log('[Witnessing] Embedded pre-session message:', messageId);
+  logger.info('[Witnessing] Embedded pre-session message:', messageId);
 }
 
 /**

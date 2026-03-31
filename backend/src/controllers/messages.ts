@@ -9,6 +9,7 @@
 
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { getOrchestratedResponse, type FullAIContext } from '../services/ai';
 import { getSonnetResponse, getSonnetStreamingResponse, BrainActivityCallType, isMockLLMEnabled } from '../lib/bedrock';
@@ -102,7 +103,7 @@ function getFallbackInitialMessage(
  * The streaming endpoint provides real-time token streaming and better error handling.
  */
 export async function sendMessage(req: Request, res: Response): Promise<void> {
-  console.warn('[sendMessage] DEPRECATED: Fire-and-forget endpoint called. Clients should use /messages/stream instead.');
+  logger.warn('[sendMessage] DEPRECATED: Fire-and-forget endpoint called. Clients should use /messages/stream instead.');
 
   errorResponse(
     res,
@@ -211,7 +212,7 @@ export async function confirmFeelHeard(
             where: { id: sessionId },
             data: { status: 'ACTIVE' },
           });
-          console.log(`[confirmFeelHeard] Updated session ${sessionId} status to ACTIVE (user has joined)`);
+          logger.info(`[confirmFeelHeard] Updated session ${sessionId} status to ACTIVE (user has joined)`);
         }
         // Creator can proceed while session is INVITED
       } else {
@@ -291,7 +292,7 @@ export async function confirmFeelHeard(
           },
         });
         advancedToStage2 = true;
-        console.log(`[confirmFeelHeard] Advanced user ${user.id} to Stage 2`);
+        logger.info(`[confirmFeelHeard] Advanced user ${user.id} to Stage 2`);
       }
     }
 
@@ -464,7 +465,7 @@ export async function confirmFeelHeard(
         // Embed session content for cross-session retrieval (non-blocking)
         // Per fact-ledger architecture, we embed at session level
         embedSessionContent(sessionId, user.id, turnId).catch((err: unknown) =>
-          console.warn('[confirmFeelHeard] Failed to embed session content:', err)
+          logger.warn('[confirmFeelHeard] Failed to embed session content:', err)
         );
 
         transitionMessage = {
@@ -474,7 +475,7 @@ export async function confirmFeelHeard(
           stage: 2, // Stage 2 transition message
         };
 
-        console.log(`[confirmFeelHeard] Generated transition message for session ${sessionId}`);
+        logger.info(`[confirmFeelHeard] Generated transition message for session ${sessionId}`);
 
         // Audit log the transition message
         /* auditLog('RESPONSE', 'Stage transition message generated', {
@@ -487,7 +488,7 @@ export async function confirmFeelHeard(
           messageId: aiMessage.id,
         }); */
       } catch (error) {
-        console.error('[confirmFeelHeard] Failed to generate transition message:', error);
+        logger.error('[confirmFeelHeard] Failed to generate transition message:', error);
         // Continue without transition message - not a critical failure
       }
     }
@@ -509,7 +510,7 @@ export async function confirmFeelHeard(
       // Consolidate global facts when Stage 1 completes (fire-and-forget)
       // Per fact-ledger architecture, we merge session facts into user's global profile
       consolidateGlobalFacts(user.id, sessionId, turnId).catch((err: unknown) =>
-        console.warn('[confirmFeelHeard] Failed to consolidate global facts:', err)
+        logger.warn('[confirmFeelHeard] Failed to consolidate global facts:', err)
       );
     }
 
@@ -543,21 +544,21 @@ export async function confirmFeelHeard(
         });
 
         if (partnerEmpathyAttempt) {
-          console.log(`[confirmFeelHeard] Partner ${partnerId} has HELD empathy - triggering reconciler (non-blocking)`);
+          logger.info(`[confirmFeelHeard] Partner ${partnerId} has HELD empathy - triggering reconciler (non-blocking)`);
 
           // Trigger reconciler in the background
           (async () => {
             try {
-              console.log(`[confirmFeelHeard] Calling runReconcilerForDirection for sessionId=${sessionId}, guesserId=${partnerId}, subjectId=${user.id}`);
+              logger.info(`[confirmFeelHeard] Calling runReconcilerForDirection for sessionId=${sessionId}, guesserId=${partnerId}, subjectId=${user.id}`);
               const result = await runReconcilerForDirection(sessionId, partnerId, user.id);
 
-              console.log(`[confirmFeelHeard] Reconciler completed: status=${result.empathyStatus}, hasSuggestion=${!!result.shareOffer}`);
+              logger.info(`[confirmFeelHeard] Reconciler completed: status=${result.empathyStatus}, hasSuggestion=${!!result.shareOffer}`);
 
               // If there's a share suggestion, notify the current user (subject)
               // Note: We DON'T exclude the user here because they ARE the intended recipient
               // Include full empathy status to avoid extra HTTP round-trip
               if (result.empathyStatus === 'AWAITING_SHARING' && result.shareOffer) {
-                console.log(`[confirmFeelHeard] Significant gaps found - notifying subject ${user.id} of share suggestion`);
+                logger.info(`[confirmFeelHeard] Significant gaps found - notifying subject ${user.id} of share suggestion`);
                 const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
                 const empathyStatus = await buildEmpathyExchangeStatus(sessionId, user.id);
                 await notifyPartner(sessionId, user.id, 'empathy.share_suggestion', {
@@ -577,15 +578,15 @@ export async function confirmFeelHeard(
               // If empathy is READY (no gaps), the guesser already got the alignment message.
               // The reveal notification will be sent when both directions are READY.
               if (result.empathyStatus === 'READY') {
-                console.log(`[confirmFeelHeard] No significant gaps - empathy marked READY, waiting for partner to complete Stage 2`);
+                logger.info(`[confirmFeelHeard] No significant gaps - empathy marked READY, waiting for partner to complete Stage 2`);
               }
             } catch (error) {
-              console.error('[confirmFeelHeard] Reconciler background task failed:', error);
+              logger.error('[confirmFeelHeard] Reconciler background task failed:', error);
             }
           })();
           reconcilerTriggered = true;
         } else {
-          console.log(`[confirmFeelHeard] Partner ${partnerId} does not have HELD empathy - reconciler NOT triggered`);
+          logger.info(`[confirmFeelHeard] Partner ${partnerId} does not have HELD empathy - reconciler NOT triggered`);
         }
       }
     }
@@ -600,7 +601,7 @@ export async function confirmFeelHeard(
       reconcilerTriggered,
     });
   } catch (error) {
-    console.error('[confirmFeelHeard] Error:', error);
+    logger.error('[confirmFeelHeard] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to confirm feel-heard', 500);
   }
 }
@@ -615,16 +616,16 @@ export async function getConversationHistory(
 ): Promise<void> {
   const requestId = `get-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   try {
-    console.log(`[getConversationHistory:${requestId}] ========== REQUEST START ==========`);
+    logger.info(`[getConversationHistory:${requestId}] ========== REQUEST START ==========`);
     const user = req.user;
     if (!user) {
-      console.log(`[getConversationHistory:${requestId}] ERROR: No user in request`);
+      logger.info(`[getConversationHistory:${requestId}] ERROR: No user in request`);
       errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
       return;
     }
 
     const { id: sessionId } = req.params;
-    console.log(`[getConversationHistory:${requestId}] Session ID: ${sessionId}, User ID: ${user.id}`);
+    logger.info(`[getConversationHistory:${requestId}] Session ID: ${sessionId}, User ID: ${user.id}`);
 
     // Validate query params
     const parseResult = getMessagesQuerySchema.safeParse(req.query);
@@ -669,7 +670,7 @@ export async function getConversationHistory(
 
     // Get messages - user's own messages (without specific recipient) + messages specifically for them
     // This ensures data isolation: messages with forUserId only show to that user
-    console.log(`[getConversationHistory:${requestId}] Fetching messages with limit=${limit}, before=${before || 'none'}, after=${after || 'none'}, order=${order}`);
+    logger.info(`[getConversationHistory:${requestId}] Fetching messages with limit=${limit}, before=${before || 'none'}, after=${after || 'none'}, order=${order}`);
     const messages = await prisma.message.findMany({
       where: {
         sessionId,
@@ -685,16 +686,16 @@ export async function getConversationHistory(
       take: limit + 1, // Fetch one extra to check for more
     });
 
-    console.log(`[getConversationHistory:${requestId}] ✅ Fetched ${messages.length} messages from database`);
+    logger.info(`[getConversationHistory:${requestId}] ✅ Fetched ${messages.length} messages from database`);
 
     // Check for duplicate message IDs
     const messageIds = messages.map(m => m.id);
     const duplicateIds = messageIds.filter((id, idx) => messageIds.indexOf(id) !== idx);
     if (duplicateIds.length > 0) {
-      console.warn(`[getConversationHistory:${requestId}] ⚠️  WARNING: Found ${duplicateIds.length} duplicate message ID(s) in query result!`);
+      logger.warn(`[getConversationHistory:${requestId}] ⚠️  WARNING: Found ${duplicateIds.length} duplicate message ID(s) in query result!`);
       duplicateIds.forEach(id => {
         const duplicates = messages.filter(m => m.id === id);
-        console.warn(`[getConversationHistory:${requestId}]   Duplicate ID ${id}: appears ${duplicates.length} times`);
+        logger.warn(`[getConversationHistory:${requestId}]   Duplicate ID ${id}: appears ${duplicates.length} times`);
       });
     }
 
@@ -709,24 +710,24 @@ export async function getConversationHistory(
     });
     const duplicateContent = Array.from(contentMap.entries()).filter(([_, msgs]) => msgs.length > 1);
     if (duplicateContent.length > 0) {
-      console.warn(`[getConversationHistory:${requestId}] ⚠️  WARNING: Found ${duplicateContent.length} message(s) with duplicate content!`);
+      logger.warn(`[getConversationHistory:${requestId}] ⚠️  WARNING: Found ${duplicateContent.length} message(s) with duplicate content!`);
       duplicateContent.forEach(([key, msgs]) => {
-        console.warn(`[getConversationHistory:${requestId}]   Content "${key.substring(0, 50)}...": appears ${msgs.length} times`);
+        logger.warn(`[getConversationHistory:${requestId}]   Content "${key.substring(0, 50)}...": appears ${msgs.length} times`);
         msgs.forEach((msg, idx) => {
-          console.warn(`[getConversationHistory:${requestId}]     ${idx + 1}. ID=${msg.id}, timestamp=${msg.timestamp.toISOString()}`);
+          logger.warn(`[getConversationHistory:${requestId}]     ${idx + 1}. ID=${msg.id}, timestamp=${msg.timestamp.toISOString()}`);
         });
       });
     }
 
     // Log recent message IDs
     const recentMessages = messages.slice(0, 5);
-    console.log(`[getConversationHistory:${requestId}] Recent 5 message IDs:`, recentMessages.map(m => `${m.role}:${m.id.substring(0, 8)}...`).join(', '));
+    logger.info(`[getConversationHistory:${requestId}] Recent 5 message IDs:`, recentMessages.map(m => `${m.role}:${m.id.substring(0, 8)}...`).join(', '));
 
     // Check if there are more messages
     const hasMore = messages.length > limit;
     let resultMessages = hasMore ? messages.slice(0, limit) : messages;
 
-    console.log(`[getConversationHistory:${requestId}] Returning ${resultMessages.length} messages (hasMore=${hasMore})`);
+    logger.info(`[getConversationHistory:${requestId}] Returning ${resultMessages.length} messages (hasMore=${hasMore})`);
 
     // If fetched in descending order, reverse to return chronological order for display
     // This allows us to fetch the latest N messages but display them oldest-first
@@ -747,7 +748,7 @@ export async function getConversationHistory(
       hasMore,
     });
   } catch (error) {
-    console.error('[getConversationHistory] Error:', error);
+    logger.error('[getConversationHistory] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get messages', 500);
   }
 }
@@ -964,13 +965,13 @@ export async function getInitialMessage(
         responseContent = getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
       }
     } catch (error) {
-      console.error('[getInitialMessage] AI response error:', error);
+      logger.error('[getInitialMessage] AI response error:', error);
       responseContent = getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
     }
 
     // If an invitation message was extracted, update the invitation
     if (isInvitationPhase && extractedInvitationMessage) {
-      console.log(`[getInitialMessage] Extracted invitation draft from initial message: "${extractedInvitationMessage}"`);
+      logger.info(`[getInitialMessage] Extracted invitation draft from initial message: "${extractedInvitationMessage}"`);
       await prisma.invitation.updateMany({
         where: { sessionId, invitedById: user.id },
         data: {
@@ -995,10 +996,10 @@ export async function getInitialMessage(
     // Embed session content for cross-session retrieval (non-blocking)
     // Per fact-ledger architecture, we embed at session level
     embedSessionContent(sessionId, user.id, turnId).catch((err: unknown) =>
-      console.warn('[getInitialMessage] Failed to embed session content:', err)
+      logger.warn('[getInitialMessage] Failed to embed session content:', err)
     );
 
-    console.log(`[getInitialMessage] Generated initial message for session ${sessionId}, stage ${currentStage}`);
+    logger.info(`[getInitialMessage] Generated initial message for session ${sessionId}, stage ${currentStage}`);
 
     // Audit log the initial message
     /* auditLog('RESPONSE', 'Initial welcome message generated', {
@@ -1027,7 +1028,7 @@ export async function getInitialMessage(
       invitationMessage: extractedInvitationMessage,
     });
   } catch (error) {
-    console.error('[getInitialMessage] Error:', error);
+    logger.error('[getInitialMessage] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get initial message', 500);
   }
 }
@@ -1074,11 +1075,11 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
   let clientDisconnected = false;
   req.on('close', () => {
     clientDisconnected = true;
-    console.log(`[sendMessageStream:${requestId}] Client disconnected`);
+    logger.info(`[sendMessageStream:${requestId}] Client disconnected`);
   });
 
   try {
-    console.log(`[sendMessageStream:${requestId}] ========== SSE STREAM REQUEST START ==========`);
+    logger.info(`[sendMessageStream:${requestId}] ========== SSE STREAM REQUEST START ==========`);
 
     const user = req.user;
     if (!user) {
@@ -1152,7 +1153,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         stage: currentStage,
       },
     });
-    console.log(`[sendMessageStream:${requestId}] User message created: ${userMessage.id}`);
+    logger.info(`[sendMessageStream:${requestId}] User message created: ${userMessage.id}`);
 
     // Broadcast to Status Site
     brainService.broadcastMessage(userMessage);
@@ -1243,7 +1244,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         select: { invitationMessage: true },
       });
       currentInvitationMessage = invitation?.invitationMessage ?? null;
-      console.log(`[sendMessageStream:${requestId}] Refining invitation, current: "${currentInvitationMessage}"`);
+      logger.info(`[sendMessageStream:${requestId}] Refining invitation, current: "${currentInvitationMessage}"`);
     }
 
     // Create intent for context assembly - use 'light' depth to load notable facts
@@ -1270,12 +1271,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       // Defense-in-depth: even if the query has user isolation, skip entirely for early stages.
       currentStage >= 2
         ? getSharedContentContext(sessionId, user.id).catch((err: Error) => {
-            console.warn(`[sendMessageStream:${requestId}] Shared content context fetch failed:`, err);
+            logger.warn(`[sendMessageStream:${requestId}] Shared content context fetch failed:`, err);
             return null;
           })
         : Promise.resolve(null),
       getMilestoneContext(sessionId, user.id).catch((err: Error) => {
-        console.warn(`[sendMessageStream:${requestId}] Milestone context fetch failed:`, err);
+        logger.warn(`[sendMessageStream:${requestId}] Milestone context fetch failed:`, err);
         return null;
       }),
       (async () => {
@@ -1295,7 +1296,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       })(),
     ]);
 
-    console.log(`[sendMessageStream:${requestId}] Context assembled: notableFacts=${contextBundle.notableFacts?.length ?? 0}, emotionalIntensity=${emotionalIntensity}`);
+    logger.info(`[sendMessageStream:${requestId}] Context assembled: notableFacts=${contextBundle.notableFacts?.length ?? 0}, emotionalIntensity=${emotionalIntensity}`);
 
     // =========================================================================
     // Stage 2B routing: Check if user is in REFINING empathy status
@@ -1327,7 +1328,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         effectiveStage = 21; // Stage 2B: Informed Empathy
         previousEmpathyContent = refiningAttempt.content;
         isRefiningEmpathy = true;
-        console.log(`[sendMessageStream:${requestId}] Stage 2B routing: user has REFINING empathy, using stage 21`);
+        logger.info(`[sendMessageStream:${requestId}] Stage 2B routing: user has REFINING empathy, using stage 21`);
 
         // Fetch current empathy draft (may have been saved from a previous turn in this conversation)
         const currentEmpathyDraft = await prisma.empathyDraft.findUnique({
@@ -1336,11 +1337,11 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         });
         if (currentEmpathyDraft) {
           empathyDraftContent = currentEmpathyDraft.content;
-          console.log(`[sendMessageStream:${requestId}] Stage 2B: found existing empathy draft (${empathyDraftContent.length} chars)`);
+          logger.info(`[sendMessageStream:${requestId}] Stage 2B: found existing empathy draft (${empathyDraftContent.length} chars)`);
         } else {
           // Use the previous empathy attempt content as starting draft
           empathyDraftContent = refiningAttempt.content;
-          console.log(`[sendMessageStream:${requestId}] Stage 2B: using previous empathy attempt as draft`);
+          logger.info(`[sendMessageStream:${requestId}] Stage 2B: using previous empathy attempt as draft`);
         }
 
         // Fetch reconciler result for gap context
@@ -1394,12 +1395,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       sharedContentHistory,
       milestoneContext,
     });
-    console.log(`[sendMessageStream:${requestId}] Formatted context: ${formattedContext.length} chars`);
+    logger.info(`[sendMessageStream:${requestId}] Formatted context: ${formattedContext.length} chars`);
 
     // Filter out empty messages to prevent Bedrock ValidationException
     const validHistory = history.filter((m) => m.content && m.content.trim().length > 0);
     if (validHistory.length !== history.length) {
-      console.warn(`[sendMessageStream:${requestId}] Filtered out ${history.length - validHistory.length} empty message(s) from history`);
+      logger.warn(`[sendMessageStream:${requestId}] Filtered out ${history.length - validHistory.length} empty message(s) from history`);
     }
 
     const summaryExists = Boolean(summaryBoundary);
@@ -1412,7 +1413,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     );
 
     if (truncated > 0) {
-      console.log(`[sendMessageStream:${requestId}] Trimmed ${truncated} old messages (summaryExists=${summaryExists})`);
+      logger.info(`[sendMessageStream:${requestId}] Trimmed ${truncated} old messages (summaryExists=${summaryExists})`);
     }
 
     // Build messages with context injected into the last user message
@@ -1509,14 +1510,14 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         const draftMatch = buffer.match(/<draft>([\s\S]*?)<\/draft>/i);
         if (draftMatch) {
           draftContent = draftMatch[1].trim();
-          console.log(`[sendMessageStream:${requestId}] [HIDDEN DRAFT]:`, draftContent.substring(0, 100) + (draftContent.length > 100 ? '...' : ''));
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN DRAFT]:`, draftContent.substring(0, 100) + (draftContent.length > 100 ? '...' : ''));
         }
 
         // Extract dispatch tag if present - store for handling after streaming
         const dispatchMatch = buffer.match(/<dispatch>([\s\S]*?)<\/dispatch>/i);
         if (dispatchMatch) {
           dispatchTagContent = dispatchMatch[1].trim();
-          console.log(`[sendMessageStream:${requestId}] [DISPATCH TAG]:`, dispatchTagContent);
+          logger.info(`[sendMessageStream:${requestId}] [DISPATCH TAG]:`, dispatchTagContent);
         }
 
         // Return text with all tags stripped
@@ -1544,8 +1545,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
               // Extract and log the hidden thinking
               thinkingContent = thinkingBuffer.substring(0, closingTagIndex);
-              console.log(`[sendMessageStream:${requestId}] [TIMING] Thinking phase complete at ${thinkingEndTime - streamStartTime}ms`);
-              console.log(`[sendMessageStream:${requestId}] [HIDDEN THINKING]:`, thinkingContent.substring(0, 200) + (thinkingContent.length > 200 ? '...' : ''));
+              logger.info(`[sendMessageStream:${requestId}] [TIMING] Thinking phase complete at ${thinkingEndTime - streamStartTime}ms`);
+              logger.info(`[sendMessageStream:${requestId}] [HIDDEN THINKING]:`, thinkingContent.substring(0, 200) + (thinkingContent.length > 200 ? '...' : ''));
 
               // Put remaining text into tag trap buffer
               tagTrapBuffer = thinkingBuffer.substring(closingTagIndex + 11); // 11 = '</thinking>'.length
@@ -1553,7 +1554,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             }
             // Safety: If buffer > 2000 chars without finding tag, assume no thinking and flush
             else if (thinkingBuffer.length > 2000) {
-              console.warn(`[sendMessageStream:${requestId}] Thinking buffer exceeded 2000 chars without closing tag, flushing`);
+              logger.warn(`[sendMessageStream:${requestId}] Thinking buffer exceeded 2000 chars without closing tag, flushing`);
               isInsideThinking = false;
               sendCleanText(thinkingBuffer);
               thinkingBuffer = '';
@@ -1624,7 +1625,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           }
         }
         // tool_use events are no longer expected with semantic router format
-        // 'done' event is handled after the loop
+
+        // Check for done event with error flag (generator catches errors internally
+        // and yields a done event with an error string instead of throwing)
+        if (event.type === 'done' && event.error) {
+          throw new Error(event.error);
+        }
       }
 
       // =========================================================================
@@ -1634,7 +1640,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       // thinkingBuffer as visible content so dispatch tags can be parsed.
       // =========================================================================
       if (isInsideThinking && thinkingBuffer.length > 0) {
-        console.warn(`[sendMessageStream:${requestId}] Stream ended while still in thinking trap. Buffer has ${thinkingBuffer.length} chars. Flushing as visible content.`);
+        logger.warn(`[sendMessageStream:${requestId}] Stream ended while still in thinking trap. Buffer has ${thinkingBuffer.length} chars. Flushing as visible content.`);
         // The buffer might contain <dispatch>...</dispatch> without a thinking block
         // Process it through the tag processor to extract dispatch tags
         const cleanText = processTagTrapBuffer(thinkingBuffer);
@@ -1652,7 +1658,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       }
 
       const streamEndTime = Date.now();
-      console.log(`[sendMessageStream:${requestId}] [TIMING] Stream complete:`,
+      logger.info(`[sendMessageStream:${requestId}] [TIMING] Stream complete:`,
         `total=${streamEndTime - streamStartTime}ms`,
         `thinkingEnd=${thinkingEndTime ? thinkingEndTime - streamStartTime : 'none'}ms`,
         `firstVisibleChunk=${firstChunkTime ? firstChunkTime - streamStartTime : 'none'}ms`,
@@ -1684,7 +1690,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         }
       }
 
-      console.log(`[sendMessageStream:${requestId}] Parsed metadata:`, {
+      logger.info(`[sendMessageStream:${requestId}] Parsed metadata:`, {
         offerFeelHeardCheck: metadata.offerFeelHeardCheck,
         offerReadyToShare: metadata.offerReadyToShare,
         hasDraft: !!parsed.draft,
@@ -1696,7 +1702,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
       // Guard: prevent empty AI responses from being saved to DB
       if (!accumulatedText.trim() && !isDispatchMessage) {
-        console.error(`[sendMessageStream:${requestId}] Empty AI response after tag stripping — skipping DB save`);
+        logger.error(`[sendMessageStream:${requestId}] Empty AI response after tag stripping — skipping DB save`);
         // Don't save empty message, but send error event so frontend can retry
         if (!clientDisconnected) {
           sendSSE(res, {
@@ -1715,7 +1721,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       // =========================================================================
       const dispatchTag = dispatchTagContent || parsed.dispatchTag;
       if (dispatchTag) {
-        console.log(`[sendMessageStream:${requestId}] Dispatch detected: ${dispatchTag}`);
+        logger.info(`[sendMessageStream:${requestId}] Dispatch detected: ${dispatchTag}`);
         isDispatchMessage = true;
 
         // Build dispatch context with conversation history and session state
@@ -1739,12 +1745,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         if (dispatchedResponse !== null) {
           // Use ONLY the dispatch response - ignore any acknowledgment text the AI may have sent
           // (The prompt instructs AI to not send visible text, but in case it does, we ignore it)
-          console.log(`[sendMessageStream:${requestId}] Dispatch response only (ignoring any streamed acknowledgment)`);
+          logger.info(`[sendMessageStream:${requestId}] Dispatch response only (ignoring any streamed acknowledgment)`);
           sendSSE(res, { event: 'chunk', data: { text: dispatchedResponse } });
           accumulatedText = dispatchedResponse;
         } else {
           // Unknown dispatch tag — fall through and use the AI's original streamed response
-          console.log(`[sendMessageStream:${requestId}] Unknown dispatch tag "${dispatchTag}" — using original AI response`);
+          logger.info(`[sendMessageStream:${requestId}] Unknown dispatch tag "${dispatchTag}" — using original AI response`);
           isDispatchMessage = false;
         }
       }
@@ -1752,7 +1758,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       finalizeTurnMetrics(turnId);
 
     } catch (error) {
-      console.error(`[sendMessageStream:${requestId}] Stream error:`, error);
+      logger.error(`[sendMessageStream:${requestId}] Stream error:`, error);
       streamError = error instanceof Error ? error : new Error(String(error));
     }
 
@@ -1761,11 +1767,11 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     // User can retry fresh (avoids duplicate messages on retry)
     // =========================================================================
     if (streamError) {
-      console.error(`[sendMessageStream:${requestId}] Stream failed, cleaning up user message`);
+      logger.error(`[sendMessageStream:${requestId}] Stream failed, cleaning up user message`);
 
       // Delete user message so retry creates fresh conversation turn
       await prisma.message.delete({ where: { id: userMessage.id } }).catch((deleteErr) => {
-        console.warn(`[sendMessageStream:${requestId}] Failed to delete user message on error:`, deleteErr);
+        logger.warn(`[sendMessageStream:${requestId}] Failed to delete user message on error:`, deleteErr);
       });
 
       // Publish error via Ably so frontend can update UI (mark message as failed)
@@ -1776,7 +1782,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         'Sorry, I had trouble generating a response. Please try again.',
         true // canRetry
       ).catch((ablyErr) => {
-        console.warn(`[sendMessageStream:${requestId}] Failed to publish error via Ably:`, ablyErr);
+        logger.warn(`[sendMessageStream:${requestId}] Failed to publish error via Ably:`, ablyErr);
       });
 
       // Send SSE error event if client still connected
@@ -1792,7 +1798,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
       // End response and return early - do NOT save fallback AI message
       res.end();
-      console.log(`[sendMessageStream:${requestId}] ========== SSE STREAM ENDED (ERROR) ==========`);
+      logger.info(`[sendMessageStream:${requestId}] ========== SSE STREAM ENDED (ERROR) ==========`);
       return;
     }
 
@@ -1818,7 +1824,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         stage: effectiveStage, // Use effective stage (21 for Stage 2B) for analytics
       },
     });
-    console.log(`[sendMessageStream:${requestId}] AI message created: ${aiMessage.id}`);
+    logger.info(`[sendMessageStream:${requestId}] AI message created: ${aiMessage.id}`);
 
     // Stage 3 safety net: if user has sent many messages but no needs extracted, trigger extraction
     if (effectiveStage === 3 && userTurnCount >= 6) {
@@ -1828,7 +1834,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         take: 1,
       });
       if (existingNeeds.length === 0) {
-        console.warn(`[sendMessageStream:${requestId}] Stage 3 safety net: ${userTurnCount} turns but no needs extracted, notifying for refetch`);
+        logger.warn(`[sendMessageStream:${requestId}] Stage 3 safety net: ${userTurnCount} turns but no needs extracted, notifying for refetch`);
         await publishSessionEvent(sessionId, 'session.resumed', { userId: user.id, reason: 'needs-safety-net' });
       }
     }
@@ -1862,7 +1868,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           ...(isInvitationPhase ? { messageConfirmed: false } : {}),
         },
       });
-      console.log(`[sendMessageStream:${requestId}] Saved invitation message: "${metadata.invitationMessage}"`);
+      logger.info(`[sendMessageStream:${requestId}] Saved invitation message: "${metadata.invitationMessage}"`);
     }
 
     // Save empathy draft (Stage 2 or Stage 2B)
@@ -1908,7 +1914,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             source: 'AI_SUGGESTED' as const,
           })),
         });
-        console.log(`[sendMessageStream:${requestId}] Created ${newStrategies.length} strategy proposals for user ${user.id}`);
+        logger.info(`[sendMessageStream:${requestId}] Created ${newStrategies.length} strategy proposals for user ${user.id}`);
       }
     }
 
@@ -1930,21 +1936,21 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     // Skip for dispatch messages - they're system responses, not user conversation
     // =========================================================================
     if (isDispatchMessage) {
-      console.log(`[sendMessageStream:${requestId}] Skipping background tasks for dispatch message`);
+      logger.info(`[sendMessageStream:${requestId}] Skipping background tasks for dispatch message`);
     } else if (isMockLLMEnabled()) {
-      console.log(`[sendMessageStream:${requestId}] Skipping background tasks in mock LLM mode`);
+      logger.info(`[sendMessageStream:${requestId}] Skipping background tasks in mock LLM mode`);
     } else {
       // Summarize and embed session content for cross-session retrieval
       // Per fact-ledger architecture, we embed at session level after summary updates
       updateSessionSummary(sessionId, user.id, turnId)
         .then(() => embedSessionContent(sessionId, user.id, turnId))
         .catch((err: unknown) =>
-          console.warn(`[sendMessageStream:${requestId}] Failed to update summary/embedding:`, err)
+          logger.warn(`[sendMessageStream:${requestId}] Failed to update summary/embedding:`, err)
         );
 
       // Run partner session classifier (fire-and-forget)
       // This extracts notable facts and detects memory intents
-      console.log(`[sendMessageStream:${requestId}] 🚀 Triggering background classification...`);
+      logger.info(`[sendMessageStream:${requestId}] 🚀 Triggering background classification...`);
       (async () => {
         try {
           // Fetch existing facts for the classifier
@@ -1986,22 +1992,22 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             existingFactsWithIds,
           });
 
-          console.log(`[sendMessageStream:${requestId}] ✅ Classification finished:`, {
+          logger.info(`[sendMessageStream:${requestId}] ✅ Classification finished:`, {
             factsCount: result?.notableFacts?.length ?? 0,
             topicContext: result?.topicContext?.substring(0, 50),
           });
         } catch (err) {
-          console.error(`[sendMessageStream:${requestId}] ❌ Classification failed:`, err);
+          logger.error(`[sendMessageStream:${requestId}] ❌ Classification failed:`, err);
         }
       })();
     }
 
     // End response
     res.end();
-    console.log(`[sendMessageStream:${requestId}] ========== SSE STREAM COMPLETE ==========`);
+    logger.info(`[sendMessageStream:${requestId}] ========== SSE STREAM COMPLETE ==========`);
 
   } catch (error) {
-    console.error(`[sendMessageStream:${requestId}] Error:`, error);
+    logger.error(`[sendMessageStream:${requestId}] Error:`, error);
 
     // If headers already sent, try to send error event
     if (res.headersSent) {

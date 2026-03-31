@@ -11,6 +11,7 @@
  * - New prompts get: [Summary of older messages] + [Recent full messages] + [Retrieved context]
  */
 
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { getHaikuJson } from '../lib/bedrock';
 import { estimateTokens } from '../utils/token-budget';
@@ -61,10 +62,10 @@ export interface SummarizationResult {
  */
 export const SUMMARIZATION_CONFIG = {
   /** Minimum messages before summarization kicks in */
-  minMessagesForSummary: 40,
+  minMessagesForSummary: 25,
 
   /** How many recent messages to keep in full (not summarized) */
-  recentMessagesToKeep: 20,
+  recentMessagesToKeep: 15,
 
   /** Target token count for summaries */
   targetSummaryTokens: 500,
@@ -196,7 +197,7 @@ export function needsSummarization(
 
 /**
  * Summarize older messages in a session and update the vessel.
- * Call this as fire-and-forget: updateSessionSummary(sessionId, userId, turnId).catch(console.warn)
+ * Call this as fire-and-forget: updateSessionSummary(sessionId, userId, turnId).catch(e => logger.warn(...))
  *
  * @param turnId - The turn that triggered this summarization (for cost attribution)
  */
@@ -320,13 +321,13 @@ export async function updateSessionSummary(
       },
     });
 
-    console.log(
+    logger.info(
       `[ConversationSummarizer] Summarized ${messagesToSummarize.length} messages for session ${sessionId}`
     );
 
     return summary;
   } catch (error) {
-    console.error('[ConversationSummarizer] Failed to summarize session:', error);
+    logger.error('[ConversationSummarizer] Failed to summarize session:', error);
     return null;
   }
 }
@@ -549,7 +550,7 @@ export function innerThoughtsNeedsSummarization(
 
 /**
  * Summarize older messages in an Inner Thoughts session and store in the session.
- * Call this as fire-and-forget: updateInnerThoughtsSummary(sessionId, turnId).catch(console.warn)
+ * Call this as fire-and-forget: updateInnerThoughtsSummary(sessionId, turnId).catch(e => logger.warn(...))
  *
  * @param turnId - The turn that triggered this summarization (for cost attribution)
  */
@@ -637,13 +638,13 @@ export async function updateInnerThoughtsSummary(
       },
     });
 
-    console.log(
+    logger.info(
       `[ConversationSummarizer] Summarized ${messagesToSummarize.length} Inner Thoughts messages for session ${sessionId}`
     );
 
     return summary;
   } catch (error) {
-    console.error('[ConversationSummarizer] Failed to summarize Inner Thoughts session:', error);
+    logger.error('[ConversationSummarizer] Failed to summarize Inner Thoughts session:', error);
     return null;
   }
 }

@@ -7,6 +7,7 @@
  */
 
 import { getHaikuJson } from '../lib/bedrock';
+import { logger } from '../lib/logger';
 import { withHaikuCircuitBreaker, HAIKU_TIMEOUT_MS } from '../utils/circuit-breaker';
 import type { MemoryDetectionResult, MemoryCategory } from 'shared';
 import { BrainActivityCallType } from '@prisma/client';
@@ -173,7 +174,7 @@ export async function detectMemoryIntent(
 
   // Skip detection for null/undefined/very short messages
   if (!message || message.trim().length < 3) {
-    console.log(`${logPrefix} Skipping - message missing or too short (${message?.trim().length || 0} chars)`);
+    logger.info(`${logPrefix} Skipping - message missing or too short (${message?.trim().length || 0} chars)`);
     return {
       hasMemoryIntent: false,
       suggestions: [],
@@ -182,7 +183,7 @@ export async function detectMemoryIntent(
   }
 
   const contextInfo = recentMessages ? ` with ${recentMessages.length} recent messages for context` : '';
-  console.log(
+  logger.info(
     `${logPrefix} Starting detection for message (${message.length} chars)${contextInfo}: "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`,
   );
 
@@ -194,7 +195,7 @@ Output only valid JSON with no markdown formatting or extra text.`;
 
   const userPrompt = buildDetectionPrompt(message, recentMessages);
 
-  console.log(`${logPrefix} Sending to Haiku...`);
+  logger.info(`${logPrefix} Sending to Haiku...`);
 
   // Ensure turnId is always a string - generate synthetic if not provided
   const effectiveSessionId = sessionId || 'memory-detection';
@@ -224,16 +225,16 @@ Output only valid JSON with no markdown formatting or extra text.`;
   );
 
   if (!response) {
-    console.warn(`${logPrefix} Haiku timed out or returned null, using fallback`);
+    logger.warn(`${logPrefix} Haiku timed out or returned null, using fallback`);
     return fallbackResult;
   }
 
-  console.log(`${logPrefix} Haiku raw response:`, JSON.stringify(response, null, 2));
+  logger.info(`${logPrefix} Haiku raw response:`, JSON.stringify(response, null, 2));
 
   // Validate and normalize the response
   const result = normalizeDetectionResult(response);
 
-  console.log(`${logPrefix} Detection result:`, {
+  logger.info(`${logPrefix} Detection result:`, {
     hasMemoryIntent: result.hasMemoryIntent,
     suggestionCount: result.suggestions.length,
     suggestions: result.suggestions.map(s => ({
@@ -255,7 +256,7 @@ function normalizeDetectionResult(raw: HaikuDetectionResponse): MemoryDetectionR
     .map(suggestion => {
       const category = normalizeCategory(suggestion.category);
       if (!category) {
-        console.warn('[Memory Detector] Invalid category:', suggestion.category);
+        logger.warn('[Memory Detector] Invalid category:', suggestion.category);
         return null;
       }
 

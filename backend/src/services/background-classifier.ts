@@ -12,6 +12,7 @@
  * - Summary update
  */
 
+import { logger } from '../lib/logger';
 import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 import type { MemorySuggestion, MemoryCategory } from '@meet-without-fear/shared';
@@ -239,7 +240,7 @@ export async function runBackgroundClassifier(
   const logPrefix = '[BackgroundClassifier]';
 
   try {
-    console.log(`${logPrefix} Starting classification for session ${input.sessionId}`);
+    logger.info(`${logPrefix} Starting classification for session ${input.sessionId}`);
 
     const systemPrompt = `CRITICAL: You are a classification engine. Output ONLY valid JSON. No conversational text, no empathy, no advice, no preamble. Your ENTIRE response must be a single JSON object.
 
@@ -279,12 +280,12 @@ Output only valid JSON.`;
     );
 
     if (!result) {
-      console.warn(`${logPrefix} Haiku timed out or returned null`);
+      logger.warn(`${logPrefix} Haiku timed out or returned null`);
       return fallback;
     }
 
     const normalized = normalizeResult(result);
-    console.log(`${logPrefix} Classification complete:`, {
+    logger.info(`${logPrefix} Classification complete:`, {
       memoryDetected: normalized.memoryIntent.detected,
       themes: normalized.themes,
       hasMetadata: Boolean(normalized.sessionMetadata.title),
@@ -294,12 +295,12 @@ Output only valid JSON.`;
     // Trigger session content embedding (fire-and-forget)
     // Per fact-ledger architecture, we embed at session level after summary/facts update
     embedInnerWorkSessionContent(input.sessionId, input.turnId).catch((err: unknown) =>
-      console.warn(`${logPrefix} Failed to embed session content:`, err)
+      logger.warn(`${logPrefix} Failed to embed session content:`, err)
     );
 
     return normalized;
   } catch (error) {
-    console.error(`${logPrefix} Classification failed:`, error);
+    logger.error(`${logPrefix} Classification failed:`, error);
     return null;
   }
 }
@@ -345,7 +346,7 @@ export async function applyClassifierResults(
       };
     }
   } catch (error) {
-    console.error('[BackgroundClassifier] Failed to apply results:', error);
+    logger.error('[BackgroundClassifier] Failed to apply results:', error);
   }
 
   return output;

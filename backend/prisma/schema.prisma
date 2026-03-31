@@ -218,6 +218,17 @@ enum TakeawaySource {
   USER  // Added or edited by user
 }
 
+enum TakeawayType {
+  INSIGHT      // A reflection or observation
+  ACTION_ITEM  // Something concrete to do
+  INTENTION    // A desire or aspiration (not a concrete action)
+}
+
+enum TakeawayLinkType {
+  AI_SEMANTIC  // Auto-detected via embedding similarity
+  USER_MANUAL  // Manually linked by the user
+}
+
 model InnerWorkMessage {
   id        String           @id @default(cuid())
   session   InnerWorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -233,17 +244,43 @@ model InnerWorkMessage {
 }
 
 model SessionTakeaway {
-  id        String           @id @default(cuid())
-  session   InnerWorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId String
-  content   String           @db.Text
-  theme     String?
-  source    TakeawaySource   @default(AI)
-  position  Int              @default(0)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id         String           @id @default(cuid())
+  session    InnerWorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  content    String           @db.Text
+  theme      String?
+  source     TakeawaySource   @default(AI)
+  type       TakeawayType     @default(INSIGHT)
+  position   Int              @default(0)
+  resolved   Boolean          @default(false)
+  resolvedAt DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  // Takeaway-level embedding for semantic search and auto-linking
+  embedding Unsupported("vector(1024)")?
+
+  // Links where this takeaway is the source
+  outgoingLinks TakeawayLink[] @relation("TakeawayLinkSource")
+  // Links where this takeaway is the target
+  incomingLinks TakeawayLink[] @relation("TakeawayLinkTarget")
 
   @@index([sessionId, position])
+}
+
+model TakeawayLink {
+  id         String           @id @default(cuid())
+  source     SessionTakeaway  @relation("TakeawayLinkSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId   String
+  target     SessionTakeaway  @relation("TakeawayLinkTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  targetId   String
+  linkType   TakeawayLinkType
+  similarity Float?
+  createdAt  DateTime         @default(now())
+
+  @@unique([sourceId, targetId])
+  @@index([sourceId])
+  @@index([targetId])
 }
 
 // ============================================================================

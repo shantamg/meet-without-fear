@@ -6,6 +6,7 @@
  */
 
 import { MentionSourceType, Person, BrainActivityCallType } from '@prisma/client';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { getHaikuJson } from '../lib/bedrock';
 import { getCurrentUserId } from '../lib/request-context';
@@ -176,7 +177,7 @@ OUTPUT (JSON):
 
     return result;
   } catch (error) {
-    console.warn('[People Extractor] AI extraction failed:', error);
+    logger.warn('[People Extractor] AI extraction failed:', error);
     return null;
   }
 }

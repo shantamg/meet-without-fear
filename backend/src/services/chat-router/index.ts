@@ -5,6 +5,7 @@
  * Uses Haiku for fast intent detection and routes to appropriate handlers.
  */
 
+import { logger } from '../../lib/logger';
 import { ChatIntent, UnifiedChatMessage, SendUnifiedChatResponse } from '@meet-without-fear/shared';
 import { Request } from 'express';
 import { prisma } from '../../lib/prisma';
@@ -39,7 +40,7 @@ export function initializeChatRouter(): void {
   registerBuiltInHandlers();
   initialized = true;
 
-  console.log('[ChatRouter] Initialized with handlers:',
+  logger.info('[ChatRouter] Initialized with handlers:',
     handlerRegistry.getAllHandlers().map(h => h.name).join(', ')
   );
 }
@@ -162,16 +163,16 @@ export async function processMessage(
         similarity: r.similarity,
       }));
       if (semanticMatches.length > 0) {
-        console.log('[ChatRouter] Semantic matches:', semanticMatches);
+        logger.info('[ChatRouter] Semantic matches:', semanticMatches);
       }
     } catch (error) {
       // Vector search failed - continue without it
-      console.warn('[ChatRouter] Vector search failed:', error);
+      logger.warn('[ChatRouter] Vector search failed:', error);
     }
   }
 
   // Detect intent with session context and semantic matches
-  console.log('[ChatRouter] Detecting intent for:', {
+  logger.info('[ChatRouter] Detecting intent for:', {
     message: content.slice(0, 50),
     hasActiveSession: !!activeSession,
     sessionCount: userSessions.length,
@@ -189,7 +190,7 @@ export async function processMessage(
     sessionId: activeSession?.id,
   });
 
-  console.log('[ChatRouter] Intent detected:', {
+  logger.info('[ChatRouter] Intent detected:', {
     intent: intent.intent,
     confidence: intent.confidence,
     sessionId: intent.sessionId,
@@ -399,7 +400,7 @@ Just output the welcome message, nothing else.`;
 
     return response?.trim() || undefined;
   } catch (error) {
-    console.error('[ChatRouter] Failed to generate welcome message:', error);
+    logger.error('[ChatRouter] Failed to generate welcome message:', error);
     return undefined;
   }
 }

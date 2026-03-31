@@ -10,6 +10,7 @@
  * - Message-level embedding functions have been deprecated and removed
  */
 
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { getEmbedding } from '../lib/bedrock';
 
@@ -119,7 +120,7 @@ export async function embedSessionContent(
   userId: string,
   turnId?: string
 ): Promise<boolean> {
-  console.log('[Embedding] Starting embedSessionContent for session:', sessionId);
+  logger.info('[Embedding] Starting embedSessionContent for session:', sessionId);
 
   // Get vessel with facts and summary
   const vessel = await prisma.userVessel.findUnique({
@@ -143,7 +144,7 @@ export async function embedSessionContent(
   });
 
   if (!vessel) {
-    console.warn(`[Embedding] No vessel found for session ${sessionId}, user ${userId}`);
+    logger.warn(`[Embedding] No vessel found for session ${sessionId}, user ${userId}`);
     return false;
   }
 
@@ -164,7 +165,7 @@ export async function embedSessionContent(
       // notableFacts is Prisma JsonValue, cast through unknown
       facts = vessel.notableFacts as unknown as CategorizedFact[];
     } catch {
-      console.warn(`[Embedding] Failed to parse notableFacts for vessel ${vessel.id}`);
+      logger.warn(`[Embedding] Failed to parse notableFacts for vessel ${vessel.id}`);
     }
   }
 
@@ -182,7 +183,7 @@ export async function embedSessionContent(
 
   // Skip if no content to embed
   if (!facts?.length && !summaryText) {
-    console.log(`[Embedding] No content to embed for session ${sessionId}`);
+    logger.info(`[Embedding] No content to embed for session ${sessionId}`);
     return false;
   }
 
@@ -192,7 +193,7 @@ export async function embedSessionContent(
   // Generate embedding
   const embedding = await getEmbedding(embeddingText, { sessionId, turnId });
   if (!embedding) {
-    console.warn(`[Embedding] Failed to generate embedding for session ${sessionId}`);
+    logger.warn(`[Embedding] Failed to generate embedding for session ${sessionId}`);
     return false;
   }
 
@@ -203,7 +204,7 @@ export async function embedSessionContent(
     WHERE id = ${vessel.id}
   `;
 
-  console.log(`[Embedding] Embedded session content for vessel ${vessel.id}`);
+  logger.info(`[Embedding] Embedded session content for vessel ${vessel.id}`);
   return true;
 }
 
@@ -224,11 +225,11 @@ export async function searchSessionContent(
   threshold: number = 0.5,
   turnId?: string
 ): Promise<SessionContentMatch[]> {
-  console.log('[Embedding] searchSessionContent for:', queryText.slice(0, 50));
+  logger.info('[Embedding] searchSessionContent for:', queryText.slice(0, 50));
 
   const queryEmbedding = await getEmbedding(queryText, { turnId });
   if (!queryEmbedding) {
-    console.warn('[Embedding] Failed to generate query embedding');
+    logger.warn('[Embedding] Failed to generate query embedding');
     return [];
   }
 
@@ -290,7 +291,7 @@ export async function embedInnerWorkSessionContent(
   sessionId: string,
   turnId?: string
 ): Promise<boolean> {
-  console.log('[Embedding] Starting embedInnerWorkSessionContent for session:', sessionId);
+  logger.info('[Embedding] Starting embedInnerWorkSessionContent for session:', sessionId);
 
   const session = await prisma.innerWorkSession.findUnique({
     where: { id: sessionId },
@@ -303,7 +304,7 @@ export async function embedInnerWorkSessionContent(
   });
 
   if (!session) {
-    console.warn(`[Embedding] Inner work session ${sessionId} not found`);
+    logger.warn(`[Embedding] Inner work session ${sessionId} not found`);
     return false;
   }
 
@@ -336,7 +337,7 @@ export async function embedInnerWorkSessionContent(
 
   // Skip if no content to embed
   if (parts.length === 0) {
-    console.log(`[Embedding] No content to embed for Inner Work session ${sessionId}`);
+    logger.info(`[Embedding] No content to embed for Inner Work session ${sessionId}`);
     return false;
   }
 
@@ -345,7 +346,7 @@ export async function embedInnerWorkSessionContent(
   // Generate embedding
   const embedding = await getEmbedding(embeddingText, { innerWorkSessionId: sessionId, turnId });
   if (!embedding) {
-    console.warn(`[Embedding] Failed to generate embedding for Inner Work session ${sessionId}`);
+    logger.warn(`[Embedding] Failed to generate embedding for Inner Work session ${sessionId}`);
     return false;
   }
 
@@ -356,7 +357,7 @@ export async function embedInnerWorkSessionContent(
     WHERE id = ${sessionId}
   `;
 
-  console.log(`[Embedding] Embedded Inner Work session content for ${sessionId}`);
+  logger.info(`[Embedding] Embedded Inner Work session content for ${sessionId}`);
   return true;
 }
 
@@ -387,11 +388,11 @@ export async function searchInnerWorkSessionContent(
   similarity: number;
   isLinked: boolean;
 }>> {
-  console.log('[Embedding] searchInnerWorkSessionContent for:', queryText.slice(0, 50));
+  logger.info('[Embedding] searchInnerWorkSessionContent for:', queryText.slice(0, 50));
 
   const queryEmbedding = await getEmbedding(queryText, { turnId, sessionId });
   if (!queryEmbedding) {
-    console.warn('[Embedding] Failed to generate query embedding');
+    logger.warn('[Embedding] Failed to generate query embedding');
     return [];
   }
 
@@ -435,6 +436,195 @@ export async function searchInnerWorkSessionContent(
 }
 
 // ============================================================================
+// Takeaway Embeddings (Phase 19 — Knowledge Base Intelligence)
+// ============================================================================
+
+/** Result from takeaway semantic search */
+export interface TakeawaySearchMatch {
+  takeawayId: string;
+  content: string;
+  theme: string | null;
+  type: string;
+  sessionId: string;
+  sessionDate: string;
+  similarity: number;
+}
+
+/**
+ * Embed a single takeaway's content for semantic search and auto-linking.
+ * Called fire-and-forget after distillation creates new takeaways.
+ *
+ * @param takeawayId - The takeaway to embed
+ * @param content - The takeaway text content
+ * @param turnId - Optional turn ID for cost attribution
+ */
+export async function embedTakeaway(
+  takeawayId: string,
+  content: string,
+  turnId?: string,
+): Promise<boolean> {
+  logger.info('[Embedding] embedTakeaway for:', takeawayId);
+
+  const embedding = await getEmbedding(content, { turnId });
+  if (!embedding) {
+    logger.warn(`[Embedding] Failed to generate embedding for takeaway ${takeawayId}`);
+    return false;
+  }
+
+  await prisma.$executeRaw`
+    UPDATE "SessionTakeaway"
+    SET "embedding" = ${vectorToSql(embedding)}::vector
+    WHERE id = ${takeawayId}
+  `;
+
+  logger.info(`[Embedding] Embedded takeaway ${takeawayId}`);
+  return true;
+}
+
+/**
+ * Embed multiple takeaways in sequence (for post-distillation batch).
+ * Returns IDs of successfully embedded takeaways.
+ */
+export async function embedTakeawayBatch(
+  takeaways: Array<{ id: string; content: string }>,
+  turnId?: string,
+): Promise<string[]> {
+  const embedded: string[] = [];
+  for (const t of takeaways) {
+    const ok = await embedTakeaway(t.id, t.content, turnId);
+    if (ok) embedded.push(t.id);
+  }
+  return embedded;
+}
+
+/**
+ * Search takeaways by semantic similarity for a given user.
+ *
+ * @param userId - The user whose takeaways to search
+ * @param queryText - The query text
+ * @param limit - Maximum results
+ * @param threshold - Minimum similarity (0-1)
+ * @param turnId - Optional turn ID for cost attribution
+ */
+export async function searchTakeaways(
+  userId: string,
+  queryText: string,
+  limit: number = 10,
+  threshold: number = 0.5,
+  turnId?: string,
+): Promise<TakeawaySearchMatch[]> {
+  logger.info('[Embedding] searchTakeaways for:', queryText.slice(0, 50));
+
+  const queryEmbedding = await getEmbedding(queryText, { turnId });
+  if (!queryEmbedding) {
+    logger.warn('[Embedding] Failed to generate query embedding for takeaway search');
+    return [];
+  }
+
+  const results = await prisma.$queryRaw<
+    Array<{
+      takeaway_id: string;
+      content: string;
+      theme: string | null;
+      type: string;
+      session_id: string;
+      session_date: Date;
+      distance: number;
+    }>
+  >`
+    SELECT
+      st.id as takeaway_id,
+      st.content,
+      st.theme,
+      st.type,
+      st."sessionId" as session_id,
+      iws."createdAt" as session_date,
+      st.embedding <=> ${vectorToSql(queryEmbedding)}::vector as distance
+    FROM "SessionTakeaway" st
+    JOIN "InnerWorkSession" iws ON st."sessionId" = iws.id
+    WHERE iws."userId" = ${userId}
+      AND st.embedding IS NOT NULL
+      AND iws.status != 'ARCHIVED'
+    ORDER BY distance ASC
+    LIMIT ${limit * 2}
+  `;
+
+  return results
+    .map((r) => ({
+      takeawayId: r.takeaway_id,
+      content: r.content,
+      theme: r.theme,
+      type: r.type,
+      sessionId: r.session_id,
+      sessionDate: r.session_date.toISOString(),
+      similarity: 1 - r.distance / 2,
+    }))
+    .filter((r) => r.similarity >= threshold)
+    .slice(0, limit);
+}
+
+/**
+ * Find similar takeaways for auto-linking after distillation.
+ * Searches existing takeaways (excluding the given takeaway and its session peers)
+ * for semantic matches above the linking threshold.
+ *
+ * @param takeawayId - The new takeaway to find links for
+ * @param userId - The user who owns the takeaways
+ * @param sessionId - The session this takeaway belongs to (excluded from matches to avoid self-links)
+ * @param threshold - Minimum similarity for auto-linking (default 0.40)
+ * @param limit - Maximum links to create
+ */
+export async function findSimilarTakeaways(
+  takeawayId: string,
+  userId: string,
+  sessionId: string,
+  threshold: number = 0.55,
+  limit: number = 5,
+): Promise<Array<{ takeawayId: string; similarity: number }>> {
+  logger.info(`[Embedding] findSimilarTakeaways for takeaway ${takeawayId}`);
+
+  // Get this takeaway's embedding
+  const result = await prisma.$queryRaw<Array<{ embedding_exists: boolean }>>`
+    SELECT (embedding IS NOT NULL) as embedding_exists
+    FROM "SessionTakeaway"
+    WHERE id = ${takeawayId}
+  `;
+
+  if (!result[0]?.embedding_exists) {
+    logger.info(`[Embedding] Takeaway ${takeawayId} has no embedding yet`);
+    return [];
+  }
+
+  // Find similar takeaways from other sessions
+  const matches = await prisma.$queryRaw<
+    Array<{ target_id: string; distance: number }>
+  >`
+    SELECT
+      other.id as target_id,
+      other.embedding <=> (
+        SELECT embedding FROM "SessionTakeaway" WHERE id = ${takeawayId}
+      ) as distance
+    FROM "SessionTakeaway" other
+    JOIN "InnerWorkSession" iws ON other."sessionId" = iws.id
+    WHERE iws."userId" = ${userId}
+      AND other.id != ${takeawayId}
+      AND other."sessionId" != ${sessionId}
+      AND other.embedding IS NOT NULL
+      AND iws.status != 'ARCHIVED'
+    ORDER BY distance ASC
+    LIMIT ${limit * 2}
+  `;
+
+  return matches
+    .map((m) => ({
+      takeawayId: m.target_id,
+      similarity: 1 - m.distance / 2,
+    }))
+    .filter((m) => m.similarity >= threshold)
+    .slice(0, limit);
+}
+
+// ============================================================================
 // Legacy Session Embeddings (for backward compatibility during migration)
 // ============================================================================
 
@@ -473,13 +663,13 @@ export async function findSimilarSessions(
   threshold: number = 0.7,
   turnId?: string
 ): Promise<SimilarSession[]> {
-  console.log('[Embedding] findSimilarSessions - generating query embedding');
+  logger.info('[Embedding] findSimilarSessions - generating query embedding');
   const queryEmbedding = await getEmbedding(queryText, { turnId });
   if (!queryEmbedding) {
-    console.warn('[Embedding] Failed to generate query embedding (Bedrock not configured?)');
+    logger.warn('[Embedding] Failed to generate query embedding (Bedrock not configured?)');
     return [];
   }
-  console.log('[Embedding] Query embedding generated, dimensions:', queryEmbedding.length);
+  logger.info('[Embedding] Query embedding generated, dimensions:', queryEmbedding.length);
 
   // Try new contentEmbedding first, fall back to legacy embedding
   const results = await prisma.$queryRaw<
@@ -522,12 +712,12 @@ export async function findRelevantSessions(
   limit: number = 3,
   turnId?: string
 ): Promise<SimilarSession[]> {
-  console.log('[Embedding] findRelevantSessions for:', userMessage.slice(0, 50));
+  logger.info('[Embedding] findRelevantSessions for:', userMessage.slice(0, 50));
 
   // First try vector search
   const vectorResults = await findSimilarSessions(userId, userMessage, limit, 0.5, turnId);
 
-  console.log('[Embedding] Vector search results:', vectorResults.length);
+  logger.info('[Embedding] Vector search results:', vectorResults.length);
 
   if (vectorResults.length > 0) {
     return vectorResults;

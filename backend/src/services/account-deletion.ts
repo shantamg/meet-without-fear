@@ -15,6 +15,8 @@
  */
 
 import { prisma } from '../lib/prisma';
+import { logger } from '../lib/logger';
+import { publishSessionEvent } from './realtime';
 
 export interface AccountDeletionSummary {
   sessionsAbandoned: number;
@@ -63,14 +65,27 @@ export async function deleteAccountWithNotifications(
     },
   });
 
-  // Step 2: Mark active sessions as ABANDONED
+  // Step 2: Mark active sessions as ABANDONED and notify partners
   for (const session of activeSessions) {
-    // Mark session as abandoned
     await prisma.session.update({
       where: { id: session.id },
       data: { status: 'ABANDONED' },
     });
     sessionsAbandoned++;
+
+    // Notify partner that the session has been abandoned
+    const partner = session.relationship.members.find((m) => m.userId !== userId);
+    if (partner) {
+      try {
+        await publishSessionEvent(session.id, 'session.abandoned', {
+          reason: 'partner_deleted_account',
+          partnerName: displayName,
+        });
+        partnersNotified++;
+      } catch (error) {
+        logger.warn(`[AccountDeletion] Failed to notify partner ${partner.userId}:`, { error });
+      }
+    }
   }
 
   // Step 3: Anonymize GlobalLibraryItem contributions (keep content, remove reference)
@@ -136,12 +151,28 @@ export async function deleteAccountWithNotifications(
   // The schema is configured with:
   // - onDelete: Cascade for user's private data (auto-deleted)
   // - onDelete: SetNull for shared content (anonymized, preserved for partner)
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { clerkId: true },
+  });
+  const clerkId = user?.clerkId;
+
   await prisma.user.delete({
     where: { id: userId },
   });
 
   // Add 1 for the user record itself
   dataRecordsDeleted += 1;
+
+  // Step 8: Delete Clerk user (after Prisma delete so DB is clean even if Clerk fails)
+  if (clerkId) {
+    try {
+      const { clerkClient } = await import('@clerk/express');
+      await clerkClient.users.deleteUser(clerkId);
+    } catch (error) {
+      logger.error(`[AccountDeletion] Failed to delete Clerk user ${clerkId}:`, { error });
+    }
+  }
 
   return {
     sessionsAbandoned,

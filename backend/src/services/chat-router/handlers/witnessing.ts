@@ -12,6 +12,7 @@
  * - Soft session suggestions: Offering to create sessions without forcing
  */
 
+import { logger } from '../../../lib/logger';
 import { ChatIntent } from '@meet-without-fear/shared';
 import { IntentHandler, IntentHandlerContext, IntentHandlerResult } from '../types';
 import {
@@ -103,7 +104,7 @@ export const witnessingHandler: IntentHandler = {
         },
       };
     } catch (error) {
-      console.error('[WitnessingHandler] Error:', error);
+      logger.error('[WitnessingHandler] Error:', error);
 
       // Fallback to simple acknowledgment
       return {

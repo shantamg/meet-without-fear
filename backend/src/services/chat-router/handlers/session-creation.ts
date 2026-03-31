@@ -5,6 +5,7 @@
  * Allows users to start sessions by naturally mentioning a person.
  */
 
+import { logger } from '../../../lib/logger';
 import { ChatIntent, SessionCreationState, SessionSummaryDTO } from '@meet-without-fear/shared';
 import { prisma } from '../../../lib/prisma';
 import { mapSessionToSummary } from '../../../utils/session';
@@ -48,7 +49,7 @@ export const sessionCreationHandler: IntentHandler = {
     // Get or create state
     let state = creationState.get(userId);
     if (!state) {
-      console.log('[SessionCreation] Creating new state for user:', userId);
+      logger.info('[SessionCreation] Creating new state for user:', userId);
       state = {
         step: 'GATHERING_PERSON',
         person: {},
@@ -57,7 +58,7 @@ export const sessionCreationHandler: IntentHandler = {
       };
       creationState.set(userId, state);
     } else {
-      console.log('[SessionCreation] Existing state:', {
+      logger.info('[SessionCreation] Existing state:', {
         step: state.step,
         person: state.person,
         historyLength: state.conversationHistory?.length || 0,
@@ -72,7 +73,7 @@ export const sessionCreationHandler: IntentHandler = {
       timestamp: new Date().toISOString(),
     });
     state = creationState.update(userId, { conversationHistory: history });
-    console.log('[SessionCreation] Added user message, history length:', history.length);
+    logger.info('[SessionCreation] Added user message, history length:', history.length);
 
     // Update with newly extracted info
     if (intent.person) {
@@ -163,7 +164,7 @@ async function createSession(
 ): Promise<IntentHandlerResult> {
   const { person, context, conversationHistory } = state;
 
-  console.log('[SessionCreation] Creating session:', {
+  logger.info('[SessionCreation] Creating session:', {
     person,
     context,
     conversationHistoryLength: conversationHistory?.length || 0,
@@ -250,7 +251,7 @@ async function createSession(
     // Save conversation history as messages in the session
     let messageIds: string[] = [];
     if (conversationHistory && conversationHistory.length > 0) {
-      console.log('[SessionCreation] Saving conversation history:', conversationHistory.length, 'messages');
+      logger.info('[SessionCreation] Saving conversation history:', conversationHistory.length, 'messages');
       // Create messages and get their IDs
       const messages = await Promise.all(
         conversationHistory.map(async (msg, index) => {
@@ -267,9 +268,9 @@ async function createSession(
         })
       );
       messageIds = messages.map((m) => m.id);
-      console.log('[SessionCreation] Saved messages:', messageIds);
+      logger.info('[SessionCreation] Saved messages:', messageIds);
     } else {
-      console.log('[SessionCreation] No conversation history to save');
+      logger.info('[SessionCreation] No conversation history to save');
     }
 
     // Also pull in any pre-session messages from witnessing mode
@@ -277,10 +278,10 @@ async function createSession(
     try {
       const preSessionCount = await convertPreSessionToSessionMessages(userId, session.id);
       if (preSessionCount > 0) {
-        console.log('[SessionCreation] Converted pre-session messages:', preSessionCount);
+        logger.info('[SessionCreation] Converted pre-session messages:', preSessionCount);
       }
     } catch (err) {
-      console.warn('[SessionCreation] Failed to convert pre-session messages:', err);
+      logger.warn('[SessionCreation] Failed to convert pre-session messages:', err);
       // Non-fatal - continue with session creation
     }
 
@@ -293,7 +294,7 @@ async function createSession(
     updateSessionSummary(session.id, userId, turnId)
       .then(() => embedSessionContent(session.id, userId, turnId))
       .catch((err: unknown) =>
-        console.warn('[SessionCreation] Failed to update summary/embedding:', err)
+        logger.warn('[SessionCreation] Failed to update summary/embedding:', err)
       );
 
     // Clear creation state
@@ -336,7 +337,7 @@ async function createSession(
       },
     };
   } catch (error) {
-    console.error('[SessionCreation] Failed to create session:', error);
+    logger.error('[SessionCreation] Failed to create session:', error);
     creationState.delete(userId);
 
     return {
@@ -384,5 +385,5 @@ export function startPendingCreation(userId: string, personFirstName: string): v
     confirmedByUser: false,
     conversationHistory: [],
   });
-  console.log('[SessionCreation] Started pending creation for:', personFirstName);
+  logger.info('[SessionCreation] Started pending creation for:', personFirstName);
 }

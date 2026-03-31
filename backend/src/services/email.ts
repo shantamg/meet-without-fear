@@ -1,3 +1,4 @@
+import { logger } from '../lib/logger';
 import { Resend } from 'resend';
 
 // Initialize Resend client - required
@@ -29,7 +30,7 @@ export async function sendInvitationEmail(
   invitationUrl: string
 ): Promise<EmailResult> {
   if (!process.env.RESEND_API_KEY) {
-    console.error('[Email] RESEND_API_KEY not configured');
+    logger.error('[Email] RESEND_API_KEY not configured');
     return {
       success: false,
       error: 'Email service not configured: set RESEND_API_KEY',
@@ -46,21 +47,21 @@ export async function sendInvitationEmail(
     });
 
     if (error) {
-      console.error('[Email] Failed to send invitation:', error);
+      logger.error('[Email] Failed to send invitation:', error);
       return {
         success: false,
         error: error.message,
       };
     }
 
-    console.log('[Email] Invitation sent successfully:', data?.id);
+    logger.info('[Email] Invitation sent successfully:', data?.id);
     return {
       success: true,
       messageId: data?.id,
     };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-    console.error('[Email] Exception sending invitation:', errorMessage);
+    logger.error('[Email] Exception sending invitation:', errorMessage);
     return {
       success: false,
       error: errorMessage,

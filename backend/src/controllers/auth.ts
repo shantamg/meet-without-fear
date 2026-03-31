@@ -6,6 +6,7 @@
  */
 
 import { Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { getUser, AuthUser } from '../middleware/auth';
 import { asyncHandler, NotFoundError, ValidationError } from '../middleware/errors';
@@ -263,7 +264,7 @@ export const getAblyToken = asyncHandler(async (req: Request, res: Response): Pr
   } catch (error) {
     // If Ably fails, log and return mock for development
     if (process.env.NODE_ENV !== 'production') {
-      console.error('[Ably] Token generation failed:', error);
+      logger.error('[Ably] Token generation failed:', error);
 
       // Return mock token for development (when Ably is not configured properly)
       const mockToken = {

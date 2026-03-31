@@ -7,6 +7,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ErrorCode, ApiError, ApiResponse } from '@meet-without-fear/shared';
 import { ZodError } from 'zod';
+import { logger } from '../lib/logger';
 
 // ============================================================================
 // API Error Classes
@@ -110,7 +111,7 @@ export function errorHandler(
 ): void {
   // Log error for debugging (in production, use proper logging)
   if (process.env.NODE_ENV !== 'test') {
-    console.error('[Error]', {
+    logger.error('[Error]', {
       name: err.name,
       message: err.message,
       stack: err.stack,

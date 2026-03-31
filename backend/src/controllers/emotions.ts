@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
 import { NotFoundError, ValidationError } from '../middleware/errors';
@@ -128,7 +129,7 @@ export async function recordEmotion(req: Request, res: Response): Promise<void> 
     };
     res.json(response);
   } catch (error) {
-    console.error('Error recording emotion:', error);
+    logger.error('Error recording emotion:', error);
     const response: ApiResponse<never> = {
       success: false,
       error: { code: ErrorCode.INTERNAL_ERROR, message: 'Failed to record emotion' },
@@ -181,7 +182,7 @@ export async function getEmotions(req: Request, res: Response): Promise<void> {
     };
     res.json(response);
   } catch (error) {
-    console.error('Error getting emotions:', error);
+    logger.error('Error getting emotions:', error);
     const response: ApiResponse<never> = {
       success: false,
       error: { code: ErrorCode.INTERNAL_ERROR, message: 'Failed to get emotions' },
@@ -258,7 +259,7 @@ export async function completeExercise(req: Request, res: Response): Promise<voi
     };
     res.json(response);
   } catch (error) {
-    console.error('Error completing exercise:', error);
+    logger.error('Error completing exercise:', error);
     const response: ApiResponse<never> = {
       success: false,
       error: { code: ErrorCode.INTERNAL_ERROR, message: 'Failed to log exercise completion' },

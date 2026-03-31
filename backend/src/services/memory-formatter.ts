@@ -6,6 +6,7 @@
  */
 
 import { getHaikuJson } from '../lib/bedrock';
+import { logger } from '../lib/logger';
 import { validateMemory } from './memory-validator';
 import type {
   MemoryCategory,
@@ -63,7 +64,7 @@ export async function formatMemoryRequest(
 ): Promise<FormatMemoryResponse> {
   const logPrefix = '[Memory Formatter]';
 
-  console.log(`${logPrefix} Formatting user input: "${userInput.substring(0, 100)}..."`);
+  logger.info(`${logPrefix} Formatting user input: "${userInput.substring(0, 100)}..."`);
 
   if (!userInput || userInput.trim().length < 3) {
     return {
@@ -121,7 +122,7 @@ Note: This memory will apply globally to all sessions.`;
       callType: BrainActivityCallType.MEMORY_FORMATTING,
     });
 
-    console.log(`${logPrefix} Haiku response:`, JSON.stringify(response, null, 2));
+    logger.info(`${logPrefix} Haiku response:`, JSON.stringify(response, null, 2));
 
     if (!response) {
       return {
@@ -142,7 +143,7 @@ Note: This memory will apply globally to all sessions.`;
     // Validate category
     const category = normalizeCategory(response.category || '');
     if (!category) {
-      console.warn(`${logPrefix} Invalid category from Haiku: ${response.category}`);
+      logger.warn(`${logPrefix} Invalid category from Haiku: ${response.category}`);
       return {
         valid: false,
         rejectionReason: 'Unable to categorize this memory. Please rephrase.',
@@ -152,7 +153,7 @@ Note: This memory will apply globally to all sessions.`;
     // Run through memory validator for double-check
     const validationResult = await validateMemory(response.content, category, { useAI: true });
     if (!validationResult.valid) {
-      console.log(`${logPrefix} Validation failed: ${validationResult.reason}`);
+      logger.info(`${logPrefix} Validation failed: ${validationResult.reason}`);
       return {
         valid: false,
         rejectionReason: validationResult.reason ||
@@ -166,14 +167,14 @@ Note: This memory will apply globally to all sessions.`;
       reasoning: response.reasoning || '',
     };
 
-    console.log(`${logPrefix} Successfully formatted memory:`, suggestion);
+    logger.info(`${logPrefix} Successfully formatted memory:`, suggestion);
 
     return {
       valid: true,
       suggestion,
     };
   } catch (error) {
-    console.error(`${logPrefix} Error formatting memory:`, error);
+    logger.error(`${logPrefix} Error formatting memory:`, error);
     return {
       valid: false,
       rejectionReason: 'An error occurred. Please try again.',
@@ -196,7 +197,7 @@ export async function processMemoryUpdate(
 ): Promise<UpdateMemoryAIResponse> {
   const logPrefix = '[Memory Formatter]';
 
-  console.log(`${logPrefix} Processing update request:`, {
+  logger.info(`${logPrefix} Processing update request:`, {
     original: originalContent,
     changeRequest: changeRequest.substring(0, 100),
   });
@@ -260,7 +261,7 @@ Apply the requested changes while keeping the memory clear and concise.`;
       callType: BrainActivityCallType.MEMORY_FORMATTING,
     });
 
-    console.log(`${logPrefix} Haiku update response:`, JSON.stringify(response, null, 2));
+    logger.info(`${logPrefix} Haiku update response:`, JSON.stringify(response, null, 2));
 
     if (!response) {
       return {
@@ -290,7 +291,7 @@ Apply the requested changes while keeping the memory clear and concise.`;
     // Run through memory validator for double-check
     const validationResult = await validateMemory(response.updatedContent, updatedCategory, { useAI: true });
     if (!validationResult.valid) {
-      console.log(`${logPrefix} Validation failed: ${validationResult.reason}`);
+      logger.info(`${logPrefix} Validation failed: ${validationResult.reason}`);
       return {
         valid: false,
         originalContent,
@@ -300,7 +301,7 @@ Apply the requested changes while keeping the memory clear and concise.`;
       };
     }
 
-    console.log(`${logPrefix} Successfully processed update:`, {
+    logger.info(`${logPrefix} Successfully processed update:`, {
       updatedContent: response.updatedContent,
       updatedCategory,
       changesSummary: response.changesSummary,
@@ -315,7 +316,7 @@ Apply the requested changes while keeping the memory clear and concise.`;
       changesSummary: response.changesSummary,
     };
   } catch (error) {
-    console.error(`${logPrefix} Error processing update:`, error);
+    logger.error(`${logPrefix} Error processing update:`, error);
     return {
       valid: false,
       originalContent,

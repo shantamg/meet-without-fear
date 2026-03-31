@@ -18,7 +18,8 @@ import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 import { prisma } from '../lib/prisma';
 import { detectRecurringTheme } from './theme-detector';
-import type { TakeawayDTO } from '@meet-without-fear/shared';
+import { embedTakeawayBatch, findSimilarTakeaways } from './embedding';
+import type { TakeawayDTO, TakeawayType } from '@meet-without-fear/shared';
 
 // ============================================================================
 // Types
@@ -33,6 +34,7 @@ export interface DistillSessionInput {
 interface RawTakeaway {
   content: string;
   theme?: string | null;
+  type?: 'insight' | 'action_item' | 'intention';
 }
 
 // ============================================================================
@@ -65,6 +67,8 @@ export function normalizeTakeaways(raw: unknown): RawTakeaway[] {
 
   if (candidates.length === 0) return [];
 
+  const VALID_TYPES = new Set(['insight', 'action_item', 'intention']);
+
   const valid = candidates
     .filter(
       (item): item is RawTakeaway =>
@@ -72,6 +76,11 @@ export function normalizeTakeaways(raw: unknown): RawTakeaway[] {
         typeof item === 'object' &&
         typeof (item as RawTakeaway).content === 'string',
     )
+    .map((item) => ({
+      ...item,
+      // Normalize type — default to 'insight' if missing or invalid
+      type: item.type && VALID_TYPES.has(item.type) ? item.type : ('insight' as const),
+    }))
     .slice(0, 10); // hard cap
 
   return valid;
@@ -107,12 +116,16 @@ Rules:
 - NO psychological labels (e.g., "attachment wound", "codependency", "trauma response")
 - NO clinical language — treat this as an organizational tool, not therapy
 - Organize by theme if multiple topics came up
+- Classify each takeaway as one of:
+  - "insight" — a reflection, observation, or realization
+  - "action_item" — something concrete to do (e.g., "I need to talk to my manager")
+  - "intention" — a desire or aspiration that isn't a concrete action (e.g., "I want to be more patient")
 
 Output ONLY valid JSON in this exact shape:
 {
   "takeaways": [
-    { "content": "...", "theme": "..." },
-    { "content": "..." }
+    { "content": "...", "theme": "...", "type": "insight" },
+    { "content": "...", "type": "action_item" }
   ]
 }`;
 }
@@ -194,14 +207,17 @@ export async function distillSession({
     prisma.sessionTakeaway.deleteMany({
       where: { sessionId, source: 'AI' },
     }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     prisma.sessionTakeaway.createMany({
       data: normalized.map((t, i) => ({
         sessionId,
         content: t.content,
         theme: t.theme ?? null,
-        source: 'AI',
+        source: 'AI' as const,
+        // 'type' column added in migration — cast needed until prisma generate runs
+        type: (t.type?.toUpperCase() ?? 'INSIGHT'),
         position: i,
-      })),
+      } as any)),
     }),
     prisma.innerWorkSession.update({
       where: { id: sessionId },
@@ -230,23 +246,94 @@ export async function distillSession({
     `[Distillation] Session ${sessionId} distilled: ${allTakeaways.length} takeaway(s)`,
   );
 
-  return allTakeaways.map(
-    (t: {
-      id: string;
-      content: string;
-      theme: string | null;
-      source: string;
-      position: number;
-      createdAt: Date;
-      updatedAt: Date;
-    }): TakeawayDTO => ({
-      id: t.id,
-      content: t.content,
-      theme: t.theme,
-      source: t.source as 'AI' | 'USER',
-      position: t.position,
-      createdAt: t.createdAt.toISOString(),
-      updatedAt: t.updatedAt.toISOString(),
-    }),
-  );
+  // 8. Fire-and-forget: embed takeaways and auto-link to similar existing takeaways
+  const newAiTakeaways = allTakeaways.filter((t) => t.source === 'AI');
+  if (newAiTakeaways.length > 0) {
+    embedAndLinkTakeaways(
+      newAiTakeaways.map((t) => ({ id: t.id, content: t.content })),
+      userId,
+      sessionId,
+    ).catch(
+      (err: unknown) => logger.warn('[Distillation] Fire-and-forget embed+link failed:', err),
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return allTakeaways.map((t: any) => mapTakeawayToDTO(t));
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function mapTakeawayToDTO(t: {
+  id: string;
+  content: string;
+  theme: string | null;
+  source: string;
+  type: string;
+  position: number;
+  resolved: boolean;
+  resolvedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): TakeawayDTO {
+  return {
+    id: t.id,
+    content: t.content,
+    theme: t.theme,
+    source: t.source as 'AI' | 'USER',
+    type: t.type as TakeawayType,
+    position: t.position,
+    resolved: t.resolved,
+    resolvedAt: t.resolvedAt?.toISOString() ?? null,
+    createdAt: t.createdAt.toISOString(),
+    updatedAt: t.updatedAt.toISOString(),
+  };
+}
+
+export { mapTakeawayToDTO };
+
+/**
+ * Embed new takeaways and create auto-links to similar existing ones.
+ * Called fire-and-forget after distillation transaction commits.
+ */
+async function embedAndLinkTakeaways(
+  takeaways: Array<{ id: string; content: string }>,
+  userId: string,
+  sessionId: string,
+): Promise<void> {
+  // Step 1: Embed all new takeaways
+  const embeddedIds = await embedTakeawayBatch(takeaways);
+  logger.info(`[Distillation] Embedded ${embeddedIds.length}/${takeaways.length} takeaways`);
+
+  // Step 2: For each embedded takeaway, find and create links to similar ones
+  for (const takeawayId of embeddedIds) {
+    const matches = await findSimilarTakeaways(takeawayId, userId, sessionId);
+    if (matches.length === 0) continue;
+
+    // Create TakeawayLink records (bidirectional: we store source→target)
+    for (const match of matches) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (prisma as any).takeawayLink.create({
+          data: {
+            sourceId: takeawayId,
+            targetId: match.takeawayId,
+            linkType: 'AI_SEMANTIC',
+            similarity: match.similarity,
+          },
+        });
+        logger.info(
+          `[Distillation] Auto-linked takeaway ${takeawayId} → ${match.takeawayId} (similarity: ${match.similarity.toFixed(3)})`,
+        );
+      } catch (err: unknown) {
+        // Unique constraint violation = link already exists — safe to ignore
+        if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2002') {
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
 }

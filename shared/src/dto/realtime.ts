@@ -105,6 +105,7 @@ export type SessionEventType =
   | 'session.paused'
   | 'session.resumed'
   | 'session.resolved'
+  | 'session.abandoned'
   // Invitations
   | 'invitation.declined'
   | 'invitation.confirmed'

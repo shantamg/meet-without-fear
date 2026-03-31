@@ -167,13 +167,8 @@ describe('Realtime Service', () => {
     it('returns false when presence check fails', async () => {
       mockPresenceGet.mockRejectedValueOnce(new Error('Connection failed'));
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
       const result = await isUserPresent(testSessionId, testUserId);
       expect(result).toBe(false);
-      expect(consoleSpy).toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
     });
   });
 

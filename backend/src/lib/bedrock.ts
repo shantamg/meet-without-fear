@@ -20,8 +20,13 @@ import { ActivityType } from '@prisma/client';
 import { recordLlmCall, getContextSizesForTurn } from '../services/llm-telemetry';
 import { getFixtureResponseByIndex, getFixtureOperationResponse } from './e2e-fixtures';
 import { getE2EFixtureId } from './request-context';
+import { bedrockCircuitBreaker, embeddingCircuitBreaker } from '../utils/circuit-breaker';
+import { logger } from './logger';
 import * as fs from 'fs';
 import * as path from 'path';
+
+// Re-export circuit breakers for monitoring endpoints
+export { bedrockCircuitBreaker, embeddingCircuitBreaker };
 
 // AWS Bedrock Pricing (USD per 1,000 tokens) - Updated Feb 2026
 const PRICING: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
@@ -118,7 +123,7 @@ function logPromptToFile(params: {
     return filepath;
   } catch (error) {
     // Silent fail - don't let logging break the main flow
-    console.warn('[Bedrock] Failed to log prompt to file:', error);
+    logger.warn('[Bedrock] Failed to log prompt to file:', error);
     return null;
   }
 }
@@ -139,7 +144,7 @@ function logResponseToFile(promptFilepath: string | null, response: string | nul
     const responseFilepath = promptFilepath.replace(/\.txt$/, '_response.txt');
     fs.writeFileSync(responseFilepath, response);
   } catch (error) {
-    console.warn('[Bedrock] Failed to log response to file:', error);
+    logger.warn('[Bedrock] Failed to log response to file:', error);
   }
 }
 
@@ -179,7 +184,7 @@ let anthropicClient: AnthropicBedrock | null | undefined;
 export function getBedrockClient(): BedrockRuntimeClient | null {
   if (bedrockClient === undefined) {
     if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
-      console.warn('[Bedrock] AWS credentials not configured - AI services will use mock responses');
+      logger.warn('[Bedrock] AWS credentials not configured - AI services will use mock responses');
       bedrockClient = null;
     } else {
       bedrockClient = new BedrockRuntimeClient({
@@ -339,12 +344,19 @@ export async function getModelCompletion(
 ): Promise<string | null> {
   // E2E Mock Mode: Return null immediately to trigger mock response path
   if (isMockLLMEnabled()) {
-    console.log(`[Bedrock] MOCK_LLM enabled, skipping ${model} call`);
+    logger.info(`[Bedrock] MOCK_LLM enabled, skipping ${model} call`);
     return null;
   }
 
   const client = getAnthropicBedrockClient();
   if (!client) {
+    return null;
+  }
+
+  // Circuit breaker fast-fail: if Bedrock is in OPEN state, return null immediately
+  const cbStats = bedrockCircuitBreaker.getStats();
+  if (cbStats.state === 'OPEN') {
+    logger.warn(`[Bedrock] Circuit breaker OPEN - skipping ${model} call for ${options.operation}`);
     return null;
   }
 
@@ -402,6 +414,9 @@ export async function getModelCompletion(
       messages: anthropicMessages,
     });
 
+    // Record success with circuit breaker (resets consecutive failure count)
+    bedrockCircuitBreaker.recordSuccess();
+
     const durationMs = Date.now() - startTime;
     const inputTokens = result.usage.input_tokens;
     const outputTokens = result.usage.output_tokens;
@@ -453,7 +468,9 @@ export async function getModelCompletion(
     logResponseToFile(promptFilepath, responseText);
     return responseText;
   } catch (error) {
-    console.error(`[Bedrock] Failed to get response from ${model}:`, error);
+    // Record failure with circuit breaker (may trip to OPEN state)
+    bedrockCircuitBreaker.recordFailure(operation);
+    logger.error(`[Bedrock] Failed to get response from ${model}:`, error);
     await brainService.failActivity(activity.id, error);
     return null;
   }
@@ -482,8 +499,8 @@ export async function getHaikuJson<T>(
   try {
     return extractJsonFromResponse(response) as T;
   } catch (error) {
-    console.error('[Bedrock] Failed to parse Haiku JSON response:', error);
-    console.error('[Bedrock] Raw response:', response);
+    logger.error('[Bedrock] Failed to parse Haiku JSON response:', error);
+    logger.error('[Bedrock] Raw response:', response);
     // Retry once
     const retry = await getModelCompletion('haiku', {
       ...options,
@@ -494,7 +511,7 @@ export async function getHaikuJson<T>(
     try {
       return extractJsonFromResponse(retry) as T;
     } catch {
-      console.error('[Bedrock] Retry also failed to parse Haiku JSON');
+      logger.error('[Bedrock] Retry also failed to parse Haiku JSON');
       return null;
     }
   }
@@ -515,10 +532,10 @@ export async function getSonnetResponse(
     if (fixtureId) {
       const mockResponse = getFixtureOperationResponse(fixtureId, operation);
       if (mockResponse) {
-        console.log(`[Bedrock] MOCK_LLM enabled, returning fixture response for operation: ${operation}`);
+        logger.info(`[Bedrock] MOCK_LLM enabled, returning fixture response for operation: ${operation}`);
         return mockResponse;
       }
-      console.log(`[Bedrock] MOCK_LLM enabled, no fixture response for operation: ${operation}`);
+      logger.info(`[Bedrock] MOCK_LLM enabled, no fixture response for operation: ${operation}`);
     }
     // Fall through to getModelCompletion which will return null
   }
@@ -554,6 +571,13 @@ export async function getEmbedding(text: string, options?: { sessionId?: string;
     return null;
   }
 
+  // Circuit breaker fast-fail: if embedding service is in OPEN state, return null
+  const embCbStats = embeddingCircuitBreaker.getStats();
+  if (embCbStats.state === 'OPEN') {
+    logger.warn('[Bedrock] Embedding circuit breaker OPEN - skipping embedding call');
+    return null;
+  }
+
   // Truncate text if too long (Titan has ~8000 token limit)
   const truncatedText = text.slice(0, 30000); // Rough character limit
 
@@ -584,7 +608,7 @@ export async function getEmbedding(text: string, options?: { sessionId?: string;
           input: { text: truncatedText },
         });
       } catch (logError) {
-        console.warn('[Bedrock] Failed to log embedding activity (continuing without logging):', (logError as Error).message);
+        logger.warn('[Bedrock] Failed to log embedding activity (continuing without logging):', (logError as Error).message);
       }
     }
 
@@ -616,10 +640,15 @@ export async function getEmbedding(text: string, options?: { sessionId?: string;
       }).catch(() => {});
     }
 
+    // Record success with embedding circuit breaker
+    embeddingCircuitBreaker.recordSuccess();
+
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
     return responseBody.embedding as number[];
   } catch (error) {
-    console.error('[Bedrock] Failed to generate embedding:', error);
+    // Record failure with embedding circuit breaker (may trip to OPEN state)
+    embeddingCircuitBreaker.recordFailure('embedding');
+    logger.error('[Bedrock] Failed to generate embedding:', error);
     return null;
   }
 }
@@ -647,7 +676,8 @@ export async function getEmbeddings(texts: string[]): Promise<(number[] | null)[
 export type StreamEvent =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; toolUseId: string; name: string; input: Record<string, unknown> }
-  | { type: 'done'; usage: { inputTokens: number; outputTokens: number } };
+  | { type: 'done'; usage: { inputTokens: number; outputTokens: number }; error?: undefined }
+  | { type: 'done'; usage: { inputTokens: number; outputTokens: number }; error: string };
 
 /**
  * Anthropic tool definition type for the Messages API.
@@ -696,18 +726,18 @@ export async function* getSonnetStreamingResponse(
     const fixtureId = getE2EFixtureId();
     if (fixtureId && options.mockResponseIndex !== undefined) {
       try {
-        console.log(`[Bedrock] MOCK_LLM enabled, loading fixture ${fixtureId} index ${options.mockResponseIndex}`);
+        logger.info(`[Bedrock] MOCK_LLM enabled, loading fixture ${fixtureId} index ${options.mockResponseIndex}`);
         const mockResponse = getFixtureResponseByIndex(fixtureId, options.mockResponseIndex);
-        console.log(`[Bedrock] Yielding mock response: "${mockResponse.substring(0, 80)}..."`);
+        logger.info(`[Bedrock] Yielding mock response: "${mockResponse.substring(0, 80)}..."`);
 
         yield { type: 'text', text: mockResponse };
         yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 } };
         return;
       } catch (error) {
-        console.error('[Bedrock] Failed to load fixture response:', error);
+        logger.error('[Bedrock] Failed to load fixture response:', error);
       }
     } else {
-      console.log('[Bedrock] MOCK_LLM enabled but no fixture configured, returning empty');
+      logger.info('[Bedrock] MOCK_LLM enabled but no fixture configured, returning empty');
     }
     yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 } };
     return;
@@ -715,6 +745,14 @@ export async function* getSonnetStreamingResponse(
 
   const client = getAnthropicBedrockClient();
   if (!client) {
+    yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 } };
+    return;
+  }
+
+  // Circuit breaker fast-fail for streaming
+  const streamCbStats = bedrockCircuitBreaker.getStats();
+  if (streamCbStats.state === 'OPEN') {
+    logger.warn('[Bedrock] Circuit breaker OPEN - skipping streaming call');
     yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 } };
     return;
   }
@@ -810,7 +848,7 @@ export async function* getSonnetStreamingResponse(
         try {
           parsedInput = accumulatedToolInput ? JSON.parse(accumulatedToolInput) : {};
         } catch (parseError) {
-          console.error('[Bedrock] Failed to parse tool input JSON:', parseError);
+          logger.error('[Bedrock] Failed to parse tool input JSON:', parseError);
         }
 
         accumulatedResponseText += `\n\n[TOOL CALL: ${currentToolName}]\n${JSON.stringify(parsedInput, null, 2)}`;
@@ -870,14 +908,25 @@ export async function* getSonnetStreamingResponse(
       cacheWriteInputTokens: cacheWriteTokens,
     });
 
+    // Record success with circuit breaker
+    bedrockCircuitBreaker.recordSuccess();
+
     // Log the accumulated response
     logResponseToFile(promptFilepath, accumulatedResponseText);
 
     // Yield done event with usage
     yield { type: 'done', usage: { inputTokens, outputTokens } };
   } catch (error) {
-    console.error('[Bedrock] Streaming error:', error);
+    // Record failure with circuit breaker (may trip to OPEN state)
+    bedrockCircuitBreaker.recordFailure('streaming');
+
+    const errorMessage = (error as Error).message ?? String(error);
+    logger.error('[Bedrock] Streaming error:', errorMessage);
     await brainService.failActivity(activity.id, error);
-    throw error;
+    // Yield a done event with error flag instead of throwing.
+    // This lets the consumer handle the error gracefully via the
+    // normal event loop rather than requiring a try/catch around
+    // the async iterator.
+    yield { type: 'done', usage: { inputTokens: 0, outputTokens: 0 }, error: errorMessage };
   }
 }

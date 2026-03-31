@@ -7,6 +7,7 @@
  * for specific scenarios like explaining the process.
  */
 
+import { logger } from '../lib/logger';
 import { getSonnetResponse, BrainActivityCallType } from '../lib/bedrock';
 
 export type DispatchTag =
@@ -99,7 +100,7 @@ export async function handleDispatch(
   dispatchTag: DispatchTag,
   context: DispatchContext
 ): Promise<string | null> {
-  console.log(`[Dispatch Handler] Triggered: ${dispatchTag}`);
+  logger.info(`[Dispatch Handler] Triggered: ${dispatchTag}`);
 
   switch (dispatchTag) {
     case 'EXPLAIN_PROCESS':
@@ -118,7 +119,7 @@ Is there something specific you'd like to note down?`;
       // Unknown tags are ignored — the AI's original streamed response is used instead.
       // This handles cases where the AI freelances dispatch tags (e.g. STAGE_4_REPAIR)
       // that don't have dedicated handlers.
-      console.warn(`[Dispatch Handler] Unknown tag ignored (using AI response): ${dispatchTag}`);
+      logger.warn(`[Dispatch Handler] Unknown tag ignored (using AI response): ${dispatchTag}`);
       return null;
   }
 }
@@ -153,7 +154,7 @@ async function handleProcessExplanation(context: DispatchContext): Promise<strin
     // Fallback if AI fails
     return getFallbackProcessResponse(userMessage);
   } catch (error) {
-    console.error('[Dispatch Handler] Process explanation failed:', error);
+    logger.error('[Dispatch Handler] Process explanation failed:', error);
     return getFallbackProcessResponse(userMessage);
   }
 }
@@ -244,7 +245,7 @@ async function handleEmpathyPurposeExplanation(context: DispatchContext): Promis
 
     return getFallbackEmpathyPurposeResponse(context);
   } catch (error) {
-    console.error('[Dispatch Handler] Empathy purpose explanation failed:', error);
+    logger.error('[Dispatch Handler] Empathy purpose explanation failed:', error);
     return getFallbackEmpathyPurposeResponse(context);
   }
 }

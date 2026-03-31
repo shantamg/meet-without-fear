@@ -6,6 +6,7 @@
  */
 
 import { Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { notifyPartner } from '../services/realtime';
 import { ApiResponse, ErrorCode, signCompactRequestSchema } from '@meet-without-fear/shared';
@@ -177,7 +178,7 @@ export async function signCompact(req: Request, res: Response): Promise<void> {
           where: { id: sessionId },
           data: { status: 'ACTIVE' },
         });
-        console.log(`[signCompact] Updated session ${sessionId} status to ACTIVE (both signed)`);
+        logger.info(`[signCompact] Updated session ${sessionId} status to ACTIVE (both signed)`);
       }
 
       // Auto-advance this user from Stage 0 to Stage 1
@@ -217,7 +218,7 @@ export async function signCompact(req: Request, res: Response): Promise<void> {
           gatesSatisfied: {},
         },
       });
-      console.log(`[signCompact] Advanced user ${user.id} to Stage 1`);
+      logger.info(`[signCompact] Advanced user ${user.id} to Stage 1`);
     }
 
     // Check if there's an invitation to determine if we should notify the inviter
@@ -257,7 +258,7 @@ export async function signCompact(req: Request, res: Response): Promise<void> {
       canAdvance,
     });
   } catch (error) {
-    console.error('[signCompact] Error:', error);
+    logger.error('[signCompact] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to sign compact', 500);
   }
 }
@@ -316,7 +317,7 @@ export async function getCompactStatus(req: Request, res: Response): Promise<voi
       canAdvance: mySigned && partnerSigned,
     });
   } catch (error) {
-    console.error('[getCompactStatus] Error:', error);
+    logger.error('[getCompactStatus] Error:', error);
     errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to get compact status', 500);
   }
 }

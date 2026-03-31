@@ -10,6 +10,7 @@
  */
 
 import { Request, Response } from 'express';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { EmpathyStatus } from '@prisma/client';
 import {
@@ -67,7 +68,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
     const result = await runReconciler(sessionId);
 
     if (!result.bothCompleted) {
-      console.warn(`[triggerReconcilerAndUpdateStatuses] Reconciler incomplete: ${result.blockingReason}`);
+      logger.warn(`[triggerReconcilerAndUpdateStatuses] Reconciler incomplete: ${result.blockingReason}`);
       return;
     }
 
@@ -86,7 +87,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
     });
 
     if (!session || session.relationship.members.length !== 2) {
-      console.warn('[triggerReconcilerAndUpdateStatuses] Session not found or invalid members');
+      logger.warn('[triggerReconcilerAndUpdateStatuses] Session not found or invalid members');
       return;
     }
 
@@ -128,7 +129,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
       // If context was already shared, treat as READY (skip sharing step)
       // Otherwise, use AWAITING_SHARING if gaps exist
       if (contextAlreadySharedToA) {
-        console.log(
+        logger.info(
           `[triggerReconcilerAndUpdateStatuses] Context already shared B→A, skipping AWAITING_SHARING for User A`
         );
         statusA = EmpathyStatus.READY;
@@ -144,7 +145,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         },
       });
 
-      console.log(
+      logger.info(
         `[triggerReconcilerAndUpdateStatuses] Updated User A's attempt to ${statusA} ` +
         `(alignment: ${result.aUnderstandingB.alignment.score}%, gaps: ${result.aUnderstandingB.gaps.severity})`
       );
@@ -162,12 +163,12 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
           empathyStatus: empathyStatusB,
           triggeredByUserId: userBId,
         });
-        console.log(`[triggerReconcilerAndUpdateStatuses] Published share_suggestion for subject User B`);
+        logger.info(`[triggerReconcilerAndUpdateStatuses] Published share_suggestion for subject User B`);
       }
     } else if (result.aUnderstandingB && !shouldUpdateA) {
       // A→B direction already processed by asymmetric reconciler — preserve current status
       statusA = (currentAttemptA?.status as EmpathyStatus) ?? null;
-      console.log(
+      logger.info(
         `[triggerReconcilerAndUpdateStatuses] Skipping User A update — already processed by asymmetric reconciler (status: ${statusA})`
       );
     }
@@ -188,7 +189,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
       // If context was already shared, treat as READY (skip sharing step)
       // Otherwise, use AWAITING_SHARING if gaps exist
       if (contextAlreadySharedToB) {
-        console.log(
+        logger.info(
           `[triggerReconcilerAndUpdateStatuses] Context already shared A→B, skipping AWAITING_SHARING for User B`
         );
         statusB = EmpathyStatus.READY;
@@ -204,7 +205,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
         },
       });
 
-      console.log(
+      logger.info(
         `[triggerReconcilerAndUpdateStatuses] Updated User B's attempt to ${statusB} ` +
         `(alignment: ${result.bUnderstandingA.alignment.score}%, gaps: ${result.bUnderstandingA.gaps.severity})`
       );
@@ -222,12 +223,12 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
           empathyStatus: empathyStatusA,
           triggeredByUserId: userAId,
         });
-        console.log(`[triggerReconcilerAndUpdateStatuses] Published share_suggestion for subject User A`);
+        logger.info(`[triggerReconcilerAndUpdateStatuses] Published share_suggestion for subject User A`);
       }
     } else if (result.bUnderstandingA && !shouldUpdateB) {
       // B→A direction already processed by asymmetric reconciler — preserve current status
       statusB = (currentAttemptB?.status as EmpathyStatus) ?? null;
-      console.log(
+      logger.info(
         `[triggerReconcilerAndUpdateStatuses] Skipping User B update — already processed by asymmetric reconciler (status: ${statusB})`
       );
     }
@@ -245,13 +246,13 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
       },
       empathyStatuses: allStatuses,
     });
-    console.log(`[triggerReconcilerAndUpdateStatuses] Published empathy.status_updated event with full status data`);
+    logger.info(`[triggerReconcilerAndUpdateStatuses] Published empathy.status_updated event with full status data`);
 
     // Always check if both are now READY and reveal both simultaneously
     const { checkAndRevealBothIfReady } = await import('../services/reconciler');
     await checkAndRevealBothIfReady(sessionId);
   } catch (error) {
-    console.error('[triggerReconcilerAndUpdateStatuses] Error:', error);
+    logger.error('[triggerReconcilerAndUpdateStatuses] Error:', error);
     throw error;
   }
 }
@@ -395,7 +396,7 @@ export async function saveDraft(req: Request, res: Response): Promise<void> {
       readyToShare: draft.readyToShare,
     });
   } catch (error) {
-    console.error('[saveDraft] Error:', error);
+    logger.error('[saveDraft] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to save draft', 500);
   }
 }
@@ -478,7 +479,7 @@ export async function getDraft(req: Request, res: Response): Promise<void> {
       alreadyConsented,
     });
   } catch (error) {
-    console.error('[getDraft] Error:', error);
+    logger.error('[getDraft] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get draft', 500);
   }
 }
@@ -669,7 +670,7 @@ export async function consentToShare(
     updateSessionSummary(sessionId, user.id, turnId)
       .then(() => embedSessionContent(sessionId, user.id, turnId))
       .catch((err: unknown) =>
-        console.warn('[consentToShare] Failed to update summary/embedding:', err)
+        logger.warn('[consentToShare] Failed to update summary/embedding:', err)
       );
 
     // Check if partner has also consented (only if we have a partner)
@@ -702,7 +703,7 @@ export async function consentToShare(
 
         // Kick off reconciler in background - it will update statuses to REVEALED or NEEDS_WORK
         triggerReconcilerAndUpdateStatuses(sessionId).catch((err) =>
-          console.warn('[consentToShare] Failed to run reconciler after both shared:', err)
+          logger.warn('[consentToShare] Failed to run reconciler after both shared:', err)
         );
       }
     }
@@ -813,7 +814,7 @@ Respond in JSON format:
       updateSessionSummary(sessionId, user.id, turnId)
         .then(() => embedSessionContent(sessionId, user.id, turnId))
         .catch((err: unknown) =>
-          console.warn('[consentToShare] Failed to update summary/embedding after transition:', err)
+          logger.warn('[consentToShare] Failed to update summary/embedding after transition:', err)
         );
 
       transitionMessage = {
@@ -835,7 +836,7 @@ Respond in JSON format:
         messageId: aiMessage.id,
       }); */
     } catch (error) {
-      console.error('[consentToShare] Failed to generate transition message:', error);
+      logger.error('[consentToShare] Failed to generate transition message:', error);
       // Continue without transition message - not a critical failure
     }
 
@@ -854,7 +855,7 @@ Respond in JSON format:
       transitionMessage,
     });
   } catch (error) {
-    console.error('[consentToShare] Error:', error);
+    logger.error('[consentToShare] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to consent to share', 500);
   }
 }
@@ -953,7 +954,7 @@ export async function getPartnerEmpathy(
       awaitingRevision: validation ? validation.validated === false : false,
     });
   } catch (error) {
-    console.error('[getPartnerEmpathy] Error:', error);
+    logger.error('[getPartnerEmpathy] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get partner empathy', 500);
   }
 }
@@ -1183,12 +1184,12 @@ export async function validateEmpathy(
     // Check if both have validated (Accurate/Partial) and trigger transition
     if (validated && partnerValidation?.validated) {
       triggerStage3Transition(sessionId, user.id, partnerId).catch(err =>
-        console.warn('[validateEmpathy] Failed to trigger transition:', err)
+        logger.warn('[validateEmpathy] Failed to trigger transition:', err)
       );
     }
 
   } catch (error) {
-    console.error('[validateEmpathy] Error:', error);
+    logger.error('[validateEmpathy] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to validate empathy', 500);
   }
 }
@@ -1309,13 +1310,13 @@ export async function skipRefinement(
       });
 
       // Check for mutual completion
-      triggerStage3Transition(sessionId, user.id, partnerId).catch(console.warn);
+      triggerStage3Transition(sessionId, user.id, partnerId).catch((e) => logger.warn('[Stage2] Stage 3 transition failed:', e));
     }
 
     successResponse(res, { success: true });
 
   } catch (error) {
-    console.error('[skipRefinement] Error:', error);
+    logger.error('[skipRefinement] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to skip refinement', 500);
   }
 }
@@ -1370,7 +1371,7 @@ export async function saveValidationFeedbackDraft(
       readyToShare: draft.readyToShare,
     });
   } catch (error) {
-    console.error('[saveValidationFeedbackDraft] Error:', error);
+    logger.error('[saveValidationFeedbackDraft] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to save feedback draft', 500);
   }
 }
@@ -1461,7 +1462,7 @@ Respond in JSON format:
     });
 
   } catch (error) {
-    console.error('[refineValidationFeedback] Error:', error);
+    logger.error('[refineValidationFeedback] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to refine feedback', 500);
   }
 }
@@ -1526,7 +1527,7 @@ Respond in JSON format:
             content = parsed.response;
           }
         } catch (e) {
-          console.warn('Failed to parse transition AI response', e);
+          logger.warn('Failed to parse transition AI response', e);
         }
       }
 
@@ -1610,11 +1611,11 @@ Respond in JSON format:
     // Per fact-ledger architecture, we embed at session level
     const embedTurnId = `${sessionId}-stage3-transition-${Date.now()}`;
     embedSessionContent(sessionId, userId, embedTurnId).catch((err: unknown) =>
-      console.warn('[Stage2] Failed to embed session content:', err)
+      logger.warn('[Stage2] Failed to embed session content:', err)
     );
 
   } catch (error) {
-    console.error('[triggerStage3Transition] Error:', error);
+    logger.error('[triggerStage3Transition] Error:', error);
   }
 }
 
@@ -1646,7 +1647,7 @@ export async function getEmpathyExchangeStatus(
 
     successResponse(res, status);
   } catch (error) {
-    console.error('[getEmpathyExchangeStatus] Error:', error);
+    logger.error('[getEmpathyExchangeStatus] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get empathy exchange status', 500);
   }
 }
@@ -1798,7 +1799,7 @@ When they seem ready to revise their statement, propose a revision in JSON forma
       canResubmit,
     });
   } catch (error) {
-    console.error('[refineEmpathy] Error:', error);
+    logger.error('[refineEmpathy] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to refine empathy', 500);
   }
 }
@@ -1905,7 +1906,7 @@ export async function resubmitEmpathy(
       },
     });
 
-    console.log(`[resubmitEmpathy] Created new EMPATHY_STATEMENT message ${newMessage.id} (revision ${previousRevision + 1})`);
+    logger.info(`[resubmitEmpathy] Created new EMPATHY_STATEMENT message ${newMessage.id} (revision ${previousRevision + 1})`);
 
     // Create turnId for this user action
     const turnId = `${sessionId}-${user.id}-resubmit-empathy`;
@@ -1913,7 +1914,7 @@ export async function resubmitEmpathy(
 
     // Embed for cross-session retrieval (non-blocking)
     embedSessionContent(sessionId, user.id, turnId).catch((err: unknown) =>
-      console.warn('[resubmitEmpathy] Failed to embed session content:', err)
+      logger.warn('[resubmitEmpathy] Failed to embed session content:', err)
     );
 
     // Increment circuit breaker counter (only resubmits increment, not initial runs)
@@ -1924,7 +1925,7 @@ export async function resubmitEmpathy(
     // Run reconciler for just this direction
     if (partnerId) {
       triggerReconcilerForUser(sessionId, user.id, partnerId).catch((err) =>
-        console.warn('[resubmitEmpathy] Failed to run reconciler:', err)
+        logger.warn('[resubmitEmpathy] Failed to run reconciler:', err)
       );
     }
 
@@ -1995,12 +1996,12 @@ Respond in JSON format:
 
       // Embed for cross-session retrieval (non-blocking)
       embedSessionContent(sessionId, user.id, turnId).catch((err: unknown) =>
-        console.warn('[resubmitEmpathy] Failed to embed session content:', err)
+        logger.warn('[resubmitEmpathy] Failed to embed session content:', err)
       );
 
       // Summarize older parts of the conversation (non-blocking)
       updateSessionSummary(sessionId, user.id, turnId).catch((err) =>
-        console.warn('[resubmitEmpathy] Failed to update session summary after transition:', err)
+        logger.warn('[resubmitEmpathy] Failed to update session summary after transition:', err)
       );
 
       transitionMessage = {
@@ -2022,7 +2023,7 @@ Respond in JSON format:
         revisionCount: previousRevision + 1,
       }); */
     } catch (error) {
-      console.error('[resubmitEmpathy] Failed to generate transition message:', error);
+      logger.error('[resubmitEmpathy] Failed to generate transition message:', error);
       // Continue without transition message - not a critical failure
     }
 
@@ -2039,7 +2040,7 @@ Respond in JSON format:
       transitionMessage,
     });
   } catch (error) {
-    console.error('[resubmitEmpathy] Error:', error);
+    logger.error('[resubmitEmpathy] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to resubmit empathy', 500);
   }
 }
@@ -2059,18 +2060,18 @@ async function triggerReconcilerForUser(
   const { runReconcilerForDirection, checkAndRevealBothIfReady } = await import('../services/reconciler');
 
   try {
-    console.log(`[triggerReconcilerForUser] Running reconciler for direction: guesser=${guesserId} → subject=${subjectId}`);
+    logger.info(`[triggerReconcilerForUser] Running reconciler for direction: guesser=${guesserId} → subject=${subjectId}`);
 
     // Use runReconcilerForDirection for asymmetric flow (only guesser has shared empathy)
     // The function now has built-in guard for context already shared, so no post-hoc override needed
     const result = await runReconcilerForDirection(sessionId, guesserId, subjectId);
 
     if (!result.result) {
-      console.warn('[triggerReconcilerForUser] No reconciler result returned');
+      logger.warn('[triggerReconcilerForUser] No reconciler result returned');
       return;
     }
 
-    console.log(
+    logger.info(
       `[triggerReconcilerForUser] Reconciler complete: ` +
       `alignment=${result.result.alignment.score}%, gaps=${result.result.gaps.severity}, ` +
       `empathyStatus=${result.empathyStatus}`
@@ -2079,7 +2080,7 @@ async function triggerReconcilerForUser(
     // Check if both are now READY and reveal both simultaneously
     await checkAndRevealBothIfReady(sessionId);
   } catch (error) {
-    console.error('[triggerReconcilerForUser] Error:', error);
+    logger.error('[triggerReconcilerForUser] Error:', error);
     throw error;
   }
 }
@@ -2146,7 +2147,7 @@ export async function getShareSuggestion(
       },
     });
   } catch (error) {
-    console.error('[getShareSuggestion] Error:', error);
+    logger.error('[getShareSuggestion] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get share suggestion', 500);
   }
 }
@@ -2253,7 +2254,7 @@ export async function respondToShareSuggestion(
         hasNewContext: true,
       });
 
-      console.log(`[respondToShareSuggestion] Notified guesser ${partnerId} of new shared context with full status data`);
+      logger.info(`[respondToShareSuggestion] Notified guesser ${partnerId} of new shared context with full status data`);
     }
 
     successResponse(res, {
@@ -2262,7 +2263,7 @@ export async function respondToShareSuggestion(
       sharedContent: result.sharedContent,
     });
   } catch (error) {
-    console.error('[respondToShareSuggestion] Error:', error);
+    logger.error('[respondToShareSuggestion] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to respond to share suggestion', 500);
   }
 }

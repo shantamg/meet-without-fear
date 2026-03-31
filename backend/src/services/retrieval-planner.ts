@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
+import { logger } from '../lib/logger';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 
 // ============================================================================
@@ -226,14 +227,14 @@ export async function planRetrieval(
 
   // If Haiku fails, return empty plan (fallback)
   if (!rawPlan) {
-    console.warn('[Retrieval Planner] Haiku unavailable, using empty plan');
+    logger.warn('[Retrieval Planner] Haiku unavailable, using empty plan');
     return fallbackPlan;
   }
 
   // Validate schema first
   const schemaResult = RetrievalPlanSchema.safeParse(rawPlan);
   if (!schemaResult.success) {
-    console.warn('[Retrieval Planner] Schema validation failed, using empty plan:', schemaResult.error);
+    logger.warn('[Retrieval Planner] Schema validation failed, using empty plan:', schemaResult.error);
     return fallbackPlan;
   }
 
@@ -254,14 +255,14 @@ export function validateRetrievalPlan(plan: RetrievalPlan, stage: number, userId
     // Validate schema
     const schemaResult = RetrievalQuerySchema.safeParse(query);
     if (!schemaResult.success) {
-      console.warn('[Retrieval Planner] Schema validation failed:', query);
+      logger.warn('[Retrieval Planner] Schema validation failed:', query);
       invalidCount.schema++;
       continue;
     }
 
     // Validate stage contract
     if (!validateStageContract(schemaResult.data, stage, userId)) {
-      console.warn('[Retrieval Planner] Stage contract violation:', query);
+      logger.warn('[Retrieval Planner] Stage contract violation:', query);
       invalidCount.contract++;
       continue;
     }
@@ -271,7 +272,7 @@ export function validateRetrievalPlan(plan: RetrievalPlan, stage: number, userId
 
   // Log violations for monitoring
   if (invalidCount.schema > 0 || invalidCount.contract > 0) {
-    console.log(
+    logger.info(
       `[Retrieval Planner] Filtered ${invalidCount.schema} schema + ${invalidCount.contract} contract violations from ${plan.queries.length} queries`,
     );
   }

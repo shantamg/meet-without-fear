@@ -10,6 +10,7 @@
  */
 
 import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { withHaikuCircuitBreaker } from '../utils/circuit-breaker';
 
@@ -117,7 +118,7 @@ export async function consolidateGlobalFacts(
   const logPrefix = '[GlobalMemory]';
 
   try {
-    console.log(`${logPrefix} Starting consolidation for user ${userId}, session ${sessionId}`);
+    logger.info(`${logPrefix} Starting consolidation for user ${userId}, session ${sessionId}`);
 
     // Get user's current global facts
     const user = await prisma.user.findUnique({
@@ -131,7 +132,7 @@ export async function consolidateGlobalFacts(
         const parsed = user.globalFacts as unknown as GlobalFacts;
         existingGlobalFacts = parsed.facts || [];
       } catch {
-        console.warn(`${logPrefix} Failed to parse existing global facts`);
+        logger.warn(`${logPrefix} Failed to parse existing global facts`);
       }
     }
 
@@ -148,13 +149,13 @@ export async function consolidateGlobalFacts(
       try {
         sessionFacts = vessel.notableFacts as unknown as CategorizedFact[];
       } catch {
-        console.warn(`${logPrefix} Failed to parse session facts`);
+        logger.warn(`${logPrefix} Failed to parse session facts`);
       }
     }
 
     // If no new facts and no existing facts, nothing to do
     if (sessionFacts.length === 0 && existingGlobalFacts.length === 0) {
-      console.log(`${logPrefix} No facts to consolidate`);
+      logger.info(`${logPrefix} No facts to consolidate`);
       return null;
     }
 
@@ -165,7 +166,7 @@ export async function consolidateGlobalFacts(
     if (totalFacts <= MAX_GLOBAL_FACTS) {
       // Simple merge - no AI needed
       consolidatedFacts = [...existingGlobalFacts, ...sessionFacts];
-      console.log(`${logPrefix} Simple merge (${totalFacts} facts, no AI needed)`);
+      logger.info(`${logPrefix} Simple merge (${totalFacts} facts, no AI needed)`);
     } else {
       // Use Haiku to consolidate
       const systemPrompt = `You consolidate user facts into a unified profile. Output valid JSON only.`;
@@ -188,11 +189,11 @@ export async function consolidateGlobalFacts(
       );
 
       if (!result) {
-        console.warn(`${logPrefix} Haiku consolidation failed, keeping existing facts`);
+        logger.warn(`${logPrefix} Haiku consolidation failed, keeping existing facts`);
         consolidatedFacts = existingGlobalFacts;
       } else {
         consolidatedFacts = normalizeConsolidationResult(result);
-        console.log(`${logPrefix} Haiku consolidated ${totalFacts} -> ${consolidatedFacts.length} facts`);
+        logger.info(`${logPrefix} Haiku consolidated ${totalFacts} -> ${consolidatedFacts.length} facts`);
       }
     }
 
@@ -220,10 +221,10 @@ export async function consolidateGlobalFacts(
       },
     });
 
-    console.log(`${logPrefix} Saved ${consolidatedFacts.length} global facts for user ${userId}`);
+    logger.info(`${logPrefix} Saved ${consolidatedFacts.length} global facts for user ${userId}`);
     return globalFacts;
   } catch (error) {
-    console.error(`${logPrefix} Failed to consolidate global facts:`, error);
+    logger.error(`${logPrefix} Failed to consolidate global facts:`, error);
     return null;
   }
 }
@@ -250,7 +251,7 @@ export async function loadGlobalFacts(userId: string): Promise<CategorizedFact[]
     const parsed = user.globalFacts as unknown as GlobalFacts;
     return parsed.facts && parsed.facts.length > 0 ? parsed.facts : undefined;
   } catch (error) {
-    console.error('[GlobalMemory] Failed to load global facts:', error);
+    logger.error('[GlobalMemory] Failed to load global facts:', error);
     return undefined;
   }
 }

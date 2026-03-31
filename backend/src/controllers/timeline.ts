@@ -9,6 +9,7 @@
 
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import { logger } from '../lib/logger';
 import { aggregateTimeline } from '../services/timeline-aggregator';
 import { successResponse, errorResponse } from '../utils/response';
 
@@ -76,7 +77,7 @@ export async function getTimeline(
 
     successResponse(res, timeline);
   } catch (error) {
-    console.error('[getTimeline] Error:', error);
+    logger.error('[getTimeline] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get timeline', 500);
   }
 }

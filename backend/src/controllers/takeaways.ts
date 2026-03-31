@@ -26,21 +26,17 @@ import type {
 // Helper
 // ============================================================================
 
-function mapTakeawayToDTO(t: {
-  id: string;
-  content: string;
-  theme: string | null;
-  source: string;
-  position: number;
-  createdAt: Date;
-  updatedAt: Date;
-}): TakeawayDTO {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapTakeawayToDTO(t: any): TakeawayDTO {
   return {
     id: t.id,
     content: t.content,
     theme: t.theme,
     source: t.source as 'AI' | 'USER',
+    type: t.type ?? 'INSIGHT',
     position: t.position,
+    resolved: t.resolved ?? false,
+    resolvedAt: t.resolvedAt?.toISOString() ?? null,
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
   };

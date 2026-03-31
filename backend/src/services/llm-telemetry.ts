@@ -1,3 +1,4 @@
+import { logger } from '../lib/logger';
 import { estimateMessagesTokens, estimateTokens } from '../utils/token-budget';
 
 export interface ContextSizeMetrics {
@@ -82,7 +83,7 @@ export function finalizeTurnMetrics(turnId: string | undefined): void {
       ` cache_hit_rate=${aggregate.inputTokens > 0 ? Math.round((aggregate.cacheReadInputTokens / aggregate.inputTokens) * 100) : 0}%`
     : '';
 
-  console.log(
+  logger.info(
     `[LLM Metrics] turn=${turnId} calls=${aggregate.callCount} ` +
       `tokens_in=${aggregate.inputTokens} tokens_out=${aggregate.outputTokens} ` +
       `duration_ms=${aggregate.durationMs} models=[${modelSummary}]${cacheInfo}`
@@ -90,7 +91,7 @@ export function finalizeTurnMetrics(turnId: string | undefined): void {
 
   if (aggregate.contextSizes) {
     const { pinnedTokens, summaryTokens, recentTokens, ragTokens } = aggregate.contextSizes;
-    console.log(
+    logger.info(
       `[Context Metrics] turn=${turnId} pinned=${pinnedTokens} summary=${summaryTokens} ` +
         `recent=${recentTokens} rag=${ragTokens}`
     );

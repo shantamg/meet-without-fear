@@ -1,11 +1,12 @@
 import { Request, Response } from 'express';
+import { logger } from '../lib/logger';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 export const streamTTS = async (req: Request, res: Response): Promise<void | Response> => {
   try {
     if (!OPENAI_API_KEY) {
-      console.error('[TTS] OPENAI_API_KEY not configured');
+      logger.error('[TTS] OPENAI_API_KEY not configured');
       return res.status(500).json({ error: 'Server configuration error' });
     }
 
@@ -26,7 +27,7 @@ export const streamTTS = async (req: Request, res: Response): Promise<void | Res
 
     // Validate model - only allow OpenAI TTS models
     if (modelId !== 'tts-1' && modelId !== 'tts-1-hd') {
-      console.warn(`[TTS] Invalid model '${modelId}' requested. Falling back to 'tts-1'.`);
+      logger.warn(`[TTS] Invalid model '${modelId}' requested. Falling back to 'tts-1'.`);
       modelId = 'tts-1';
     }
 
@@ -47,7 +48,7 @@ export const streamTTS = async (req: Request, res: Response): Promise<void | Res
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[TTS] OpenAI API error:', response.status, errorText);
+      logger.error('[TTS] OpenAI API error:', response.status, errorText);
       return res.status(response.status).json({ error: `OpenAI API error: ${errorText}` });
     }
 
@@ -65,7 +66,7 @@ export const streamTTS = async (req: Request, res: Response): Promise<void | Res
     }
 
   } catch (error) {
-    console.error('[TTS] Error streaming audio:', error);
+    logger.error('[TTS] Error streaming audio:', error);
     if (!res.headersSent) {
       res.status(500).json({ error: 'Internal server error processing TTS' });
     }

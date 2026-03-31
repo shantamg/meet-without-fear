@@ -9,6 +9,7 @@
  */
 
 import { extractJsonFromResponse } from './json-extractor';
+import { logger } from '../lib/logger';
 
 export interface ParsedMicroTagResponse {
   /** The user-facing response text (all tags stripped) */
@@ -50,7 +51,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
 
   // 3. Fallback: if all content ended up inside tags, don't return empty
   if (!responseText && thinking) {
-    console.warn('[micro-tag-parser] Empty response after tag stripping — using thinking fallback');
+    logger.warn('[micro-tag-parser] Empty response after tag stripping — using thinking fallback');
     responseText = '[AI processing — please continue the conversation]';
   }
 

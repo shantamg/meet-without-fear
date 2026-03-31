@@ -8,6 +8,7 @@
  * "The large model receives a pre-assembled context bundle. It does not decide what to retrieve."
  */
 
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import {
   type MemoryIntentResult,
@@ -213,7 +214,7 @@ export async function assembleContextBundle(
   ]);
 
   // Debug logging for notable facts
-  console.log(`[Context Assembler] assembleContextBundle: session=${sessionId}, notableFacts=${notableFacts ? `${notableFacts.length} facts` : 'undefined'}`);
+  logger.info(`[Context Assembler] assembleContextBundle: session=${sessionId}, notableFacts=${notableFacts ? `${notableFacts.length} facts` : 'undefined'}`);
 
   // Build Inner Thoughts context after we have conversation context (it needs the last user message)
   const finalInnerThoughts = (depth === 'full' || depth === 'light')
@@ -543,7 +544,7 @@ async function buildInnerThoughtsContext(
       hasLinkedSession: !!linkedSession,
     };
   } catch (error) {
-    console.warn('[Context Assembler] Failed to retrieve Inner Thoughts:', error);
+    logger.warn('[Context Assembler] Failed to retrieve Inner Thoughts:', error);
     return {
       relevantReflections: [],
       hasLinkedSession: !!linkedSession,
@@ -610,18 +611,18 @@ async function loadNotableFacts(
 
   // Debug logging to track notable facts loading
   if (!vessel) {
-    console.log(`[Context Assembler] loadNotableFacts: No UserVessel found for session=${sessionId}, user=${userId}`);
+    logger.info(`[Context Assembler] loadNotableFacts: No UserVessel found for session=${sessionId}, user=${userId}`);
     return undefined;
   }
 
   const rawFacts = vessel.notableFacts;
   if (!rawFacts) {
-    console.log(`[Context Assembler] loadNotableFacts: UserVessel exists but no facts for session=${sessionId}, user=${userId}`);
+    logger.info(`[Context Assembler] loadNotableFacts: UserVessel exists but no facts for session=${sessionId}, user=${userId}`);
     return undefined;
   }
 
   if (!Array.isArray(rawFacts)) {
-    console.warn(`[Context Assembler] loadNotableFacts: notableFacts is not an array for session=${sessionId}, user=${userId}`);
+    logger.warn(`[Context Assembler] loadNotableFacts: notableFacts is not an array for session=${sessionId}, user=${userId}`);
     return undefined;
   }
 
@@ -640,7 +641,7 @@ async function loadNotableFacts(
     return undefined;
   }
 
-  console.log(`[Context Assembler] loadNotableFacts: Loaded ${categorizedFacts.length} facts for session=${sessionId}, user=${userId}:`, categorizedFacts.slice(0, 3));
+  logger.info(`[Context Assembler] loadNotableFacts: Loaded ${categorizedFacts.length} facts for session=${sessionId}, user=${userId}:`, categorizedFacts.slice(0, 3));
   return categorizedFacts;
 }
 

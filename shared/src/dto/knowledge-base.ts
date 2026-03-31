@@ -13,7 +13,13 @@ export interface TopicSessionEntryDTO {
   sessionId: string;
   title: string | null;
   createdAt: string; // ISO 8601
-  takeaways: Array<{ id: string; content: string; theme: string | null }>;
+  takeaways: Array<{
+    id: string;
+    content: string;
+    theme: string | null;
+    type: 'INSIGHT' | 'ACTION_ITEM' | 'INTENTION';
+    resolved: boolean;
+  }>;
 }
 
 export interface KnowledgeBaseTopicDTO {
@@ -50,4 +56,42 @@ export interface RecurringThemeDTO {
 // GET /api/v1/knowledge-base/themes
 export interface ListRecurringThemesResponse {
   themes: RecurringThemeDTO[];
+}
+
+// ============================================================================
+// Search (SEARCH-01, SEARCH-02, SEARCH-03)
+// ============================================================================
+
+export interface SearchResultDTO {
+  takeawayId: string;
+  content: string;
+  theme: string | null;
+  type: 'INSIGHT' | 'ACTION_ITEM' | 'INTENTION';
+  sessionDate: string; // ISO 8601
+  sessionId: string;
+  similarity: number; // 0-1
+}
+
+// GET /api/v1/knowledge-base/search?q=<text>&limit=10
+export interface SearchKnowledgeBaseResponse {
+  results: SearchResultDTO[];
+  query: string;
+}
+
+// ============================================================================
+// Recent Takeaways (UI-03)
+// ============================================================================
+
+export interface RecentTakeawayDTO {
+  id: string;
+  content: string;
+  theme: string | null;
+  type: 'INSIGHT' | 'ACTION_ITEM' | 'INTENTION';
+  sessionDate: string; // ISO 8601
+  sessionId: string;
+}
+
+// GET /api/v1/knowledge-base/recent?limit=3
+export interface RecentTakeawaysResponse {
+  takeaways: RecentTakeawayDTO[];
 }

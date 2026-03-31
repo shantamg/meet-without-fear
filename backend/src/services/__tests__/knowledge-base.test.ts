@@ -86,6 +86,8 @@ function makeSession(
       id: t.id,
       content: t.content,
       theme: t.theme,
+      type: 'INSIGHT',
+      resolved: false,
       position: idx,
     })),
   };
@@ -322,8 +324,8 @@ describe('getTopicTimeline', () => {
     const session = response.data.sessions[0];
     expect(session.sessionId).toBe('s1');
     expect(session.takeaways).toHaveLength(2);
-    expect(session.takeaways[0]).toEqual({ id: 't1', content: 'I felt anxious', theme: 'anxiety' });
-    expect(session.takeaways[1]).toEqual({ id: 't2', content: 'I need support', theme: null });
+    expect(session.takeaways[0]).toEqual({ id: 't1', content: 'I felt anxious', theme: 'anxiety', type: 'INSIGHT', resolved: false });
+    expect(session.takeaways[1]).toEqual({ id: 't2', content: 'I need support', theme: null, type: 'INSIGHT', resolved: false });
   });
 });
 
