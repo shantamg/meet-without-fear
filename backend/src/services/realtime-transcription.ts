@@ -19,7 +19,8 @@
  */
 
 import WebSocket from 'ws';
-import { Server } from 'http';
+import { Server, IncomingMessage } from 'http';
+import { Socket } from 'net';
 import { logger } from '../lib/logger';
 
 const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
@@ -36,11 +37,11 @@ const MIN_CHUNK_SIZE = 1600;
 export function attachRealtimeWebSocket(server: Server): void {
   const wss = new WebSocket.Server({ noServer: true });
 
-  server.on('upgrade', (request, socket, head) => {
+  server.on('upgrade', (request: IncomingMessage, socket, head: Buffer) => {
     const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
 
     if (pathname === '/realtime') {
-      wss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
+      wss.handleUpgrade(request, socket as Socket, head, (ws: WebSocket) => {
         wss.emit('connection', ws, request);
       });
     }
