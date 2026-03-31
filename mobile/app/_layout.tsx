@@ -14,6 +14,7 @@ import { QueryProvider } from '@/src/providers/QueryProvider';
 import { ToastProvider } from '@/src/contexts/ToastContext';
 import { MixpanelInitializer } from '@/src/components/MixpanelInitializer';
 import { E2EAuthProvider, isE2EMode } from '@/src/providers/E2EAuthProvider';
+import { useOTAUpdate } from '@/src/hooks/useOTAUpdate';
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? '',
@@ -64,6 +65,10 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
  * Root layout component
  */
 function RootLayout() {
+  // Check for OTA updates at root level so it runs even on the sign-in screen.
+  // Without this, users stuck on a broken sign-in can never receive the fix via OTA.
+  useOTAUpdate();
+
   const [fontsLoaded, fontError] = useFonts({});
 
   // Keep showing splash screen until fonts are loaded

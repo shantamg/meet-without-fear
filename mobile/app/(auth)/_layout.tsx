@@ -3,6 +3,8 @@ import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 import { colors } from '@/theme';
 import { useUserSessionUpdates } from '@/src/hooks/useRealtime';
 import { isE2EMode } from '@/src/providers/E2EAuthProvider';
+import { useOTAUpdate } from '@/src/hooks/useOTAUpdate';
+import { UpdateBanner } from '@/src/components/UpdateBanner';
 
 /**
  * Auth group layout
@@ -18,6 +20,9 @@ export default function AuthLayout() {
   // Skip in E2E mode to avoid token/capability cache issues with the user notification channel
   useUserSessionUpdates({ enabled: !isE2EMode() });
 
+  // OTA update banner
+  const { showUpdateBanner, applyUpdate, dismissUpdate } = useOTAUpdate();
+
   // Wait for Clerk to initialize
   if (!isLoaded) {
     return null;
@@ -30,54 +35,59 @@ export default function AuthLayout() {
 
   // Render the app - backend profile sync happens in useAuth hook
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        headerStyle: {
-          backgroundColor: colors.bgPrimary,
-        },
-        headerTintColor: colors.textPrimary,
-        headerTitleStyle: {
-          color: colors.textPrimary,
-        },
-        contentStyle: {
-          backgroundColor: colors.bgPrimary,
-        },
-      }}
-    >
-      {/* Main screens (Home, Settings) */}
-      <Stack.Screen name="(tabs)" />
-
-      {/* Inner Work - animation is handled at the screen level */}
-      <Stack.Screen name="inner-work" />
-
-      {/* Settings - slide from right */}
-      <Stack.Screen
-        name="settings"
-        options={{
-          animation: 'slide_from_right',
+    <>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          headerStyle: {
+            backgroundColor: colors.bgPrimary,
+          },
+          headerTintColor: colors.textPrimary,
+          headerTitleStyle: {
+            color: colors.textPrimary,
+          },
+          contentStyle: {
+            backgroundColor: colors.bgPrimary,
+          },
         }}
-      />
+      >
+        {/* Main screens (Home, Settings) */}
+        <Stack.Screen name="(tabs)" />
 
-      {/* Session flow screens */}
-      <Stack.Screen
-        name="session/new"
-        options={{
-          presentation: 'modal',
-          headerShown: true,
-          title: 'New Session',
-        }}
-      />
-      <Stack.Screen name="session/[id]" />
+        {/* Inner Work - animation is handled at the screen level */}
+        <Stack.Screen name="inner-work" />
 
-      {/* Person detail */}
-      <Stack.Screen
-        name="person/[id]"
-        options={{
-          headerShown: true,
-          title: 'Person',
-        }}
-      />
-    </Stack>
+        {/* Settings - slide from right */}
+        <Stack.Screen
+          name="settings"
+          options={{
+            animation: 'slide_from_right',
+          }}
+        />
+
+        {/* Session flow screens */}
+        <Stack.Screen
+          name="session/new"
+          options={{
+            presentation: 'modal',
+            headerShown: true,
+            title: 'New Session',
+          }}
+        />
+        <Stack.Screen name="session/[id]" />
+
+        {/* Person detail */}
+        <Stack.Screen
+          name="person/[id]"
+          options={{
+            headerShown: true,
+            title: 'Person',
+          }}
+        />
+      </Stack>
+      {showUpdateBanner && (
+        <UpdateBanner onApply={applyUpdate} onDismiss={dismissUpdate} />
+      )}
+    </>
   );
 }
