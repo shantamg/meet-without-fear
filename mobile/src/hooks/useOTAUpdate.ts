@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
-import * as Updates from 'expo-updates';
 import * as Sentry from '@sentry/react-native';
+
+// Lazy-load expo-updates to avoid crashing when the native module isn't available (e.g., Expo Go)
+let Updates: typeof import('expo-updates') | null = null;
+if (!__DEV__) {
+  try {
+    Updates = require('expo-updates');
+  } catch {
+    // Native module not available
+  }
+}
 import { track } from '@/src/services/mixpanel';
 
 /**
@@ -18,7 +27,7 @@ export function useOTAUpdate() {
   const [dismissed, setDismissed] = useState(false);
 
   const checkForUpdate = useCallback(async () => {
-    if (__DEV__ || isChecking.current) return;
+    if (__DEV__ || !Updates || isChecking.current) return;
     isChecking.current = true;
     try {
       Sentry.addBreadcrumb({
@@ -70,10 +79,10 @@ export function useOTAUpdate() {
       Sentry.captureException(err, {
         tags: { component: 'ota-update' },
         extra: {
-          channel: Updates.channel ?? 'unknown',
-          runtimeVersion: Updates.runtimeVersion ?? 'unknown',
-          updateId: Updates.updateId ?? 'none',
-          isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+          channel: Updates?.channel ?? 'unknown',
+          runtimeVersion: Updates?.runtimeVersion ?? 'unknown',
+          updateId: Updates?.updateId ?? 'none',
+          isEmbeddedLaunch: Updates?.isEmbeddedLaunch,
         },
       });
     } finally {
@@ -82,6 +91,7 @@ export function useOTAUpdate() {
   }, []);
 
   const applyUpdate = useCallback(async () => {
+    if (!Updates) return;
     Sentry.addBreadcrumb({
       category: 'ota-update',
       message: 'User tapped apply OTA update — reloading',
@@ -96,7 +106,7 @@ export function useOTAUpdate() {
   }, []);
 
   useEffect(() => {
-    if (__DEV__) return;
+    if (__DEV__ || !Updates) return;
 
     // Check on mount (app launch)
     checkForUpdate();
@@ -122,9 +132,9 @@ export function useOTAUpdate() {
       level: 'info',
     });
     track('OTA Update Dismissed', {
-      channel: Updates.channel ?? 'unknown',
-      runtime_version: Updates.runtimeVersion ?? 'unknown',
-      update_id: Updates.updateId ?? 'none',
+      channel: Updates?.channel ?? 'unknown',
+      runtime_version: Updates?.runtimeVersion ?? 'unknown',
+      update_id: Updates?.updateId ?? 'none',
     });
     setDismissed(true);
   }, []);
