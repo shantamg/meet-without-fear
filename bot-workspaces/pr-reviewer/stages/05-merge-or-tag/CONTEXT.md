@@ -119,7 +119,7 @@ Only after both guards pass, tag humans for final review:
 
 ```bash
 gh pr comment "$PR_NUMBER" --repo shantamg/meet-without-fear \
-  --body "Bot review complete — LGTM. Ready for human review and merge. @shantamg @mengerink"
+  --body "Bot review complete — LGTM. Ready for human review and merge. @shantamg"
 ```
 
 Add `bot:needs-human-review` to the accumulated label set:

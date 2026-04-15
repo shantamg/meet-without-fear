@@ -33,7 +33,7 @@ Related to #<issue-number>
 ## Docs updated
 - <doc path> (or "No doc changes needed")
 EOF
-)" --reviewer shantamg,mengerink
+)" --reviewer shantamg
 ```
 
 ### 3. Issue Linking
@@ -45,7 +45,7 @@ EOF
 
 ### 4. Reviewers
 
-Always request: `--reviewer shantamg,mengerink`
+Always request: `--reviewer shantamg`
 
 PRs require human review. Never auto-merge.
 

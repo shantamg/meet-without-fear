@@ -16,7 +16,7 @@ Use the `shared/skills/pr.md` workflow. Follow `references/pr-conventions.md` fo
 - PR body HEREDOC template
 - Issue linking: always use `Related to #N` (never `Fixes #N`) — all issues stay open for human verification
 - Post verification comment on the issue after PR creation
-- Required reviewers: `shantamg,mengerink`
+- Required reviewers: `shantamg`
 - Never force-push
 
 ### 2. Post-PR label management
@@ -44,6 +44,6 @@ This is the final stage. Report back to the orchestrator:
 | Root cause | One-line summary |
 | Fix | What was changed |
 | PR | URL |
-| Review | Awaiting human review from shantamg and mengerink |
+| Review | Awaiting human review from shantamg |
 
 The orchestrator collects reports from all sub-agents and produces a final summary table.

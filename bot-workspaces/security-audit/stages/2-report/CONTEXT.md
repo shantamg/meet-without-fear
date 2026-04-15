@@ -44,7 +44,7 @@ Any other `gh` read call indicates a bug.
    - If a **matching closed issue** exists → skip creation unless the finding represents a **regression** (same vulnerability resurfaced). For regressions, reopen the existing issue with a comment instead of creating a new one
    - Only create a new issue when no semantic match is found (title/topic overlap counts as a match even if wording differs)
 3. **Create GitHub issues** (only for net-new findings after dedup):
-   - CRITICAL/HIGH: one issue each via `shared/github/create-issue.md`, label `security` + `bot:investigate`, assign `shantamg,matthewmengerink`
+   - CRITICAL/HIGH: one issue each via `shared/github/create-issue.md`, label `security` + `bot:investigate`, assign `shantamg`
    - MEDIUM: single consolidated issue, label `security` + `bot:investigate`
    - LOW/INFO: Slack report only
    - Always add `bot:investigate` so findings enter the bot pipeline for automated investigation (see `shared/references/github-ops.md` Bot Pipeline Labels)
@@ -52,7 +52,7 @@ Any other `gh` read call indicates a bug.
    - Summary: total findings by severity
    - Critical & High findings with impact and remediation
    - Third-party data handling matrix (service, data sent, training opt-out, DPA status)
-   - If CRITICAL: tag @shantamg and @mengerink
+   - If CRITICAL: tag @shantamg
 
 ## Output
 

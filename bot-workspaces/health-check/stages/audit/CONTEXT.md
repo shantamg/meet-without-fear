@@ -56,7 +56,7 @@ Use `github_state_*` helpers for all open issue/PR metadata lookups. Do NOT call
 7. **Post to #health-check** via `shared/slack/slack-post.md`:
    - All clear: `All clear — no issues found.`
    - Minor: `N issues created — [brief]. [link]`
-   - Needs attention: `N issues, user impact detected — [brief]. [links] cc @shantamg @mengerink`
+   - Needs attention: `N issues, user impact detected — [brief]. [links] cc @shantamg`
 
 ## Output
 

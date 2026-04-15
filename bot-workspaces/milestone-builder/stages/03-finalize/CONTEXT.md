@@ -33,7 +33,7 @@
    - Title: `feat: {plan-name} — milestone merge (#{parent-issue})`
    - Body: per milestone-conventions.md format (Issues Closed, PRs Merged, What Was Built)
    - Target: `main`
-   - Reviewers: `shantamg` and `mengerink`
+   - Reviewers: `shantamg`
    - Add `bot:review-impl` label to trigger plan-alignment review
    - Do NOT merge — humans merge to main
 
@@ -45,7 +45,7 @@
    - Link to the milestone→main PR
    - Summary of everything completed
    - List all sub-issue PRs and their review status
-   - Tag @shantamg and @mengerink for review
+   - Tag @shantamg for review
 
 ## Output
 

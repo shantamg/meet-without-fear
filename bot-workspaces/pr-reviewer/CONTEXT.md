@@ -20,6 +20,6 @@ Autonomously manage the full lifecycle of bot-created PRs: detect conflicts, reb
 
 - Fully autonomous — never prompt for user input
 - Process PRs one at a time through the pipeline
-- Never force-merge PRs targeting `main` — always tag @shantamg @mengerink
+- Never force-merge PRs targeting `main` — always tag @shantamg
 - Max 3 fix attempts per PR before requesting human help
 - Skip PRs with `bot:ci-monitor` label (handled by ci-monitor workspace)

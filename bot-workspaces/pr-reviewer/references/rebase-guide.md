@@ -34,4 +34,4 @@ Strategy: **Accept target branch** for index/routing files. Accept PR branch for
 - Conflicts in database migrations (never auto-resolve these)
 - Conflicts in CI/CD config files (`.github/workflows/`)
 
-Post a comment: `"Rebase failed — conflicts too complex for automated resolution. Requesting human help. @shantamg @mengerink"`
+Post a comment: `"Rebase failed — conflicts too complex for automated resolution. Requesting human help. @shantamg"`

@@ -186,7 +186,7 @@ if [ "${#CLAUDE_QUEUE[@]}" -gt 0 ]; then
   "$BOT_SCRIPTS_DIR/run-claude.sh" "stale-sweeper" \
     "Process these stale GitHub items. For each one, take the described action.
 Use sub-agents with isolation: \"worktree\" for any code changes (same pattern as fix-bugs).
-Request reviewers --reviewer shantamg,mengerink on any new PRs.
+Request reviewers --reviewer shantamg on any new PRs.
 Never auto-close issues or auto-merge PRs.
 
 ${TASK_LIST}

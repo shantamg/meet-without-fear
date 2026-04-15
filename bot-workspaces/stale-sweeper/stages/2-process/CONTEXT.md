@@ -9,7 +9,7 @@
 For each item, follow the prescribed action from the cron script:
 
 - **Stale issues without bot labels**: Add `bot:investigate` so the dispatcher picks them up. Do NOT attempt code fixes — that's the bug-fix workspace's job.
-- **Stale PRs needing comments**: Post specific, actionable comments. "This needs @mengerink to check the webhook URL" is good. "What should we do?" is bad.
+- **Stale PRs needing comments**: Post specific, actionable comments. "This needs @shantamg to check the webhook URL" is good. "What should we do?" is bad.
 - **Duplicate/overlapping PRs**: Comment noting the overlap, tag humans to decide which to keep.
 - **Conflict resolution on PRs**: Resolve in worktree, push fix.
 

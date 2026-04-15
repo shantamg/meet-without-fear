@@ -105,7 +105,7 @@ If you've fixed the same issue (same issue number + same failure type) 3+ times 
   ```
   ⚠️ Pipeline monitor: #N has had its labels fixed 3 times but keeps reverting.
   This suggests the milestone-builder is overwriting corrections. Needs human attention.
-  @shantamg @matthewmengerink
+  @shantamg
   ```
 
 ### 6. Progress summary

@@ -5,7 +5,7 @@ Standard patterns for GitHub issue and PR operations. Referenced by workspaces t
 ## Configuration
 
 - **Repo**: `shantamg/meet-without-fear`
-- **Default assignees**: `shantamg`, `matthewmengerink`
+- **Default assignees**: `shantamg`
 - See `.claude/config/services.json` for additional constants.
 
 ## Duplicate Check (always run before creating issues)

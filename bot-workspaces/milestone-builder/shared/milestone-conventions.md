@@ -47,7 +47,7 @@ Related to #{issue-number}
 
 **Title:** `feat: {plan-name} — milestone merge (#{parent-issue})`
 **Target:** `main`
-**Reviewers:** `shantamg`, `mengerink`
+**Reviewers:** `shantamg`
 
 **Body:**
 ```markdown

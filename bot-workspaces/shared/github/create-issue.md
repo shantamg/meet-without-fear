@@ -17,7 +17,7 @@ Create a GitHub issue with duplicate checking, provenance tracking, and cross-re
    ```
 5. **Create the issue** — `gh issue create` with appropriate label and assignees per `shared/references/github-ops.md`
 6. **Cross-reference** — comment on related issues linking back
-7. **Notify if critical** — ping @shantamg @mengerink on the issue
+7. **Notify if critical** — ping @shantamg on the issue
 
 ## Output
 

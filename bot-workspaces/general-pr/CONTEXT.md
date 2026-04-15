@@ -19,5 +19,5 @@ Execute a GitHub issue end-to-end: read it, implement the requested changes, and
 - Branch naming: `feat/<short-description>-<issue-number>`
 - Issue linking: always use `Related to #N` (never `Fixes #N`) — all issues stay open for human verification (see `shared/skills/pr.md`)
 - PR body must include Provenance section
-- Always request reviewers: `shantamg,mengerink`
+- Always request reviewers: `shantamg`
 - Use CLAUDE.md docs routing table to find relevant documentation before implementing

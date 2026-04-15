@@ -32,7 +32,7 @@ End-to-end bug fixing: from issue selection through investigation, implementatio
 - Max 3 concurrent sub-agents per batch
 - WIP registry: register in Stage 04, deregister in Stage 06
 - Stage 01 is the orchestrator; Stages 02-06 run per issue in sub-agents
-- All PRs require human review from `shantamg` and `mengerink`
+- All PRs require human review from `shantamg`
 - Issue linking in PR body is mandatory: always use `Related to #N` (never `Fixes #N`) — all issues stay open for human verification
 
 ## Shell Script Integration
