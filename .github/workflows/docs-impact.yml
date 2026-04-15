@@ -1,0 +1,175 @@
+name: Doc Impact Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+concurrency:
+  group: doc-impact-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  doc-impact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check doc impact
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            const mappingFile = JSON.parse(
+              fs.readFileSync('docs/code-to-docs-mapping.json', 'utf8')
+            );
+            const MAPPINGS = mappingFile.mappings;
+
+            // Paginate changed files
+            let changedFiles = [];
+            let page = 1;
+            while (true) {
+              const { data: files } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                per_page: 100,
+                page,
+              });
+              changedFiles.push(...files.map(f => f.filename));
+              if (files.length < 100) break;
+              page++;
+            }
+
+            // Glob-ish matcher: supports '**' suffix ('dir/**') and literal path match.
+            function matchesPattern(file, pattern) {
+              if (pattern.endsWith('/**')) {
+                return file.startsWith(pattern.slice(0, -3) + '/');
+              }
+              if (pattern.includes('*')) {
+                // Handle suffix patterns like 'backend/src/services/ai*.ts'
+                const re = new RegExp(
+                  '^' +
+                    pattern
+                      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+                      .replace(/\*\*/g, '.*')
+                      .replace(/\*/g, '[^/]*') +
+                    '$'
+                );
+                return re.test(file);
+              }
+              return file === pattern;
+            }
+
+            function docWasUpdated(doc, changedFiles) {
+              return changedFiles.includes(doc);
+            }
+
+            const mappedPrefixes = MAPPINGS.map(m => {
+              if (m.code.endsWith('/**')) return m.code.slice(0, -3);
+              if (m.code.includes('*')) return m.code.split('*')[0].replace(/\/$/, '');
+              return m.code;
+            });
+
+            const rows = [];
+            let hasMissing = false;
+
+            for (const mapping of MAPPINGS) {
+              const codeChanged = changedFiles.some(f => matchesPattern(f, mapping.code));
+              if (!codeChanged) continue;
+
+              for (const doc of mapping.docs) {
+                const updated = docWasUpdated(doc, changedFiles);
+                const status = updated ? '✅ Yes' : '❌ No';
+                if (!updated) hasMissing = true;
+                rows.push(`| \`${mapping.label}\` | \`${doc}\` | ${status} |`);
+              }
+            }
+
+            // Unmapped-dir detection: flag changes under backend/src/, mobile/src/,
+            // shared/src/, scripts/ec2-bot/, bot-workspaces/ that aren't covered.
+            const watchedRoots = [
+              'backend/src/',
+              'mobile/src/',
+              'shared/src/',
+              'scripts/ec2-bot/',
+              'bot-workspaces/',
+              '.github/workflows/',
+            ];
+            const unmappedDirs = new Set();
+            for (const file of changedFiles) {
+              if (!watchedRoots.some(root => file.startsWith(root))) continue;
+              const isMapped = mappedPrefixes.some(prefix => file.startsWith(prefix));
+              if (isMapped) continue;
+              const parts = file.split('/');
+              if (parts.length >= 3) {
+                unmappedDirs.add(parts.slice(0, 3).join('/'));
+              } else if (parts.length === 2) {
+                unmappedDirs.add(parts.join('/'));
+              }
+            }
+
+            const uniqueRows = [...new Set(rows)];
+
+            // Clean up prior doc-impact comments from this run
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            for (const comment of comments.data) {
+              if (comment.body?.includes('📝 **Doc Impact Check**') &&
+                  comment.user?.login === 'github-actions[bot]') {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id,
+                });
+              }
+            }
+
+            const sections = [];
+
+            if (hasMissing && uniqueRows.length > 0) {
+              sections.push(
+                'This PR changes code in areas that have corresponding documentation. Please verify these docs are still accurate:',
+                '',
+                '| Changed code | Related doc | Updated in this PR? |',
+                '|---|---|---|',
+                ...uniqueRows,
+              );
+            }
+
+            if (unmappedDirs.size > 0) {
+              if (sections.length > 0) sections.push('');
+              sections.push(
+                '⚠️ **Unmapped code areas detected** — these directories have no entry in `docs/code-to-docs-mapping.json`:',
+                '',
+                ...[...unmappedDirs].sort().map(d => `- \`${d}\``),
+                '',
+                'If these areas have corresponding docs, please add a mapping entry.',
+              );
+            }
+
+            if (sections.length > 0) {
+              const body = [
+                '📝 **Doc Impact Check**',
+                '',
+                ...sections,
+                '',
+                '_This is an automated reminder. If the code changes don\'t affect the doc content, no action needed._',
+              ].join('\n');
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
