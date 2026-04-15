@@ -20,7 +20,7 @@ POST /api/v1/sessions/:id/compact/sign
 
 ```typescript
 interface SignCompactRequest {
-  // No body required - signing is implicit
+  agreed: true;  // must literally be true; any other value returns VALIDATION_ERROR
 }
 ```
 
@@ -56,16 +56,18 @@ curl -X POST /api/v1/sessions/sess_abc123/compact/sign \
 
 ### Side Effects
 
-1. Updates `StageProgress.gatesSatisfied` with `compactSigned: true`
-2. If partner already signed, both users can advance
-3. Partner receives notification that user signed
+1. Updates `StageProgress.gatesSatisfied` with `compactSigned: true` and stamps `signedAt`.
+2. Notification target depends on role: if the signer is the invitee, the inviter is notified; otherwise the session's partner is notified (if any).
+3. **Self-healing session activation**: If both parties have now signed and the session is still in `CREATED` / `INVITED`, the controller upgrades it to `ACTIVE` in the same transaction. This covers edge cases where the invitation-accept flow didn't flip the status.
+4. `canAdvance` in the response is `true` iff both parties have signed.
 
 ### Errors
 
 | Code | When |
 |------|------|
-| `CONFLICT` | User already signed |
-| `SESSION_NOT_ACTIVE` | Session not in ACTIVE status |
+| `VALIDATION_ERROR` | `agreed` is not literally `true`, or the user has already signed |
+
+> There is no separate `SESSION_NOT_ACTIVE` error for Stage 0 — signing can succeed from `CREATED`/`INVITED` as well (see side effect 3).
 
 ---
 
@@ -151,8 +153,9 @@ See [Stage 0: Onboarding](../../stages/stage-0-onboarding.md#the-curiosity-compa
 When user has signed but partner hasn't:
 
 1. Show waiting UI with partner status
-2. Subscribe to Ably channel for real-time update
-3. Optionally allow user to "nudge" partner (separate endpoint, rate limited)
+2. Subscribe to Ably channel for real-time update when the partner signs
+
+> There is no "nudge" endpoint — reminders are handled out-of-band by the inviter re-sharing the invitation URL if the partner never engages.
 
 ```mermaid
 flowchart TD
