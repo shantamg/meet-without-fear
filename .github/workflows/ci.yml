@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'backend/**'
+              - 'mobile/**'
+              - 'shared/**'
+              - 'e2e/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig*.json'
+              - 'scripts/**'
+              - '.github/workflows/ci.yml'
+
+  ci:
+    name: Checks & Tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: meetwithoutfear_user
+          POSTGRES_PASSWORD: meetwithoutfear_password
+          POSTGRES_DB: meetwithoutfear_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://meetwithoutfear_user:meetwithoutfear_password@localhost:5432/meetwithoutfear_test
+      SHADOW_DATABASE_URL: postgresql://meetwithoutfear_user:meetwithoutfear_password@localhost:5432/meetwithoutfear_test_shadow
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Prisma engines
+        uses: actions/cache@v4
+        with:
+          path: |
+            backend/node_modules/.prisma
+            ~/.cache/prisma
+          key: ${{ runner.os }}-prisma-${{ hashFiles('backend/prisma/schema.prisma') }}
+          restore-keys: |
+            ${{ runner.os }}-prisma-
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate --workspace=backend
+        env:
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: 1
+
+      - name: Run checks (lint & type-check)
+        run: npm run check
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy --schema=backend/prisma/schema.prisma
+
+      - name: Run tests
+        run: npm run test
+
+  # Gate job for branch protection — always runs, fails if any real job failed.
+  # Set this as the required status check instead of the individual jobs.
+  ci-success:
+    name: CI Result
+    if: always()
+    needs: [changes, ci]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all checks passed
+        run: |
+          echo "changes: ${{ needs.changes.result }}"
+          echo "ci:      ${{ needs.ci.result }}"
+
+          # Allowlist: only 'success' and 'skipped' are acceptable.
+          # Catches 'failure', 'cancelled', and any unexpected state.
+          for result in \
+            "${{ needs.changes.result }}" \
+            "${{ needs.ci.result }}"; do
+            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
+              echo "::error::Job returned unexpected result: $result"
+              exit 1
+            fi
+          done
+          echo "All checks passed (or were correctly skipped)"

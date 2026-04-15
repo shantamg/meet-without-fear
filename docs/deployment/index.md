@@ -64,19 +64,29 @@ Build profiles are defined in `mobile/eas.json`. Most profiles set `EXPO_PUBLIC_
 
 ## CI/CD Pipeline
 
-GitHub Actions runs on every push to `main` and every pull request targeting `main`. The workflow is defined in `.github/workflows/ci.yml`.
+Two GitHub Actions workflows split the concerns:
+
+### `.github/workflows/ci.yml` — tests on PRs
+Runs on every PR targeting `main`. Short-circuited via `dorny/paths-filter` when only docs or unrelated files change.
 
 **Steps:**
 
-1. Starts a PostgreSQL 16 service container (health-checked with `pg_isready`)
-2. Checks out the repository and sets up Node.js 20 with npm caching
-3. Installs dependencies (`npm ci`)
-4. Generates the Prisma client (`npx prisma generate` in `backend/`)
-5. Runs database migrations (`npx prisma migrate deploy` in `backend/`)
-6. Runs type checking across all workspaces (`npm run check`)
-7. Runs tests across all workspaces (`npm run test`)
+1. Starts a PostgreSQL 15 service container (health-checked with `pg_isready`).
+2. Checks out the repository and sets up Node.js 20 with npm caching.
+3. Installs dependencies (`npm ci`).
+4. Generates the Prisma client (`npm run prisma:generate --workspace=backend`, with `PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1`).
+5. Runs type checking across all workspaces (`npm run check`).
+6. Runs database migrations (`npx prisma migrate deploy --schema=backend/prisma/schema.prisma`).
+7. Runs tests across all workspaces (`npm run test`).
 
-The pipeline uses a dedicated test database (`meetwithoutfear_test`) with `NODE_ENV=test`. All steps must pass before a PR can be merged.
+A gate job (`ci-success`) rolls the individual jobs up — set that as the single required status check for branch protection.
+
+The pipeline uses a dedicated test database (`meetwithoutfear_test`) with `NODE_ENV=test`.
+
+### `.github/workflows/render-deploy.yml` — explicit deploys on main
+Runs on push to `main`. A `dorny/paths-filter` step restricts deploys to pushes that actually change `backend/`, `shared/`, the lockfile, `render.yaml`, or the workflow itself. On a match, the workflow `curl -X POST`s the Render **deploy hook** stored in repo secret `RENDER_DEPLOY_HOOK`.
+
+> Render's built-in "auto-deploy on push" must be **off** for the `meet-without-fear-api` service — GitHub Actions is the only deploy trigger. This prevents docs-only pushes from rebuilding the backend.
 
 ## Key Environment Variables
 
