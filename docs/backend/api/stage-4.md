@@ -19,16 +19,10 @@ Key design:
 - Overlap is revealed together
 
 ### Data persistence
-- Strategies -> `StrategyProposal` (source tracked for audit; not exposed to partner)
-- Rankings -> `StrategyRanking` (ordered array of proposal ids)
-- Winning micro-experiment -> `Agreement` with `type = MICRO_EXPERIMENT` and `proposalId` reference
-- Consent: if proposals are derived from partner content, create `ConsentRecord.targetType = STRATEGY_PROPOSAL`
-
-### Data persistence
-- Strategies -> `StrategyProposal` (source tracked for audit; not exposed to partner)
-- Rankings -> `StrategyRanking` (ordered array of proposal ids)
-- Winning micro-experiment -> `Agreement` with `type = MICRO_EXPERIMENT` and `proposalId` reference
-- Consent: if proposals are derived from partner content, create `ConsentRecord.targetType = STRATEGY_PROPOSAL`
+- Strategies → `StrategyProposal` (source tracked for audit; not exposed to partner). Strategy pool is shuffled server-side before returning to avoid revealing order-of-proposal.
+- Rankings → `StrategyRanking` (ordered array of proposal ids)
+- Winning micro-experiment → `Agreement` with `type = MICRO_EXPERIMENT` and `proposalId` reference. `duration` and `measureOfSuccess` are returned for shape compatibility but are currently `null` — fields not yet added to the Prisma model.
+- `ConsentRecord` rows are **not** created for Stage 4 proposals today — the feature is designed but not wired in the controllers yet.
 
 ---
 
@@ -59,12 +53,12 @@ interface StrategyDTO {
 }
 
 enum StrategyPhase {
-  COLLECTING = 'COLLECTING',     // Users still adding
-  RANKING = 'RANKING',           // Both ready to rank
-  REVEALING = 'REVEALING',       // Revealing overlap
-  NEGOTIATING = 'NEGOTIATING',   // Working toward agreement
-  AGREED = 'AGREED',             // Agreement reached
+  COLLECTING = 'COLLECTING',     // Users still adding strategies
+  RANKING    = 'RANKING',        // Both have marked ready; ranking in progress
+  REVEALING  = 'REVEALING',      // Both rankings submitted; overlap revealed
 }
+// There is no NEGOTIATING or AGREED phase — the code uses only the three above.
+// Overlap with no shared items just returns an empty `overlap` array while staying in REVEALING.
 ```
 
 ### Example Response
@@ -178,13 +172,15 @@ interface RequestSuggestionsResponse {
 
 ### Source Constraints
 
-AI suggestions are generated from:
+AI suggestions are designed to be generated from:
 - Common ground needs (Shared Vessel)
 - Global Micro-Experiments Library (anonymized)
 
 **Never** from user memory (Retrieval Contract enforced).
 
-Validation: count 1-5; focusNeeds max 3 entries. Suggestions persisted as `StrategyProposal` with `source = AI_SUGGESTED`.
+> **Current state**: this endpoint is a placeholder. The controller returns `{ suggestions: [] }` and does not persist any `StrategyProposal` rows. The route path is `/strategies/suggest`; the JSDoc in the controller still says `/strategies/suggestions` (stale comment, route is correct).
+
+Validation: count 1-5; focusNeeds max 3 entries.
 
 ---
 
@@ -213,7 +209,7 @@ When both ready:
 - Strategy pool is locked (no new additions)
 - Partner notified
 
-Gate link: sets `strategiesSubmitted` for caller when they mark ready.
+Gate link: sets `readyToRank` on the caller's `StageProgress.gatesSatisfied`.
 
 ---
 
@@ -248,7 +244,7 @@ interface SubmitRankingResponse {
 
 Rankings are **completely private** until both submit. Neither party can see the other's choices during ranking.
 
-Validation: IDs must exist in session, no duplicates, overwrite allowed (last write wins). Gate link: sets `rankingsSubmitted` for caller.
+Validation: IDs must exist in session, no duplicates, overwrite allowed (last write wins). Gate link: sets `rankingSubmitted` on the caller's `StageProgress.gatesSatisfied`.
 
 ---
 
@@ -271,10 +267,8 @@ interface RevealOverlapResponse {
 
 ### Behavior
 
-- If overlap exists: return shared highest-ranked items
-- If no overlap: return empty array and set `phase = NEGOTIATING`
-
-Gate link: sets `overlapIdentified` when overlap is computed (even if empty).
+- Phase is computed from the `(callerReady, partnerReady, callerRanked, partnerRanked)` combination: `COLLECTING` → `RANKING` → `REVEALING`.
+- If no overlap exists once both sides have ranked, the response is `{ overlap: [], phase: 'REVEALING' }`; there is no separate `NEGOTIATING` phase.
 
 ---
 
@@ -360,41 +354,37 @@ interface ConfirmAgreementResponse {
 
 ## Resolve Session
 
-Mark session as resolved after successful agreement.
+Session resolution is a **side effect of confirming an agreement**, not a standalone endpoint.
 
-```
-POST /api/v1/sessions/:id/resolve
-```
+When `POST /sessions/:id/agreements/:agreementId/confirm` flips the last outstanding agreement to `AGREED` and both parties have signed off, the `confirmAgreement` controller updates the session in the same transaction:
 
-### Response
-
-```typescript
-interface ResolveSessionResponse {
-  resolved: boolean;
-  resolvedAt: string;
-  agreements: AgreementDTO[];
-  followUpScheduled: boolean;
+```ts
+if (sessionCanResolve) {
+  await prisma.session.update({ where: { id: sessionId }, data: { status: 'RESOLVED' } });
 }
 ```
 
-### Side Effects
+The confirm response's `sessionCanResolve` boolean tells the client whether this happened. There is no dedicated `POST /sessions/:id/resolve` for Stage 4.
 
-- Session status changes to `RESOLVED`
-- Both parties notified
-- If follow-up scheduled, reminder queued
+---
+
+## Agreement count cap
+
+Each session is capped at **two `Agreement` rows**. `createAgreement` returns `VALIDATION_ERROR` (400) with "Maximum of 2 agreements per session" once the cap is reached.
 
 ---
 
 ## Stage 4 Gate Requirements
 
-To resolve session:
+Advancement to `RESOLVED` uses these caller-side gates (set on `StageProgress.gatesSatisfied`):
 
 | Gate | Requirement |
 |------|-------------|
-| `proposalsCreated` | At least one strategy in pool |
-| `proposalsRanked` | Both users submitted rankings |
-| `agreementReached` | At least one agreement confirmed by both |
-| `followUpScheduled` | Optional: follow-up date set |
+| `readyToRank` | Caller posted `/strategies/ready` |
+| `rankingSubmitted` | Caller posted `/strategies/rank` |
+| `agreementConfirmed` | Caller confirmed at least one agreement (partner too, for session to resolve) |
+
+Session resolves once both partners have at least one `AGREED` agreement (see Resolve Session side effect above).
 
 ---
 
