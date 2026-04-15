@@ -1,6 +1,6 @@
 ---
-title: **INNER WORK \- Product Specification**
-sidebar_position: 5
+title: "**INNER WORK \\- Product Specification**"
+sidebar_position: "5"
 description: "Version: 1.0 Draft Date: January 2026 Author: DF Audience: SG"
 ---
 # **INNER WORK \- Product Specification**

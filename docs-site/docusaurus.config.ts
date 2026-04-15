@@ -3,8 +3,8 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: 'Meet Without Fear MVP Planning',
-  tagline: 'Meet Without Fear MVP Planning Documentation',
+  title: 'Meet Without Fear',
+  tagline: 'Living documentation: product, backend, mobile, deployment, infrastructure',
   favicon: 'img/favicon.ico',
 
   future: {
@@ -22,9 +22,10 @@ const config: Config = {
     locales: ['en'],
   },
 
-  // Mermaid support
+  // Mermaid support + parse .md as plain markdown (no MDX/JSX expressions)
   markdown: {
     mermaid: true,
+    format: 'detect',
   },
   themes: ['@docusaurus/theme-mermaid'],
 

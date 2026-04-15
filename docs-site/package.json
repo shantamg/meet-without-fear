@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "docusaurus": "docusaurus",
-    "prebuild": "rm -rf docs && cp -r ../docs/mvp-planning docs",
+    "prebuild": "rm -rf docs && mkdir docs && rsync -a --exclude='archive/' --exclude='*.json' ../docs/ docs/",
     "start": "npm run prebuild && docusaurus start",
     "build": "npm run prebuild && docusaurus build",
     "swizzle": "docusaurus swizzle",

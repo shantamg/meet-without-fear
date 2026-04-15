@@ -53,7 +53,11 @@ function parseFrontmatter(content) {
 
 function extractTitle(body) {
   const h1 = body.match(/^#\s+(.+)$/m);
-  return h1 ? h1[1].trim() : null;
+  if (!h1) return null;
+  let t = h1[1].trim();
+  // Strip markdown emphasis/bold/code and backslash-escapes
+  t = t.replace(/[*_`]/g, '').replace(/\\(.)/g, '$1').trim();
+  return t || null;
 }
 
 function extractDescription(body) {
@@ -92,9 +96,9 @@ function renderFrontmatter(fm) {
     if (typeof v === 'number') {
       lines.push(`${k}: ${v}`);
     } else {
-      // Quote if contains special chars
-      const needsQuote = /[:#'"\n]/.test(v);
-      lines.push(`${k}: ${needsQuote ? JSON.stringify(v) : v}`);
+      // Always JSON-stringify strings: safe against YAML specials
+      // (*, &, :, #, quotes, leading-dash, etc.) and idempotent on reads.
+      lines.push(`${k}: ${JSON.stringify(String(v))}`);
     }
   }
   lines.push('---', '');
@@ -128,9 +132,21 @@ function processFile(filePath, positionIndex) {
     }
   }
 
+  // Force a re-render if existing frontmatter has YAML-unsafe unquoted values
+  // (leading *, &, leading -, etc.) — those break Docusaurus load.
   if (!changed && frontmatter) {
-    skippedFiles++;
-    return;
+    const raw = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] || '';
+    const hasUnsafe = raw.split(/\r?\n/).some(line => {
+      const m = line.match(/^\w+:\s*([^"'\d\[\{].*)$/);
+      if (!m) return false;
+      const val = m[1].trim();
+      return /^[*&!%@`>|]/.test(val); // YAML indicator chars at start
+    });
+    if (!hasUnsafe) {
+      skippedFiles++;
+      return;
+    }
+    changed = true;
   }
 
   const newContent = renderFrontmatter(fm) + body.replace(/^\r?\n+/, '');
