@@ -145,12 +145,21 @@ echo "Uploading doc..."
 notebooklm source add "$DOC_ABS" --title "DOC: $DOC" > /dev/null
 
 echo "Uploading ${#CODE_FILES[@]} code files..."
+# NotebookLM's `source add` only reads file *contents* when the path ends in
+# .txt or .md (auto-detect rules). For other extensions (.ts, .sh, etc.), the
+# path string itself is stored as inline text — garbage input. Workaround: copy
+# each file to a temp dir with a .md extension so auto-detect reads the bytes.
+TMP_UPLOAD_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_UPLOAD_DIR"' EXIT
+
 for rel in "${CODE_FILES[@]}"; do
   abs="$REPO_ROOT/$rel"
   [ -f "$abs" ] || continue
-  # Force text type — NotebookLM's file upload rejects .ts/.tsx/.sh with 400.
-  # `--type text` sends the content inline as plain text instead.
-  notebooklm source add "$abs" --type text --title "CODE: $rel" > /dev/null 2>&1 \
+  # Flat filename in the temp dir, preserving the original path via the title.
+  tmpname=$(echo "$rel" | tr '/' '_')
+  tmppath="$TMP_UPLOAD_DIR/${tmpname}.md"
+  cp "$abs" "$tmppath"
+  notebooklm source add "$tmppath" --title "CODE: $rel" > /dev/null 2>&1 \
     || echo "  skipped (upload failed): $rel" >&2
 done
 
