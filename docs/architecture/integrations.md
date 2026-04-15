@@ -31,22 +31,27 @@ status: living
   - Model overrides: `BEDROCK_SONNET_MODEL_ID`, `BEDROCK_HAIKU_MODEL_ID`, `BEDROCK_TITAN_EMBED_MODEL_ID`
   - Auth: `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
   - Files: `backend/src/lib/bedrock.ts` (client setup), `backend/src/services/ai.ts` (high-level API)
-  - Pricing: Sonnet 4.5 — $3.00/MTok input, $15.00/MTok output; Haiku 4.5 — $1.00/MTok input, $5.00/MTok output. Prices shown per 1M tokens (code constants in `bedrock.ts` and `brain.ts` are per 1K tokens — e.g. `{ input: 0.001, output: 0.005 }` for Haiku)
+  - Pricing (per 1M tokens; code constants in `bedrock.ts` and `brain.ts` are per 1K tokens):
+    - Sonnet 4.5 — $3.00 input, $15.00 output, $0.30 cache-read, $3.75 cache-write.
+    - Haiku 4.5 — $1.00 input, $5.00 output, $0.10 cache-read, $1.25 cache-write.
+    - See `PRICING` in `bedrock.ts` for per-model entries (including legacy models).
   - Prompt caching: two layers.
     1. System prompts use a 2-block architecture — a static block with `cache_control: { type: 'ephemeral' }` reused across turns within a stage, and a dynamic per-turn block that is not cached (see `stage-prompts.ts`). This is Sonnet-only: `SonnetCompletionOptions.systemPrompt` accepts `string | PromptBlocks`, but `HaikuCompletionOptions.systemPrompt` is `string` only, so Haiku calls do not cache the system block.
     2. Conversation history prefix caching — `cache_control` is added to the second-to-last message in every Bedrock request, so each subsequent turn replays the entire prior conversation as a cache hit. See `docs/backend/prompt-caching.md` for details.
   - Extended thinking: `CompletionOptions` / `SonnetCompletionOptions` accept an optional `thinkingBudget?: number` to request interleaved thinking tokens.
-  - Circuit breakers: `bedrockCircuitBreaker` and `embeddingCircuitBreaker` are defined in `backend/src/utils/circuit-breaker.ts` and used by `backend/src/lib/bedrock.ts`. They fast-fail to `null` when OPEN, so AI callers must handle a null response. Ably has its own `ablyCircuitBreaker` (see Realtime below).
+  - Circuit breakers: `bedrockCircuitBreaker` and `embeddingCircuitBreaker` are defined in `backend/src/utils/circuit-breaker.ts` and used by `backend/src/lib/bedrock.ts`. When OPEN they log a `[Bedrock] Circuit breaker OPEN - skipping <model> call for <operation>` warning and return `null`, so AI callers must handle a null response. Ably has its own `ablyCircuitBreaker` (see Realtime below).
   - Titan embeddings: `getEmbedding()` hard-truncates the input at 30,000 characters — chosen as a rough ceiling to stay inside Titan's ~8,000-token input limit. Titan has no native batch endpoint, so `getEmbeddings()` (plural) parallelizes by mapping `getEmbedding` across the inputs.
   - Streaming: `StreamEvent` union includes `{ type: 'done'; usage: {...}; error: string }` — a non-empty `error` on the terminal `done` event means the stream failed partway, callers must check.
-  - E2E fixture mode: when `E2E_FIXTURE_ID` is set, `getSonnetResponse` / `getSonnetStreamingResponse` route through `getFixtureOperationResponse()` / `getFixtureResponseByIndex()` instead of Bedrock. `MOCK_LLM=true` is the looser toggle.
+  - E2E fixture mode: when `E2E_FIXTURE_ID` is set, `getSonnetResponse` / `getSonnetStreamingResponse` route through `getFixtureOperationResponse()` / `getFixtureResponseByIndex()` instead of Bedrock. `MOCK_LLM=true` is a cross-model kill-switch checked inside `getModelCompletion()` (so it short-circuits Haiku calls too, returning `null`).
+  - Cost attribution: `CompletionOptions.sessionId` and `CompletionOptions.turnId` are required (enforced at call sites, documented on the type) so every Bedrock call can be attributed in `BrainActivity`.
+  - Haiku JSON retry: `getHaikuJson()` retries once with operation suffix `-retry` if the first response fails JSON parsing, before returning `null`.
   - Legacy model support: `PRICING` still includes entries for `claude-sonnet-4-6`, `claude-3-5-sonnet-20241022-v2:0`, and `claude-3-5-haiku-20241022-v1:0`, and a legacy `BEDROCK_MODEL_ID` export aliases Sonnet. Safe to reference when resurrecting old calls; new call sites should use the named constants.
   - Prompt debug logging (local dev only): every Bedrock prompt + response is written to `backend/tmp/prompts/` as paired `<stem>.txt` / `<stem>_response.txt` files unless `DISABLE_PROMPT_LOGGING=true`. Directory is gitignored.
 
 **Real-time Communication:**
 - Ably - WebSocket-based pub/sub messaging
   - SDK: `ably` (backend and mobile)
-  - Auth: `ABLY_API_KEY` (backend only). Mobile fetches short-lived tokens from the backend via `GET /api/v1/auth/ably-token` (`mobile/src/lib/ably.ts` calls the API client with the relative path `'/auth/ably-token'`, which picks up the `/api/v1` base URL).
+  - Auth: `ABLY_API_KEY` (backend only). Mobile fetches short-lived tokens from the backend via `GET /api/v1/auth/ably-token` (`mobile/src/lib/ably.ts` calls the API client with the relative path `'/auth/ably-token'`, which picks up the `/api/v1` base URL). The client prefers a full JWT `token` in the response over an Ably `tokenRequest` to avoid an extra round-trip.
   - Channel format: `meetwithoutfear:session:${sessionId}` and `meetwithoutfear:user:${userId}` (see `shared/src/dto/realtime.ts`)
   - 47 event types (44 SessionEventType + 3 UserEventType) across session, user, empathy, and system events (added `session.abandoned`)
   - Audit stream channel: `ai-audit-stream` (when `ENABLE_AUDIT_STREAM=true`)
