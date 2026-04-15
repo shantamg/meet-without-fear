@@ -3,7 +3,7 @@ title: "Gratitude Practice (\"See the Positive\") Implementation Plan"
 sidebar_position: 3
 description: "> Status: DEFERRED — This feature is not part of the v1.2 Inner Thoughts Journal milestone. The UI pathway has been removed from the Inner Work hub. This spe..."
 ---
-> **Status: DEFERRED** — This feature is not part of the v1.2 Inner Thoughts Journal milestone. The UI pathway has been removed from the Inner Work hub. This spec is preserved for future reference.
+> **Status: partially implemented.** A `GratitudeScreen.tsx` exists in `mobile/src/screens/` with entry form, history, streak / daily-count gamification, speech-enabled prompts (via `useSpeech`), and data hooks (`useGratitudeEntries`, `useGratitudePrompt`, `useGratitudePatterns`). Originally deferred from v1.2 — the screen has since been added but several design pieces below (dedicated `GratitudeEntryScreen`, post-save AI response, voice *input* transcription, needs-aware prompt variants, explicit needs linkage) are **not yet built**. Treat the doc as a mix of current behavior and forward plan; see inline notes.
 
 # Gratitude Practice ("See the Positive") Implementation Plan
 
@@ -310,6 +310,8 @@ Run async after save (non-blocking, like Inner Thoughts):
 
 ### New Files
 
+**Planned structure (original design):**
+
 ```
 mobile/src/
 ├── screens/
@@ -324,6 +326,8 @@ mobile/src/
 └── hooks/
     └── useGratitude.ts             # React Query hooks
 ```
+
+**Actual current structure:** a single `mobile/src/screens/GratitudeScreen.tsx` hosts both the new-entry form and the history/patterns view in one scroll-based layout. Data hooks live in `mobile/src/hooks/useGratitude.ts` (`useGratitudeEntries`, `useGratitudePrompt`, `useGratitudePatterns`, `useSubmitGratitudeEntry`). The per-entry detail card is `EntryCard` inside `GratitudeScreen.tsx`, which shows the first `metadata.themes` entry; there is no dedicated `linkedNeedIds` surfacing in the UI yet.
 
 ### Hooks
 
@@ -486,16 +490,17 @@ Action: Opens GratitudeEntryScreen
 - [ ] Preferences endpoints
 
 ### Phase 3: Mobile Entry Screen (1-2 days)
-- [ ] Create GratitudeEntryScreen
-- [ ] Implement contextual prompts
-- [ ] Add voice input option
-- [ ] Show AI response after save
+- [x] Create entry UI (landed as `GratitudeScreen` `NewEntryForm`, not a separate screen)
+- [x] Implement prompt plumbing (fetched via `useGratitudePrompt`; contextual variants based on needs scores are **not yet wired**)
+- [x] Speech output — prompt is read aloud via `useSpeech` (`toggleSpeech(prompt, 'gratitude-prompt')`)
+- [ ] Voice *input* — transcription into the entry field is not implemented
+- [ ] Post-save AI response — submission currently triggers only a success toast (`'Gratitude Saved'`)
 
 ### Phase 4: Mobile History Screen (1-2 days)
-- [ ] Create GratitudeHistoryScreen
-- [ ] Build GratitudeCard component
-- [ ] Implement infinite scroll
-- [ ] Add date filtering
+- [x] Landed as the history/patterns section of `GratitudeScreen` (no separate `GratitudeHistoryScreen`)
+- [x] `EntryCard` component shows `metadata.themes[0]` alongside each entry
+- [x] Streak + daily-count display (`calculateStreak`, `getTodaysEntries`)
+- [ ] Infinite scroll / date filtering — not yet implemented
 
 ### Phase 5: Metadata Extraction (1 day)
 - [ ] Create extraction service
