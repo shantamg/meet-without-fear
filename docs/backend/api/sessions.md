@@ -20,31 +20,28 @@ POST /api/v1/sessions
 
 ```typescript
 interface CreateSessionRequest {
-  // Option 1: Invite existing person
+  // Existing person (returns existing active session if one already exists)
   personId?: string;
 
-  // Option 2: Invite by contact info
-  inviteEmail?: string;
-  invitePhone?: string;
+  // Or, name-only invite for a brand-new person
   inviteName?: string;
 
-  // Optional context (private to creator)
+  // Optional context (private to creator, used to seed the AI intro)
   context?: string;
+
+  // Optional link to the Inner Thoughts entry that motivated the session
+  innerThoughtsId?: string;
 }
 ```
 
 ### Validation Rules
 
-- Must provide either `personId` OR (`inviteEmail` | `invitePhone`)
-- Cannot have an active session with the same person
-- Email/phone must be valid format
+- Must provide `personId` OR `inviteName`
+- If `personId` has an existing `ACTIVE`/`CREATED`/`INVITED` session, that session is returned instead of creating a new one
 
 ### Invitation Delivery
 
-- **Email**: Sent via [Resend](https://resend.com) when `inviteEmail` is provided
-- **Phone**: Sent via [Twilio](https://twilio.com) SMS when `invitePhone` is provided
-
-See [Invitations API](./invitations.md) for delivery details.
+The backend returns a shareable `invitationUrl`; the inviter forwards it through whatever channel they prefer (iMessage, email, WhatsApp). The backend itself does **not** send invitation emails or SMS. See [Invitations API](./invitations.md) for the full model.
 
 ### Response
 
@@ -63,7 +60,6 @@ curl -X POST /api/v1/sessions \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "inviteEmail": "partner@example.com",
     "inviteName": "Alex",
     "context": "Discussion about household responsibilities"
   }'
@@ -78,7 +74,7 @@ curl -X POST /api/v1/sessions \
     "session": {
       "id": "sess_abc123",
       "relationshipId": "rel_xyz789",
-      "status": "INVITED",
+      "status": "CREATED",
       "createdAt": "2024-01-15T10:30:00Z",
       "partner": {
         "id": "user_pending",
@@ -109,43 +105,23 @@ curl -X POST /api/v1/sessions \
 
 | Code | When |
 |------|------|
-| `VALIDATION_ERROR` | Invalid email/phone format |
-| `CONFLICT` | Active session already exists with this person |
+| `VALIDATION_ERROR` | Missing required fields |
 | `NOT_FOUND` | `personId` doesn't exist |
+
+### Session lifecycle
+
+`CREATED → INVITED → ACTIVE → ARCHIVED | ABANDONED`. There are no pause/resume states. `CREATED` flips to `INVITED` once the inviter confirms the invitation message; `INVITED` flips to `ACTIVE` when the partner accepts.
+
+> **Background AI**: After the inviter confirms the invitation message (`POST /sessions/:id/invitation/confirm`), the HTTP response returns immediately and the backend fires an AI transition message generation + Ably session-event publish asynchronously (fire-and-forget).
 
 ---
 
 ## List Sessions
 
-Get all sessions for the authenticated user.
+Listing the caller's sessions is currently surfaced via **unread count** + per-person **People API** rather than a generic `GET /sessions` endpoint. The `GET /sessions/unread-count` endpoint returns aggregate badge data.
 
 ```
-GET /api/v1/sessions
-```
-
-### Query Parameters
-
-| Param | Type | Default | Description |
-|-------|------|---------|-------------|
-| `status` | string | all | Filter by status (ACTIVE, RESOLVED, etc.) |
-| `cursor` | string | - | Pagination cursor |
-| `limit` | number | 20 | Max results (1-50) |
-
-### Response
-
-```typescript
-interface ListSessionsResponse {
-  sessions: SessionSummaryDTO[];
-  cursor?: string;
-  hasMore: boolean;
-}
-```
-
-### Example
-
-```bash
-curl /api/v1/sessions?status=ACTIVE \
-  -H "Authorization: Bearer <token>"
+GET /api/v1/sessions/unread-count
 ```
 
 ---
@@ -194,60 +170,34 @@ interface SessionDetailDTO {
 
 | Code | When |
 |------|------|
-| `NOT_FOUND` | Session doesn't exist |
-| `FORBIDDEN` | User is not a participant |
+| `UNAUTHORIZED` (401) | No auth token |
+| `NOT_FOUND` (404) | Session doesn't exist, or the authenticated user isn't a participant (non-participants see 404, not 403, to avoid disclosing session IDs) |
 
 ---
 
-## Pause Session
+## Session state, timeline, and progress
 
-Temporarily pause an active session (cooling period).
+The frontend doesn't reconstruct session state from `GET /sessions/:id` alone. Use these companion endpoints:
 
-```
-POST /api/v1/sessions/:id/pause
-```
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET`  | `/api/v1/sessions/:id/state` | Consolidated session + stage + gate state |
+| `GET`  | `/api/v1/sessions/:id/timeline` | Ordered ChatItem timeline (messages + indicators) |
+| `GET`  | `/api/v1/sessions/:id/progress` | Per-user `StageProgress` + gate satisfaction |
+| `POST` | `/api/v1/sessions/:id/stages/advance` | Advance the caller's stage when all gates for the current stage are satisfied |
+| `POST` | `/api/v1/sessions/:id/resolve` | Resolve session. Requires at least one `AGREED` agreement exists in the shared vessel; returns `VALIDATION_ERROR` otherwise |
+| `POST` | `/api/v1/sessions/:id/viewed` | Mark the session as viewed (clears unread flags) |
+| `POST` | `/api/v1/sessions/:id/share-tab-viewed` | Mark the Sharing tab as viewed |
+| `GET`  | `/api/v1/sessions/:id/invitation` | Get the current draft invitation message (inviter only) |
+| `PUT`  | `/api/v1/sessions/:id/invitation/message` | Replace the draft invitation message |
+| `POST` | `/api/v1/sessions/:id/invitation/confirm` | Confirm the invitation message; transitions session `CREATED → INVITED` |
+| `GET`  | `/api/v1/sessions/:id/inner-thoughts` | Fetch the linked Inner Thoughts entry (if any) |
 
-### Request Body
+> **Stage gates** (code: `STAGE_GATES`): Stage 0 requires `compactSigned`; Stage 1 requires `feelHeardConfirmed`; later stages have their own gate keys. `/progress` surfaces which gates the caller and the partner still need to satisfy.
 
-```typescript
-interface PauseSessionRequest {
-  reason?: string;  // Optional: why pausing
-}
-```
+### Pause / Resume
 
-### Response
-
-```typescript
-interface PauseSessionResponse {
-  session: SessionSummaryDTO;
-  pausedAt: string;
-}
-```
-
-### Side Effects
-
-- Partner receives notification
-- Both users can still view history but cannot send messages
-- Emotional readings can still be recorded
-
----
-
-## Resume Session
-
-Resume a paused session.
-
-```
-POST /api/v1/sessions/:id/resume
-```
-
-### Response
-
-```typescript
-interface ResumeSessionResponse {
-  session: SessionSummaryDTO;
-  resumedAt: string;
-}
-```
+Not implemented. Sessions cannot be paused. For cooling-off, users can stop messaging — all state persists, and the session remains in `ACTIVE` until archived, abandoned, or resolved.
 
 ---
 
