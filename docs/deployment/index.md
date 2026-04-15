@@ -22,7 +22,7 @@ The Express API is deployed to Render.com as a web service. Configuration is def
 - **Branch**: `main`
 - **Build command**: `npm install && npm run prisma:generate --workspace=backend && npm run build --workspace=backend`
 - **Start command**: `cd backend && npx prisma migrate deploy && node dist/backend/src/server.js`
-- **Environment variables**: Loaded from the `meet-without-fear-api-env` environment group on Render
+- **Environment variables**: Loaded from the `be-heard-api-env` environment group on Render
 
 Prisma migrations run automatically on each deploy via `prisma migrate deploy` in the start command.
 
