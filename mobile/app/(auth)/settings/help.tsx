@@ -14,6 +14,7 @@ import {
   Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import {
   HelpCircle,
   MessageCircle,
@@ -61,9 +62,7 @@ export default function HelpSupportScreen() {
   };
 
   const handleOpenDocs = () => {
-    Linking.openURL('https://meetwithoutfear.com/docs').catch(() => {
-      Alert.alert('Error', 'Could not open documentation');
-    });
+    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/docs');
   };
 
   const handleFeedback = () => {

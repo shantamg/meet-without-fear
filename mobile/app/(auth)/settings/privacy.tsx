@@ -12,10 +12,9 @@ import {
   ScrollView,
   Switch,
   TouchableOpacity,
-  Linking,
-  Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { Shield, Eye, Users, FileText, ExternalLink } from 'lucide-react-native';
 import { colors } from '@/src/theme';
 
@@ -27,17 +26,11 @@ export default function PrivacySettingsScreen() {
   const [shareAnonymousAnalytics, setShareAnonymousAnalytics] = useState(true);
 
   const handlePrivacyPolicyPress = () => {
-    // Open privacy policy in browser
-    Linking.openURL('https://meetwithoutfear.com/privacy').catch(() => {
-      Alert.alert('Error', 'Could not open privacy policy');
-    });
+    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/privacy');
   };
 
   const handleTermsPress = () => {
-    // Open terms of service in browser
-    Linking.openURL('https://meetwithoutfear.com/terms').catch(() => {
-      Alert.alert('Error', 'Could not open terms of service');
-    });
+    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/terms');
   };
 
   return (

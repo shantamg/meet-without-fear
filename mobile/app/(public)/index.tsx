@@ -1,5 +1,6 @@
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { colors } from '@/theme';
 import { Logo } from '@/src/components';
 
@@ -15,11 +16,11 @@ export default function WelcomeScreen() {
   };
 
   const handleTerms = () => {
-    Linking.openURL('https://meetwithoutfear.com/terms');
+    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/terms');
   };
 
   const handlePrivacy = () => {
-    Linking.openURL('https://meetwithoutfear.com/privacy');
+    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/privacy');
   };
 
   return (
