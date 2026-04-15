@@ -35,8 +35,11 @@ status: living
   - Prompt caching: two layers.
     1. System prompts use a 2-block architecture — a static block with `cache_control: { type: 'ephemeral' }` reused across turns within a stage, and a dynamic per-turn block that is not cached (see `stage-prompts.ts`).
     2. Conversation history prefix caching — `cache_control` is added to the second-to-last message in every Bedrock request, so each subsequent turn replays the entire prior conversation as a cache hit. See `docs/backend/prompt-caching.md` for details.
-  - Circuit breakers: `bedrockCircuitBreaker` and `embeddingCircuitBreaker` (in `backend/src/services/bedrock.ts`) fast-fail to `null` when OPEN, so AI callers must handle a null response. Ably has its own `ablyCircuitBreaker` (see Realtime below).
-  - Titan input truncation: `generateEmbedding()` hard-truncates the input at 30,000 characters (rough ~8K-token ceiling).
+  - Circuit breakers: `bedrockCircuitBreaker` and `embeddingCircuitBreaker` are defined in `backend/src/utils/circuit-breaker.ts` and used by `backend/src/lib/bedrock.ts`. They fast-fail to `null` when OPEN, so AI callers must handle a null response. Ably has its own `ablyCircuitBreaker` (see Realtime below).
+  - Titan embeddings: `getEmbedding()` hard-truncates the input at 30,000 characters (rough ~8K-token ceiling). Titan has no native batch endpoint, so `getEmbeddings()` (plural) parallelizes by mapping `getEmbedding` across the inputs.
+  - Streaming: `StreamEvent` union includes `{ type: 'done'; usage: {...}; error: string }` — a non-empty `error` on the terminal `done` event means the stream failed partway, callers must check.
+  - E2E fixture mode: when `E2E_FIXTURE_ID` is set, `getSonnetResponse` / `getSonnetStreamingResponse` route through `getFixtureOperationResponse()` / `getFixtureResponseByIndex()` instead of Bedrock. `MOCK_LLM=true` is the looser toggle.
+  - Legacy model support: `PRICING` still includes entries for `claude-sonnet-4-6`, `claude-3-5-sonnet-20241022-v2:0`, and `claude-3-5-haiku-20241022-v1:0`, and a legacy `BEDROCK_MODEL_ID` export aliases Sonnet. Safe to reference when resurrecting old calls; new call sites should use the named constants.
   - Prompt debug logging (local dev only): every Bedrock prompt + response is written to `backend/tmp/prompts/` as paired `<stem>.txt` / `<stem>_response.txt` files unless `DISABLE_PROMPT_LOGGING=true`. Directory is gitignored.
 
 **Real-time Communication:**
