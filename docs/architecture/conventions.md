@@ -14,10 +14,10 @@ status: living
 
 **Files:**
 - Utilities and helpers: `camelCase.ts` - e.g., `chatUIState.ts`, `getWaitingStatus.ts`
-- Services: `camelCase.ts` - e.g., `context-assembler.ts` for compound names with hyphens
+- Services: `kebab-case.ts` for compound names - e.g., `context-assembler.ts`, `session-state.ts`. Simple single-word service files use lowercase camelCase.
 - Components: `PascalCase.tsx` - e.g., `EmotionalBarometer.tsx`
 - Types/interfaces: `camelCase.ts` with PascalCase type names - e.g., `AuthUser` interface in `auth.ts`
-- Enums: `CONSTANT_CASE` values - e.g., `SessionStatus.CREATED`, `MessageRole.USER`
+- Enums: `CONSTANT_CASE` keys - e.g., `SessionStatus.CREATED`, `MessageRole.USER`. String *values* vary: true enums (e.g. `SessionStatus`, `Stage`, `InnerWorkStatus`) use matching `CONSTANT_CASE` strings; wire-format discriminants (e.g. `ChatItemType`, `AIMessageStatus`, `SharedContentDeliveryStatus`) use lowercase / kebab-case strings like `'ai-message'`, `'streaming'`, `'sending'`.
 - Test files: `__tests__/[name].test.ts[x]` or `__tests__/[name].spec.ts` - located in same directory as source
 
 **Functions:**
@@ -30,7 +30,7 @@ status: living
 **Variables:**
 - camelCase: `sessionId`, `invitationConfirmed`, `partnerProgress`
 - Constants: `CONSTANT_CASE` for compile-time constants - e.g., `MODEL_LIMITS`, `DATABASE_URL`
-- Booleans: prefix with `is*`, `has*`, `should*`, `can*` - e.g., `isLoading`, `hasInvitationMessage`, `shouldHideInput`
+- Booleans: prefer prefixes `is*`, `has*`, `should*`, `can*` - e.g., `isLoading`, `hasInvitationMessage`, `shouldHideInput`. DTO fields frequently use state-based adjectives instead (`biometricEnabled`, `registered`, `success`, `readyToShare`, `confirmed`); don't rename these in passing.
 - Config objects: PascalCase - e.g., `WaitingStatusConfig`
 - Unused parameters: prefix with `_` to signal intention - e.g., `_next: NextFunction`, `_props`
 
@@ -39,7 +39,9 @@ status: living
 - DTO suffix for data transfer objects: `SessionSummaryDTO`, `StageProgressDTO`
 - Props interface: `[ComponentName]Props` - e.g., `UseChatUIStateProps`
 - State interface: `[Name]State` - e.g., `ChatUIState`, `WaitingStatusState`
-- Enum values: `CONSTANT_CASE` in UPPERCASE - e.g., `SessionStatus.ACTIVE`, `Stage.WITNESS`
+- Enum keys: `CONSTANT_CASE` - e.g., `SessionStatus.ACTIVE`, `Stage.WITNESS`. See Naming Patterns > Enums for value conventions.
+- Zod-inferred request/response types use the `Input` suffix: `type RecordBarometerRequestInput = z.infer<typeof recordBarometerRequestSchema>`.
+- Reusable Zod validator *instances* are sometimes exported as `camelCase` consts (e.g. `intensityRating` in `shared/src/validation/utils`) rather than PascalCase types — that's intentional since they're values, not types.
 
 ## Code Style
 
@@ -227,7 +229,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
 **Exports:**
 - One primary export per file (default or named)
 - Helper exports grouped: `export { Helper1, Helper2 }`
-- No star exports (`export *`) except barrel files (`index.ts`), main package entry points (`shared/src/index.ts`), and type-only re-exports in service modules
+- No star exports (`export *`) except in barrel files (`index.ts`), main package entry points (`shared/src/index.ts`), and validation modules that re-export the matching contract types (e.g. `shared/src/validation/invitations.ts` re-exporting from `../contracts/sessions`)
 
 **Barrel Files** (index.ts):
 - Used for organizing related modules
@@ -238,7 +240,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
 - Backend: Controllers → Services → Utils → Library
 - Mobile: Screens → Components → Hooks → Utils → Library
 - No circular imports (TypeScript will flag)
-- Shared package has no internal dependencies (pure data + enums)
+- Shared package has no dependencies on backend or mobile code. Internal cross-file imports between shared DTOs (e.g. `dto/chat-item.ts` → `./empathy`, `dto/chat-router.ts` → `./session`, `./message`, `./memory`) are expected.
 
 ## Type Safety
 
@@ -305,7 +307,7 @@ Feature directories use `index.ts` barrel files to provide clean import paths. N
 - Pattern boundary: Controllers never call other controllers; hooks may compose other hooks
 
 **Nullable Values:**
-Convention says `T | null` for explicit null handling. In practice, some code uses `T | undefined` or `|| undefined` as a variation. DTOs use optional properties (`?:`) alongside `T | null`.
+Function return types prefer explicit `T | null` for missing data. DTOs, however, predominantly use optional properties (`field?: T`) — which TypeScript treats as `T | undefined` — rather than `T | null`. Either is acceptable; pick to match neighbors.
 
 ---
 
