@@ -14,7 +14,7 @@ status: living
 
 **Files:**
 - Utilities and helpers: `camelCase.ts` - e.g., `chatUIState.ts`, `getWaitingStatus.ts`
-- Services: `kebab-case.ts` for compound names - e.g., `context-assembler.ts`, `session-state.ts`. Simple single-word service files use lowercase camelCase.
+- Services: `kebab-case.ts` for compound names - e.g., `context-assembler.ts`, `session-state.ts`. Single-word service files are lowercase (e.g., `auth.ts`, `empathy.ts`).
 - Components: `PascalCase.tsx` - e.g., `EmotionalBarometer.tsx`
 - Types/interfaces: `camelCase.ts` with PascalCase type names - e.g., `AuthUser` interface in `auth.ts`
 - Enum-like types: two shapes are in use.
@@ -220,7 +220,7 @@ Examples in codebase:
 - Explicit return type declarations required
 - `void` for functions with side effects only
 - Promise types: `Promise<T>` or `Promise<void>` for async
-- Nullable returns: function signatures prefer `T | null` for "known absent" cases; DTO fields prefer optional properties (`field?: T`, i.e. `T | undefined`). See Additional Patterns > Nullable Values.
+- Nullable returns: function signatures prefer `T | null` for "known absent" cases. DTOs mix `T | null` and optional properties; see Additional Patterns > Nullable Values.
 - Union types for computation: `'option-a' | 'option-b' | null`
 
 **Pure Functions** (preferred pattern):
@@ -318,7 +318,10 @@ Feature directories use `index.ts` barrel files to provide clean import paths. N
 - Pattern boundary: Controllers never call other controllers; hooks may compose other hooks
 
 **Nullable Values:**
-Function return types prefer explicit `T | null` for missing data. DTOs, however, predominantly use optional properties (`field?: T`) — which TypeScript treats as `T | undefined` — rather than `T | null`. Either is acceptable; pick to match neighbors.
+Function return types prefer explicit `T | null`. DTOs use both forms, with a rough split by role:
+- Response / entity DTOs use explicit `T | null` for fields that are always present but may be empty: `UserDTO.name: string | null`, `UserDTO.lastMoodIntensity: number | null`, `TakeawayDTO.theme: string | null`, `EmpathyExchangeStatusResponse.myAttempt: EmpathyAttemptDTO | null`.
+- Request DTOs lean on optional properties (`field?: T`) when the field may be absent entirely (partial update payloads, URL query params).
+Either is acceptable; pick to match neighbors.
 
 ---
 
