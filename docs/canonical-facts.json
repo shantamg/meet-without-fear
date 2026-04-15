@@ -1,0 +1,89 @@
+{
+  "_comment": "Cross-doc canonical values. If any of these change, search for occurrences across docs/ and update them together. Updated irregularly; not the source of truth — the code is. This is for cross-doc consistency checks.",
+  "_updated": "2026-04-14",
+
+  "backend": {
+    "framework": "Express",
+    "runtime": "Node.js 20",
+    "orm": "Prisma 6.x",
+    "database": "PostgreSQL (Render)",
+    "service_count": 49,
+    "controller_count": 19
+  },
+
+  "mobile": {
+    "framework": "Expo 54 + React Native 0.84",
+    "navigation": "Expo Router 6.x",
+    "state_management": "React Query 5.x + custom hooks (cache-first pattern)",
+    "auth": "Clerk + expo-auth-session",
+    "screen_count": 13,
+    "component_count": 81,
+    "hook_count": 38
+  },
+
+  "conversation_stages": {
+    "count": 5,
+    "stages": [
+      { "n": 0, "name": "Onboarding",          "doc": "docs/product/stages/stage-0-onboarding.md" },
+      { "n": 1, "name": "Witness",             "doc": "docs/product/stages/stage-1-witness.md" },
+      { "n": 2, "name": "Perspective Stretch", "doc": "docs/product/stages/stage-2-perspective-stretch.md" },
+      { "n": 3, "name": "Need Mapping",        "doc": "docs/product/stages/stage-3-need-mapping.md" },
+      { "n": 4, "name": "Strategic Repair",    "doc": "docs/product/stages/stage-4-strategic-repair.md" }
+    ]
+  },
+
+  "ai": {
+    "provider": "AWS Bedrock",
+    "user_facing_model": "Claude Sonnet 4.5",
+    "user_facing_model_id": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "internal_model": "Claude Haiku 4.5",
+    "internal_model_id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "embedding_model": "Amazon Titan Embed Text v2",
+    "embedding_model_id": "amazon.titan-embed-text-v2:0"
+  },
+
+  "integrations": {
+    "auth": "Clerk",
+    "realtime": "Ably 2.x (WebSocket pub/sub)",
+    "analytics": "Mixpanel",
+    "error_tracking": "Sentry",
+    "email": "Resend",
+    "push": "Expo Push",
+    "speech_to_text": "AssemblyAI"
+  },
+
+  "testing": {
+    "unit_integration": "Jest 29",
+    "e2e": "Playwright 1.x (React Native web + API)",
+    "test_database": "meetwithoutfear_test"
+  },
+
+  "deployment": {
+    "backend_host": "Render",
+    "backend_service_name": "meet-without-fear-api",
+    "backend_service_id": "srv-d58bj73uibrs73akacd0",
+    "backend_env_group": "be-heard-api-env",
+    "backend_env_group_id": "evg-d58bivruibrs73aka8qg",
+    "database_name": "be_heard_db",
+    "database_user": "be_heard_db_user",
+    "database_id": "dpg-d58660shg0os73bkkpmg-a",
+    "database_region": "oregon",
+    "docs_site_host": "Vercel",
+    "marketing_site_host": "Vercel"
+  },
+
+  "bot": {
+    "system_name": "slam-bot",
+    "github_account": "slam-paws",
+    "ec2_tag": "slam-bot",
+    "ec2_region": "us-west-2",
+    "scripts_root": "/opt/slam-bot",
+    "log_dir": "/var/log/slam-bot"
+  },
+
+  "repo": {
+    "github": "shantamg/meet-without-fear",
+    "default_branch": "main",
+    "workspace_layout": "monorepo (npm workspaces) — backend/, mobile/, shared/, e2e/, docs-site/, website/"
+  }
+}
