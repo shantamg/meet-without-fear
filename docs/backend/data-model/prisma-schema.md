@@ -1,12 +1,12 @@
 ---
 title: Prisma Schema
 sidebar_position: 1
-description: Complete database schema implementing the Vessel Architecture.
+description: Core Vessel Architecture tables plus pointers to the rest of the Prisma schema (Inner Work, reconciler, memory, needs/people, telemetry).
 slug: /backend/data-model/prisma-schema
 ---
 # Prisma Schema
 
-Complete database schema implementing the [Vessel Architecture](../../privacy/vessel-model.md).
+This page documents the **core Vessel Architecture tables** (Users, Relationships, Sessions, UserVessel, SharedVessel, and their direct children) plus notable cross-cutting conventions. For subsystems that live alongside the core — Inner Work, memory, reconciler, needs/people catalogs, telemetry, and pre-session messages — the authoritative source is `backend/prisma/schema.prisma`. Key subsystems summarized near the bottom of this page.
 
 ## Schema Overview
 
@@ -32,23 +32,36 @@ erDiagram
 
 ```prisma
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String?
-  pushToken     String?  // Expo push token for realtime fallbacks
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  clerkId            String   @unique  // Clerk user ID for auth
+  email              String   @unique
+  name               String?
+  firstName          String?
+  lastName           String?
+  pushToken          String?  // Expo push token for realtime fallbacks
+  biometricEnabled   Boolean  @default(false)
+  biometricEnrolledAt DateTime?
+  lastMoodIntensity  Int?
+  globalFacts        Json?    // Fact-Ledger: consolidated cross-session insights
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  // Relationships
-  relationships RelationshipMember[]
-  vessels       UserVessel[]
-  stageProgress StageProgress[]
-  messages      Message[]
-  consents      ConsentRecord[]
-  empathyDrafts EmpathyDraft[]
-  empathyAttempts EmpathyAttempt[]
-  strategyProposals StrategyProposal[]
-  strategyRankings  StrategyRanking[]
+  // Key relations (see schema.prisma for the full set)
+  relationships      RelationshipMember[]
+  vessels            UserVessel[]
+  stageProgress      StageProgress[]
+  messages           Message[]
+  consents           ConsentRecord[]
+  empathyDrafts      EmpathyDraft[]
+  empathyAttempts    EmpathyAttempt[]
+  strategyProposals  StrategyProposal[]
+  strategyRankings   StrategyRanking[]
+  memories           UserMemory[]        // "Things to Always Remember"
+  innerWorkSessions  InnerWorkSession[]
+  gratitudeEntries   GratitudeEntry[]
+  meditationSessions MeditationSession[]
+  needsAssessments   NeedsAssessmentState[]
+  people             Person[]
 }
 ```
 
@@ -692,7 +705,17 @@ See [Architecture: RLS Middleware](../overview/architecture.md#row-level-securit
 
 ## pgvector Configuration
 
-### Enabling Vector Search
+### Current state (embeddings disabled)
+
+The `pgvector` extension is **not currently enabled** on the live database. In the schema:
+
+- `datasource db` keeps `extensions = [vector]` commented out.
+- All `embedding` / `contentEmbedding` fields on `UserEvent`, `PreSessionMessage`, `GlobalLibraryItem`, `GratitudeEntry`, etc. are either commented out or typed with `Unsupported("vector(1024)")?` — placeholders for the day pgvector is turned on.
+- Retrieval today is SQL-only (keyword/category filters, JOINs on consent). See [Prompting architecture](../prompting-architecture.md) and [Retrieval contracts](../state-machine/retrieval-contracts.md) for how context is assembled without vector search.
+
+### Enabling Vector Search (future)
+
+When pgvector is re-enabled:
 
 ```sql
 -- Enable the pgvector extension
@@ -709,7 +732,7 @@ USING ivfflat (embedding vector_cosine_ops)
 WITH (lists = 100);
 ```
 
-### Similarity Search Example
+### Similarity Search Example (future)
 
 ```sql
 -- Find similar past events for a user (Stage 1 context)
@@ -760,6 +783,44 @@ const similarMoments = await prisma.$queryRaw`
   LIMIT 3
 `;
 ```
+
+## Other subsystems (pointers into schema.prisma)
+
+These subsystems share the same database but aren't documented in full here. Consult `backend/prisma/schema.prisma` for field-level detail.
+
+### Inner Work (solo reflection + practices)
+- `InnerWorkSession` / `InnerWorkMessage` — solo reflection sessions that can be linked to a partner session via `linkedPartnerSessionId`.
+- `SessionTakeaway` + `TakeawayLink` — distilled takeaways that can be attached to partner sessions.
+- `GratitudeEntry` — gratitude practice logs.
+- `MeditationSession`, `MeditationStats`, `MeditationFavorite`, `SavedMeditation` — meditation tracking + generated scripts.
+- `Need`, `NeedScore`, `NeedsAssessmentState` — needs catalog (19 core human needs) and the user's scored assessment state.
+
+### People graph
+- `Person` — people the user talks about in-session.
+- `PersonMention` — links from messages to people mentioned (used to build relational context).
+
+### Memory & Fact-Ledger
+- `UserMemory` (+ `MemoryCategory` enum) — persisted AI instructions and remembered preferences ("Things to Always Remember").
+- `UserVessel.notableFacts` (JSON) — session-level extracted facts.
+- `User.globalFacts` (JSON) — consolidated cross-session insights generated at Stage 1 completion.
+- `Insight`, `RecurringTheme` — derived patterns surfaced across sessions.
+
+### Reconciler
+- `ReconcilerResult` — alignment score, gap summary, and decision (PROCEED / OFFER_OPTIONAL / OFFER_SHARING) per Stage-2 attempt pair.
+- `ReconcilerShareOffer` — share-suggestion flow state (`NOT_OFFERED` / `ACCEPTED` / `DECLINED` / `EXPIRED` / `SKIPPED`).
+- `RefinementAttemptCounter` — bounded refinement-loop counter, used by the asymmetric reconciler circuit breaker.
+
+### Empathy state machine
+`EmpathyStatus` enum: `HELD`, `ANALYZING`, `AWAITING_SHARING`, `REFINING`, `VALIDATED`, etc. — state transitions drive `/empathy/status` and the reconciler flow.
+
+### Agreements
+`AgreementType` = `MICRO_EXPERIMENT` | `COMMITMENT` | `CHECK_IN` | `HYBRID`. Sessions are capped at **2** agreements (enforced in `createAgreement`).
+
+### Telemetry + pre-session
+- `BrainActivity` — per-LLM-call telemetry (tokens, cost, duration, operation), keyed by `sessionId` / `turnId`.
+- `PreSessionMessage` — messages authored before a session has been created (landing-page / invitation warm-up flow).
+
+---
 
 ## Related Documentation
 
