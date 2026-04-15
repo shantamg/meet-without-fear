@@ -124,4 +124,4 @@ Optional variables include Twilio SMS credentials, Neural Monitor dashboard sett
 ## See Also
 
 - `.planning/architecture/production-deployment-strategy.md` -- Neural Monitor dashboard deployment strategy (planning)
-- [MVP Planning: Deployment](../mvp-planning/plans/deployment/index.md) -- Original deployment specs
+- [Environment variables](environment-variables.md), [Render config](render-config.md), [Push notifications](push-notifications.md)

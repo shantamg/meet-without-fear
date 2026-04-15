@@ -11,16 +11,24 @@ Start here to find what you need.
 ## Quick Navigation
 
 ### For understanding the product
-- [MVP Planning](mvp-planning/index.md) -- Product specs, stages, wireframes, mechanisms
+- [Product](product/concept.md) -- Concept, philosophy, information architecture, user journey
+- [Product: Stages](product/stages/index.md) -- The 5 conversation stages
+- [Product: Mechanisms](product/mechanisms/index.md) -- Emotional barometer, guardrails, mirror intervention, consensual bridge
+- [Product: Inner Work](product/inner-work/index.md) -- Gratitude, meditation, needs assessment, people tracking
+- [Product: Privacy](product/privacy/index.md) -- Vessel model and privacy principles
 
 ### For understanding the codebase
 - [Architecture](architecture/index.md) -- System architecture, tech stack, conventions, integrations, testing patterns
 - [Backend](backend/index.md) -- Prompting architecture, caching strategy, reconciler flow
+- [Backend: API](backend/api/index.md) -- Endpoint specs by stage and feature
+- [Backend: Prompts](backend/prompts/index.md) -- AI prompt templates per stage
+- [Mobile: Wireframes](mobile/wireframes/index.md) -- UI specs for each screen
 - [Diagrams](diagrams/index.md) -- State diagrams, user flow diagrams
 
 ### For working on the codebase
 - [E2E Testing](e2e-testing/index.md) -- Test architecture and audit results
 - [Deployment](deployment/index.md) -- Deployment strategies and distribution options
+- [Infrastructure](infrastructure/index.md) -- Slam bot, EC2, Render, Vercel setup
 
 ### For planning work
 - `.planning/` -- Active planning directory (not in docs/). Documents have varying ages and may be stale; check file dates and cross-reference with current code before relying on them.
@@ -36,7 +44,7 @@ Start here to find what you need.
 
 | Task | Start here |
 |------|------------|
-| Understand the product | [MVP Planning](mvp-planning/index.md) |
+| Understand the product | [Product: Concept](product/concept.md) then [Stages](product/stages/index.md) |
 | Backend changes | [Backend](backend/index.md) then [Architecture](architecture/backend-overview.md) |
 | Mobile changes | [Architecture](architecture/structure.md) then `CLAUDE.md` State Management section |
 | Database changes | [Architecture](architecture/backend-overview.md) then `backend/prisma/schema.prisma` |

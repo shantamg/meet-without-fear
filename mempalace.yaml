@@ -1,0 +1,46 @@
+wing: meet_without_fear
+rooms:
+- name: docs_site
+  description: Files from docs-site/
+- name: scripts
+  description: Files from tools/
+- name: coordination
+  description: Files from coordination/
+- name: memory
+  description: Files from memory/
+- name: mwf
+  description: Files from mwf/
+- name: website
+  description: Files from website/
+- name: backend
+  description: Files from backend/
+- name: shared
+  description: Files from shared/
+- name: documentation
+  description: Files from docs/
+- name: logs
+  description: Files from logs/
+- name: mobile
+  description: Files from mobile/
+- name: bot
+  description: Files from bot/
+- name: playwright_report
+  description: Files from playwright-report/
+- name: test_results
+  description: Files from test-results/
+- name: e2e
+  description: Files from e2e/
+- name: planning
+  description: Files from specs/
+- name: frontend
+  description: Files from components/
+- name: configuration
+  description: Files from config/
+- name: design
+  description: Files from assets/
+- name: research
+  description: Files from research/
+- name: testing
+  description: Files from tests/
+- name: general
+  description: Files that don't fit other rooms

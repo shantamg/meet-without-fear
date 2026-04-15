@@ -220,7 +220,7 @@ status: living
 
 **Documentation Site:**
 - Deployment: Vercel via `docs-site/vercel.json`
-- Docusaurus 3.9.2 with pre-build script copying docs from `../docs/mvp-planning/`
+- Docusaurus 3.9.2 with pre-build script copying from `../docs/` (minus archive and JSON files)
 
 ---
 

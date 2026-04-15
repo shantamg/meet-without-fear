@@ -123,4 +123,4 @@ npm run migrate       # Run Prisma migrations
 
 ## Documentation
 
-- [MVP Planning](docs/mvp-planning/index.md) - Product planning documentation
+- [Product docs](docs/product/concept.md) - Concept, stages, mechanisms, inner-work, privacy

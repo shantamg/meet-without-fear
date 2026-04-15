@@ -17,7 +17,7 @@ Backend-specific documentation for the Express + Prisma API server.
 ## See Also
 
 - [Architecture: Backend Overview](../architecture/backend-overview.md) -- Higher-level system architecture
-- [MVP Planning: Backend](../mvp-planning/plans/backend/index.md) -- Original design specs
+- [Backend: API](api/index.md), [Prompts](prompts/index.md), [Data Model](data-model/index.md), [Security](security/index.md), [State Machine](state-machine/index.md)
 - `.planning/BACKEND_ARCHITECTURE_PROPOSAL.md` -- Stage 2B design proposal (not yet implemented)
 
 
