@@ -16,14 +16,14 @@ Stage 2 has two phases:
 2. **Phase 2: Exchange** - Users exchange empathy attempts and validate each other
 
 ### Data persistence
-- Drafts -> `EmpathyDraft` (one per user/session)
-- Consented share -> `EmpathyAttempt` (immutable) with `ConsentRecord.targetType = EMPATHY_ATTEMPT`
-- Validation -> `EmpathyValidation` (one per recipient per attempt)
+- Drafts → `EmpathyDraft` (one per user/session, mutable)
+- Consented share → `EmpathyAttempt` with `ConsentRecord.targetType = 'EMPATHY_DRAFT'`
+- Validation → `EmpathyValidation` (one per recipient per attempt)
 
 ### Consent semantics (MVP)
-- Consent request created when user hits `/empathy/consent`; decision stored on `ConsentRecord` (decision nullable until act).
-- Revocation on `/consent/revoke` must set `ConsentRecord.decision = REVOKED`, `consentedContent.consentActive = false`, and mark dependent SharedVessel copies as inaccessible.
-- Pending queue (`/consent/pending`) reads `ConsentRecord` rows with `decision IS NULL`.
+- Consent is recorded via `POST /sessions/:id/empathy/consent`. The controller creates a `ConsentRecord` with `targetType = 'EMPATHY_DRAFT'` referencing the draft, and snapshots the content into an `EmpathyAttempt`.
+- `EmpathyDraft` is currently **mutable** after sharing — the controller does not block further `saveDraft` calls on a consented draft. Downstream reads (partner view, validation) use the `EmpathyAttempt` snapshot, so edits to the draft do not leak to the partner, but the draft row itself can still move.
+- General consent revocation / pending-queue semantics live in the [Consent API](./consent.md), not here.
 
 ---
 
@@ -153,11 +153,11 @@ interface EmpathyAttemptDTO {
 
 ### Side Effects
 
-1. Draft becomes immutable (no more edits)
-2. ConsentRecord created
-3. Content moved to SharedVessel (as ConsentedContent)
-4. If partner already consented, both receive each other's attempts
-5. Partner notified via Ably
+1. `ConsentRecord` created with `targetType = 'EMPATHY_DRAFT'`
+2. `EmpathyAttempt` snapshot is created from the (possibly edited) content; this is what the partner reads
+3. The original `EmpathyDraft` row remains mutable — subsequent edits don't affect the shared `EmpathyAttempt`
+4. If partner already has an `EmpathyAttempt`, both sides can now read each other's via `GET /empathy/partner` / `/empathy/status`
+5. Partner notified via the Ably session channel
 
 ---
 
@@ -194,12 +194,24 @@ interface EmpathyAttemptDTO {
 }
 ```
 
-### Errors
+> Unlike many API endpoints, this returns **200 OK with `attempt: null` and `waitingForPartner: true`** when the partner hasn't shared yet — there's no dedicated `PARTNER_NOT_READY` error code. The same is true when the caller themselves hasn't consented yet.
 
-| Code | When |
-|------|------|
-| `CONSENT_REQUIRED` | Current user hasn't consented to share yet |
-| `PARTNER_NOT_READY` | Partner hasn't consented to share yet |
+---
+
+## Status + refinement + share suggestion endpoints
+
+Besides the Phase-1 / Phase-2 core above, the routes file exposes these controllers:
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET`  | `/api/v1/sessions/:id/empathy/status` | Single-call status for the whole Stage 2 exchange — returns draft, attempt, refinement state (`NEEDS_WORK`, `REFINING`, `ANALYZING`, etc.), and gate flags |
+| `POST` | `/api/v1/sessions/:id/empathy/refine` | Run AI refinement on the caller's current draft (used by the validation feedback / coach loop) |
+| `POST` | `/api/v1/sessions/:id/empathy/resubmit` | After refinement, resubmit an updated `EmpathyAttempt` on top of an existing validation request |
+| `POST` | `/api/v1/sessions/:id/empathy/skip-refinement` | Accept the current gap as a "willing-to-accept" difference and advance without further refinement; updates `skippedRefinement`, `willingToAccept`, `skipReason` on the caller's StageProgress |
+| `GET`  | `/api/v1/sessions/:id/empathy/share-suggestion` | Asymmetric reconciler: fetch a suggestion to help the caller close an empathy gap for the partner |
+| `POST` | `/api/v1/sessions/:id/empathy/share-suggestion/respond` | Accept or decline a share suggestion |
+| `POST` | `/api/v1/sessions/:id/empathy/validation-feedback/draft` | Draft feedback via the "Feedback Coach" AI flow |
+| `POST` | `/api/v1/sessions/:id/empathy/validation-feedback/refine` | Iterate on feedback-coach output |
 
 ---
 
@@ -241,10 +253,12 @@ interface ValidateEmpathyResponse {
 Validation: feedback max 1000 chars; one validation per recipient per attempt (idempotent overwrite allowed).
 
 ### Gate keys set by Stage 2 endpoints
-- `empathyDraftReady`: set when `readyToShare` true on draft save
-- `empathyConsented`: set when user consents to share their attempt
-- `partnerConsented`: set when partner attempt becomes available
-- `partnerValidated`: set when recipient posts `validated=true`
+- `empathyDraftReady`: set when `readyToShare: true` on draft save
+- `empathyConsented`: set when the caller consents to share their attempt
+- `empathyValidated` / `validatedAt`: set when the caller posts `validated: true` on the partner's attempt
+- `skippedRefinement`, `willingToAccept`, `skipReason`: set by `/empathy/skip-refinement` when the caller accepts remaining differences
+
+Stage-2 advancement is computed by comparing the caller's and partner's mutual `empathyValidated` status (either both validated, or at least one side has skipped refinement and both gates are consistent).
 
 ### Example: Validation with Feedback
 
@@ -284,16 +298,14 @@ If feedback is shared:
 
 ## Stage 2 Gate Requirements
 
-To advance from Stage 2 to Stage 3:
+To advance from Stage 2 to Stage 3, the caller needs:
 
 | Gate | Requirement |
 |------|-------------|
-| `empathyAttemptCreated` | User has created an empathy attempt |
-| `empathyAttemptConsentedToShare` | User consented to share it |
-| `receivedPartnerAttempt` | Partner has shared their attempt |
-| `validatedPartnerAttempt` | User validated partner's attempt as accurate |
+| `empathyConsented` | Caller consented to share their attempt (`EmpathyAttempt` exists) |
+| `empathyValidated` (or `skippedRefinement = true`) | Caller validated the partner's attempt, or explicitly accepted the remaining differences |
 
-**Note**: Both users must complete validation for either to advance.
+Advancement also requires the partner has reached the matching state — see `empathy-status.ts` for the mutual-state check.
 
 ---
 
