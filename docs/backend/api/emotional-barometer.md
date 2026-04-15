@@ -99,7 +99,9 @@ Support is offered based on:
 
 **Important**: Support is always **offered, never forced**. The user chooses whether to engage.
 
-Validation: intensity must be integer 1-10; context max 200 chars; rate limit 1 reading per user per 30 seconds to avoid spam.
+Validation: intensity must be integer 1-10; `context` max 500 chars; no dedicated rate limit beyond the global per-user rate limit middleware (readings are cheap and session-scoped).
+
+> **Implementation note:** The support-offer logic in the table above is a product design; the current `recordEmotion` controller persists the reading but does not yet compute `offerSupport` / `supportType` from recent history — consumers should treat those fields as optional/absent for now.
 
 ---
 
@@ -113,11 +115,13 @@ GET /api/v1/sessions/:id/emotions
 
 ### Query Parameters
 
+Currently ignored by the controller — it returns the full list of readings for the authenticated user in the session, ordered by timestamp. The filter/pagination fields below are reserved for a future implementation:
+
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `stage` | number | all | Filter by stage |
-| `limit` | number | 20 | Max results (1-100) |
-| `cursor` | string | - | Pagination cursor |
+| `stage` | number | all | Filter by stage (reserved, not yet applied) |
+| `limit` | number | 20 | Max results (reserved, not yet applied) |
+| `cursor` | string | - | Pagination cursor (reserved, not yet applied) |
 
 ### Response
 
@@ -189,9 +193,9 @@ curl -X POST /api/v1/sessions/sess_abc123/exercises/complete \
 If `postExerciseCheckIn: true`, the UI should:
 1. Show a gentle prompt for new reading
 2. "How are you feeling now?" with 1-10 scale
-3. Record the new reading via `POST /emotions`
+3. Record the new reading via `POST /api/v1/sessions/:id/emotions`
 
-Persistence: logs to `EmotionalExerciseCompletion` with optional before/after readings. Rate limit: max 5 exercise logs per user per hour to prevent abuse.
+Persistence: logs to `EmotionalExerciseCompletion` with optional before/after readings. No per-endpoint rate limit beyond the global user-level throttle.
 
 ---
 
