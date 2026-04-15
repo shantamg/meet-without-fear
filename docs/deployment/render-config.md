@@ -19,7 +19,7 @@ services:
     runtime: node
     plan: starter
     branch: main
-    buildCommand: npm install && npm run prisma:generate --workspace=backend && npm run build --workspace=backend
+    buildCommand: npm ci && npm run prisma:generate --workspace=backend && npm run build --workspace=backend
     startCommand: cd backend && npx prisma migrate deploy && node dist/backend/src/server.js
     envVars:
       - fromGroup: meet-without-fear-api-env
@@ -28,11 +28,12 @@ services:
 ### Key facts from this blueprint
 
 - **Service name**: `meet-without-fear-api` (hyphens, not camelCase)
-- **Monorepo-aware build**: Both `prisma:generate` and `build` use `--workspace=backend` so the root-level `npm install` works across the full monorepo
+- **Monorepo-aware build**: Both `prisma:generate` and `build` use `--workspace=backend`; `npm ci` runs at the repo root so the full monorepo's `node_modules` is hydrated from `package-lock.json`. Using `npm ci` (rather than `npm install`) guarantees a clean, lockfile-strict install so Render's build cache can't mask stale transitive dependencies between deploys.
 - **Migrations auto-run on every deploy**: `startCommand` runs `npx prisma migrate deploy` from inside `backend/` before starting the server — there is no separate manual migration step
 - **Entry point**: `dist/backend/src/server.js` (nested under `backend/dist/` because TS compiles from the repo root)
 - **Env group**: All secrets (DB URL, Clerk keys, Bedrock credentials, Ably, Resend, etc.) live in the Render env group `meet-without-fear-api-env` — update them in the Render dashboard; the blueprint just wires the whole group into the service via `fromGroup`
 - **Database**: managed separately as a Render Postgres instance (not declared in this `render.yaml`); connection string is injected into the env group
+- **Auto-deploy disabled**: Render's built-in "auto-deploy on push" should be turned OFF for this service. Deploys are instead triggered by the GitHub Actions workflow `.github/workflows/render-deploy.yml`, which fires the service's deploy hook only when `backend/`, `shared/`, `package-lock.json`, or `render.yaml` actually changed. This prevents docs-only pushes from rebuilding the backend.
 
 ## Database Setup
 
