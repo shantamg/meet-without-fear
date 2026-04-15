@@ -7,4 +7,4 @@ services:
     buildCommand: npm ci && npm run prisma:generate --workspace=backend && npm run build --workspace=backend
     startCommand: cd backend && npx prisma migrate deploy && node dist/backend/src/server.js
     envVars:
-      - fromGroup: meet-without-fear-api-env
+      - fromGroup: be-heard-api-env
