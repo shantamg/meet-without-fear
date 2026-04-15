@@ -130,9 +130,10 @@ status: living
 ## Entry Points
 
 **Backend API Server:**
-- Location: `backend/src/app.ts`
+- Location: `backend/src/app.ts` (middleware + route mounting) and `backend/src/server.ts` (HTTP + WebSocket listener)
 - Triggers: `npm run dev:api` in development; PORT=3000 (default) in production
-- Responsibilities: Initializes Express app with middleware; mounts all route modules; handles errors consistently
+- Responsibilities: Initializes Express app with middleware; mounts all route modules under both `/api` and `/api/v1` (dual-prefix for compatibility); attaches the `/realtime` WebSocket for real-time transcription via `attachRealtimeWebSocket(server)`; handles errors consistently
+- Compression: the compression middleware is explicitly disabled for `/messages/stream` paths to prevent SSE buffering
 
 **Mobile App Entry:**
 - Location: `mobile/app/_layout.tsx` (Expo Router file-based routing)
@@ -152,7 +153,7 @@ status: living
 ## Additional Backend Services
 
 **AI & Messaging:**
-- Stage 2B / INFORMED_EMPATHY (Stage 21 in enum): Routing for informed empathy after context sharing; StageProgress stays at 2
+- Stage 2B / INFORMED_EMPATHY (internal stage id 21; the persisted `StageProgress.stage` is an `Int` that stays at 2 — 21 is only used in-memory for routing)
 - Initial message generation: `POST /sessions/:id/messages/initial` generates the first AI message for a session
 - Dispatch handler system: Routes AI micro-tags to specific backend actions
 - Background classifier: `partner-session-classifier.ts` runs fire-and-forget after each AI response
@@ -196,8 +197,8 @@ status: living
 - Mobile: Zod schemas in shared contracts; React Hook Form for UI validation
 
 **Authentication:**
-- Backend: Clerk JWT in `Authorization: Bearer` header; middleware extracts + verifies with `verifyToken()` (from @clerk/express)
-- Mobile: Clerk Expo SDK manages tokens; `useAuth()` hook provides `token` for API calls; E2E mode uses custom headers for testing
+- Backend: Clerk JWT in `Authorization: Bearer` header; middleware extracts + verifies with `verifyToken()` (from @clerk/express). When `E2E_AUTH_BYPASS=true`, the middleware also accepts `x-e2e-user-id` and `x-e2e-user-email` headers and resolves them to a DB user instead of a Clerk session.
+- Mobile: Clerk Expo SDK manages tokens; `useAuth()` hook provides `token` for API calls; E2E mode sends the `x-e2e-user-id` / `x-e2e-user-email` headers described above instead of a Clerk token.
 
 **Rate Limiting:**
 - Implemented via `backend/src/middleware/rate-limit.ts` with three tiers:
