@@ -17,7 +17,10 @@ status: living
 - Services: `kebab-case.ts` for compound names - e.g., `context-assembler.ts`, `session-state.ts`. Simple single-word service files use lowercase camelCase.
 - Components: `PascalCase.tsx` - e.g., `EmotionalBarometer.tsx`
 - Types/interfaces: `camelCase.ts` with PascalCase type names - e.g., `AuthUser` interface in `auth.ts`
-- Enums: `CONSTANT_CASE` keys - e.g., `SessionStatus.CREATED`, `MessageRole.USER`. String *values* vary: true enums (e.g. `SessionStatus`, `Stage`, `InnerWorkStatus`) use matching `CONSTANT_CASE` strings; wire-format discriminants (e.g. `ChatItemType`, `AIMessageStatus`, `SharedContentDeliveryStatus`) use lowercase / kebab-case strings like `'ai-message'`, `'streaming'`, `'sending'`.
+- Enum keys (the property name on the enum object): always `CONSTANT_CASE` — e.g. `SessionStatus.CREATED`, `ChatItemType.AI_MESSAGE`. Enum *string values* vary by type:
+  - True enums (`SessionStatus`, `Stage`, `InnerWorkStatus`) use matching `CONSTANT_CASE` string values.
+  - Wire-format discriminants carried in serialized payloads (`ChatItemType` → `'ai-message'`, `AIMessageStatus` → `'streaming'`, `SharedContentDeliveryStatus` → `'sending'`, `IndicatorType` → `'invitation-sent'`) use lowercase or kebab-case strings.
+  - Don't uppercase wire values without migrating every consumer.
 - Test files: `__tests__/[name].test.ts[x]` or `__tests__/[name].spec.ts` - located in same directory as source
 
 **Functions:**
@@ -30,13 +33,13 @@ status: living
 **Variables:**
 - camelCase: `sessionId`, `invitationConfirmed`, `partnerProgress`
 - Constants: `CONSTANT_CASE` for compile-time constants - e.g., `MODEL_LIMITS`, `DATABASE_URL`
-- Booleans: prefer prefixes `is*`, `has*`, `should*`, `can*` - e.g., `isLoading`, `hasInvitationMessage`, `shouldHideInput`. DTO fields frequently use state-based adjectives instead (`biometricEnabled`, `registered`, `success`, `readyToShare`, `confirmed`); don't rename these in passing.
+- Booleans: for *local/computed* variables, prefer prefixes `is*`, `has*`, `should*`, `can*` (e.g., `isLoading`, `hasInvitationMessage`, `shouldHideInput`). For *DTO fields*, state-based adjectives are idiomatic and widespread: `biometricEnabled`, `registered`, `success`, `readyToShare`, `canConsent`, `alreadyConsented`, `confirmed`. Don't rename DTO fields in passing.
 - Config objects: PascalCase - e.g., `WaitingStatusConfig`
 - Unused parameters: prefix with `_` to signal intention - e.g., `_next: NextFunction`, `_props`
 
 **Types/Interfaces:**
 - PascalCase for all type names: `SessionStateDTO`, `ChatUIState`, `ContextBundle`
-- DTO suffix for data transfer objects: `SessionSummaryDTO`, `StageProgressDTO`
+- Suffixes signal the role of a data-transfer type. Core entities use `DTO` (`UserDTO`, `SessionSummaryDTO`, `TakeawayDTO`). API/realtime boundary types use purpose suffixes: `Request` (`UpdateProfileRequest`), `Response` (`GetMeResponse`), `Event` (`StageProgressEvent`), `Payload` (`ChatItemNewPayload`). Some lightweight data shapes have no suffix when context makes the role obvious (`PresenceData`, `MemorySuggestion`).
 - Props interface: `[ComponentName]Props` - e.g., `UseChatUIStateProps`
 - State interface: `[Name]State` - e.g., `ChatUIState`, `WaitingStatusState`
 - Enum keys: `CONSTANT_CASE` - e.g., `SessionStatus.ACTIVE`, `Stage.WITNESS`. See Naming Patterns > Enums for value conventions.
@@ -209,7 +212,7 @@ Examples in codebase:
 - Explicit return type declarations required
 - `void` for functions with side effects only
 - Promise types: `Promise<T>` or `Promise<void>` for async
-- Nullable returns: `T | null` not `T?` (explicit null handling)
+- Nullable returns: function signatures prefer `T | null` for "known absent" cases; DTO fields prefer optional properties (`field?: T`, i.e. `T | undefined`). See Additional Patterns > Nullable Values.
 - Union types for computation: `'option-a' | 'option-b' | null`
 
 **Pure Functions** (preferred pattern):
@@ -227,8 +230,8 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
 ## Module Design
 
 **Exports:**
-- One primary export per file (default or named)
-- Helper exports grouped: `export { Helper1, Helper2 }`
+- Feature/service modules prefer one primary export per file (default or named), with helpers grouped: `export { Helper1, Helper2 }`
+- Shared DTO files intentionally group many related exports (interfaces, discriminant consts, type guards) in a single file — e.g. `shared/src/dto/auth.ts` exports all auth DTOs together, `shared/src/dto/chat-item.ts` exports `ChatItemType` plus every item interface and matching `isAIMessage`/`isUserMessage` type guards.
 - No star exports (`export *`) except in barrel files (`index.ts`), main package entry points (`shared/src/index.ts`), and validation modules that re-export the matching contract types (e.g. `shared/src/validation/invitations.ts` re-exporting from `../contracts/sessions`)
 
 **Barrel Files** (index.ts):
