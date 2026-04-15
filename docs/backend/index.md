@@ -20,7 +20,7 @@ Backend-specific documentation for the Express + Prisma API server.
 
 - [Architecture: Backend Overview](../architecture/backend-overview.md) -- Higher-level system architecture
 - [Backend: API](api/index.md), [Prompts](prompts/index.md), [Data Model](data-model/index.md), [Security](security/index.md), [State Machine](state-machine/index.md)
-- `.planning/BACKEND_ARCHITECTURE_PROPOSAL.md` -- Stage 2B design proposal (not yet implemented)
+- `.planning/BACKEND_ARCHITECTURE_PROPOSAL.md` -- Original Stage 2B design doc (design document; the prompt path itself is implemented in `stage-prompts.ts` as case 21 / `buildStage2BPrompt`)
 
 
 ## Historical MVP plans
@@ -53,11 +53,14 @@ These rules are constitutional and must never be compromised:
 ## Technology Stack
 
 - **Runtime**: Node.js with Express
-- **ORM**: Prisma with RLS middleware
-- **Database**: PostgreSQL (Render) + pgvector + Row-Level Security
+- **ORM**: Prisma (RLS middleware wired in `lib/prisma-rls.ts`, not every query path uses it)
+- **Database**: PostgreSQL (Render). `pgvector` extension is currently disabled (commented out in `schema.prisma`); embeddings fields are placeholders for future vector search. Row-Level Security is in use for session-scoped reads.
 - **Realtime**: Ably (pub/sub + presence detection for immediate partner notifications)
 - **Push**: Expo Push Notifications (for offline users)
-- **AI Models**: AWS Bedrock (Haiku for small tasks, Sonnet for facilitation)
+- **AI Models**: AWS Bedrock (Haiku for mechanics, Sonnet for facilitation)
+- **Auth**: Clerk (JWT validation, account deletion handoff)
+- **Email**: Resend (transactional; not outbound invitation delivery)
+- **Voice**: AssemblyAI Universal Streaming (real-time transcription via `realtime-transcription.ts`)
 - **Infrastructure**: Render.com (Web Service + Managed Postgres)
 
 ## Dual-Layer Data Strategy
@@ -81,8 +84,10 @@ Session states, stage gates, retrieval contracts
 ### [AI Prompts](./prompts/index.md)
 Model stratification, prompt templates for each stage, transformation prompts
 
-### Mechanisms (coming soon)
-Backend implementations of Emotional Barometer, Mirror Intervention, Consensual Bridge
+### Mechanisms
+- **Emotional Barometer** — implemented. `context-assembler.ts` builds the emotional thread, computes trends (escalating / stable), and flags 3+ point shifts from `EmotionalReading` data.
+- **Mirror Intervention** — implemented as the `MIRROR` branch inside Stage 2 prompts (`stage-prompts.ts`); acknowledges hurt when a user slips into blame and redirects toward curiosity.
+- **Consensual Bridge** — implemented end-to-end via the Consent API and `EmpathyAttempt` flow; see [Consent API](api/consent.md) and [Stage 2 API](api/stage-2.md).
 
 ### [API](./api/index.md)
 REST endpoints for session management, stage progression, and consent flows
@@ -102,7 +107,7 @@ Canonical definitions for all Meet Without Fear backend terminology
 |-----------|----------------|
 | Memory is typed, scoped, gated | Not conversation history - structured objects with access rules |
 | Vector search is support tool | Never authority for trust-affecting decisions |
-| Small model for mechanics | Stage classification, detection, retrieval planning |
+| Small model (Haiku) for mechanics | Stage classification, intent detection, retrieval planning, session distillation / takeaway extraction, memory formatting + validation, attacking-language detection and rewriting suggestions |
 | Large model receives pre-assembled context | Does not decide what to retrieve |
 | AI Synthesis is regenerable | Persist inputs, regenerate synthesis |
 | Stage-scoped retrieval contracts | Hard rules on what each stage can access |
