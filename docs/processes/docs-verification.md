@@ -2,6 +2,7 @@
 title: Living-doc verification with NotebookLM
 sidebar_position: 2
 description: How to check whether a living doc still matches the code it describes, using the notebooklm CLI.
+updated: 2026-04-15
 ---
 
 # Living-doc verification
@@ -40,14 +41,56 @@ Example output (real, from an actual run):
 bash scripts/verify-docs.sh --list
 ```
 
-## Fix loop
+## Automated fix loop (via skill)
 
-The intended workflow:
+The `verify-and-fix-doc` skill automates the full iterative workflow. Invoke it in Claude Code:
+
+> "verify docs/architecture/backend-overview.md"
+> "fix drift in docs/backend/api/auth.md"
+
+Or to run all mapped docs at once:
+
+> "verify all docs"
+
+The skill:
+
+1. Runs `scripts/verify-docs.sh <doc>` and captures findings.
+2. For each finding, decides whether to edit the doc or the code (see decision rules below).
+3. Commits: one commit per iteration using `docs: fix drift in <doc-path> (N findings resolved: <summary>)`.
+4. Re-verifies. Repeats up to **5 iterations** per doc, then stops and surfaces any remaining findings.
+5. In `--all` mode, iterates every doc in `docs/code-to-docs-mapping.json` and produces a final summary table.
+
+### Decision rules: edit doc vs edit code
+
+**Edit the doc** (the default — most findings are stale docs):
+- Doc describes behavior that no longer matches code
+- Doc lists a wrong value, path, or name
+- Doc omits something the code does
+
+**Edit the code** (rare):
+- The code has a clear bug contradicting documented intended behavior
+
+**Stop and ask the user** when:
+- The right answer is genuinely ambiguous
+- A fix requires refactoring multiple files or touching a public API
+- The finding describes a missing feature needing a design decision
+
+### Success criterion
+
+The skill considers a doc clean when NotebookLM explicitly says: *"the doc and code are aligned"*, *"no inaccuracies found"*, or *"aligned"*. Any other response means findings are present and must be addressed.
+
+### Manual fix loop (without the skill)
 
 1. Run the script → get a list of specific issues.
 2. For each issue, update **either the doc or the code** (whichever is wrong).
 3. Rerun the script. The script reuploads fresh sources; NotebookLM re-evaluates.
-4. Repeat until NotebookLM reports "the doc and code are aligned".
+4. Repeat until NotebookLM reports the doc and code are aligned.
+
+## Common pitfalls
+
+- **Reorg artifacts**: NotebookLM may report broken internal links left from the living-docs reorganization. Those aren't drift — fix the link or leave them as a follow-up. Don't rewrite content for them.
+- **Fix didn't land**: If the same finding persists across iterations, check that `git status` shows the edit and the commit went through before re-verifying.
+- **Source cache**: NotebookLM caches indexing briefly. If re-verification says "I don't see the code sources", wait ~10 seconds and retry.
 
 ## Known limitations
 
@@ -58,4 +101,4 @@ The intended workflow:
 
 ## On the bot
 
-Phase 10 of the living-docs reorg plan wires this into the slam-bot so it runs on a schedule and opens issues for drift. That's deferred — operator-driven local runs are the starting point.
+The `verify-and-fix-doc` skill is available to the slam-bot. Nightly `audit-docs` runs (via `workspace-dispatcher.sh`) use the incremental docs-audit workspace to detect and fix drift automatically — see [Infrastructure](../infrastructure/index.md) for the schedule.
