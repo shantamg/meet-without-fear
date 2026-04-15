@@ -1,0 +1,16 @@
+[Unit]
+Description=Slam Bot Socket Mode Listener
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/slam-bot/socket-mode
+ExecStart=/bin/bash -c "source /opt/slam-bot/.env && exec /usr/bin/node socket-listener.mjs"
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/slam-bot/socket-mode.log
+StandardError=append:/var/log/slam-bot/socket-mode.log
+
+[Install]
+WantedBy=multi-user.target

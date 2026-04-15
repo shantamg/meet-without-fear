@@ -1,0 +1,23 @@
+[Unit]
+Description=Slam Bot — GitHub state scanner daemon
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/slam-bot
+EnvironmentFile=/opt/slam-bot/.env
+ExecStart=/bin/bash /opt/slam-bot/scripts/github-state-scanner.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/var/log/slam-bot/github-state-scanner.log
+StandardError=append:/var/log/slam-bot/github-state-scanner.log
+
+# Resource isolation — the scanner is a single-process bash loop, so
+# limits stay generous. The hard kill at 256MB protects against a runaway
+# jq pipeline on a malformed response.
+MemoryMax=256M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

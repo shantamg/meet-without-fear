@@ -1,0 +1,32 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Slam Bot Crontab
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Infrastructure (always running) ──────────────────────────────────────────
+*/5 * * * * /opt/slam-bot/scripts/clear-stale-locks.sh
+* * * * *   /opt/slam-bot/scripts/git-pull.sh >> /var/log/slam-bot/cron.log 2>&1
+*/5 * * * * /opt/slam-bot/scripts/check-socket-mode.sh >> /var/log/slam-bot/cron.log 2>&1
+* * * * *   /opt/slam-bot/scripts/check-github.sh >> /var/log/slam-bot/cron.log 2>&1
+0 6 * * *   /opt/slam-bot/scripts/bot-health-check.sh >> /var/log/slam-bot/cron.log 2>&1
+
+# ── Label sync (keeps GitHub labels in sync with label-registry.json) ────────
+0 7 * * * /opt/slam-bot/scripts/sync-labels.sh >> /var/log/slam-bot/cron.log 2>&1
+
+# ── Label-driven dispatcher (scans for bot:* labels every minute) ────────────
+* * * * * /opt/slam-bot/scripts/workspace-dispatcher.sh >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+
+# ── Scheduled workspace jobs ─────────────────────────────────────────────────
+# Scheduled jobs use MAX_CONCURRENT - 2 slots, reserving 2 for interactive work.
+0 * * * *   /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled bug-fix "Fix untouched bug issues" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+0 */6 * * * /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled health-check "Run scheduled health check" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+*/10 * * * * /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled pr-reviewer "Scan and review open bot PRs" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+
+# ── Thread tracker (Slack thread follow-up, every 30 min) ───────────────────
+*/30 * * * * /opt/slam-bot/scripts/thread-tracker.sh >> /var/log/slam-bot/thread-tracker.log 2>&1
+
+# ── Process queue (drain queued agent requests every minute) ────────────────
+* * * * * /opt/slam-bot/scripts/process-queue.sh >> /var/log/slam-bot/cron.log 2>&1
+
+# ── Log pruning ──────────────────────────────────────────────────────────────
+0 4 * * * /opt/slam-bot/scripts/prune-journal.sh >> /var/log/slam-bot/cron.log 2>&1
+5 4 * * * /opt/slam-bot/scripts/prune-claude-projects.sh >> /var/log/slam-bot/cron.log 2>&1

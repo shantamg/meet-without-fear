@@ -1,0 +1,76 @@
+{
+  "description": "Maps bot:* GitHub labels to workspace paths. When a label is applied to an issue, the bot routes to the corresponding workspace. Optional 'model' field overrides the default Claude model (e.g., 'sonnet' for lighter tasks). Optional 'effort' field overrides the default effort level (low, medium, high, max). Default effort is 'high' when unset.",
+  "labels": {
+    "bot:slack-triage": {
+      "workspace": "slack-triage/",
+      "entry_stage": "1-fetch-and-classify",
+      "trigger": "cron",
+      "model": "sonnet"
+    },
+    "bot:github-respond": {
+      "workspace": "github-respond/",
+      "entry_stage": "respond",
+      "trigger": "webhook",
+      "effort": "max"
+    },
+    "bot:review-pr": {
+      "workspace": "github-respond/",
+      "entry_stage": "review",
+      "trigger": "webhook",
+      "persona": "engineer",
+      "effort": "max"
+    },
+    "bot:bug-fix": {
+      "workspace": "bug-fix/",
+      "entry_stage": "01-select",
+      "trigger": "cron",
+      "persona": "engineer",
+      "effort": "max"
+    },
+    "bot:health-check": {
+      "workspace": "health-check/",
+      "entry_stage": "audit",
+      "trigger": "cron"
+    },
+    "bot:expert-review": {
+      "workspace": "expert-review/",
+      "entry_stage": "01-initialize",
+      "trigger": "label",
+      "keep_label": true,
+      "effort": "max"
+    },
+    "bot:ci-monitor": {
+      "workspace": "ci-monitor/",
+      "entry_stage": "tick",
+      "trigger": "label"
+    },
+    "bot:pr": {
+      "workspace": "general-pr/",
+      "entry_stage": "01-implement",
+      "trigger": "label",
+      "persona": "engineer",
+      "effort": "max"
+    },
+    "bot:pr-reviewer": {
+      "workspace": "pr-reviewer/",
+      "entry_stage": "01-scan",
+      "trigger": "cron",
+      "model": "sonnet",
+      "persona": "engineer"
+    },
+    "bot:investigate": {
+      "workspace": "bug-fix/",
+      "entry_stage": "02-investigate",
+      "trigger": "label",
+      "persona": "engineer",
+      "effort": "max"
+    },
+    "bot:review-impl": {
+      "workspace": "pr-reviewer/",
+      "entry_stage": "review-impl",
+      "trigger": "label",
+      "keep_label": false,
+      "effort": "max"
+    }
+  }
+}

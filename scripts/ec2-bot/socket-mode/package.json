@@ -1,0 +1,14 @@
+{
+  "name": "slam-bot-socket-mode",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Slack Socket Mode listener for slam-bot — real-time message handling",
+  "scripts": {
+    "start": "node socket-listener.mjs"
+  },
+  "dependencies": {
+    "@slack/socket-mode": "^2.0.0",
+    "@slack/web-api": "^7.0.0"
+  }
+}

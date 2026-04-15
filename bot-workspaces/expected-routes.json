@@ -1,0 +1,33 @@
+{
+  "description": "Maps command slugs (from meta.json) to expected workspace/stage pairs. Used by audit-routing.sh to measure routing accuracy. Glob patterns (*) match any suffix (e.g., 'respond-github-*' matches 'respond-github-123').",
+  "routes": {
+    "dm-reply": {
+      "workspace": "slack-triage",
+      "firstStage": "1-fetch-and-classify"
+    },
+    "respond-github-*": {
+      "workspace": "github-respond",
+      "firstStage": "respond"
+    },
+    "review-pr-*": {
+      "workspace": "github-respond",
+      "firstStage": "review"
+    },
+    "fix-bugs": {
+      "workspace": "bug-fix",
+      "firstStage": "01-select"
+    },
+    "health-check": {
+      "workspace": "health-check",
+      "firstStage": "audit"
+    },
+    "ws-expert-review": {
+      "workspace": "expert-review",
+      "firstStage": "01-initialize"
+    },
+    "review-impl": {
+      "workspace": "pr-reviewer",
+      "firstStage": "review-impl"
+    }
+  }
+}

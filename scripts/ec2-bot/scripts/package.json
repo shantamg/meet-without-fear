@@ -1,0 +1,8 @@
+{
+  "name": "ec2-bot-scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ably": "^2.0.0"
+  }
+}
