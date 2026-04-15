@@ -144,17 +144,17 @@ interface AblyTokenResponse {
 
 ### Capability Scoping
 
-Token capability always includes a private notification channel for the user. When the user has sessions in `ACTIVE`, `WAITING`, or `PAUSED` state, each one adds its own session channel too:
+Token capability always includes a private notification channel for the user. Session channels are added for each session the user participates in with status `CREATED`, `INVITED`, `ACTIVE`, `WAITING`, or `PAUSED` (so partners can subscribe before the session is accepted):
 
 ```json
 {
-  "meetwithoutfear:user:<userId>:notifications": ["subscribe"],
+  "meetwithoutfear:user:<userId>": ["subscribe"],
   "meetwithoutfear:session:sess_abc123": ["subscribe", "publish"],
   "meetwithoutfear:session:sess_abc123:presence": ["presence"]
 }
 ```
 
-Users with no active sessions still receive a valid token scoped to just the notifications channel.
+Users with no relevant sessions still receive a valid token scoped to just the user notification channel.
 
 ---
 
@@ -163,7 +163,7 @@ Users with no active sessions still receive a valid token scoped to just the not
 Not fully documented above; see `backend/src/routes/auth.ts` for the complete list:
 
 - `DELETE /api/v1/auth/push-token` — unregister device for push notifications.
-- `PATCH /api/v1/auth/biometric` — update biometric preference (iOS Touch ID / Face ID opt-in stored server-side for cross-device consistency).
+- `PATCH /api/v1/auth/biometric` — update biometric preference (iOS Touch ID / Face ID opt-in stored server-side for cross-device consistency). When enabling, the server stamps `biometricEnrolledAt = new Date()`; when disabling, it clears it to `null`.
 - `PATCH /api/v1/auth/me/mood` — set the user's default mood intensity.
 - `GET` / `PUT /api/v1/auth/me/memory-preferences` — read / replace the memory-detection preferences (retention and surfacing toggles).
 - `GET` / `PATCH /api/v1/auth/me/notification-preferences` — read / partially update push-notification categories.
