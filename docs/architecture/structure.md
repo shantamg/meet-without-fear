@@ -180,10 +180,11 @@ project-root/
   - `useRefinementChat.ts` - Refinement chat flow handling
   - `useRouterChat.ts` - Router-level chat orchestration against the virtual `ROUTER_SESSION_ID` ("router") session, responsible for session creation + navigation out of the inbox
   - `usePendingActions.ts` - Pending action tracking
-  - `useUnreadSessionCount.ts` - Unread session badge count
-  - `useSharingStatus.ts` - Share offer status tracking
+  - `useUnreadSessionCount.ts` - Count of unread sessions. The aggregate app badge count lives in `usePendingActions.ts` as `useBadgeCount` (hits `/notifications/badge-count`).
+  - `useSharingStatus.ts` - Composite hook for the Sharing Status screen: aggregates my/partner empathy attempts, reconciler analysis status, validation status, shared-context history, and share offer state.
+  - `useSessionDrawer.tsx` - Provides `SessionDrawerContext` for the hamburger drawer (open/close state, selected tab between Inner Thoughts and Partner Sessions).
   - Inner Work feature hooks: `useGratitude.ts`, `useMeditation.ts`, `useNeedsAssessment.ts`. Hooks exist in-code but the matching product pathways are deferred per v1.2 scope (see note on `InnerWorkHubScreen.tsx`).
-  - Auth: `useAuth.ts`, `useAuthProviderClerk.ts`, `useBiometricAuth.ts`
+  - Auth: `useAuth.ts` (user auth + `useUpdateMood` for persisting the user's default mood intensity), `useAuthProviderClerk.ts`, `useBiometricAuth.ts`
   - Timeline: `useTimeline.ts` (13KB)
 
 **`services/`**
