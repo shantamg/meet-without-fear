@@ -95,12 +95,14 @@ enum NeedCategory {
 
 ### Synthesis Trigger
 
-Synthesis is regenerated when:
-- User enters Stage 3 (initial)
-- `isDirty` is true and needs are requested
-- User explicitly requests resynthesis
+`GET /needs` runs extraction only when **no needs exist yet** for the caller AND the caller has sent at least one Stage-3 `USER` message (the caller has to engage before the AI will synthesize).
 
-Validation: needs array size 2-8; each need has evidence 1-5 items; aiConfidence 0-1. `isDirty` derived from StageProgress.isSynthesisDirty.
+- First call with zero Stage-3 messages: returns `{ needs: [], extracting: false }`; the UI prompts the user to reflect.
+- First call after the user has messaged: returns `{ needs: [], extracting: true }` on a cache miss while AI extraction runs; subsequent polls return the synthesized list.
+- Subsequent calls once needs exist: returns the stored `IdentifiedNeed` rows without re-extracting.
+- Concurrency: an in-memory `extractionLocks` map prevents duplicate AI calls for the same `(sessionId, userId)` while extraction is in flight.
+
+`isDirty` and explicit re-synthesis are not currently triggers — extraction runs once and is not re-run from this endpoint. Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response includes both `need` and `description` fields carrying the same string (`description` is a compatibility alias).
 
 ---
 
@@ -136,7 +138,7 @@ interface ConfirmNeedsResponse {
 }
 ```
 
-Validation: confirmation required for each presented need; adjustment max 300 chars. Sets gate `needsConfirmed` for caller. If partner confirmed their needs, sets `partnerNeedsConfirmed` derived flag.
+Validation: confirmation required for each presented need; adjustment max 300 chars. Sets gate `needsConfirmed` for the caller. The response includes a `partnerConfirmed` boolean indicating whether the partner has reached the same gate (no separate `partnerNeedsConfirmed` field in the payload).
 
 ### Example
 
@@ -179,7 +181,7 @@ interface AddNeedResponse {
 }
 ```
 
-Validation: need/description 1-200 chars; category required; creates IdentifiedNeed with `confirmed=false` and sets `isSynthesisDirty=false` for added item.
+Validation: need/description 1-200 chars; category required. User-added needs are created with `confirmed: true` (they represent an explicit user declaration, not an AI guess).
 
 ---
 
@@ -219,7 +221,19 @@ interface ConsentShareNeedsResponse {
 3. If both consented, common ground analysis triggered
 4. Creates `ConsentRecord` rows with `targetType = IDENTIFIED_NEED`, links ConsentedContent
 
-Validation: needIds must be confirmed needs; at least 1. Sets gate `needsConfirmed` already true; partner’s consent sets `partnerNeedsConfirmed`.
+Validation: needIds must reference confirmed needs; at least 1. Consenting sets the caller's `needsShared` gate and moves the caller's Stage-3 status to `GATE_PENDING`. The partner-side check `partnerProgress.gatesSatisfied.needsShared === true` (surfaced via the `hasPartnerSharedNeeds` helper) is what unblocks common-ground analysis.
+
+---
+
+## Compare Needs (Side-by-Side)
+
+Before common-ground analysis runs, the app can render a side-by-side comparison of each user's confirmed/shared needs:
+
+```
+GET /api/v1/sessions/:id/needs/comparison
+```
+
+Returns each partner's needs grouped for display; useful when the partner has shared but common-ground analysis hasn't completed yet.
 
 ---
 
@@ -290,6 +304,12 @@ Common ground is identified when:
 - Deeper analysis finds connected needs (e.g., "recognition" and "appreciation")
 - AI detects underlying shared needs beneath surface differences
 
+### "No Overlap" fast-path
+
+When AI analysis finds zero common ground items, the response includes `noOverlap: true`. In that case the Stage-3 gate auto-completes without requiring `/common-ground/confirm` — users can advance directly to Stage 4. The controller updates Stage-3 status to `COMPLETED` and skips the confirm step.
+
+Concurrency: a `commonGroundLocks` map prevents duplicate analysis calls for the same session while AI analysis is in flight (polling clients will see `analysisComplete: false` until the run finishes).
+
 Validation: commonGround array size 1-5; description 1-200 chars. Only needs with active consent participate.
 
 ---
@@ -334,11 +354,11 @@ To advance from Stage 3 to Stage 4:
 
 | Gate | Requirement |
 |------|-------------|
-| `needsConfirmed` | User confirmed at least one need |
-| `partnerNeedsConfirmed` | Partner confirmed their needs |
-| `commonGroundConfirmed` | Both confirmed at least one common ground |
+| `needsConfirmed` | Caller confirmed at least one need |
+| `needsShared` | Caller consented to share confirmed needs |
+| `commonGroundConfirmed` | Both confirmed at least one common-ground item (**or** AI reported no overlap — auto-completes) |
 
-**Both** users must confirm common ground before either can advance. Consent to share needs is required to generate common ground.
+The partner-side check reads `partnerProgress.gatesSatisfied.needsShared`; there is no standalone `partnerNeedsConfirmed` gate. Stage-3 status transitions: `IN_PROGRESS → GATE_PENDING` (after sharing needs) → `COMPLETED` (either via mutual common-ground confirm or the no-overlap fast-path).
 
 ---
 
