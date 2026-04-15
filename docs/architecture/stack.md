@@ -3,7 +3,7 @@ title: Technology Stack
 sidebar_position: 7
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-04-15
 status: living
 ---
 # Technology Stack
@@ -62,7 +62,7 @@ status: living
   - Mobile: Subscribes to partner events and AI message streams
 
 **Data Layer:**
-- Prisma 6.19.2 - ORM for PostgreSQL with migrations
+- Prisma 6.12.0 - ORM for PostgreSQL with migrations
   - Config: `backend/prisma/schema.prisma`
   - Client: `@prisma/client`
 - PostgreSQL (datasource) - Primary database via `DATABASE_URL`
