@@ -13,8 +13,9 @@ echo
 
 read -rsp "Bot User OAuth Token (xoxb-...): " SLACK_BOT_TOKEN; echo
 read -rsp "App-Level Token (xapp-...):      " SLACK_APP_TOKEN; echo
-read -rp  "DM channel ID (D...):            " SHANTAM_SLACK_DM
-read -rp  "#slam-bot channel ID (C...):     " SLAM_BOT_CHANNEL_ID
+read -rp  "DM channel ID (D...):                " SHANTAM_SLACK_DM
+read -rp  "#slam-bot channel ID (C...):         " SLAM_BOT_CHANNEL_ID
+read -rp  "#bugs-and-requests channel ID (C...):" BUGS_AND_REQUESTS_CHANNEL_ID
 
 [[ "$SLACK_BOT_TOKEN" == xoxb-* ]] || { echo "ERROR: bot token should start with xoxb-"; exit 1; }
 [[ "$SLACK_APP_TOKEN" == xapp-* ]] || { echo "ERROR: app token should start with xapp-"; exit 1; }
@@ -39,6 +40,7 @@ SLACK_APP_TOKEN=$SLACK_APP_TOKEN
 SLAM_BOT_USER_ID=$SLAM_BOT_USER_ID
 SHANTAM_SLACK_DM=$SHANTAM_SLACK_DM
 SLAM_BOT_CHANNEL_ID=$SLAM_BOT_CHANNEL_ID
+BUGS_AND_REQUESTS_CHANNEL_ID=$BUGS_AND_REQUESTS_CHANNEL_ID
 ENV
 
 scp -q "$TMP" slam-bot:/tmp/slack-env.new
@@ -47,7 +49,7 @@ shred -u "$TMP" 2>/dev/null || rm -f "$TMP"
 ssh slam-bot bash <<'REMOTE'
 set -e
 # Strip any prior Slack keys from existing .env, then append the new ones
-grep -vE '^(SLACK_BOT_TOKEN|SLACK_APP_TOKEN|SLAM_BOT_USER_ID|SHANTAM_SLACK_DM|SLAM_BOT_CHANNEL_ID)=' /opt/slam-bot/.env > /tmp/.env.base 2>/dev/null || touch /tmp/.env.base
+grep -vE '^(SLACK_BOT_TOKEN|SLACK_APP_TOKEN|SLAM_BOT_USER_ID|SHANTAM_SLACK_DM|SLAM_BOT_CHANNEL_ID|BUGS_AND_REQUESTS_CHANNEL_ID)=' /opt/slam-bot/.env > /tmp/.env.base 2>/dev/null || touch /tmp/.env.base
 cat /tmp/.env.base /tmp/slack-env.new > /opt/slam-bot/.env
 chmod 600 /opt/slam-bot/.env
 rm -f /tmp/.env.base /tmp/slack-env.new

@@ -23,6 +23,7 @@
  *   PMF1_CHANNEL_ID       — Channel ID for #pmf1
  *   AGENTIC_DEVS_CHANNEL_ID — Channel ID for the #agentic-devs channel
  *   SLAM_BOT_CHANNEL_ID — Channel ID for the #slam-bot channel
+ *   BUGS_AND_REQUESTS_CHANNEL_ID — Channel ID for the #bugs-and-requests channel
  */
 
 import { SocketModeClient } from '@slack/socket-mode';
@@ -41,6 +42,7 @@ const BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const BOT_USER_ID = process.env.SLAM_BOT_USER_ID;
 const SHANTAM_DM = process.env.SHANTAM_SLACK_DM;
 const SLAM_BOT_CHANNEL = process.env.SLAM_BOT_CHANNEL_ID;
+const BUGS_AND_REQUESTS_CHANNEL = process.env.BUGS_AND_REQUESTS_CHANNEL_ID;
 
 if (!APP_TOKEN || !BOT_TOKEN || !BOT_USER_ID) {
   console.error('Missing required env vars: SLACK_APP_TOKEN, SLACK_BOT_TOKEN, SLAM_BOT_USER_ID');
@@ -129,6 +131,17 @@ if (SLAM_BOT_CHANNEL) {
     logName: 'check-slam-bot',
     channelName: '#slam-bot',
     commandSlug: 'slam-bot-reply',
+    workspace: 'slack-triage',
+    contextCount: 10,
+  };
+}
+
+// #bugs-and-requests channel — product-team intake for bugs and feature requests
+if (BUGS_AND_REQUESTS_CHANNEL) {
+  CHANNEL_CONFIG[BUGS_AND_REQUESTS_CHANNEL] = {
+    logName: 'check-bugs-and-requests',
+    channelName: '#bugs-and-requests',
+    commandSlug: 'bugs-and-requests-reply',
     workspace: 'slack-triage',
     contextCount: 10,
   };
