@@ -3,7 +3,7 @@ title: "Needs Assessment (\"Am I OK?\") Implementation Plan"
 sidebar_position: 6
 description: "> Status: DEFERRED — This feature is not part of the v1.2 Inner Thoughts Journal milestone. The UI pathway has been removed from the Inner Work hub. This spe..."
 ---
-> **Status: DEFERRED** — This feature is not part of the v1.2 Inner Thoughts Journal milestone. The UI pathway has been removed from the Inner Work hub. This spec is preserved for future reference.
+> **Status: partially implemented.** `mobile/src/screens/NeedsAssessmentScreen.tsx` exists with `overview`, `baseline`, `checkin`, and `summary` modes, `ScoreSelector` (0/1/2), category grouping, `useSpeech` read-aloud for need descriptions, and `useLowNeedsDashboard` sorting. Several design pieces below (AI-guided chat check-ins, Needs Wheel dashboard, Previous/Pause buttons, optional clarification text input, mid-assessment resume) are **not yet built**. Treat this spec as a mix of current behavior and forward plan.
 
 # Needs Assessment ("Am I OK?") Implementation Plan
 
@@ -190,10 +190,10 @@ Response: { success: boolean }
 2. **Assessment Screen** - Steps through each need:
    - Category header (e.g., "Foundation & Survival")
    - Need name and question
-   - Three radio options: Not met / Somewhat met / Fully met
-   - Optional clarification text input
+   - Three options via `ScoreSelector`: Not at all (0) / Somewhat (1) / Fully met (2)
    - Progress indicator (e.g., "5 of 19")
-   - Previous / Next / Pause buttons
+   - Current UI exposes **Next** only; **Previous** and **Pause** are still planned
+   - Optional clarification text input — **not yet built** (scores are numeric-only in `baselineScores`)
 3. **Completion Screen** - Summary with category breakdown
 
 **Mobile Implementation:**
@@ -211,29 +211,22 @@ NeedsAssessmentScreen
     └── NeedsSummary (category breakdown)
 ```
 
-**State Management:**
-- Track current need index locally
-- Save progress periodically (every 5 needs or on pause)
-- Allow resume if user leaves mid-assessment
+**State Management (current):**
+- Local `useState` for current need index + `baselineScores: Record<needId, 0|1|2>`.
+- No periodic persistence — if the user navigates away mid-baseline, the screen alerts "Your progress will be lost" and resets state on confirm. Periodic save + resume is planned but not wired.
 
 ### Flow 2: Needs Wheel Dashboard
 
 **When:** After baseline completed, user opens "Am I OK?"
 
-**UI Components:**
-1. **Needs Wheel** - Circular visualization with 19 segments
-   - Color-coded by score (red/yellow/green)
-   - Tap segment to see details
-   - Time filter: Now / 1 Month / 3 Months
-2. **Category Summary** - Count of needs by score level
-3. **Quick Actions:**
-   - "Check In Now" - Start a check-in conversation
-   - "View History" - Detailed timeline
+**UI Components (planned vs current):**
+1. **Needs Wheel** *(planned, not built)* - Circular 19-segment visualization with color-coded scores and time filters. The current overview uses a vertically scrolling list of needs grouped by category plus a "low needs" section (`groupNeedsByCategory`, `useLowNeedsDashboard`), not an SVG wheel.
+2. **Category Summary** *(current)* - Counts and a per-category list of needs with score pills.
+3. **Quick Actions** *(partial)* - Inline check-in buttons per need. A separate "View History" timeline is planned.
 
-**Visualization Options:**
-- Use `react-native-svg` for custom wheel
-- Or `victory-native` for charting
-- Consider accessibility: provide text alternative view
+**Visualization Options (planned):**
+- `react-native-svg` custom wheel or `victory-native` charting
+- Accessibility: text alternative view
 
 ### Flow 3: Rotating Check-in Conversation
 
@@ -265,10 +258,11 @@ AI: "Based on what you've shared, does [previous score] still feel accurate,
 [Score saved with timestamp and conversation summary as clarification]
 ```
 
-**Implementation:**
-- Can reuse existing chat interface
-- Create `buildNeedsCheckInPrompt()` in stage-prompts.ts
-- Score update happens via special message type or inline UI
+**Implementation (planned):**
+- Reuse the existing chat interface for a conversational check-in
+- Create `buildNeedsCheckInPrompt()` in `stage-prompts.ts`
+
+> **Current implementation** (non-conversational): the `checkin` mode renders a `ScoreSelector` (0/1/2 buttons) in a modal/inline card on `NeedsAssessmentScreen`; `handleSubmitCheckIn` posts the numeric score via the `checkInNeed` mutation. There's no AI-guided chat or clarification capture yet.
 
 ---
 
