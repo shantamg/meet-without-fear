@@ -11,15 +11,26 @@ Database design implementing the [Vessel Architecture](../../privacy/vessel-mode
 ## Documents
 
 ### [Prisma Schema](./prisma-schema.md)
-Complete database schema with dual SQL/Vector strategy, Stage 2/4 storage, and consent semantics
+Complete database schema: stage/session tables, consent semantics, Inner Work subsystem, Fact-Ledger memory architecture, Reconciler models, and Needs / People catalogs.
 
-## Quick Reference: Three Vessels
+## Quick Reference: Vessel tables
 
-| Vessel | Storage Strategy | Access Pattern |
-|--------|-----------------|----------------|
-| User Vessel | SQL (structured) + pgvector (embeddings) | User + AI only |
-| AI Synthesis | Ephemeral + regenerated | AI only |
-| Shared Vessel | SQL (permanent record) | Both users + AI |
+The Vessel Architecture is realized in two Prisma tables plus a synthesis-state concept:
+
+| Concept | Table(s) | Storage Strategy | Access Pattern |
+|---------|----------|-----------------|----------------|
+| User Vessel | `UserVessel` (+ `notableFacts`, message/session embeddings) | SQL + pgvector | User + AI only |
+| Shared Vessel | `SharedVessel` (linked 1:1 to `Session`) | SQL | Both users + AI |
+| AI Synthesis | `StageProgress.isSynthesisDirty` / `synthesisLastUpdated` + regenerated on demand | Ephemeral (no dedicated table) | AI only |
+
+## Related subsystems
+
+The full Prisma schema also covers subsystems that aren't strictly part of the vessel model but share the same database:
+
+- **Inner Work**: `InnerWorkSession`, `InnerWorkMessage`, `MeditationSession`, `MeditationStats`, `MeditationFavorite`, `GratitudeEntry`.
+- **Fact-Ledger / memory**: `User.globalFacts`, `UserVessel.notableFacts`, session-level embeddings, `UserMemory` for cross-session AI context.
+- **Reconciler**: `ReconcilerResult`, `ReconcilerShareOffer` (alignment scores, gap summaries, share-suggestion state).
+- **Needs + people catalogs**: `Need` (19 core human needs), `NeedScore`, `Person`, `PersonMention`.
 
 ## Dual-Layer Data Strategy
 
