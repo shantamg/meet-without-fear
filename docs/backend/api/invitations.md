@@ -8,16 +8,11 @@ slug: /backend/api/invitations
 
 Invitation acceptance and management for session partners.
 
-## Delivery Methods
+## Delivery Model
 
-Invitations can be sent via email or phone:
+The backend **does not send invitations itself**. `POST /api/v1/sessions` (see [Sessions API](./sessions.md)) creates the session + invitation records and returns a shareable invitation URL; the inviting user shares that link over their own channels (iMessage, WhatsApp, email, etc.). `createSession` accepts `personId`, `inviteName`, `context`, and an optional `innerThoughtsId` — not `inviteEmail` / `invitePhone`. Resend is used for some transactional emails elsewhere (not outbound invitations), and Twilio is not currently integrated.
 
-| Channel | Provider | Details |
-|---------|----------|---------|
-| Email | [Resend](https://resend.com) | Transactional email delivery |
-| Phone | [Twilio](https://twilio.com) | SMS delivery |
-
-When creating a session with `inviteEmail`, the invitation is sent via Resend. When using `invitePhone`, it's sent via Twilio SMS. The invitation includes a deep link to accept.
+Invitations are valid for **7 days** from creation; after that the `GET /invitations/:id` endpoint returns `status: 'EXPIRED'`.
 
 ## Get Invitation Details
 
@@ -67,7 +62,18 @@ interface InvitationDTO {
 | Code | When |
 |------|------|
 | `NOT_FOUND` | Invitation doesn't exist |
-| `INVITATION_EXPIRED` | Invitation has expired |
+
+> Expired invitations return a successful 200 response with `status: 'EXPIRED'` rather than an error code — clients should branch on `data.status`.
+
+---
+
+## Acknowledge Invitation
+
+Mark a pending invitation as viewed (flips a `viewedAt` timestamp for the inviter's UI). Requires authentication.
+
+```
+POST /api/v1/invitations/:id/acknowledge
+```
 
 ---
 
@@ -94,11 +100,11 @@ interface AcceptInvitationResponse {
 
 ### Side Effects
 
-1. Session status changes from `INVITED` to `ACTIVE`
-2. Inviter receives push notification
-3. Both users' StageProgress records are created for Stage 0
-4. SharedVessel is created for the session
-5. UserVessel is created for the accepting user
+1. Session transitions out of `INVITED` toward `ACTIVE` (sessions are `CREATED` at session creation, move to `INVITED` once the inviter confirms the invitation message, then `ACTIVE` on accept).
+2. Inviter receives push notification + Ably realtime event on their user channel.
+3. The accepter's `StageProgress` row for Stage 0 is created here. The inviter's `StageProgress` row was already created when the session was originally created.
+4. `SharedVessel` was already created at session creation; no new vessel is created on accept.
+5. The accepting user's `UserVessel` is created here.
 
 ### Example
 
@@ -144,9 +150,7 @@ curl -X POST /api/v1/invitations/inv_def456/accept \
 | Code | When |
 |------|------|
 | `NOT_FOUND` | Invitation doesn't exist |
-| `INVITATION_EXPIRED` | Invitation has expired |
-| `CONFLICT` | Invitation already accepted/declined |
-| `FORBIDDEN` | User is the one who sent the invitation |
+| `VALIDATION_ERROR` (400) | Invitation has expired, has already been accepted/declined, or the caller is the inviter trying to accept their own invitation |
 
 ---
 
@@ -183,30 +187,20 @@ interface DeclineInvitationResponse {
 
 ---
 
-## Resend Invitation
+## Related session/person endpoints
 
-Resend invitation notification (for pending invitations only).
+These invitation-adjacent endpoints live in the same route file:
 
-```
-POST /api/v1/invitations/:id/resend
-```
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/v1/sessions/:id/archive` | Archive a resolved or abandoned session |
+| `DELETE` | `/api/v1/sessions/:id` | Remove the caller's private data from a session (marks it `ABANDONED`) |
+| `PATCH` | `/api/v1/relationships/:relationshipId/nickname` | Update the partner's nickname on the caller's side |
+| `GET` | `/api/v1/people` | List all people the user has established relationships with |
 
-**Note**: Only the original inviter can resend.
+> **Not implemented:** There is no `POST /invitations/:id/resend` endpoint. Invitations can't be resent — if an invitation expires, the inviter creates a new session.
 
-### Response
-
-```typescript
-interface ResendInvitationResponse {
-  sent: boolean;
-  sentAt: string;
-  expiresAt: string;  // Extended expiration
-}
-```
-
-### Rate Limiting
-
-- Max 3 resends per invitation
-- Minimum 24 hours between resends
+> **Duplicate-session guard:** `POST /api/v1/sessions` checks for an existing active session with the same person and returns that session instead of creating a new one.
 
 ---
 
