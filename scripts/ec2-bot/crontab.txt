@@ -19,9 +19,15 @@
 # Scheduled jobs use MAX_CONCURRENT - 2 slots, reserving 2 for interactive work.
 0 * * * *   /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled bug-fix "Fix untouched bug issues" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
 0 */6 * * * /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled health-check "Run scheduled health check" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+0 10 * * *  /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled docs-audit "Run incremental docs audit (24h lookback)" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+0 11 * * 1  /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled security-audit "Run weekly security audit" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+0 9 * * 1-5 /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled stale-sweeper "Sweep for stale items" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
 */10 * * * * /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled pr-reviewer "Scan and review open bot PRs" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
 
-# ── Thread tracker (Slack thread follow-up, every 30 min) ───────────────────
+# ── Pipeline monitor (watches active milestone-builder runs) ────────────────
+*/10 * * * * /opt/slam-bot/scripts/pipeline-monitor.sh >> /var/log/slam-bot/pipeline-monitor.log 2>&1
+
+# ── Thread tracker (Slack thread follow-up) ─────────────────────────────────
 */30 * * * * /opt/slam-bot/scripts/thread-tracker.sh >> /var/log/slam-bot/thread-tracker.log 2>&1
 
 # ── Process queue (drain queued agent requests every minute) ────────────────
@@ -30,3 +36,7 @@
 # ── Log pruning ──────────────────────────────────────────────────────────────
 0 4 * * * /opt/slam-bot/scripts/prune-journal.sh >> /var/log/slam-bot/cron.log 2>&1
 5 4 * * * /opt/slam-bot/scripts/prune-claude-projects.sh >> /var/log/slam-bot/cron.log 2>&1
+
+# ── API budget monitoring ────────────────────────────────────────────────────
+* * * * * /opt/slam-bot/scripts/api-budget-monitor.sh >> /var/log/slam-bot/cron.log 2>&1
+30 7 * * * /opt/slam-bot/scripts/api-budget-summary.sh --alert >> /var/log/slam-bot/cron.log 2>&1

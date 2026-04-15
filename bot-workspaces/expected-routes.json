@@ -5,6 +5,10 @@
       "workspace": "slack-triage",
       "firstStage": "1-fetch-and-classify"
     },
+    "slam-bot-reply": {
+      "workspace": "slack-triage",
+      "firstStage": "1-fetch-and-classify"
+    },
     "respond-github-*": {
       "workspace": "github-respond",
       "firstStage": "respond"
@@ -21,9 +25,41 @@
       "workspace": "health-check",
       "firstStage": "audit"
     },
+    "audit-docs": {
+      "workspace": "docs-audit",
+      "firstStage": "incremental"
+    },
+    "audit-docs-full": {
+      "workspace": "docs-audit",
+      "firstStage": "full"
+    },
+    "stale-sweeper": {
+      "workspace": "stale-sweeper",
+      "firstStage": "1-identify"
+    },
     "ws-expert-review": {
       "workspace": "expert-review",
       "firstStage": "01-initialize"
+    },
+    "security-audit": {
+      "workspace": "security-audit",
+      "firstStage": "1-scan"
+    },
+    "workspace-builder": {
+      "workspace": "workspace-builder",
+      "firstStage": "01-discover"
+    },
+    "workspace-audit": {
+      "workspace": "workspace-builder",
+      "firstStage": "05-validate"
+    },
+    "research": {
+      "workspace": "research",
+      "firstStage": "01-gather"
+    },
+    "verify": {
+      "workspace": "verify",
+      "firstStage": "01-check"
     },
     "review-impl": {
       "workspace": "pr-reviewer",

@@ -1,0 +1,17 @@
+# Stage: {{STAGE_TITLE}}
+
+## Input
+
+{{INPUT_DESCRIPTION}}
+
+## Process
+
+{{PROCESS_STEPS}}
+
+## Output
+
+{{OUTPUT_DESCRIPTION}}
+
+## Completion
+
+{{COMPLETION_INSTRUCTIONS}}

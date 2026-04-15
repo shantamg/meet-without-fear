@@ -1,0 +1,24 @@
+# {{WORKSPACE_TITLE}} (L1)
+
+{{ONE_LINE_DESCRIPTION}}
+
+## What to Load
+
+| Resource | When | Why |
+|---|---|---|
+| `stages/{current}/CONTEXT.md` | Always | Current stage contract |
+{{LOAD_TABLE_ROWS}}
+
+## What NOT to Load
+
+| Resource | Why |
+|---|---|
+{{EXCLUDE_TABLE_ROWS}}
+
+## Stage Progression
+
+{{STAGE_LIST}}
+
+## Orchestrator Rules
+
+{{ORCHESTRATOR_RULES}}

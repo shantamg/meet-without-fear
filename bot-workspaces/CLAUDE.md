@@ -12,12 +12,31 @@ Route each bot job to its workspace and entry stage. The workspace `CLAUDE.md` (
 | `review-pr` | `github-respond/` | `review` |
 | `fix-bugs` | `bug-fix/` | `01-select` |
 | `investigate` | `bug-fix/` | `02-investigate` |
+| `needs-info` | `needs-info/` | `01-create-issue` |
 | `health-check` | `health-check/` | `audit` |
+| `stale-sweeper` | `stale-sweeper/` | `1-identify` |
 | `bot:expert-review` | `expert-review/` | `01-initialize` |
+| `security-audit` | `security-audit/` | `1-scan` |
+| `systems-architect` | `systems-architect/` | `01-scan` |
+| `audit-docs` | `docs-audit/` | `incremental` |
+| `audit-docs-full` | `docs-audit/` | `full` |
 | `check-pr` / `check-pr-tick` | `ci-monitor/` | `tick` |
+| `brainstorm` | `brainstorm/` | `1-digest` |
+| `deploy-prepare` | `deploy/` | `prepare` |
+| `do-later-review` | `do-later-review/` | `01-scan` |
+| `milestone-builder` | `milestone-builder/` | `01-initialize` |
 | `general-pr` | `general-pr/` | `01-implement` |
+| `project-orchestrator` | `project-orchestrator/` | `01-initialize` |
 | `pr-reviewer` | `pr-reviewer/` | `01-scan` |
+| `workspace-builder` | `workspace-builder/` | `01-discover` |
+| `milestone-planner` | `milestone-planner/` | `01-gather` |
+| `workspace-audit` | `workspace-builder/` | `05-validate` |
+| `spec-builder` | `spec-builder/` | `01-initialize` |
+| `research` | `research/` | `01-gather` |
+| `pipeline-monitor` | `pipeline-monitor/` | `tick` |
 | `review-impl` | `pr-reviewer/` | `review-impl` |
+| `verify` | `verify/` | `01-check` |
+| `release-summary` | `release-summary/` | `summarize` |
 
 ## What NOT to Load (root level)
 
