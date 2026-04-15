@@ -12,12 +12,12 @@ This document provides state diagrams for all reconciler outcome paths from both
 
 ## Reconciler Trigger Timing
 
-The reconciler runs **asymmetrically**: it is triggered when a user calls `confirmFeelHeard` (Stage 1 completion), and only if the partner already has a HELD empathy attempt. This means the reconciler runs for a **single direction** (e.g., A->B) the first time, not when both users share empathy simultaneously.
+The reconciler runs **asymmetrically**. Two entry points:
 
-- **Trigger**: `confirmFeelHeard()` in `messages.ts` calls `runReconcilerForDirection(sessionId, guesserId, subjectId)`
-- **Condition**: Only runs if the partner (guesser) has a HELD empathy attempt
-- **Direction**: Evaluates guesser's empathy against the subject's actual feelings (one direction at a time)
-- **Second direction**: Runs when the other user later confirms feel-heard (if their partner also has HELD empathy)
+1. **Automatic (primary)**: `confirmFeelHeard()` in `messages.ts` calls `runReconcilerForDirection(sessionId, guesserId, subjectId)` — only fires if the partner (guesser) has a `HELD` empathy attempt. Evaluates one direction at a time.
+2. **Manual (API)**: `POST /api/v1/sessions/:id/reconciler/run` invokes `runReconciler(sessionId, forUserId?)`. When `forUserId` is passed the run is scoped to a single direction; when it's omitted both directions run in one call. Used by the share-refine flow and E2E fixtures.
+
+- **Second direction** in the automatic flow runs when the other user later confirms feel-heard (if their partner also has a `HELD` empathy attempt).
 
 ## NEEDS_WORK Status (Legacy/Deprecated)
 
@@ -30,8 +30,8 @@ Key reconciler-related events and their routing:
 | Event | Delivery | `forUserId` | Notes |
 |-------|----------|-------------|-------|
 | `empathy.status_updated` | `publishSessionEvent` (broadcast to session) OR `notifyPartner` (targeted) | Yes, when targeted via `notifyPartner`; absent when broadcast via `publishSessionEvent` | Broadcast variant includes `empathyStatuses` map for all users. Targeted variant (e.g., after validation) includes `forUserId` for filtering. |
-| `empathy.share_suggestion` | `notifyPartner` (targeted to subject) | Yes (`forUserId` = subject's user ID) | Only the subject should see the ShareTopicPanel. Mobile filters on `data.forUserId === user?.id`. |
-| `empathy.revealed` | `publishSessionEvent` (broadcast) | No | Both users receive; UI shows partner's empathy. |
+| `empathy.status_updated` with `status: 'AWAITING_SHARING'` | `notifyPartner` (targeted to subject) | Yes (`forUserId` = subject's user ID) | Replaces the old `empathy.share_suggestion` name. Message format: `"<name> is considering a suggestion to share more"`. Mobile filters on `data.forUserId === user?.id` to show the ShareTopicPanel only to the subject. |
+| `empathy.revealed` | `notifyPartner` (targeted per direction) | Yes — `forUserId` set per recipient | Each user gets an individual `empathy.revealed` event so the mobile can read their partner's statement; it is not a session-wide broadcast. |
 | `empathy.context_shared` | `notifyPartner` (targeted to guesser) | Yes | Guesser receives SHARED_CONTEXT notification. |
 
 ## 1. PROCEED Path (No Gaps Found)
@@ -306,7 +306,7 @@ stateDiagram-v2
 
 ## 4. Refinement Loop (One Cycle)
 
-When the subject shares additional context, the guesser can refine their empathy attempt. The reconciler re-runs once. Per design constraints, only one refinement cycle is supported.
+When the subject shares additional context, the guesser can refine their empathy attempt. The reconciler re-runs each cycle. A circuit breaker (`refinement-circuit-breaker.ts`) caps this at **3 attempts per direction** — beyond that, the reconciler is skipped and the attempt is forced into `READY` with the softer "let's move forward" alignment message.
 
 ### 4.1 Guesser Perspective (Refinement)
 
@@ -562,7 +562,7 @@ stateDiagram-v2
 
 ## 6. Acceptance Check (Guesser Declines to Refine)
 
-When the guesser receives shared context or feedback but chooses not to refine their empathy statement, the AI performs an acceptance check.
+When the guesser receives shared context or feedback but chooses not to refine their empathy statement, the backend transitions the attempt to `READY` with a **hardcoded** alignment message — there is no AI call at this junction. The message is chosen from two templates based on whether the circuit breaker tripped: either "`<subjectName>` has felt heard…" (normal path) or "You've shared your perspective… Let's move forward" (circuit-breaker / already-shared-context path).
 
 ### 6.1 Guesser Perspective (Acceptance Check)
 
