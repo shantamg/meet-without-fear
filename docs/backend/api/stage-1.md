@@ -8,13 +8,47 @@ slug: /backend/api/stage-1
 
 Endpoints for the witness stage - being heard by the AI.
 
-## Send Message
+## Send Message (streaming, primary)
 
-Send a message in the conversation. Works for all stages but has stage-specific AI behavior.
+Send a message and receive the AI response as a server-sent-event (SSE) stream. This is the active path.
 
 ```
-POST /api/v1/sessions/:id/messages
+POST /api/v1/sessions/:id/messages/stream
 ```
+
+### SSE event types
+
+The stream emits these event kinds until the connection closes:
+
+| Event | Payload |
+|-------|---------|
+| `chunk` | `{ content: string }` — an incremental text fragment |
+| `text_complete` | `{ content: string }` — the full assembled assistant text |
+| `metadata` | `{ messageId, emotionalReading?, suggestPause?, pauseReason? }` — message-level metadata once persistence is complete |
+| `error` | `{ code, message }` — stream-terminating error |
+
+### Legacy non-streaming endpoint (deprecated)
+
+```
+POST /api/v1/sessions/:id/messages     # DEPRECATED — returns 410 Gone
+```
+
+This path now returns **HTTP 410 Gone**. All callers must use the streaming endpoint above.
+
+## Get Initial Message
+
+Generate the AI's first message for a session/stage (greeting, invitation-phase context, or Inner-Thoughts-seeded warm-up).
+
+```
+POST /api/v1/sessions/:id/messages/initial
+```
+
+The controller handles:
+- First greeting when the session enters a stage for the first time.
+- Special invitation-phase copy before the partner has accepted.
+- Building context from a linked Inner Thoughts entry when present.
+
+### Shared body (streaming + initial)
 
 ### Request Body
 
@@ -115,9 +149,19 @@ GET /api/v1/sessions/:id/messages
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `stage` | number | all | Filter by stage |
-| `cursor` | string | - | Pagination cursor |
-| `limit` | number | 50 | Max results (1-100) |
+| `before` | ISO string | - | Return messages strictly before this timestamp |
+| `after`  | ISO string | - | Return messages strictly after this timestamp |
+| `order`  | `asc` \| `desc` | `desc` | Sort order |
+| `limit`  | number | 50 | Max results |
+
+The query filters by both sender and visibility. Each message has an optional `forUserId` — only messages with `forUserId == null` (public) or `forUserId == <caller>` (addressed to the caller) are returned, enforcing cross-user data isolation at the read boundary:
+
+```sql
+WHERE (senderId = :userId AND forUserId IS NULL)
+   OR forUserId = :userId
+```
+
+There is no `stage` filter or `cursor` token; pagination uses timestamp-based `before`/`after` windows.
 
 ### Response
 
@@ -191,6 +235,13 @@ curl -X POST /api/v1/sessions/sess_abc123/feel-heard \
   }
 }
 ```
+
+### Side Effects (on `confirmed: true`)
+
+1. Sets the caller's `feelHeardConfirmed` gate and stamps `confirmedAt`.
+2. Triggers `consolidateGlobalFacts` to merge session insights into the user's global profile.
+3. If the partner has an outstanding `HELD` empathy attempt, the asymmetric reconciler runs to decide whether to surface a share suggestion.
+4. If both partners are now confirmed, publishes a session-wide `partner.advanced` event on the Ably session channel.
 
 ### UI Integration
 
