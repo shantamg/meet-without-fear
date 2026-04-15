@@ -26,19 +26,39 @@ read -rsp "Mixpanel service-account secret:         " MIXPANEL_SECRET; echo
 [[ "$MIXPANEL_PROJECT_ID" =~ ^[0-9]+$ ]] || { echo "ERROR: project ID should be numeric"; exit 1; }
 
 echo "Verifying credentials via Mixpanel API..."
-HTTP_CODE=$(curl -s -o /tmp/mixpanel-check.$$ -w "%{http_code}" \
+
+# First try the Export API on data.mixpanel.com — tends to be available on
+# more plans than the Query API.
+YESTERDAY=$(date -u -v-1d +%Y-%m-%d 2>/dev/null || date -u -d 'yesterday' +%Y-%m-%d)
+EXPORT_CODE=$(curl -s -o /tmp/mixpanel-check.$$ -w "%{http_code}" \
   --user "$MIXPANEL_USERNAME:$MIXPANEL_SECRET" \
-  "https://mixpanel.com/api/2.0/events/top?project_id=$MIXPANEL_PROJECT_ID&type=general&limit=1")
-BODY=$(cat /tmp/mixpanel-check.$$)
+  "https://data.mixpanel.com/api/2.0/export?project_id=$MIXPANEL_PROJECT_ID&from_date=$YESTERDAY&to_date=$YESTERDAY&limit=1")
+EXPORT_BODY=$(cat /tmp/mixpanel-check.$$)
 rm -f /tmp/mixpanel-check.$$
 
-if [ "$HTTP_CODE" != "200" ]; then
-  echo "ERROR: Mixpanel API returned HTTP $HTTP_CODE"
-  echo "$BODY" | head -c 500
-  echo
-  exit 1
-fi
-echo "  OK — API auth succeeded."
+case "$EXPORT_CODE" in
+  200)
+    echo "  OK — Export API auth succeeded."
+    ;;
+  401|403)
+    echo "ERROR: Mixpanel Export API returned HTTP $EXPORT_CODE — credentials rejected."
+    echo "$EXPORT_BODY" | head -c 300; echo
+    echo "Double-check project ID, username, secret, and that the service account"
+    echo "has read access to this project."
+    exit 1
+    ;;
+  402)
+    echo "  WARN — Export API returned HTTP 402 (plan restriction). Credentials appear"
+    echo "  valid (a 401 would have been a real auth failure). check-mixpanel may not"
+    echo "  work until the Mixpanel plan is upgraded, but the vars will be saved so"
+    echo "  the skill can at least attempt calls and surface the 402 clearly."
+    ;;
+  *)
+    echo "  WARN — Export API returned HTTP $EXPORT_CODE (unexpected). Saving creds"
+    echo "  anyway; investigate with the bot's check-mixpanel skill."
+    echo "$EXPORT_BODY" | head -c 300; echo
+    ;;
+esac
 
 # Build env additions locally, scp, merge on remote
 TMP=$(mktemp)
