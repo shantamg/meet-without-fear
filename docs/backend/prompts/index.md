@@ -14,12 +14,18 @@ Meet Without Fear uses Claude models via AWS Bedrock:
 
 | Task | Model | Rationale |
 |------|-------|-----------|
-| Stage classification | Claude 3.5 Haiku | Fast, deterministic |
-| Emotional intensity detection | Claude 3.5 Haiku | Quick pattern matching |
-| Retrieval planning | Claude 3.5 Haiku | Structured output, no creativity |
-| **User-facing responses** | **Claude 3.5 Sonnet** | Empathy, nuance, safety |
-| Need extraction | Claude 3.5 Sonnet | Complex reasoning |
-| Transformation (raw to shareable) | Claude 3.5 Sonnet | Preserving meaning, removing heat |
+| Retrieval planning (`planRetrieval`) | Claude Haiku 4.5 | Structured output, no creativity |
+| Memory intent detection (`determineMemoryIntent`) | Claude Haiku 4.5 | Fast, deterministic gate on retrieval depth |
+| Intent / reference detection (`detectIntent`, `detectReferences`) | Claude Haiku 4.5 | Quick pattern matching |
+| Session distillation / takeaway extraction | Claude Haiku 4.5 | Bulk summarization |
+| Language rewrite suggestions (attacking-language coach) | Claude Haiku 4.5 | Rule-assisted rewriting |
+| **User-facing responses (default)** | **Claude Sonnet 4.5** | Empathy, nuance, safety |
+| User-facing responses (low-signal turns) | Claude Haiku 4.5 via `routeModel()` | Cost/latency optimization |
+| Reconciler / empathy-gap analysis | Claude Sonnet 4.5 | Complex reasoning over partner state |
+| Need / need-mapping responses | Claude Sonnet 4.5 | Integrated into Stage 3 prompt |
+| Content transformation (consent shareable text) | Claude Sonnet 4.5 | Preserving meaning, removing heat |
+
+> Emotional intensity and current stage are **pre-calculated** in the orchestrator context (intensity from `EmotionalReading` rows, stage from session state) — they are not detected by an LLM during orchestration, even though a dedicated Haiku path exists for other classification tasks.
 
 ## Prompt Categories
 
@@ -29,8 +35,9 @@ Meet Without Fear uses Claude models via AWS Bedrock:
 |--------|-------|---------|
 | [Stage 0: Opening](./stage-0-opening.md) | 0 | Welcome and Curiosity Compact |
 | [Stage 1: Witnessing](./stage-1-witnessing.md) | 1 | Deep listening and reflection |
-| [Stage 2: Perspective](./stage-2-perspective.md) | 2 | Building empathy guess |
-| [Stage 3: Need Mapping](./stage-3-needs.md) | 3 | Validating needs and common ground |
+| [Stage 2: Perspective](./stage-2-perspective.md) | 2 | Building empathy guess; also hosts the `MIRROR` mode (redirect judgment) and other internal modes as branches of `buildStage2Prompt` |
+| Stage 2B: Informed Empathy | 21 (internal code) | Refining empathy after receiving partner's shared context (`buildStage2BPrompt`) |
+| [Stage 3: Need Mapping](./stage-3-needs.md) | 3 | Validating needs, extracting universal needs from venting, and surfacing common ground (need extraction lives inside `buildStage3Prompt`) |
 | [Stage 4: Strategic Repair](./stage-4-repair.md) | 4 | Collaborative strategy creation |
 
 ### Cross-Stage
@@ -38,14 +45,16 @@ Meet Without Fear uses Claude models via AWS Bedrock:
 | Prompt | Stages | Purpose |
 |--------|--------|---------|
 | [Emotional Support](./emotional-support.md) | All | Responding to high intensity |
-| [Mirror Intervention](./mirror-intervention.md) | 2+ | Redirecting judgment to curiosity |
+
+> **Mirror Intervention** is **not** a standalone prompt — it's the `MIRROR` mode inside `buildStage2Prompt`, selected when a user slips into blame. The linked `mirror-intervention.md` page describes the behavior but the code lives in `stage-prompts.ts`.
 
 ### Utility
 
 | Prompt | Purpose |
 |--------|---------|
-| [Need Extraction](./need-extraction.md) | Extract needs from venting (Stage 3 input) |
-| [Content Transformation](./content-transformation.md) | Raw to shareable content |
+| [Content Transformation](./content-transformation.md) | Raw to shareable content (used by consent flow) |
+
+> **Need Extraction** isn't a separate utility prompt. The Stage 3 prompt (`buildStage3Prompt`) directly instructs the AI to "crystallize the universal human needs underneath their positions"; there's no standalone `need-extraction` call in the orchestrator.
 
 ## Prompt Structure
 
@@ -77,12 +86,23 @@ max_tokens: number
 
 ## Retrieval Context
 
-Prompts receive pre-assembled context based on [Retrieval Contracts](../state-machine/retrieval-contracts.md). The AI:
+Prompts receive pre-assembled context based on [Retrieval Contracts](../state-machine/retrieval-contracts.md). The **user-facing model (Sonnet)** does not decide what to retrieve — it only sees the pre-built `OrchestratorContext`. An **internal Haiku call** (`determineMemoryIntent` + `planRetrieval`) decides how much to retrieve and generates the query plan before the Sonnet call runs; that plan is not user-facing.
 
-- Never decides what to retrieve
+The user-facing model:
+- Never issues retrieval queries directly
 - Receives only stage-appropriate data
 - Cannot access partner UserVessel content
 - Sees AI Synthesis for internal planning only (never in generation context)
+
+## Semantic tags (output format)
+
+All user-facing stage responses are expected to follow the micro-tag format enforced by `buildResponseProtocol`:
+
+- `<thinking>` — private AI reasoning, may include metadata markers like `FeelHeardCheck: ...` or `ReadyShare: ...`.
+- `<draft>` — the user-facing reply body.
+- `<dispatch>` — optional structured commands for the orchestrator (e.g. mode switches).
+
+The orchestrator parses these tags to (a) extract the visible reply, (b) detect gate-satisfaction signals inside `<thinking>`, and (c) act on any `<dispatch>` payload. Prompts that don't emit the tags are treated as plain text.
 
 ## Safety Guidelines
 
@@ -177,7 +197,9 @@ CONTINUITY TECHNIQUES:
 
 ### 5. Session Summary Injection
 
-For sessions longer than 30 minutes, a **session summary** is included:
+When a session summary exists in the context bundle (`contextBundle.sessionSummary.currentFocus` is non-empty), the orchestrator injects it into the prompt. There is no hard 30-minute timer — the summary is generated by a separate summarization pass and the orchestrator just includes whatever it finds.
+
+Summary shape:
 
 ```typescript
 session_summary?: {
