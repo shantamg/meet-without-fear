@@ -54,7 +54,7 @@ Characteristics:
 - Left-aligned
 - Subtle background color
 - AI avatar/icon
-- No typing indicator shown during composition
+- A typing indicator ("ghost dots") appears while the user is waiting for the AI's reply — it's derived from cache state (the last message role is `USER`, meaning the AI hasn't answered yet) and from pending mutations like `isFetchingInitialMessage` / `isConfirmingFeelHeard` / `isSharingEmpathy` / `isConfirmingInvitation`. Dots hide as soon as the first AI chunk arrives via SSE / Ably.
 
 ### User Message
 
@@ -166,7 +166,7 @@ flowchart TB
     end
 ```
 
-### Stage 4: Repair Chat
+### Stage 4: Strategic Repair ("Moving Forward Together")
 
 ```mermaid
 flowchart TB
@@ -189,7 +189,15 @@ flowchart TB
     end
 ```
 
+## Session entry flow
+
+Before the chat list renders, `UnifiedSessionScreen` can swap in a full-screen mood check (`SessionEntryMoodCheck`) — this is the default entry when `shouldShowMoodCheck` is true. Only after the user submits (or dismisses) the mood reading does the usual chat layout show.
+
 ## Empty States
+
+### Compact-not-signed (onboarding)
+
+If the caller enters a session but hasn't signed the Curiosity Compact, the list replaces its usual empty state with a `CompactChatItem` (the compact text + "Sign and begin" CTA). This is controlled by `isInOnboardingUnsigned` / `customEmptyState`.
 
 ### Waiting for Partner
 
@@ -247,24 +255,28 @@ flowchart TB
 
 ## Attachment Support
 
-```mermaid
-flowchart TB
-    subgraph AttachmentFlow[Document Attachment]
-        AttachBtn[Attach button] --> FileSelect[File picker]
-        FileSelect --> Preview[Attachment preview]
-        Preview --> Confirm[Add to message]
-        Confirm --> Uploaded[Attached: document.pdf]
-    end
-```
+Not implemented. The message input accepts text only (`sendMessage(message: string)`); there is no attachment button, file picker, or attachment preview in `UnifiedSessionScreen` or `ChatInterface`. Documented here only as a deferred design idea — remove from wireframes before shipping if it doesn't make the roadmap.
 
-Supported types:
-- Images (screenshots of texts, etc.)
-- PDFs (documents, emails)
-- Text files
+## Integrated emotional barometer
 
-:::tip See it in action
-<a href="/demo/features/attachments.html" target="_blank" rel="noreferrer">Try the Attachment Support demo →</a> - See how screenshots and documents are shared for context.
-:::
+The chat input hosts an inline emotion slider (`barometerValue` / `handleBarometerChange`). Readings ≥9 automatically open the `support-options` overlay to surface coping exercises before the user continues typing.
+
+## Typewriter + inline Stage 2 cards
+
+The chat list tracks `isTypewriterAnimating` (set while a new AI message is being typed in) so it can delay the appearance of inline cards until the text has finished. In Stage 2 (`PERSPECTIVE_STRETCH`), the list renders **validation cards** directly in the timeline (`validationCards`) with "Accurate / Partially / Off" buttons wired to `handleValidationAccurate` / `handleValidationNotQuite` instead of routing users to a separate screen.
+
+## Stage label map
+
+The screen uses this friendly-name map when rendering the stage header:
+
+| Internal enum | UI label |
+|---|---|
+| `Stage.ONBOARDING` | Welcome |
+| `Stage.WITNESS` | Share what's on your mind |
+| `Stage.PERSPECTIVE_STRETCH` | Imagine their side |
+| `Stage.NEED_MAPPING` | Find what you both need |
+| `Stage.INFORMED_EMPATHY` | Deeper Understanding |
+| `Stage.STRATEGIC_REPAIR` | Moving Forward Together |
 
 ---
 
