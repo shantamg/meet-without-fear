@@ -19,7 +19,7 @@ status: living
 - Types/interfaces: `camelCase.ts` with PascalCase type names - e.g., `AuthUser` interface in `auth.ts`
 - Enum-like types: two shapes are in use.
   - **TypeScript `enum`** for persisted / Prisma-shared types: `SessionStatus`, `Stage`, `InnerWorkStatus`, `MessageRole`, `ConnectionStatus`. Keys are `CONSTANT_CASE`; string values are usually `CONSTANT_CASE` (e.g. `SessionStatus.ACTIVE = 'ACTIVE'`) but some enums use lowercase values (e.g. `ConnectionStatus.CONNECTING = 'connecting'`).
-  - **`const` object with `as const` + derived type** for wire-format discriminants and UI state tags: `ChatItemType`, `AIMessageStatus`, `IndicatorType`, `AnimationState`, `SharedContentDeliveryStatus`. Pattern: `export const Foo = { BAR: 'bar' } as const; export type Foo = (typeof Foo)[keyof typeof Foo];`. Keys are `CONSTANT_CASE`; values are lowercase or kebab-case (`'ai-message'`, `'streaming'`, `'invitation-sent'`).
+  - **`const` object with `as const` + derived type** for wire-format discriminants and UI state tags: `ChatItemType`, `AIMessageStatus`, `IndicatorType`, `AnimationState`, `SharedContentDeliveryStatus`, `EmpathyStatus`, `ReconcilerAction`, `ShareOfferStatus`. Pattern: `export const Foo = { BAR: 'bar' } as const; export type Foo = (typeof Foo)[keyof typeof Foo];`. Keys are always `CONSTANT_CASE`. Values are either lowercase/kebab-case strings (`'ai-message'`, `'streaming'`, `'invitation-sent'`) or `CONSTANT_CASE` strings (`'HELD'`, `'PROCEED'`, `'NOT_OFFERED'`), picked to match existing peers in the same subsystem.
   - Don't change wire values (either case) without migrating every consumer, including persisted data.
 - Test files: `__tests__/[name].test.ts[x]` or `__tests__/[name].spec.ts` - located in same directory as source
 
@@ -29,6 +29,7 @@ status: living
 - Async functions: no special prefix, use same camelCase - Promise type is in signature
 - Private/internal functions: no prefix convention, but typically placed before exports
 - Callback handlers: prefix with `handle*` or `on*` - e.g., `handleClerkAuth()`, `onMutate()`
+- Type guards: prefix with `is*` and return a typed predicate - e.g., `isAIMessage()`, `isUserMessage()`, `isEmpathyStatement()`, `isSharedContext()`, `isIndicator()`
 
 **Variables:**
 - camelCase: `sessionId`, `invitationConfirmed`, `partnerProgress`
@@ -46,13 +47,14 @@ status: living
   - `Summary` / `Detail` — list-view vs comprehensive entity view (`SessionSummaryDTO`, `PersonSummaryDTO` vs `PersonDetailDTO`, `StageProgressDetailDTO`, `InnerWorkSessionDetailDTO`).
   - `Result` — analysis/extraction outputs (`ExtractedPeopleResult`, `MemoryDetectionResult`).
   - `Params` — URL/route parameters, typically paired with Zod: `AcceptInvitationParamsInput`.
-  - `Input` — Zod-inferred request/response types: `RecordBarometerRequestInput`.
+  - `Input` — Zod-inferred request/response types: `RecordBarometerRequestInput` (see Naming Patterns > Types/Interfaces for when this is dropped).
+  - `EntryDTO` — individual rows inside a list-shaped DTO (`TopicSessionEntryDTO`).
   - Lightweight shapes may have no suffix when context makes the role obvious (`PresenceData`, `MemorySuggestion`).
 - Props interface: `[ComponentName]Props` - e.g., `UseChatUIStateProps`
 - State interface: `[Name]State` - e.g., `ChatUIState`, `WaitingStatusState`
 - Enum keys: `CONSTANT_CASE` - e.g., `SessionStatus.ACTIVE`, `Stage.WITNESS`. See Naming Patterns > Enums for value conventions.
-- Zod-inferred request/response types use the `Input` suffix: `type RecordBarometerRequestInput = z.infer<typeof recordBarometerRequestSchema>`.
-- Reusable Zod validator *instances* are sometimes exported as `camelCase` consts (e.g. `intensityRating` in `shared/src/validation/utils`) rather than PascalCase types — that's intentional since they're values, not types.
+- Zod schema *constants* use a `xxxSchema` suffix with camelCase: `alignmentSchema`, `recordBarometerRequestSchema`, `runReconcilerRequestSchema`. Reusable validator fragments (e.g. `intensityRating` in `shared/src/validation/utils`) are camelCase without the `Schema` suffix because they're reused as building blocks, not full request/response schemas.
+- Zod-inferred request/response types often use the `Input` suffix (e.g. `RecordBarometerRequestInput = z.infer<typeof recordBarometerRequestSchema>`), but some contracts omit it and use the bare `Request`/`Response` name (e.g. `RunReconcilerRequest`, `RunReconcilerResponse`, `ReconcilerStatusResponse`). Either is acceptable; match neighbors.
 
 ## Code Style
 
