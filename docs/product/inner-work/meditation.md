@@ -3,7 +3,7 @@ title: "Meditation (\"Develop Loving Awareness\") Implementation Plan"
 sidebar_position: 5
 description: "> Status: DEFERRED — This feature is not part of the v1.2 Inner Thoughts Journal milestone. The UI pathway has been removed from the Inner Work hub. This spe..."
 ---
-> **Status: DEFERRED** — This feature is not part of the v1.2 Inner Thoughts Journal milestone. The UI pathway has been removed from the Inner Work hub. This spec is preserved for future reference.
+> **Status: partially implemented.** `mobile/src/screens/MeditationScreen.tsx` exists with home / setup / active / complete screens, AI script generation, and TTS via the `useSpeech` hook. Several design pieces below (7-option duration picker, interval bells, breathing animation, Needs-Assessment / Conflicts integration, a dedicated `MeditationPlayer` service) are **not yet built**. Treat this spec as a mix of current behavior and forward plan.
 
 # Meditation ("Develop Loving Awareness") Implementation Plan
 
@@ -17,12 +17,12 @@ A meditation practice feature with AI-generated guided meditations and an unguid
 - AI generates personalized scripts based on user context
 - Text-to-speech delivers audio guidance
 - User can specify focus OR accept AI suggestion
-- Duration: 5, 10, 15, 20, 30, 45, 60 minutes
+- Duration: design calls for 5, 10, 15, 20, 30, 45, 60 minutes. Current `DurationSelector` renders only the first five options (5–30 min) — slicing longer durations until they're user-tested.
 
 ### 2. Unguided Timer
 - Simple meditation timer with bells
-- Opening bell, optional interval bells, closing bell
-- Minimal visual (breathing animation or countdown)
+- Opening / interval / closing bells (planned; not yet wired — current `handlePauseResume` manages only the countdown)
+- Minimal visual: currently a numerical countdown with a vertical progress bar inside a circle. Breathing animation is planned but not yet implemented.
 - Same duration options
 
 ---
@@ -666,7 +666,9 @@ mobile/src/
         └── bell.mp3                  # Singing bowl sound
 ```
 
-### Key Service: MeditationPlayer
+### Key Service: MeditationPlayer (planned)
+
+> Current code doesn't ship a `MeditationPlayer` class. `MeditationScreen` calls `playMeditationScript` from the `useSpeech` / `useAutoSpeech` hooks to hand a full generated script to the platform TTS. Segment-level progress/pause/resume and bell cueing remain part of this future design.
 
 ```typescript
 // meditation-player.ts
