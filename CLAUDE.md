@@ -42,33 +42,44 @@ To run ad-hoc Prisma queries, create a temp file in `backend/src/` that imports 
 
 ### Doc Routing Table
 
-When working on a task, consult the relevant docs first:
+All routes below point at living docs under `docs/` (topical layout). When working on a task, consult the relevant doc first, then cross-reference with the code.
 
 | Task Area | Primary Doc | Secondary |
 |-----------|-------------|-----------|
-| **Product design / stages** | `docs/mvp-planning/index.md` | `docs/mvp-planning/plans/stages/` |
-| **Backend architecture** | `docs/architecture/backend-overview.md` | `docs/architecture/structure.md` |
-| **Backend prompting / AI** | `docs/backend/prompting-architecture.md` | `docs/backend/prompt-caching.md` |
+| **Product concept / philosophy** | `docs/product/concept.md` | `docs/product/product-philosophy.md`, `docs/product/user-journey.md` |
+| **Conversation stages (0–4)** | `docs/product/stages/index.md` | `docs/product/stages/stage-<n>-*.md` |
+| **Product mechanisms** | `docs/product/mechanisms/index.md` | `docs/product/mechanisms/<mechanism>.md` |
+| **Inner-work features** | `docs/product/inner-work/index.md` | `docs/product/inner-work/<feature>.md` |
+| **Privacy / Vessel model** | `docs/product/privacy/index.md` | `docs/product/privacy/vessel-model.md` |
+| **Backend architecture** | `docs/architecture/backend-overview.md` | `docs/architecture/structure.md`, `docs/backend/overview/architecture.md` |
+| **Backend API (by stage / feature)** | `docs/backend/api/index.md` | `docs/backend/api/stage-<n>.md`, etc. |
+| **Backend prompting / AI** | `docs/backend/prompting-architecture.md` | `docs/backend/prompts/index.md`, `docs/backend/prompt-caching.md` |
 | **Reconciler / empathy** | `docs/backend/reconciler-flow.md` | `docs/diagrams/reconciler-paths.md` |
+| **Database / Prisma schema** | `docs/backend/data-model/prisma-schema.md` | `backend/prisma/schema.prisma` |
+| **Backend security / RLS** | `docs/backend/security/index.md` | `docs/backend/security/rls-policies.md` |
+| **Backend state machine** | `docs/backend/state-machine/index.md` | `docs/backend/state-machine/retrieval-contracts.md` |
 | **Mobile architecture** | `docs/architecture/structure.md` | |
-| **Database / Prisma** | `docs/architecture/backend-overview.md` | `backend/prisma/schema.prisma` |
+| **Mobile wireframes** | `docs/mobile/wireframes/index.md` | `docs/mobile/wireframes/<screen>.md` |
 | **Testing** | `docs/architecture/testing.md` | `docs/e2e-testing/architecture.md` |
 | **Integrations (Ably, Clerk, Bedrock)** | `docs/architecture/integrations.md` | |
 | **Code conventions** | `docs/architecture/conventions.md` | |
 | **Tech stack** | `docs/architecture/stack.md` | |
-| **Deployment** | `docs/deployment/index.md` | |
-| **Stage 2B / Redesign** | `.planning/BACKEND_ARCHITECTURE_PROPOSAL.md` | `.planning/designs/SHARE-REDESIGN.md` |
-| **Stage 3 work** | `.planning/STAGE3_INTEGRATION_PLAN.md` | `.planning/STAGE3_UX_SYNTHESIS.md` |
+| **Deployment** | `docs/deployment/index.md` | `docs/deployment/render-config.md`, `docs/deployment/environment-variables.md` |
+| **Infrastructure (slam-bot, EC2, Vercel)** | `docs/infrastructure/index.md` | |
 | **Known concerns / tech debt** | `docs/architecture/concerns.md` | |
 | **Historical plans/specs** | `docs/archive/index.md` | |
 
 **Fallback**: If no route matches, check `docs/index.md` or search the codebase.
 
+**Cross-doc consistency**: `docs/canonical-facts.json` lists values that appear across multiple docs (service IDs, model IDs, stage names, etc.). When changing any of those, update the JSON and all referencing docs together.
+
+**Doc-code mapping**: `docs/code-to-docs-mapping.json` maps code path globs to the docs that describe them. The `docs-impact` GitHub Action uses this to flag PRs that change mapped code without updating the doc.
+
 ### Documentation Rules
 
 - **Living docs** (`docs/` except `archive/`): Always reflect current state. Update when code changes.
 - **Archive docs** (`docs/archive/`): Read-only. Never update.
-- **Planning docs** (`.planning/`): Working documents. May be stale.
+- **Planning docs** (`.planning/`): Working / aspirational documents. May be stale; not authoritative for current code state. Do not list as primary docs here — promote to `docs/` when the work lands.
 
 ## State Management Architecture
 
