@@ -33,7 +33,7 @@ interface GetPendingConsentsResponse {
 
 interface ConsentRequestDTO {
   id: string;
-  contentType: ConsentContentType;
+  contentType: ConsentContentType;  // mapped from the DB column `targetType`
   contentDescription: string;
 
   // Preview of what partner would see
@@ -104,10 +104,17 @@ interface DecideConsentResponse {
   recorded: boolean;
   consentRecord: ConsentRecordDTO;
 
-  // If granted, the shared content
-  sharedContent?: ConsentedContentDTO;
+  // If granted, the shared content (note: currently always returned as `null`
+  // pending content-creation wiring — consumers should refetch via the
+  // consent history endpoint to pick up the consented content once populated).
+  sharedContent: ConsentedContentDTO | null;
 }
 ```
+
+### Behavior
+
+- **Atomic**: the controller wraps the consent-record update and any related content deactivation/creation in a single `prisma.$transaction` — all writes succeed or all roll back.
+- **Partner notification**: on `GRANTED` the backend publishes `partner.consent_granted` to the partner's Ably session channel; on revocation (see `Revoke Consent` below) it publishes `partner.consent_revoked`.
 
 ### Example: Granting with Edit
 
@@ -186,11 +193,14 @@ interface RevokeConsentResponse {
 
 ### Side Effects
 
+All database writes run inside a single `prisma.$transaction` — they either all succeed or all roll back:
+
 1. `ConsentRecord.revokedAt` set to current timestamp
 2. `ConsentedContent.consentActive` set to false
-3. Partner can no longer access this content
-4. Content is **not deleted** - just marked inactive
-5. Derived objects become stale (see Stale Data Handling below)
+3. Partner is notified via `partner.consent_revoked` on the Ably session channel
+4. Partner can no longer access this content
+5. Content is **not deleted** - just marked inactive
+6. Derived objects become stale (see Stale Data Handling below)
 
 ### Important Notes
 
