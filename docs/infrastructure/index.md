@@ -2,6 +2,7 @@
 title: Infrastructure
 sidebar_position: 1
 description: Slam bot (EC2), Render hosting, Vercel deploys, GitHub automation.
+updated: 2026-04-15
 ---
 
 # Infrastructure
@@ -25,11 +26,12 @@ Operational infrastructure for Meet Without Fear.
 
 ### Cron jobs
 
-The crontab (installed by `deploy.sh`) covers roughly the following categories. Source of truth is `scripts/ec2-bot/scripts/crontab.txt`:
+The crontab (installed by `deploy.sh`) covers roughly the following categories. Source of truth is `scripts/ec2-bot/crontab.txt`:
 
 | Cadence | Script | Role |
 |---|---|---|
 | every 1 min | `git-pull.sh` | Keep `/opt/slam-bot` in sync with `main`; pushes propagate in ~60s |
+| every 1 min | `check-github.sh` | Monitor and enforce GitHub state (falls back to `gh` calls if state scanner is unavailable) |
 | every 1 min | `workspace-dispatcher.sh` | Drive label-based workspace dispatch |
 | every 1 min | `process-queue.sh` | Drain queued work items |
 | every 1 min | `api-budget-monitor.sh` | Track Claude API spend per workspace |
