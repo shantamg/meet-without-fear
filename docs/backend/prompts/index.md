@@ -1,8 +1,9 @@
 ---
-slug: /backend/prompts
+title: AI Prompt Templates
 sidebar_position: 1
+description: Prompt templates for Meet Without Fear AI interactions. Each prompt is designed for specific stage contexts and follows strict retrieval contracts.
+slug: /backend/prompts
 ---
-
 # AI Prompt Templates
 
 Prompt templates for Meet Without Fear AI interactions. Each prompt is designed for specific stage contexts and follows strict retrieval contracts.

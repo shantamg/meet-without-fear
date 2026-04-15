@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/invitations
+title: Invitations API
 sidebar_position: 3
+description: Invitation acceptance and management for session partners.
+slug: /backend/api/invitations
 ---
-
 # Invitations API
 
 Invitation acceptance and management for session partners.

@@ -1,3 +1,8 @@
+---
+title: Stages
+sidebar_position: 1
+description: Meet Without Fear guides users through a structured five-stage process. Each stage has specific goals and advancement gates that must be satisfied before pro...
+---
 # Stages
 
 Meet Without Fear guides users through a structured five-stage process. Each stage has specific goals and advancement gates that must be satisfied before progressing.

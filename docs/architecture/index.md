@@ -1,9 +1,11 @@
 ---
+title: Architecture
+sidebar_position: 1
+description: System architecture documentation for Meet Without Fear. These docs describe the current state of the codebase.
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Architecture
 
 System architecture documentation for Meet Without Fear. These docs describe the current state of the codebase.

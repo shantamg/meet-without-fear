@@ -1,3 +1,8 @@
+---
+title: Home Dashboard
+sidebar_position: 6
+description: The primary landing screen when users open Meet Without Fear. Surfaces the most important action and provides access to all relationships and inner work.
+---
 # Home Dashboard
 
 The primary landing screen when users open Meet Without Fear. Surfaces the most important action and provides access to all relationships and inner work.

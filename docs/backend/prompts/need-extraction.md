@@ -1,10 +1,12 @@
 ---
+title: Need Extraction Prompt
+sidebar_position: 6
+description: "Extract universal human needs from user's Stage 1-2 content."
 slug: /backend/prompts/need-extraction
 model: sonnet
 temperature: 0.4
 max_tokens: 1000
 ---
-
 # Need Extraction Prompt
 
 Extract universal human needs from user's Stage 1-2 content.

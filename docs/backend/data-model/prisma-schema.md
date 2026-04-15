@@ -1,8 +1,9 @@
 ---
-slug: /backend/data-model/prisma-schema
+title: Prisma Schema
 sidebar_position: 1
+description: Complete database schema implementing the Vessel Architecture.
+slug: /backend/data-model/prisma-schema
 ---
-
 # Prisma Schema
 
 Complete database schema implementing the [Vessel Architecture](../../privacy/vessel-model.md).

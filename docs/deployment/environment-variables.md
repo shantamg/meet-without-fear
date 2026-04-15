@@ -1,8 +1,9 @@
 ---
-slug: /deployment/environment-variables
+title: Environment Variables
 sidebar_position: 3
+description: All required environment variables for Meet Without Fear services.
+slug: /deployment/environment-variables
 ---
-
 # Environment Variables
 
 All required environment variables for Meet Without Fear services.

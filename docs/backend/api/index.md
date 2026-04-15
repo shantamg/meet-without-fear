@@ -1,8 +1,9 @@
 ---
-slug: /backend/api
+title: API Specification
 sidebar_position: 1
+description: REST API endpoints for the Meet Without Fear backend. All endpoints use JSON request/response bodies.
+slug: /backend/api
 ---
-
 # API Specification
 
 REST API endpoints for the Meet Without Fear backend. All endpoints use JSON request/response bodies.

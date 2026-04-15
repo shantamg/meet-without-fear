@@ -1,3 +1,8 @@
+---
+title: People Tracking Implementation Plan
+sidebar_position: 7
+description: A system to track mentions of people across all Inner Work features (Inner Thoughts, Gratitude, Needs check-ins) and partner sessions. This enables cross-fea...
+---
 # People Tracking Implementation Plan
 
 ## Overview

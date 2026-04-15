@@ -1,9 +1,11 @@
 ---
+title: Codebase Concerns
+sidebar_position: 3
+description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Codebase Concerns
 
 **Analysis Date:** 2026-03-11

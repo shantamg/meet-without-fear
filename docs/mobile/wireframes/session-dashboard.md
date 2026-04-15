@@ -1,3 +1,8 @@
+---
+title: Session Dashboard
+sidebar_position: 11
+description: The preparation space users see before entering stage work. Provides context, AI support, and emotional check-in.
+---
 # Session Dashboard
 
 The preparation space users see before entering stage work. Provides context, AI support, and emotional check-in.

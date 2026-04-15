@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/auth
+title: Authentication API
 sidebar_position: 13
+description: Authentication via Clerk with backend user provisioning and Ably token management.
+slug: /backend/api/auth
 ---
-
 # Authentication API
 
 Authentication via Clerk with backend user provisioning and Ably token management.

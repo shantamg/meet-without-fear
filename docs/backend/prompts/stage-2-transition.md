@@ -1,10 +1,12 @@
 ---
+title: "Stage 2: Transition Prompt"
+sidebar_position: 11
+description: Generates transition messages when users complete the empathy exchange.
 slug: /backend/prompts/stage-2-transition
 model: sonnet
 temperature: 0.6
 max_tokens: 512
 ---
-
 # Stage 2: Transition Prompt
 
 Generates transition messages when users complete the empathy exchange.

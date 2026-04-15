@@ -1,9 +1,11 @@
 ---
+title: Codebase Structure
+sidebar_position: 8
+description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Codebase Structure
 
 **Analysis Date:** 2026-03-11

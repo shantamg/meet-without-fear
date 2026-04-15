@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/emotional-barometer
+title: Emotional Barometer API
 sidebar_position: 8
+description: Emotional tracking and support exercises across all stages.
+slug: /backend/api/emotional-barometer
 ---
-
 # Emotional Barometer API
 
 Emotional tracking and support exercises across all stages.

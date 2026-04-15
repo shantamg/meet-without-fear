@@ -1,9 +1,11 @@
 ---
+title: External Integrations
+sidebar_position: 6
+description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
 updated: 2026-03-12
 status: living
 ---
-
 # External Integrations
 
 **Analysis Date:** 2026-03-11

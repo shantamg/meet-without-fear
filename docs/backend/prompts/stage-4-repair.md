@@ -1,10 +1,12 @@
 ---
+title: "Stage 4: Strategic Repair Prompt"
+sidebar_position: 13
+description: Guiding collaborative strategy creation and agreement.
 slug: /backend/prompts/stage-4-repair
 model: sonnet
 temperature: 0.7
 max_tokens: 800
 ---
-
 # Stage 4: Strategic Repair Prompt
 
 Guiding collaborative strategy creation and agreement.

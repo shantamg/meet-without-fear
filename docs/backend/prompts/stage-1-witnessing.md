@@ -1,10 +1,12 @@
 ---
+title: "Stage 1: Witnessing Prompt"
+sidebar_position: 8
+description: "- User has signed the Curiosity Compact and entered Stage 1 - Goal: Create safe space for expression, help user feel deeply heard - Partner data is completel..."
 slug: /backend/prompts/stage-1-witnessing
 model: sonnet
 temperature: 0.7
 max_tokens: 800
 ---
-
 # Stage 1: Witnessing Prompt
 
 ## Context

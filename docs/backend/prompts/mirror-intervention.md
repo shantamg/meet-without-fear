@@ -1,10 +1,12 @@
 ---
+title: Mirror Intervention Prompt
+sidebar_position: 5
+description: Redirecting judgment and attack patterns to curiosity through reflection.
 slug: /backend/prompts/mirror-intervention
 model: sonnet
 temperature: 0.6
 max_tokens: 500
 ---
-
 # Mirror Intervention Prompt
 
 Redirecting judgment and attack patterns to curiosity through reflection.

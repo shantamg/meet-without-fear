@@ -1,8 +1,9 @@
 ---
-slug: /deployment/push-notifications
+title: Push Notifications
 sidebar_position: 4
+description: Expo Push Notification setup for Meet Without Fear mobile apps.
+slug: /deployment/push-notifications
 ---
-
 # Push Notifications
 
 Expo Push Notification setup for Meet Without Fear mobile apps.

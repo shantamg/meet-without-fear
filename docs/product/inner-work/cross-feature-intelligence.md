@@ -1,3 +1,8 @@
+---
+title: Cross-Feature Intelligence Implementation Plan
+sidebar_position: 2
+description: "The \"magic\" of Inner Work: connecting data across all features to surface meaningful patterns, detect contradictions, and provide insights that no single fea..."
+---
 # Cross-Feature Intelligence Implementation Plan
 
 ## Overview

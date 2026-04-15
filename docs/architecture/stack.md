@@ -1,9 +1,11 @@
 ---
+title: Technology Stack
+sidebar_position: 7
+description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Technology Stack
 
 **Analysis Date:** 2026-03-11

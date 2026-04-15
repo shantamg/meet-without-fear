@@ -1,3 +1,8 @@
+---
+title: Mirror Intervention
+sidebar_position: 6
+description: ":::tip See it in action <a href=\"/demo/features/process-explanation.html\" onClick=\"window.location.href='/demo/features/process-explanation.html'; return fal..."
+---
 # Mirror Intervention
 
 :::tip See it in action

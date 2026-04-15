@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/realtime
+title: Realtime Integration
 sidebar_position: 12
+description: Ably-powered real-time updates for partner status and session events.
+slug: /backend/api/realtime
 ---
-
 # Realtime Integration
 
 Ably-powered real-time updates for partner status and session events.

@@ -1,9 +1,11 @@
 ---
+title: Diagrams
+sidebar_position: 1
+description: Visual documentation for state machines, user flows, and system interactions.
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Diagrams
 
 Visual documentation for state machines, user flows, and system interactions.

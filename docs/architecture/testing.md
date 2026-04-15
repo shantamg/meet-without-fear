@@ -1,9 +1,11 @@
 ---
+title: Testing Patterns
+sidebar_position: 9
+description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Testing Patterns
 
 **Analysis Date:** 2026-03-11

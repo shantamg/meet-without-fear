@@ -1,10 +1,12 @@
 ---
+title: "Stage 0: Opening Prompt"
+sidebar_position: 7
+description: The initial welcome message when a user enters Stage 0 (Onboarding).
 slug: /backend/prompts/stage-0-opening
 model: sonnet
 temperature: 0.7
 max_tokens: 500
 ---
-
 # Stage 0: Opening Prompt
 
 The initial welcome message when a user enters Stage 0 (Onboarding).

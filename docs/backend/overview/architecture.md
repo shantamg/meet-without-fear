@@ -1,8 +1,9 @@
 ---
-slug: /backend/overview/architecture
+title: System Architecture
 sidebar_position: 1
+description: Meet Without Fear is built as a Finite State Machine with Typed Memory Objects and Role-segmented Models.
+slug: /backend/overview/architecture
 ---
-
 # System Architecture
 
 Meet Without Fear is built as a **Finite State Machine with Typed Memory Objects and Role-segmented Models**.

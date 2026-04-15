@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/stage-4
+title: "Stage 4 API: Strategic Repair"
 sidebar_position: 11
+description: Endpoints for collaborative strategy generation, ranking, and agreement documentation.
+slug: /backend/api/stage-4
 ---
-
 # Stage 4 API: Strategic Repair
 
 Endpoints for collaborative strategy generation, ranking, and agreement documentation.

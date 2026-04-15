@@ -1,9 +1,11 @@
 ---
+title: Prompt Caching Strategy for Meet Without Fear
+sidebar_position: 4
+description: "This document describes how Anthropic's prompt caching works and how we implement it. Our system prompts are split into static and dynamic blocks (the \"2-blo..."
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Prompt Caching Strategy for Meet Without Fear
 
 ## Purpose

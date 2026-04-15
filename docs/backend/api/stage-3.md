@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/stage-3
+title: "Stage 3 API: Need Mapping"
 sidebar_position: 10
+description: Endpoints for identifying needs, confirming them, and discovering common ground.
+slug: /backend/api/stage-3
 ---
-
 # Stage 3 API: Need Mapping
 
 Endpoints for identifying needs, confirming them, and discovering common ground.

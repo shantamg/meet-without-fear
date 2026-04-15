@@ -1,3 +1,8 @@
+---
+title: "Stage 0: Onboarding"
+sidebar_position: 3
+description: Establish the Process Guardian role and secure commitment from both parties through the Curiosity Compact.
+---
 # Stage 0: Onboarding
 
 ## Purpose

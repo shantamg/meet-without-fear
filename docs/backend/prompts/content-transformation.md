@@ -1,10 +1,12 @@
 ---
+title: Content Transformation Prompt
+sidebar_position: 2
+description: Transform raw user content into shareable form (removing heat, preserving meaning).
 slug: /backend/prompts/content-transformation
 model: sonnet
 temperature: 0.5
 max_tokens: 300
 ---
-
 # Content Transformation Prompt
 
 Transform raw user content into shareable form (removing heat, preserving meaning).

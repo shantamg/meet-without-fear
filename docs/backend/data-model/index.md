@@ -1,8 +1,9 @@
 ---
-slug: /backend/data-model
+title: Data Model
 sidebar_position: 2
+description: Database design implementing the Vessel Architecture with PostgreSQL and pgvector.
+slug: /backend/data-model
 ---
-
 # Data Model
 
 Database design implementing the [Vessel Architecture](../../privacy/vessel-model.md) with PostgreSQL and pgvector.

@@ -1,8 +1,9 @@
 ---
-slug: /deployment/render-config
+title: Render Configuration
 sidebar_position: 2
+description: Render.com service definitions for Meet Without Fear.
+slug: /deployment/render-config
 ---
-
 # Render Configuration
 
 Render.com service definitions for Meet Without Fear.

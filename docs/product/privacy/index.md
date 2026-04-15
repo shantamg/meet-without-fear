@@ -1,3 +1,8 @@
+---
+title: Privacy Model
+sidebar_position: 1
+description: The Vessel architecture that protects user data and controls information flow.
+---
 # Privacy Model
 
 The Vessel architecture that protects user data and controls information flow.

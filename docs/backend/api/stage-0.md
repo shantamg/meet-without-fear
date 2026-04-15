@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/stage-0
+title: "Stage 0 API: Onboarding"
 sidebar_position: 5
+description: Endpoints for the Curiosity Compact signing flow.
+slug: /backend/api/stage-0
 ---
-
 # Stage 0 API: Onboarding
 
 Endpoints for the Curiosity Compact signing flow.

@@ -1,3 +1,8 @@
+---
+title: Vessel Architecture
+sidebar_position: 3
+description: Meet Without Fear separates data into three distinct containers with different access rules.
+---
 # Vessel Architecture
 
 ## The Three Vessels

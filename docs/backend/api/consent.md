@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/consent
+title: Consent API
 sidebar_position: 9
+description: Endpoints for the Consensual Bridge mechanism - controlling what data is shared with partner.
+slug: /backend/api/consent
 ---
-
 # Consent API
 
 Endpoints for the Consensual Bridge mechanism - controlling what data is shared with partner.

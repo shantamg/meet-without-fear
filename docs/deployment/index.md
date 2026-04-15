@@ -1,9 +1,11 @@
 ---
+title: Deployment
+sidebar_position: 1
+description: Production deployment targets and distribution options for the Meet Without Fear platform.
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Deployment
 
 Production deployment targets and distribution options for the Meet Without Fear platform.

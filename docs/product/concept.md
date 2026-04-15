@@ -1,3 +1,8 @@
+---
+title: Core Concept
+sidebar_position: 2
+description: "Conflict escalates because humans try to solve problems while under physiological and emotional threat. When triggered:"
+---
 # Core Concept
 
 ## The Problem

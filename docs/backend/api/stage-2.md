@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/stage-2
+title: "Stage 2 API: Perspective Stretch"
 sidebar_position: 7
+description: Endpoints for building and exchanging empathy attempts.
+slug: /backend/api/stage-2
 ---
-
 # Stage 2 API: Perspective Stretch
 
 Endpoints for building and exchanging empathy attempts.

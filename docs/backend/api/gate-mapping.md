@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/gate-mapping
+title: Gate → Endpoint Mapping (MVP)
 sidebar_position: 13
+description: Canonical mapping from gate keys to the endpoints/payloads that set them. Used by QA and backend to keep progression consistent.
+slug: /backend/api/gate-mapping
 ---
-
 # Gate → Endpoint Mapping (MVP)
 
 Canonical mapping from gate keys to the endpoints/payloads that set them. Used by QA and backend to keep progression consistent.

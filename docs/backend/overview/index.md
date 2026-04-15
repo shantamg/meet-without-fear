@@ -1,8 +1,9 @@
 ---
-slug: /backend/overview
+title: Backend Overview
 sidebar_position: 1
+description: High-level architecture and design philosophy for the Meet Without Fear backend.
+slug: /backend/overview
 ---
-
 # Backend Overview
 
 High-level architecture and design philosophy for the Meet Without Fear backend.

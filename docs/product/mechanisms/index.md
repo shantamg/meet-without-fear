@@ -1,3 +1,8 @@
+---
+title: Mechanisms
+sidebar_position: 1
+description: Key behavioral mechanics that govern how Meet Without Fear operates across all stages.
+---
 # Mechanisms
 
 Key behavioral mechanics that govern how Meet Without Fear operates across all stages.

@@ -1,10 +1,11 @@
 ---
+title: E2E Test Suite Audit
+sidebar_position: 3
+description: This document provides an audit of the current E2E test suite for expert review.
 created: 2026-03-11
 updated: 2026-03-11
-analysis-date: 2026-03-11
 status: living
 ---
-
 # E2E Test Suite Audit
 
 This document provides an audit of the current E2E test suite for expert review.

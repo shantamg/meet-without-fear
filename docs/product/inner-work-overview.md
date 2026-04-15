@@ -1,3 +1,8 @@
+---
+title: Inner Work Mode
+sidebar_position: 4
+description: ":::tip See it in action <a href=\"/demo/features/inner-work.html\" onClick=\"window.location.href='/demo/features/inner-work.html'; return false;\">Try the Inner..."
+---
 # Inner Work Mode
 
 :::tip See it in action

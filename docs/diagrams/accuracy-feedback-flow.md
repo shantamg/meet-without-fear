@@ -1,10 +1,11 @@
 ---
+title: Accuracy Feedback Flow
+sidebar_position: 2
+description: "This document describes how users validate their partner's empathy attempt, including the UI component behavior and API interactions."
 created: 2026-03-11
 updated: 2026-03-11
-analysis-date: 2026-03-11
 status: living
 ---
-
 # Accuracy Feedback Flow
 
 This document describes how users validate their partner's empathy attempt, including the UI component behavior and API interactions.

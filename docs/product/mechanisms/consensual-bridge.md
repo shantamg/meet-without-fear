@@ -1,3 +1,8 @@
+---
+title: Consensual Bridge
+sidebar_position: 2
+description: ":::tip See it in action <a href=\"/demo/features/consensual-bridge.html\" onClick=\"window.location.href='/demo/features/consensual-bridge.html'; return false;\"..."
+---
 # Consensual Bridge
 
 :::tip See it in action

@@ -1,3 +1,8 @@
+---
+title: System Guardrails
+sidebar_position: 4
+description: ":::tip See it in action <a href=\"/demo/features/guardrails.html\" onClick=\"window.location.href='/demo/features/guardrails.html'; return false;\">Try the Guard..."
+---
 # System Guardrails
 
 :::tip See it in action

@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/stage-1
+title: "Stage 1 API: The Witness"
 sidebar_position: 6
+description: Endpoints for the witness stage - being heard by the AI.
+slug: /backend/api/stage-1
 ---
-
 # Stage 1 API: The Witness
 
 Endpoints for the witness stage - being heard by the AI.

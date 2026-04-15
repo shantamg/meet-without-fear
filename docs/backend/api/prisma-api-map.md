@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/prisma-api-map
+title: Prisma ↔ API Mapping (MVP)
 sidebar_position: 14
+description: Quick reference linking API endpoints to the tables/fields they touch.
+slug: /backend/api/prisma-api-map
 ---
-
 # Prisma ↔ API Mapping (MVP)
 
 Quick reference linking API endpoints to the tables/fields they touch.

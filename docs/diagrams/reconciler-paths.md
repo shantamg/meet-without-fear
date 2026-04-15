@@ -1,10 +1,11 @@
 ---
+title: Reconciler Outcome Paths - State Diagrams
+sidebar_position: 4
+description: This document provides state diagrams for all reconciler outcome paths from both user perspectives (guesser and subject). These diagrams document the complet...
 created: 2026-03-11
 updated: 2026-03-11
-analysis-date: 2026-03-11
 status: living
 ---
-
 # Reconciler Outcome Paths - State Diagrams
 
 This document provides state diagrams for all reconciler outcome paths from both user perspectives (guesser and subject). These diagrams document the complete flow for PROCEED, OFFER_OPTIONAL, OFFER_SHARING, refinement loops, accuracy feedback, and acceptance checks.

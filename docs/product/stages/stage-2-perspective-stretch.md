@@ -1,3 +1,8 @@
+---
+title: "Stage 2: Perspective Stretch"
+sidebar_position: 5
+description: Build genuine empathy by helping each user understand the other persons perspective, needs, and experience.
+---
 # Stage 2: Perspective Stretch
 
 ## Purpose

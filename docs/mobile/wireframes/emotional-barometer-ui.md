@@ -1,3 +1,8 @@
+---
+title: Emotional Barometer UI
+sidebar_position: 5
+description: Interface components for tracking and responding to emotional intensity.
+---
 # Emotional Barometer UI
 
 Interface components for tracking and responding to emotional intensity.

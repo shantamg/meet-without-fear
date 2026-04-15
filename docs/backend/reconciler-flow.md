@@ -1,9 +1,11 @@
 ---
+title: "Stage 2: Perspective Stretch - Empathy Exchange Flow"
+sidebar_position: 6
+description: This document describes the empathy exchange flow in Stage 2, including the reconciler system that analyzes empathy accuracy and manages the sharing of addit...
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Stage 2: Perspective Stretch - Empathy Exchange Flow
 
 This document describes the empathy exchange flow in Stage 2, including the reconciler system that analyzes empathy accuracy and manages the sharing of additional context.

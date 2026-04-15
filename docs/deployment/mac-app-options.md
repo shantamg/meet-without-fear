@@ -1,9 +1,11 @@
 ---
+title: Mac App Distribution Options
+sidebar_position: 4
+description: "> Note: None of these options have been implemented. This document captures research into potential Mac app packaging approaches."
 created: 2026-03-11
 updated: 2026-03-11
 status: reference
 ---
-
 # Mac App Distribution Options
 
 > **Note:** None of these options have been implemented. This document captures research into potential Mac app packaging approaches.

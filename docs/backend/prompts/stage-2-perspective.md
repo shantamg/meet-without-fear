@@ -1,10 +1,12 @@
 ---
+title: "Stage 2: Perspective Stretch Prompt"
+sidebar_position: 10
+description: "- User completed Stage 1 (feels heard) - Goal: Help them build genuine empathy for their partner - Partner data ONLY available via Shared Vessel (consented c..."
 slug: /backend/prompts/stage-2-perspective
 model: sonnet
 temperature: 0.7
 max_tokens: 800
 ---
-
 # Stage 2: Perspective Stretch Prompt
 
 ## Context

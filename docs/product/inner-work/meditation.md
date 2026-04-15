@@ -1,3 +1,8 @@
+---
+title: "Meditation (\"Develop Loving Awareness\") Implementation Plan"
+sidebar_position: 5
+description: "> Status: DEFERRED — This feature is not part of the v1.2 Inner Thoughts Journal milestone. The UI pathway has been removed from the Inner Work hub. This spe..."
+---
 > **Status: DEFERRED** — This feature is not part of the v1.2 Inner Thoughts Journal milestone. The UI pathway has been removed from the Inner Work hub. This spec is preserved for future reference.
 
 # Meditation ("Develop Loving Awareness") Implementation Plan

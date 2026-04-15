@@ -1,3 +1,8 @@
+---
+title: "Stage 3: Need Mapping"
+sidebar_position: 6
+description: Transition from surface-level stories and complaints to identifying universal human needs that both parties share.
+---
 # Stage 3: Need Mapping
 
 ## Purpose

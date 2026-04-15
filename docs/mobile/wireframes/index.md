@@ -1,3 +1,8 @@
+---
+title: Wireframes
+sidebar_position: 1
+description: UI concepts and screen layouts for key Meet Without Fear interfaces.
+---
 # Wireframes
 
 UI concepts and screen layouts for key Meet Without Fear interfaces.

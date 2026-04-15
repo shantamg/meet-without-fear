@@ -1,8 +1,9 @@
 ---
-slug: /backend/state-machine/retrieval-contracts
+title: Retrieval Contracts
 sidebar_position: 1
+description: This is the most critical document for maintaining trust in Meet Without Fear.
+slug: /backend/state-machine/retrieval-contracts
 ---
-
 # Retrieval Contracts
 
 **This is the most critical document for maintaining trust in Meet Without Fear.**

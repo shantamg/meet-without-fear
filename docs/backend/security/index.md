@@ -1,8 +1,9 @@
 ---
-slug: /backend/security
+title: Security Architecture
 sidebar_position: 1
+description: Security implementation for Meet Without Fear, focusing on privacy isolation and consent enforcement.
+slug: /backend/security
 ---
-
 # Security Architecture
 
 Security implementation for Meet Without Fear, focusing on privacy isolation and consent enforcement.

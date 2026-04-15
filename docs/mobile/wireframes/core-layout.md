@@ -1,3 +1,8 @@
+---
+title: Core Layout
+sidebar_position: 4
+description: Base app structure that persists across all screens.
+---
 # Core Layout
 
 Base app structure that persists across all screens.

@@ -1,8 +1,9 @@
 ---
-slug: /backend/state-machine
+title: State Machine
 sidebar_position: 3
+description: Session lifecycle management and stage-scoped data access rules.
+slug: /backend/state-machine
 ---
-
 # State Machine
 
 Session lifecycle management and stage-scoped data access rules.

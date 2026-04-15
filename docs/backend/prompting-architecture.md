@@ -1,9 +1,11 @@
 ---
+title: Backend Prompting Architecture Audit
+sidebar_position: 5
+description: "Last Updated: 2026-03-11"
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Backend Prompting Architecture Audit
 
 **Last Updated:** 2026-03-11

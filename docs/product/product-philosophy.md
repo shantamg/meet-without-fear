@@ -1,3 +1,8 @@
+---
+title: Product Philosophy
+sidebar_position: 6
+description: "For most users today, conversational history lives inside a vendor silo: - ChatGPT history lives with OpenAI - Gemini history lives with Google - Claude hist..."
+---
 # Product Philosophy
 
 ## The Core Insight: Decoupling Memory from the Model

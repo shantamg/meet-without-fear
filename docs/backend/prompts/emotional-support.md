@@ -1,10 +1,12 @@
 ---
+title: Emotional Support Prompt
+sidebar_position: 3
+description: Responding to high emotional intensity across all stages.
 slug: /backend/prompts/emotional-support
 model: sonnet
 temperature: 0.6
 max_tokens: 400
 ---
-
 # Emotional Support Prompt
 
 Responding to high emotional intensity across all stages.

@@ -1,3 +1,8 @@
+---
+title: Inner Work Implementation Plans
+sidebar_position: 1
+description: "> v1.2 Status: The Inner Work hub currently shows only one active pathway — Inner Thoughts (Talk it Out). Needs Assessment, Gratitude Practice, and Meditatio..."
+---
 # Inner Work Implementation Plans
 
 > **v1.2 Status:** The Inner Work hub currently shows only one active pathway — Inner Thoughts (Talk it Out). Needs Assessment, Gratitude Practice, and Meditation are **deferred to a future milestone** and are not part of v1.2. See each plan for the DEFERRED status banner.

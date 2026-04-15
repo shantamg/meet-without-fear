@@ -1,8 +1,9 @@
 ---
-slug: /backend/glossary
+title: Glossary
 sidebar_position: 7
+description: Canonical definitions for Meet Without Fear backend terminology. Use these terms consistently across all documentation and code.
+slug: /backend/glossary
 ---
-
 # Glossary
 
 Canonical definitions for Meet Without Fear backend terminology. Use these terms consistently across all documentation and code.

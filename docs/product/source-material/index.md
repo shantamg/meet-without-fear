@@ -1,3 +1,8 @@
+---
+title: Source Material
+sidebar_position: 1
+description: Raw input documents for Meet Without Fear MVP planning.
+---
 # Source Material
 
 Raw input documents for Meet Without Fear MVP planning.

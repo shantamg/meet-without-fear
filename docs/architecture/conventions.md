@@ -1,9 +1,11 @@
 ---
+title: Coding Conventions
+sidebar_position: 4
+description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Coding Conventions
 
 **Analysis Date:** 2026-03-11

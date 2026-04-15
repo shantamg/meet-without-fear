@@ -1,3 +1,8 @@
+---
+title: Authentication & First-Run
+sidebar_position: 2
+description: Entry experiences for first open, creating an account, signing in, and recovery.
+---
 # Authentication & First-Run
 
 Entry experiences for first open, creating an account, signing in, and recovery.

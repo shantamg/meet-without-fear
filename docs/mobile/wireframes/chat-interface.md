@@ -1,3 +1,8 @@
+---
+title: Chat Interface
+sidebar_position: 3
+description: The primary conversation interface where users interact with the AI.
+---
 # Chat Interface
 
 The primary conversation interface where users interact with the AI.

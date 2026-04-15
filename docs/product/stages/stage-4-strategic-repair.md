@@ -1,3 +1,8 @@
+---
+title: "Stage 4: Strategic Repair"
+sidebar_position: 7
+description: ":::tip See it in action <a href=\"/demo/features/follow-up.html\" onClick=\"window.location.href='/demo/features/follow-up.html'; return false;\">Try the Follow-..."
+---
 # Stage 4: Strategic Repair
 
 :::tip See it in action

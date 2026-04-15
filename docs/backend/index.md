@@ -1,9 +1,11 @@
 ---
+title: Backend Documentation
+sidebar_position: 1
+description: Backend-specific documentation for the Express + Prisma API server.
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Backend Documentation
 
 Backend-specific documentation for the Express + Prisma API server.

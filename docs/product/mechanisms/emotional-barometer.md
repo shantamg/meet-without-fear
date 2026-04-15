@@ -1,3 +1,8 @@
+---
+title: Emotional Barometer
+sidebar_position: 3
+description: ":::tip See it in action <a href=\"/demo/features/cooling-period.html\" onClick=\"window.location.href='/demo/features/cooling-period.html'; return false;\">Try t..."
+---
 # Emotional Barometer
 
 :::tip See it in action

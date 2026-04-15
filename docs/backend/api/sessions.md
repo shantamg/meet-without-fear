@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/sessions
+title: Sessions API
 sidebar_position: 2
+description: Session creation, listing, and lifecycle management.
+slug: /backend/api/sessions
 ---
-
 # Sessions API
 
 Session creation, listing, and lifecycle management.

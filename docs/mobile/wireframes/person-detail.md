@@ -1,3 +1,8 @@
+---
+title: Person Detail
+sidebar_position: 10
+description: The relationship view showing current session status and history with a specific person.
+---
 # Person Detail
 
 The relationship view showing current session status and history with a specific person.

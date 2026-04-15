@@ -1,3 +1,8 @@
+---
+title: "Gratitude Practice (\"See the Positive\") Implementation Plan"
+sidebar_position: 3
+description: "> Status: DEFERRED — This feature is not part of the v1.2 Inner Thoughts Journal milestone. The UI pathway has been removed from the Inner Work hub. This spe..."
+---
 > **Status: DEFERRED** — This feature is not part of the v1.2 Inner Thoughts Journal milestone. The UI pathway has been removed from the Inner Work hub. This spec is preserved for future reference.
 
 # Gratitude Practice ("See the Positive") Implementation Plan

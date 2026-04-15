@@ -1,3 +1,8 @@
+---
+title: **Conflict Resolution  — MVP Spec (Engineer-Ready)**
+sidebar_position: 2
+description: AI-Facilitated Conflict Metabolism System
+---
 # **Conflict Resolution  — MVP Spec (Engineer-Ready)**
 
 AI-Facilitated Conflict Metabolism System

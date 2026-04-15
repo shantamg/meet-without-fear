@@ -1,10 +1,11 @@
 ---
+title: E2E Testing Architecture
+sidebar_position: 2
+description: This document describes the end-to-end testing approach used in Meet Without Fear.
 created: 2026-03-11
 updated: 2026-03-11
-analysis-date: 2026-03-11
 status: living
 ---
-
 # E2E Testing Architecture
 
 This document describes the end-to-end testing approach used in Meet Without Fear.

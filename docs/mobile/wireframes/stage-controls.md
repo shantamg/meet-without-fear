@@ -1,3 +1,8 @@
+---
+title: Stage Controls
+sidebar_position: 12
+description: UI elements that manage stage progression and status.
+---
 # Stage Controls
 
 UI elements that manage stage progression and status.

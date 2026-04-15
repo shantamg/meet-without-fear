@@ -1,8 +1,9 @@
 ---
-slug: /backend/security/rls-policies
+title: Row-Level Security Policies
 sidebar_position: 2
+description: PostgreSQL RLS policies enforcing privacy at the database level.
+slug: /backend/security/rls-policies
 ---
-
 # Row-Level Security Policies
 
 PostgreSQL RLS policies enforcing privacy at the database level.

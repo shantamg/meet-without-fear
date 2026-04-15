@@ -1,8 +1,9 @@
 ---
-slug: /backend/overview/mental-model
+title: "Mental Model: Process Guardian, Not Chatbot"
 sidebar_position: 2
+description: This document explains why Meet Without Fear requires a fundamentally different architecture than typical LLM applications.
+slug: /backend/overview/mental-model
 ---
-
 # Mental Model: Process Guardian, Not Chatbot
 
 This document explains why Meet Without Fear requires a fundamentally different architecture than typical LLM applications.

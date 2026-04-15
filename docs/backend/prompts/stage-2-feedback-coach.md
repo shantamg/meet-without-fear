@@ -1,10 +1,12 @@
 ---
+title: "Stage 2: Feedback Coach Prompt"
+sidebar_position: 9
+description: "Helps the user craft constructive feedback when their partner's empathy attempt is \"Not Quite\" right."
 slug: /backend/prompts/stage-2-feedback-coach
 model: sonnet
 temperature: 0.6
 max_tokens: 512
 ---
-
 # Stage 2: Feedback Coach Prompt
 
 Helps the user craft constructive feedback when their partner's empathy attempt is "Not Quite" right.

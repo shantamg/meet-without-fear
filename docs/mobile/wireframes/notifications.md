@@ -1,3 +1,8 @@
+---
+title: Notifications UX
+sidebar_position: 9
+description: Notification surfaces for invitations, stage progress, cooling periods, and follow-ups.
+---
 # Notifications UX
 
 Notification surfaces for invitations, stage progress, cooling periods, and follow-ups.

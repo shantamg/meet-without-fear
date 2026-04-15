@@ -1,10 +1,12 @@
 ---
+title: "Stage 3: Need Mapping Prompt"
+sidebar_position: 12
+description: Guiding users to validate synthesized needs and discover common ground.
 slug: /backend/prompts/stage-3-needs
 model: sonnet
 temperature: 0.6
 max_tokens: 800
 ---
-
 # Stage 3: Need Mapping Prompt
 
 Guiding users to validate synthesized needs and discover common ground.

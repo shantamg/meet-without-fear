@@ -1,3 +1,8 @@
+---
+title: "Stage 1: The Witness"
+sidebar_position: 4
+description: Provide each user with the experience of being deeply and fully heard by the AI, without interruption or judgment.
+---
 # Stage 1: The Witness
 
 ## Purpose

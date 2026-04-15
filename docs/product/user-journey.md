@@ -1,3 +1,8 @@
+---
+title: User Journey
+sidebar_position: 7
+description: Complete flow through Meet Without Fear from first contact to resolution.
+---
 # User Journey
 
 Complete flow through Meet Without Fear from first contact to resolution.

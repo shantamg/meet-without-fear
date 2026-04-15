@@ -1,3 +1,8 @@
+---
+title: New Session Flow
+sidebar_position: 8
+description: The flow for creating a new session and inviting someone to work through a conflict together.
+---
 # New Session Flow
 
 The flow for creating a new session and inviting someone to work through a conflict together.

@@ -1,9 +1,11 @@
 ---
+title: Meet Without Fear Documentation
+sidebar_position: 1
+description: Start here to find what you need.
 created: 2026-03-11
 updated: 2026-03-11
 status: living
 ---
-
 # Meet Without Fear Documentation
 
 Start here to find what you need.

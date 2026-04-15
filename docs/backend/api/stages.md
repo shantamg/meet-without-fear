@@ -1,8 +1,9 @@
 ---
-slug: /backend/api/stages
+title: Stages API
 sidebar_position: 4
+description: Stage progression and gate validation.
+slug: /backend/api/stages
 ---
-
 # Stages API
 
 Stage progression and gate validation.
