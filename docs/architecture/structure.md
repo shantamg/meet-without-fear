@@ -115,7 +115,7 @@ project-root/
   - `prisma-rls.ts` - PostgreSQL Row Level Security helper (`withUserContext()` sets `app.current_user_id` session variable)
   - `bedrock.ts` - AWS Bedrock LLM client (with circuit breaker integration)
   - `logger.ts` - Winston structured logger with JSON output in production, pretty-print in dev; auto-injects request context; Sentry transport for errors
-  - Note: Ably client is in `backend/src/services/realtime.ts`, not a separate lib file
+  - Note: Backend Ably client lives in `backend/src/services/realtime.ts` (no separate backend/lib file). The *mobile* Ably client singleton is a separate file at `mobile/src/lib/ably.ts`.
   - `e2e-fixtures.ts` - Testing helpers
   - `request-context.ts` - AsyncLocalStorage initialization
 
@@ -160,12 +160,10 @@ project-root/
   - `queryKeys.ts` - Centralized query key definitions (prevents circular dependencies)
   - `useUnifiedSession.ts` - Orchestrates all session data (~711 lines, reduced from ~1218 via hook extraction); gathers state, messages, realtime events
   - `useSessionEventHandler.ts` - Centralized Ably real-time event handling with cache updates (extracted from useUnifiedSession)
-  - `useEmpathyActions.ts` - Empathy mutations: save draft, share, resubmit, validate, respond to share offer
-  - `useNeedsActions.ts` - Stage 3 needs/common-ground mutations with auto-consent logic
-  - `useStrategyActions.ts` - Stage 4 strategy/agreement mutations
+  - Note: there are no consolidated `useEmpathyActions`/`useNeedsActions`/`useStrategyActions` hooks yet. Stage mutations currently live as individual hooks in `useStages.ts` (e.g. `useSaveEmpathyDraft`, `useConfirmNeeds`, `useProposeStrategy`), consumed directly by `useUnifiedSession.ts`.
   - `cacheHelpers.ts` - Type-safe React Query cache mutation helpers (`typedSetQueryData`, `typedGetQueryData`)
-  - `useMessages.ts` - Message querying + mutations (30KB); optimistic updates + streaming
-  - `useSessions.ts` - Session CRUD + list (32KB)
+  - `useMessages.ts` - Message querying + mutations (30KB); optimistic updates + streaming. `useInfiniteMessages` here is still the pagination source (wrapped by `useUnifiedSession`); `useTimeline.ts` is a newer companion hook that does not yet fully replace it.
+  - `useSessions.ts` - Session CRUD + list (32KB). Uses the cache-first pattern: `useConfirmInvitationMessage` optimistically updates the cache in `onMutate` before the server confirms. `useArchiveSession` is deprecated in favor of `useDeleteSession`, which handles proper data cleanup.
   - `useStages.ts` - Stage mutations + gate validation (64KB)
   - `useRealtime.ts` - Ably subscription setup (29KB); listens to session events
   - `useStreamingMessage.ts` - SSE streaming setup + metadata handling (27KB)
@@ -173,14 +171,16 @@ project-root/
   - `useAnimationQueue.ts` - Animation sequencing for chat UI
   - `useConsent.ts` - Consent state management
   - `useEmotions.ts` - Emotion data queries + mutations
-  - `useInnerWorkOverview.ts` - Inner work hub data fetching
-  - `useProfile.ts` - User profile queries + mutations
+  - `useInnerWorkOverview.ts` - Inner Work hub/dashboard query + mutations (aggregates all Inner Work features; separate from `useInnerThoughts.ts`)
+  - `useInnerThoughts.ts` - Inner Thoughts (solo reflection) session hooks; `useInnerWorkSession*` legacy aliases also live here for backward compat
+  - `useProfile.ts` - User profile queries + mutations, plus push tokens (`useUpdatePushToken`), Ably realtime tokens (`useAblyToken`), GDPR data export, and account deletion
+  - `usePerson.ts` - Person/relationship detail fetching and cross-session history for a single contact
   - `useRefinementChat.ts` - Refinement chat flow handling
-  - `useRouterChat.ts` - Router-level chat orchestration
+  - `useRouterChat.ts` - Router-level chat orchestration against the virtual `ROUTER_SESSION_ID` ("router") session, responsible for session creation + navigation out of the inbox
   - `usePendingActions.ts` - Pending action tracking
   - `useUnreadSessionCount.ts` - Unread session badge count
   - `useSharingStatus.ts` - Share offer status tracking
-  - Stage-specific: `useInnerThoughts.ts`, `useGratitude.ts`, `useMeditation.ts`, `useNeedsAssessment.ts`, etc.
+  - Inner Work feature hooks: `useGratitude.ts`, `useMeditation.ts`, `useNeedsAssessment.ts`. Hooks exist in-code but the matching product pathways are deferred per v1.2 scope (see note on `InnerWorkHubScreen.tsx`).
   - Auth: `useAuth.ts`, `useAuthProviderClerk.ts`, `useBiometricAuth.ts`
   - Timeline: `useTimeline.ts` (13KB)
 
