@@ -159,10 +159,10 @@ project-root/
 - Key hooks:
   - `queryKeys.ts` - Centralized query key definitions (prevents circular dependencies)
   - `useUnifiedSession.ts` - Orchestrates all session data (~711 lines, reduced from ~1218 via hook extraction); gathers state, messages, realtime events
-  - `useSessionEventHandler.ts` - Centralized Ably real-time event handling with cache updates (extracted from useUnifiedSession)
+  - `useRealtime.ts` / `useStreamingMessage.ts` - Ably subscription + SSE streaming, used by `useUnifiedSession` for event + message delivery
   - Note: there are no consolidated `useEmpathyActions`/`useNeedsActions`/`useStrategyActions` hooks yet. Stage mutations currently live as individual hooks in `useStages.ts` (e.g. `useSaveEmpathyDraft`, `useConfirmNeeds`, `useProposeStrategy`), consumed directly by `useUnifiedSession.ts`.
   - `cacheHelpers.ts` - Type-safe React Query cache mutation helpers (`typedSetQueryData`, `typedGetQueryData`)
-  - `useMessages.ts` - Message querying + mutations (30KB); optimistic updates + streaming. `useInfiniteMessages` here is still the pagination source (wrapped by `useUnifiedSession`); `useTimeline.ts` is a newer companion hook that does not yet fully replace it.
+  - `useMessages.ts` - Message querying + mutations (30KB); optimistic updates + streaming. Also hosts emotion tracking for messages (`useEmotionalHistory`, `useRecordEmotion`) alongside `useEmotions.ts`. `useInfiniteMessages` here is still the pagination source (wrapped by `useUnifiedSession`); `useTimeline.ts` is a newer companion hook that does not yet fully replace it.
   - `useSessions.ts` - Session CRUD + list (32KB). Uses the cache-first pattern: `useConfirmInvitationMessage` optimistically updates the cache in `onMutate` before the server confirms. `useArchiveSession` is deprecated in favor of `useDeleteSession`, which handles proper data cleanup.
   - `useStages.ts` - Stage mutations + gate validation (64KB)
   - `useRealtime.ts` - Ably subscription setup (29KB); listens to session events
@@ -172,9 +172,11 @@ project-root/
   - `useConsent.ts` - Consent state management
   - `useEmotions.ts` - Emotion data queries + mutations
   - `useInnerWorkOverview.ts` - Inner Work hub/dashboard query + mutations (aggregates all Inner Work features; separate from `useInnerThoughts.ts`)
-  - `useInnerThoughts.ts` - Inner Thoughts (solo reflection) session hooks; `useInnerWorkSession*` legacy aliases also live here for backward compat
+  - `useInnerThoughts.ts` - Inner Thoughts (solo reflection) session hooks. Can link to a partner session (`linkedPartnerSessionId`) for context-aware reflection, and `useGenerateContext` can produce a distilled context summary when a partner session begins. Legacy `useInnerWorkSession*` aliases live here for backward compat.
   - `useProfile.ts` - User profile queries + mutations, plus push tokens (`useUpdatePushToken`), Ably realtime tokens (`useAblyToken`), GDPR data export, and account deletion
   - `usePerson.ts` - Person/relationship detail fetching and cross-session history for a single contact
+  - `useKnowledgeBase.ts` - Knowledge base browsing: reflections by topic, person, or theme; cross-feature context
+  - `useInvitation.ts` - Invitation-specific flows (partner invite code entry, confirmation)
   - `useRefinementChat.ts` - Refinement chat flow handling
   - `useRouterChat.ts` - Router-level chat orchestration against the virtual `ROUTER_SESSION_ID` ("router") session, responsible for session creation + navigation out of the inbox
   - `usePendingActions.ts` - Pending action tracking

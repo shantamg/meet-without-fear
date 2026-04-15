@@ -4,9 +4,9 @@
  * React Query hook for fetching and managing the unified chat timeline.
  * Supports infinite scroll pagination and real-time updates via Ably.
  *
- * This hook replaces the previous useInfiniteMessages hook with a unified
- * ChatItem-based approach that includes messages, indicators, and other
- * timeline items.
+ * This hook is a newer ChatItem-based alternative to useInfiniteMessages. It
+ * includes messages, indicators, and other timeline items. Not yet a full
+ * replacement: useUnifiedSession still reads messages via useInfiniteMessages.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
