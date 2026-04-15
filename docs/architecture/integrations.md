@@ -31,13 +31,18 @@ status: living
   - Model overrides: `BEDROCK_SONNET_MODEL_ID`, `BEDROCK_HAIKU_MODEL_ID`, `BEDROCK_TITAN_EMBED_MODEL_ID`
   - Auth: `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
   - Files: `backend/src/lib/bedrock.ts` (client setup), `backend/src/services/ai.ts` (high-level API)
-  - Pricing: Sonnet 4.5 — $3.00/MTok input, $15.00/MTok output; Haiku 4.5 — $0.80/MTok input, $4.00/MTok output. Prices shown per 1M tokens (code constants in `bedrock.ts` and `brain.ts` are per 1K tokens)
-  - Prompt caching: System prompts use 2-block architecture — a static block with `cache_control: { type: 'ephemeral' }` that is reused across turns within a stage, and a dynamic per-turn block that is not cached (see `stage-prompts.ts`)
+  - Pricing: Sonnet 4.5 — $3.00/MTok input, $15.00/MTok output; Haiku 4.5 — $1.00/MTok input, $5.00/MTok output. Prices shown per 1M tokens (code constants in `bedrock.ts` and `brain.ts` are per 1K tokens — e.g. `{ input: 0.001, output: 0.005 }` for Haiku)
+  - Prompt caching: two layers.
+    1. System prompts use a 2-block architecture — a static block with `cache_control: { type: 'ephemeral' }` reused across turns within a stage, and a dynamic per-turn block that is not cached (see `stage-prompts.ts`).
+    2. Conversation history prefix caching — `cache_control` is added to the second-to-last message in every Bedrock request, so each subsequent turn replays the entire prior conversation as a cache hit. See `docs/backend/prompt-caching.md` for details.
+  - Circuit breakers: `bedrockCircuitBreaker` and `embeddingCircuitBreaker` (in `backend/src/services/bedrock.ts`) fast-fail to `null` when OPEN, so AI callers must handle a null response. Ably has its own `ablyCircuitBreaker` (see Realtime below).
+  - Titan input truncation: `generateEmbedding()` hard-truncates the input at 30,000 characters (rough ~8K-token ceiling).
+  - Prompt debug logging (local dev only): every Bedrock prompt + response is written to `backend/tmp/prompts/` as paired `<stem>.txt` / `<stem>_response.txt` files unless `DISABLE_PROMPT_LOGGING=true`. Directory is gitignored.
 
 **Real-time Communication:**
 - Ably - WebSocket-based pub/sub messaging
   - SDK: `ably` (backend and mobile)
-  - Auth: `ABLY_API_KEY`
+  - Auth: `ABLY_API_KEY` (backend only). Mobile fetches short-lived tokens from the backend via `GET /api/v1/auth/ably-token` (`mobile/src/services/ably.ts`).
   - Channel format: `meetwithoutfear:session:${sessionId}` and `meetwithoutfear:user:${userId}` (see `shared/src/dto/realtime.ts`)
   - 47 event types (44 SessionEventType + 3 UserEventType) across session, user, empathy, and system events (added `session.abandoned`)
   - Audit stream channel: `ai-audit-stream` (when `ENABLE_AUDIT_STREAM=true`)
