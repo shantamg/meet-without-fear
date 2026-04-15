@@ -24,7 +24,7 @@ import { clerkMiddleware, requireAuth } from '@clerk/express';
 app.use(clerkMiddleware());
 app.use('/api/v1', requireAuth(), apiRouter);
 ```
-3) **User provisioning**: On first authenticated request, upsert a local `User` row keyed by the Clerk user ID (store Clerk user ID in the User table; recommend using it as the primary key or a unique `clerkUserId` field). Copy profile fields (email, name) + pushToken when available.
+3) **User provisioning**: The auth middleware (`backend/src/middleware/auth.ts`) upserts a local `User` row keyed by the Clerk user ID on every authenticated request, copying profile fields (email, firstName/lastName) from the Clerk session. Controllers downstream of the middleware (including `GET /auth/me`) assume the User row already exists and only read from it.
 4) **Token characteristics**: Tokens are Clerk session JWTs; no backend refresh endpoint is needed. Expiration/rotation is managed by Clerk.
 
 The only backend-issued tokens are for Ably (`/auth/ably-token`) which require a valid Clerk session token on the request.
@@ -57,10 +57,9 @@ interface GetMeResponse {
 }
 ```
 
-`GET /auth/me` should:
-- Trust Clerk middleware for auth context.
-- Upsert local user if missing (Clerk ID, email, name, pushToken).
-- Return current user profile + counts derived from local DB (sessions, etc.).
+`GET /auth/me`:
+- Trusts the Clerk middleware for auth context and the middleware-upserted local user row.
+- Returns the current user profile plus `activeSessions` (count of sessions in `ACTIVE`, `WAITING`, or `PAUSED` state) and `pushNotificationsEnabled` (true iff a non-null `pushToken` is stored).
 
 ---
 
@@ -76,7 +75,9 @@ PATCH /api/v1/auth/me
 
 ```typescript
 interface UpdateProfileRequest {
-  name?: string;
+  name?: string;       // deprecated single-field form
+  firstName?: string;
+  lastName?: string;
 }
 ```
 
@@ -143,14 +144,30 @@ interface AblyTokenResponse {
 
 ### Capability Scoping
 
-Token is scoped to user's active sessions only:
+Token capability always includes a private notification channel for the user. When the user has sessions in `ACTIVE`, `WAITING`, or `PAUSED` state, each one adds its own session channel too:
 
 ```json
 {
+  "meetwithoutfear:user:<userId>:notifications": ["subscribe"],
   "meetwithoutfear:session:sess_abc123": ["subscribe", "publish"],
   "meetwithoutfear:session:sess_abc123:presence": ["presence"]
 }
 ```
+
+Users with no active sessions still receive a valid token scoped to just the notifications channel.
+
+---
+
+## Other `/auth` endpoints
+
+Not fully documented above; see `backend/src/routes/auth.ts` for the complete list:
+
+- `DELETE /api/v1/auth/push-token` — unregister device for push notifications.
+- `PATCH /api/v1/auth/biometric` — update biometric preference (iOS Touch ID / Face ID opt-in stored server-side for cross-device consistency).
+- `PATCH /api/v1/auth/me/mood` — set the user's default mood intensity.
+- `GET` / `PUT /api/v1/auth/me/memory-preferences` — read / replace the memory-detection preferences (retention and surfacing toggles).
+- `GET` / `PATCH /api/v1/auth/me/notification-preferences` — read / partially update push-notification categories.
+- `DELETE /api/v1/auth/me` — account deletion. Abandons active sessions, anonymizes historical messages/empathy records, and queues Clerk account deletion.
 
 ---
 
