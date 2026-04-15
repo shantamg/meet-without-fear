@@ -247,7 +247,7 @@ await new SessionBuilder(request)
 | `CREATED` | Session created, compact not signed |
 | `EMPATHY_SHARED_A` | User A completed Stage 1 |
 | `FEEL_HEARD_B` | User B felt heard, reconciler ready |
-| `RECONCILER_SHOWN_B` | User B felt heard, reconciler ran with significant gaps, share offer is OFFERED |
+| `RECONCILER_SHOWN_B` | User B felt heard, reconciler returned `OFFER_SHARING` (significant gaps), share-offer row transitioned to `OFFERED` once the subject fetched it |
 | `CONTEXT_SHARED_B` | Both users active, context shared |
 | `EMPATHY_REVEALED` | Both users shared empathy and validated each other (empathy reveal complete) |
 | `NEED_MAPPING_COMPLETE` | Stage 3: Both users identified needs and confirmed common ground |
@@ -409,7 +409,7 @@ Enabled only when `E2E_AUTH_BYPASS=true`:
 Two-browser tests simulate both users simultaneously in separate browser contexts:
 
 **Configuration:** `e2e/playwright.two-browser.config.ts`
-- Timeout: 900 seconds (vs 120s for single-browser)
+- Timeout: 900 seconds per test. Single-browser reconciler specs typically override the default via `test.setTimeout(300_000)` (5 min) because they chain many AI calls through the reconciler.
 - Uses real Ably for real-time event verification between browsers
 - `TwoBrowserHarness` manages two browser contexts with separate auth headers
 
@@ -417,7 +417,7 @@ Two-browser tests simulate both users simultaneously in separate browser context
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /api/e2e/cleanup` | Delete all test data |
+| `POST /api/e2e/cleanup` | Delete all `@e2e.test` users and their related data (sessions, vessels, consent records, etc.) |
 | `POST /api/e2e/seed` | Create a test user |
 | `POST /api/e2e/seed-session` | Create session at specific stage |
 | `POST /api/e2e/trigger-reconciler` | Manually trigger reconciler for a session |
@@ -426,7 +426,7 @@ Two-browser tests simulate both users simultaneously in separate browser context
 - `handleMoodCheck(page)` — handles the mood check prompt if it appears
 - `signCompact(page)` — helper to sign compact agreement
 - `confirmFeelHeard(page)` — helper to confirm feel-heard
-- `waitForAnyAIResponse(page)` — waits for any AI response to appear in chat
+- `waitForAIResponse(page, textPattern, timeout?)` — polls the chat for an AI response matching a regex pattern (default timeout 15s). There is no `waitForAnyAIResponse` helper; tests that want to wait for "any" response pass a broad pattern like `/.+/`.
 - `sendAndWaitForPanel()` — sends message and waits for panel to appear
 
 **Stage Flow Helpers** (defined in `e2e/helpers/stage-flows.ts`):
