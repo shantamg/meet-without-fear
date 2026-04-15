@@ -9,6 +9,10 @@
       "workspace": "slack-triage",
       "firstStage": "1-fetch-and-classify"
     },
+    "bugs-and-requests-reply": {
+      "workspace": "slack-triage",
+      "firstStage": "1-fetch-and-classify"
+    },
     "respond-github-*": {
       "workspace": "github-respond",
       "firstStage": "respond"

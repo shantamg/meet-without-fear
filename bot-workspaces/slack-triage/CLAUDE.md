@@ -1,6 +1,6 @@
 # Slack Triage Workspace (L1)
 
-Triage actionable messages from any Slack channel (DMs, #pmf1, #agentic-devs, #slam-bot). Classify each message and dispatch the appropriate action. **All substantive work must flow through GitHub issues with `bot:*` labels** — Slack is an intake channel, GitHub is where work happens visibly.
+Triage actionable messages from any Slack channel (DMs, #pmf1, #agentic-devs, #slam-bot, #bugs-and-requests). Classify each message and dispatch the appropriate action. **All substantive work must flow through GitHub issues with `bot:*` labels** — Slack is an intake channel, GitHub is where work happens visibly.
 
 ## What to Load
 
@@ -50,6 +50,11 @@ Adapt tone based on the source channel:
 - Treat every message like a DM — route through the full workspace tree
 - Technical detail is fine (team members watching)
 - Be concise and actionable
+
+**#bugs-and-requests** — Product-team intake for bugs and feature requests. Readers are testing the product, not engineers.
+- Keep it non-technical: no file paths, function names, stack traces
+- Acknowledge the report, link to the GitHub issue you filed
+- Warm and brief — mirror #pmf1 tone
 
 **DMs** — Direct conversation with a team member.
 - Match their tone and technical level
