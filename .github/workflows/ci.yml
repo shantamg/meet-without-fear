@@ -44,7 +44,10 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15
+        # Use pgvector/pgvector:pg15 (not plain postgres:15) because one of
+        # the Prisma migrations does CREATE EXTENSION "vector". Render's
+        # managed Postgres has pgvector available; mirror that in CI.
+        image: pgvector/pgvector:pg15
         env:
           POSTGRES_USER: meetwithoutfear_user
           POSTGRES_PASSWORD: meetwithoutfear_password
