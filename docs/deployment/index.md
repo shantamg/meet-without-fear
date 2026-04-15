@@ -43,13 +43,13 @@ The iOS production build uses `--auto-submit` to push directly to App Store Conn
 
 #### EAS Build Profiles
 
-Build profiles are defined in `mobile/eas.json`. Each profile configures its own Clerk keys, API URL, and Mixpanel token.
+Build profiles are defined in `mobile/eas.json`. Most profiles set `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_MIXPANEL_TOKEN`, and `EXPO_PUBLIC_SENTRY_DSN`. Clerk publishable keys live in a Clerk-managed config (not in every `eas.json` profile), so the `preview` and `android-apk` profiles don't repeat them; `development*` and `production` profiles carry their own Clerk key overrides. The `development` and `development-simulator` profiles also set `EXPO_PUBLIC_BUNDLE_ID=com.meetwithoutfear.app.dev` so they can install alongside prod.
 
 | Profile | Purpose |
 |---------|---------|
-| `development` | Local dev build pointing at `http://localhost:3000` |
+| `development` | Local dev build pointing at `http://localhost:3000`; dev bundle ID |
 | `development-production` | Dev client against production API (`https://api.meetwithoutfear.com`) |
-| `development-simulator` | iOS simulator build for local development |
+| `development-simulator` | iOS simulator build for local development; dev bundle ID |
 | `preview` | Internal staging distribution build |
 | `production` | App Store / Play Store release build |
 | `android-apk` | Standalone APK build for sideloading |
