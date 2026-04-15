@@ -26,7 +26,10 @@ status: living
 
 **E2E:**
 - Runner: Playwright 1.50.0
-- Config: `e2e/playwright.config.ts` (standard) and `e2e/playwright.live-ai.config.ts` (AI tests)
+- Configs:
+  - `e2e/playwright.config.ts` - standard single-browser suite (MOCK_LLM, global fixture ID)
+  - `e2e/playwright.live-ai.config.ts` - real Bedrock AI run (slow, separate workflow)
+  - `e2e/playwright.two-browser.config.ts` - multi-user scenarios. `testMatch: /two-browser-.*\.spec\.ts/`. `MOCK_LLM=true`, no global fixture ID — each browser sets its own via the `X-E2E-Fixture-ID` header.
 - Assertion: Playwright built-in matchers
 
 **Run Commands:**
@@ -73,7 +76,8 @@ npm run test -- --coverage --workspace=backend
   - `src/components/__tests__/EmotionalBarometer.test.tsx` - Component tests
   - `src/screens/__tests__/PersonDetailScreen.test.tsx` - Screen tests
 - E2E: `e2e/tests/` flat with organized subdirectories
-  - `e2e/tests/stage-2-empathy/reconciler/*.spec.ts` - Feature paths
+  - `e2e/tests/stage-2-empathy/reconciler/*.spec.ts` - Feature paths, with named fixtures driving outcomes: `user-b-partner-journey` (standard gaps detected), `reconciler-no-gaps` (PROCEED action), `reconciler-circuit-breaker` (forces refinement loop until safety circuit trips)
+  - `e2e/tests/two-browser-*.spec.ts` - Multi-user flows requiring two browser contexts (see `playwright.two-browser.config.ts`). Includes `two-browser-circuit-breaker.spec.ts` which verifies the infinite-refinement safety circuit trips on the 4th attempt
   - `e2e/tests/homepage.spec.ts`, `single-user-journey.spec.ts` - Top-level flows
   - `e2e/helpers/stage-flows.ts` - Composite flow helpers with shared fixture messages (reduces test boilerplate)
 
@@ -92,8 +96,15 @@ testMatch: ['**/__tests__/**/*.test.ts']
 
 // E2E: playwright.config.ts
 testDir: './tests'
-testIgnore: /live-ai-.*\.spec\.ts/  // Exclude AI tests by default
+testIgnore: /live-ai-.*\.spec\.ts/  // Exclude live-AI tests by default
+
+// E2E: playwright.two-browser.config.ts
+testMatch: /two-browser-.*\.spec\.ts/  // Only multi-user specs
 ```
+
+**E2E timeouts** (configured in configs; higher than unit/integration):
+- Default global timeout: 15 minutes per test for AI-heavy flows (`timeout: 900000`) — e.g. Stage 2 needs ~13 AI interactions plus reconciler round-trips.
+- Individual `test.setTimeout(...)` calls further tighten or extend inside specs.
 
 ## Test Structure
 
@@ -291,7 +302,7 @@ test.describe('Reconciler: No Gaps Detected → Proceed Directly', () => {
 **Framework:**
 - Jest: `jest.mock()` and `jest.fn()`
 - React Query: `QueryClient` with `defaultOptions: { queries: { retry: false } }`
-- Playwright: No mocks - browser automation, uses fixtures instead
+- Playwright: No component-level mocks — uses real browser automation. LLM responses are deterministic via `MOCK_LLM=true` + fixture-based responses (see Fixtures below).
 
 **Patterns:**
 
@@ -399,7 +410,7 @@ it('shows active session indicator', () => {
 
 **E2E Fixtures:**
 Located in `e2e/helpers/` (directory with index.ts re-export):
-- `getE2EHeaders()` - Returns X-E2E-User-ID/Email headers for auth bypass
+- `getE2EHeaders(email, userId, fixtureId?)` - Returns `X-E2E-User-ID` / `X-E2E-User-Email` for auth bypass plus an optional `X-E2E-Fixture-ID` that selects the per-request fixture (required for two-browser runs where each user needs its own fixture)
 - `SessionBuilder` - Orchestrates setup via REST API
 - `cleanupE2EData()` - Clears DB between tests
 - `navigateToShareFromSession()` - Navigates to Share tab
@@ -450,7 +461,7 @@ npm run test -- --coverage --workspace=mobile
 
 **E2E Tests:**
 - Scope: Complete user journey through app
-- Approach: Real browser automation (Playwright), mocked backend
+- Approach: Real browser automation (Playwright) against a real backend with `MOCK_LLM=true`. AI responses come from fixtures keyed by `X-E2E-Fixture-ID` header or the `E2E_FIXTURE_ID` env var.
 - Examples:
   - `e2e/tests/single-user-journey.spec.ts` - Full session flow
   - `e2e/tests/stage-2-empathy/reconciler/*.spec.ts` - Feature-specific flows
