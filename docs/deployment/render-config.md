@@ -10,56 +10,29 @@ Render.com service definitions for Meet Without Fear.
 
 ## render.yaml
 
+The live `render.yaml` at repo root is intentionally minimal — secrets live in a Render **environment group** (`meet-without-fear-api-env`), not in the blueprint file:
+
 ```yaml
 services:
-  # Backend API
   - type: web
-    name: meetwithoutfear-api
+    name: meet-without-fear-api
     runtime: node
-    region: oregon
     plan: starter
-    buildCommand: npm ci && npm run build
-    startCommand: npm run start
-    healthCheckPath: /health
+    branch: main
+    buildCommand: npm install && npm run prisma:generate --workspace=backend && npm run build --workspace=backend
+    startCommand: cd backend && npx prisma migrate deploy && node dist/backend/src/server.js
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        fromDatabase:
-          name: meetwithoutfear-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: meetwithoutfear-redis
-          type: redis
-          property: connectionString
-      - key: JWT_SECRET
-        generateValue: true
-      - key: JWT_REFRESH_SECRET
-        generateValue: true
-      - key: ABLY_API_KEY
-        sync: false  # Set manually
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_REGION
-        value: us-west-2
-      - key: EXPO_ACCESS_TOKEN
-        sync: false
-    autoDeploy: true
-
-databases:
-  # PostgreSQL with pgvector
-  - name: meetwithoutfear-db
-    plan: starter
-    region: oregon
-    postgresMajorVersion: 15
-    ipAllowList: []  # Only allow from Render services
-
-# Note: Redis is configured separately in Render dashboard
-# as it requires the paid tier for persistence
+      - fromGroup: meet-without-fear-api-env
 ```
+
+### Key facts from this blueprint
+
+- **Service name**: `meet-without-fear-api` (hyphens, not camelCase)
+- **Monorepo-aware build**: Both `prisma:generate` and `build` use `--workspace=backend` so the root-level `npm install` works across the full monorepo
+- **Migrations auto-run on every deploy**: `startCommand` runs `npx prisma migrate deploy` from inside `backend/` before starting the server — there is no separate manual migration step
+- **Entry point**: `dist/backend/src/server.js` (nested under `backend/dist/` because TS compiles from the repo root)
+- **Env group**: All secrets (DB URL, Clerk keys, Bedrock credentials, Ably, Resend, etc.) live in the Render env group `meet-without-fear-api-env` — update them in the Render dashboard; the blueprint just wires the whole group into the service via `fromGroup`
+- **Database**: managed separately as a Render Postgres instance (not declared in this `render.yaml`); connection string is injected into the env group
 
 ## Database Setup
 
@@ -140,12 +113,11 @@ export default router;
 
 ### Initial Deployment
 
-1. Create services in Render dashboard
-2. Set environment variables (secrets)
-3. Deploy backend
-4. Run database migrations
-5. Enable pgvector extension
-6. Verify health endpoint
+1. Create the Render **Blueprint** from `render.yaml` (imports the service into the Render dashboard).
+2. Create the Render Postgres database separately (not declared in the blueprint) and populate `meet-without-fear-api-env` with its connection string plus the rest of the secrets.
+3. Trigger the first deploy — migrations run automatically via the `startCommand` (`npx prisma migrate deploy`).
+4. (Optional, future) When pgvector is turned on, enable the extension on the Postgres instance: `CREATE EXTENSION vector;`
+5. Verify health endpoint.
 
 ### Database Migrations
 
