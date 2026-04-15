@@ -99,7 +99,7 @@ Previously, our system prompt was built as **one giant string** that mixed stati
 | `PRIVACY_GUIDANCE` | Never | ~30 |
 | `INVALID_MEMORY_GUIDANCE` | Never | ~15 |
 | `PROCESS_OVERVIEW` | Never (conditionally included) | ~40 |
-| `NEUTRALITY_GUIDANCE` | Never | ~180 |
+| `PERSPECTIVE_AWARENESS` (previously `NEUTRALITY_GUIDANCE`) | Never | ~180 |
 | `STAGE1_LISTENING_RULES` | Never (within a stage) | ~280 |
 | `STAGE1_QUESTION_TEMPLATES` | Never (within a stage) | ~50 |
 | `buildResponseProtocol(1)` | Never (within a stage) | ~100 |
@@ -147,11 +147,13 @@ All stages exceed Sonnet's 1,024-token caching threshold (measured Feb 2026, see
 |-------|-------------|---------------|-------|------------|
 | Onboarding | ~1,410 tok | ~70 tok | ~1,480 tok | YES |
 | Invitation | ~1,410 tok | ~70 tok | ~1,480 tok | YES |
-| Stage 1 (Feel Heard) | ~1,410 tok | ~70 tok | ~1,480 tok | YES |
-| Stage 2 (Perspective) | ~1,678 tok | ~10 tok | ~1,688 tok | YES |
-| Stage 2B (Refinement) | ~1,415 tok | ~10 tok | ~1,425 tok | YES |
-| Stage 3 (Needs) | ~1,219 tok | ~10 tok | ~1,229 tok | YES |
-| Stage 4 (Resolution) | ~1,269 tok | ~10 tok | ~1,279 tok | YES |
+| Stage 1 (Witnessing) | ~1,410 tok | ~70 tok | ~1,480 tok | YES |
+| Stage 2 (Perspective Stretch) | ~1,678 tok | ~10 tok | ~1,688 tok | YES |
+| Stage 2B (Informed Empathy) | ~1,415 tok | ~10 tok | ~1,425 tok | YES |
+| Stage 3 (Need Mapping) | ~1,219 tok | ~10 tok | ~1,229 tok | YES |
+| Stage 4 (Strategic Repair) | ~1,269 tok | ~10 tok | ~1,279 tok | YES |
+
+> Dynamic-block sizes above reflect a typical turn. On stage-transition turns, `buildStagePromptString` prepends a `transitionInjection` (6–8 sentences for the Stage 1→2 boundary) and may append a `postShareSection` after a partner share — those transitions temporarily push the dynamic block well above the steady-state numbers without changing the cached static block.
 
 **Stage 3 is the closest to the threshold at ~1,219 tokens.** If the prompt is trimmed in the future, it could drop below 1,024.
 
@@ -165,7 +167,7 @@ SIMPLE_LANGUAGE_PROMPT        (~120 tokens)  Voice & style rules
 PINNED_CONSTITUTION           (~80 tokens)   Ground rules, safety
 PRIVACY_GUIDANCE              (~30 tokens)   Cross-user information rules
 INVALID_MEMORY_GUIDANCE       (~15 tokens)   Memory request handling
-NEUTRALITY_GUIDANCE           (~180 tokens)  Three-layer neutrality (Stages 1-2)
+PERSPECTIVE_AWARENESS         (~180 tokens)  Three-layer perspective-awareness / neutrality rules (Stages 1-2). Previously named NEUTRALITY_GUIDANCE.
 LATERAL_PROBING_GUIDANCE      (~20 tokens)   Brief/guarded user handling
 ```
 
@@ -274,7 +276,7 @@ All items from the original implementation plan are complete and in production. 
 - Conversation history caching (already works well via second-to-last message breakpoint)
 - The content of the prompts themselves (only restructuring how they're delivered)
 - Response parsing or any downstream behavior
-- Inner work / linked inner thoughts prompts (can be optimized later)
+- (Inner work / linked inner thoughts prompts — `buildInnerWorkPrompt` / `buildLinkedInnerThoughtsPrompt` — now also return `PromptBlocks`; they use the same static/dynamic split and are covered by the caching path.)
 
 ---
 
