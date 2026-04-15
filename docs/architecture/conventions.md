@@ -17,10 +17,10 @@ status: living
 - Services: `kebab-case.ts` for compound names - e.g., `context-assembler.ts`, `session-state.ts`. Simple single-word service files use lowercase camelCase.
 - Components: `PascalCase.tsx` - e.g., `EmotionalBarometer.tsx`
 - Types/interfaces: `camelCase.ts` with PascalCase type names - e.g., `AuthUser` interface in `auth.ts`
-- Enum keys (the property name on the enum object): always `CONSTANT_CASE` — e.g. `SessionStatus.CREATED`, `ChatItemType.AI_MESSAGE`. Enum *string values* vary by type:
-  - True enums (`SessionStatus`, `Stage`, `InnerWorkStatus`) use matching `CONSTANT_CASE` string values.
-  - Wire-format discriminants carried in serialized payloads (`ChatItemType` → `'ai-message'`, `AIMessageStatus` → `'streaming'`, `SharedContentDeliveryStatus` → `'sending'`, `IndicatorType` → `'invitation-sent'`) use lowercase or kebab-case strings.
-  - Don't uppercase wire values without migrating every consumer.
+- Enum-like types: two shapes are in use.
+  - **TypeScript `enum`** for persisted / Prisma-shared types: `SessionStatus`, `Stage`, `InnerWorkStatus`, `MessageRole`, `ConnectionStatus`. Keys are `CONSTANT_CASE`; string values are usually `CONSTANT_CASE` (e.g. `SessionStatus.ACTIVE = 'ACTIVE'`) but some enums use lowercase values (e.g. `ConnectionStatus.CONNECTING = 'connecting'`).
+  - **`const` object with `as const` + derived type** for wire-format discriminants and UI state tags: `ChatItemType`, `AIMessageStatus`, `IndicatorType`, `AnimationState`, `SharedContentDeliveryStatus`. Pattern: `export const Foo = { BAR: 'bar' } as const; export type Foo = (typeof Foo)[keyof typeof Foo];`. Keys are `CONSTANT_CASE`; values are lowercase or kebab-case (`'ai-message'`, `'streaming'`, `'invitation-sent'`).
+  - Don't change wire values (either case) without migrating every consumer, including persisted data.
 - Test files: `__tests__/[name].test.ts[x]` or `__tests__/[name].spec.ts` - located in same directory as source
 
 **Functions:**
@@ -33,13 +33,21 @@ status: living
 **Variables:**
 - camelCase: `sessionId`, `invitationConfirmed`, `partnerProgress`
 - Constants: `CONSTANT_CASE` for compile-time constants - e.g., `MODEL_LIMITS`, `DATABASE_URL`
-- Booleans: for *local/computed* variables, prefer prefixes `is*`, `has*`, `should*`, `can*` (e.g., `isLoading`, `hasInvitationMessage`, `shouldHideInput`). For *DTO fields*, state-based adjectives are idiomatic and widespread: `biometricEnabled`, `registered`, `success`, `readyToShare`, `canConsent`, `alreadyConsented`, `confirmed`. Don't rename DTO fields in passing.
+- Booleans: both the prefix form (`is*`, `has*`, `should*`, `can*`) and state-adjective form are common in both local variables and DTO fields. Examples in DTOs: `isTyping`, `isInviter`, `hasUnread`, `hasMore`, `canAdvance`, `canConsent`, alongside `biometricEnabled`, `registered`, `success`, `readyToShare`, `alreadyConsented`, `confirmed`. Pick to match neighbors in the same file; don't rename DTO fields in passing.
 - Config objects: PascalCase - e.g., `WaitingStatusConfig`
 - Unused parameters: prefix with `_` to signal intention - e.g., `_next: NextFunction`, `_props`
 
 **Types/Interfaces:**
 - PascalCase for all type names: `SessionStateDTO`, `ChatUIState`, `ContextBundle`
-- Suffixes signal the role of a data-transfer type. Core entities use `DTO` (`UserDTO`, `SessionSummaryDTO`, `TakeawayDTO`). API/realtime boundary types use purpose suffixes: `Request` (`UpdateProfileRequest`), `Response` (`GetMeResponse`), `Event` (`StageProgressEvent`), `Payload` (`ChatItemNewPayload`). Some lightweight data shapes have no suffix when context makes the role obvious (`PresenceData`, `MemorySuggestion`).
+- Suffixes signal the role of a data-transfer type. Common suffixes:
+  - `DTO` — core entities (`UserDTO`, `TakeawayDTO`).
+  - `Request` / `Response` — HTTP boundary (`UpdateProfileRequest`, `GetMeResponse`).
+  - `Event` / `Payload` — realtime/Ably boundary (`StageProgressEvent`, `ChatItemNewPayload`).
+  - `Summary` / `Detail` — list-view vs comprehensive entity view (`SessionSummaryDTO`, `PersonSummaryDTO` vs `PersonDetailDTO`, `StageProgressDetailDTO`, `InnerWorkSessionDetailDTO`).
+  - `Result` — analysis/extraction outputs (`ExtractedPeopleResult`, `MemoryDetectionResult`).
+  - `Params` — URL/route parameters, typically paired with Zod: `AcceptInvitationParamsInput`.
+  - `Input` — Zod-inferred request/response types: `RecordBarometerRequestInput`.
+  - Lightweight shapes may have no suffix when context makes the role obvious (`PresenceData`, `MemorySuggestion`).
 - Props interface: `[ComponentName]Props` - e.g., `UseChatUIStateProps`
 - State interface: `[Name]State` - e.g., `ChatUIState`, `WaitingStatusState`
 - Enum keys: `CONSTANT_CASE` - e.g., `SessionStatus.ACTIVE`, `Stage.WITNESS`. See Naming Patterns > Enums for value conventions.
