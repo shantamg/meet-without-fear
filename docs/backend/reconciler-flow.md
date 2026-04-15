@@ -147,8 +147,8 @@ flowchart TB
 |--------------|-------------------|-------------------|-------------------|
 | None | `PROCEED` | Status → READY (waiting for mutual reveal) | Continues with their empathy |
 | Minor | `PROCEED` | Status → READY (waiting for mutual reveal) | Continues with their empathy |
-| Moderate | `OFFER_OPTIONAL` | Status → READY (waiting for mutual reveal) | Continues with their empathy |
-| Significant | `OFFER_SHARING` | Status → AWAITING_SHARING | Sees share suggestion panel |
+| Moderate | `OFFER_OPTIONAL` | If AI returned a `suggestedShareFocus` → Status `AWAITING_SHARING` (Sharer gets a share prompt). If no `suggestedShareFocus` → treated as `PROCEED` (US-8 rule) and Status → `READY`. | Sees share suggestion panel when `AWAITING_SHARING`, otherwise continues |
+| Significant | `OFFER_SHARING` | Status → `AWAITING_SHARING` | Sees share suggestion panel |
 
 > **Note**: When both directions are in `READY` status, both empathy statements are revealed simultaneously. Neither user sees their partner's empathy until both have completed Stage 2.
 
@@ -361,7 +361,7 @@ Only one panel shows at a time, in this priority order:
 
 | Event | Trigger | Cache Invalidation | UI Update |
 |-------|---------|-------------------|-----------|
-| `empathy.share_suggestion` | Reconciler finds significant gaps | `shareOffer`, `empathyStatus` | Show share suggestion panel |
+| `empathy.status_updated` (status=`AWAITING_SHARING`) | Reconciler offers a share prompt (Moderate+focus or Significant gap) | `shareOffer`, `empathyStatus` | Show share suggestion panel (message: "&lt;name&gt; is considering a suggestion to share more") |
 | `empathy.context_shared` | Subject shares additional context | `empathyStatus`, `shareOffer`, `messages` | Guesser sees shared context |
 | `empathy.revealed` | Empathy revealed (no significant gaps) | `empathyStatus`, `partnerEmpathy` | Subject can validate |
 | `partner.stage_completed` | Partner completes a stage | `empathyStatus`, `progress` | Update waiting status |
@@ -498,7 +498,7 @@ If both users share empathy at nearly the same time, both reconcilers run. Need 
 
 ### Case 2: Refresh During Share Suggestion
 If user refreshes while share suggestion is pending:
-- Frontend fetches `/reconciler/share-offer`
+- Frontend fetches `GET /api/v1/sessions/:id/reconciler/share-offer`
 - If status is `PENDING`, it becomes `OFFERED`
 - Panel should reappear with suggestion
 
@@ -514,7 +514,8 @@ If user tries to validate partner's empathy before reconciler finishes:
 
 ### Case 5: User Responds Before Fetching Share Offer
 If user accepts/declines before the GET endpoint marks offer as `OFFERED`:
-- `respondToShareSuggestion` accepts both `PENDING` and `OFFERED` status
+- `respondToShareSuggestion` accepts both `PENDING` and `OFFERED` status, and supports three actions: `accept`, `decline`, and `refine` (re-runs suggestion generation with `refinedContent` feedback from the user)
+- After the circuit-breaker trips, the Guesser's alignment message is softened from the default "your attempt to imagine what they're feeling was quite accurate" to the more honest "You've shared your perspective… Let's move forward" to avoid overclaiming accuracy when refinement was exhausted or context was already shared
 - Marks as `OFFERED` before processing for proper audit trail
 
 ## Debugging Tips
@@ -537,12 +538,13 @@ This shows:
 ### Check Reconciler Logs
 Look for these key log messages (now using Winston structured logger — search JSON logs in production):
 - `Running asymmetric reconciliation` - Start of analysis (in `reconciler/state.ts`)
-- `Outcome analysis: severity=X, action=Y` - Decision made (in `reconciler/analysis.ts`)
+- `AI analysis complete` (in `reconciler/analysis.ts`) — AI analysis done; fields: `alignmentScore`, `gapSeverity`, `action`
+- `Reconciler outcome` (in `reconciler/state.ts`) — state transition committed; fields: `severity`, `action`, `empathyStatus`
 - `Share suggestion generated` - Suggestion created (in `reconciler/sharing.ts`)
 - `Could not find reconcilerResult` - Race condition error (in `reconciler/sharing.ts`)
 
 ### Frontend Cache Issues
 If UI doesn't update after Ably events:
 - Check that `empathy.revealed` handler invalidates `empathyStatus`
-- Verify `shareOffer` query is invalidated after `empathy.share_suggestion`
+- Verify `shareOffer` query is invalidated after `empathy.status_updated` (status=`AWAITING_SHARING`)
 - Use React Query DevTools to inspect cache state

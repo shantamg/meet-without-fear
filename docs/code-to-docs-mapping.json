@@ -28,7 +28,7 @@
     { "code": "backend/src/services/ai*.ts",             "label": "backend/src/services/ai",       "docs": ["docs/backend/prompting-architecture.md", "docs/backend/prompts/index.md"] },
     { "code": "backend/src/services/stage-prompts.ts",   "label": "backend/src/services/stage-prompts.ts", "docs": ["docs/backend/prompting-architecture.md", "docs/backend/prompt-caching.md", "docs/backend/prompts/index.md"] },
     { "code": "backend/src/services/needs-prompts.ts",   "label": "backend/src/services/needs-prompts.ts", "docs": ["docs/backend/prompting-architecture.md", "docs/backend/prompts/index.md"] },
-    { "code": "backend/src/services/reconciler*.ts",     "label": "backend/src/services/reconciler", "docs": ["docs/backend/reconciler-flow.md", "docs/diagrams/reconciler-paths.md"] },
+    { "code": "backend/src/services/reconciler/**",      "label": "backend/src/services/reconciler", "docs": ["docs/backend/reconciler-flow.md", "docs/diagrams/reconciler-paths.md"] },
     { "code": "backend/src/services/stage-prompts*.ts",  "label": "backend/src/services/stage-prompts", "docs": ["docs/backend/prompts/index.md"] },
     { "code": "backend/src/controllers/emotions.ts", "label": "backend/src/controllers/emotions.ts", "docs": ["docs/backend/api/emotional-barometer.md", "docs/product/mechanisms/emotional-barometer.md"] },
     { "code": "backend/src/routes/emotions.ts",      "label": "backend/src/routes/emotions.ts",      "docs": ["docs/backend/api/emotional-barometer.md", "docs/product/mechanisms/emotional-barometer.md"] },
