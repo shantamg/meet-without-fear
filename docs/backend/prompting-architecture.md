@@ -30,7 +30,8 @@ This document provides a comprehensive overview of how prompting works in the Me
 The backend uses a **two-model stratification** approach:
 
 - **Haiku (Claude Haiku 4.5)**: Fast, structured output for mechanical tasks (classification, detection, planning)
-- **Sonnet (Claude Sonnet 4.5)**: Empathetic responses for user-facing interactions
+- **Sonnet (Claude Sonnet 4.5)**: Default model for empathetic user-facing responses
+- **Dynamic routing**: At response time, `routeModel()` picks between Haiku and Sonnet based on conflict intensity, topic ambiguity, and message length — low-signal turns can be served by Haiku to save cost/latency. `orchestrateResponse` logs the chosen model in the `operation` field (`orchestrator-response-<model>`).
 
 The system follows a **decision-first architecture** where a "decider" (Memory Intent Layer) determines what kind of remembering is appropriate before any retrieval occurs.
 
@@ -245,11 +246,11 @@ graph TD
 **Stage-Aware Configuration:**
 Each intent gets stage-specific thresholds:
 
-- **Stage 1**: threshold=0.65, maxCrossSession=0, allowCrossSession=false, surfaceStyle='silent' (maxCrossSession increases to 3 after turn 3, but cross-session remains disabled)
-- **Stage 2**: threshold=0.55, maxCrossSession=0, allowCrossSession=false, surfaceStyle='tentative'
-- **Stage 3-4**: threshold=0.50, maxCrossSession=0, allowCrossSession=false, surfaceStyle='explicit'
+- **Stage 1**: threshold=0.65, `allowCrossSession=false`, surfaceStyle='silent' (config-level `maxCrossSession` has per-stage values for future use)
+- **Stage 2**: threshold=0.55, `allowCrossSession=false`, surfaceStyle='tentative'
+- **Stage 3-4**: threshold=0.50, `allowCrossSession=false`, surfaceStyle='explicit'
 
-> **Note:** Cross-session retrieval is currently disabled across all stages pending consent UI implementation. The code has `allowCrossSession: false` and `maxCrossSession: 0` for Stages 2-4 (with comments like `// was 5`, `// was 10` indicating the originally intended values).
+> **Note:** The stage-config `maxCrossSession` values above represent the surfacing policy's intent. The orchestrator currently calls `retrieveContext({ ..., maxCrossSessionMessages: 10 })` with a **hardcoded 10** regardless of stage/turn — the surfacing policy's per-stage limit is not yet propagated into the retrieval call. Cross-session retrieval is still effectively disabled at the vector-search layer because `allowCrossSession: false` short-circuits the semantic search branch.
 
 **Key File:** `backend/src/services/memory-intent.ts`
 
@@ -454,12 +455,15 @@ graph TD
 **Prompt Components:**
 
 1. **BASE_SYSTEM_PROMPT** (always included):
-   - Communication principles
-   - Memory guidance
-   - Process overview
+   - `PINNED_CONSTITUTION` (ground rules, safety)
+   - `SIMPLE_LANGUAGE_PROMPT` (voice + style)
+   - `PRIVACY_GUIDANCE`
+   - `PERSPECTIVE_AWARENESS` (neutrality rules for Stages 1–2)
+   - Process overview (conditionally included)
+   - (`COMMUNICATION_PRINCIPLES` and `MEMORY_GUIDANCE` were removed — Sonnet handles tone natively and the legacy memory-detection-in-prompt feature was deleted.)
 
 2. **Stage-Specific Content:**
-   - Stage 1: Witnessing techniques, mode switching (WITNESS vs INSIGHT)
+   - Stage 1: Witnessing techniques. The Response Protocol exposes these named modes to the model: `WITNESS`, `PERSPECTIVE`, `NEEDS`, `REPAIR`, `ONBOARDING`, `DISPATCH` — the model self-selects per turn.
    - Stage 2: Empathy building, perspective-taking
    - Stage 3: Need mapping, no solutions
    - Stage 4: Strategic repair, experiments
