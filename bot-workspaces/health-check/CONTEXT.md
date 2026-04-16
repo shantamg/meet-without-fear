@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Cross-reference Mixpanel activity, Render logs, and Sentry errors to surface production issues. Creates GitHub issues for actionable findings and posts a summary to #health-check.
+Cross-reference Mixpanel activity, Render logs, and Sentry errors to surface production issues. Creates GitHub issues for actionable findings and posts a summary to #bot-ops.
 
 ## Stage Pointers
 
@@ -16,4 +16,4 @@ Cross-reference Mixpanel activity, Render logs, and Sentry errors to surface pro
 - `shared/diagnostics/render-logs.md` — Error/warning logs
 - `shared/github/create-issue.md` — Issue creation for findings
 - `shared/references/github-ops.md` — Auto-creation thresholds
-- `shared/slack/slack-post.md` — Summary to #health-check
+- `shared/slack/slack-post.md` — Summary to #bot-ops

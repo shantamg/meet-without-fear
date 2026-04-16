@@ -19,7 +19,7 @@ Rules:
 - ~5 min per item max — if complex, post analysis and move on
 - Clickable GitHub links in Slack: `<https://github.com/shantamg/meet-without-fear/issues/N|#N>`
 
-After all items processed, post summary to #agentic-devs via `shared/slack/slack-post.md`:
+After all items processed, post summary to #bot-ops (`$BOT_OPS_CHANNEL_ID`) via `shared/slack/slack-post.md`:
 ```
 *Stale Sweeper — [Date]*
 Triaged [N] items:
