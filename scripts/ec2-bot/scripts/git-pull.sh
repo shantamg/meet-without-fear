@@ -4,6 +4,7 @@ set -euo pipefail
 # Bootstrap: use hardcoded path for the initial git pull (config.sh
 # may not exist yet on first-ever pull, and PULL_LOG isn't defined yet).
 cd ~/meet-without-fear
+git checkout main >> /var/log/slam-bot/git-pull.log 2>&1 || true
 git fetch origin main && git reset --hard origin/main >> /var/log/slam-bot/git-pull.log 2>&1
 
 # Now source config.sh (guaranteed to exist after pull)
