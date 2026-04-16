@@ -27,6 +27,7 @@ Thread-based MWF conversation workspace. Each Slack thread in `#mwf-sessions` is
 | `references/guardian-constitution.md` | Always | Process Guardian identity, voice, and universal rules |
 | `references/stage-progression.md` | Always | Gate rules, parallel vs sequential logic |
 | `references/privacy-model.md` | Always | Per-stage sharing and Vessel rules |
+| `references/global-facts.md` | Stage 0 (session start), stage transitions, session completion | Cross-session fact accumulation lifecycle |
 | `shared/slack/slack-post.md` | Stage 2 (reply posting) | Posting thread replies via `slack-post.sh` |
 | `shared/references/slack-format.md` | Stage 2 (reply posting) | Slack mrkdwn syntax (NOT Markdown) |
 | `docs/product/stages/index.md` | First message in thread | Understand stage progression rules |
