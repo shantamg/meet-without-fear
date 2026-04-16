@@ -24,6 +24,7 @@
  *   AGENTIC_DEVS_CHANNEL_ID — Channel ID for the #agentic-devs channel
  *   SLAM_BOT_CHANNEL_ID — Channel ID for the #slam-paws channel
  *   BUGS_AND_REQUESTS_CHANNEL_ID — Channel ID for the #bugs-and-requests channel
+ *   MWF_SESSIONS_CHANNEL_ID — Channel ID for the #mwf-sessions channel
  */
 
 import { SocketModeClient } from '@slack/socket-mode';
@@ -43,6 +44,7 @@ const BOT_USER_ID = process.env.SLAM_BOT_USER_ID;
 const SHANTAM_DM = process.env.SHANTAM_SLACK_DM;
 const SLAM_BOT_CHANNEL = process.env.SLAM_BOT_CHANNEL_ID;
 const BUGS_AND_REQUESTS_CHANNEL = process.env.BUGS_AND_REQUESTS_CHANNEL_ID;
+const MWF_SESSIONS_CHANNEL = process.env.MWF_SESSIONS_CHANNEL_ID;
 
 if (!APP_TOKEN || !BOT_TOKEN || !BOT_USER_ID) {
   console.error('Missing required env vars: SLACK_APP_TOKEN, SLACK_BOT_TOKEN, SLAM_BOT_USER_ID');
@@ -147,8 +149,19 @@ if (BUGS_AND_REQUESTS_CHANNEL) {
   };
 }
 
+// #mwf-sessions channel — MWF test session threads
+if (MWF_SESSIONS_CHANNEL) {
+  CHANNEL_CONFIG[MWF_SESSIONS_CHANNEL] = {
+    logName: 'check-mwf-sessions',
+    channelName: '#mwf-sessions',
+    commandSlug: 'mwf-session-reply',
+    workspace: 'mwf-session',
+    contextCount: 10,
+  };
+}
+
 // ---------------------------------------------------------------------------
-// All channels now use workspace mode (slack-triage). The workspace CLAUDE.md
+// All channels now use workspace mode. The workspace CLAUDE.md
 // provides classification + dispatch; the prompt provides the specific message.
 // Channel-specific tone is handled by the workspace based on channelName.
 

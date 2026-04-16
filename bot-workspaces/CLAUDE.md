@@ -9,6 +9,7 @@ Route each bot job to its workspace and entry stage. The workspace `CLAUDE.md` (
 | `dm-reply` | `slack-triage/` | `1-fetch-and-classify` |
 | `slam-paws-reply` | `slack-triage/` | `1-fetch-and-classify` |
 | `bugs-and-requests-reply` | `slack-triage/` | `1-fetch-and-classify` |
+| `mwf-session-reply` | `mwf-session/` | `route` |
 | `respond-github` | `github-respond/` | `respond` |
 | `review-pr` | `github-respond/` | `review` |
 | `fix-bugs` | `bug-fix/` | `01-select` |
