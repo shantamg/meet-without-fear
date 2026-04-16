@@ -22,6 +22,18 @@ Each stage has an advancement gate. Both users must satisfy it before the sessio
 | 3 | At least one common-ground need identified and confirmed by both users |
 | 4 | Mutual agreement on at least one micro-experiment |
 
+## Gate Keys
+
+Gate state is persisted in `stage-progress.json`. Each key is a boolean that must be satisfied before the stage can advance. Stage advancement requires **both users** to satisfy all gate keys for the current stage.
+
+| Stage | Gate Keys |
+|---|---|
+| 0 | `agreedToTerms` |
+| 1 | `feelHeardConfirmed` |
+| 2 | `empathyDraftReady`, `empathyConsented`, `partnerValidated` |
+| 3 | `needsConfirmed`, `commonGroundConfirmed` |
+| 4 | `strategiesSubmitted`, `rankingsSubmitted`, `agreementCreated` |
+
 ## Per-User Status
 
 Each user tracks their own `StageStatus` independently:
