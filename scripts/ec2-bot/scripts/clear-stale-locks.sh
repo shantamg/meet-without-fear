@@ -172,6 +172,12 @@ fi
 if [ -d "$CLAIMS_DIR" ]; then
   CLEANED=$(find "$CLAIMS_DIR" -name "claimed-*.txt" -mmin +1440 -delete -print 2>/dev/null | wc -l)
   [ "$CLEANED" -gt 0 ] && echo "[$(date)] Cleaned $CLEANED stale claim files" >> "$LOGFILE"
+
+  # Clean up stale waiting-human markers (>7 days old).
+  # These are written by keep-label workspaces (spec-builder, needs-info) when
+  # waiting for human input. 7 days matches the spec-builder stale threshold.
+  WAITING_CLEANED=$(find "$CLAIMS_DIR" -name "waiting-human-*.txt" -mmin +10080 -delete -print 2>/dev/null | wc -l)
+  [ "$WAITING_CLEANED" -gt 0 ] && echo "[$(date)] Cleaned $WAITING_CLEANED stale waiting-human markers" >> "$LOGFILE"
 fi
 
 # Clean up temp prompt/context files (>1 hour old)

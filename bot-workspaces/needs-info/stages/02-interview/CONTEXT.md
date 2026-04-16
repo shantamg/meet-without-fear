@@ -30,12 +30,12 @@ Any other `gh` read call indicates a bug.
 1. **Read all issue comments** via `gh issue view <number> --comments`.
 2. **Find the most recent bot comment** and extract the metadata from its HTML comment tag.
 3. **Check for user responses** since the last bot comment:
-   - **User responded**: Analyze the response against graduation criteria.
+   - **User responded**: Analyze the response against graduation criteria. Remove waiting-human marker (see below).
      - If criteria met → proceed to stage 03 (graduate).
-     - If more info needed → post follow-up questions (max 2-3 per round), update metadata with incremented `questions_asked` and `last_response` timestamp.
-   - **No response, <24h since last bot comment**: Do nothing, exit.
-   - **No response, 24-72h**: Post a gentle nudge on the GitHub issue AND on the original Slack thread (see Slack follow-up below).
-   - **No response, >72h**: Add `stale` label, post a closing comment, remove `bot:needs-info` label. Exit.
+     - If more info needed → post follow-up questions (max 2-3 per round), update metadata with incremented `questions_asked` and `last_response` timestamp. Write waiting-human marker (see below).
+   - **No response, <24h since last bot comment**: Write waiting-human marker (see below), exit.
+   - **No response, 24-72h**: Post a gentle nudge on the GitHub issue AND on the original Slack thread (see Slack follow-up below). Write waiting-human marker (see below), exit.
+   - **No response, >72h**: Add `stale` label, post a closing comment, remove `bot:needs-info` label. Remove waiting-human marker (see below). Exit.
 4. **Update metadata** in each new bot comment:
    ```
    <!-- bot:needs-info-meta: {"questions_asked": N, "last_response": "<ISO>", "category": "<category>"} -->
@@ -69,6 +69,17 @@ When posting a 24h nudge, also notify the requester on the original Slack thread
 
    No rush, just reply here when you get a chance.
    ```
+
+## Waiting-Human Marker
+
+When exiting without a human response (all exit paths except graduation), write a marker file so the dispatcher skips this issue until a human responds. The pipeline-monitor (Check 7) clears it when a new human comment is detected.
+
+```bash
+# Write on exit without human response:
+date -Iseconds > "${CLAIMS_DIR:-/opt/slam-bot/state/claims}/waiting-human-${ISSUE_NUMBER}.txt"
+# Remove on graduation or stale closure:
+rm -f "${CLAIMS_DIR:-/opt/slam-bot/state/claims}/waiting-human-${ISSUE_NUMBER}.txt"
+```
 
 ## Completion
 
