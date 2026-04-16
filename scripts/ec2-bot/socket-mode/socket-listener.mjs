@@ -454,7 +454,13 @@ function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey
     log(config.logName, `Agent for ${ts} (${mode}) exited with code ${code}`);
     await removeReaction(channel, ts, 'eyes');
 
-    await addReaction(channel, ts, 'white_check_mark');
+    if (code === 0) {
+      await addReaction(channel, ts, 'white_check_mark');
+    } else if (code === 75 || code === 76) {
+      await addReaction(channel, ts, 'zzz');
+    } else {
+      await addReaction(channel, ts, 'x');
+    }
 
     // Thread queue drain: when this agent finishes, dispatch the next
     // queued reply for the same thread (if any).
