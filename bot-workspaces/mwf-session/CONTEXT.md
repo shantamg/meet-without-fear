@@ -17,6 +17,7 @@ Facilitate a Meet Without Fear conversation between two users through five seque
 - `references/stage-progression.md` — Gate conditions and coordination modes per stage
 - `references/privacy-model.md` — Vessel rules, consent requirements, per-stage sharing policy
 - `references/guardian-constitution.md` — Process Guardian identity, voice, and universal behavioral rules
+- `references/global-facts.md` — Cross-session fact accumulation: loading, consolidation, and privacy rules
 
 ## Key Conventions
 

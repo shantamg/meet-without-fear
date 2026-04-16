@@ -55,3 +55,12 @@ Each user tracks their own `StageStatus` independently:
 ## No Skipping
 
 Stages must be completed in order (0 → 1 → 2 → 3 → 4). A user cannot enter stage N+1 until stage N is `COMPLETED` for both users.
+
+## Global Facts Consolidation
+
+Notable facts are consolidated into each user's cross-session `global-facts.json` at two points:
+
+1. **Stage transitions** — when `current_stage` advances (both users `COMPLETED`), consolidate each user's `vessel-{x}/notable-facts.json` into `data/mwf-users/{slack_user_id}/global-facts.json`
+2. **Session completion** — when all Stage 4 gates are satisfied and `session.json` status is set to `completed`
+
+This ensures facts are preserved even if a session ends early or is abandoned after a stage transition. See `references/global-facts.md` for the full merge algorithm, deduplication rules, and 50-fact limit.

@@ -23,6 +23,7 @@
 | `data/mwf-sessions/thread-index.json` | `schemas/thread-index.schema.md` | Map `channel:thread_ts` → session ID |
 | `data/mwf-sessions/{session_id}/session.json` | `schemas/session.schema.md` | Session metadata and pairing state |
 | `data/mwf-sessions/{session_id}/stage-progress.json` | `schemas/stage-progress.schema.md` | Per-user stage and gate tracking |
+| `data/mwf-users/{slack_user_id}/global-facts.json` | `schemas/global-facts.schema.md` | Cross-session accumulated facts (returning users) |
 
 ## Process
 
@@ -82,7 +83,13 @@ Triggered when a user starts a new MWF session and no existing session is found 
 3. **Update thread index**:
    - Add `"{channel_id}:{thread_ts}": "{session_id}"` entry to `thread-index.json`
 
-4. **Reply with join code**:
+4. **Load global facts** (returning user context):
+   - Check if `data/mwf-users/{user_id}/global-facts.json` exists
+   - If it exists and is non-empty, load the facts as background context for this session
+   - Use facts to inform questions and reflections naturally — do NOT say "I remember from last time"
+   - See `references/global-facts.md` for loading rules and privacy constraints
+
+5. **Reply with join code**:
    - Tell the user their session is created
    - Provide the join code for them to share with their conversation partner
    - Transition to Phase B (Invitation Crafting) in the same thread
@@ -110,7 +117,12 @@ Triggered when a message contains a join code and no existing session is found f
    - Create `data/mwf-sessions/{session_id}/vessel-a/`
    - Create `data/mwf-sessions/{session_id}/vessel-b/`
 
-5. **Notify both users**:
+5. **Load global facts** (returning user context):
+   - For both User A and User B, check if `data/mwf-users/{slack_user_id}/global-facts.json` exists
+   - If it exists and is non-empty, load as background context for this user's session thread
+   - See `references/global-facts.md` for loading rules and privacy constraints
+
+6. **Notify both users**:
    - In User A's thread: "Your partner has joined! Let's begin."
    - In User B's thread: Welcome and begin Phase A (Curiosity Compact)
    - Both users enter Phase A
