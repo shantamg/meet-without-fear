@@ -25,7 +25,14 @@ The mobile app ships an Inner Work hub alongside partner sessions. These surface
 - `NeedsAssessmentScreen` — "Am I OK?" self-assessment across the 19-need catalog
 - `KnowledgeBaseIndexScreen` / `KnowledgeBaseTopicScreen` — browse reflections by topic, person, theme
 
-> Some previously listed wireframes (Home Dashboard with hero card, Stage Controls, standalone Emotional Barometer UI, Authentication & First-Run, Notifications UX) don't correspond to screens that currently exist — the app consolidates stage UI inside `UnifiedSessionScreen`, and auth is handled entirely by the Clerk-provided UI. Those pages are omitted from this index rather than pointing at missing docs.
+### Settings
+Settings screens exist in the app but don't have dedicated wireframe docs yet. Refer to the components directly:
+- `app/(auth)/settings/` — Settings hub routing
+- `help.tsx` — FAQ, email support, feedback, documentation links
+- `privacy.tsx` — Visibility toggles, analytics opt-out, legal links (Terms/Privacy open via in-app browser)
+- `account.tsx` — Profile editing, data export, account deletion
+
+> Some previously listed wireframes (Home Dashboard with hero card, Stage Controls, standalone Emotional Barometer UI, Authentication & First-Run, Notifications UX, Curiosity Compact, Waiting Room) don't correspond to screens that currently exist — the app consolidates stage UI inside `UnifiedSessionScreen`, auth is handled entirely by the Clerk-provided UI, and the onboarding compact/waiting screens were removed. Those pages are omitted from this index rather than pointing at missing docs.
 
 ## Design Principles
 
@@ -54,11 +61,6 @@ flowchart TB
         NewSession[New Session Flow]
     end
 
-    subgraph Onboarding[Onboarding]
-        Compact[Curiosity Compact]
-        Wait[Waiting Room]
-    end
-
     subgraph Core[Core Experience]
         Chat[Chat Interface]
         Progress[Progress View]
@@ -74,8 +76,7 @@ flowchart TB
     Home --> PersonDetail
     Home --> NewSession
     PersonDetail --> SessionDash
-    SessionDash --> Onboarding
-    Onboarding --> Core
+    SessionDash --> Core
     Core --> Support
     Support --> Core
 ```

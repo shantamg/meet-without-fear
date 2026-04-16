@@ -2,7 +2,7 @@
 title: Infrastructure
 sidebar_position: 1
 description: Slam bot (EC2), Render hosting, Vercel deploys, GitHub automation.
-updated: 2026-04-15
+updated: 2026-04-16
 ---
 
 # Infrastructure
@@ -12,6 +12,7 @@ Operational infrastructure for Meet Without Fear.
 ## Slam Bot (autonomous agent on EC2)
 
 - Runs on a t3.medium EC2 instance in us-west-2, tagged `slam-bot`.
+- **Display name**: "Slam Paws" (in Slack and GitHub). System paths (`/opt/slam-bot/`) retain the original name for backward compatibility.
 - GitHub identity: `slam-paws` (collaborator on `shantamg/meet-without-fear` with write access).
 - Scripts at `/opt/slam-bot/scripts` (symlink to `~/meet-without-fear/scripts/ec2-bot/scripts` on the box).
 - Workspaces at `~/meet-without-fear/bot-workspaces/` with a router (`CLAUDE.md`) + label registry (`label-registry.json`).
@@ -49,7 +50,7 @@ Local operator scripts live at `scripts/ec2-bot/`:
 | `provision.sh` | One-shot AWS provisioning (security group, EIP, instance, SSH config entry) |
 | `setup.sh` | First-time bootstrap of a fresh instance (Node, gh, claude, directories) |
 | `deploy.sh` | Symlink scripts, install systemd units + crontab + logrotate |
-| `configure-slack.sh` | Write Slack tokens + channel IDs to `/opt/slam-bot/.env` and start the socket service |
+| `configure-slack.sh` | Write Slack tokens + channel IDs (including `BUGS_AND_REQUESTS_CHANNEL_ID` for `#bugs-and-requests`) to `/opt/slam-bot/.env` and start the socket service |
 | `configure-mixpanel.sh` | Write Mixpanel service-account credentials |
 | `configure-db.sh` | Create/rotate `slam_bot_readonly` role on the Render Postgres |
 
@@ -65,3 +66,5 @@ See [deployment](../deployment/index.md) for release procedures and env var refe
 ## GitHub workflows
 
 - `.github/workflows/docs-impact.yml` — PR-time check that code changes and their mapped docs are updated together. Mapping rules in `docs/code-to-docs-mapping.json`.
+- `.github/workflows/ci.yml` — PR-time CI: spins up a Postgres 15 service container, installs deps (`npm ci`), generates the Prisma client, runs `npm run check`, migrates the test DB, and runs `npm run test`. Skipped for docs-only changes via `dorny/paths-filter`. A `ci-success` gate job is the single required status check for branch protection.
+- `.github/workflows/render-deploy.yml` — Push-to-`main` backend deploy: filters to pushes that touch `backend/`, `shared/`, the lockfile, `render.yaml`, or the workflow itself, then POSTs the Render deploy hook (stored in repo secret `RENDER_DEPLOY_HOOK`). Render's built-in auto-deploy must be **off** — this workflow is the sole deploy trigger.
