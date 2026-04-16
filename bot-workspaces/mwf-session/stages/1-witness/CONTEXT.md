@@ -81,11 +81,60 @@ The following adjustments are made based on the current turn state:
 | **Gathering (turn < 5, intensity < 8)** | Keep responses short — acknowledge briefly, then ask. Don't reflect yet unless something really heavy deserves more than a one-liner. |
 | **Reflecting (turn 5+, intensity < 8)** | Reflect back using their own words. Check if you've understood. Ask from understanding, not just gathering. |
 
+### Vessel File Writes (per turn)
+
+After composing the reply, update the user's private vessel files. See `schemas/vessel-files.schema.md` and `schemas/notable-facts.schema.md` for full schemas.
+
+**Notable Facts** — Append to `vessel-{x}/notable-facts.json`:
+- Extract facts the user reveals about the conflict, people, or situation
+- Categorize each fact: `People`, `Logistics`, `Conflict`, `Emotional`, `History`
+- Max 20 facts per session per user — when exceeded, consolidate oldest entries
+- Only add genuinely new information; skip facts already captured
+
+**Emotional Thread** — Append to `vessel-{x}/emotional-thread.json`:
+- Record one reading per turn: `{ ts, intensity (1–10), context }`
+- `context` is a brief phrase describing what drove the intensity (e.g., "Anger when recounting betrayal")
+
+**Conversation Summary** — Update `vessel-{x}/conversation-summary.md`:
+- Rolling narrative of what the user has shared so far
+- Written in third-person past tense ("User described...")
+- Replace the full file each turn — this is a summary, not an append log
+
+### Internal Dialogue Trace (per turn)
+
+Append to `synthesis/internal-dialogue.md` — dev-only, never exposed to users.
+
+Each entry includes:
+- Turn number and timestamp
+- Stage detection reasoning (gathering vs. reflecting)
+- Emotional assessment and any notable shifts
+- Mode decision (why you chose the response you did)
+- FeelHeardCheck reasoning (why Y or N)
+
+Format: fenced block per turn, newest at the bottom.
+
+### Gate Persistence
+
+Track the `feelHeardConfirmed` gate in `stage-progress.json` (see `schemas/stage-progress.schema.md`).
+
+- When the user explicitly confirms they feel heard → set `feelHeardConfirmed: true` and user status to `GATE_PENDING`
+- When **both** users have `feelHeardConfirmed: true` → advance `current_stage` to `2` and reset gate keys to Stage 2 defaults
+
 ## Output
 
-- User's Vessel populated with: raw messages, emotional readings, notable facts, conversation summary
-- User's stage status: `GATE_PENDING` (confirmed heard) or `IN_PROGRESS` (still sharing)
-- FeelHeardCheck signal: Y or N per turn
+After each turn, the following files are updated:
+
+| File | Location | Action |
+|---|---|---|
+| `notable-facts.json` | `vessel-{x}/` | Append new facts |
+| `emotional-thread.json` | `vessel-{x}/` | Append intensity reading |
+| `conversation-summary.md` | `vessel-{x}/` | Replace with updated summary |
+| `internal-dialogue.md` | `synthesis/` | Append reasoning trace |
+| `stage-progress.json` | Session root | Update gate if confirmed |
+
+Signals returned per turn:
+- FeelHeardCheck: Y or N
+- User stage status: `IN_PROGRESS` or `GATE_PENDING`
 
 ## Completion
 
