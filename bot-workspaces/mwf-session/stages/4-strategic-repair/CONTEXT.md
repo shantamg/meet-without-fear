@@ -143,7 +143,13 @@ When both users have satisfied all Stage 4 gates:
 
 1. **Update `session.json`** — set `status` to `completed`
 2. **Post-completion messages** — acknowledge the work both users did, summarize the agreed micro-experiments, and offer to review agreements in a future check-in
-3. **Trigger global facts consolidation** — consolidate notable facts from this session into the user's `global-facts.json` (per-user cross-session file in `data/mwf-users/{user_id}/`)
+3. **Consolidate global facts** — for each user in the session:
+   a. Read `vessel-{x}/notable-facts.json` for this user's session facts
+   b. Read (or create) `data/mwf-users/{slack_user_id}/global-facts.json`
+   c. Merge: deduplicate by UUID (update `last_confirmed` and `source_sessions` for existing facts; add new facts with `first_seen` from `extracted_at`)
+   d. If over 50 facts, consolidate oldest by merging similar facts within the same category
+   e. Write updated global facts back to file
+   f. See `references/global-facts.md` for the full algorithm and privacy rules
 
 ## Output
 
