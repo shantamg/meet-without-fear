@@ -14,6 +14,9 @@ Determine the current stage from the meta tag in the latest bot comment. If no m
 | `shared/rubrics.md` | Stages 02-04 | Checklist rubrics for adaptive depth per stage |
 | `shared/draft-template.md` | Stages 01-05 | Spec draft structure and section headers |
 | `shared/commands.md` | Stages 02-04 | Slash-command vocabulary and validation rules |
+| `shared/slack/slack-post.md` | Stages 02-04 (question post) | Slack thread reply for DM notification |
+| `shared/references/slack-format.md` | Stages 02-04 (question post) | Slack mrkdwn formatting rules |
+| `.claude/config/services.json` | Stages 02-04 (question post) | Channel ID lookup |
 
 ## What NOT to Load
 
@@ -22,7 +25,7 @@ Determine the current stage from the meta tag in the latest bot comment. If no m
 | repo root source code | Workspace operates on issue comments, not app code (v1.1 adds sub-agent codebase research) |
 | `docs/` | Not needed for interview loop |
 | `shared/diagnostics/` | No diagnostic work involved |
-| `shared/slack/` | Output goes to GitHub, not Slack |
+| `shared/slack/` (wholesale) | Only load `slack-post.md` for DM notifications, not the full directory |
 | Other workspace stage files | Only read current stage CONTEXT.md |
 
 ## Stage Progression

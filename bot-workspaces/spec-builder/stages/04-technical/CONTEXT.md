@@ -12,7 +12,7 @@
 
 1. **Read latest meta tag** from most recent bot comment. Verify `stage` is `technical`.
 2. **Check for slash commands** in latest human comment. Handle per `shared/commands.md`.
-3. **Check staleness** (same 72h nudge / 7-day stale pattern as prior stages).
+3. **Check staleness** (same 72h nudge / 7-day stale pattern as prior stages, including waiting-human marker — see `02-scope/CONTEXT.md`).
 4. **If human responded**: reset `nudge_sent`, update `last_human_response_at`.
 5. **Evaluate Technical rubric** against the current draft + latest human response:
    - `technical_approach`: high-level approach described (which services, patterns, data flow)? (`met | partial | missing`)
@@ -29,6 +29,21 @@
 - Meta tag updated with rubric status, round count, timestamps
 - Draft snapshot posted if content changed
 - Issue body updated if `draft_hash` changed
+
+## Waiting-Human Marker
+
+Same as `02-scope/CONTEXT.md`: write `waiting-human-${ISSUE_NUMBER}.txt` when exiting without a human response, remove it on stale/label removal.
+
+```bash
+# Write on exit without human response:
+date -Iseconds > "${CLAIMS_DIR:-/opt/slam-bot/state/claims}/waiting-human-${ISSUE_NUMBER}.txt"
+# Remove on stale/abandon:
+rm -f "${CLAIMS_DIR:-/opt/slam-bot/state/claims}/waiting-human-${ISSUE_NUMBER}.txt"
+```
+
+## Slack DM on Question Post
+
+Same as `02-scope/CONTEXT.md`: when posting questions (step 7), also notify the requester via Slack thread reply using the Provenance block's channel and timestamp. See `02-scope/CONTEXT.md` for full instructions.
 
 ## Completion
 

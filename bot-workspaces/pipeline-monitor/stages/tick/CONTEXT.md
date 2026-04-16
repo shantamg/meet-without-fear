@@ -137,8 +137,10 @@ For each issue found:
    gh api repos/shantamg/meet-without-fear/issues/$N/comments --paginate --jq 'sort_by(.created_at) | reverse | .[] | {user: .user.login, created_at: .created_at, bot: (.user.type == "Bot" or .user.login == "slam-paws" or .user.login == "github-actions[bot]")}' | head -20
    ```
 2. Find the most recent bot comment and the most recent non-bot comment.
-3. **If a non-bot user commented AFTER the bot's last comment**, the issue is unblocked — re-trigger the current workspace:
+3. **If a non-bot user commented AFTER the bot's last comment**, the issue is unblocked — clear the waiting-human marker and re-trigger the current workspace:
    ```bash
+   # Clear the waiting-human marker so the dispatcher will pick this up
+   rm -f "${CLAIMS_DIR:-/opt/slam-bot/state/claims}/waiting-human-${N}.txt"
    CURRENT_LABEL="bot:spec-builder"  # or whichever label the issue has
    gh issue edit $N --repo shantamg/meet-without-fear --remove-label "$CURRENT_LABEL"
    # Brief pause to ensure label removal is registered

@@ -122,6 +122,16 @@ is_issue_active() {
     rm -f "$cooldown_file"
   fi
 
+  # Check for "waiting for human" marker. Keep-label workspaces (spec-builder,
+  # needs-info) write this file when they exit in a "waiting for human" state.
+  # The pipeline-monitor clears it when a human responds (Check 7). This
+  # replaces burning a full Claude invocation per cooldown cycle with a zero-cost
+  # file existence check.
+  local waiting_file="$CLAIMS_DIR/waiting-human-${issue_number}.txt"
+  if [ -f "$waiting_file" ]; then
+    return 0  # Still waiting for human — skip dispatch
+  fi
+
   return 1  # Not active
 }
 
