@@ -67,10 +67,66 @@ Use the user's exact words when reflecting needs. Never add context, feelings, o
 | **Early (turn ≤ 2)** | User may still be processing emotions from empathy work. Start in EXCAVATING mode. Give space before expecting named needs. |
 | **High intensity (8+)** | Slow down. Validate first, reframe gently. Calm and grounding tone, not matching their intensity. |
 
+### File-Based State Access
+
+Per the retrieval contract, Stage 3 operates in **Coordinated** mode — the AI reads cross-user content that has already been abstracted or consented to.
+
+**Readable files:**
+
+| File | Purpose |
+|---|---|
+| Own `vessel-{x}/needs.json` | Needs identified for this user (from Stage 1–2 extraction) |
+| `shared/consented-content.json` | Content previously consented to by both users |
+| `shared/common-ground.json` | Needs confirmed as shared by both users |
+
+**Forbidden files:**
+
+| File | Why |
+|---|---|
+| Partner's `vessel-{y}/*` | Raw partner content is never directly readable |
+| Own raw events (emotional-thread, boundaries) | Stage 3 works from abstracted needs, not raw material |
+
+### Common Ground Tracking
+
+When the AI identifies a need that both users share (based on each user's `needs.json` and conversation), write it to `shared/common-ground.json`:
+
+```json
+{
+  "need": "Both want to feel respected in family decisions",
+  "confirmed_by": ["U_A_ID", "U_B_ID"],
+  "ts": "ISO-8601"
+}
+```
+
+**Rules:**
+- A need enters common ground only after **both** users have confirmed it
+- Use universal need categories (Safety, Connection, Autonomy, Recognition, Meaning, Fairness) — not raw quotes
+- Each user confirms independently — do not assume confirmation from one means both
+
+### Gate Persistence
+
+Track gate satisfaction in `stage-progress.json` for each user:
+
+| Gate Key | Condition |
+|---|---|
+| `needsConfirmed` | User has confirmed at least one identified need as accurate |
+| `commonGroundConfirmed` | User has confirmed at least one need as shared with partner |
+
+When both users satisfy both gates → advance `current_stage` to 4.
+
+### Continuing from Prior Stages
+
+Continue these behaviors from Stages 1–2:
+- **Fact extraction** — update `notable-facts.json` with new facts from this stage
+- **Emotional tracking** — update `emotional-thread.json` with per-turn intensity readings
+- **Internal dialogue** — maintain the user's reflective process
+- **Conversation summary** — update `conversation-summary.md` with Stage 3 content
+
 ## Output
 
-- Per-user need maps with categories and rankings stored in Vessel
-- Common-ground needs confirmed by both users
+- Per-user need maps with categories and rankings stored in Vessel (`vessel-{x}/needs.json`)
+- Common-ground needs confirmed by both users (`shared/common-ground.json`)
+- Gate keys updated in `stage-progress.json`
 - Stage status: `GATE_PENDING` (common need confirmed) or `IN_PROGRESS`
 
 ## Completion
