@@ -60,7 +60,13 @@ TRIAGE_MIN_AGE="${TRIAGE_MIN_AGE:-10}"
 HARD_CAP_MIN="${HARD_CAP_MIN:-45}"
 
 # ── Slack ───────────────────────────────────────────────────────────────────
+# Three output channels for automated workspace results:
+#   #bot-ops       — health-check, stale-sweeper, security-audit, pipeline-monitor
+#   #daily-summary — daily summary digests
+#   #agentic-devs  — PR creation, code reviews, spec work, docs-audit, systems-architect
 BOT_OPS_CHANNEL_ID="${BOT_OPS_CHANNEL_ID:-}"
+DAILY_SUMMARY_CHANNEL_ID="${DAILY_SUMMARY_CHANNEL_ID:-}"
+AGENTIC_DEVS_CHANNEL_ID="${AGENTIC_DEVS_CHANNEL_ID:-}"
 
 # ── Heartbeats ──────────────────────────────────────────────────────────────
 HEARTBEAT_DIR="${HEARTBEAT_DIR:-${BOT_STATE_DIR}/heartbeats}"

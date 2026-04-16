@@ -48,7 +48,7 @@ Any other `gh` read call indicates a bug.
    - MEDIUM: single consolidated issue, label `security` + `bot:investigate`
    - LOW/INFO: Slack report only
    - Always add `bot:investigate` so findings enter the bot pipeline for automated investigation (see `shared/references/github-ops.md` Bot Pipeline Labels)
-4. **Post to #security-audit** (channel `C0AMBNDFL9X`):
+4. **Post to #bot-ops** (`$BOT_OPS_CHANNEL_ID`):
    - Summary: total findings by severity
    - Critical & High findings with impact and remediation
    - Third-party data handling matrix (service, data sent, training opt-out, DPA status)
@@ -57,7 +57,7 @@ Any other `gh` read call indicates a bug.
 ## Output
 
 - GitHub issues for CRITICAL/HIGH/MEDIUM findings
-- Slack report posted to #security-audit
+- Slack report posted to #bot-ops
 - Summary: total findings, issue links, top 3 priorities
 
 ## Completion

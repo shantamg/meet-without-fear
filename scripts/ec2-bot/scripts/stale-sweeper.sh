@@ -8,7 +8,7 @@ source "$SCRIPT_DIR/lib/shared.sh"
 LOGFILE="$BOT_LOG_DIR/stale-sweeper.log"
 REPO="$GITHUB_REPO"
 SLACK_SCRIPT="$BOT_SCRIPTS_DIR/slack-post.sh"
-AGENTIC_DEVS="C0AM2J47R4L"
+OUTPUT_CHANNEL="${BOT_OPS_CHANNEL_ID}"
 STALE_HOURS=24
 
 # Labels that exempt items from sweeping
@@ -191,7 +191,7 @@ Never auto-close issues or auto-merge PRs.
 
 ${TASK_LIST}
 
-When done, post a summary to #agentic-devs (${AGENTIC_DEVS}) via /slack-post listing what you did for each item. Include clickable GitHub links." \
+When done, post a summary to #bot-ops (${OUTPUT_CHANNEL}) via /slack-post listing what you did for each item. Include clickable GitHub links." \
     "$HOME/meet-without-fear/.claude/commands/stale-sweeper.md"
 fi
 
@@ -203,7 +203,7 @@ if [ "${#ACTIONS_TAKEN[@]}" -gt 0 ] && [ "${#CLAUDE_QUEUE[@]}" -eq 0 ]; then
   for action in "${ACTIONS_TAKEN[@]}"; do
     SUMMARY+="• ${action}"$'\n'
   done
-  "$SLACK_SCRIPT" --channel "$AGENTIC_DEVS" --text "$SUMMARY" 2>/dev/null || \
+  "$SLACK_SCRIPT" --channel "$OUTPUT_CHANNEL" --text "$SUMMARY" 2>/dev/null || \
     log "Failed to post Slack summary"
 fi
 

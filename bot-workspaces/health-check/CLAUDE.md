@@ -11,7 +11,7 @@ Daily production health audit. Cross-references Mixpanel activity, Render logs, 
 | `shared/diagnostics/check-mixpanel.md` | Always | Activity analysis |
 | `shared/diagnostics/check-sentry.md` | Always | Error tracking |
 | `shared/diagnostics/render-logs.md` | Always | Log analysis |
-| `shared/slack/slack-post.md` | Always | Post to #health-check |
+| `shared/slack/slack-post.md` | Always | Post to #bot-ops (`$BOT_OPS_CHANNEL_ID`) |
 | `shared/references/github-ops.md` | Always | Duplicate check, auto-creation thresholds |
 | `shared/diagnostics/check-thread-tracker.md` | Always | Thread tracker health checks |
 | `shared/github/create-issue.md` | When issues found | Issue creation |

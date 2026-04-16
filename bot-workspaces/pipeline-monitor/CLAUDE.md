@@ -8,7 +8,7 @@ Autonomous watcher that monitors active milestone-builder pipelines for failures
 |---|---|---|
 | `stages/tick/CONTEXT.md` | Always | Monitor checklist |
 | `shared/references/github-ops.md` (root) | Always | GitHub label and issue operations |
-| `shared/slack/slack-post.md` (root) | Always | Slack notification for auto-graduations (checks 7-9) |
+| `shared/slack/slack-post.md` (root) | Always | Slack notification to #bot-ops for auto-graduations (checks 7-9) |
 | `shared/references/slack-format.md` (root) | Always | Slack message formatting conventions |
 
 ## What NOT to Load
@@ -33,6 +33,6 @@ Autonomous watcher that monitors active milestone-builder pipelines for failures
 - Self-heal: fix wrong labels, promote stalled waves, clean stale `bot:in-progress`
 - Response detection: re-trigger interview workspaces when humans respond to bot questions
 - Auto-graduate: add `bot:verify` on approved PRs, re-trigger milestones when all sub-issues close
-- Slack notify: post to `daily-summary` channel when auto-graduating (checks 7-9)
+- Slack notify: post to #bot-ops (`$BOT_OPS_CHANNEL_ID`) when auto-graduating (checks 7-9)
 - Escalate: comment tagging humans for issues that can't be auto-fixed
 - Session continuity: remembers what it checked and fixed on prior ticks

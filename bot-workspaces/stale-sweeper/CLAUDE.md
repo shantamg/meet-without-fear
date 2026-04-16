@@ -8,7 +8,7 @@ Process stale GitHub issues and PRs. The cron script pre-triages items and tells
 |---|---|---|
 | `stages/{current}/CONTEXT.md` | Always | Current stage contract |
 | `shared/references/github-ops.md` | Always | Issue/PR patterns |
-| `shared/slack/slack-post.md` | Stage 2 | Summary to #agentic-devs |
+| `shared/slack/slack-post.md` | Stage 2 | Summary to #bot-ops (`$BOT_OPS_CHANNEL_ID`) |
 | `shared/skills/pr.md` | Stage 2 (if fixing) | PR creation for fixes |
 
 ## What NOT to Load

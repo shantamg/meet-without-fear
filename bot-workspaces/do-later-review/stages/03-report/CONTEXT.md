@@ -3,7 +3,7 @@
 ## Input
 
 - Evaluated issue list from Stage 02 (issues with recommendations and rationale)
-- Slack channel: `#bot-ops`
+- Slack channel: #bot-ops (`$BOT_OPS_CHANNEL_ID`)
 - `shared/references/github-ops.md` -- label operations
 - `shared/slack/slack-post.md` -- posting patterns
 
@@ -30,11 +30,11 @@
 4. **Apply changes for "keep" recommendations**:
    - Add a comment: "Reviewed [date] -- keeping deferred. Next review next month."
 
-5. **Post the summary to Slack** (`#bot-ops`)
+5. **Post the summary to Slack** (#bot-ops, `$BOT_OPS_CHANNEL_ID`)
 
 ## Output
 
-- Slack summary posted to #bot-ops
+- Slack summary posted to #bot-ops (`$BOT_OPS_CHANNEL_ID`)
 - Label changes applied to reopened/closed issues
 - Comments added to kept issues
 

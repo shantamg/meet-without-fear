@@ -21,9 +21,11 @@
  *   SLAM_BOT_USER_ID   — Bot's Slack user ID (to filter self-messages)
  *   SHANTAM_SLACK_DM      — Channel ID for Shantam's DM
  *   PMF1_CHANNEL_ID       — Channel ID for #pmf1
- *   AGENTIC_DEVS_CHANNEL_ID — Channel ID for the #agentic-devs channel
  *   SLAM_BOT_CHANNEL_ID — Channel ID for the #slam-paws channel
  *   BUGS_AND_REQUESTS_CHANNEL_ID — Channel ID for the #bugs-and-requests channel
+ *   BOT_OPS_CHANNEL_ID          — Channel ID for #bot-ops (health/ops outputs)
+ *   DAILY_SUMMARY_CHANNEL_ID    — Channel ID for #daily-summary (daily digests)
+ *   AGENTIC_DEVS_CHANNEL_ID     — Channel ID for #agentic-devs (dev activity outputs)
  */
 
 import { SocketModeClient } from '@slack/socket-mode';
