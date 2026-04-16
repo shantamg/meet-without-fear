@@ -68,6 +68,14 @@
     "review-impl": {
       "workspace": "pr-reviewer",
       "firstStage": "review-impl"
+    },
+    "mwf-session-reply": {
+      "workspace": "mwf-session",
+      "firstStage": "route"
+    },
+    "mwf-session": {
+      "workspace": "mwf-session",
+      "firstStage": "0-onboarding"
     }
   }
 }
