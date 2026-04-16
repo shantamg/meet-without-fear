@@ -341,15 +341,51 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Create session in CREATED status (becomes INVITED after message is confirmed)
-    const session = await prisma.session.create({
-      data: {
-        relationshipId: relationship.id,
-        status: 'CREATED',
-      },
+    // Create session, invitation, stage progress, and vessels atomically
+    const { session, invitation } = await prisma.$transaction(async (tx) => {
+      const sess = await tx.session.create({
+        data: {
+          relationshipId: relationship.id,
+          status: 'CREATED',
+        },
+      });
+
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const inv = await tx.invitation.create({
+        data: {
+          sessionId: sess.id,
+          invitedById: user.id,
+          name: inviteName,
+          expiresAt,
+        },
+      });
+
+      await tx.stageProgress.create({
+        data: {
+          sessionId: sess.id,
+          userId: user.id,
+          stage: 0,
+          status: 'IN_PROGRESS',
+        },
+      });
+
+      await tx.userVessel.create({
+        data: {
+          sessionId: sess.id,
+          userId: user.id,
+        },
+      });
+
+      await tx.sharedVessel.create({
+        data: {
+          sessionId: sess.id,
+        },
+      });
+
+      return { session: sess, invitation: inv };
     });
 
-    // If originated from Inner Thoughts, link it back
+    // If originated from Inner Thoughts, link it back (non-critical, outside transaction)
     if (innerThoughtsId) {
       try {
         await prisma.innerWorkSession.updateMany({
@@ -365,44 +401,8 @@ export async function createSession(req: Request, res: Response): Promise<void> 
       }
     }
 
-    // Create invitation with 7-day expiry
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    const invitation = await prisma.invitation.create({
-      data: {
-        sessionId: session.id,
-        invitedById: user.id,
-        name: inviteName,
-        expiresAt,
-      },
-    });
-
     // Generate invitation URL (user shares via their own channels)
     const invitationUrl = createInvitationUrl(invitation.id);
-
-    // Create initial stage progress for inviter
-    await prisma.stageProgress.create({
-      data: {
-        sessionId: session.id,
-        userId: user.id,
-        stage: 0,
-        status: 'IN_PROGRESS',
-      },
-    });
-
-    // Create user vessel for inviter
-    await prisma.userVessel.create({
-      data: {
-        sessionId: session.id,
-        userId: user.id,
-      },
-    });
-
-    // Create shared vessel
-    await prisma.sharedVessel.create({
-      data: {
-        sessionId: session.id,
-      },
-    });
 
     // Note: Initial AI message is now generated via POST /messages/initial
     // when the user first enters the session (fetched by mobile app)
@@ -551,56 +551,55 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
       return;
     }
 
-    // Join the relationship
-    const existingMembership = await prisma.relationshipMember.findUnique({
-      where: {
-        relationshipId_userId: {
-          relationshipId: invitation.session.relationshipId,
-          userId: user.id,
+    // Accept invitation, activate session, create stage progress + vessel atomically
+    await prisma.$transaction(async (tx) => {
+      // Join the relationship
+      const existingMembership = await tx.relationshipMember.findUnique({
+        where: {
+          relationshipId_userId: {
+            relationshipId: invitation.session.relationshipId,
+            userId: user.id,
+          },
         },
-      },
-    });
+      });
 
-    if (!existingMembership) {
-      await prisma.relationshipMember.create({
+      if (!existingMembership) {
+        await tx.relationshipMember.create({
+          data: {
+            relationshipId: invitation.session.relationshipId,
+            userId: user.id,
+          },
+        });
+      }
+
+      await tx.invitation.update({
+        where: { id },
         data: {
-          relationshipId: invitation.session.relationshipId,
+          status: 'ACCEPTED',
+          acceptedAt: new Date(),
+        },
+      });
+
+      await tx.session.update({
+        where: { id: invitation.sessionId },
+        data: { status: 'ACTIVE' },
+      });
+
+      await tx.stageProgress.create({
+        data: {
+          sessionId: invitation.sessionId,
+          userId: user.id,
+          stage: 0,
+          status: 'IN_PROGRESS',
+        },
+      });
+
+      await tx.userVessel.create({
+        data: {
+          sessionId: invitation.sessionId,
           userId: user.id,
         },
       });
-    }
-
-    // Update invitation status
-    await prisma.invitation.update({
-      where: { id },
-      data: {
-        status: 'ACCEPTED',
-        acceptedAt: new Date(),
-      },
-    });
-
-    // Update session to ACTIVE
-    await prisma.session.update({
-      where: { id: invitation.sessionId },
-      data: { status: 'ACTIVE' },
-    });
-
-    // Create stage progress for accepter
-    await prisma.stageProgress.create({
-      data: {
-        sessionId: invitation.sessionId,
-        userId: user.id,
-        stage: 0,
-        status: 'IN_PROGRESS',
-      },
-    });
-
-    // Create user vessel for accepter
-    await prisma.userVessel.create({
-      data: {
-        sessionId: invitation.sessionId,
-        userId: user.id,
-      },
     });
 
     // Get session summary for response

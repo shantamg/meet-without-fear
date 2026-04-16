@@ -156,6 +156,11 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
   const isMountedRef = useRef(true);
   const reconnectAttemptsRef = useRef(0);
 
+  // Synchronous ref for user ID — prevents stale closure from leaking
+  // messages to the wrong user during auth transitions or app backgrounding
+  const userIdRef = useRef(user?.id);
+  userIdRef.current = user?.id;
+
   // Store callbacks in refs to avoid stale closures
   const callbacksRef = useRef({
     onConnectionChange,
@@ -214,11 +219,15 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
     (message: Ably.Message) => {
       if (!isMountedRef.current) return;
 
+      // Use ref for user ID — avoids stale closure during auth transitions
+      const currentUserId = userIdRef.current;
+      if (!currentUserId) return;
+
       const eventName = message.name as SessionEventType;
       const eventData = message.data as SessionEventData;
 
       // Skip events from ourselves
-      if (eventData.excludeUserId === user?.id) {
+      if (eventData.excludeUserId === currentUserId) {
         return;
       }
 
@@ -266,7 +275,7 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
           if (callbacksRef.current.onAIResponse) {
             const aiPayload = eventData as unknown as MessageAIResponsePayload;
             // Only handle if this message is for the current user
-            if (aiPayload.forUserId === user?.id) {
+            if (aiPayload.forUserId === currentUserId) {
               console.log('[Realtime] AI response received:', aiPayload.message?.id);
               callbacksRef.current.onAIResponse(aiPayload);
             }
@@ -277,7 +286,7 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
           if (callbacksRef.current.onAIError) {
             const errorPayload = eventData as unknown as MessageErrorPayload;
             // Only handle if this error is for the current user
-            if (errorPayload.forUserId === user?.id) {
+            if (errorPayload.forUserId === currentUserId) {
               console.log('[Realtime] AI error received:', errorPayload.error);
               callbacksRef.current.onAIError(errorPayload);
             }
@@ -290,7 +299,8 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
           break;
       }
     },
-    [user?.id]
+    // userIdRef is read synchronously — no dependency on user?.id needed
+    []
   );
 
   // ============================================================================
