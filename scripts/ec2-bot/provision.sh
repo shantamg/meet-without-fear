@@ -11,7 +11,7 @@ AMI="ami-0e5e1413a3bf2d262"  # Ubuntu 24.04 amd64
 INSTANCE_TYPE="t3.medium"
 VOLUME_SIZE=30
 
-echo "=== Slam Bot EC2 Provisioning ==="
+echo "=== Slam Paws EC2 Provisioning ==="
 
 # 1. SSH Key Pair
 if $AWS ec2 describe-key-pairs --key-names $KEY_NAME 2>/dev/null; then
@@ -31,7 +31,7 @@ SG_ID=$($AWS ec2 describe-security-groups --filters "Name=group-name,Values=$SG_
 if [ "$SG_ID" = "None" ] || [ -z "$SG_ID" ]; then
   echo "Creating security group..."
   SG_ID=$($AWS ec2 create-security-group --group-name $SG_NAME \
-    --description "Slam Bot EC2 - SSH access" --query 'GroupId' --output text)
+    --description "Slam Paws EC2 - SSH access" --query 'GroupId' --output text)
   $AWS ec2 authorize-security-group-ingress --group-id $SG_ID \
     --protocol tcp --port 22 --cidr 0.0.0.0/0
   echo "Security group created: $SG_ID"

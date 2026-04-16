@@ -124,7 +124,7 @@ if [ -n "$ERROR_MSG" ]; then
   curl -s -X POST https://slack.com/api/chat.postMessage \
     -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" \
     -d "$(jq -n --arg ch "$BOT_OPS_CHANNEL_ID" --arg slug "$COMMAND_SLUG" --arg err "$ERROR_MSG" \
-      '{channel: $ch, text: ("🚨 slam-bot error running `" + $slug + "`:\n```\n" + $err + "\n```")}')"
+      '{channel: $ch, text: ("🚨 Slam Paws error running `" + $slug + "`:\n```\n" + $err + "\n```")}')"
   echo "[$(date)] CLI ERROR on $COMMAND_SLUG: $ERROR_MSG" >> "$LOGDIR/auth-failures.log"
   exit 1
 fi
@@ -132,7 +132,7 @@ fi
 if echo "$TAIL" | grep -qiE "login|sign in|authenticate|expired|unauthorized|APIError.*401"; then
   curl -s -X POST https://slack.com/api/chat.postMessage \
     -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" \
-    -d "{\"channel\":\"$BOT_OPS_CHANNEL_ID\",\"text\":\"🚨 slam-bot: Claude auth failed running '$COMMAND_SLUG'. SSH in and run 'claude' to re-authenticate.\"}"
+    -d "{\"channel\":\"$BOT_OPS_CHANNEL_ID\",\"text\":\"🚨 Slam Paws: Claude auth failed running '$COMMAND_SLUG'. SSH in and run 'claude' to re-authenticate.\"}"
   echo "[$(date)] AUTH FAILURE on $COMMAND_SLUG" >> "$LOGDIR/auth-failures.log"
   exit 1
 fi
@@ -140,7 +140,7 @@ fi
 if echo "$TAIL" | grep -qiE "gh auth|token.*expired|Bad credentials"; then
   curl -s -X POST https://slack.com/api/chat.postMessage \
     -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" \
-    -d "{\"channel\":\"$BOT_OPS_CHANNEL_ID\",\"text\":\"🚨 slam-bot: GitHub token expired running '$COMMAND_SLUG'. SSH in and update GH_TOKEN.\"}"
+    -d "{\"channel\":\"$BOT_OPS_CHANNEL_ID\",\"text\":\"🚨 Slam Paws: GitHub token expired running '$COMMAND_SLUG'. SSH in and update GH_TOKEN.\"}"
   echo "[$(date)] GH_TOKEN FAILURE on $COMMAND_SLUG" >> "$LOGDIR/auth-failures.log"
   exit 1
 fi

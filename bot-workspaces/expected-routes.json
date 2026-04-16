@@ -5,7 +5,7 @@
       "workspace": "slack-triage",
       "firstStage": "1-fetch-and-classify"
     },
-    "slam-bot-reply": {
+    "slam-paws-reply": {
       "workspace": "slack-triage",
       "firstStage": "1-fetch-and-classify"
     },
