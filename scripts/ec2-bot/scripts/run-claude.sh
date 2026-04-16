@@ -119,7 +119,7 @@ fi
 # ── Error checking ──
 TAIL=$(tail -n +"$START_LINE" "$LOGFILE")
 
-ERROR_MSG=$(echo "$TAIL" | grep -i "^Error:" | head -5)
+ERROR_MSG=$(echo "$TAIL" | grep -i "^Error:" | head -5 || true)
 if [ -n "$ERROR_MSG" ]; then
   curl -s -X POST https://slack.com/api/chat.postMessage \
     -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" \
