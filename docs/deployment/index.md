@@ -3,7 +3,7 @@ title: Deployment
 sidebar_position: 1
 description: Production deployment targets and distribution options for the Meet Without Fear platform.
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-04-16
 status: living
 ---
 # Deployment
@@ -20,7 +20,7 @@ The Express API is deployed to Render.com as a web service. Configuration is def
 - **Runtime**: Node.js (20.x per `package.json` engines; `render.yaml` specifies `runtime: node`)
 - **Plan**: Starter
 - **Branch**: `main`
-- **Build command**: `npm install && npm run prisma:generate --workspace=backend && npm run build --workspace=backend`
+- **Build command**: `npm ci && npm run prisma:generate --workspace=backend && npm run build --workspace=backend`
 - **Start command**: `cd backend && npx prisma migrate deploy && node dist/backend/src/server.js`
 - **Environment variables**: Loaded from the `be-heard-api-env` environment group on Render
 
