@@ -1,0 +1,46 @@
+# Privacy Model — Vessel Rules
+
+The Vessel model ensures each user's raw content stays private unless they give explicit consent to share. Every stage has specific sharing rules.
+
+## Core Principle
+
+Raw user content (quotes, stories, venting) is stored in the user's Vessel and **never** shared directly with the other user. The AI synthesizes, summarizes, or translates content into safe forms before any cross-user exchange.
+
+## Per-Stage Sharing Rules
+
+| Stage | What Stays Private | What Can Be Shared | Consent Required? |
+|---|---|---|---|
+| 0 — Onboarding | N/A (no personal content yet) | Compact signing status | No (structural) |
+| 1 — Witness | All raw content, emotions, stories | Nothing crosses to partner | N/A |
+| 2 — Perspective Stretch | Raw content from Stage 1 | Empathy *attempts* (partner's guess at your experience) | Yes — explicit opt-in per attempt |
+| 3 — Need Mapping | Raw quotes, specific stories | Synthesized universal needs (e.g., "Need for Recognition") | No (already abstracted) |
+| 4 — Strategic Repair | Who proposed which strategy | Unlabeled strategy pool, ranking overlap | No (anonymous by design) |
+
+## Consent Mechanism (Consensual Bridge)
+
+Used in Stage 2 when sharing empathy attempts:
+
+1. Partner drafts an empathy attempt ("I imagine you might feel...")
+2. AI presents it to the recipient privately
+3. Recipient chooses: **accept**, **revise**, or **decline**
+4. Only accepted/revised attempts are confirmed; declined attempts are discarded
+5. Recipient's raw feedback on attempts stays in their Vessel
+
+## Synthesis Rules
+
+When the AI creates cross-user content, it must:
+
+- **Never quote** raw user words without explicit consent
+- **Abstract** specific complaints into universal need categories
+- **Anonymize** strategy proposals (Stage 4) — no attribution
+- **Frame** partner perspectives as possibilities ("they might feel..."), not certainties
+
+## Vessel Contents
+
+Each user's Vessel stores:
+
+- Raw conversation messages (all stages)
+- Emotional readings and barometer data (Stage 1+)
+- Identified needs with categories (Stage 3+)
+- Strategy proposals and rankings (Stage 4)
+- Conversation summaries and notable facts (AI-generated)
