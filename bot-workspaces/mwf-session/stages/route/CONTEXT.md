@@ -3,60 +3,111 @@
 ## Input
 
 - Slack message from `#mwf-sessions` thread (via prompt file)
-- Session history (via `--resume` if this is a thread reply)
-- Channel context (recent messages if this is a new thread)
+- `channel_id` and `thread_ts` from the incoming message
+- `user_id` identifying which participant sent this message
 
 ## Process
 
-1. **Detect current stage**: Review the conversation history from the session.
-   - If no prior conversation (new thread): this is **Stage 0 — Onboarding**.
-   - If prior conversation exists: identify the current stage from context. Look for:
-     - Stage transition markers you previously announced
-     - Whether gate conditions have been met
-     - The last stage-specific behavior you applied
+### 1. Thread-to-Session Lookup
 
-2. **Apply stage behavior**:
+Look up the incoming thread in the session index:
 
-   **Stage 0 — Onboarding**
-   - Welcome the user to MWF
-   - Explain the Curiosity Compact (ground rules for the conversation)
-   - Ask the user to agree to the compact before proceeding
-   - Gate: user agrees to the ground rules
+1. Construct key: `{channel_id}:{thread_ts}`
+2. Read `data/mwf-sessions/thread-index.json` (see `schemas/thread-index.schema.md`)
+3. Look up the constructed key in the index
 
-   **Stage 1 — The Witness**
-   - Listen deeply to the user's perspective on their conflict
-   - Reflect back what you hear without judgment
-   - Ask clarifying questions to understand their experience fully
-   - Do not rush — hold space for as long as needed
-   - Gate: user confirms they feel fully heard
+**If found** → extract `session_id`, continue to step 2.
 
-   **Stage 2 — Perspective Stretch**
-   - Guide the user to consider their conversation partner's perspective
-   - Help them build an "empathy guess" — what might the other person be feeling/needing?
-   - Gate: user feels they understand their partner's perspective (or chooses to proceed)
+**If not found** → this is a new or unrecognized thread:
+- Check if the message body contains a 6-character alphanumeric join code → route to partner-join flow (Stage 0)
+- Otherwise treat as a new session request → route to Stage 0 (Onboarding) to create a new session
 
-   **Stage 3 — Need Mapping**
-   - Help identify underlying needs (not positions) for both parties
-   - Look for common ground — needs that both people share
-   - Gate: at least one common-ground need identified
+### 2. State File Loading
 
-   **Stage 4 — Strategic Repair**
-   - Help design a small, concrete "micro-experiment" — one action to try
-   - The experiment should be low-risk, time-bounded, and testable
-   - Gate: user agrees to try the micro-experiment
+Load session state from `data/mwf-sessions/{session_id}/`:
 
-3. **Handle stage transitions**: When a gate condition is met:
-   - Acknowledge the milestone warmly
-   - Announce the transition (e.g., "Now that you feel heard, let's explore your partner's perspective...")
-   - Begin applying the next stage's behavior
+1. Read `session.json` for session metadata (see `schemas/session.schema.md`)
+   - `status`: must be `active` or `waiting_for_partner` to proceed
+   - If `completed` or `abandoned` → reply that this session has ended
+   - `user_a` / `user_b`: identify which participant sent this message via `user_id` match
+2. Read `stage-progress.json` for current stage and gate status (see `schemas/stage-progress.schema.md`)
+   - `current_stage`: the stage number (0–4) to apply
+   - `users.{user_id}.stage_status`: this user's progress within the current stage
+   - `users.{user_id}.gates_satisfied`: which gates this user has already passed
 
-4. **Reply in thread**: Compose a response and post it as a Slack thread reply. See `shared/slack/slack-post.md` for the posting procedure and `shared/references/slack-format.md` for Slack mrkdwn formatting (not Markdown).
+### 3. Lockfile Acquisition
+
+Prevent concurrent processing of the same session:
+
+1. Attempt to create `data/mwf-sessions/{session_id}/.lock` (atomic create — fail if file already exists)
+2. **If lock acquired** → continue to step 4
+3. **If lock held** (file already exists) → reply: "I'm still processing your previous message — one moment." and stop
+
+The lock MUST be released (delete `.lock`) when processing completes, whether the turn succeeds or errors. Wrap all subsequent steps in a try/finally pattern.
+
+### 4. Retrieval Contract Enforcement
+
+Based on `current_stage` from `stage-progress.json`, enforce file access rules from `references/privacy-model.md`:
+
+| Stage | Files Readable | Files Forbidden |
+|---|---|---|
+| 0 | `session.json`, `stage-progress.json` | All vessel files |
+| 1 | Own `vessel-{x}/*`, `conversation-summary.md` | Partner's vessel, `shared/*` |
+| 2 | Own vessel + `shared/consented-content.json` | Partner's raw vessel |
+| 3 | Own `vessel-{x}/needs.json` + `shared/consented-content.json`, `shared/common-ground.json` | Partner's raw vessel, own raw events |
+| 4 | `shared/*` (all) | Both users' raw vessels |
+
+The `synthesis/` directory is **never** read during user-facing turns.
+
+Only load vessel files permitted for the current stage. If a stage handler requests a forbidden file, deny the read.
+
+### 5. Stage Dispatch
+
+Route to the appropriate stage CONTEXT based on `current_stage`:
+
+| `current_stage` | Stage CONTEXT |
+|---|---|
+| 0 | `stages/0-onboarding/CONTEXT.md` |
+| 1 | `stages/1-witness/CONTEXT.md` |
+| 2 | `stages/2-perspective-stretch/CONTEXT.md` |
+| 3 | `stages/3-need-mapping/CONTEXT.md` |
+| 4 | `stages/4-strategic-repair/CONTEXT.md` |
+
+Pass the loaded state as context for the stage to use:
+- `session.json` contents (session metadata, user pairing)
+- `stage-progress.json` contents (current stage, user's gate status)
+- Any permitted vessel/shared files loaded in step 4
+- The `user_id` of the current message sender
+
+### 6. Post-Turn State Updates
+
+After the stage handler completes and the reply is posted:
+
+1. **Update `stage-progress.json`**:
+   - Set `users.{user_id}.last_active` to current ISO-8601 timestamp
+   - Update `users.{user_id}.gates_satisfied` if any gates were satisfied during this turn
+   - If all gates for the current stage are satisfied for **both** users:
+     - Advance `current_stage` by 1
+     - Reset both users' `gates_satisfied` to the new stage's gate keys (all `false`)
+     - Set both users' `stage_status` to `IN_PROGRESS`
+   - If this user satisfied all gates but partner has not:
+     - Set this user's `stage_status` to `GATE_PENDING`
+2. **Update `session.json`** if session status changed (e.g., partner joined → `active`, all stages done → `completed`)
+3. **Update `thread-index.json`** if a new thread was created (new session or partner join)
+4. **Release lockfile**: delete `data/mwf-sessions/{session_id}/.lock`
+
+### 7. Reply in Thread
+
+Compose and post the response as a Slack thread reply. See `shared/slack/slack-post.md` for the posting procedure and `shared/references/slack-format.md` for Slack mrkdwn formatting (not Markdown).
 
 ## Output
 
 - A reply posted to the Slack thread
-- Stage progression tracked in the conversation session (Claude session state)
+- Updated `stage-progress.json` reflecting any gate changes or stage advancement
+- Updated `session.json` if session status changed
+- Updated `thread-index.json` if new thread mapping was added
+- Lockfile released
 
 ## Completion
 
-This stage runs once per message. No multi-stage pipeline — each invocation handles one message and replies.
+This stage runs once per message. No multi-stage pipeline — each invocation handles one message, updates state files, and replies.
