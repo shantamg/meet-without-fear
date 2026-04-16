@@ -17,7 +17,7 @@
    - Duplicate/overlap detection (similar filenames, same H1, >50% content overlap)
 6. **Fix all issues**: update drifted docs, create missing docs, archive plans, fix hygiene. Commit.
 7. **Create PR** (via `shared/skills/pr.md`)
-8. **Post summary** to #agentic-devs
+8. **Post summary** to #bot-ops (`$BOT_OPS_CHANNEL_ID`)
 
 ## Output
 

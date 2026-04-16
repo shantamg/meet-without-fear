@@ -19,5 +19,5 @@ Watches active milestone-builder pipelines for known failure modes. Self-heals w
 - **Session continuity** — invoked with `--session monitor-milestone-{issue}` so `--resume` gives context across ticks
 - **Self-heal threshold** — fix the same issue up to 3 times. After 3 fixes for the same failure, escalate to humans instead of re-fixing.
 - **Response detection** — re-triggers interview workspaces (spec-builder, needs-info, research) when a human responds after the bot's last comment. Also detects PR approvals needing verification and milestone completions.
-- **Slack notifications** — posts to `daily-summary` channel when auto-graduating issues (checks 7-9)
+- **Slack notifications** — posts to `#bot-ops` channel when auto-graduating issues (checks 7-9)
 - **Tick frequency** — every 10 minutes via cron

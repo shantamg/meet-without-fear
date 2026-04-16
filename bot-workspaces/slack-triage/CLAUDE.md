@@ -46,7 +46,7 @@ Adapt tone based on the source channel:
 - Technical detail is fine
 - Be concise and actionable
 
-**#slam-paws** — General-purpose bot interaction channel. Visible to the whole team.
+**#slam-paws** — Conversational channel for Shantam and Darryl to chat with the bot. No automated outputs here — those go to #bot-ops.
 - Treat every message like a DM — route through the full workspace tree
 - Technical detail is fine (team members watching)
 - Be concise and actionable

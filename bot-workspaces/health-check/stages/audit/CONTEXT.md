@@ -53,7 +53,7 @@ Use `github_state_*` helpers for all open issue/PR metadata lookups. Do NOT call
    Always add a `bot:investigate` label in addition to `bug`/`security` so the
    dispatcher picks the issue up for automated investigation. See the
    "Bot Pipeline Labels" section in `shared/references/github-ops.md`.
-7. **Post to #health-check** via `shared/slack/slack-post.md`:
+7. **Post to #bot-ops** (`$BOT_OPS_CHANNEL_ID`) via `shared/slack/slack-post.md`:
    - All clear: `All clear — no issues found.`
    - Minor: `N issues created — [brief]. [link]`
    - Needs attention: `N issues, user impact detected — [brief]. [links] cc @shantamg`

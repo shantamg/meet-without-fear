@@ -11,7 +11,7 @@ Detect documentation drift by comparing docs against code. Two modes: incrementa
 
 ## Shared Resources Used
 
-- `shared/slack/slack-post.md` — Summary to #agentic-devs
+- `shared/slack/slack-post.md` — Summary to #bot-ops
 - `shared/skills/pr.md` — PR for doc updates
 
 ## Code-to-Doc Mapping
