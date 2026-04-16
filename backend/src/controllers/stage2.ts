@@ -1184,7 +1184,7 @@ export async function validateEmpathy(
     // Check if both have validated (Accurate/Partial) and trigger transition
     if (validated && partnerValidation?.validated) {
       triggerStage3Transition(sessionId, user.id, partnerId).catch(err =>
-        logger.warn('[validateEmpathy] Failed to trigger transition:', err)
+        logger.error('[validateEmpathy] Failed to trigger stage 3 transition:', err)
       );
     }
 
@@ -1310,7 +1310,7 @@ export async function skipRefinement(
       });
 
       // Check for mutual completion
-      triggerStage3Transition(sessionId, user.id, partnerId).catch((e) => logger.warn('[Stage2] Stage 3 transition failed:', e));
+      triggerStage3Transition(sessionId, user.id, partnerId).catch((e) => logger.error('[Stage2] Stage 3 transition failed:', e));
     }
 
     successResponse(res, { success: true });
@@ -1548,16 +1548,38 @@ Respond in JSON format:
     const message = messages[0];
 
     // 4. Update Stage Progress for both to Stage 3
+    // Backfill missing prior stage records (defensive — handles cases where
+    // session initialization failed to create StageProgress atomically)
+    const now = new Date();
+    for (const uid of userIds) {
+      for (const priorStage of [0, 1, 2]) {
+        await prisma.stageProgress.upsert({
+          where: {
+            sessionId_userId_stage: { sessionId, userId: uid, stage: priorStage }
+          },
+          create: {
+            sessionId,
+            userId: uid,
+            stage: priorStage,
+            status: 'COMPLETED',
+            completedAt: now,
+          },
+          update: {}
+        });
+      }
+    }
+
     // Mark Stage 2 as COMPLETED
     await prisma.stageProgress.updateMany({
       where: {
         sessionId,
         stage: 2,
-        userId: { in: userIds }
+        userId: { in: userIds },
+        status: { not: 'COMPLETED' }
       },
       data: {
         status: 'COMPLETED',
-        completedAt: new Date()
+        completedAt: now
       }
     });
 
@@ -1576,7 +1598,7 @@ Respond in JSON format:
           userId: uid,
           stage: 3,
           status: 'IN_PROGRESS',
-          startedAt: new Date(),
+          startedAt: now,
         },
         update: {}
       });
