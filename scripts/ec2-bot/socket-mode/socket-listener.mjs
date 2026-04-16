@@ -366,6 +366,22 @@ async function buildPrompt(channel, config, msgEvent) {
     parts.push('');
   }
 
+  // MWF session routing: pass thread context for session/state lookup
+  if (config.workspace === 'mwf-session') {
+    const threadTs = msgEvent.thread_ts || msgEvent.ts;
+    const entryStage = isThreadReply ? 'route' : '0-onboarding';
+    parts.push('## MWF Session Routing\n');
+    parts.push(`Entry Stage: \`${entryStage}\``);
+    parts.push(`Workspace: mwf-session`);
+    parts.push(`Channel ID: ${channel}`);
+    parts.push(`Thread TS: ${threadTs}`);
+    parts.push(`Thread Key: ${channel}:${threadTs}`);
+    if (msgEvent.user) {
+      parts.push(`User ID: ${msgEvent.user}`);
+    }
+    parts.push('');
+  }
+
   // Message to handle
   parts.push('## Message to handle\n');
   parts.push(formatMessage(msgEvent));
@@ -436,6 +452,24 @@ function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey
     args = [...sessionArgs, config.commandSlug, '', promptFile, ts];
   }
 
+  const env = {
+    ...process.env,
+    SLAM_BOT: '1',
+    PRIORITY: 'high',
+    CHANNEL: channel,
+    PROVENANCE_CHANNEL: provenance.channel || '',
+    PROVENANCE_REQUESTER: provenance.requester || '',
+    PROVENANCE_MESSAGE: provenance.message || '',
+  };
+
+  // MWF session thread context for state file lookup
+  if (config.workspace === 'mwf-session' && tKey) {
+    const threadTs = tKey.split(':')[1] || '';
+    env.MWF_THREAD_TS = threadTs;
+    env.MWF_CHANNEL = channel;
+    env.MWF_ENTRY_STAGE = threadTs === ts ? '0-onboarding' : 'route';
+  }
+
   const child = spawn(
     join(SCRIPTS_DIR, 'run-claude.sh'),
     args,
@@ -443,15 +477,7 @@ function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey
       cwd: MWF_APP_DIR,
       stdio: 'ignore',
       detached: true,
-      env: {
-        ...process.env,
-        SLAM_BOT: '1',
-        PRIORITY: 'high',
-        CHANNEL: channel,
-        PROVENANCE_CHANNEL: provenance.channel || '',
-        PROVENANCE_REQUESTER: provenance.requester || '',
-        PROVENANCE_MESSAGE: provenance.message || '',
-      },
+      env,
     }
   );
 
