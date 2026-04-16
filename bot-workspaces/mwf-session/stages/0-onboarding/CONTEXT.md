@@ -5,8 +5,10 @@
 | Parameter | Source | Description |
 |---|---|---|
 | `user_id` | Session event | Which participant is messaging |
+| `channel_id` | Session event | Slack channel ID for the thread |
+| `thread_ts` | Session event | Slack thread timestamp |
 | `userName` | User profile | Display name for this user |
-| `partnerName` | Session data | Display name for the other participant |
+| `partnerName` | Session data | Display name for the other participant (null if unpaired) |
 | `turnCount` | Conversation state | Number of exchanges so far |
 | `emotionalIntensity` | Per-turn analysis | 1–10 rating of user's current state |
 | `isInvitationPhase` | Session state | Whether user is crafting an invitation (partner hasn't joined yet) |
@@ -14,9 +16,104 @@
 | `invitationMessage` | Session data | Current invitation draft text (if refining) |
 | `innerThoughtsContext` | Inner work session | Summary and themes from prior self-reflection (if any) |
 
+## State Files
+
+| File | Schema | Purpose |
+|---|---|---|
+| `data/mwf-sessions/thread-index.json` | `schemas/thread-index.schema.md` | Map `channel:thread_ts` → session ID |
+| `data/mwf-sessions/{session_id}/session.json` | `schemas/session.schema.md` | Session metadata and pairing state |
+| `data/mwf-sessions/{session_id}/stage-progress.json` | `schemas/stage-progress.schema.md` | Per-user stage and gate tracking |
+
 ## Process
 
 Load `references/guardian-constitution.md` for universal voice, identity, and behavioral rules. All rules below layer on top.
+
+### Routing: Determine Entry Point
+
+On each incoming message, determine which phase to enter:
+
+1. Construct lookup key: `{channel_id}:{thread_ts}`
+2. Check `thread-index.json` for an existing session
+3. Route based on result:
+   - **No session found + message contains a join code** (e.g., "Join mwf abc123") → **Phase 0B: Partner Pairing**
+   - **No session found + no join code** → **Phase 0A: Session Creation**
+   - **Session found + status `waiting_for_partner`** → **Phase B: Invitation Crafting** (existing user waiting)
+   - **Session found + status `active`** → **Phase A: Curiosity Compact**
+
+### Phase 0A: Session Creation
+
+Triggered when a user starts a new MWF session and no existing session is found in `thread-index.json`.
+
+1. **Generate session identifiers**:
+   - `session_id`: a new UUID
+   - `join_code`: a random 6-character alphanumeric code (lowercase + digits)
+
+2. **Create session files**:
+   - Create directory `data/mwf-sessions/{session_id}/`
+   - Write `session.json`:
+     ```json
+     {
+       "session_id": "<uuid>",
+       "join_code": "<6-char code>",
+       "created_at": "<ISO-8601>",
+       "status": "waiting_for_partner",
+       "user_a": {
+         "slack_user_id": "<user_id>",
+         "display_name": "<userName>",
+         "thread_ts": "<thread_ts>"
+       },
+       "user_b": null
+     }
+     ```
+   - Write `stage-progress.json`:
+     ```json
+     {
+       "current_stage": 0,
+       "users": {
+         "<user_id>": {
+           "stage_status": "NOT_STARTED",
+           "gates_satisfied": { "agreedToTerms": false },
+           "last_active": "<ISO-8601>"
+         }
+       }
+     }
+     ```
+
+3. **Update thread index**:
+   - Add `"{channel_id}:{thread_ts}": "{session_id}"` entry to `thread-index.json`
+
+4. **Reply with join code**:
+   - Tell the user their session is created
+   - Provide the join code for them to share with their conversation partner
+   - Transition to Phase B (Invitation Crafting) in the same thread
+
+### Phase 0B: Partner Pairing
+
+Triggered when a message contains a join code and no existing session is found for this thread.
+
+1. **Look up the join code**:
+   - Search across all `data/mwf-sessions/{session_id}/session.json` files for a matching `join_code`
+   - If not found → reply: "I couldn't find a session with that code. Double-check and try again."
+   - If found but `status` is not `waiting_for_partner` → reply: "That session already has two participants."
+
+2. **Pair the users**:
+   - Update `session.json`:
+     - Set `user_b` to `{ "slack_user_id": "<user_id>", "display_name": "<userName>", "thread_ts": "<thread_ts>" }`
+     - Set `status` to `active`
+   - Update `stage-progress.json`:
+     - Add User B entry: `{ "stage_status": "NOT_STARTED", "gates_satisfied": { "agreedToTerms": false }, "last_active": "<ISO-8601>" }`
+
+3. **Update thread index**:
+   - Add User B's `"{channel_id}:{thread_ts}": "{session_id}"` entry to `thread-index.json`
+
+4. **Create vessel directories**:
+   - Create `data/mwf-sessions/{session_id}/vessel-a/`
+   - Create `data/mwf-sessions/{session_id}/vessel-b/`
+
+5. **Notify both users**:
+   - In User A's thread: "Your partner has joined! Let's begin."
+   - In User B's thread: Welcome and begin Phase A (Curiosity Compact)
+   - Both users enter Phase A
 
 ### Phase A: Curiosity Compact (both users present)
 
@@ -39,11 +136,17 @@ Load `references/guardian-constitution.md` for universal voice, identity, and be
 4. **Collect signatures**:
    - Each user explicitly agrees (`agreedToTerms: true`)
    - Record signature timestamp per user
+   - **Persist to `stage-progress.json`**: set `gates_satisfied.agreedToTerms` to `true` and `stage_status` to `COMPLETE` for this user
    - If one user declines, session cannot proceed — acknowledge respectfully
 
-5. **Confirm both signed**:
-   - When both have signed, acknowledge the shared commitment
-   - Brief preview of Stage 1 (The Witness)
+5. **Check gate completion**:
+   - After each signature, read `stage-progress.json` to check if **both** users have `agreedToTerms: true`
+   - If only one user has signed: update their status and reply with "Waiting for your partner to agree as well."
+   - If both have signed:
+     - Advance `current_stage` to `1` in `stage-progress.json`
+     - Reset both users' `gates_satisfied` to `{ "feelHeardConfirmed": false }` and `stage_status` to `NOT_STARTED`
+     - Acknowledge the shared commitment
+     - Brief preview of Stage 1 (The Witness)
 
 ### Phase B: Invitation Crafting (one user, partner hasn't joined)
 
@@ -72,12 +175,22 @@ Load `references/guardian-constitution.md` for universal voice, identity, and be
 - Reference the summary and themes to inform the invitation
 - But don't share raw inner-work content in the invitation itself
 
+## Error Handling
+
+| Scenario | Response |
+|---|---|
+| Invalid join code | "I couldn't find a session with that code. Double-check and try again." |
+| Already-paired session | "That session already has two participants." |
+| User declines Curiosity Compact | Acknowledge respectfully; session cannot proceed without both signatures |
+
 ## Output
 
+- Session files created/updated (`session.json`, `stage-progress.json`, `thread-index.json`)
+- Vessel directories created on pairing (`vessel-a/`, `vessel-b/`)
 - Both users' Compact signatures with timestamps (Phase A)
 - Invitation draft with consent to send (Phase B)
-- Session status: `COMPLETED` (both signed) or blocked (awaiting signature / declined)
+- Gate state: `agreedToTerms` per user in `stage-progress.json`
 
 ## Completion
 
-When both users have signed, advance to `stages/1-witness/`. If either user declines, end the session gracefully.
+When both users have `agreedToTerms: true` in `stage-progress.json`, advance `current_stage` to `1` and proceed to `stages/1-witness/`. If either user declines, end the session gracefully.
