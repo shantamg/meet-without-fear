@@ -14,7 +14,7 @@ if [ -z "${BOT_NAME:-}" ]; then
 fi
 
 # ── is_bot_user ──────────────────────────────────────────────────────────────
-# Check if a GitHub user.login is the slam-bot identity.
+# Check if a GitHub user.login is the Slam Paws bot identity.
 # Accepts both the legacy PAT identity ("MwfBot") and the GitHub App
 # bot-user identity ("mwf-bot-app[bot]"). This is the ONLY place the
 # bot-user name should be hardcoded; all other call sites must use this

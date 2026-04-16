@@ -1,10 +1,10 @@
 #!/bin/bash
 # github-state-scanner.sh — Long-lived daemon that maintains a unified
-# GitHub state file for the entire slam-bot.
+# GitHub state file for the entire Slam Paws bot.
 #
 # Why
 # ---
-# Before this script existed, every workspace and cron in the slam-bot
+# Before this script existed, every workspace and cron in Slam Paws
 # made its own independent `gh pr view --json X,Y,Z` and `gh issue list
 # --json A,B,C` calls. With ~17 workspaces and 8-12 overlapping processes
 # per hour, the same PR's metadata was being fetched 3-5 times per minute,

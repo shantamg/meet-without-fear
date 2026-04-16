@@ -1,7 +1,7 @@
 #!/bin/bash
 # github-app-token.sh — Print a fresh GitHub App installation access token.
 #
-# This is the token-refresh helper for the slam-bot GitHub App migration
+# This is the token-refresh helper for the Slam Paws GitHub App migration
 # (see shantamg/meet-without-fear#1652). It generates a JWT signed with the App's private
 # key, exchanges it for an installation access token from
 # POST /app/installations/:id/access_tokens, and caches the result until

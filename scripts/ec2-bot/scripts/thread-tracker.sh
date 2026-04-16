@@ -684,7 +684,7 @@ get_channel_tone() {
   case "$channel_name" in
     "#pmf1"|"DM (Shantam)")
       echo "warm and friendly — keep it brief, non-technical, supportive" ;;
-    "#agentic-devs"|"#slam-bot")
+    "#agentic-devs"|"#slam-paws")
       echo "technical and concise — can reference PRs and technical details" ;;
     "#bot-scientist")
       echo "professional and science-oriented" ;;

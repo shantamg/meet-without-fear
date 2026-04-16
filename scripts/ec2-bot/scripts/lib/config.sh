@@ -11,13 +11,15 @@
 # Values can be overridden by environment variables (e.g., in .env).
 
 # ── Identity ────────────────────────────────────────────────────────────────
-BOT_NAME="${BOT_NAME:-slam-bot}"
+BOT_NAME="${BOT_NAME:-slam-paws}"
+# NOTE: BOT_HOME and BOT_LOG_DIR still use /opt/slam-bot and /var/log/slam-bot
+# paths. A full infrastructure rename requires server-side directory changes.
 GITHUB_REPO="${GITHUB_REPO:-shantamg/meet-without-fear}"
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 BOT_HOME="${BOT_HOME:-/opt/slam-bot}"
 BOT_ENV_FILE="${BOT_ENV_FILE:-${BOT_HOME}/.env}"
-BOT_LOG_DIR="${BOT_LOG_DIR:-/var/log/${BOT_NAME}}"
+BOT_LOG_DIR="${BOT_LOG_DIR:-/var/log/slam-bot}"
 BOT_STATE_DIR="${BOT_STATE_DIR:-${BOT_HOME}/state}"
 BOT_QUEUE_DIR="${BOT_QUEUE_DIR:-${BOT_HOME}/queue}"
 
@@ -31,7 +33,7 @@ ACTIVE_DIR="${ACTIVE_DIR:-${WORKSPACES_DIR}/_active}"
 BOT_SCRIPTS_DIR="${BOT_SCRIPTS_DIR:-${BOT_HOME}/scripts}"
 
 # ── Lock/flag file prefix ───────────────────────────────────────────────────
-LOCK_PREFIX="${LOCK_PREFIX:-/tmp/${BOT_NAME}}"
+LOCK_PREFIX="${LOCK_PREFIX:-/tmp/slam-bot}"
 
 # ── gh call budget ────────────────────────────────────────────────────────────
 GH_BUDGET_THRESHOLD="${GH_BUDGET_THRESHOLD:-200}"

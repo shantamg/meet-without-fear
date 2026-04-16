@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Socket Mode Listener for slam-bot
+ * Socket Mode Listener for Slam Paws
  *
  * Persistent WebSocket connection to Slack. Receives message events in
  * real-time, including thread replies on old messages.
@@ -22,7 +22,7 @@
  *   SHANTAM_SLACK_DM      — Channel ID for Shantam's DM
  *   PMF1_CHANNEL_ID       — Channel ID for #pmf1
  *   AGENTIC_DEVS_CHANNEL_ID — Channel ID for the #agentic-devs channel
- *   SLAM_BOT_CHANNEL_ID — Channel ID for the #slam-bot channel
+ *   SLAM_BOT_CHANNEL_ID — Channel ID for the #slam-paws channel
  *   BUGS_AND_REQUESTS_CHANNEL_ID — Channel ID for the #bugs-and-requests channel
  */
 
@@ -125,12 +125,12 @@ if (SHANTAM_DM) {
   };
 }
 
-// #slam-bot channel — general-purpose bot interaction
+// #slam-paws channel — general-purpose bot interaction
 if (SLAM_BOT_CHANNEL) {
   CHANNEL_CONFIG[SLAM_BOT_CHANNEL] = {
-    logName: 'check-slam-bot',
-    channelName: '#slam-bot',
-    commandSlug: 'slam-bot-reply',
+    logName: 'check-slam-paws',
+    channelName: '#slam-paws',
+    commandSlug: 'slam-paws-reply',
     workspace: 'slack-triage',
     contextCount: 10,
   };

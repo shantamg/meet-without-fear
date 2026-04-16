@@ -1,5 +1,5 @@
 [Unit]
-Description=Slam Bot Socket Mode Listener
+Description=Slam Paws Socket Mode Listener
 After=network.target
 
 [Service]

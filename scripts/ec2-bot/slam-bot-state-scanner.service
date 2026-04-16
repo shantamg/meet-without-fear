@@ -1,5 +1,5 @@
 [Unit]
-Description=Slam Bot — GitHub state scanner daemon
+Description=Slam Paws — GitHub state scanner daemon
 After=network.target
 
 [Service]
