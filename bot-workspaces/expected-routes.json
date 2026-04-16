@@ -72,6 +72,10 @@
     "mwf-session-reply": {
       "workspace": "mwf-session",
       "firstStage": "route"
+    },
+    "mwf-session": {
+      "workspace": "mwf-session",
+      "firstStage": "0-onboarding"
     }
   }
 }

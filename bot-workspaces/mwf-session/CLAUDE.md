@@ -27,6 +27,8 @@ Thread-based MWF conversation workspace. Each Slack thread in `#mwf-sessions` is
 | `references/guardian-constitution.md` | Always | Process Guardian identity, voice, and universal rules |
 | `references/stage-progression.md` | Always | Gate rules, parallel vs sequential logic |
 | `references/privacy-model.md` | Always | Per-stage sharing and Vessel rules |
+| `shared/slack/slack-post.md` | Stage 2 (reply posting) | Posting thread replies via `slack-post.sh` |
+| `shared/references/slack-format.md` | Stage 2 (reply posting) | Slack mrkdwn syntax (NOT Markdown) |
 | `docs/product/stages/index.md` | First message in thread | Understand stage progression rules |
 | `docs/product/concept.md` | First message in thread | MWF product philosophy |
 
@@ -55,7 +57,7 @@ Unlike single-actor workspaces, MWF sessions track two participants. Each stage 
 - Warm, empathetic, and non-judgmental
 - Match the user's emotional register
 - Never rush through stages -- hold space
-- Use Slack mrkdwn (`*bold*`, bullet `*`)
+- Use Slack mrkdwn (`*bold*`, bullet `•`)
 - Always reply in the thread, never as a new channel message
 
 ## Safety

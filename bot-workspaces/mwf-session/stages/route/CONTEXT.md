@@ -50,11 +50,7 @@
    - Announce the transition (e.g., "Now that you feel heard, let's explore your partner's perspective...")
    - Begin applying the next stage's behavior
 
-4. **Reply in thread**: Compose a response and post it as a Slack thread reply using `slack-post.sh`:
-   ```bash
-   SLACK_MCP_XOXB_TOKEN="$SLACK_MCP_XOXB_TOKEN" bash scripts/slack-post.sh "$CHANNEL" "$THREAD_TS" "Your message here"
-   ```
-   Use Slack mrkdwn formatting (not Markdown).
+4. **Reply in thread**: Compose a response and post it as a Slack thread reply. See `shared/slack/slack-post.md` for the posting procedure and `shared/references/slack-format.md` for Slack mrkdwn formatting (not Markdown).
 
 ## Output
 
