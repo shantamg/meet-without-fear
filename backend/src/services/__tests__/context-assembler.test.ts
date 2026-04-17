@@ -15,6 +15,7 @@ describe('Context Assembler', () => {
         recentTurns: [],
         turnCount: 0,
         sessionDurationMinutes: 0,
+        timeSinceLastUserTurnMs: null,
       },
       emotionalThread: {
         initialIntensity: null,
