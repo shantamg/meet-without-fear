@@ -31,8 +31,10 @@ import {
   findOrCreateSlackUser,
   findSessionByJoinCode,
   findSessionByThread,
+  findInvitedSessionForUser,
   createSlackSession,
   pairSlackSession,
+  archiveSession,
   saveSlackMessage,
   getCurrentStage,
   updateStageProgress,
@@ -83,6 +85,12 @@ async function handleLobbyMessage(payload: SlackMessagePayload): Promise<void> {
     return;
   }
 
+  // Archive an existing INVITED session
+  if (lower === 'archive') {
+    await handleArchiveCommand(user.id, payload);
+    return;
+  }
+
   // Help fallback — don't start a random session on stray lobby chatter.
   await postMessage(
     payload.channel,
@@ -91,7 +99,42 @@ async function handleLobbyMessage(payload: SlackMessagePayload): Promise<void> {
   );
 }
 
+async function handleArchiveCommand(
+  userId: string,
+  payload: SlackMessagePayload
+): Promise<void> {
+  const existing = await findInvitedSessionForUser(userId);
+  if (!existing) {
+    await postMessage(
+      payload.channel,
+      "You don't have a session waiting to be archived. Say `start` to begin a new one.",
+      payload.thread_ts ?? payload.ts
+    );
+    return;
+  }
+  await archiveSession(existing.id);
+  await postMessage(
+    payload.channel,
+    'Archived. Say `start` whenever you\'re ready to begin a new session.',
+    payload.thread_ts ?? payload.ts
+  );
+}
+
 async function handleStartSession(userId: string, payload: SlackMessagePayload): Promise<void> {
+  // Duplicate-session catch: if the user already has an open INVITED session
+  // waiting for a partner, surface the existing join code instead of minting
+  // a second orphan. Gives them an explicit `archive` escape hatch if they
+  // really do want to start fresh.
+  const existingInvite = await findInvitedSessionForUser(userId);
+  if (existingInvite?.slackJoinCode) {
+    await postMessage(
+      payload.channel,
+      `You already have a session waiting for a partner — join code *${existingInvite.slackJoinCode}*. Share it with them, or say \`archive\` to close this one and start over.`,
+      payload.thread_ts ?? payload.ts
+    );
+    return;
+  }
+
   const dmChannel = await openDM(payload.user);
   if (!dmChannel) {
     logger.error('[SlackConversation] Could not open DM for user', payload.user);

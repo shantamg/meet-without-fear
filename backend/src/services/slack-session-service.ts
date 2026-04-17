@@ -78,6 +78,40 @@ export async function findSessionByJoinCode(code: string): Promise<Session | nul
   return prisma.session.findUnique({ where: { slackJoinCode: code } });
 }
 
+/**
+ * Find the user's currently-open `INVITED` session, if any. Used by the lobby
+ * to short-circuit a duplicate `start` — if A already created a session and
+ * hasn't been paired yet, surface the existing join code instead of minting a
+ * second orphan session.
+ */
+export async function findInvitedSessionForUser(
+  userId: string
+): Promise<Session | null> {
+  return prisma.session.findFirst({
+    where: {
+      status: 'INVITED',
+      relationship: { members: { some: { userId } } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+/**
+ * Mark a session as ABANDONED and drop its Slack thread mappings. Used when
+ * the user explicitly abandons an `INVITED` session via the lobby `archive`
+ * command, or when the opportunistic TTL sweeper finds a 7-day-old invite.
+ */
+export async function archiveSession(sessionId: string): Promise<void> {
+  await prisma.$transaction([
+    prisma.session.update({
+      where: { id: sessionId },
+      data: { status: 'ABANDONED' },
+    }),
+    prisma.sessionSlackThread.deleteMany({ where: { sessionId } }),
+  ]);
+  logger.info('[SlackSessionService] Archived Slack session', { sessionId });
+}
+
 // ============================================================================
 // Session creation & pairing
 // ============================================================================

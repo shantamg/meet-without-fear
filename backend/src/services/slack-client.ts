@@ -25,7 +25,8 @@ import { logger } from '../lib/logger';
  *   • `__bold__` → `*bold*`
  *   • `[label](url)` → `<url|label>`
  *   • leading `# ` / `## ` / `### ` headers → `*bold line*`
- *   • leading `- ` / `* ` bullets → `• `
+ *   • leading `- ` / `* ` bullets → `• ` (tabs normalized to spaces for nesting)
+ *   • multi-line blockquotes with lazy continuation → `>` prefix on every line
  *
  * We deliberately don't touch single `*word*` (could be italic) or single
  * `_word_` (already valid Slack italic).
@@ -47,11 +48,47 @@ export function toSlackMrkdwn(text: string): string {
       // Headers → bold line (only consume horizontal whitespace — \s would eat
       // the blank line between a header and its body).
       out = out.replace(/^[ \t]{0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/gm, '*$1*');
-      // - / * bullets at line start → • (keep indentation)
-      out = out.replace(/^(\s*)[-*]\s+/gm, '$1• ');
+      // Bullets at line start → • (normalize tab indentation to spaces so
+      // Slack renders nested bullets correctly).
+      out = out.replace(/^([ \t]*)[-*][ \t]+/gm, (_m, indent: string) => {
+        const spaces = indent.replace(/\t/g, '  ');
+        return `${spaces}• `;
+      });
+      // Multi-line blockquote lazy continuation → explicit `>` per line.
+      out = normalizeBlockquotes(out);
       return out;
     })
     .join('');
+}
+
+/**
+ * Standard Markdown allows a blockquote paragraph to start with `>` on only
+ * the first line, with subsequent non-blank lines implicitly joining the
+ * quote ("lazy continuation"). Slack doesn't — it treats lines without `>`
+ * as plain text, so a multi-line quote renders flat past the first line.
+ * This walks the text line-by-line and prefixes continuation lines with `> `
+ * until a blank line or a new block-level construct ends the quote.
+ */
+function normalizeBlockquotes(text: string): string {
+  const lines = text.split('\n');
+  let inQuote = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^>\s?/.test(line)) {
+      inQuote = true;
+      continue;
+    }
+    if (line.trim() === '') {
+      inQuote = false;
+      continue;
+    }
+    if (inQuote) {
+      // Lazy continuation — extend the quote. Preserve leading whitespace
+      // after the `> ` prefix in case the line was indented.
+      lines[i] = `> ${line}`;
+    }
+  }
+  return lines.join('\n');
 }
 
 let client: WebClient | null | undefined;
