@@ -792,4 +792,43 @@ describe('Stage Prompts Service', () => {
       }
     });
   });
+
+  describe('invitedSessionNudge injection', () => {
+    it('is absent by default', () => {
+      const blocks = buildStagePrompt(0, createContext(), { surface: 'slack' });
+      expect(blocks.dynamicBlock).not.toContain('OPERATIONAL NUDGE');
+    });
+
+    it('is appended to the dynamic block when present', () => {
+      const blocks = buildStagePrompt(
+        0,
+        createContext({
+          invitedSessionNudge: 'Session waiting 5 days. Re-share code `abc123`.',
+        }),
+        { surface: 'slack' }
+      );
+      expect(blocks.dynamicBlock).toContain('OPERATIONAL NUDGE:');
+      expect(blocks.dynamicBlock).toContain('abc123');
+    });
+
+    it('is NOT baked into the cached static block (still per-turn)', () => {
+      const blocks = buildStagePrompt(
+        0,
+        createContext({
+          invitedSessionNudge: 'anything',
+        }),
+        { surface: 'slack' }
+      );
+      expect(blocks.staticBlock).not.toContain('OPERATIONAL NUDGE');
+    });
+
+    it('does not fire when invitedSessionNudge is explicitly null', () => {
+      const blocks = buildStagePrompt(
+        0,
+        createContext({ invitedSessionNudge: null }),
+        { surface: 'slack' }
+      );
+      expect(blocks.dynamicBlock).not.toContain('OPERATIONAL NUDGE');
+    });
+  });
 });
