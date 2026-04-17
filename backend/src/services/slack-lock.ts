@@ -15,8 +15,12 @@
  *   ties the lock to transaction lifetime (released on COMMIT / ROLLBACK /
  *   connection drop). Transactions are long-running by necessity here — the
  *   Sonnet call is typically 3–8s — so we extend the Prisma timeout.
- * - This holds a DB connection for the lock duration. At MWF's scale
- *   (default 10-conn pool, <10 concurrent active turns) that's fine. If
+ * - This holds a DB connection for the lock duration. Note that `fn()` runs
+ *   on the global Prisma client (not `tx`), so each active turn holds TWO
+ *   pool connections: one for this lock tx and one for the work. The real
+ *   pool ceiling is therefore `pool_size / 2` concurrent turns, not
+ *   `pool_size`. At MWF's scale (default 10-conn pool, <10 concurrent
+ *   active turns → <5 concurrent locked turns) that's comfortable. If
  *   pool pressure becomes real, switch to a lock table with row-level
  *   locking + explicit expiry; the call-site API stays the same.
  */
