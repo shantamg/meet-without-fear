@@ -178,6 +178,14 @@ Identity provisioning lives in Clerk; the backend only exposes profile and token
 | `GET`    | `/auth/me/notification-preferences` | Read push notification prefs |
 | `PATCH`  | `/auth/me/notification-preferences` | Partial update of prefs |
 
+### [Slack Ingress](../../architecture/backend-overview.md#slack-ingress-backend)
+Slack-originated MWF sessions. These routes use shared-secret auth (not Clerk JWT).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/slack/mwf-session` | Accept a Slack message payload from the EC2 socket listener |
+| `GET`  | `/slack/health` | Health check: workspace load status and Slack configuration |
+
 ### Additional feature areas (not yet broken out in this index)
 
 The routes below are live; consult the source directly until dedicated pages exist:

@@ -4,8 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
   // extensions = [vector]
 }
 
@@ -14,68 +14,68 @@ datasource db {
 // ============================================================================
 
 model User {
-  id                       String    @id @default(cuid())
-  clerkId                  String?   @unique // Clerk authentication user ID
-  email                    String    @unique
-  name                     String?   // Full name (computed from firstName + lastName)
-  firstName                String?
-  lastName                 String?
-  pushToken                String?   // Expo push token for realtime fallbacks
-  biometricEnabled         Boolean   @default(false)
-  biometricEnrolledAt      DateTime?
-  memoryPreferences        Json?     // MemoryPreferencesDTO - AI memory settings
-  notificationPreferences  Json?     // NotificationPreferencesDTO - notification settings
-  lastMoodIntensity        Int?      // Last mood intensity (1-10) for session entry default
-  createdAt                DateTime  @default(now())
-  updatedAt                DateTime  @updatedAt
+  id                      String    @id @default(cuid())
+  clerkId                 String?   @unique // Clerk authentication user ID
+  slackUserId             String?   @unique // Slack user ID for Slack-originated sessions
+  email                   String    @unique
+  name                    String? // Full name (computed from firstName + lastName)
+  firstName               String?
+  lastName                String?
+  pushToken               String? // Expo push token for realtime fallbacks
+  biometricEnabled        Boolean   @default(false)
+  biometricEnrolledAt     DateTime?
+  memoryPreferences       Json? // MemoryPreferencesDTO - AI memory settings
+  notificationPreferences Json? // NotificationPreferencesDTO - notification settings
+  lastMoodIntensity       Int? // Last mood intensity (1-10) for session entry default
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   // === Global Facts ===
   // Consolidated facts about the user across all sessions
   // Format: [{ category: string, fact: string }]
   // Categories: People, Logistics, Conflict, Emotional, History, etc.
   // Max 50 facts, deduplicated and pruned during consolidation
-  globalFacts              Json?
+  globalFacts Json?
 
   // Relationships
-  relationships       RelationshipMember[]
-  vessels             UserVessel[]
-  stageProgress       StageProgress[]
-  messages            Message[]
-  consentsGiven       ConsentRecord[]               @relation("ConsentsGiven")
-  consentsRequested   ConsentRecord[]               @relation("ConsentsRequested")
-  consentedContent    ConsentedContent[]
-  empathyDrafts       EmpathyDraft[]
-  empathyAttempts     EmpathyAttempt[]
-  empathyValidations  EmpathyValidation[]
-  strategyProposals   StrategyProposal[]
-  strategyRankings    StrategyRanking[]
-  exerciseCompletions EmotionalExerciseCompletion[]
-  invitationsSent     Invitation[]                  @relation("InvitedBy")
-  innerWorkSessions   InnerWorkSession[]
-  userMemories        UserMemory[]
+  relationships            RelationshipMember[]
+  vessels                  UserVessel[]
+  stageProgress            StageProgress[]
+  messages                 Message[]
+  consentsGiven            ConsentRecord[]               @relation("ConsentsGiven")
+  consentsRequested        ConsentRecord[]               @relation("ConsentsRequested")
+  consentedContent         ConsentedContent[]
+  empathyDrafts            EmpathyDraft[]
+  empathyAttempts          EmpathyAttempt[]
+  empathyValidations       EmpathyValidation[]
+  strategyProposals        StrategyProposal[]
+  strategyRankings         StrategyRanking[]
+  exerciseCompletions      EmotionalExerciseCompletion[]
+  invitationsSent          Invitation[]                  @relation("InvitedBy")
+  innerWorkSessions        InnerWorkSession[]
+  userMemories             UserMemory[]
   validationFeedbackDrafts ValidationFeedbackDraft[]
 
-
   // Inner Work: Needs Assessment
-  needScores          NeedScore[]
+  needScores           NeedScore[]
   needsAssessmentState NeedsAssessmentState?
 
   // Inner Work: People Tracking
-  people              Person[]
+  people Person[]
 
   // Inner Work: Gratitude Practice
-  gratitudeEntries    GratitudeEntry[]
+  gratitudeEntries     GratitudeEntry[]
   gratitudePreferences GratitudePreferences?
 
   // Inner Work: Meditation
-  meditationSessions  MeditationSession[]
-  meditationStats     MeditationStats?
-  meditationFavorites MeditationFavorite[]
+  meditationSessions    MeditationSession[]
+  meditationStats       MeditationStats?
+  meditationFavorites   MeditationFavorite[]
   meditationPreferences MeditationPreferences?
-  savedMeditations    SavedMeditation[]
+  savedMeditations      SavedMeditation[]
 
   // Inner Work: Cross-Feature Intelligence
-  insights            Insight[]
+  insights Insight[]
 
   // Inner Work: Recurring Themes (Knowledge Base)
   recurringThemes RecurringTheme[]
@@ -99,10 +99,32 @@ model RelationshipMember {
   userId         String
   joinedAt       DateTime     @default(now())
   role           String       @default("member")
-  nickname       String?      // What this member calls their partner
+  nickname       String? // What this member calls their partner
 
   @@unique([relationshipId, userId])
   @@index([userId])
+}
+
+// ============================================================================
+// Slack Thread Mapping
+// ============================================================================
+
+/// Maps a Slack DM channel+thread to a (session, user) pair. Each MWF session
+/// involves two users, each with their own private DM thread. This replaces
+/// the file-based `thread-index.json` used by the Claude-agent workspace.
+model SessionSlackThread {
+  id        String   @id @default(cuid())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  userId    String // the Slack-user's DB User.id (for cross-referencing messages/vessels)
+  channelId String // Slack DM channel id
+  threadTs  String // top-level thread timestamp
+  createdAt DateTime @default(now())
+
+  @@unique([channelId, threadTs])
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([channelId])
 }
 
 // ============================================================================
@@ -119,24 +141,28 @@ model Session {
   updatedAt      DateTime      @updatedAt
   resolvedAt     DateTime?
 
+  // Slack origin (null for mobile-originated sessions)
+  slackJoinCode String?              @unique // 6-char code for partner to pair via lobby
+  slackThreads  SessionSlackThread[]
+
   // Related entities
-  messages            Message[]
-  sharedVessel        SharedVessel?
-  stageProgress       StageProgress[]
-  userVessels         UserVessel[]
-  empathyDrafts       EmpathyDraft[]
-  empathyAttempts     EmpathyAttempt[]
-  empathyValidations  EmpathyValidation[]
-  strategyProposals   StrategyProposal[]
-  strategyRankings    StrategyRanking[]
-  consentRecords      ConsentRecord[]
-  exerciseCompletions EmotionalExerciseCompletion[]
-  invitations         Invitation[]
-  userMemories        UserMemory[]
-  validationFeedbackDrafts ValidationFeedbackDraft[]
+  messages                  Message[]
+  sharedVessel              SharedVessel?
+  stageProgress             StageProgress[]
+  userVessels               UserVessel[]
+  empathyDrafts             EmpathyDraft[]
+  empathyAttempts           EmpathyAttempt[]
+  empathyValidations        EmpathyValidation[]
+  strategyProposals         StrategyProposal[]
+  strategyRankings          StrategyRanking[]
+  consentRecords            ConsentRecord[]
+  exerciseCompletions       EmotionalExerciseCompletion[]
+  invitations               Invitation[]
+  userMemories              UserMemory[]
+  validationFeedbackDrafts  ValidationFeedbackDraft[]
   refinementAttemptCounters RefinementAttemptCounter[]
-  reconcilerResults        ReconcilerResult[]
-  brainActivities          BrainActivity[]
+  reconcilerResults         ReconcilerResult[]
+  brainActivities           BrainActivity[]
 
   // Linked Inner Thoughts sessions for private reflection during partner session
   linkedInnerThoughts InnerWorkSession[] @relation("LinkedInnerThoughts")
@@ -167,16 +193,16 @@ enum SessionStatus {
 // ============================================================================
 
 model InnerWorkSession {
-  id        String              @id @default(cuid())
-  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  title     String?             // Optional user-provided or AI-generated title
-  summary   String?             @db.Text // AI-generated summary of the session
-  theme     String?             // Detected theme (e.g., "anxiety", "relationship patterns")
-  status    InnerWorkStatus     @default(ACTIVE)
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
-  distilledAt DateTime?         // Set when distillation has been run on this session
+  id          String          @id @default(cuid())
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  title       String? // Optional user-provided or AI-generated title
+  summary     String?         @db.Text // AI-generated summary of the session
+  theme       String? // Detected theme (e.g., "anxiety", "relationship patterns")
+  status      InnerWorkStatus @default(ACTIVE)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  distilledAt DateTime? // Set when distillation has been run on this session
 
   // Rolling conversation summary for long sessions (like partner session vessels)
   // Stores JSON: { text, keyThemes, emotionalJourney, unresolvedTopics, messageCount, generatedAt }
@@ -188,7 +214,7 @@ model InnerWorkSession {
   contentEmbedding Unsupported("vector(1024)")?
 
   // Messages in this inner work session
-  messages InnerWorkMessage[]
+  messages  InnerWorkMessage[]
   // Distilled takeaways from this session
   takeaways SessionTakeaway[]
 
@@ -199,8 +225,8 @@ model InnerWorkSession {
   // When set, AI has access to partner session context and can reference it
   linkedPartnerSession   Session? @relation("LinkedInnerThoughts", fields: [linkedPartnerSessionId], references: [id], onDelete: SetNull)
   linkedPartnerSessionId String?
-  linkedAtStage          Int?     // Stage when Inner Thoughts was opened (1, 2, 3, 4)
-  linkedTrigger          String?  // Why it was opened: "empathy_wait", "voluntary", "witness_wait"
+  linkedAtStage          Int? // Stage when Inner Thoughts was opened (1, 2, 3, 4)
+  linkedTrigger          String? // Why it was opened: "empathy_wait", "voluntary", "witness_wait"
 
   @@index([userId, updatedAt])
   @@index([status])
@@ -208,25 +234,25 @@ model InnerWorkSession {
 }
 
 enum InnerWorkStatus {
-  ACTIVE    // Ongoing inner work session
+  ACTIVE // Ongoing inner work session
   COMPLETED // User marked as complete or AI determined closure
-  ARCHIVED  // User archived this session
+  ARCHIVED // User archived this session
 }
 
 enum TakeawaySource {
-  AI    // Distilled by AI
-  USER  // Added or edited by user
+  AI // Distilled by AI
+  USER // Added or edited by user
 }
 
 enum TakeawayType {
-  INSIGHT      // A reflection or observation
-  ACTION_ITEM  // Something concrete to do
-  INTENTION    // A desire or aspiration (not a concrete action)
+  INSIGHT // A reflection or observation
+  ACTION_ITEM // Something concrete to do
+  INTENTION // A desire or aspiration (not a concrete action)
 }
 
 enum TakeawayLinkType {
-  AI_SEMANTIC  // Auto-detected via embedding similarity
-  USER_MANUAL  // Manually linked by the user
+  AI_SEMANTIC // Auto-detected via embedding similarity
+  USER_MANUAL // Manually linked by the user
 }
 
 model InnerWorkMessage {
@@ -349,9 +375,9 @@ model UserVessel {
   // === Session Read State ===
   // When the user last viewed/opened this session's chat
   // Used to determine: (1) if session has unread content, (2) where "new messages" line appears
-  lastViewedAt DateTime?
+  lastViewedAt         DateTime?
   // The ID of the last chat item the user saw (for "new messages" line placement)
-  lastSeenChatItemId String?
+  lastSeenChatItemId   String?
   // When the user last viewed the Share/Partner tab
   // Used to determine "seen" status for shared content (empathy, context)
   lastViewedShareTabAt DateTime?
@@ -613,10 +639,10 @@ enum MessageRole {
   USER
   AI
   SYSTEM
-  EMPATHY_STATEMENT     // User's shared empathy statement (shown in chat history)
-  EMPATHY_REVEAL_INTRO  // AI intro message when revealing partner's empathy to user
-  SHARED_CONTEXT        // Context shared by subject to help guesser refine empathy
-  SHARE_SUGGESTION      // Suggested content for subject to share (reconciler)
+  EMPATHY_STATEMENT // User's shared empathy statement (shown in chat history)
+  EMPATHY_REVEAL_INTRO // AI intro message when revealing partner's empathy to user
+  SHARED_CONTEXT // Context shared by subject to help guesser refine empathy
+  SHARE_SUGGESTION // Suggested content for subject to share (reconciler)
   EMPATHY_VALIDATION_PROMPT // AI prompt asking user to validate partner's understanding
 }
 
@@ -638,13 +664,13 @@ model PreSessionMessage {
   // embedding Unsupported("vector(1024)")?  -- pgvector not available
 
   // Metadata from intent detection
-  detectedIntent    String? // The intent detected for this message
-  emotionalTone     String? // neutral, upset, hopeful, anxious
-  extractedPerson   String? // If a person was mentioned
-  extractedTopic    String? // If a topic was identified
+  detectedIntent  String? // The intent detected for this message
+  emotionalTone   String? // neutral, upset, hopeful, anxious
+  extractedPerson String? // If a person was mentioned
+  extractedTopic  String? // If a topic was identified
 
   // Association tracking
-  associatedSessionId String?   // Set when message is linked to a session
+  associatedSessionId String? // Set when message is linked to a session
   associatedAt        DateTime? // When it was associated
 
   // Cleanup
@@ -691,16 +717,16 @@ model EmpathyAttempt {
 
   // Reconciler flow fields
   status        EmpathyStatus @default(HELD)
-  statusVersion Int           @default(0)  // Incremented on every status change for event ordering
+  statusVersion Int           @default(0) // Incremented on every status change for event ordering
   revealedAt    DateTime?
   revisionCount Int           @default(0)
 
   // Delivery status for showing pending/delivered/seen to the author
-  deliveryStatus    SharedContentDeliveryStatus @default(PENDING)
+  deliveryStatus SharedContentDeliveryStatus @default(PENDING)
   /// When the empathy statement was delivered to partner's chat (when revealed)
-  deliveredAt       DateTime?
+  deliveredAt    DateTime?
   /// When the partner acknowledged/saw the statement
-  seenAt            DateTime?
+  seenAt         DateTime?
 
   validations EmpathyValidation[]
 
@@ -711,14 +737,14 @@ model EmpathyAttempt {
 }
 
 enum EmpathyStatus {
-  HELD              // Waiting for partner to complete Stage 1
-  ANALYZING         // Reconciler is comparing guess vs actual Stage 1 content
-  AWAITING_SHARING  // Gaps detected, waiting for subject to respond to share suggestion
-  REFINING          // Guesser is refining after receiving shared context
-  NEEDS_WORK        // Significant gaps detected, guesser should refine (legacy - use AWAITING_SHARING)
-  READY             // Reconciler complete, waiting for partner to also complete Stage 2 before revealing
-  REVEALED          // Recipient can now see statement
-  VALIDATED         // Recipient has validated accuracy
+  HELD // Waiting for partner to complete Stage 1
+  ANALYZING // Reconciler is comparing guess vs actual Stage 1 content
+  AWAITING_SHARING // Gaps detected, waiting for subject to respond to share suggestion
+  REFINING // Guesser is refining after receiving shared context
+  NEEDS_WORK // Significant gaps detected, guesser should refine (legacy - use AWAITING_SHARING)
+  READY // Reconciler complete, waiting for partner to also complete Stage 2 before revealing
+  REVEALED // Recipient can now see statement
+  VALIDATED // Recipient has validated accuracy
 }
 
 model EmpathyValidation {
@@ -744,50 +770,50 @@ model EmpathyValidation {
 /// Stores the result of reconciler analysis comparing what one person
 /// guessed about the other vs what they actually expressed.
 model ReconcilerResult {
-  id        String   @id @default(cuid())
-  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String
 
   /// The user who made the empathy guess
-  guesserId     String
-  guesserName   String
+  guesserId   String
+  guesserName String
   /// The user being guessed about (whose feelings were analyzed)
-  subjectId     String
-  subjectName   String
+  subjectId   String
+  subjectName String
 
   // Alignment Analysis
-  alignmentScore     Int      // 0-100
-  alignmentSummary   String   @db.Text
+  alignmentScore      Int // 0-100
+  alignmentSummary    String   @db.Text
   correctlyIdentified String[] // Feelings/needs that were correctly identified
 
   // Gap Analysis
-  gapSeverity       String   // none, minor, moderate, significant
-  gapSummary        String   @db.Text
-  missedFeelings    String[] // Feelings/needs that were missed
-  misattributions   String[] // Incorrect assumptions made
-  mostImportantGap  String?  @db.Text // The single most important gap
+  gapSeverity      String // none, minor, moderate, significant
+  gapSummary       String   @db.Text
+  missedFeelings   String[] // Feelings/needs that were missed
+  misattributions  String[] // Incorrect assumptions made
+  mostImportantGap String?  @db.Text // The single most important gap
 
   // Recommendation
-  recommendedAction   String  // PROCEED, OFFER_OPTIONAL, OFFER_SHARING
+  recommendedAction   String // PROCEED, OFFER_OPTIONAL, OFFER_SHARING
   rationale           String  @db.Text
   sharingWouldHelp    Boolean
   suggestedShareFocus String? @db.Text
 
   // Abstract guidance for refinement (no specific partner content)
-  areaHint      String?   // e.g., "work and effort"
-  guidanceType  String?   // e.g., "explore_deeper_feelings"
-  promptSeed    String?   // e.g., "what might be underneath"
+  areaHint     String? // e.g., "work and effort"
+  guidanceType String? // e.g., "explore_deeper_feelings"
+  promptSeed   String? // e.g., "what might be underneath"
 
   // Suggestion for subject to share (generated when gaps are significant)
-  suggestedShareContent String?  @db.Text  // AI-generated suggestion for what subject could share
-  suggestedShareReason  String?  @db.Text  // Why this would help the guesser understand
+  suggestedShareContent String? @db.Text // AI-generated suggestion for what subject could share
+  suggestedShareReason  String? @db.Text // Why this would help the guesser understand
 
   /// Which iteration of the reconciler loop produced this result (1 = first run)
-  iteration         Int      @default(1)
+  iteration             Int       @default(1)
   /// Whether this result was produced by the circuit breaker forcing READY
-  wasCircuitBreakerTrip Boolean @default(false)
+  wasCircuitBreakerTrip Boolean   @default(false)
   /// When set, this result has been superseded by a newer analysis (audit trail)
-  supersededAt      DateTime?
+  supersededAt          DateTime?
 
   createdAt DateTime @default(now())
 
@@ -802,45 +828,45 @@ model ReconcilerResult {
 /// Tracks the share suggestion made to a user (the subject) and their response.
 /// This allows the subject to optionally share context to help the guesser understand better.
 model ReconcilerShareOffer {
-  id        String   @id @default(cuid())
-  result    ReconcilerResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
-  resultId  String   @unique
+  id       String           @id @default(cuid())
+  result   ReconcilerResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  resultId String           @unique
 
   /// The user being asked to share (the subject of the analysis)
-  userId    String
+  userId String
 
   /// Status of the share offer
-  status    ReconcilerShareStatus @default(NOT_OFFERED)
+  status ReconcilerShareStatus @default(NOT_OFFERED)
 
   /// AI-generated suggestion for what to share
-  suggestedContent   String?  @db.Text  // What the AI suggests the subject could share
-  suggestedReason    String?  @db.Text  // Why this would help the guesser
+  suggestedContent String? @db.Text // What the AI suggests the subject could share
+  suggestedReason  String? @db.Text // Why this would help the guesser
 
   /// The AI-generated message offering to share (shown to user)
-  offerMessage      String?  @db.Text
+  offerMessage String? @db.Text
 
   /// User's refined version (if they edited the suggestion)
-  refinedContent     String?  @db.Text
+  refinedContent String? @db.Text
 
   /// Final content that was shared (could be suggested, refined, or custom)
-  sharedContent     String?  @db.Text
-  sharedAt          DateTime?
+  sharedContent String?   @db.Text
+  sharedAt      DateTime?
 
   /// Delivery status of shared content (pending -> delivered -> seen)
-  deliveryStatus    SharedContentDeliveryStatus @default(PENDING)
+  deliveryStatus SharedContentDeliveryStatus @default(PENDING)
   /// When the content was delivered to the guesser
-  deliveredAt       DateTime?
+  deliveredAt    DateTime?
   /// When the guesser saw/acknowledged the content (sent first message after)
-  seenAt            DateTime?
+  seenAt         DateTime?
 
   /// If they declined
-  declinedAt        DateTime?
+  declinedAt DateTime?
 
   /// Legacy: skipped without responding
-  skippedAt         DateTime?
+  skippedAt DateTime?
 
   /// Which iteration of the reconciler loop this offer belongs to
-  iteration         Int      @default(1)
+  iteration          Int     @default(1)
   /// Whether the refinement chat was used before accepting/declining
   refinementChatUsed Boolean @default(false)
 
@@ -857,19 +883,19 @@ model ReconcilerShareOffer {
 
 /// Delivery status for shared content (empathy statements, shared context)
 enum SharedContentDeliveryStatus {
-  PENDING    // Content saved but not yet delivered
-  DELIVERED  // Content delivered to recipient's chat
-  SEEN       // Recipient has viewed/acknowledged the content
+  PENDING // Content saved but not yet delivered
+  DELIVERED // Content delivered to recipient's chat
+  SEEN // Recipient has viewed/acknowledged the content
 }
 
 enum ReconcilerShareStatus {
-  PENDING     // Suggestion generated, not yet shown to user
-  OFFERED     // Shown to user, awaiting response
-  ACCEPTED    // User accepted (with or without refinement)
-  DECLINED    // User declined to share
-  EXPIRED     // Offer expired (timeout)
+  PENDING // Suggestion generated, not yet shown to user
+  OFFERED // Shown to user, awaiting response
+  ACCEPTED // User accepted (with or without refinement)
+  DECLINED // User declined to share
+  EXPIRED // Offer expired (timeout)
   NOT_OFFERED // Legacy: no offer was made
-  SKIPPED     // Legacy: user skipped without responding
+  SKIPPED // Legacy: user skipped without responding
 }
 
 /// Tracks refinement attempts per direction to implement circuit breaker.
@@ -878,7 +904,7 @@ model RefinementAttemptCounter {
   id        String   @id @default(cuid())
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String
-  direction String   // "guesserId->subjectId" composite string
+  direction String // "guesserId->subjectId" composite string
   attempts  Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -989,21 +1015,21 @@ enum GlobalLibrarySource {
 // ============================================================================
 
 model Invitation {
-  id                String           @id @default(cuid())
-  session           Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId         String
-  invitedBy         User             @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
-  invitedById       String
-  name              String?          // Display name for the invited person
-  invitationMessage   String?          @db.Text // The crafted invitation message
-  messageConfirmed    Boolean          @default(false) // User confirmed the message
-  messageConfirmedAt  DateTime?        // When the user confirmed the message (for chat indicator positioning)
-  status              InvitationStatus @default(PENDING)
-  createdAt         DateTime         @default(now())
-  expiresAt         DateTime
-  acceptedAt        DateTime?
-  declinedAt        DateTime?
-  declineReason     String?
+  id                 String           @id @default(cuid())
+  session            Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId          String
+  invitedBy          User             @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+  invitedById        String
+  name               String? // Display name for the invited person
+  invitationMessage  String?          @db.Text // The crafted invitation message
+  messageConfirmed   Boolean          @default(false) // User confirmed the message
+  messageConfirmedAt DateTime? // When the user confirmed the message (for chat indicator positioning)
+  status             InvitationStatus @default(PENDING)
+  createdAt          DateTime         @default(now())
+  expiresAt          DateTime
+  acceptedAt         DateTime?
+  declinedAt         DateTime?
+  declineReason      String?
 
   @@index([sessionId])
   @@index([status])
@@ -1016,18 +1042,17 @@ enum InvitationStatus {
   EXPIRED
 }
 
-
 // ============================================================================
 // User Memory (Things to Always Remember)
 // ============================================================================
 
 enum MemoryCategory {
-  AI_NAME       // "Call me Alex"
-  LANGUAGE      // "Respond in Spanish"
+  AI_NAME // "Call me Alex"
+  LANGUAGE // "Respond in Spanish"
   COMMUNICATION // "Keep responses brief"
   PERSONAL_INFO // "Call me Sam", pronouns
-  RELATIONSHIP  // "Partner's name is Jordan"
-  PREFERENCE    // "Use examples when explaining"
+  RELATIONSHIP // "Partner's name is Jordan"
+  PREFERENCE // "Use examples when explaining"
 }
 
 enum MemoryStatus {
@@ -1038,8 +1063,8 @@ enum MemoryStatus {
 
 enum MemorySource {
   USER_APPROVED // AI suggested, user approved
-  USER_CREATED  // User created directly
-  USER_EDITED   // AI suggested, user edited before saving
+  USER_CREATED // User created directly
+  USER_EDITED // AI suggested, user edited before saving
 }
 
 model UserMemory {
@@ -1047,7 +1072,7 @@ model UserMemory {
   user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId      String
   session     Session?       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId   String?        // null = global memory
+  sessionId   String? // null = global memory
   content     String         @db.Text
   category    MemoryCategory
   status      MemoryStatus   @default(ACTIVE)
@@ -1066,21 +1091,21 @@ model UserMemory {
 
 // Reference table for the 19 core human needs (seeded data)
 model Need {
-  id          Int          @id
-  name        String       // "Physical Safety"
-  slug        String       @unique // "physical-safety"
-  description String       @db.Text // Full question text
+  id          Int           @id
+  name        String // "Physical Safety"
+  slug        String        @unique // "physical-safety"
+  description String        @db.Text // Full question text
   category    NeedsCategory
-  order       Int          // Display order within category
+  order       Int // Display order within category
 
   scores NeedScore[]
 }
 
 enum NeedsCategory {
-  FOUNDATION    // Physical safety, health, rest, material security
-  EMOTIONAL     // Emotional safety, self-compassion, regulation, agency
-  RELATIONAL    // Being seen, belonging, trust, contribution
-  INTEGRATION   // Purpose, learning, integrity, hope
+  FOUNDATION // Physical safety, health, rest, material security
+  EMOTIONAL // Emotional safety, self-compassion, regulation, agency
+  RELATIONAL // Being seen, belonging, trust, contribution
+  INTEGRATION // Purpose, learning, integrity, hope
   TRANSCENDENCE // Presence, gratitude, connection to larger whole
 }
 
@@ -1091,7 +1116,7 @@ model NeedScore {
   userId        String
   need          Need     @relation(fields: [needId], references: [id], onDelete: Cascade)
   needId        Int
-  score         Int      // 0 = Not met, 1 = Somewhat met, 2 = Fully met
+  score         Int // 0 = Not met, 1 = Somewhat met, 2 = Fully met
   clarification String?  @db.Text // Optional user notes
   createdAt     DateTime @default(now())
 
@@ -1107,7 +1132,7 @@ model NeedsAssessmentState {
   baselineCompleted    Boolean   @default(false)
   baselineCompletedAt  DateTime?
   checkInFrequencyDays Int       @default(7) // 1-10 days
-  lastCheckInNeedId    Int?      // Which need was last checked
+  lastCheckInNeedId    Int? // Which need was last checked
   lastCheckInAt        DateTime?
   nextCheckInAt        DateTime?
 }
@@ -1121,9 +1146,9 @@ model Person {
   id             String   @id @default(cuid())
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId         String
-  name           String   // Primary name: "Sarah"
+  name           String // Primary name: "Sarah"
   aliases        String[] @default([]) // ["my friend Sarah", "Sarah W."]
-  relationship   String?  // "friend", "partner", "family", "coworker", etc.
+  relationship   String? // "friend", "partner", "family", "coworker", etc.
   firstMentioned DateTime @default(now())
   lastMentioned  DateTime @default(now())
 
@@ -1149,9 +1174,9 @@ model PersonMention {
   personId   String
   userId     String
   sourceType MentionSourceType
-  sourceId   String            // ID of the source entity
+  sourceId   String // ID of the source entity
   context    String?           @db.Text // Surrounding text snippet
-  sentiment  Float?            // -1 to 1
+  sentiment  Float? // -1 to 1
   createdAt  DateTime          @default(now())
 
   @@index([personId, createdAt])
@@ -1159,9 +1184,9 @@ model PersonMention {
 }
 
 enum MentionSourceType {
-  INNER_THOUGHTS  // InnerWorkMessage
-  GRATITUDE       // GratitudeEntry
-  NEEDS_CHECKIN   // NeedScore clarification
+  INNER_THOUGHTS // InnerWorkMessage
+  GRATITUDE // GratitudeEntry
+  NEEDS_CHECKIN // NeedScore clarification
   PARTNER_SESSION // Session message
 }
 
@@ -1171,25 +1196,25 @@ enum MentionSourceType {
 
 // AI-generated insights from cross-feature pattern recognition
 model Insight {
-  id         String      @id @default(cuid())
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     String
-  type       InsightType
-  summary    String      @db.Text // Human-readable insight summary
-  data       Json        // Structured data supporting the insight
-  priority   Int         @default(0) // Higher = more important (0-10)
-  dismissed  Boolean     @default(false)
-  expiresAt  DateTime?   // Auto-expire old insights
-  createdAt  DateTime    @default(now())
+  id        String      @id @default(cuid())
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  type      InsightType
+  summary   String      @db.Text // Human-readable insight summary
+  data      Json // Structured data supporting the insight
+  priority  Int         @default(0) // Higher = more important (0-10)
+  dismissed Boolean     @default(false)
+  expiresAt DateTime? // Auto-expire old insights
+  createdAt DateTime    @default(now())
 
   @@index([userId, dismissed, priority])
   @@index([userId, expiresAt])
 }
 
 enum InsightType {
-  PATTERN       // Recurring behavior or theme detected
+  PATTERN // Recurring behavior or theme detected
   CONTRADICTION // Conflicting self-reports or behaviors
-  SUGGESTION    // Recommended action based on patterns
+  SUGGESTION // Recommended action based on patterns
 }
 
 // ============================================================================
@@ -1200,9 +1225,9 @@ model RecurringTheme {
   id           String   @id @default(cuid())
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId       String
-  tag          String   // The theme tag (matches InnerWorkSession.theme)
-  sessionCount Int      // How many sessions share this theme (updated each time)
-  summary      String   @db.Text  // Haiku-generated cross-session summary
+  tag          String // The theme tag (matches InnerWorkSession.theme)
+  sessionCount Int // How many sessions share this theme (updated each time)
+  summary      String   @db.Text // Haiku-generated cross-session summary
   summaryAt    DateTime // When summary was last generated
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -1233,7 +1258,7 @@ model GratitudeEntry {
   // Connections
   linkedNeedIds    Int[]   @default([]) // Which needs this touches
   linkedConflictId String? // If mentioned an active conflict
-  sentimentScore   Float?  // -1 to 1, for trend tracking
+  sentimentScore   Float? // -1 to 1, for trend tracking
 
   // AI response to the gratitude
   aiResponse String? @db.Text
@@ -1253,8 +1278,8 @@ model GratitudePreferences {
   frequency       Int      @default(1) // 0-3 times per day
   preferredTimes  String[] @default(["20:00"]) // Array of HH:MM
   weekdayOnly     Boolean  @default(false)
-  quietHoursStart String?  // HH:MM
-  quietHoursEnd   String?  // HH:MM
+  quietHoursStart String? // HH:MM
+  quietHoursEnd   String? // HH:MM
 }
 
 // ============================================================================
@@ -1267,7 +1292,7 @@ model MeditationSession {
   userId          String
   type            MeditationType
   durationMinutes Int
-  focusArea       String?        // e.g., "grounding", "self-compassion"
+  focusArea       String? // e.g., "grounding", "self-compassion"
   completed       Boolean        @default(false)
   startedAt       DateTime       @default(now())
   completedAt     DateTime?
@@ -1322,7 +1347,7 @@ model MeditationFavorite {
   id              String       @id @default(cuid())
   user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId          String
-  name            String       // User-given or auto-generated name
+  name            String // User-given or auto-generated name
   focusArea       String
   durationMinutes Int
   favoriteType    FavoriteType
@@ -1350,10 +1375,10 @@ model SavedMeditation {
   id              String   @id @default(cuid())
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId          String
-  title           String   // User-provided or AI-generated title
+  title           String // User-provided or AI-generated title
   script          String   @db.Text // Full script with [PAUSE:Xs] tokens
-  durationSeconds Int      // Calculated from script
-  conversationId  String?  // Link to InnerWorkSession that created it (for editing)
+  durationSeconds Int // Calculated from script
+  conversationId  String? // Link to InnerWorkSession that created it (for editing)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -1369,33 +1394,33 @@ model SavedMeditation {
 // ============================================================================
 
 model BrainActivity {
-  id              String           @id @default(cuid())
-  session         Session?         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId       String?
-  innerWorkSession InnerWorkSession? @relation(fields: [innerWorkSessionId], references: [id], onDelete: Cascade)
+  id                 String            @id @default(cuid())
+  session            Session?          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId          String?
+  innerWorkSession   InnerWorkSession? @relation(fields: [innerWorkSessionId], references: [id], onDelete: Cascade)
   innerWorkSessionId String?
-  turnId          String?
-  activityType    ActivityType
-  model           String           // e.g. "claude-3-5-sonnet", "titan-embed"
+  turnId             String?
+  activityType       ActivityType
+  model              String // e.g. "claude-3-5-sonnet", "titan-embed"
 
   // Full telemetry
-  input           Json?            // Prompt, query, etc.
-  output          Json?            // Response, retrieved items, etc.
-  metadata        Json?            // Reasoning, confidence, errors
+  input    Json? // Prompt, query, etc.
+  output   Json? // Response, retrieved items, etc.
+  metadata Json? // Reasoning, confidence, errors
 
   // Typed call information for dashboard display
-  callType         BrainActivityCallType?  // Specific LLM call type for component rendering
-  structuredOutput Json?                   // Typed output data for dashboard components
+  callType         BrainActivityCallType? // Specific LLM call type for component rendering
+  structuredOutput Json? // Typed output data for dashboard components
 
   // Stats
-  tokenCountInput  Int             @default(0)
-  tokenCountOutput Int             @default(0)
-  cost             Float           @default(0.0)
-  durationMs       Int             @default(0)
+  tokenCountInput  Int   @default(0)
+  tokenCountOutput Int   @default(0)
+  cost             Float @default(0.0)
+  durationMs       Int   @default(0)
 
-  status          ActivityStatus   @default(PENDING)
-  createdAt       DateTime         @default(now())
-  completedAt     DateTime?
+  status      ActivityStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+  completedAt DateTime?
 
   @@index([sessionId])
   @@index([innerWorkSessionId])
