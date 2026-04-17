@@ -16,6 +16,7 @@ jest.mock('../../lib/prisma', () => ({
 
 import {
   detectShareCommand,
+  detectSendInvitationCommand,
   markDraftReadyToShare,
 } from '../slack-empathy-exchange';
 
@@ -47,6 +48,47 @@ describe('detectShareCommand', () => {
 
   it('rejects empty input', () => {
     expect(detectShareCommand('')).toBe(false);
+  });
+});
+
+describe('detectSendInvitationCommand', () => {
+  it.each([
+    'send it',
+    'Send it.',
+    'send it!',
+    'sent',
+    'ship it',
+    'go ahead',
+    'yes, send it',
+    'yes send it',
+    'yep, send',
+    'Yeah, ship it',
+    'ok send',
+    'okay, send it',
+    'looks good, send',
+    'looks good send',
+    'that looks good, send',
+    'that sounds right, send',
+    '  send it  ',
+  ])('accepts %p as a send-invitation command', (input) => {
+    expect(detectSendInvitationCommand(input)).toBe(true);
+  });
+
+  it.each([
+    "I'll send it later",
+    "don't send it",
+    'can you send it?',
+    'maybe send it tomorrow',
+    'share it',
+    'share',
+    'yes',
+    'no',
+    'not yet',
+    'hold on',
+    '',
+    '   ',
+  ])('rejects %p', (input) => {
+    expect(detectSendInvitationCommand(input)).toBe(false);
   });
 });
 

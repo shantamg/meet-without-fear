@@ -40,13 +40,20 @@ import {
   getCurrentStage,
   updateStageProgress,
   hasBothUsersCompacted,
+  hasUserCompacted,
+  hasUserSentInvitation,
   advanceToStage,
+  advanceUserToStage,
   INVITED_SESSION_TTL_MS,
   INVITED_SESSION_NUDGE_THRESHOLD_MS,
 } from './slack-session-service';
 import { buildStagePrompt } from './stage-prompts';
-import { detectShareCommand, markDraftReadyToShare } from './slack-empathy-exchange';
-import { MessageRole } from '@prisma/client';
+import {
+  detectShareCommand,
+  detectSendInvitationCommand,
+  markDraftReadyToShare,
+} from './slack-empathy-exchange';
+import { MessageRole, type Session } from '@prisma/client';
 
 const CONVERSATION_TURN_LIMIT = 12; // pairs of user+assistant messages kept in prompt
 const MAX_SONNET_TOKENS = 1024; // Slack replies are short — no need for 2048
@@ -283,6 +290,14 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
   const { session, userId } = mapping;
   const stage = await getCurrentStage(session.id, userId);
 
+  // Stage 0 solo invitation-send: if the user has signed the compact and
+  // replies "send it" to the AI's proposed invitation draft, short-circuit
+  // the Sonnet turn, mark Stage 0 complete, and open Stage 1 for this user
+  // alone. Partner (if any) advances independently when they do the same.
+  if (await maybeHandleInvitationSend(session, userId, payload.text, payload)) {
+    return;
+  }
+
   // Stage 2 share command: if the user types `share` / `send it` while in
   // Stage 2 with a pending draft, short-circuit the Sonnet turn and flip
   // their draft to ready-to-share. Follow-up iteration will also create the
@@ -361,6 +376,15 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
   // system message.
   const invitedSessionNudge = buildInvitedSessionNudge(session);
 
+  // Per-user Stage 0 gates. Mobile's solo flow advances each user
+  // independently — Slack now mirrors that. `hasBothUsersCompacted` is still
+  // exported for anything that needs the both-users gate (none today), but
+  // the prompt routing here is scoped to the current user.
+  const userCompacted = await hasUserCompacted(session.id, userId);
+  const userInvitationSent = await hasUserSentInvitation(session.id, userId);
+  const isOnboarding = stage === 0 && !userCompacted;
+  const isInvitationPhase = stage === 0 && userCompacted && !userInvitationSent;
+
   // Use the same prompt builder as mobile for behavioral parity — the only
   // difference for Slack is `surface: 'slack'`, which appends mrkdwn
   // formatting rules to the static block. Prompt-cache keys still hit across
@@ -377,7 +401,8 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
     },
     {
       surface: 'slack',
-      isOnboarding: stage === 0 && !(await hasBothUsersCompacted(session.id)),
+      isOnboarding,
+      isInvitationPhase,
     }
   );
 
@@ -583,6 +608,48 @@ async function maybeHandleStage0Signal(
       sessionId,
     });
   }
+}
+
+/**
+ * Stage 0 solo invitation-send signal. Mirrors the mobile transition at
+ * `sessions.ts` confirmInvitationMessage: once the user has signed the
+ * compact and responds to the AI's `<draft>` invitation with a short
+ * send command, we mark both Stage 0 gates satisfied and advance this
+ * user to Stage 1. Nothing is actually transmitted — "sending" in the
+ * solo flow is a conceptual commit to the invitation, not an out-of-band
+ * message to a partner.
+ *
+ * Returns true when it handled the turn (and the caller should stop),
+ * false when this isn't a send signal and the normal DM path should run.
+ */
+async function maybeHandleInvitationSend(
+  session: Session,
+  userId: string,
+  text: string,
+  payload: SlackMessagePayload
+): Promise<boolean> {
+  const stage = await getCurrentStage(session.id, userId);
+  if (stage !== 0) return false;
+
+  if (!(await hasUserCompacted(session.id, userId))) return false;
+  if (!detectSendInvitationCommand(text)) return false;
+
+  await updateStageProgress(session.id, userId, {
+    gatesSatisfied: { compactSigned: true, invitationSent: true },
+  });
+  await advanceUserToStage(session.id, userId, 1);
+
+  await postMessage(
+    payload.channel,
+    "Sent. I'll pick up where you are when you're ready for the next piece.",
+    payload.thread_ts ?? payload.ts
+  );
+
+  logger.info('[SlackConversation] Solo invitation sent — advanced user to Stage 1', {
+    sessionId: session.id,
+    userId,
+  });
+  return true;
 }
 
 async function maybeAdvanceOnFeelHeard(sessionId: string, userId: string): Promise<void> {
