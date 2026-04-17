@@ -51,6 +51,34 @@ export interface SummarizationResult {
   partnerNeeds?: string[];
   openQuestions?: string[];
   agreements?: string[];
+  /**
+   * A single-sentence "cliffhanger" describing where the user's emotional
+   * tension was left hanging — used by the long-idle resumption prompt to
+   * anchor the re-orientation message. Null when the user just crossed a
+   * stage gate / reached a milestone (nothing is unresolved) or when the
+   * partner hasn't joined yet (no two-sided dynamic to leave unresolved).
+   */
+  lastUnresolvedThread?: string | null;
+}
+
+/**
+ * Structural hints the summarizer needs so it doesn't hallucinate unresolved
+ * drama when there genuinely is none. Passed in by callers who know the
+ * session state (stage just advanced? partner hasn't joined?).
+ */
+export interface SummarizationHints {
+  /**
+   * True when the user just crossed a stage gate (e.g. both confirmed "I feel
+   * heard" → advanced to Stage 2). In that case the `lastUnresolvedThread`
+   * MUST be null — tension resolved, not a cliffhanger.
+   */
+  stageJustAdvanced?: boolean;
+  /**
+   * Where the partner is in their own flow. `'not_joined'` means the user is
+   * essentially soloing; the summarizer must frame the cliffhanger as
+   * internal processing without anticipating a partner response.
+   */
+  partnerStatus?: 'not_joined' | 'in_progress' | 'completed';
 }
 
 // ============================================================================
@@ -91,7 +119,8 @@ async function generateConversationSummary(
   partnerName: string,
   stage: number,
   sessionId: string,
-  turnId: string
+  turnId: string,
+  hints: SummarizationHints = {}
 ): Promise<SummarizationResult | null> {
   if (messages.length === 0) {
     return null;
@@ -104,10 +133,24 @@ async function generateConversationSummary(
 
   const stageContext = getStageContext(stage);
 
+  // Emit structural context so the model doesn't invent phantom cliffhangers
+  // when the session is actually at a clean milestone / still one-sided.
+  const structuralHints = [
+    hints.stageJustAdvanced
+      ? 'STRUCTURAL CONTEXT: The user just crossed a stage gate (milestone reached). `lastUnresolvedThread` MUST be null.'
+      : '',
+    hints.partnerStatus === 'not_joined'
+      ? `STRUCTURAL CONTEXT: ${partnerName} has not yet joined this session. Frame cliffhangers and unresolved threads strictly in terms of ${userName}'s own internal processing — do NOT anticipate a direct partner response.`
+      : '',
+    hints.partnerStatus === 'completed'
+      ? `STRUCTURAL CONTEXT: ${partnerName} has completed their side of this stage. Unresolved threads should reflect what the user alone still needs to work through.`
+      : '',
+  ].filter(Boolean).join('\n');
+
   const systemPrompt = `You are summarizing a conflict resolution conversation to preserve context for an AI assistant.
 
 STAGE CONTEXT: ${stageContext}
-
+${structuralHints ? `\n${structuralHints}\n` : ''}
 OUTPUT FORMAT (JSON):
 {
   "summary": "2-3 paragraph narrative summary capturing the emotional journey and key points discussed",
@@ -118,14 +161,16 @@ OUTPUT FORMAT (JSON):
   "userNeeds": ["needs the user stated or implied"],
   "partnerNeeds": ["needs the partner stated or implied"],
   "openQuestions": ["open questions to revisit"],
-  "agreements": ["explicit agreements or experiments (if any)"]
+  "agreements": ["explicit agreements or experiments (if any)"],
+  "lastUnresolvedThread": "One sentence describing where the user's emotional tension was left hanging — this is the 'cliffhanger' the AI will use to re-orient the user after a long gap. MUST be null when the user just reached a milestone (stage gate crossed, mutual agreement), or when you'd have to invent partner dynamics to satisfy it."
 }
 
 GUIDELINES:
 - Capture emotional tone and key facts.
 - Keep language compact and concrete.
 - Do not invent consent state or partner data unless it was explicitly shared.
-- Keep the summary under 500 words.`;
+- Keep the summary under 500 words.
+- lastUnresolvedThread: prefer null over fabrication. If you'd have to stretch to name a cliffhanger, it's null.`;
 
   const userPrompt = `Summarize this conversation between ${userName} and Meet Without Fear:
 
@@ -204,7 +249,8 @@ export function needsSummarization(
 export async function updateSessionSummary(
   sessionId: string,
   userId: string,
-  turnId: string
+  turnId: string,
+  hints: SummarizationHints = {}
 ): Promise<ConversationSummary | null> {
   try {
     // Get session with messages and vessel (only this user's messages - data isolation)
@@ -286,7 +332,8 @@ export async function updateSessionSummary(
       partnerName,
       stage,
       sessionId,
-      turnId
+      turnId,
+      hints
     );
 
     if (!summaryResult) {
@@ -303,6 +350,14 @@ export async function updateSessionSummary(
       generatedAt: new Date(),
     };
 
+    // Structural guardrail: if the caller told us the stage just advanced,
+    // force lastUnresolvedThread to null regardless of what the model emitted.
+    // This is defense-in-depth against prompt-following lapses.
+    const lastUnresolvedThread =
+      hints.stageJustAdvanced
+        ? null
+        : summaryResult.lastUnresolvedThread ?? null;
+
     // Store in vessel
     await prisma.userVessel.update({
       where: { id: vessel.id },
@@ -317,6 +372,7 @@ export async function updateSessionSummary(
           partnerNeeds: summaryResult.partnerNeeds ?? [],
           openQuestions: summaryResult.openQuestions ?? [],
           agreements: summaryResult.agreements ?? [],
+          lastUnresolvedThread,
         }),
       },
     });
@@ -330,6 +386,71 @@ export async function updateSessionSummary(
     logger.error('[ConversationSummarizer] Failed to summarize session:', error);
     return null;
   }
+}
+
+/**
+ * Threshold beyond which the Slack flow treats a user as "long-idle" and may
+ * trigger a synchronous summary refresh before assembling context for their
+ * return turn. See `maybeRefreshSummaryForResumption`.
+ */
+export const LONG_IDLE_RESUMPTION_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Force a synchronous summary refresh when a user is returning after a long
+ * idle and their stored summary pre-dates their own last message. This gives
+ * the re-orientation prompt a fresh `lastUnresolvedThread` to anchor on.
+ *
+ * - No-op when the user hasn't been idle >24h (returns `'not_idle'`).
+ * - No-op when the stored summary is already newer than the user's last own
+ *   message — there's nothing new to summarize (returns `'summary_fresh'`).
+ * - Otherwise awaits `updateSessionSummary` and returns `'refreshed'`.
+ *
+ * Callers (like the Slack turn runner) should fire this BEFORE building the
+ * context bundle so the bundle's `sessionSummary.lastUnresolvedThread`
+ * reflects the fresh state on the critical first-return turn.
+ */
+export async function maybeRefreshSummaryForResumption(params: {
+  sessionId: string;
+  userId: string;
+  turnId: string;
+  /**
+   * When this user last spoke (USER-role message with senderId=userId).
+   * Computed by the caller BEFORE persisting the current incoming message,
+   * so this represents the previous turn's timestamp, not this one's.
+   */
+  lastUserTurnAt: Date | null;
+  hints?: SummarizationHints;
+  now?: Date;
+}): Promise<'refreshed' | 'summary_fresh' | 'not_idle' | 'no_user_activity'> {
+  const { sessionId, userId, turnId, lastUserTurnAt, hints, now = new Date() } = params;
+
+  if (!lastUserTurnAt) return 'no_user_activity';
+
+  const idleMs = now.getTime() - lastUserTurnAt.getTime();
+  if (idleMs < LONG_IDLE_RESUMPTION_THRESHOLD_MS) return 'not_idle';
+
+  // Cheap guard: look up existing summary timestamp. Skip the Haiku call if
+  // it's already newer than the user's last message — nothing has changed.
+  const existing = await prisma.userVessel.findUnique({
+    where: { userId_sessionId: { userId, sessionId } },
+    select: { conversationSummary: true },
+  });
+
+  const existingSummaryJson = existing?.conversationSummary as string | null | undefined;
+  if (existingSummaryJson) {
+    try {
+      const parsed = JSON.parse(existingSummaryJson) as { generatedAt?: string };
+      const generatedAt = parsed.generatedAt ? new Date(parsed.generatedAt) : null;
+      if (generatedAt && generatedAt.getTime() >= lastUserTurnAt.getTime()) {
+        return 'summary_fresh';
+      }
+    } catch {
+      // Malformed stored summary — treat as missing; fall through to refresh.
+    }
+  }
+
+  await updateSessionSummary(sessionId, userId, turnId, hints);
+  return 'refreshed';
 }
 
 // ============================================================================
@@ -352,6 +473,7 @@ export async function getSessionSummary(
   partnerNeeds: string[];
   openQuestions: string[];
   agreements: string[];
+  lastUnresolvedThread: string | null;
 } | null> {
   const vessel = await prisma.userVessel.findUnique({
     where: {
@@ -383,6 +505,7 @@ export async function getSessionSummary(
       partnerNeeds: parsed.partnerNeeds || [],
       openQuestions: parsed.openQuestions || [],
       agreements: parsed.agreements || [],
+      lastUnresolvedThread: parsed.lastUnresolvedThread ?? null,
     };
   } catch {
     return null;

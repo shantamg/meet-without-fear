@@ -22,6 +22,7 @@ import {
   type ContextBundle,
 } from './context-assembler';
 import { formatContextForPrompt } from './context-formatters';
+import { maybeRefreshSummaryForResumption } from './conversation-summarizer';
 import { determineMemoryIntent } from './memory-intent';
 import { parseMicroTagResponse } from '../utils/micro-tag-parser';
 import { trimConversationHistory } from '../utils/token-budget';
@@ -31,15 +32,20 @@ import {
   findOrCreateSlackUser,
   findSessionByJoinCode,
   findSessionByThread,
+  findInvitedSessionForUser,
   createSlackSession,
   pairSlackSession,
+  archiveSession,
   saveSlackMessage,
   getCurrentStage,
   updateStageProgress,
   hasBothUsersCompacted,
   advanceToStage,
+  INVITED_SESSION_TTL_MS,
+  INVITED_SESSION_NUDGE_THRESHOLD_MS,
 } from './slack-session-service';
-import { buildSlackStagePrompt } from './workspace-prompt-builder';
+import { buildStagePrompt } from './stage-prompts';
+import { detectShareCommand, markDraftReadyToShare } from './slack-empathy-exchange';
 import { MessageRole } from '@prisma/client';
 
 const CONVERSATION_TURN_LIMIT = 12; // pairs of user+assistant messages kept in prompt
@@ -83,6 +89,12 @@ async function handleLobbyMessage(payload: SlackMessagePayload): Promise<void> {
     return;
   }
 
+  // Archive an existing INVITED session
+  if (lower === 'archive') {
+    await handleArchiveCommand(user.id, payload);
+    return;
+  }
+
   // Help fallback — don't start a random session on stray lobby chatter.
   await postMessage(
     payload.channel,
@@ -91,7 +103,42 @@ async function handleLobbyMessage(payload: SlackMessagePayload): Promise<void> {
   );
 }
 
+async function handleArchiveCommand(
+  userId: string,
+  payload: SlackMessagePayload
+): Promise<void> {
+  const existing = await findInvitedSessionForUser(userId);
+  if (!existing) {
+    await postMessage(
+      payload.channel,
+      "You don't have a session waiting to be archived. Say `start` to begin a new one.",
+      payload.thread_ts ?? payload.ts
+    );
+    return;
+  }
+  await archiveSession(existing.id);
+  await postMessage(
+    payload.channel,
+    'Archived. Say `start` whenever you\'re ready to begin a new session.',
+    payload.thread_ts ?? payload.ts
+  );
+}
+
 async function handleStartSession(userId: string, payload: SlackMessagePayload): Promise<void> {
+  // Duplicate-session catch: if the user already has an open INVITED session
+  // waiting for a partner, surface the existing join code instead of minting
+  // a second orphan. Gives them an explicit `archive` escape hatch if they
+  // really do want to start fresh.
+  const existingInvite = await findInvitedSessionForUser(userId);
+  if (existingInvite?.slackJoinCode) {
+    await postMessage(
+      payload.channel,
+      `You already have a session waiting for a partner — join code *${existingInvite.slackJoinCode}*. Share it with them, or say \`archive\` to close this one and start over.`,
+      payload.thread_ts ?? payload.ts
+    );
+    return;
+  }
+
   const dmChannel = await openDM(payload.user);
   if (!dmChannel) {
     logger.error('[SlackConversation] Could not open DM for user', payload.user);
@@ -236,8 +283,25 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
   const { session, userId } = mapping;
   const stage = await getCurrentStage(session.id, userId);
 
+  // Stage 2 share command: if the user types `share` / `send it` while in
+  // Stage 2 with a pending draft, short-circuit the Sonnet turn and flip
+  // their draft to ready-to-share. Follow-up iteration will also create the
+  // EmpathyAttempt + fire the cross-user handoff; for now the draft flag
+  // is the trigger the existing Stage 2 machinery picks up.
+  if (stage === 2 && detectShareCommand(payload.text)) {
+    await handleShareCommand(session.id, userId, payload);
+    return;
+  }
+
+  // Capture the timestamp of this user's PREVIOUS own message before we
+  // persist the current one. Used below to detect a long-idle resumption and
+  // decide whether to force a summary refresh so the re-orientation prompt
+  // has a fresh `lastUnresolvedThread` to anchor on.
+  const previousUserTurnAt = await findPreviousUserTurnAt(session.id, userId);
+
   // Persist the incoming user message before we call the model so it's part of
   // context on this turn too (matches the mobile controller).
+  const turnId = randomUUID();
   await saveSlackMessage({
     sessionId: session.id,
     userId,
@@ -249,6 +313,18 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
   // If the user is in Stage 0 and answers yes to the compact, mark it and
   // possibly advance.
   await maybeHandleStage0Signal(session.id, userId, payload.text);
+
+  // On long-idle resumption (>24h since previous turn AND no fresh summary),
+  // force a synchronous summary refresh so this turn's context bundle has a
+  // current cliffhanger. No-op for active conversations.
+  await maybeRefreshSummaryForResumption({
+    sessionId: session.id,
+    userId,
+    turnId,
+    lastUserTurnAt: previousUserTurnAt,
+  }).catch((err) => {
+    logger.warn('[SlackConversation] forced summary refresh failed (non-fatal):', err);
+  });
 
   // Load history for both the Sonnet prompt and context assembly.
   const history = await loadConversationForPrompt(session.id, userId);
@@ -280,7 +356,16 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
     CONVERSATION_TURN_LIMIT
   );
 
-  const prompt = buildSlackStagePrompt(
+  // If the session is still INVITED and nearing TTL, build an operational
+  // nudge the AI can weave into its next response — better than a scheduled
+  // system message.
+  const invitedSessionNudge = buildInvitedSessionNudge(session);
+
+  // Use the same prompt builder as mobile for behavioral parity — the only
+  // difference for Slack is `surface: 'slack'`, which appends mrkdwn
+  // formatting rules to the static block. Prompt-cache keys still hit across
+  // turns because the static block is stable.
+  const prompt = buildStagePrompt(
     stage,
     {
       userName,
@@ -288,8 +373,10 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
       turnCount: contextBundle.conversationContext.turnCount,
       emotionalIntensity,
       contextBundle,
+      invitedSessionNudge,
     },
     {
+      surface: 'slack',
       isOnboarding: stage === 0 && !(await hasBothUsersCompacted(session.id)),
     }
   );
@@ -304,7 +391,6 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
     ...trimmedHistory,
   ];
 
-  const turnId = randomUUID();
   const raw = await getSonnetResponse({
     systemPrompt: prompt,
     messages,
@@ -346,6 +432,64 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
   if (stage === 1 && parsed.offerFeelHeardCheck) {
     await maybeAdvanceOnFeelHeard(session.id, userId);
   }
+
+  // Stage 2 ReadyShare nudge — when the AI signals the draft is ready, post
+  // a follow-up structural hint about the `share` command. The AI prompt
+  // already encourages this conversationally, but the explicit command
+  // reference reduces ambiguity about how to actually trigger the share.
+  if (stage === 2 && parsed.offerReadyToShare) {
+    await postMessage(
+      payload.channel,
+      '_When you\'re ready, reply `share` to send this to your partner — or keep refining._',
+      threadTs
+    );
+  }
+}
+
+/**
+ * Handle a Slack `share` / `send it` command from the subject at Stage 2.
+ * Short-circuits the Sonnet turn and flips the user's EmpathyDraft to
+ * ready-to-share. Posts a confirmation (or a helpful error) back to the
+ * DM thread.
+ */
+async function handleShareCommand(
+  sessionId: string,
+  userId: string,
+  payload: SlackMessagePayload
+): Promise<void> {
+  const threadTs = payload.thread_ts ?? payload.ts;
+  const result = await markDraftReadyToShare(sessionId, userId);
+
+  switch (result.status) {
+    case 'marked_ready':
+      await postMessage(
+        payload.channel,
+        'Got it — your partner will see your empathy statement on their next turn. Keep an eye out for their reaction.',
+        threadTs
+      );
+      break;
+    case 'already_ready':
+      await postMessage(
+        payload.channel,
+        "_You've already marked this ready to share — your partner will see it on their next turn._",
+        threadTs
+      );
+      break;
+    case 'empty_draft':
+      await postMessage(
+        payload.channel,
+        "Your draft is empty — share something about your partner's experience first, then reply `share`.",
+        threadTs
+      );
+      break;
+    case 'no_draft':
+      await postMessage(
+        payload.channel,
+        "I don't see a draft for you to share yet. Keep working with me on what your partner might be going through, then reply `share` once it feels right.",
+        threadTs
+      );
+      break;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +514,48 @@ async function loadConversationForPrompt(
     role: m.role === MessageRole.USER ? ('user' as const) : ('assistant' as const),
     content: m.content,
   }));
+}
+
+/**
+ * Return the timestamp of this user's most recent OWN USER message in the
+ * session, if any. Called before persisting the current incoming message so
+ * the resumption-idle check sees the previous turn, not the one we're about
+ * to handle.
+ */
+async function findPreviousUserTurnAt(
+  sessionId: string,
+  userId: string
+): Promise<Date | null> {
+  const last = await prisma.message.findFirst({
+    where: { sessionId, senderId: userId, role: MessageRole.USER },
+    orderBy: { timestamp: 'desc' },
+    select: { timestamp: true },
+  });
+  return last?.timestamp ?? null;
+}
+
+/**
+ * Build an operational nudge string for INVITED sessions approaching their
+ * 7-day TTL. Returns null when the session is already ACTIVE, still well
+ * inside the nudge-free window, or missing a join code (structurally
+ * impossible for INVITED Slack sessions, but defensive).
+ *
+ * When rendered, the dynamic block carries this verbatim and the Process
+ * Guardian is instructed (via `finalize`'s "OPERATIONAL NUDGE" framing) to
+ * weave it into its next response in its own voice.
+ */
+function buildInvitedSessionNudge(
+  session: { status: string; createdAt: Date; slackJoinCode: string | null }
+): string | null {
+  if (session.status !== 'INVITED') return null;
+  if (!session.slackJoinCode) return null;
+
+  const ageMs = Date.now() - session.createdAt.getTime();
+  if (ageMs < INVITED_SESSION_NUDGE_THRESHOLD_MS) return null;
+  if (ageMs >= INVITED_SESSION_TTL_MS) return null; // TTL sweep will handle it
+
+  const daysWaiting = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+  return `This session has been waiting for a partner to join for ${daysWaiting} days. Gently mention that they can re-share their join code \`${session.slackJoinCode}\`, or say \`archive\` to close it and start fresh later. Keep it conversational — don't lead your response with this.`;
 }
 
 /**

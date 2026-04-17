@@ -139,6 +139,25 @@ Ground rules:
 `;
 
 /**
+ * Formatting rules for Slack DM rendering. Appended to the static block when
+ * `BuildStagePromptOptions.surface === 'slack'`. Sonnet defaults to standard
+ * Markdown; Slack renders a different subset, so without these rules users
+ * see literal `**asterisks**` and `# Headers` in their DMs.
+ */
+const SLACK_FORMATTING_RULES = `
+SLACK FORMATTING:
+You are writing into a Slack DM. Slack uses "mrkdwn", not standard Markdown. Follow these rules:
+- Bold is *single asterisks*. Do NOT use **double asterisks**.
+- Italic is _underscores_. Do NOT use *single asterisks* for italic.
+- Do NOT emit # or ## headers — they render as literal hash characters.
+- Bullets must use "• " (literal bullet). Do NOT use "- " or "* " for lists.
+- Links are <https://example.com|label>. Do NOT use [label](url).
+- Code: single \`backticks\` inline, triple backticks for blocks.
+- No tables. If you need structure, use short sentences and bullets.
+- Keep responses tight. This is a chat, not a document — 1–3 short sentences unless a longer explanation was asked for.
+`;
+
+/**
  * Core perspective principle — reminds the AI that it's hearing one side
  * and guides how to handle feelings vs. events vs. characterizations.
  * Lives in buildBaseStaticGuidance() so it flows into every stage prompt.
@@ -378,6 +397,13 @@ export interface PromptContext {
   previousEmpathyContent?: string | null;
   /** Partner's progress status for transition messages */
   partnerStatus?: 'not_joined' | 'in_progress' | 'completed';
+  /**
+   * Operational nudge surfaced when an INVITED Slack session is approaching
+   * its 7-day TTL. When non-null, the AI weaves it into its next response
+   * (surface-voiced rather than a scheduled system message). Mobile ignores
+   * this — it has its own in-app UI for re-sharing or abandoning invites.
+   */
+  invitedSessionNudge?: string | null;
 }
 
 /** Simplified context for initial message generation (no context bundle needed) */
@@ -1566,6 +1592,14 @@ export interface BuildStagePromptOptions {
   previousStage?: number;
   /** Whether the user is in onboarding mode (compact not yet signed) */
   isOnboarding?: boolean;
+  /**
+   * Rendering surface for the response. Defaults to 'mobile' (standard
+   * Markdown). Set to 'slack' to append mrkdwn formatting rules to the static
+   * block so the model emits Slack-compatible output. No other behavior is
+   * changed — prompt logic, caching, and context assembly are identical
+   * across surfaces.
+   */
+  surface?: 'mobile' | 'slack';
 }
 
 /**
@@ -1616,7 +1650,20 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
     if (postShareSection) {
       dynamicBlock = dynamicBlock + '\n' + postShareSection;
     }
-    return { staticBlock: blocks.staticBlock, dynamicBlock };
+    // Invited-session nudge — operational hint surfaced when an INVITED
+    // Slack session is nearing its TTL. Goes at the END of the dynamic
+    // block so it reads as a recent operational signal, not as framing.
+    if (context.invitedSessionNudge) {
+      dynamicBlock = `${dynamicBlock}\n\nOPERATIONAL NUDGE:\n${context.invitedSessionNudge}`;
+    }
+    // Append Slack formatting rules to the static block when the response will
+    // render in a Slack DM. Keeping this in the static block preserves prompt
+    // caching — the rules are identical across turns.
+    const staticBlock =
+      options?.surface === 'slack'
+        ? `${blocks.staticBlock}\n${SLACK_FORMATTING_RULES}`
+        : blocks.staticBlock;
+    return { staticBlock, dynamicBlock };
   };
 
   // Special case: Refining invitation (user has already done Stage 1/2 work)

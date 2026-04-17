@@ -60,6 +60,8 @@ export interface SessionSummary {
   partnerNeeds?: string[];
   openQuestions?: string[];
   agreements?: string[];
+  /** Cliffhanger for long-idle resumption. Null when the user is at a milestone. */
+  lastUnresolvedThread?: string | null;
 }
 
 /**
@@ -102,6 +104,16 @@ export interface ContextBundle {
     recentTurns: ContextMessage[];
     turnCount: number;
     sessionDurationMinutes: number;
+    /**
+     * Milliseconds since this user's own last USER message in the session.
+     * Null when they haven't spoken yet (first-turn case), undefined when
+     * the bundle was built by a caller that doesn't track this (e.g. mock
+     * bundles in tests / replay harnesses). `assembleContextBundle` always
+     * sets it. Used by the prompt layer to signal long-idle resumption
+     * framing; measured on `senderId = userId` only so AI-side interrupts
+     * don't age the clock.
+     */
+    timeSinceLastUserTurnMs?: number | null;
   };
 
   // Emotional state
@@ -197,7 +209,7 @@ export async function assembleContextBundle(
   // Note: buildInnerThoughtsContext depends on conversationContext, so it runs after.
   const turnBufferSize = getTurnBufferSize(stage, intent.intent);
 
-  const [conversationContext, emotionalThread, priorThemes, sessionSummary, userMemories, notableFacts, globalFacts] = await Promise.all([
+  const [conversationContext, emotionalThread, priorThemes, sessionSummary, userMemories, notableFacts, globalFacts, lastUserTurnAt] = await Promise.all([
     buildConversationContext(sessionId, userId, turnBufferSize, depth),
     buildEmotionalThread(sessionId, userId, depth),
     (depth === 'full' || depth === 'light')
@@ -211,6 +223,7 @@ export async function assembleContextBundle(
     // Global facts disabled until consent UI is implemented
     // loadGlobalFacts(userId),
     Promise.resolve(undefined),
+    findLastUserTurnTimestamp(sessionId, userId),
   ]);
 
   // Debug logging for notable facts
@@ -225,11 +238,16 @@ export async function assembleContextBundle(
     (now.getTime() - session.createdAt.getTime()) / 60000
   );
 
+  const timeSinceLastUserTurnMs = lastUserTurnAt
+    ? now.getTime() - lastUserTurnAt.getTime()
+    : null;
+
   return {
     conversationContext: {
       recentTurns: conversationContext,
       turnCount: conversationContext.length,
       sessionDurationMinutes,
+      timeSinceLastUserTurnMs,
     },
     emotionalThread,
     priorThemes,
@@ -456,6 +474,7 @@ async function buildSessionSummary(
     partnerNeeds: summaryData.partnerNeeds ?? [],
     openQuestions: summaryData.openQuestions ?? [],
     agreements: summaryData.agreements ?? [],
+    lastUnresolvedThread: summaryData.lastUnresolvedThread ?? null,
   };
 }
 
@@ -650,3 +669,21 @@ export {
   formatContextForPromptLegacy,
   type ContextFormattingOptions,
 } from './context-formatters';
+
+/**
+ * Return the timestamp of this user's most recent own USER message in the
+ * session. Measures engagement specifically — AI-side posts (gentle
+ * interrupts, welcome-backs) intentionally don't age the idle clock.
+ * Returns null when the user hasn't spoken yet.
+ */
+async function findLastUserTurnTimestamp(
+  sessionId: string,
+  userId: string
+): Promise<Date | null> {
+  const last = await prisma.message.findFirst({
+    where: { sessionId, senderId: userId, role: 'USER' },
+    orderBy: { timestamp: 'desc' },
+    select: { timestamp: true },
+  });
+  return last?.timestamp ?? null;
+}

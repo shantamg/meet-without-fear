@@ -12,6 +12,7 @@ describe('Stage Prompts Service', () => {
       recentTurns: [],
       turnCount: 0,
       sessionDurationMinutes: 5,
+      timeSinceLastUserTurnMs: null,
     },
     emotionalThread: {
       initialIntensity: null,
@@ -747,6 +748,87 @@ describe('Stage Prompts Service', () => {
 
       expect(prompt).toContain('ReadyShare:');
       expect(prompt).not.toContain('FeelHeardCheck:');
+    });
+  });
+
+  describe('surface option', () => {
+    it('defaults to mobile — no Slack formatting rules in the static block', () => {
+      const blocks = buildStagePrompt(1, createContext());
+      expect(blocks.staticBlock).not.toContain('SLACK FORMATTING');
+    });
+
+    it('explicit surface: "mobile" also omits Slack formatting rules', () => {
+      const blocks = buildStagePrompt(1, createContext(), { surface: 'mobile' });
+      expect(blocks.staticBlock).not.toContain('SLACK FORMATTING');
+    });
+
+    it('surface: "slack" appends mrkdwn rules to the static block', () => {
+      const blocks = buildStagePrompt(1, createContext(), { surface: 'slack' });
+      expect(blocks.staticBlock).toContain('SLACK FORMATTING');
+      expect(blocks.staticBlock).toContain('mrkdwn');
+      expect(blocks.staticBlock).toContain('*single asterisks*');
+      expect(blocks.staticBlock).toContain('_underscores_');
+    });
+
+    it('surface: "slack" keeps the same dynamic block as mobile (parity)', () => {
+      const ctx = createContext({ turnCount: 5, emotionalIntensity: 6 });
+      const mobile = buildStagePrompt(1, ctx);
+      const slack = buildStagePrompt(1, ctx, { surface: 'slack' });
+      expect(slack.dynamicBlock).toBe(mobile.dynamicBlock);
+    });
+
+    it('surface: "slack" preserves the micro-tag response protocol', () => {
+      const blocks = buildStagePrompt(1, createContext(), { surface: 'slack' });
+      // The response protocol lives in the static block, so it must still be
+      // there alongside the Slack rules.
+      expect(blocks.staticBlock).toContain('<thinking>');
+      expect(blocks.staticBlock).toContain('FeelHeardCheck');
+    });
+
+    it('surface: "slack" works on every stage', () => {
+      for (const stage of [0, 1, 2, 3, 4, 21]) {
+        const blocks = buildStagePrompt(stage, createContext(), { surface: 'slack' });
+        expect(blocks.staticBlock).toContain('SLACK FORMATTING');
+      }
+    });
+  });
+
+  describe('invitedSessionNudge injection', () => {
+    it('is absent by default', () => {
+      const blocks = buildStagePrompt(0, createContext(), { surface: 'slack' });
+      expect(blocks.dynamicBlock).not.toContain('OPERATIONAL NUDGE');
+    });
+
+    it('is appended to the dynamic block when present', () => {
+      const blocks = buildStagePrompt(
+        0,
+        createContext({
+          invitedSessionNudge: 'Session waiting 5 days. Re-share code `abc123`.',
+        }),
+        { surface: 'slack' }
+      );
+      expect(blocks.dynamicBlock).toContain('OPERATIONAL NUDGE:');
+      expect(blocks.dynamicBlock).toContain('abc123');
+    });
+
+    it('is NOT baked into the cached static block (still per-turn)', () => {
+      const blocks = buildStagePrompt(
+        0,
+        createContext({
+          invitedSessionNudge: 'anything',
+        }),
+        { surface: 'slack' }
+      );
+      expect(blocks.staticBlock).not.toContain('OPERATIONAL NUDGE');
+    });
+
+    it('does not fire when invitedSessionNudge is explicitly null', () => {
+      const blocks = buildStagePrompt(
+        0,
+        createContext({ invitedSessionNudge: null }),
+        { surface: 'slack' }
+      );
+      expect(blocks.dynamicBlock).not.toContain('OPERATIONAL NUDGE');
     });
   });
 });

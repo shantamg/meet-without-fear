@@ -56,8 +56,42 @@ export async function findOrCreateSlackUser(slackUserId: string): Promise<User> 
 // ============================================================================
 
 /**
+ * TTL for `INVITED` sessions — a creator posts `start` in the lobby but the
+ * partner never joins. After this window we treat the session as abandoned
+ * and reclaim it opportunistically on the next lookup. 7 days was chosen to
+ * capture at least one full weekend cycle regardless of what day the invite
+ * was sent.
+ */
+export const INVITED_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Soft milestone at which the Slack flow nudges the creator that their
+ * invite is approaching expiry. Surfaced via the dynamic prompt block so the
+ * Process Guardian delivers it in its own voice rather than through a
+ * scheduled system message.
+ */
+export const INVITED_SESSION_NUDGE_THRESHOLD_MS = 5 * 24 * 60 * 60 * 1000;
+
+/** Sessions that have already been decommissioned — never returned by lookups. */
+const DEAD_SESSION_STATUSES = ['ABANDONED', 'ARCHIVED'] as const;
+
+function isDeadSession(status: string): boolean {
+  return DEAD_SESSION_STATUSES.includes(status as typeof DEAD_SESSION_STATUSES[number]);
+}
+
+function isInvitedSessionExpired(session: Session, now: Date): boolean {
+  return (
+    session.status === 'INVITED' &&
+    now.getTime() - session.createdAt.getTime() > INVITED_SESSION_TTL_MS
+  );
+}
+
+/**
  * Find the (session, userId) pair bound to a specific Slack channel+thread.
- * Returns null if the thread is not yet mapped.
+ * Returns null if:
+ *   - the thread is not mapped,
+ *   - the session has already been ABANDONED/ARCHIVED, or
+ *   - the session is an INVITED past its 7-day TTL (auto-archived on lookup).
  */
 export async function findSessionByThread(
   channelId: string,
@@ -68,14 +102,72 @@ export async function findSessionByThread(
     include: { session: true },
   });
   if (!mapping) return null;
-  return { session: mapping.session, userId: mapping.userId };
+
+  const { session } = mapping;
+  if (isDeadSession(session.status)) return null;
+
+  if (isInvitedSessionExpired(session, new Date())) {
+    await archiveSession(session.id);
+    return null;
+  }
+
+  return { session, userId: mapping.userId };
 }
 
 /**
- * Find a session by its 6-char lobby join code.
+ * Find a session by its 6-char lobby join code. Enforces the same TTL +
+ * dead-session exclusions as `findSessionByThread` so a stale code can't
+ * resurrect an abandoned session.
  */
 export async function findSessionByJoinCode(code: string): Promise<Session | null> {
-  return prisma.session.findUnique({ where: { slackJoinCode: code } });
+  const session = await prisma.session.findUnique({ where: { slackJoinCode: code } });
+  if (!session) return null;
+  if (isDeadSession(session.status)) return null;
+  if (isInvitedSessionExpired(session, new Date())) {
+    await archiveSession(session.id);
+    return null;
+  }
+  return session;
+}
+
+/**
+ * Find the user's currently-open `INVITED` session, if any. Used by the lobby
+ * to short-circuit a duplicate `start` — if A already created a session and
+ * hasn't been paired yet, surface the existing join code instead of minting a
+ * second orphan session. Opportunistically archives stale invites.
+ */
+export async function findInvitedSessionForUser(
+  userId: string
+): Promise<Session | null> {
+  const session = await prisma.session.findFirst({
+    where: {
+      status: 'INVITED',
+      relationship: { members: { some: { userId } } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!session) return null;
+  if (isInvitedSessionExpired(session, new Date())) {
+    await archiveSession(session.id);
+    return null;
+  }
+  return session;
+}
+
+/**
+ * Mark a session as ABANDONED and drop its Slack thread mappings. Used when
+ * the user explicitly abandons an `INVITED` session via the lobby `archive`
+ * command, or when the opportunistic TTL sweeper finds a 7-day-old invite.
+ */
+export async function archiveSession(sessionId: string): Promise<void> {
+  await prisma.$transaction([
+    prisma.session.update({
+      where: { id: sessionId },
+      data: { status: 'ABANDONED' },
+    }),
+    prisma.sessionSlackThread.deleteMany({ where: { sessionId } }),
+  ]);
+  logger.info('[SlackSessionService] Archived Slack session', { sessionId });
 }
 
 // ============================================================================

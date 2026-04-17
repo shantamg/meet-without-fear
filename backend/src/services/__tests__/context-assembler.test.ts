@@ -15,6 +15,7 @@ describe('Context Assembler', () => {
         recentTurns: [],
         turnCount: 0,
         sessionDurationMinutes: 0,
+        timeSinceLastUserTurnMs: null,
       },
       emotionalThread: {
         initialIntensity: null,
@@ -224,6 +225,130 @@ describe('Context Assembler', () => {
 
         // Forbidden content (cross-session)
         expect(formatted).not.toContain('ABOUT THIS USER (from previous sessions)');
+      });
+    });
+
+    describe('Resumption framing (long-idle)', () => {
+      const HOUR = 60 * 60 * 1000;
+
+      it('does not render resumption section for active conversations', () => {
+        const bundle = createMinimalBundle({
+          conversationContext: {
+            recentTurns: [],
+            turnCount: 5,
+            sessionDurationMinutes: 10,
+            timeSinceLastUserTurnMs: 5 * 60 * 1000, // 5 min
+          },
+        });
+        const formatted = formatContextForPrompt(bundle);
+        expect(formatted).not.toContain('Resumption');
+      });
+
+      it('does not render resumption section when user has never spoken', () => {
+        const bundle = createMinimalBundle({
+          conversationContext: {
+            recentTurns: [],
+            turnCount: 0,
+            sessionDurationMinutes: 0,
+            timeSinceLastUserTurnMs: null,
+          },
+        });
+        const formatted = formatContextForPrompt(bundle);
+        expect(formatted).not.toContain('Resumption');
+      });
+
+      it('renders cliffhanger branch when summary has a lastUnresolvedThread', () => {
+        const bundle = createMinimalBundle({
+          conversationContext: {
+            recentTurns: [],
+            turnCount: 8,
+            sessionDurationMinutes: 30,
+            timeSinceLastUserTurnMs: 48 * HOUR,
+          },
+          sessionSummary: {
+            keyThemes: [],
+            emotionalJourney: '',
+            currentFocus: '',
+            userStatedGoals: [],
+            lastUnresolvedThread: 'Alice was still sitting with the feeling that trust had been eroding.',
+          },
+        });
+        const formatted = formatContextForPrompt(bundle);
+        expect(formatted).toContain('Resumption');
+        expect(formatted).toContain('Paused mid-thread');
+        expect(formatted).toContain('trust had been eroding');
+        expect(formatted).toContain('2 days'); // humanized duration
+      });
+
+      it('renders milestone branch when lastUnresolvedThread is null', () => {
+        const bundle = createMinimalBundle({
+          conversationContext: {
+            recentTurns: [],
+            turnCount: 8,
+            sessionDurationMinutes: 30,
+            timeSinceLastUserTurnMs: 26 * HOUR,
+          },
+          stageContext: {
+            stage: 2,
+            gatesSatisfied: {},
+          },
+          sessionSummary: {
+            keyThemes: [],
+            emotionalJourney: '',
+            currentFocus: '',
+            userStatedGoals: [],
+            lastUnresolvedThread: null,
+          },
+        });
+        const formatted = formatContextForPrompt(bundle);
+        expect(formatted).toContain('Resumption');
+        expect(formatted).toContain('Just entered Stage 2');
+        expect(formatted).toContain('without manufacturing unresolved tension');
+      });
+
+      it('renders milestone branch when sessionSummary is missing entirely', () => {
+        const bundle = createMinimalBundle({
+          conversationContext: {
+            recentTurns: [],
+            turnCount: 8,
+            sessionDurationMinutes: 30,
+            timeSinceLastUserTurnMs: 30 * HOUR,
+          },
+          stageContext: {
+            stage: 1,
+            gatesSatisfied: {},
+          },
+          // no sessionSummary
+        });
+        const formatted = formatContextForPrompt(bundle);
+        expect(formatted).toContain('Resumption');
+        expect(formatted).toContain('Just entered Stage 1');
+      });
+
+      it('formats short idle windows (24-35h) in hours', () => {
+        const bundle = createMinimalBundle({
+          conversationContext: {
+            recentTurns: [],
+            turnCount: 5,
+            sessionDurationMinutes: 15,
+            timeSinceLastUserTurnMs: 25 * HOUR,
+          },
+        });
+        const formatted = formatContextForPrompt(bundle);
+        expect(formatted).toContain('~25 hours');
+      });
+
+      it('formats longer gaps in days', () => {
+        const bundle = createMinimalBundle({
+          conversationContext: {
+            recentTurns: [],
+            turnCount: 5,
+            sessionDurationMinutes: 15,
+            timeSinceLastUserTurnMs: 72 * HOUR,
+          },
+        });
+        const formatted = formatContextForPrompt(bundle);
+        expect(formatted).toContain('3 days');
       });
     });
   });

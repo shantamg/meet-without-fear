@@ -10,6 +10,87 @@
 import { WebClient } from '@slack/web-api';
 import { logger } from '../lib/logger';
 
+// ---------------------------------------------------------------------------
+// Markdown → Slack mrkdwn conversion
+// ---------------------------------------------------------------------------
+
+/**
+ * Post-process a reply so it renders correctly in Slack. The prompt already
+ * tells Sonnet to emit mrkdwn (via `SLACK_FORMATTING_RULES` in stage-prompts),
+ * but the model still fumbles occasionally — this catches the common cases so
+ * users never see literal `**asterisks**` or `# Headers` in their DM.
+ *
+ * Rules applied (fenced code blocks are skipped so code stays verbatim):
+ *   • `**bold**` → `*bold*`
+ *   • `__bold__` → `*bold*`
+ *   • `[label](url)` → `<url|label>`
+ *   • leading `# ` / `## ` / `### ` headers → `*bold line*`
+ *   • leading `- ` / `* ` bullets → `• ` (tabs normalized to spaces for nesting)
+ *   • multi-line blockquotes with lazy continuation → `>` prefix on every line
+ *
+ * We deliberately don't touch single `*word*` (could be italic) or single
+ * `_word_` (already valid Slack italic).
+ */
+export function toSlackMrkdwn(text: string): string {
+  // Split on triple-backtick fences so we leave code blocks alone.
+  const parts = text.split(/(```[\s\S]*?```)/g);
+  return parts
+    .map((part, i) => {
+      // Every odd-indexed part is a fenced code block — pass through.
+      if (i % 2 === 1) return part;
+      let out = part;
+      // **bold** → *bold*
+      out = out.replace(/\*\*([^*\n]+?)\*\*/g, '*$1*');
+      // __bold__ → *bold*
+      out = out.replace(/__([^_\n]+?)__/g, '*$1*');
+      // [label](url) → <url|label>
+      out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<$2|$1>');
+      // Headers → bold line (only consume horizontal whitespace — \s would eat
+      // the blank line between a header and its body).
+      out = out.replace(/^[ \t]{0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/gm, '*$1*');
+      // Bullets at line start → • (normalize tab indentation to spaces so
+      // Slack renders nested bullets correctly).
+      out = out.replace(/^([ \t]*)[-*][ \t]+/gm, (_m, indent: string) => {
+        const spaces = indent.replace(/\t/g, '  ');
+        return `${spaces}• `;
+      });
+      // Multi-line blockquote lazy continuation → explicit `>` per line.
+      out = normalizeBlockquotes(out);
+      return out;
+    })
+    .join('');
+}
+
+/**
+ * Standard Markdown allows a blockquote paragraph to start with `>` on only
+ * the first line, with subsequent non-blank lines implicitly joining the
+ * quote ("lazy continuation"). Slack doesn't — it treats lines without `>`
+ * as plain text, so a multi-line quote renders flat past the first line.
+ * This walks the text line-by-line and prefixes continuation lines with `> `
+ * until a blank line or a new block-level construct ends the quote.
+ */
+function normalizeBlockquotes(text: string): string {
+  const lines = text.split('\n');
+  let inQuote = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^>\s?/.test(line)) {
+      inQuote = true;
+      continue;
+    }
+    if (line.trim() === '') {
+      inQuote = false;
+      continue;
+    }
+    if (inQuote) {
+      // Lazy continuation — extend the quote. Preserve leading whitespace
+      // after the `> ` prefix in case the line was indented.
+      lines[i] = `> ${line}`;
+    }
+  }
+  return lines.join('\n');
+}
+
 let client: WebClient | null | undefined;
 
 /**
@@ -49,7 +130,7 @@ export async function postMessage(
   try {
     const res = await slack.chat.postMessage({
       channel,
-      text,
+      text: toSlackMrkdwn(text),
       thread_ts: threadTs,
       unfurl_links: false,
       unfurl_media: false,

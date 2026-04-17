@@ -1,35 +1,23 @@
 /**
  * Slack Session Orchestrator
  *
- * Runs the full Bedrock conversation loop for a Slack-originated MWF session
- * turn. In Phase 1 this is a simple echo so end-to-end plumbing can be tested;
- * Phases 2–4 replace the body with context assembly, prompt building, and a
- * real Sonnet call.
+ * Runs one turn of an MWF session driven from Slack. Handles concurrency
+ * (advisory lock keyed on Slack user), the 👀/✅/❌ reaction UX, and top-level
+ * error boundary. Delegates the actual conversation logic to
+ * `slack-conversation.ts`.
  */
 
 import { logger } from '../lib/logger';
 import { postMessage, addReaction, removeReaction } from './slack-client';
 import type { SlackMessagePayload } from './slack-types';
 import { runConversationTurn } from './slack-conversation';
-
-/**
- * Naive in-memory per-user lock to serialize concurrent messages from the same
- * Slack user. Swap for a DB advisory lock once we deploy multiple backend
- * instances.
- */
-const inFlight = new Map<string, Promise<unknown>>();
+import { withSlackUserLock } from './slack-lock';
 
 export async function handleSlackMessage(payload: SlackMessagePayload): Promise<void> {
-  const key = `slack:${payload.user}`;
-  const prev = inFlight.get(key) ?? Promise.resolve();
-  const next = prev.finally(() => {}).then(() => processTurn(payload));
-  inFlight.set(
-    key,
-    next.finally(() => {
-      if (inFlight.get(key) === next) inFlight.delete(key);
-    })
-  );
-  await next;
+  // Serialize concurrent turns from the same Slack user via a Postgres
+  // advisory lock. Works across multiple backend replicas; lock auto-releases
+  // on tx end or connection drop (so a crashed process can't leave it stuck).
+  await withSlackUserLock(payload.user, () => processTurn(payload));
 }
 
 async function processTurn(payload: SlackMessagePayload): Promise<void> {
