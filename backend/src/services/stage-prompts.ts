@@ -397,6 +397,13 @@ export interface PromptContext {
   previousEmpathyContent?: string | null;
   /** Partner's progress status for transition messages */
   partnerStatus?: 'not_joined' | 'in_progress' | 'completed';
+  /**
+   * Operational nudge surfaced when an INVITED Slack session is approaching
+   * its 7-day TTL. When non-null, the AI weaves it into its next response
+   * (surface-voiced rather than a scheduled system message). Mobile ignores
+   * this — it has its own in-app UI for re-sharing or abandoning invites.
+   */
+  invitedSessionNudge?: string | null;
 }
 
 /** Simplified context for initial message generation (no context bundle needed) */
@@ -1642,6 +1649,12 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
     }
     if (postShareSection) {
       dynamicBlock = dynamicBlock + '\n' + postShareSection;
+    }
+    // Invited-session nudge — operational hint surfaced when an INVITED
+    // Slack session is nearing its TTL. Goes at the END of the dynamic
+    // block so it reads as a recent operational signal, not as framing.
+    if (context.invitedSessionNudge) {
+      dynamicBlock = `${dynamicBlock}\n\nOPERATIONAL NUDGE:\n${context.invitedSessionNudge}`;
     }
     // Append Slack formatting rules to the static block when the response will
     // render in a Slack DM. Keeping this in the static block preserves prompt

@@ -41,6 +41,8 @@ import {
   updateStageProgress,
   hasBothUsersCompacted,
   advanceToStage,
+  INVITED_SESSION_TTL_MS,
+  INVITED_SESSION_NUDGE_THRESHOLD_MS,
 } from './slack-session-service';
 import { buildStagePrompt } from './stage-prompts';
 import { MessageRole } from '@prisma/client';
@@ -343,6 +345,11 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
     CONVERSATION_TURN_LIMIT
   );
 
+  // If the session is still INVITED and nearing TTL, build an operational
+  // nudge the AI can weave into its next response — better than a scheduled
+  // system message.
+  const invitedSessionNudge = buildInvitedSessionNudge(session);
+
   // Use the same prompt builder as mobile for behavioral parity — the only
   // difference for Slack is `surface: 'slack'`, which appends mrkdwn
   // formatting rules to the static block. Prompt-cache keys still hit across
@@ -355,6 +362,7 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
       turnCount: contextBundle.conversationContext.turnCount,
       emotionalIntensity,
       contextBundle,
+      invitedSessionNudge,
     },
     {
       surface: 'slack',
@@ -455,6 +463,30 @@ async function findPreviousUserTurnAt(
     select: { timestamp: true },
   });
   return last?.timestamp ?? null;
+}
+
+/**
+ * Build an operational nudge string for INVITED sessions approaching their
+ * 7-day TTL. Returns null when the session is already ACTIVE, still well
+ * inside the nudge-free window, or missing a join code (structurally
+ * impossible for INVITED Slack sessions, but defensive).
+ *
+ * When rendered, the dynamic block carries this verbatim and the Process
+ * Guardian is instructed (via `finalize`'s "OPERATIONAL NUDGE" framing) to
+ * weave it into its next response in its own voice.
+ */
+function buildInvitedSessionNudge(
+  session: { status: string; createdAt: Date; slackJoinCode: string | null }
+): string | null {
+  if (session.status !== 'INVITED') return null;
+  if (!session.slackJoinCode) return null;
+
+  const ageMs = Date.now() - session.createdAt.getTime();
+  if (ageMs < INVITED_SESSION_NUDGE_THRESHOLD_MS) return null;
+  if (ageMs >= INVITED_SESSION_TTL_MS) return null; // TTL sweep will handle it
+
+  const daysWaiting = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+  return `This session has been waiting for a partner to join for ${daysWaiting} days. Gently mention that they can re-share their join code \`${session.slackJoinCode}\`, or say \`archive\` to close it and start fresh later. Keep it conversational — don't lead your response with this.`;
 }
 
 /**
