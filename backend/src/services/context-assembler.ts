@@ -60,6 +60,8 @@ export interface SessionSummary {
   partnerNeeds?: string[];
   openQuestions?: string[];
   agreements?: string[];
+  /** Cliffhanger for long-idle resumption. Null when the user is at a milestone. */
+  lastUnresolvedThread?: string | null;
 }
 
 /**
@@ -472,6 +474,7 @@ async function buildSessionSummary(
     partnerNeeds: summaryData.partnerNeeds ?? [],
     openQuestions: summaryData.openQuestions ?? [],
     agreements: summaryData.agreements ?? [],
+    lastUnresolvedThread: summaryData.lastUnresolvedThread ?? null,
   };
 }
 
