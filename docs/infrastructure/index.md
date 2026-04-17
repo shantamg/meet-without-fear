@@ -22,7 +22,7 @@ Operational infrastructure for Meet Without Fear.
 
 | Service | Purpose |
 |---|---|
-| `slam-bot-socket.service` | Socket Mode listener for real-time Slack events |
+| `slam-bot-socket.service` | Socket Mode listener for real-time Slack events. For `#mwf-sessions` channel messages, the listener forwards payloads to the backend via `POST /api/slack/mwf-session` (authenticated with `SLACK_INGRESS_SECRET`) instead of spawning a Claude Code agent. The backend runs the full Bedrock pipeline and posts replies back to Slack. |
 | `slam-bot-state-scanner.service` | GitHub state scanner daemon (`github-state-scanner.sh` loop). Hardened with `MemoryMax=256M` and `TasksMax=64` to prevent runaway resource use. |
 
 ### Cron jobs

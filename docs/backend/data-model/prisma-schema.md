@@ -42,6 +42,7 @@ model User {
   biometricEnabled   Boolean  @default(false)
   biometricEnrolledAt DateTime?
   lastMoodIntensity  Int?
+  slackUserId        String?  @unique // Slack user ID for Slack-originated sessions
   globalFacts        Json?    // Fact-Ledger: consolidated cross-session insights
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -103,6 +104,10 @@ model Session {
   updatedAt      DateTime      @updatedAt
   resolvedAt     DateTime?
 
+  // Slack origin (null for mobile-originated sessions)
+  slackJoinCode String?              @unique // 6-char code for partner to pair via lobby
+  slackThreads  SessionSlackThread[]
+
   // Related entities
   messages      Message[]
   sharedVessel  SharedVessel?
@@ -118,6 +123,27 @@ enum SessionStatus {
   WAITING     // One user ahead, waiting for other
   RESOLVED    // Process completed
   ABANDONED   // Timeout or withdrawal
+}
+```
+
+### SessionSlackThread
+
+Maps a Slack DM channel+thread to a (session, user) pair. Each MWF session involves two users, each with their own private DM thread.
+
+```prisma
+model SessionSlackThread {
+  id        String   @id @default(cuid())
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  userId    String   // the Slack-user's DB User.id
+  channelId String   // Slack DM channel id
+  threadTs  String   // top-level thread timestamp
+  createdAt DateTime @default(now())
+
+  @@unique([channelId, threadTs])
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([channelId])
 }
 ```
 
