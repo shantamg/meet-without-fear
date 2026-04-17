@@ -165,7 +165,7 @@ project-root/
   - `useMessages.ts` - Message querying + mutations (30KB); optimistic updates + streaming. Also hosts emotion tracking for messages (`useEmotionalHistory`, `useRecordEmotion`) alongside `useEmotions.ts`. `useInfiniteMessages` here is still the pagination source (wrapped by `useUnifiedSession`); `useTimeline.ts` is a newer companion hook that does not yet fully replace it.
   - `useSessions.ts` - Session CRUD + list (32KB). Uses the cache-first pattern: `useConfirmInvitationMessage` optimistically updates the cache in `onMutate` before the server confirms. `useArchiveSession` is deprecated in favor of `useDeleteSession`, which handles proper data cleanup.
   - `useStages.ts` - Stage mutations + gate validation (64KB)
-  - `useRealtime.ts` - Ably subscription setup (32KB); session-scoped realtime events + fire-and-forget AI messages with stale-closure defense via `userIdRef`. Exports convenience hooks: `usePartnerTyping()`, `usePartnerPresence()`, `useSessionEvents()`, `useUserSessionUpdates()`. Handles app foreground/background state (re-enters/leaves presence, reconnects on resume).
+  - `useRealtime.ts` - Ably subscription setup (29KB); session-scoped realtime events + fire-and-forget AI messages with stale-closure defense via `userIdRef`. Exports convenience hooks: `usePartnerTyping()`, `usePartnerPresence()`, `useSessionEvents()`, `useUserSessionUpdates()`. Handles app foreground/background state (re-enters/leaves presence, reconnects on resume).
   - `useStreamingMessage.ts` - SSE streaming setup + metadata handling (27KB)
   - `useChatUIState.ts` - Derives UI state from cache values (9KB wrapper around `utils/chatUIState.ts`)
   - `useAnimationQueue.ts` - Animation sequencing for chat UI
