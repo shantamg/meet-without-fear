@@ -5,6 +5,49 @@ export interface ContextFormattingOptions {
   milestoneContext?: string | null;
 }
 
+/**
+ * Long-idle threshold (24h). Duplicated from conversation-summarizer to avoid
+ * a circular import; kept here as the render-side gate so the threshold stays
+ * in one logical place per direction of control.
+ */
+const LONG_IDLE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
+/** Humanize an idle duration for inclusion in the prompt. */
+function formatIdleDuration(ms: number): string {
+  const hours = ms / (60 * 60 * 1000);
+  if (hours < 36) return `~${Math.round(hours)} hours`;
+  const days = Math.round(hours / 24);
+  return `${days} days`;
+}
+
+/**
+ * Render the re-orientation hint block when the user is returning after a
+ * long gap. Branches based on whether the summarizer produced a concrete
+ * cliffhanger (`lastUnresolvedThread`) or explicitly null-ed it (milestone
+ * reached / no two-sided dynamic to leave unresolved).
+ *
+ * Returns null when the bundle doesn't warrant a resumption framing at all
+ * (active conversation or first-turn-ever).
+ */
+function renderResumptionSection(bundle: ContextBundle): string | null {
+  const idleMs = bundle.conversationContext.timeSinceLastUserTurnMs;
+  if (idleMs == null || idleMs < LONG_IDLE_THRESHOLD_MS) return null;
+
+  const duration = formatIdleDuration(idleMs);
+  const stage = bundle.stageContext.stage;
+  const cliffhanger = bundle.sessionSummary?.lastUnresolvedThread ?? null;
+
+  const lines = [`--- Resumption (${duration} since last turn) ---`];
+  if (cliffhanger) {
+    lines.push(`Paused mid-thread: "${cliffhanger}"`);
+    lines.push('Weave a gentle re-orientation into your first response before picking up where they left off.');
+  } else {
+    lines.push(`Status: Just entered Stage ${stage}. Awaiting your orientation.`);
+    lines.push('Welcome them back without manufacturing unresolved tension — they reached a clean point before the gap.');
+  }
+  return lines.join('\n');
+}
+
 export function formatContextForPromptLegacy(bundle: ContextBundle): string {
   const parts: string[] = [];
 
@@ -109,6 +152,11 @@ export function formatContextForPrompt(
   const trend = bundle.emotionalThread.trend;
   const intensityStr = intensity !== null ? `${intensity}/10` : 'Unknown';
   parts.push(`Intensity: ${intensityStr} (${trend}) | Turn ${bundle.conversationContext.turnCount}`);
+
+  // Long-idle resumption framing — surfaces before the rolling summary so the
+  // AI orients on it first. No-op for active conversations.
+  const resumption = renderResumptionSection(bundle);
+  if (resumption) parts.push(resumption);
 
   if (bundle.sessionSummary) {
     parts.push('--- Rolling summary ---');
