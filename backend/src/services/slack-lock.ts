@@ -52,8 +52,11 @@ export async function withSlackUserLock<T>(
       // Blocking acquire — if another replica holds the lock for this user,
       // we queue behind it. Uses xact_lock so release is automatic at
       // transaction boundary.
+      // Explicit ::int cast on the namespace: Prisma binds JS numbers as bigint,
+      // and Postgres has no `pg_advisory_xact_lock(bigint, integer)` overload
+      // (only (bigint) and (int, int)), so we must land on the (int, int) form.
       await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(${LOCK_NAMESPACE}, hashtext(${slackUserId}))
+        SELECT pg_advisory_xact_lock(${LOCK_NAMESPACE}::int, hashtext(${slackUserId}))
       `;
       return fn();
     },
