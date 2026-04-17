@@ -9,6 +9,9 @@ export interface ContextFormattingOptions {
  * Long-idle threshold (24h). Duplicated from conversation-summarizer to avoid
  * a circular import; kept here as the render-side gate so the threshold stays
  * in one logical place per direction of control.
+ *
+ * grep: LONG_IDLE_RESUMPTION_THRESHOLD_MS (conversation-summarizer.ts)
+ * — if you change this value, update the source constant there too.
  */
 const LONG_IDLE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
