@@ -1029,6 +1029,19 @@ export async function refinementFinalizeHandler(
         empathyStatus: partnerEmpathyStatus,
         triggeredByUserId: user.id,
       }, { excludeUserId: user.id });
+
+      // Gentle Interrupt for Slack: no-op for mobile users, posts an async
+      // heads-up DM to Slack guessers (non-blocking so a Slack outage can't
+      // affect the mobile delivery path above).
+      const { notifyGuesserOfShareViaSlack } = await import('../services/slack-reconciler-notify');
+      notifyGuesserOfShareViaSlack({
+        sessionId,
+        guesserUserId: guesserId,
+        subjectName,
+        sharedContent: content,
+      }).catch((err) => {
+        logger.warn('[refinementFinalizeHandler] Slack gentle interrupt failed:', err);
+      });
     }
 
     successResponse(res, {
