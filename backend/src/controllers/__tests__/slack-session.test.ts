@@ -9,15 +9,6 @@
 jest.mock('../../services/slack-session-orchestrator', () => ({
   handleSlackMessage: jest.fn().mockResolvedValue(undefined),
 }));
-jest.mock('../../services/workspace-prompt-builder', () => ({
-  getWorkspaceStatus: jest.fn().mockReturnValue({
-    root: '/fake',
-    stagesLoaded: [0, 1, 2, 3, 4],
-    guardianLoaded: true,
-    privacyLoaded: true,
-    progressionLoaded: true,
-  }),
-}));
 
 import type { Request, Response } from 'express';
 import { handleMwfSessionMessage, slackHealth } from '../slack-session';
@@ -123,8 +114,9 @@ describe('slack-session controller', () => {
   });
 
   describe('slackHealth', () => {
-    it('reports slack config and workspace status', () => {
+    it('reports slack config status', () => {
       process.env.SLACK_BOT_TOKEN = 'xoxb-test';
+      process.env.SLACK_INGRESS_SECRET = 'shhh';
       const res = makeRes();
       slackHealth({} as Request, res);
 
@@ -133,10 +125,7 @@ describe('slack-session controller', () => {
         expect.objectContaining({
           ok: true,
           slackConfigured: true,
-          workspace: expect.objectContaining({
-            stagesLoaded: expect.arrayContaining([0, 1, 2, 3, 4]),
-            guardianLoaded: true,
-          }),
+          secretRequired: true,
         })
       );
     });

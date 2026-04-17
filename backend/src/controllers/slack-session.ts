@@ -15,7 +15,6 @@ import { Request, Response } from 'express';
 import { logger } from '../lib/logger';
 import { handleSlackMessage } from '../services/slack-session-orchestrator';
 import type { SlackMessagePayload } from '../services/slack-types';
-import { getWorkspaceStatus } from '../services/workspace-prompt-builder';
 
 export type { SlackMessagePayload };
 
@@ -77,17 +76,9 @@ export async function handleMwfSessionMessage(req: Request, res: Response): Prom
  * can verify the backend is reachable before wiring itself up.
  */
 export function slackHealth(_req: Request, res: Response): void {
-  const workspace = getWorkspaceStatus();
   res.status(200).json({
     ok: true,
     slackConfigured: Boolean(process.env.SLACK_BOT_TOKEN),
     secretRequired: Boolean(process.env.SLACK_INGRESS_SECRET),
-    workspace: {
-      root: workspace.root,
-      stagesLoaded: workspace.stagesLoaded,
-      guardianLoaded: workspace.guardianLoaded,
-      privacyLoaded: workspace.privacyLoaded,
-      progressionLoaded: workspace.progressionLoaded,
-    },
   });
 }

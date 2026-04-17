@@ -10,6 +10,50 @@
 import { WebClient } from '@slack/web-api';
 import { logger } from '../lib/logger';
 
+// ---------------------------------------------------------------------------
+// Markdown → Slack mrkdwn conversion
+// ---------------------------------------------------------------------------
+
+/**
+ * Post-process a reply so it renders correctly in Slack. The prompt already
+ * tells Sonnet to emit mrkdwn (via `SLACK_FORMATTING_RULES` in stage-prompts),
+ * but the model still fumbles occasionally — this catches the common cases so
+ * users never see literal `**asterisks**` or `# Headers` in their DM.
+ *
+ * Rules applied (fenced code blocks are skipped so code stays verbatim):
+ *   • `**bold**` → `*bold*`
+ *   • `__bold__` → `*bold*`
+ *   • `[label](url)` → `<url|label>`
+ *   • leading `# ` / `## ` / `### ` headers → `*bold line*`
+ *   • leading `- ` / `* ` bullets → `• `
+ *
+ * We deliberately don't touch single `*word*` (could be italic) or single
+ * `_word_` (already valid Slack italic).
+ */
+export function toSlackMrkdwn(text: string): string {
+  // Split on triple-backtick fences so we leave code blocks alone.
+  const parts = text.split(/(```[\s\S]*?```)/g);
+  return parts
+    .map((part, i) => {
+      // Every odd-indexed part is a fenced code block — pass through.
+      if (i % 2 === 1) return part;
+      let out = part;
+      // **bold** → *bold*
+      out = out.replace(/\*\*([^*\n]+?)\*\*/g, '*$1*');
+      // __bold__ → *bold*
+      out = out.replace(/__([^_\n]+?)__/g, '*$1*');
+      // [label](url) → <url|label>
+      out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<$2|$1>');
+      // Headers → bold line (only consume horizontal whitespace — \s would eat
+      // the blank line between a header and its body).
+      out = out.replace(/^[ \t]{0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/gm, '*$1*');
+      // - / * bullets at line start → • (keep indentation)
+      out = out.replace(/^(\s*)[-*]\s+/gm, '$1• ');
+      return out;
+    })
+    .join('');
+}
+
 let client: WebClient | null | undefined;
 
 /**
@@ -49,7 +93,7 @@ export async function postMessage(
   try {
     const res = await slack.chat.postMessage({
       channel,
-      text,
+      text: toSlackMrkdwn(text),
       thread_ts: threadTs,
       unfurl_links: false,
       unfurl_media: false,

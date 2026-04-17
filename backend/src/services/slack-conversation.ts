@@ -39,7 +39,7 @@ import {
   hasBothUsersCompacted,
   advanceToStage,
 } from './slack-session-service';
-import { buildSlackStagePrompt } from './workspace-prompt-builder';
+import { buildStagePrompt } from './stage-prompts';
 import { MessageRole } from '@prisma/client';
 
 const CONVERSATION_TURN_LIMIT = 12; // pairs of user+assistant messages kept in prompt
@@ -280,7 +280,11 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
     CONVERSATION_TURN_LIMIT
   );
 
-  const prompt = buildSlackStagePrompt(
+  // Use the same prompt builder as mobile for behavioral parity — the only
+  // difference for Slack is `surface: 'slack'`, which appends mrkdwn
+  // formatting rules to the static block. Prompt-cache keys still hit across
+  // turns because the static block is stable.
+  const prompt = buildStagePrompt(
     stage,
     {
       userName,
@@ -290,6 +294,7 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
       contextBundle,
     },
     {
+      surface: 'slack',
       isOnboarding: stage === 0 && !(await hasBothUsersCompacted(session.id)),
     }
   );
