@@ -388,6 +388,71 @@ export async function updateSessionSummary(
   }
 }
 
+/**
+ * Threshold beyond which the Slack flow treats a user as "long-idle" and may
+ * trigger a synchronous summary refresh before assembling context for their
+ * return turn. See `maybeRefreshSummaryForResumption`.
+ */
+export const LONG_IDLE_RESUMPTION_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Force a synchronous summary refresh when a user is returning after a long
+ * idle and their stored summary pre-dates their own last message. This gives
+ * the re-orientation prompt a fresh `lastUnresolvedThread` to anchor on.
+ *
+ * - No-op when the user hasn't been idle >24h (returns `'not_idle'`).
+ * - No-op when the stored summary is already newer than the user's last own
+ *   message — there's nothing new to summarize (returns `'summary_fresh'`).
+ * - Otherwise awaits `updateSessionSummary` and returns `'refreshed'`.
+ *
+ * Callers (like the Slack turn runner) should fire this BEFORE building the
+ * context bundle so the bundle's `sessionSummary.lastUnresolvedThread`
+ * reflects the fresh state on the critical first-return turn.
+ */
+export async function maybeRefreshSummaryForResumption(params: {
+  sessionId: string;
+  userId: string;
+  turnId: string;
+  /**
+   * When this user last spoke (USER-role message with senderId=userId).
+   * Computed by the caller BEFORE persisting the current incoming message,
+   * so this represents the previous turn's timestamp, not this one's.
+   */
+  lastUserTurnAt: Date | null;
+  hints?: SummarizationHints;
+  now?: Date;
+}): Promise<'refreshed' | 'summary_fresh' | 'not_idle' | 'no_user_activity'> {
+  const { sessionId, userId, turnId, lastUserTurnAt, hints, now = new Date() } = params;
+
+  if (!lastUserTurnAt) return 'no_user_activity';
+
+  const idleMs = now.getTime() - lastUserTurnAt.getTime();
+  if (idleMs < LONG_IDLE_RESUMPTION_THRESHOLD_MS) return 'not_idle';
+
+  // Cheap guard: look up existing summary timestamp. Skip the Haiku call if
+  // it's already newer than the user's last message — nothing has changed.
+  const existing = await prisma.userVessel.findUnique({
+    where: { userId_sessionId: { userId, sessionId } },
+    select: { conversationSummary: true },
+  });
+
+  const existingSummaryJson = existing?.conversationSummary as string | null | undefined;
+  if (existingSummaryJson) {
+    try {
+      const parsed = JSON.parse(existingSummaryJson) as { generatedAt?: string };
+      const generatedAt = parsed.generatedAt ? new Date(parsed.generatedAt) : null;
+      if (generatedAt && generatedAt.getTime() >= lastUserTurnAt.getTime()) {
+        return 'summary_fresh';
+      }
+    } catch {
+      // Malformed stored summary — treat as missing; fall through to refresh.
+    }
+  }
+
+  await updateSessionSummary(sessionId, userId, turnId, hints);
+  return 'refreshed';
+}
+
 // ============================================================================
 // Summary Retrieval
 // ============================================================================
