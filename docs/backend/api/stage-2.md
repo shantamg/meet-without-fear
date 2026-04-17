@@ -124,9 +124,7 @@ POST /api/v1/sessions/:id/empathy/consent
 
 ```typescript
 interface ConsentToShareEmpathyRequest {
-  draftId: string;
-  // Optional: user can edit before sharing
-  finalContent?: string;
+  consent: boolean;  // true to consent and share
 }
 ```
 
@@ -135,19 +133,22 @@ interface ConsentToShareEmpathyRequest {
 ```typescript
 interface ConsentToShareEmpathyResponse {
   consented: boolean;
-  consentedAt: string;
-  waitingForPartner: boolean;
-
-  // If partner already consented, their attempt is returned
-  partnerAttempt?: EmpathyAttemptDTO;
-}
-
-interface EmpathyAttemptDTO {
-  id: string;
-  sourceUserId: string;
-  content: string;
-  sharedAt: string;
-  consentRecordId: string;
+  consentedAt: string | null;
+  partnerConsented: boolean;
+  canReveal: boolean;
+  status: 'HELD' | 'ANALYZING';  // HELD = waiting for partner; ANALYZING = both shared
+  empathyMessage: {
+    id: string;
+    content: string;
+    timestamp: string;
+    stage: number;
+  };
+  transitionMessage?: {
+    id: string;
+    content: string;
+    timestamp: string;
+    stage: number;
+  };
 }
 ```
 
