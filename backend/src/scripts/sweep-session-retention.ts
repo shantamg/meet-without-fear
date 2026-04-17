@@ -23,6 +23,9 @@ main()
     console.error('[sweep-session-retention] failed:', err);
     process.exit(1);
   })
+  // `.finally()` only fires on the success path here — `process.exit(1)`
+  // in `.catch()` terminates the process before `.finally()` executes, so
+  // exit code 0 is never reached on failure.
   .finally(() => {
     process.exit(0);
   });
