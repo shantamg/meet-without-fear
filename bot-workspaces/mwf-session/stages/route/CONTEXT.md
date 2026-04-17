@@ -19,42 +19,51 @@ Check `channel_id` against the `#mwf-sessions` lobby channel ID (from `.claude/c
 
 ### 1A. Lobby Handler (#mwf-sessions)
 
-The lobby handles two actions only:
+The lobby is a multi-turn conversation in a thread. The bot asks questions, the user answers, and once everything is gathered the bot sets up DMs.
 
-**Start a new session:**
-- User posts "start", "new session", or similar
-- Create a new session:
-  1. Generate a UUID for `session_id` and a 6-char alphanumeric `join_code`
-  2. Create `data/mwf-sessions/{session_id}/session.json` (status: `waiting_for_partner`, user_a populated)
-  3. Create `data/mwf-sessions/{session_id}/stage-progress.json` (current_stage: 0, user_a: IN_PROGRESS)
-  4. Create empty vessel dirs: `vessel-a/`, `shared/`, `synthesis/`
-- Open a DM with the user:
-  ```bash
-  # Use Slack MCP tool or curl to open a DM
-  # conversations.open with users=<user_id> returns a DM channel ID
-  ```
-- Post the Stage 0 welcome message in the DM (this creates a thread)
-- Write the DM thread mapping to `data/mwf-sessions/thread-index.json`:
-  ```json
-  { "{dm_channel_id}:{thread_ts}": "{session_id}" }
-  ```
-- Reply in the lobby thread: "I've sent you a private message to start your session. Your join code is `{join_code}` — share it with your conversation partner."
+**Step 1: User posts "start" (or similar) in `#mwf-sessions`**
 
-**Join an existing session:**
-- User posts a 6-char alphanumeric code
-- Look up the code in `data/mwf-sessions/*/session.json` (scan for matching `join_code`)
-- If found and status is `waiting_for_partner`:
-  1. Update `session.json`: populate `user_b`, set status to `active`
-  2. Update `stage-progress.json`: add user_b with stage 0 IN_PROGRESS
-  3. Create `vessel-b/` directory
-  4. Open a DM with User B (`conversations.open`)
-  5. Post Stage 0 welcome in User B's DM
-  6. Write User B's DM thread to `thread-index.json`
-  7. Reply in lobby thread: "You've joined the session! Check your DMs."
-  8. Notify User A in their DM thread: "Your partner has joined the session."
-- If not found or already paired → reply in lobby: "That code didn't match an open session."
+Reply in a thread:
+> "I'd love to help you start a conversation. What's your first name?"
 
-**Any other lobby message** → reply in thread: "This channel is for starting and joining sessions. Post `start` to begin a new session, or paste a 6-character join code."
+**Step 2: User replies with their name**
+
+> "Thanks, {name}! Who would you like to have this conversation with? @mention them so I can send the invitation."
+
+**Step 3: User @mentions their partner**
+
+Extract the partner's Slack user ID from the @mention. Then:
+
+1. **Create the session**:
+   - Generate a UUID for `session_id`
+   - Create `data/mwf-sessions/{session_id}/` directory
+   - Write `session.json` (status: `waiting_for_partner`, user_a populated with name + slack_user_id, partner's slack_user_id stored for later invitation delivery)
+   - Write `stage-progress.json` (current_stage: 0, user_a: NOT_STARTED)
+   - Create empty vessel dirs: `vessel-a/`, `shared/`, `synthesis/`
+
+2. **Open a DM with User A** (`conversations.open` with `users=<user_a_id>`):
+   - Post a welcome message as a top-level DM message
+   - **Reply to that message in a thread** to seed the conversation (e.g., "To get started, I'd like to walk you through a few ground rules...")
+   - Write to `thread-index.json`: `"{dm_channel_id}:{welcome_msg_ts}": "{session_id}"`
+   - Update `session.json` with User A's `thread_ts`
+
+3. **Reply in the lobby thread**:
+   > "I've sent you a private message to get started. Head over to your DMs with me."
+
+4. **User A continues in DM** → enters Stage 0 Phase A (Curiosity Compact), then Phase B (Invitation Crafting). The invitation crafting phase is a multi-turn conversation where the bot helps the user compose a thoughtful message to their partner (see `stages/0-onboarding/CONTEXT.md` Phase B). The invitation is NOT sent immediately.
+
+5. **When the invitation is finalized** (user approves the draft):
+   - Open a DM with the partner (`conversations.open` with `users=<partner_id>`)
+   - Post the crafted invitation as a top-level DM message
+   - **Reply to that message in a thread**: "If you'd like to participate, just reply here with your first name to get started."
+   - Write to `thread-index.json`: `"{partner_dm_channel_id}:{invitation_msg_ts}": "{session_id}"`
+
+**When the partner responds in their DM thread:**
+- The socket listener matches it via `thread-index.json` → routes to this workspace
+- The route stage loads the session, sees `status: waiting_for_partner` and this user is the partner
+- Ask for their name, pair them, then proceed to Phase 0B (pairing + onboarding)
+
+**Any other lobby message** → reply in thread: "To start a session, just say `start`."
 
 ### 2. Session Lookup (DM messages)
 
