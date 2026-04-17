@@ -606,13 +606,21 @@ function findSessionThreadForChannel(channel) {
 // ---------------------------------------------------------------------------
 
 /**
- * POST the incoming Slack event to the backend MWF endpoint. The backend
- * replies asynchronously (200 immediately, posts the real reply via Slack
- * Web API). We still manage reactions here so the existing 👀/✅/❌ flow
- * keeps working.
+ * POST the incoming Slack event to the backend MWF endpoint with retries.
+ * The backend replies asynchronously (200 immediately, posts the real reply
+ * via Slack Web API). We still manage reactions here so the existing
+ * 👀/✅/❌ flow keeps working.
+ *
+ * Retry policy: up to 2 retries with exponential-ish backoff (500ms, 2s).
+ * Covers brief Render deploy windows (~30–60s of 5xx) without looking like
+ * silent bot failure to the user. A single attempt that returns 4xx (e.g.
+ * 401 from a secret mismatch) is NOT retried — that's configuration, not
+ * transient outage.
  */
+const MWF_FORWARD_RETRY_DELAYS_MS = [500, 2000];
+
 async function forwardToMwfBackend(event, { isLobby }) {
-  if (!MWF_BACKEND_URL) return false;
+  if (!MWF_BACKEND_URL) return { ok: false, reason: 'no_backend_url' };
 
   const body = JSON.stringify({
     channel: event.channel,
@@ -627,21 +635,50 @@ async function forwardToMwfBackend(event, { isLobby }) {
   const headers = { 'content-type': 'application/json' };
   if (MWF_INGRESS_SECRET) headers['x-slack-ingress-secret'] = MWF_INGRESS_SECRET;
 
-  try {
-    const res = await fetch(MWF_BACKEND_URL, {
-      method: 'POST',
-      headers,
-      body,
-    });
-    if (!res.ok) {
+  const maxAttempts = MWF_FORWARD_RETRY_DELAYS_MS.length + 1;
+  let lastReason = 'unknown';
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(MWF_BACKEND_URL, { method: 'POST', headers, body });
+      if (res.ok) return { ok: true };
+
       const txt = await res.text().catch(() => '');
-      logMain(`MWF backend ${res.status}: ${txt.slice(0, 200)}`);
-      return false;
+      lastReason = `http_${res.status}`;
+      logMain(`MWF backend ${res.status} (attempt ${attempt}/${maxAttempts}): ${txt.slice(0, 200)}`);
+
+      // 4xx is a config/logic problem — don't retry, fail fast.
+      if (res.status >= 400 && res.status < 500) return { ok: false, reason: lastReason };
+    } catch (err) {
+      lastReason = 'network_error';
+      logMain(`MWF backend POST failed (attempt ${attempt}/${maxAttempts}): ${err.message}`);
     }
-    return true;
+
+    const nextDelay = MWF_FORWARD_RETRY_DELAYS_MS[attempt - 1];
+    if (nextDelay !== undefined) {
+      await new Promise((resolve) => setTimeout(resolve, nextDelay));
+    }
+  }
+
+  return { ok: false, reason: lastReason };
+}
+
+/**
+ * Surface a human-readable message to the user when we fully gave up
+ * forwarding. Better UX than a silent ❌ reaction — most users won't
+ * understand what the red-cross emoji means when their message didn't seem
+ * to go anywhere.
+ */
+async function postMwfForwardFallback(event) {
+  const threadTs = event.thread_ts || event.ts;
+  try {
+    await slack.chat.postMessage({
+      channel: event.channel,
+      thread_ts: threadTs,
+      text: "_I couldn't reach my model just now — please resend your message and I'll pick it up._",
+    });
   } catch (err) {
-    logMain(`MWF backend POST failed: ${err.message}`);
-    return false;
+    logMain(`MWF fallback DM failed: ${err.message}`);
   }
 }
 
@@ -715,10 +752,16 @@ async function handleMessageEvent(event) {
   if (config.workspace === 'mwf-session' && MWF_BACKEND_URL) {
     const isLobby = channel === MWF_SESSIONS_CHANNEL;
     await addReaction(channel, ts, 'eyes');
-    const ok = await forwardToMwfBackend(event, { isLobby });
-    if (!ok) {
+    const result = await forwardToMwfBackend(event, { isLobby });
+    if (!result.ok) {
       await removeReaction(channel, ts, 'eyes');
       await addReaction(channel, ts, 'x');
+      // Human-readable fallback so users understand the bot had a hiccup
+      // instead of just seeing a silent ❌. Only post if the failure was
+      // transient — for config failures (4xx) a DM would just confuse them.
+      if (result.reason && !result.reason.startsWith('http_4')) {
+        await postMwfForwardFallback(event);
+      }
     }
     try {
       writeFileSync(HEARTBEAT_FILE, new Date().toISOString());
