@@ -1,13 +1,15 @@
 # MWF Session Workspace (L1)
 
-Thread-based MWF conversation workspace. Each Slack thread in `#mwf-sessions` is one conversation session. The bot guides users through the five MWF conversation stages (0-4) using session continuity (`--session` / `--resume`).
+DM-based MWF conversation workspace. `#mwf-sessions` is a **lobby** for starting/joining sessions. Actual conversations happen in **private DMs** between the bot and each user, ensuring vessel privacy by design.
 
 ## How It Works
 
-1. **Thread = session**: The socket-listener routes `#mwf-sessions` messages here with thread-scoped sessions. Claude resumes the full conversation history on each reply.
-2. **Stage detection**: On each message, determine the current stage from the conversation so far. New threads start at Stage 0.
-3. **Stage behavior**: Apply the appropriate stage's Process Guardian behavior (tone, goals, gate conditions).
-4. **Stage transitions**: When a stage's gate condition is met, announce the transition and begin the next stage's behavior.
+1. **Lobby → DM handoff**: User posts in `#mwf-sessions` to start or join a session. Bot opens a private DM with the user (via `conversations.open`) and conducts all conversation there.
+2. **DM thread = session**: Each user gets their own DM thread for the session. The socket-listener detects active session threads in DMs via `thread-index.json` and routes them here.
+3. **Stage detection**: On each message, load state from `data/mwf-sessions/{session_id}/` to determine current stage.
+4. **Stage behavior**: Apply the appropriate stage's Process Guardian behavior (tone, goals, gate conditions).
+5. **Stage transitions**: When a stage's gate condition is met, announce the transition and begin the next stage's behavior.
+6. **Privacy**: Each user's conversation is in a separate DM — Slack enforces isolation. No user can see the other's messages.
 
 ## Conversation Stages
 
@@ -45,13 +47,21 @@ Thread-based MWF conversation workspace. Each Slack thread in `#mwf-sessions` is
 
 ## Stage Progression
 
-1. `route` -- Detect current stage from conversation history, apply appropriate behavior
+1. `route` -- Detect message source (lobby vs DM), load session state, apply appropriate stage behavior
 
 This is a single-stage workspace. The `route` stage handles all messages by reading the session context and applying the correct stage behavior. There is no multi-stage pipeline -- the stage detection is inline.
 
 ## Two-User Model
 
-Unlike single-actor workspaces, MWF sessions track two participants. Each stage receives a `user_id` identifying which participant is messaging. Per-user state (Vessel data, stage progress) is tracked independently. Stage advancement requires both users to satisfy the gate condition.
+Unlike single-actor workspaces, MWF sessions track two participants. Each user has their own private DM thread with the bot. Per-user state (Vessel data, stage progress) is tracked independently. Stage advancement requires both users to satisfy the gate condition.
+
+## Lobby vs DM
+
+| Source | What happens |
+|--------|-------------|
+| `#mwf-sessions` (lobby) | "Start session" → create session + open DM. Join code → pair + open DM. All other messages → prompt user to check DMs. |
+| DM (session thread) | Route to stage handler based on `thread-index.json` lookup. This is where all conversation happens. |
+| DM (non-session) | Not handled by this workspace — falls through to `slack-triage`. |
 
 ## Tone
 
@@ -66,4 +76,5 @@ Unlike single-actor workspaces, MWF sessions track two participants. Each stage 
 1. Never share one user's private reflections with others
 2. Never diagnose, label, or pathologize
 3. If a user expresses distress, acknowledge it and suggest professional support
-4. Never post outside the thread
+4. Never post outside the user's DM thread — no cross-posting to the lobby or to the other user's DM
+5. Never reveal one user's DM channel ID or thread to the other user

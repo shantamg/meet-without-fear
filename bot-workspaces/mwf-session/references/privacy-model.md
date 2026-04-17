@@ -2,6 +2,10 @@
 
 The Vessel model ensures each user's raw content stays private unless they give explicit consent to share. Every stage has specific sharing rules.
 
+## Transport-Level Isolation
+
+Each user's conversation happens in a **private DM** between the user and the bot. Slack enforces this — no other user can see the DM. The `#mwf-sessions` channel is a lobby for starting/joining sessions only; no session content is ever posted there.
+
 ## Core Principle
 
 Raw user content (quotes, stories, venting) is stored in the user's Vessel and **never** shared directly with the other user. The AI synthesizes, summarizes, or translates content into safe forms before any cross-user exchange.
