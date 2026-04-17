@@ -99,3 +99,82 @@ export async function notifyGuesserOfShareViaSlack(
   });
   return { status: 'posted', channelId: thread.channelId };
 }
+
+// ---------------------------------------------------------------------------
+// Partner empathy reveal
+// ---------------------------------------------------------------------------
+
+export interface NotifyEmpathyRevealParams {
+  sessionId: string;
+  /** The Guesser's DB user id — they're the one RECEIVING the empathy. */
+  recipientUserId: string;
+  /** The Subject's display name — they DRAFTED the empathy about their partner. */
+  subjectName: string;
+  /** The empathy content the Subject drafted (NOT a quote of the Guesser). */
+  empathyContent: string;
+}
+
+export type NotifyEmpathyRevealResult =
+  | { status: 'posted'; channelId: string }
+  | { status: 'no_slack_thread' }
+  | { status: 'post_failed'; error: string };
+
+/**
+ * Post a partner's empathy statement to the recipient's Slack DM thread as
+ * a blockquoted paragraph, with an intro that clearly attributes the
+ * content to the other party. Mirrors the mobile-side EMPATHY_STATEMENT
+ * card layout in a chat-native form.
+ *
+ * Framing note: this is the one place we DO want a clear call to respond.
+ * Unlike the share Gentle Interrupt (which is a passive heads-up), receiving
+ * your partner's empathy attempt is a moment that invites a reply. The text
+ * explicitly asks "does this land?" with the accept / revise / decline
+ * vocabulary so the classifier has clean input when the user answers.
+ *
+ * No-op when the recipient is on mobile (the mobile client renders its own
+ * native empathy card via Ably).
+ */
+export async function postEmpathyRevealToSlack(
+  params: NotifyEmpathyRevealParams
+): Promise<NotifyEmpathyRevealResult> {
+  const { sessionId, recipientUserId, subjectName, empathyContent } = params;
+
+  const thread = await prisma.sessionSlackThread.findUnique({
+    where: { sessionId_userId: { sessionId, userId: recipientUserId } },
+    select: { channelId: true, threadTs: true },
+  });
+
+  if (!thread) {
+    return { status: 'no_slack_thread' };
+  }
+
+  const quotedEmpathy = empathyContent
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
+
+  const text = [
+    `💭 *${subjectName} shared their understanding of what you've been going through:*`,
+    quotedEmpathy,
+    '',
+    '_Does this land for you? Reply `accept`, `revise <your correction>`, or `decline` — or share more to help them get closer._',
+  ].join('\n');
+
+  const res = await postMessage(thread.channelId, text, thread.threadTs);
+
+  if (!res.ok) {
+    logger.warn('[SlackReconcilerNotify] Empathy reveal post failed', {
+      sessionId,
+      recipientUserId,
+      error: res.error,
+    });
+    return { status: 'post_failed', error: res.error ?? 'unknown' };
+  }
+
+  logger.info('[SlackReconcilerNotify] Empathy reveal posted', {
+    sessionId,
+    recipientUserId,
+    channelId: thread.channelId,
+  });
+  return { status: 'posted', channelId: thread.channelId };
+}
