@@ -8,12 +8,13 @@
 
 const sessionFindUnique = jest.fn();
 const userVesselUpdate = jest.fn();
+const userVesselFindUnique = jest.fn();
 const getHaikuJsonMock = jest.fn();
 
 jest.mock('../../lib/prisma', () => ({
   prisma: {
     session: { findUnique: sessionFindUnique },
-    userVessel: { update: userVesselUpdate },
+    userVessel: { update: userVesselUpdate, findUnique: userVesselFindUnique },
   },
 }));
 
@@ -22,7 +23,11 @@ jest.mock('../../lib/bedrock', () => ({
   BrainActivityCallType: { SUMMARIZATION: 'SUMMARIZATION' },
 }));
 
-import { updateSessionSummary } from '../conversation-summarizer';
+import {
+  updateSessionSummary,
+  maybeRefreshSummaryForResumption,
+  LONG_IDLE_RESUMPTION_THRESHOLD_MS,
+} from '../conversation-summarizer';
 
 function buildSessionFixture(overrides: Partial<{
   messageCount: number;
@@ -59,6 +64,7 @@ describe('conversation-summarizer — lastUnresolvedThread + hints', () => {
   beforeEach(() => {
     sessionFindUnique.mockReset();
     userVesselUpdate.mockReset();
+    userVesselFindUnique.mockReset();
     getHaikuJsonMock.mockReset();
     userVesselUpdate.mockResolvedValue({});
   });
@@ -176,5 +182,116 @@ describe('conversation-summarizer — lastUnresolvedThread + hints', () => {
 
     const systemPrompt = (getHaikuJsonMock.mock.calls[0][0] as { systemPrompt: string }).systemPrompt;
     expect(systemPrompt).not.toContain('STRUCTURAL CONTEXT');
+  });
+});
+
+describe('maybeRefreshSummaryForResumption', () => {
+  beforeEach(() => {
+    sessionFindUnique.mockReset();
+    userVesselUpdate.mockReset();
+    userVesselFindUnique.mockReset();
+    getHaikuJsonMock.mockReset();
+    userVesselUpdate.mockResolvedValue({});
+  });
+
+  const idleButFresh = 25 * 60 * 60 * 1000; // 25h
+  const notIdle = 10 * 60 * 1000; // 10min
+
+  it('returns "no_user_activity" when the user has never spoken', async () => {
+    const result = await maybeRefreshSummaryForResumption({
+      sessionId: 's', userId: 'u', turnId: 't',
+      lastUserTurnAt: null,
+    });
+    expect(result).toBe('no_user_activity');
+    expect(getHaikuJsonMock).not.toHaveBeenCalled();
+  });
+
+  it('returns "not_idle" and does nothing for active conversations', async () => {
+    const now = new Date();
+    const result = await maybeRefreshSummaryForResumption({
+      sessionId: 's', userId: 'u', turnId: 't',
+      lastUserTurnAt: new Date(now.getTime() - notIdle),
+      now,
+    });
+    expect(result).toBe('not_idle');
+    expect(userVesselFindUnique).not.toHaveBeenCalled();
+    expect(getHaikuJsonMock).not.toHaveBeenCalled();
+  });
+
+  it('returns "summary_fresh" when existing summary is newer than the user\'s last message', async () => {
+    const now = new Date();
+    const lastUserTurnAt = new Date(now.getTime() - idleButFresh);
+    const summaryAfter = new Date(lastUserTurnAt.getTime() + 60_000).toISOString();
+
+    userVesselFindUnique.mockResolvedValue({
+      conversationSummary: JSON.stringify({ generatedAt: summaryAfter }),
+    });
+
+    const result = await maybeRefreshSummaryForResumption({
+      sessionId: 's', userId: 'u', turnId: 't',
+      lastUserTurnAt,
+      now,
+    });
+
+    expect(result).toBe('summary_fresh');
+    expect(getHaikuJsonMock).not.toHaveBeenCalled();
+  });
+
+  it('refreshes when idle >24h and summary is older than the last user message', async () => {
+    const now = new Date();
+    const lastUserTurnAt = new Date(now.getTime() - idleButFresh);
+    const summaryBefore = new Date(lastUserTurnAt.getTime() - 60_000).toISOString();
+
+    // The outer helper sees the stale stored summary via userVesselFindUnique
+    // and decides to refresh. `updateSessionSummary` then does its OWN
+    // internal session load — that fixture's vessel has no summary, so
+    // `needsSummarization` lets the Haiku call through.
+    userVesselFindUnique.mockResolvedValue({
+      conversationSummary: JSON.stringify({ generatedAt: summaryBefore }),
+    });
+    sessionFindUnique.mockResolvedValue(buildSessionFixture({ messageCount: 30 }));
+    getHaikuJsonMock.mockResolvedValue({
+      summary: 'fresh summary',
+      keyThemes: [],
+      emotionalJourney: '',
+      unresolvedTopics: [],
+      lastUnresolvedThread: 'Alice was weighing whether to initiate the next step.',
+    });
+
+    const result = await maybeRefreshSummaryForResumption({
+      sessionId: 's', userId: 'u', turnId: 't',
+      lastUserTurnAt,
+      now,
+    });
+
+    expect(result).toBe('refreshed');
+    expect(getHaikuJsonMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes when idle >24h and no summary exists at all', async () => {
+    const now = new Date();
+    const lastUserTurnAt = new Date(now.getTime() - idleButFresh);
+
+    userVesselFindUnique.mockResolvedValue({ conversationSummary: null });
+    sessionFindUnique.mockResolvedValue(buildSessionFixture());
+    getHaikuJsonMock.mockResolvedValue({
+      summary: 'fresh summary',
+      keyThemes: [],
+      emotionalJourney: '',
+      unresolvedTopics: [],
+    });
+
+    const result = await maybeRefreshSummaryForResumption({
+      sessionId: 's', userId: 'u', turnId: 't',
+      lastUserTurnAt,
+      now,
+    });
+
+    expect(result).toBe('refreshed');
+    expect(getHaikuJsonMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('LONG_IDLE_RESUMPTION_THRESHOLD_MS is 24 hours', () => {
+    expect(LONG_IDLE_RESUMPTION_THRESHOLD_MS).toBe(24 * 60 * 60 * 1000);
   });
 });

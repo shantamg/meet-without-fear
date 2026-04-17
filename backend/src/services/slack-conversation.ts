@@ -22,6 +22,7 @@ import {
   type ContextBundle,
 } from './context-assembler';
 import { formatContextForPrompt } from './context-formatters';
+import { maybeRefreshSummaryForResumption } from './conversation-summarizer';
 import { determineMemoryIntent } from './memory-intent';
 import { parseMicroTagResponse } from '../utils/micro-tag-parser';
 import { trimConversationHistory } from '../utils/token-budget';
@@ -279,8 +280,15 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
   const { session, userId } = mapping;
   const stage = await getCurrentStage(session.id, userId);
 
+  // Capture the timestamp of this user's PREVIOUS own message before we
+  // persist the current one. Used below to detect a long-idle resumption and
+  // decide whether to force a summary refresh so the re-orientation prompt
+  // has a fresh `lastUnresolvedThread` to anchor on.
+  const previousUserTurnAt = await findPreviousUserTurnAt(session.id, userId);
+
   // Persist the incoming user message before we call the model so it's part of
   // context on this turn too (matches the mobile controller).
+  const turnId = randomUUID();
   await saveSlackMessage({
     sessionId: session.id,
     userId,
@@ -292,6 +300,18 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
   // If the user is in Stage 0 and answers yes to the compact, mark it and
   // possibly advance.
   await maybeHandleStage0Signal(session.id, userId, payload.text);
+
+  // On long-idle resumption (>24h since previous turn AND no fresh summary),
+  // force a synchronous summary refresh so this turn's context bundle has a
+  // current cliffhanger. No-op for active conversations.
+  await maybeRefreshSummaryForResumption({
+    sessionId: session.id,
+    userId,
+    turnId,
+    lastUserTurnAt: previousUserTurnAt,
+  }).catch((err) => {
+    logger.warn('[SlackConversation] forced summary refresh failed (non-fatal):', err);
+  });
 
   // Load history for both the Sonnet prompt and context assembly.
   const history = await loadConversationForPrompt(session.id, userId);
@@ -352,7 +372,6 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
     ...trimmedHistory,
   ];
 
-  const turnId = randomUUID();
   const raw = await getSonnetResponse({
     systemPrompt: prompt,
     messages,
@@ -418,6 +437,24 @@ async function loadConversationForPrompt(
     role: m.role === MessageRole.USER ? ('user' as const) : ('assistant' as const),
     content: m.content,
   }));
+}
+
+/**
+ * Return the timestamp of this user's most recent OWN USER message in the
+ * session, if any. Called before persisting the current incoming message so
+ * the resumption-idle check sees the previous turn, not the one we're about
+ * to handle.
+ */
+async function findPreviousUserTurnAt(
+  sessionId: string,
+  userId: string
+): Promise<Date | null> {
+  const last = await prisma.message.findFirst({
+    where: { sessionId, senderId: userId, role: MessageRole.USER },
+    orderBy: { timestamp: 'desc' },
+    select: { timestamp: true },
+  });
+  return last?.timestamp ?? null;
 }
 
 /**
