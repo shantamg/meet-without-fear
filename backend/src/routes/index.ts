@@ -14,6 +14,7 @@ import peopleRoutes from './people';
 import knowledgeBaseRoutes from './knowledge-base';
 import reconcilerRoutes from './reconciler';
 import sessionsRoutes from './sessions';
+import slackRoutes from './slack';
 import stage0Routes from './stage0';
 import messagesRoutes from './messages';
 import notificationsRoutes from './notifications';
@@ -35,6 +36,7 @@ router.use('/auth', authRoutes);
 router.use('/tts', ttsRoutes);
 router.use(voiceRoutes); // Voice transcription token endpoint
 router.use('/e2e', e2eRoutes); // E2E testing helpers - must be BEFORE routers with global auth middleware
+router.use(slackRoutes); // Slack ingress (socket-listener → backend) — uses shared-secret auth
 router.use(chatRoutes); // Unified chat router
 router.use(invitationsRoutes); // Must be before innerWorkRoutes (has public endpoints)
 router.use(innerThoughtsRoutes); // Inner Thoughts (solo self-reflection, optionally linked to partner sessions)

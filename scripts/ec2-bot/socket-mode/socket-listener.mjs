@@ -46,6 +46,12 @@ const SLAM_BOT_CHANNEL = process.env.SLAM_BOT_CHANNEL_ID;
 const BUGS_AND_REQUESTS_CHANNEL = process.env.BUGS_AND_REQUESTS_CHANNEL_ID;
 const MWF_SESSIONS_CHANNEL = process.env.MWF_SESSIONS_CHANNEL_ID;
 
+// Backend endpoint that owns MWF sessions (Bedrock engine, same as mobile).
+// When set, mwf-session messages are POSTed here instead of spawned into a
+// Claude Code agent. Falls back to the legacy agent path when unset.
+const MWF_BACKEND_URL = process.env.MWF_BACKEND_URL;
+const MWF_INGRESS_SECRET = process.env.SLACK_INGRESS_SECRET;
+
 if (!APP_TOKEN || !BOT_TOKEN || !BOT_USER_ID) {
   console.error('Missing required env vars: SLACK_APP_TOKEN, SLACK_BOT_TOKEN, SLAM_BOT_USER_ID');
   process.exit(1);
@@ -596,6 +602,50 @@ function findSessionThreadForChannel(channel) {
 }
 
 // ---------------------------------------------------------------------------
+// MWF backend forwarding — Bedrock engine owns MWF sessions, not Claude agents
+// ---------------------------------------------------------------------------
+
+/**
+ * POST the incoming Slack event to the backend MWF endpoint. The backend
+ * replies asynchronously (200 immediately, posts the real reply via Slack
+ * Web API). We still manage reactions here so the existing 👀/✅/❌ flow
+ * keeps working.
+ */
+async function forwardToMwfBackend(event, { isLobby }) {
+  if (!MWF_BACKEND_URL) return false;
+
+  const body = JSON.stringify({
+    channel: event.channel,
+    user: event.user,
+    text: event.text || '',
+    thread_ts: event.thread_ts,
+    ts: event.ts,
+    team: event.team,
+    isLobby,
+  });
+
+  const headers = { 'content-type': 'application/json' };
+  if (MWF_INGRESS_SECRET) headers['x-slack-ingress-secret'] = MWF_INGRESS_SECRET;
+
+  try {
+    const res = await fetch(MWF_BACKEND_URL, {
+      method: 'POST',
+      headers,
+      body,
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      logMain(`MWF backend ${res.status}: ${txt.slice(0, 200)}`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logMain(`MWF backend POST failed: ${err.message}`);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Event handling
 // ---------------------------------------------------------------------------
 
@@ -658,6 +708,23 @@ async function handleMessageEvent(event) {
   }
 
   logMain(`Claimed message ${ts} in ${config.logName} from user=${user}`);
+
+  // MWF sessions run on the backend Bedrock engine, not Claude agents. Forward
+  // the event and short-circuit the agent dispatch path. The backend will
+  // manage reactions (✅/❌) and post the reply itself.
+  if (config.workspace === 'mwf-session' && MWF_BACKEND_URL) {
+    const isLobby = channel === MWF_SESSIONS_CHANNEL;
+    await addReaction(channel, ts, 'eyes');
+    const ok = await forwardToMwfBackend(event, { isLobby });
+    if (!ok) {
+      await removeReaction(channel, ts, 'eyes');
+      await addReaction(channel, ts, 'x');
+    }
+    try {
+      writeFileSync(HEARTBEAT_FILE, new Date().toISOString());
+    } catch { /* ignore */ }
+    return;
+  }
 
   // Thread-aware queuing: if an agent is already working on this thread,
   // queue this message instead of dispatching immediately.
