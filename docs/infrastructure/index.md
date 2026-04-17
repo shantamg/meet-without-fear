@@ -2,7 +2,7 @@
 title: Infrastructure
 sidebar_position: 1
 description: Slam bot (EC2), Render hosting, Vercel deploys, GitHub automation.
-updated: 2026-04-16
+updated: 2026-04-17
 ---
 
 # Infrastructure
@@ -50,9 +50,32 @@ Local operator scripts live at `scripts/ec2-bot/`:
 | `provision.sh` | One-shot AWS provisioning (security group, EIP, instance, SSH config entry) |
 | `setup.sh` | First-time bootstrap of a fresh instance (Node, gh, claude, directories) |
 | `deploy.sh` | Symlink scripts, install systemd units + crontab + logrotate |
-| `configure-slack.sh` | Write Slack tokens + channel IDs (including `BUGS_AND_REQUESTS_CHANNEL_ID` for `#bugs-and-requests`) to `/opt/slam-bot/.env` and start the socket service |
+| `configure-slack.sh` | Write Slack tokens + channel IDs (including `BUGS_AND_REQUESTS_CHANNEL_ID` for `#bugs-and-requests` and `MWF_SESSIONS_CHANNEL_ID` for `#mwf-sessions`) to `/opt/slam-bot/.env` and start the socket service |
 | `configure-mixpanel.sh` | Write Mixpanel service-account credentials |
 | `configure-db.sh` | Create/rotate `slam_bot_readonly` role on the Render Postgres |
+
+### Session data directories
+
+The bot maintains session state on disk at `~/meet-without-fear/`:
+
+| Directory | Purpose |
+|---|---|
+| `data/mwf-sessions/` | MWF session data, one subdirectory per session ID |
+| `data/mwf-sessions/thread-index.json` | Maps `{channel}:{thread_ts}` → `{session_id}` for DM routing lookup |
+| `data/mwf-users/` | Per-user profile data (name, previous sessions, etc.) |
+
+`thread-index.json` is read on every incoming DM to check if the message belongs to an active MWF session. It is maintained by the `route` stage in the `mwf-session` workspace.
+
+### MWF session routing
+
+The socket listener implements session-aware message routing:
+
+- **Session detection**: On each DM message, checks `data/mwf-sessions/thread-index.json` for active session threads
+- **DM → mwf-session mapping**: Messages in a DM thread matching an active MWF session are routed to the `mwf-session` workspace instead of `slack-triage`
+- **Stray DM prevention**: Top-level DMs (outside any thread) from users with active sessions are redirected with a nudge to use their session thread
+- **Lobby channel**: `#mwf-sessions` is used for session setup only; actual conversations happen in private DMs (one DM thread per user) to enforce vessel privacy at the transport layer
+
+See `bot-workspaces/mwf-session/CLAUDE.md` for full architecture and stage contracts.
 
 ## Production hosting
 

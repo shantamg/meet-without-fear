@@ -9,7 +9,7 @@
  * - `comparison`: Side-by-side view of both users' needs + common ground
  */
 
-import React, { useRef, useCallback, useEffect } from 'react';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -109,12 +109,14 @@ export function NeedsDrawer({
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const isDragging = useRef(false);
   const currentSnap = useRef<'3q' | 'full'>('3q');
+  const [contentHeight, setContentHeight] = useState(SCREEN_HEIGHT - POSITION_3Q);
 
   // -------------------------------------------------------------------------
   // Open / Close / Snap animations
   // -------------------------------------------------------------------------
   const snapTo = useCallback(
     (position: number, backdrop: number) => {
+      setContentHeight(SCREEN_HEIGHT - position);
       Animated.parallel([
         Animated.spring(drawerTranslate, {
           toValue: position,
@@ -507,36 +509,39 @@ export function NeedsDrawer({
           },
         ]}
       >
-        {/* Drag handle */}
-        <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
-          <View style={styles.dragHandle} />
+        {/* Content wrapper constrains layout to visible drawer area */}
+        <View style={{ height: contentHeight }}>
+          {/* Drag handle */}
+          <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
+            <View style={styles.dragHandle} />
+          </View>
+
+          {/* Header */}
+          <Text
+            style={styles.header}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            testID={`${testID}-header`}
+          >
+            {headerText}
+          </Text>
+
+          {/* Scrollable content */}
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator
+          >
+            {mode === 'needs' && renderNeedsMode()}
+            {mode === 'common-ground' && renderCommonGroundMode()}
+            {mode === 'comparison' && renderComparisonMode()}
+          </ScrollView>
+
+          {/* Fixed footer buttons */}
+          {mode === 'needs' && renderNeedsButtons()}
+          {mode === 'common-ground' && renderCommonGroundButtons()}
+          {mode === 'comparison' && renderComparisonButtons()}
         </View>
-
-        {/* Header */}
-        <Text
-          style={styles.header}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          testID={`${testID}-header`}
-        >
-          {headerText}
-        </Text>
-
-        {/* Scrollable content */}
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator
-        >
-          {mode === 'needs' && renderNeedsMode()}
-          {mode === 'common-ground' && renderCommonGroundMode()}
-          {mode === 'comparison' && renderComparisonMode()}
-        </ScrollView>
-
-        {/* Fixed footer buttons */}
-        {mode === 'needs' && renderNeedsButtons()}
-        {mode === 'common-ground' && renderCommonGroundButtons()}
-        {mode === 'comparison' && renderComparisonButtons()}
       </Animated.View>
     </View>
   );
