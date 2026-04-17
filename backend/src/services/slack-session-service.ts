@@ -424,6 +424,41 @@ export async function hasBothUsersCompacted(sessionId: string): Promise<boolean>
 }
 
 /**
+ * Returns true when this user has compactSigned=true on their Stage 0 row.
+ * Per-user counterpart to `hasBothUsersCompacted`, used by the solo flow so
+ * one user can advance past onboarding without waiting on a partner.
+ */
+export async function hasUserCompacted(
+  sessionId: string,
+  userId: string
+): Promise<boolean> {
+  const row = await prisma.stageProgress.findFirst({
+    where: { sessionId, userId, stage: 0 },
+    orderBy: { startedAt: 'desc' },
+    select: { gatesSatisfied: true },
+  });
+  const gates = row?.gatesSatisfied as { compactSigned?: boolean } | null;
+  return gates?.compactSigned === true;
+}
+
+/**
+ * Returns true when this user has invitationSent=true on their Stage 0 row.
+ * Drives the invitation-phase prompt branch once the compact is signed.
+ */
+export async function hasUserSentInvitation(
+  sessionId: string,
+  userId: string
+): Promise<boolean> {
+  const row = await prisma.stageProgress.findFirst({
+    where: { sessionId, userId, stage: 0 },
+    orderBy: { startedAt: 'desc' },
+    select: { gatesSatisfied: true },
+  });
+  const gates = row?.gatesSatisfied as { invitationSent?: boolean } | null;
+  return gates?.invitationSent === true;
+}
+
+/**
  * Advance every user on the session to `newStage`: mark the current
  * StageProgress COMPLETED and open a fresh IN_PROGRESS row for the new stage.
  */
@@ -474,6 +509,57 @@ export async function advanceToStage(
     sessionId,
     newStage,
     memberCount: members.length,
+  });
+}
+
+/**
+ * Advance a single user to `newStage`: mark their current open StageProgress
+ * COMPLETED and open a fresh IN_PROGRESS row. Used by the solo flow so one
+ * partner can progress past Stage 0 without waiting on the other. Partner
+ * rows are untouched — they advance on their own when they sign their own
+ * compact and send their own invitation.
+ */
+export async function advanceUserToStage(
+  sessionId: string,
+  userId: string,
+  newStage: number
+): Promise<void> {
+  const now = new Date();
+  const current = await prisma.stageProgress.findFirst({
+    where: { sessionId, userId, status: { not: StageStatus.COMPLETED } },
+    orderBy: { startedAt: 'desc' },
+    select: { id: true },
+  });
+  if (current) {
+    await prisma.stageProgress.update({
+      where: { id: current.id },
+      data: { status: StageStatus.COMPLETED, completedAt: now },
+    });
+  }
+
+  await prisma.stageProgress.upsert({
+    where: {
+      sessionId_userId_stage: { sessionId, userId, stage: newStage },
+    },
+    create: {
+      sessionId,
+      userId,
+      stage: newStage,
+      status: StageStatus.IN_PROGRESS,
+      gatesSatisfied: {},
+    },
+    update: {
+      status: StageStatus.IN_PROGRESS,
+      startedAt: now,
+      completedAt: null,
+      gatesSatisfied: {},
+    },
+  });
+
+  logger.info('[SlackSessionService] Advanced user to new stage', {
+    sessionId,
+    userId,
+    newStage,
   });
 }
 
