@@ -69,11 +69,40 @@ interface InvitationDTO {
 
 ## Acknowledge Invitation
 
-Mark a pending invitation as viewed (flips a `viewedAt` timestamp for the inviter's UI). Requires authentication.
+Mark a pending invitation as viewed. Creates a notification so the invitee can see the invitation. Requires authentication.
 
 ```
 POST /api/v1/invitations/:id/acknowledge
 ```
+
+### Response
+
+```typescript
+interface AcknowledgeInvitationResponse {
+  acknowledged: boolean;
+  reason?: string;  // 'expired' or status name if not acknowledged
+  invitation: {
+    id: string;
+    status: InvitationStatus;
+    invitedBy: {
+      id: string;
+      name: string | null;
+    };
+    session?: {
+      id: string;
+      status: string;
+    };
+    expiresAt?: string;
+  };
+}
+```
+
+### Errors
+
+| Code | When |
+|------|------|
+| `VALIDATION_ERROR` (400) | User is the inviter (cannot acknowledge own invitation) |
+| `NOT_FOUND` | Invitation doesn't exist |
 
 ---
 
