@@ -51,6 +51,7 @@
       "entry_stage": "01-initialize",
       "trigger": "label",
       "keep_label": true,
+      "cooldown_secs": 0,
       "effort": "max"
     },
     "bot:milestone-builder": {
