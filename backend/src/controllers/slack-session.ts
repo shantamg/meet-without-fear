@@ -15,6 +15,7 @@ import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { logger } from '../lib/logger';
 import { handleSlackMessage } from '../services/slack-session-orchestrator';
+import { findSessionByThread, findLiveSessionThreadForChannel } from '../services/slack-session-service';
 import type { SlackMessagePayload } from '../services/slack-types';
 
 export type { SlackMessagePayload };
@@ -81,4 +82,45 @@ export function slackHealth(_req: Request, res: Response): void {
     slackConfigured: Boolean(process.env.SLACK_BOT_TOKEN),
     secretRequired: Boolean(process.env.SLACK_INGRESS_SECRET),
   });
+}
+
+/**
+ * GET /api/slack/session-check?channel=X&thread_ts=Y
+ *
+ * Authoritative "is this (channel, thread) an active MWF session thread?"
+ * lookup for the EC2 socket listener. The listener used to answer this
+ * from a local `thread-index.json` written by the legacy Claude-agent path;
+ * now that sessions live in Postgres, only the backend knows, so the
+ * listener queries here to decide whether to forward DM replies to
+ * `/slack/mwf-session` (vs. falling back to slack-triage).
+ *
+ * Also returns `activeThreadTs` for the channel so the listener can nudge a
+ * user back when they post a stray top-level DM outside their session thread
+ * (the same UX the old thread-index-based code offered).
+ */
+export async function slackSessionCheck(req: Request, res: Response): Promise<void> {
+  if (!validateSharedSecret(req)) {
+    res.status(401).json({ ok: false, error: 'unauthorized' });
+    return;
+  }
+
+  const channel = typeof req.query.channel === 'string' ? req.query.channel : '';
+  const threadTs = typeof req.query.thread_ts === 'string' ? req.query.thread_ts : '';
+  if (!channel) {
+    res.status(400).json({ ok: false, error: 'missing_channel' });
+    return;
+  }
+
+  let isSession = false;
+  if (threadTs) {
+    const mapping = await findSessionByThread(channel, threadTs);
+    isSession = Boolean(mapping);
+  }
+
+  // When a user posts a top-level DM (no thread_ts) in a channel that still
+  // has an active session thread, the listener wants to nudge them back to
+  // the thread. Surface the active thread_ts (if any) so it can do that.
+  const activeThreadTs = isSession ? null : await findLiveSessionThreadForChannel(channel);
+
+  res.status(200).json({ ok: true, isSession, activeThreadTs });
 }

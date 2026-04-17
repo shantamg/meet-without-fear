@@ -115,6 +115,29 @@ export async function findSessionByThread(
 }
 
 /**
+ * Return the thread_ts of a live (non-dead, non-expired-INVITED) session
+ * bound to this Slack channel, if any. Used by the socket-listener's
+ * session-check endpoint to redirect stray top-level DMs back into an
+ * active session thread.
+ */
+export async function findLiveSessionThreadForChannel(
+  channelId: string
+): Promise<string | null> {
+  const mappings = await prisma.sessionSlackThread.findMany({
+    where: { channelId },
+    include: { session: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  const now = new Date();
+  for (const m of mappings) {
+    if (isDeadSession(m.session.status)) continue;
+    if (isInvitedSessionExpired(m.session, now)) continue;
+    return m.threadTs;
+  }
+  return null;
+}
+
+/**
  * Find a session by its 6-char lobby join code. Enforces the same TTL +
  * dead-session exclusions as `findSessionByThread` so a stale code can't
  * resurrect an abandoned session.
