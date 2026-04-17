@@ -1209,6 +1209,17 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       },
     });
     const turnId = `${sessionId}-${user.id}-${userTurnCount}`;
+
+    // Count user messages in the CURRENT stage only (for stage-specific guards like feel-heard check)
+    const stageTurnCount = await prisma.message.count({
+      where: {
+        sessionId,
+        role: 'USER',
+        senderId: user.id,
+        forUserId: null,
+        stage: currentStage,
+      },
+    });
     updateContext({ turnId, sessionId, userId: user.id });
 
     // Get partner name for context
@@ -1374,7 +1385,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     const prompt = buildStagePrompt(effectiveStage, {
       userName,
       partnerName,
-      turnCount: userTurnCount,
+      turnCount: stageTurnCount,
       emotionalIntensity,
       contextBundle,
       sharedContentHistory,
@@ -1845,7 +1856,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     // =========================================================================
     // Process metadata (persist to database)
     // =========================================================================
-    if (currentStage === 1 && metadata.offerFeelHeardCheck && progress?.id) {
+    if (currentStage === 1 && metadata.offerFeelHeardCheck && progress?.id && stageTurnCount >= 3) {
       const currentGates = (progress.gatesSatisfied as Record<string, unknown>) ?? {};
       await prisma.stageProgress.update({
         where: { id: progress.id },
