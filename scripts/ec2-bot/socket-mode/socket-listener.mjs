@@ -575,6 +575,26 @@ function checkMwfSessionThread(channel, threadTs) {
   }
 }
 
+/**
+ * Check if a DM channel has ANY active MWF session (regardless of thread).
+ * Used to detect stray top-level DMs from users who should be replying in
+ * their session thread. Returns the thread_ts they should be using, or null.
+ */
+function findSessionThreadForChannel(channel) {
+  try {
+    const index = JSON.parse(readFileSync(THREAD_INDEX_PATH, 'utf8'));
+    const prefix = `${channel}:`;
+    for (const key of Object.keys(index)) {
+      if (key.startsWith(prefix)) {
+        return key.split(':')[1]; // Return the thread_ts
+      }
+    }
+  } catch {
+    // File doesn't exist yet or is unreadable
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Event handling
 // ---------------------------------------------------------------------------
@@ -596,6 +616,8 @@ async function handleMessageEvent(event) {
 
   // Session-aware DM routing: if this is a DM that matches an active MWF
   // session thread, route to mwf-session workspace instead of slack-triage.
+  // Also catches stray top-level DMs from users who have an active session
+  // in this DM channel — replies telling them to use the session thread.
   if (config && config.workspace === 'slack-triage') {
     const threadTs = event.thread_ts || event.ts;
     const sessionId = checkMwfSessionThread(channel, threadTs);
@@ -607,6 +629,23 @@ async function handleMessageEvent(event) {
         workspace: 'mwf-session',
       };
       logMain(`DM message ${ts} matched MWF session ${sessionId} — routing to mwf-session`);
+    } else if (!event.thread_ts) {
+      // Top-level DM (not in any thread) — check if this channel has an active session
+      const sessionThreadTs = findSessionThreadForChannel(channel);
+      if (sessionThreadTs) {
+        // User posted outside their session thread — nudge them back
+        logMain(`Stray DM ${ts} in channel with active session thread ${sessionThreadTs} — sending redirect`);
+        try {
+          await slack.chat.postMessage({
+            channel,
+            text: `It looks like you have an active session here. Please reply in the conversation thread above to continue.`,
+            thread_ts: ts, // Reply to their stray message
+          });
+        } catch (err) {
+          logMain(`Failed to send session redirect: ${err.message}`);
+        }
+        return; // Don't dispatch an agent for this
+      }
     }
   }
 

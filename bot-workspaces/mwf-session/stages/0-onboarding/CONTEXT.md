@@ -89,7 +89,12 @@ Triggered when a user starts a new MWF session and no existing session is found 
    - Use facts to inform questions and reflections naturally — do NOT say "I remember from last time"
    - See `references/global-facts.md` for loading rules and privacy constraints
 
-5. **Reply with join code**:
+5. **Ask for the user's name**:
+   - "What's your first name?" (or preferred name)
+   - Store the response as `display_name` in `session.json` under `user_a`
+   - Use this name throughout the session for personalization
+
+6. **Reply with join code**:
    - Tell the user their session is created
    - Provide the join code for them to share with their conversation partner
    - Transition to Phase B (Invitation Crafting) in the same thread
@@ -103,26 +108,30 @@ Triggered when a message contains a join code and no existing session is found f
    - If not found → reply: "I couldn't find a session with that code. Double-check and try again."
    - If found but `status` is not `waiting_for_partner` → reply: "That session already has two participants."
 
-2. **Pair the users**:
+2. **Ask for User B's name**:
+   - "What's your first name?" (or preferred name)
+   - Use the response as `display_name` below
+
+3. **Pair the users**:
    - Update `session.json`:
-     - Set `user_b` to `{ "slack_user_id": "<user_id>", "display_name": "<userName>", "thread_ts": "<thread_ts>" }`
+     - Set `user_b` to `{ "slack_user_id": "<user_id>", "display_name": "<name from step 2>", "thread_ts": "<thread_ts>" }`
      - Set `status` to `active`
    - Update `stage-progress.json`:
      - Add User B entry: `{ "stage_status": "NOT_STARTED", "gates_satisfied": { "agreedToTerms": false }, "last_active": "<ISO-8601>" }`
 
-3. **Update thread index**:
+4. **Update thread index**:
    - Add User B's `"{channel_id}:{thread_ts}": "{session_id}"` entry to `thread-index.json`
 
-4. **Create vessel directories**:
+5. **Create vessel directories**:
    - Create `data/mwf-sessions/{session_id}/vessel-a/`
    - Create `data/mwf-sessions/{session_id}/vessel-b/`
 
-5. **Load global facts** (returning user context):
+6. **Load global facts** (returning user context):
    - For both User A and User B, check if `data/mwf-users/{slack_user_id}/global-facts.json` exists
    - If it exists and is non-empty, load as background context for this user's session thread
    - See `references/global-facts.md` for loading rules and privacy constraints
 
-6. **Notify both users**:
+7. **Notify both users**:
    - In User A's thread: "Your partner has joined! Let's begin."
    - In User B's thread: Welcome and begin Phase A (Curiosity Compact)
    - Both users enter Phase A
