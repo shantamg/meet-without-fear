@@ -8,11 +8,12 @@
 
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/errors';
-import { handleMwfSessionMessage, slackHealth } from '../controllers/slack-session';
+import { handleMwfSessionMessage, slackHealth, slackSessionCheck } from '../controllers/slack-session';
 
 const router = Router();
 
 router.get('/slack/health', slackHealth);
+router.get('/slack/session-check', asyncHandler(slackSessionCheck));
 router.post('/slack/mwf-session', asyncHandler(handleMwfSessionMessage));
 
 export default router;
