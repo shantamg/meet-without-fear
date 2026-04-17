@@ -45,6 +45,7 @@ import {
   INVITED_SESSION_NUDGE_THRESHOLD_MS,
 } from './slack-session-service';
 import { buildStagePrompt } from './stage-prompts';
+import { detectShareCommand, markDraftReadyToShare } from './slack-empathy-exchange';
 import { MessageRole } from '@prisma/client';
 
 const CONVERSATION_TURN_LIMIT = 12; // pairs of user+assistant messages kept in prompt
@@ -282,6 +283,16 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
   const { session, userId } = mapping;
   const stage = await getCurrentStage(session.id, userId);
 
+  // Stage 2 share command: if the user types `share` / `send it` while in
+  // Stage 2 with a pending draft, short-circuit the Sonnet turn and flip
+  // their draft to ready-to-share. Follow-up iteration will also create the
+  // EmpathyAttempt + fire the cross-user handoff; for now the draft flag
+  // is the trigger the existing Stage 2 machinery picks up.
+  if (stage === 2 && detectShareCommand(payload.text)) {
+    await handleShareCommand(session.id, userId, payload);
+    return;
+  }
+
   // Capture the timestamp of this user's PREVIOUS own message before we
   // persist the current one. Used below to detect a long-idle resumption and
   // decide whether to force a summary refresh so the re-orientation prompt
@@ -420,6 +431,64 @@ async function handleDmMessage(payload: SlackMessagePayload): Promise<void> {
   // Stage-specific signal handling.
   if (stage === 1 && parsed.offerFeelHeardCheck) {
     await maybeAdvanceOnFeelHeard(session.id, userId);
+  }
+
+  // Stage 2 ReadyShare nudge — when the AI signals the draft is ready, post
+  // a follow-up structural hint about the `share` command. The AI prompt
+  // already encourages this conversationally, but the explicit command
+  // reference reduces ambiguity about how to actually trigger the share.
+  if (stage === 2 && parsed.offerReadyToShare) {
+    await postMessage(
+      payload.channel,
+      '_When you\'re ready, reply `share` to send this to your partner — or keep refining._',
+      threadTs
+    );
+  }
+}
+
+/**
+ * Handle a Slack `share` / `send it` command from the subject at Stage 2.
+ * Short-circuits the Sonnet turn and flips the user's EmpathyDraft to
+ * ready-to-share. Posts a confirmation (or a helpful error) back to the
+ * DM thread.
+ */
+async function handleShareCommand(
+  sessionId: string,
+  userId: string,
+  payload: SlackMessagePayload
+): Promise<void> {
+  const threadTs = payload.thread_ts ?? payload.ts;
+  const result = await markDraftReadyToShare(sessionId, userId);
+
+  switch (result.status) {
+    case 'marked_ready':
+      await postMessage(
+        payload.channel,
+        'Got it — your partner will see your empathy statement on their next turn. Keep an eye out for their reaction.',
+        threadTs
+      );
+      break;
+    case 'already_ready':
+      await postMessage(
+        payload.channel,
+        "_You've already marked this ready to share — your partner will see it on their next turn._",
+        threadTs
+      );
+      break;
+    case 'empty_draft':
+      await postMessage(
+        payload.channel,
+        "Your draft is empty — share something about your partner's experience first, then reply `share`.",
+        threadTs
+      );
+      break;
+    case 'no_draft':
+      await postMessage(
+        payload.channel,
+        "I don't see a draft for you to share yet. Keep working with me on what your partner might be going through, then reply `share` once it feels right.",
+        threadTs
+      );
+      break;
   }
 }
 
