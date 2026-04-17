@@ -554,6 +554,28 @@ async function drainThreadQueue(tKey) {
 }
 
 // ---------------------------------------------------------------------------
+// MWF session detection — check if a DM thread is an active MWF session
+// ---------------------------------------------------------------------------
+
+const THREAD_INDEX_PATH = join(MWF_APP_DIR, 'data', 'mwf-sessions', 'thread-index.json');
+
+/**
+ * Check if a DM message belongs to an active MWF session.
+ * Reads thread-index.json and looks for a matching {channel}:{thread_ts} key.
+ * Returns the session ID if found, null otherwise.
+ */
+function checkMwfSessionThread(channel, threadTs) {
+  if (!threadTs) return null;
+  try {
+    const index = JSON.parse(readFileSync(THREAD_INDEX_PATH, 'utf8'));
+    const key = `${channel}:${threadTs}`;
+    return index[key] || null;
+  } catch {
+    return null; // File doesn't exist yet or is unreadable
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Event handling
 // ---------------------------------------------------------------------------
 
@@ -570,7 +592,24 @@ async function handleMessageEvent(event) {
   if (subtype && subtype !== 'file_share') return;
 
   // Check if this channel is configured
-  const config = CHANNEL_CONFIG[channel];
+  let config = CHANNEL_CONFIG[channel];
+
+  // Session-aware DM routing: if this is a DM that matches an active MWF
+  // session thread, route to mwf-session workspace instead of slack-triage.
+  if (config && config.workspace === 'slack-triage') {
+    const threadTs = event.thread_ts || event.ts;
+    const sessionId = checkMwfSessionThread(channel, threadTs);
+    if (sessionId) {
+      config = {
+        ...config,
+        logName: 'check-mwf-session',
+        commandSlug: 'mwf-session-reply',
+        workspace: 'mwf-session',
+      };
+      logMain(`DM message ${ts} matched MWF session ${sessionId} — routing to mwf-session`);
+    }
+  }
+
   if (!config) return; // Not a monitored channel
 
   // Try to claim this message
