@@ -19,20 +19,18 @@ Check `channel_id` against the `#mwf-sessions` lobby channel ID (from `.claude/c
 
 ### 1A. Lobby Handler (#mwf-sessions)
 
-The lobby is a multi-turn conversation in a thread. The bot asks questions, the user answers, and once everything is gathered the bot sets up DMs.
+The lobby is a short exchange in a thread. The bot resolves the user's name from Slack (via the `user_id` in the event — use the Slack user's display name or real name from the message context) and asks one question: who to invite.
 
 **Step 1: User posts "start" (or similar) in `#mwf-sessions`**
 
 Reply in a thread:
-> "I'd love to help you start a conversation. What's your first name?"
+> "Hi {name}! Who would you like to have this conversation with? @mention them so I can send the invitation."
 
-**Step 2: User replies with their name**
+The user's name comes from their Slack profile (already available in the message event or via `users.info`). Do NOT ask for their name.
 
-> "Thanks, {name}! Who would you like to have this conversation with? @mention them so I can send the invitation."
+**Step 2: User @mentions their partner**
 
-**Step 3: User @mentions their partner**
-
-Extract the partner's Slack user ID from the @mention. Then:
+Extract the partner's Slack user ID from the @mention. Resolve the partner's display name from Slack as well. Then:
 
 1. **Create the session**:
    - Generate a UUID for `session_id`

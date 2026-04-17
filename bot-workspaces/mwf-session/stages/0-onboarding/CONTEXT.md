@@ -89,10 +89,7 @@ Triggered when a user starts a new MWF session and no existing session is found 
    - Use facts to inform questions and reflections naturally — do NOT say "I remember from last time"
    - See `references/global-facts.md` for loading rules and privacy constraints
 
-5. **Ask for the user's name**:
-   - "What's your first name?" (or preferred name)
-   - Store the response as `display_name` in `session.json` under `user_a`
-   - Use this name throughout the session for personalization
+5. **Resolve user's name from Slack profile** (do NOT ask — use `display_name` or `real_name` from the Slack user profile, already available via the message event or `users.info`). Store as `display_name` in `session.json` under `user_a`.
 
 6. **Reply with join code**:
    - Tell the user their session is created
@@ -108,13 +105,11 @@ Triggered when a message contains a join code and no existing session is found f
    - If not found → reply: "I couldn't find a session with that code. Double-check and try again."
    - If found but `status` is not `waiting_for_partner` → reply: "That session already has two participants."
 
-2. **Ask for User B's name**:
-   - "What's your first name?" (or preferred name)
-   - Use the response as `display_name` below
+2. **Resolve User B's name from Slack profile** (do NOT ask — use `display_name` or `real_name` from Slack, available via `users.info`).
 
 3. **Pair the users**:
    - Update `session.json`:
-     - Set `user_b` to `{ "slack_user_id": "<user_id>", "display_name": "<name from step 2>", "thread_ts": "<thread_ts>" }`
+     - Set `user_b` to `{ "slack_user_id": "<user_id>", "display_name": "<name from Slack>", "thread_ts": "<thread_ts>" }`
      - Set `status` to `active`
    - Update `stage-progress.json`:
      - Add User B entry: `{ "stage_status": "NOT_STARTED", "gates_satisfied": { "agreedToTerms": false }, "last_active": "<ISO-8601>" }`
