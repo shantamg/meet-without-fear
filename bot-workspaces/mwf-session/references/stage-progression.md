@@ -22,6 +22,18 @@ Each stage has an advancement gate. Both users must satisfy it before the sessio
 | 3 | At least one common-ground need identified and confirmed by both users |
 | 4 | Mutual agreement on at least one micro-experiment |
 
+## Gate Keys
+
+Gate state is persisted in `stage-progress.json`. Each key is a boolean that must be satisfied before the stage can advance. Stage advancement requires **both users** to satisfy all gate keys for the current stage.
+
+| Stage | Gate Keys |
+|---|---|
+| 0 | `agreedToTerms` |
+| 1 | `feelHeardConfirmed` |
+| 2 | `empathyDraftReady`, `empathyConsented`, `partnerValidated` |
+| 3 | `needsConfirmed`, `commonGroundConfirmed` |
+| 4 | `strategiesSubmitted`, `rankingsSubmitted`, `agreementCreated` |
+
 ## Per-User Status
 
 Each user tracks their own `StageStatus` independently:
@@ -43,3 +55,12 @@ Each user tracks their own `StageStatus` independently:
 ## No Skipping
 
 Stages must be completed in order (0 → 1 → 2 → 3 → 4). A user cannot enter stage N+1 until stage N is `COMPLETED` for both users.
+
+## Global Facts Consolidation
+
+Notable facts are consolidated into each user's cross-session `global-facts.json` at two points:
+
+1. **Stage transitions** — when `current_stage` advances (both users `COMPLETED`), consolidate each user's `vessel-{x}/notable-facts.json` into `data/mwf-users/{slack_user_id}/global-facts.json`
+2. **Session completion** — when all Stage 4 gates are satisfied and `session.json` status is set to `completed`
+
+This ensures facts are preserved even if a session ends early or is abandoned after a stage transition. See `references/global-facts.md` for the full merge algorithm, deduplication rules, and 50-fact limit.

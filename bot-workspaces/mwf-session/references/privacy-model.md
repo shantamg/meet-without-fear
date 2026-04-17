@@ -35,6 +35,20 @@ When the AI creates cross-user content, it must:
 - **Anonymize** strategy proposals (Stage 4) — no attribution
 - **Frame** partner perspectives as possibilities ("they might feel..."), not certainties
 
+## File-Level Access Rules
+
+Each stage enforces strict retrieval contracts on the file-based state tree:
+
+| Stage | Files Readable | Files Forbidden |
+|---|---|---|
+| 0 | `session.json`, `stage-progress.json` | All vessel files |
+| 1 | Own `vessel-{x}/*`, `conversation-summary.md` | Partner's vessel, `shared/*` |
+| 2 | Own vessel + `shared/consented-content.json` | Partner's raw vessel |
+| 3 | Own `vessel-{x}/needs.json` + `shared/consented-content.json`, `shared/common-ground.json` | Partner's raw vessel, own raw events |
+| 4 | `shared/*` (all) | Both users' raw vessels |
+
+The `synthesis/` directory is **never** read during user-facing turns — it exists for dev/monitoring purposes only.
+
 ## Vessel Contents
 
 Each user's Vessel stores:

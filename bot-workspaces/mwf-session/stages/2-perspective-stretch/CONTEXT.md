@@ -98,12 +98,83 @@ When the user returns to refine empathy after their partner has shared additiona
 | **Early (turn ≤ 3)** | User may still have leftover feelings. Start in LISTENING mode. Give space before trying to shift focus. |
 | **High intensity (8+)** | Stay in LISTENING mode. Be calm and steady — don't match their intensity. Let them settle first. |
 
+### Vessel File Writes (per turn)
+
+Continue the same vessel file updates from Stage 1. See `schemas/vessel-files.schema.md` and `schemas/notable-facts.schema.md` for full schemas.
+
+**Notable Facts** — Append to `vessel-{x}/notable-facts.json`:
+- Continue extracting facts as the user reveals new information about the conflict or their partner
+- Same categories and 20-fact limit as Stage 1; `source_stage` is now `2`
+
+**Emotional Thread** — Append to `vessel-{x}/emotional-thread.json`:
+- One reading per turn: `{ ts, intensity (1–10), context }`
+
+**Conversation Summary** — Update `vessel-{x}/conversation-summary.md`:
+- Replace with updated rolling narrative including Stage 2 perspective-taking progress
+
+**Internal Dialogue Trace** — Append to `synthesis/internal-dialogue.md`:
+- Same format as Stage 1, but reasoning now includes mode selection (LISTENING/BRIDGING/BUILDING/MIRROR), ReadyShare reasoning, and Consensual Bridge decisions
+
+### Needs Identification
+
+Create or update `vessel-{x}/needs.json` (see `schemas/vessel-files.schema.md`).
+
+- As the user explores their partner's perspective, underlying needs surface for both parties
+- Extract needs with evidence quotes: `{ need, evidence[], confirmed: false }`
+- Needs are the user's own needs — not the partner's (partner needs go in the partner's vessel)
+- Mark `confirmed: true` only when the user explicitly validates a need
+- These feed into Stage 3 need mapping; accuracy matters more than completeness
+
+### Consensual Bridge Flow
+
+The Consensual Bridge is how private vessel content becomes available to the partner. Raw user input is **never** shared — only transformed, abstracted versions. See `schemas/shared-vessel.schema.md` for file format.
+
+**Trigger**: When the ReadyShare signal fires and the user has an empathy draft ready.
+
+**Steps**:
+1. **Identify sharable content** — Bot selects content from the user's vessel that would help the partner understand how they're being seen (the empathy draft and supporting context)
+2. **Transform** — Rewrite raw input into an abstracted form. Remove heat, preserve the need. Example: raw "they never listen to me about the kids" → transformed "Feels unheard on parenting decisions"
+3. **Ask for explicit consent** — Present the transformed content to the user and ask: "This is what would be shared with [partner]. Are you okay with that?" The user must say yes.
+4. **Write to shared vessel** — Only after consent: append to `shared/consented-content.json` with `{ source_user, transformed, consent_ts, consent_active: true }`
+5. **Partner reads on next turn** — The partner's Stage 2 contract can read `shared/consented-content.json` to inform Stage 2B refinement
+
+**Consent rules**:
+- Consent is per-item and revocable (`consent_active` can be set to `false`)
+- If the user declines, do not share. Acknowledge their choice and continue the conversation.
+- Never pressure the user to share. If they're hesitant, respect it.
+
+### Gate Persistence
+
+Track three gates in `stage-progress.json` (see `schemas/stage-progress.schema.md`):
+
+| Gate Key | When to set `true` |
+|---|---|
+| `empathyDraftReady` | User has a finalized empathy draft they're satisfied with |
+| `empathyConsented` | User consented to share their empathy draft with partner |
+| `partnerValidated` | Partner confirmed the empathy attempt feels accurate (or chose to proceed) |
+
+- `empathyDraftReady` and `empathyConsented` are set by this user's thread
+- `partnerValidated` is set by the **partner's** thread after reading the shared empathy content
+- When **both** users have all three gates satisfied → advance `current_stage` to `3` and reset gate keys to Stage 3 defaults
+
 ## Output
 
-- Empathy attempts with consent decisions and revision history per user
-- ReadyShare signal: Y or N per turn
-- Stage status: `GATE_PENDING` (feels reflected) or `IN_PROGRESS` (still iterating)
+After each turn, the following files are updated:
+
+| File | Location | Action |
+|---|---|---|
+| `notable-facts.json` | `vessel-{x}/` | Append new facts |
+| `emotional-thread.json` | `vessel-{x}/` | Append intensity reading |
+| `conversation-summary.md` | `vessel-{x}/` | Replace with updated summary |
+| `needs.json` | `vessel-{x}/` | Create/update identified needs |
+| `internal-dialogue.md` | `synthesis/` | Append reasoning trace |
+| `consented-content.json` | `shared/` | Append on consent (Consensual Bridge only) |
+| `stage-progress.json` | Session root | Update gates as satisfied |
+
+Signals returned per turn:
+- ReadyShare: Y or N
+- User stage status: `IN_PROGRESS` or `GATE_PENDING`
 
 ## Completion
 
-When both users feel accurately reflected (or choose to proceed), advance to `stages/3-need-mapping/`.
+When both users have all three gates satisfied (or choose to proceed), advance to `stages/3-need-mapping/`.
