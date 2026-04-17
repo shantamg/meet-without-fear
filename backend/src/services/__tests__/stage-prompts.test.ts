@@ -12,6 +12,7 @@ describe('Stage Prompts Service', () => {
       recentTurns: [],
       turnCount: 0,
       sessionDurationMinutes: 5,
+      timeSinceLastUserTurnMs: null,
     },
     emotionalThread: {
       initialIntensity: null,
