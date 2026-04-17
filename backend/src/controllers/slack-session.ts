@@ -11,6 +11,7 @@
  * smoke-tested. Phases 3–4 replace the echo with the real session loop.
  */
 
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { logger } from '../lib/logger';
 import { handleSlackMessage } from '../services/slack-session-orchestrator';
@@ -34,11 +35,10 @@ function validateSharedSecret(req: Request): boolean {
     return true;
   }
 
-  const provided =
-    (req.header('x-slack-ingress-secret') as string | undefined) ??
-    (req.body?.secret as string | undefined);
+  const provided = req.header('x-slack-ingress-secret') ?? '';
 
-  return provided === expected;
+  if (provided.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
 }
 
 /**
