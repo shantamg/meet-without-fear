@@ -24,8 +24,11 @@ describe('time-language utilities', () => {
     });
 
     it('should identify today for content earlier same day', () => {
-      const fourHoursAgo = new Date(NOW.getTime() - 4 * 60 * 60 * 1000);
-      const ctx = getTimeContext(fourHoursAgo.toISOString(), NOW);
+      // Use a midday reference so subtracting 4h never crosses midnight
+      const midday = new Date(NOW);
+      midday.setHours(12, 0, 0, 0);
+      const fourHoursBefore = new Date(midday.getTime() - 4 * 60 * 60 * 1000);
+      const ctx = getTimeContext(fourHoursBefore.toISOString(), midday);
 
       expect(ctx.bucket).toBe('today');
       expect(ctx.phrase).toBe('earlier today');
