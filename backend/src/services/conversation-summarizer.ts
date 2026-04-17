@@ -51,6 +51,34 @@ export interface SummarizationResult {
   partnerNeeds?: string[];
   openQuestions?: string[];
   agreements?: string[];
+  /**
+   * A single-sentence "cliffhanger" describing where the user's emotional
+   * tension was left hanging — used by the long-idle resumption prompt to
+   * anchor the re-orientation message. Null when the user just crossed a
+   * stage gate / reached a milestone (nothing is unresolved) or when the
+   * partner hasn't joined yet (no two-sided dynamic to leave unresolved).
+   */
+  lastUnresolvedThread?: string | null;
+}
+
+/**
+ * Structural hints the summarizer needs so it doesn't hallucinate unresolved
+ * drama when there genuinely is none. Passed in by callers who know the
+ * session state (stage just advanced? partner hasn't joined?).
+ */
+export interface SummarizationHints {
+  /**
+   * True when the user just crossed a stage gate (e.g. both confirmed "I feel
+   * heard" → advanced to Stage 2). In that case the `lastUnresolvedThread`
+   * MUST be null — tension resolved, not a cliffhanger.
+   */
+  stageJustAdvanced?: boolean;
+  /**
+   * Where the partner is in their own flow. `'not_joined'` means the user is
+   * essentially soloing; the summarizer must frame the cliffhanger as
+   * internal processing without anticipating a partner response.
+   */
+  partnerStatus?: 'not_joined' | 'in_progress' | 'completed';
 }
 
 // ============================================================================
@@ -91,7 +119,8 @@ async function generateConversationSummary(
   partnerName: string,
   stage: number,
   sessionId: string,
-  turnId: string
+  turnId: string,
+  hints: SummarizationHints = {}
 ): Promise<SummarizationResult | null> {
   if (messages.length === 0) {
     return null;
@@ -104,10 +133,24 @@ async function generateConversationSummary(
 
   const stageContext = getStageContext(stage);
 
+  // Emit structural context so the model doesn't invent phantom cliffhangers
+  // when the session is actually at a clean milestone / still one-sided.
+  const structuralHints = [
+    hints.stageJustAdvanced
+      ? 'STRUCTURAL CONTEXT: The user just crossed a stage gate (milestone reached). `lastUnresolvedThread` MUST be null.'
+      : '',
+    hints.partnerStatus === 'not_joined'
+      ? `STRUCTURAL CONTEXT: ${partnerName} has not yet joined this session. Frame cliffhangers and unresolved threads strictly in terms of ${userName}'s own internal processing — do NOT anticipate a direct partner response.`
+      : '',
+    hints.partnerStatus === 'completed'
+      ? `STRUCTURAL CONTEXT: ${partnerName} has completed their side of this stage. Unresolved threads should reflect what the user alone still needs to work through.`
+      : '',
+  ].filter(Boolean).join('\n');
+
   const systemPrompt = `You are summarizing a conflict resolution conversation to preserve context for an AI assistant.
 
 STAGE CONTEXT: ${stageContext}
-
+${structuralHints ? `\n${structuralHints}\n` : ''}
 OUTPUT FORMAT (JSON):
 {
   "summary": "2-3 paragraph narrative summary capturing the emotional journey and key points discussed",
@@ -118,14 +161,16 @@ OUTPUT FORMAT (JSON):
   "userNeeds": ["needs the user stated or implied"],
   "partnerNeeds": ["needs the partner stated or implied"],
   "openQuestions": ["open questions to revisit"],
-  "agreements": ["explicit agreements or experiments (if any)"]
+  "agreements": ["explicit agreements or experiments (if any)"],
+  "lastUnresolvedThread": "One sentence describing where the user's emotional tension was left hanging — this is the 'cliffhanger' the AI will use to re-orient the user after a long gap. MUST be null when the user just reached a milestone (stage gate crossed, mutual agreement), or when you'd have to invent partner dynamics to satisfy it."
 }
 
 GUIDELINES:
 - Capture emotional tone and key facts.
 - Keep language compact and concrete.
 - Do not invent consent state or partner data unless it was explicitly shared.
-- Keep the summary under 500 words.`;
+- Keep the summary under 500 words.
+- lastUnresolvedThread: prefer null over fabrication. If you'd have to stretch to name a cliffhanger, it's null.`;
 
   const userPrompt = `Summarize this conversation between ${userName} and Meet Without Fear:
 
@@ -204,7 +249,8 @@ export function needsSummarization(
 export async function updateSessionSummary(
   sessionId: string,
   userId: string,
-  turnId: string
+  turnId: string,
+  hints: SummarizationHints = {}
 ): Promise<ConversationSummary | null> {
   try {
     // Get session with messages and vessel (only this user's messages - data isolation)
@@ -286,7 +332,8 @@ export async function updateSessionSummary(
       partnerName,
       stage,
       sessionId,
-      turnId
+      turnId,
+      hints
     );
 
     if (!summaryResult) {
@@ -303,6 +350,14 @@ export async function updateSessionSummary(
       generatedAt: new Date(),
     };
 
+    // Structural guardrail: if the caller told us the stage just advanced,
+    // force lastUnresolvedThread to null regardless of what the model emitted.
+    // This is defense-in-depth against prompt-following lapses.
+    const lastUnresolvedThread =
+      hints.stageJustAdvanced
+        ? null
+        : summaryResult.lastUnresolvedThread ?? null;
+
     // Store in vessel
     await prisma.userVessel.update({
       where: { id: vessel.id },
@@ -317,6 +372,7 @@ export async function updateSessionSummary(
           partnerNeeds: summaryResult.partnerNeeds ?? [],
           openQuestions: summaryResult.openQuestions ?? [],
           agreements: summaryResult.agreements ?? [],
+          lastUnresolvedThread,
         }),
       },
     });
@@ -352,6 +408,7 @@ export async function getSessionSummary(
   partnerNeeds: string[];
   openQuestions: string[];
   agreements: string[];
+  lastUnresolvedThread: string | null;
 } | null> {
   const vessel = await prisma.userVessel.findUnique({
     where: {
@@ -383,6 +440,7 @@ export async function getSessionSummary(
       partnerNeeds: parsed.partnerNeeds || [],
       openQuestions: parsed.openQuestions || [],
       agreements: parsed.agreements || [],
+      lastUnresolvedThread: parsed.lastUnresolvedThread ?? null,
     };
   } catch {
     return null;
