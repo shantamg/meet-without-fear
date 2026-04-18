@@ -28,8 +28,10 @@
 # ── Staging branch sync (keeps bot/staging in sync with main, PRs accumulated work) ──
 0 8,20 * * * /opt/slam-bot/scripts/sync-staging.sh >> /var/log/slam-bot/cron.log 2>&1
 
-# ── Expert review (advances open bot:expert-review issues one step each run) ──
-0 */2 * * * /opt/slam-bot/scripts/bot-expert-review.sh >> /var/log/slam-bot/cron.log 2>&1
+# Note: bot-expert-review.sh is NOT wired into cron. The workspace-dispatcher
+# already drives bot:expert-review issues (cooldown removed in #110), so the
+# dispatcher scans every minute and advances issues via the expert-review
+# workspace. The script remains available for manual / ad-hoc invocation.
 
 # ── Pipeline monitor (watches active milestone-builder runs) ────────────────
 */10 * * * * /opt/slam-bot/scripts/pipeline-monitor.sh >> /var/log/slam-bot/pipeline-monitor.log 2>&1
