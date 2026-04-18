@@ -40,8 +40,9 @@ The crontab (installed by `deploy.sh`) covers roughly the following categories. 
 | every 5 min | `check-socket-mode.sh` | Restart socket listener if Slack disconnects |
 | every 10 min | `pipeline-monitor.sh` | Watch PR / workflow state |
 | every 30 min | `thread-tracker.sh` | Reconcile Slack threads with GitHub activity |
-| daily | `sync-labels.sh`, `bot-health-check.sh`, `api-budget-summary.sh --alert`, `prune-journal.sh`, `prune-claude-projects.sh`, `sweep-mwf-sessions.sh` | Housekeeping + daily health + budget digest + session retention |
-| scheduled | `workspace-dispatcher.sh` variants | `bug-fix`, `health-check`, `docs-audit`, `security-audit`, `stale-sweeper`, `pr-reviewer` runs |
+| daily | `sync-labels.sh`, `bot-health-check.sh`, `api-budget-summary.sh --post`, `api-budget-summary.sh --alert`, `prune-journal.sh`, `prune-claude-projects.sh`, `sweep-mwf-sessions.sh` | Housekeeping + daily health + budget digest (post to `#bot-ops` + over-budget alert) + session retention |
+| twice daily (08:00 / 20:00) | `sync-staging.sh` | Merge `main` → `bot/staging`; PR accumulated bot work back to `main` |
+| scheduled | `workspace-dispatcher.sh` variants | `bug-fix`, `health-check`, `docs-audit`, `security-audit`, `stale-sweeper`, `pr-reviewer`, `daily-strategy` runs |
 
 Local operator scripts live at `scripts/ec2-bot/`:
 
