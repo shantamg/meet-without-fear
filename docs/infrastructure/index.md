@@ -2,7 +2,7 @@
 title: Infrastructure
 sidebar_position: 1
 description: Slam bot (EC2), Render hosting, Vercel deploys, GitHub automation.
-updated: 2026-04-17
+updated: 2026-04-18
 ---
 
 # Infrastructure
@@ -22,7 +22,7 @@ Operational infrastructure for Meet Without Fear.
 
 | Service | Purpose |
 |---|---|
-| `slam-bot-socket.service` | Socket Mode listener for real-time Slack events. For `#mwf-sessions` channel messages, the listener forwards payloads to the backend via `POST /api/slack/mwf-session` (authenticated with `SLACK_INGRESS_SECRET`) instead of spawning a Claude Code agent. The backend runs the full Bedrock pipeline and posts replies back to Slack. |
+| `slam-bot-socket.service` | Socket Mode listener for real-time Slack events. For each DM, first queries `GET /api/slack/session-check` (authenticated with `SLACK_INGRESS_SECRET`) to detect active MWF sessions in Postgres. If `isSession=true`, forwards the payload to `POST /api/slack/mwf-session` (backend Bedrock pipeline); otherwise dispatches to the `slack-triage` workspace. For `#mwf-sessions` lobby messages, always forwards to the backend. |
 | `slam-bot-state-scanner.service` | GitHub state scanner daemon (`github-state-scanner.sh` loop). Hardened with `MemoryMax=256M` and `TasksMax=64` to prevent runaway resource use. |
 
 ### Cron jobs
@@ -61,21 +61,16 @@ The bot maintains session state on disk at `~/meet-without-fear/`:
 | Directory | Purpose |
 |---|---|
 | `data/mwf-sessions/` | MWF session data, one subdirectory per session ID |
-| `data/mwf-sessions/thread-index.json` | Maps `{channel}:{thread_ts}` → `{session_id}` for DM routing lookup |
 | `data/mwf-users/` | Per-user profile data (name, previous sessions, etc.) |
-
-`thread-index.json` is read on every incoming DM to check if the message belongs to an active MWF session. It is maintained by the `route` stage in the `mwf-session` workspace.
 
 ### MWF session routing
 
 The socket listener implements session-aware message routing:
 
-- **Session detection**: On each DM message, checks `data/mwf-sessions/thread-index.json` for active session threads
-- **DM → mwf-session mapping**: Messages in a DM thread matching an active MWF session are routed to the `mwf-session` workspace instead of `slack-triage`
-- **Stray DM prevention**: Top-level DMs (outside any thread) from users with active sessions are redirected with a nudge to use their session thread
+- **Session detection**: On each DM message, queries `GET /api/slack/session-check?channel=C&thread_ts=T` (authenticated with `SLACK_INGRESS_SECRET`) to check if the thread is an active MWF session. Session state lives in Postgres (`SessionSlackThread` table); the backend is the authoritative source.
+- **DM → mwf-session mapping**: Messages where the backend returns `isSession=true` are POSTed to `POST /api/slack/mwf-session` (Bedrock pipeline) instead of dispatched to a Claude agent workspace
+- **Stray DM prevention**: Top-level DMs (outside any thread) in a channel with an active session receive the `activeThreadTs` from the session-check response; the listener nudges the user back to their session thread
 - **Lobby channel**: `#mwf-sessions` is used for session setup only; actual conversations happen in private DMs (one DM thread per user) to enforce vessel privacy at the transport layer
-
-See `bot-workspaces/mwf-session/CLAUDE.md` for full architecture and stage contracts.
 
 ## Production hosting
 

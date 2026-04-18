@@ -3,7 +3,7 @@ title: "Stage 2: Perspective Stretch - Empathy Exchange Flow"
 sidebar_position: 6
 description: This document describes the empathy exchange flow in Stage 2, including the reconciler system that analyzes empathy accuracy and manages the sharing of addit...
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-04-18
 status: living
 ---
 # Stage 2: Perspective Stretch - Empathy Exchange Flow
@@ -182,6 +182,12 @@ sequenceDiagram
 > **Implementation:** Share suggestion generation is handled by `reconciler/sharing.ts` which contains
 > `generateShareSuggestion()`, `respondToShareSuggestion()`, `generatePostShareContinuation()`, and
 > `generateContextReceivedReflection()`. The module includes delivery status tracking and fallback messages for AI failures.
+
+### Slack Gentle Interrupt
+
+When the subject shares context and `refinementFinalizeHandler` delivers it to the guesser, an async Slack DM notification is sent to the guesser (if they are a Slack user) via `notifyGuesserOfShareViaSlack()` in `slack-reconciler-notify.ts`.
+
+This is fire-and-forget: it runs non-blocking (`catch` logs the error) so a Slack outage cannot affect the mobile delivery path. Mobile users receive no Slack notification — the in-app Ably event is the only signal for them.
 
 ## User Experience: Both Users' Perspective
 

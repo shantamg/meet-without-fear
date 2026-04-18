@@ -183,6 +183,7 @@ Slack-originated MWF sessions. These routes use shared-secret auth (not Clerk JW
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| `GET`  | `/slack/session-check` | Check if a `(channel, thread_ts)` pair is an active MWF session thread. Used by the EC2 socket listener to route DMs. Returns `{ ok: true, isSession: bool, activeThreadTs: string\|null }` |
 | `POST` | `/slack/mwf-session` | Accept a Slack message payload from the EC2 socket listener |
 | `GET`  | `/slack/health` | Health check: workspace load status and Slack configuration |
 
