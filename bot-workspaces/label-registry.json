@@ -96,6 +96,12 @@
       "entry_stage": "full",
       "trigger": "cron"
     },
+    "bot:daily-strategy": {
+      "workspace": "daily-strategy/",
+      "entry_stage": "1-gather",
+      "trigger": "cron",
+      "model": "sonnet"
+    },
     "bot:ci-monitor": {
       "workspace": "ci-monitor/",
       "entry_stage": "tick",

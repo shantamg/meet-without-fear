@@ -40,6 +40,7 @@ Route each bot job to its workspace and entry stage. The workspace `CLAUDE.md` (
 | `verify` | `verify/` | `01-check` |
 | `release-summary` | `release-summary/` | `summarize` |
 | `mwf-session` | `mwf-session/` | `0-onboarding` |
+| `daily-strategy` | `daily-strategy/` | `1-gather` |
 
 ## What NOT to Load (root level)
 
