@@ -43,6 +43,7 @@ const BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const BOT_USER_ID = process.env.SLAM_BOT_USER_ID;
 const SHANTAM_DM = process.env.SHANTAM_SLACK_DM;
 const SLAM_BOT_CHANNEL = process.env.SLAM_BOT_CHANNEL_ID;
+const AGENTIC_DEVS_CHANNEL = process.env.AGENTIC_DEVS_CHANNEL_ID;
 const BUGS_AND_REQUESTS_CHANNEL = process.env.BUGS_AND_REQUESTS_CHANNEL_ID;
 const MWF_SESSIONS_CHANNEL = process.env.MWF_SESSIONS_CHANNEL_ID;
 
@@ -139,6 +140,17 @@ if (SLAM_BOT_CHANNEL) {
     logName: 'check-slam-paws',
     channelName: '#slam-paws',
     commandSlug: 'slam-paws-reply',
+    workspace: 'slack-triage',
+    contextCount: 10,
+  };
+}
+
+// #agentic-devs channel — dev/ops chatter routed through slack-triage
+if (AGENTIC_DEVS_CHANNEL) {
+  CHANNEL_CONFIG[AGENTIC_DEVS_CHANNEL] = {
+    logName: 'check-agentic-devs',
+    channelName: '#agentic-devs',
+    commandSlug: 'agentic-devs-reply',
     workspace: 'slack-triage',
     contextCount: 10,
   };
@@ -560,53 +572,6 @@ async function drainThreadQueue(tKey) {
 }
 
 // ---------------------------------------------------------------------------
-// MWF session detection — ask the backend whether a DM thread is a session.
-// ---------------------------------------------------------------------------
-//
-// Historically this was answered from a local `thread-index.json` written by
-// the legacy Claude-agent path. Now that sessions live in the backend DB
-// (Render), only the backend knows — so we query its `/slack/session-check`
-// endpoint, which also returns the live thread_ts for the channel (used to
-// nudge stray top-level DMs back into their session thread).
-//
-// Combined call saves a round trip: one GET returns both `isSession` (for
-// the thread-reply path) and `activeThreadTs` (for the stray-DM path).
-//
-// Fails closed on network errors — better to miss one routing hint than to
-// spam the user or double-handle a message.
-
-function sessionCheckUrl() {
-  if (!MWF_BACKEND_URL) return null;
-  // MWF_BACKEND_URL looks like https://…/api/v1/slack/mwf-session — swap the
-  // last path segment so /slack/session-check lands at the same mount point.
-  return MWF_BACKEND_URL.replace(/\/mwf-session\/?$/, '/session-check');
-}
-
-async function fetchSessionInfo(channel, threadTs) {
-  const base = sessionCheckUrl();
-  if (!base) return { isSession: false, activeThreadTs: null };
-  const params = new URLSearchParams({ channel });
-  if (threadTs) params.set('thread_ts', threadTs);
-  const headers = {};
-  if (MWF_INGRESS_SECRET) headers['x-slack-ingress-secret'] = MWF_INGRESS_SECRET;
-  try {
-    const res = await fetch(`${base}?${params.toString()}`, { headers });
-    if (!res.ok) {
-      logMain(`session-check ${res.status} — treating as non-session`);
-      return { isSession: false, activeThreadTs: null };
-    }
-    const data = await res.json();
-    return {
-      isSession: Boolean(data.isSession),
-      activeThreadTs: data.activeThreadTs ?? null,
-    };
-  } catch (err) {
-    logMain(`session-check fetch failed: ${err.message}`);
-    return { isSession: false, activeThreadTs: null };
-  }
-}
-
-// ---------------------------------------------------------------------------
 // MWF backend forwarding — Bedrock engine owns MWF sessions, not Claude agents
 // ---------------------------------------------------------------------------
 
@@ -704,40 +669,7 @@ async function handleMessageEvent(event) {
   if (subtype && subtype !== 'file_share') return;
 
   // Check if this channel is configured
-  let config = CHANNEL_CONFIG[channel];
-
-  // Session-aware DM routing: if this is a DM that matches an active MWF
-  // session thread, route to mwf-session workspace instead of slack-triage.
-  // Also catches stray top-level DMs from users who have an active session
-  // in this DM channel — replies telling them to use the session thread.
-  if (config && config.workspace === 'slack-triage') {
-    const threadTs = event.thread_ts || null;
-    const info = await fetchSessionInfo(channel, threadTs);
-    if (info.isSession) {
-      config = {
-        ...config,
-        logName: 'check-mwf-session',
-        commandSlug: 'mwf-session-reply',
-        workspace: 'mwf-session',
-      };
-      logMain(`DM message ${ts} matched MWF session thread — routing to mwf-session`);
-    } else if (!event.thread_ts && info.activeThreadTs) {
-      // Top-level DM posted while an active session thread exists on the same
-      // channel — nudge them back rather than dispatching an agent.
-      logMain(`Stray DM ${ts} in channel with active session thread ${info.activeThreadTs} — sending redirect`);
-      try {
-        await slack.chat.postMessage({
-          channel,
-          text: `It looks like you have an active session here. Please reply in the conversation thread above to continue.`,
-          thread_ts: ts,
-        });
-      } catch (err) {
-        logMain(`Failed to send session redirect: ${err.message}`);
-      }
-      return;
-    }
-  }
-
+  const config = CHANNEL_CONFIG[channel];
   if (!config) return; // Not a monitored channel
 
   // Try to claim this message
