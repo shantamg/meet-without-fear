@@ -483,7 +483,7 @@ graph TD
 
    When `PromptContext.invitedSessionNudge` is set (non-null), its content is appended to the dynamic block as `OPERATIONAL NUDGE:`. This signals the AI to weave in an invite-expiry reminder. Only used for Slack-originated `INVITED` sessions approaching their 7-day TTL.
 
-4. **Dynamic Elements:**
+5. **Dynamic Elements:**
    - Turn count
    - Emotional intensity
    - Surfacing style
