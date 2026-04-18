@@ -3,7 +3,7 @@ title: Backend Prompting Architecture Audit
 sidebar_position: 5
 description: "Last Updated: 2026-03-11"
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-04-18
 status: living
 ---
 # Backend Prompting Architecture Audit
@@ -477,6 +477,11 @@ graph TD
    - User memories (preferences, names, communication style)
    - **Categorized session facts** (People, Logistics, Conflict, Emotional, History)
    - Retrieved context (cross-session, relevant history)
+
+4. **Surface-Specific Formatting (Slack):**
+   When `BuildStagePromptOptions.surface === 'slack'`, `SLACK_FORMATTING_RULES` is appended to the static block. This block instructs the model to use Slack mrkdwn (single `*asterisks*` for bold, `•` for bullets, `<url|label>` for links) instead of standard Markdown. The rules are kept in the static block to preserve prompt caching — they are identical across turns. No other behavior changes: prompt logic, context assembly, and model routing are the same for both surfaces.
+
+   When `PromptContext.invitedSessionNudge` is set (non-null), its content is appended to the dynamic block as `OPERATIONAL NUDGE:`. This signals the AI to weave in an invite-expiry reminder. Only used for Slack-originated `INVITED` sessions approaching their 7-day TTL.
 
 4. **Dynamic Elements:**
    - Turn count

@@ -3,7 +3,7 @@ title: Prompt Caching Strategy for Meet Without Fear
 sidebar_position: 4
 description: "This document describes how Anthropic's prompt caching works and how we implement it. Our system prompts are split into static and dynamic blocks (the \"2-blo..."
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-04-18
 status: living
 ---
 # Prompt Caching Strategy for Meet Without Fear
@@ -183,6 +183,8 @@ Response protocol              (~100 tokens)
 
 **What about `userName` and `partnerName`?** These are session-stable (never change within a conversation) and caches are per-user anyway on Bedrock, so including them in the static block is fine. They don't bust the cache.
 
+**Slack surface addition:** When `BuildStagePromptOptions.surface === 'slack'`, `SLACK_FORMATTING_RULES` (~60 tokens) is appended to the static block. This block is identical on every Slack turn, so it caches normally. All stage token counts above reflect the mobile surface; Slack adds ~60 tokens to each static block but all stages remain well above the 1,024-token threshold.
+
 ### Block 2: Dynamic Turn Context (~10-70 tokens, NOT cached)
 
 Everything that changes every turn:
@@ -196,6 +198,7 @@ Feel-heard turn guard                     (~15 tokens)  "Too early (turn < 3)"
 Early stage flags                         (~15 tokens)  Conditional on turnCount
 Post-share context                        (~varies)     Only after sharing events
 Transition injection                      (~varies)     Only on stage transitions
+Invited-session nudge                     (~varies)     Only when invitedSessionNudge is set (Slack INVITED sessions nearing 7-day TTL)
 ```
 
 ### What We Send to Claude
