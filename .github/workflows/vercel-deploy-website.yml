@@ -1,0 +1,70 @@
+name: Vercel Deploy — Website
+
+# Deploys the Next.js marketing site in `website/` to meetwithoutfear.com
+# via Vercel. Triggers on changes to website/** on main, or manual dispatch.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'website/**'
+      - '.github/workflows/vercel-deploy-website.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-deploy-website-${{ github.sha }}
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      website: ${{ steps.filter.outputs.website }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        # workflow_dispatch should always deploy
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            website:
+              - 'website/**'
+              - 'package.json'
+              - 'package-lock.json'
+
+  website:
+    name: Deploy Website (Next.js)
+    needs: changes
+    if: needs.changes.outputs.website == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_WEBSITE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build (next build)
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy prebuilt
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

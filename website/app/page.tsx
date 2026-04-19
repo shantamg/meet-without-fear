@@ -121,13 +121,13 @@ export default function HomePage() {
         <div className="container mx-auto px-6 text-center">
           <h2 className="text-3xl font-bold mb-6">Ready to Start?</h2>
           <p className="text-muted-foreground text-lg mb-8 max-w-2xl mx-auto">
-            Download the app and begin your journey toward better communication and deeper connection.
+            Open Meet Without Fear and begin your journey toward better communication and deeper connection.
           </p>
           <Link
             href="/app"
             className="inline-flex items-center justify-center gap-2 bg-brand-orange text-black px-8 py-4 rounded-xl font-semibold text-lg hover:bg-brand-orange/90 transition-all hover:scale-105"
           >
-            Download the App
+            Get Started
             <ArrowRight className="w-5 h-5" />
           </Link>
         </div>

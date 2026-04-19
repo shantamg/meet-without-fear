@@ -11,6 +11,7 @@ import {
   XCircle,
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   Download,
 } from "lucide-react";
 import { getInvitation, acceptInvitation, InvitationDetails } from "@/lib/api";
@@ -386,8 +387,8 @@ function AlreadyAcceptedState({ inviterName }: { inviterName: string | null }) {
           onClick={handleDownloadClick}
           className="inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-6 py-3 rounded-xl font-semibold hover:bg-accent/90 transition-all"
         >
-          <Download className="w-5 h-5" />
-          Get the App
+          Open Meet Without Fear
+          <ArrowRight className="w-5 h-5" />
         </Link>
       </div>
     </main>
@@ -514,7 +515,7 @@ function SuccessState() {
         </a>
         <div className="mt-4">
           <Link
-            href="/app"
+            href="/download"
             onClick={handleDownloadClick}
             className="inline-flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground text-sm"
           >
