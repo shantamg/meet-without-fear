@@ -12,46 +12,17 @@ import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { extractNeedsFromConversation, findCommonGround } from '../services/needs';
+import {
+  extractNeedsFromConversation,
+  findCommonGround,
+  isExtractionRunning,
+  acquireExtractionLock,
+  releaseExtractionLock,
+} from '../services/needs';
 import { confirmNeedsRequestSchema, ConsentContentType } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
-
-// ============================================================================
-// Extraction Lock (in-memory idempotency guard)
-// ============================================================================
-
-/**
- * Track in-progress needs extractions to prevent concurrent AI calls.
- * Key: `${sessionId}:${userId}`, Value: timestamp when extraction started.
- */
-const extractionLocks = new Map<string, number>();
-const EXTRACTION_LOCK_TIMEOUT_MS = 60_000; // 60 seconds max
-
-function getExtractionKey(sessionId: string, userId: string): string {
-  return `${sessionId}:${userId}`;
-}
-
-function isExtractionRunning(sessionId: string, userId: string): boolean {
-  const key = getExtractionKey(sessionId, userId);
-  const startedAt = extractionLocks.get(key);
-  if (!startedAt) return false;
-  // Auto-expire stale locks
-  if (Date.now() - startedAt > EXTRACTION_LOCK_TIMEOUT_MS) {
-    extractionLocks.delete(key);
-    return false;
-  }
-  return true;
-}
-
-function setExtractionLock(sessionId: string, userId: string): void {
-  extractionLocks.set(getExtractionKey(sessionId, userId), Date.now());
-}
-
-function clearExtractionLock(sessionId: string, userId: string): void {
-  extractionLocks.delete(getExtractionKey(sessionId, userId));
-}
 
 // ============================================================================
 // Common Ground Analysis Lock (in-memory idempotency guard)
@@ -232,7 +203,7 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
         return;
       }
 
-      setExtractionLock(sessionId, user.id);
+      acquireExtractionLock(sessionId, user.id);
       try {
         needs = await extractNeedsFromConversation(sessionId, user.id);
 
@@ -248,7 +219,7 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
           }
         }
       } finally {
-        clearExtractionLock(sessionId, user.id);
+        releaseExtractionLock(sessionId, user.id);
       }
     }
 

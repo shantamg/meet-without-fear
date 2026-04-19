@@ -46,6 +46,8 @@ export function ChatInput({
   const canSend = input.trim().length > 0 && !disabled;
   const characterRatio = input.length / maxLength;
   const showWarning = characterRatio >= CHARACTER_WARNING_THRESHOLD;
+  // Voice recording is not supported on web; hide the mic regardless of caller.
+  const showVoiceButton = !!onVoicePress && Platform.OS !== 'web';
 
   const handleSend = useCallback(() => {
     if (!canSend) return;
@@ -102,7 +104,7 @@ export function ChatInput({
           </Text>
         )}
       </View>
-      {onVoicePress && (
+      {showVoiceButton && (
         <TouchableOpacity
           style={styles.micButton}
           onPress={onVoicePress}

@@ -8,6 +8,7 @@
     "start:clear": "npm run set-local-ip && expo start --clear",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "web": "expo start --web",
     "build": "expo prebuild",
     "set-local-ip": "node scripts/set-local-ip.js",
     "test": "jest",

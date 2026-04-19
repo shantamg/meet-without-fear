@@ -504,16 +504,24 @@ function SuccessState() {
         </div>
         <h1 className="text-2xl font-bold mb-3">You&apos;re In!</h1>
         <p className="text-muted-foreground mb-6">
-          Your account has been created and linked to this session. Download the app to continue.
+          Your account has been created and linked to this session. Open the app to get started.
         </p>
-        <Link
-          href="/app"
-          onClick={handleDownloadClick}
+        <a
+          href="https://app.meetwithoutfear.com/"
           className="inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-accent/90 transition-all"
         >
-          <Download className="w-5 h-5" />
-          Download the App
-        </Link>
+          Open Meet Without Fear
+        </a>
+        <div className="mt-4">
+          <Link
+            href="/app"
+            onClick={handleDownloadClick}
+            className="inline-flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground text-sm"
+          >
+            <Download className="w-4 h-4" />
+            Or download the mobile app
+          </Link>
+        </div>
       </div>
     </main>
   );

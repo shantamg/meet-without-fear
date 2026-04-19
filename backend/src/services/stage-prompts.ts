@@ -805,8 +805,14 @@ ${buildResponseProtocol(3)}`;
 
   const earlyStage3 = context.turnCount <= 2;
   if (earlyStage3) {
-    dynamicParts.push('EARLY STAGE 3: User may still be processing emotions from empathy work. Start in EXCAVATING mode. Give space before expecting named needs.');
+    dynamicParts.push('EARLY STAGE 3: User just arrived from empathy work. They may still be processing emotions — give them a breath before pushing toward needs.');
   }
+
+  // Content-aware pacing (every turn): let what the user said drive the mode,
+  // not a turn counter. A user who names three clear needs in one rich message
+  // should be validated; a user still venting in positions should be excavated.
+  dynamicParts.push('PACING — LET CONTENT DRIVE THE MODE, NOT TURN COUNT: If the user has clearly named specific underlying needs (e.g., "partnership", "to feel safe", "to be heard"), move into VALIDATING and reflect them back — do not artificially hold back to "give more time". If they are still speaking in positions, complaints, or general frustrations, stay in EXCAVATING — reframe positions into needs and ask what matters most. Do not rush users who are still exploring, and do not stall users who have already landed.');
+
   if (context.emotionalIntensity >= 8) {
     dynamicParts.push('HIGH USER INTENSITY: The user is very activated/distressed. Slow down. Validate first, reframe gently. Your tone should be calm and grounding, not matching their intensity.');
   }
