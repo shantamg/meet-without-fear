@@ -4,9 +4,12 @@ name: OTA Update — Mobile
 # Android doesn't have a store release, so OTA is iOS-only (matches
 # scripts/publish-ota.sh).
 #
-# Phase 1 (now): workflow_dispatch only, so we can verify a CI-built bundle
-# installs cleanly on device before letting it auto-fire on every push.
-# Phase 2 (after a green manual run): uncomment the push trigger.
+# Verified on 2026-04-19: a CI-built bundle installed cleanly on iOS via
+# the in-app update modal — no crash, no rollback needed. Push trigger now
+# enabled so mobile/** commits to main auto-ship an OTA update.
+# If a bad bundle ever ships, roll back with:
+#   eas update:list --branch production --non-interactive --json
+#   eas update:delete <group-id> --non-interactive
 #
 # The lovely/peter-app workflow had to hand-hoist @babel packages out of
 # pnpm's .pnpm/ symlink tree to keep Metro's transform workers happy. MWF
@@ -21,16 +24,15 @@ on:
         description: 'OTA update message (defaults to latest commit subject)'
         required: false
         type: string
-  # Uncomment once a manual dispatch has shipped cleanly:
-  # push:
-  #   branches:
-  #     - main
-  #   paths:
-  #     - 'mobile/**'
-  #     - 'shared/**'
-  #     - 'package.json'
-  #     - 'package-lock.json'
-  #     - '.github/workflows/ota-update.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'mobile/**'
+      - 'shared/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ota-update.yml'
 
 concurrency:
   group: ota-update
