@@ -68,6 +68,16 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     };
   }
 
+  // --- Web: shim expo-secure-store (no browser keystore) ---
+  // Belt-and-braces against stray `expo-secure-store` imports on web
+  // (e.g. the dead src/contexts/AuthContext.tsx imports it top-level).
+  if (platform === 'web' && moduleName === 'expo-secure-store') {
+    return {
+      filePath: path.resolve(projectRoot, 'src/shims/secure-store-web.ts'),
+      type: 'sourceFile',
+    };
+  }
+
   // --- E2E Mode: mock Clerk ---
   if (isE2EMode) {
     if (moduleName === '@clerk/clerk-expo') {
