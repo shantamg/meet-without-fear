@@ -40,7 +40,10 @@ export function TransformationPairs() {
     return (
       <ul className="space-y-4 text-center">
         {PAIRS.map((p) => (
-          <li key={p.from} className="font-display text-3xl text-foreground sm:text-4xl">
+          <li
+            key={p.from}
+            className="font-display text-3xl text-foreground whitespace-nowrap sm:text-4xl"
+          >
             <span className="text-muted-foreground">{p.from}</span>
             <span className="mx-4 text-brand-blue">→</span>
             <span>{p.to}</span>
@@ -52,7 +55,7 @@ export function TransformationPairs() {
 
   return (
     <div
-      className="relative mx-auto flex h-[88px] w-full max-w-xl items-center justify-center sm:h-[120px]"
+      className="relative mx-auto flex h-[72px] w-full max-w-xl items-center justify-center sm:h-[96px] md:h-[120px]"
       role="status"
       aria-live="polite"
       aria-label={`${PAIRS[index].from} to ${PAIRS[index].to}`}
@@ -64,17 +67,24 @@ export function TransformationPairs() {
             key={p.from}
             aria-hidden={!isActive}
             className={[
-              "absolute inset-0 flex items-center justify-center transition-all duration-700 ease-out",
+              // whitespace-nowrap guarantees the pair stays on one line; the
+              // fluid clamp() font-size below ensures the longest pair
+              // ("Opposition → Win–Win") still fits at ~320px viewport up to
+              // desktop without ever wrapping or overflowing the column.
+              "absolute inset-0 flex items-center justify-center whitespace-nowrap transition-all duration-700 ease-out",
               isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none",
             ].join(" ")}
           >
-            <span className="font-display text-4xl leading-none text-muted-foreground sm:text-6xl md:text-7xl">
+            <span className="font-display text-[clamp(1.375rem,7.2vw,4.5rem)] leading-none text-muted-foreground">
               {p.from}
             </span>
-            <span className="mx-4 text-2xl text-brand-blue sm:mx-6 sm:text-3xl md:mx-8" aria-hidden>
+            <span
+              className="mx-3 text-[clamp(1rem,4vw,2rem)] text-brand-blue sm:mx-5 md:mx-7"
+              aria-hidden
+            >
               →
             </span>
-            <span className="font-display text-4xl leading-none text-foreground sm:text-6xl md:text-7xl">
+            <span className="font-display text-[clamp(1.375rem,7.2vw,4.5rem)] leading-none text-foreground">
               {p.to}
             </span>
           </div>
