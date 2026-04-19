@@ -12,11 +12,15 @@ const app = express();
 // Security middleware
 app.use(helmet());
 
-// CORS - allow website, mobile, and dashboard origins
+// CORS - allow website, app (Expo Web), and dashboard origins
 const corsOrigins: (string | RegExp)[] = [
-  // Website (invitation acceptance flow)
+  // Website (marketing + invitation acceptance flow)
   'https://meetwithoutfear.com',
   'https://www.meetwithoutfear.com',
+  // App (Expo Web build)
+  'https://app.meetwithoutfear.com',
+  // Vercel preview deployments of mwf-app (mwf-<hash>-shantam.vercel.app etc)
+  /^https:\/\/mwf-[a-z0-9-]+\.vercel\.app$/,
   // Local development
   'http://localhost:3000',
   'http://localhost:3001',
