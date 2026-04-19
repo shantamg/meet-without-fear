@@ -1200,14 +1200,28 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
     // Count ALL user messages for this session (not just from the limited history window)
     // This prevents turn IDs from getting stuck when conversation exceeds 20 messages
-    const userTurnCount = await prisma.message.count({
-      where: {
-        sessionId,
-        role: 'USER',
-        senderId: user.id,
-        forUserId: null,
-      },
-    });
+    // Also count user messages in the CURRENT stage only — stage-specific guards
+    // (e.g., feel-heard check, early-stage guidance) need stage-scoped counts so they
+    // don't fire prematurely due to accumulated turns from earlier stages.
+    const [userTurnCount, stageTurnCount] = await Promise.all([
+      prisma.message.count({
+        where: {
+          sessionId,
+          role: 'USER',
+          senderId: user.id,
+          forUserId: null,
+        },
+      }),
+      prisma.message.count({
+        where: {
+          sessionId,
+          role: 'USER',
+          senderId: user.id,
+          forUserId: null,
+          stage: currentStage,
+        },
+      }),
+    ]);
     const turnId = `${sessionId}-${user.id}-${userTurnCount}`;
     updateContext({ turnId, sessionId, userId: user.id });
 
@@ -1374,7 +1388,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     const prompt = buildStagePrompt(effectiveStage, {
       userName,
       partnerName,
-      turnCount: userTurnCount,
+      turnCount: stageTurnCount,
       emotionalIntensity,
       contextBundle,
       sharedContentHistory,
@@ -1827,7 +1841,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     logger.info(`[sendMessageStream:${requestId}] AI message created: ${aiMessage.id}`);
 
     // Stage 3 safety net: if user has sent many messages but no needs extracted, trigger extraction
-    if (effectiveStage === 3 && userTurnCount >= 6) {
+    if (effectiveStage === 3 && stageTurnCount >= 6) {
       const existingNeeds = await prisma.needScore.findMany({
         where: { userId: user.id },
         select: { id: true },

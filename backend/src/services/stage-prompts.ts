@@ -803,9 +803,9 @@ ${buildResponseProtocol(3)}`;
   const baseDynamic = buildBaseDynamicGuidance(context);
   if (baseDynamic) dynamicParts.push(baseDynamic);
 
-  const earlyStage3 = context.turnCount <= 2;
+  const earlyStage3 = context.turnCount <= 4;
   if (earlyStage3) {
-    dynamicParts.push('EARLY STAGE 3: User may still be processing emotions from empathy work. Start in EXCAVATING mode. Give space before expecting named needs.');
+    dynamicParts.push('EARLY STAGE 3: User may still be processing emotions from empathy work. Start in EXCAVATING mode. Give space before expecting named needs. Don\'t rush — they need time to distinguish positions from underlying needs.');
   }
   if (context.emotionalIntensity >= 8) {
     dynamicParts.push('HIGH USER INTENSITY: The user is very activated/distressed. Slow down. Validate first, reframe gently. Your tone should be calm and grounding, not matching their intensity.');
