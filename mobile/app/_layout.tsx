@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Platform, StyleSheet, View } from 'react-native';
 
+import { theme } from '@/src/theme';
 import { SessionDrawerProvider } from '@/src/hooks/useSessionDrawer';
 import { useInvitationLink } from '@/src/hooks/useInvitation';
 import { QueryProvider } from '@/src/providers/QueryProvider';
@@ -43,22 +44,24 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
   useInvitationLink();
 
   return (
-    <View style={styles.webFrame}>
-      <GestureHandlerRootView style={styles.container}>
-        <SafeAreaProvider>
-          <SessionDrawerProvider>
-            <ToastProvider>
-              {includeMixpanel && <MixpanelInitializer />}
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(public)" />
-                <Stack.Screen name="(auth)" />
-                <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-              </Stack>
-              <StatusBar style="light" />
-            </ToastProvider>
-          </SessionDrawerProvider>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
+    <View style={styles.webBackdrop}>
+      <View style={styles.webFrame}>
+        <GestureHandlerRootView style={styles.container}>
+          <SafeAreaProvider>
+            <SessionDrawerProvider>
+              <ToastProvider>
+                {includeMixpanel && <MixpanelInitializer />}
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="(public)" />
+                  <Stack.Screen name="(auth)" />
+                  <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+                </Stack>
+                <StatusBar style="light" />
+              </ToastProvider>
+            </SessionDrawerProvider>
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
+      </View>
     </View>
   );
 }
@@ -106,18 +109,28 @@ function RootLayout() {
 
 export default Sentry.wrap(RootLayout);
 
-// Phone-width shim for web: cap the app at a mobile column and center it
-// until we design proper desktop/tablet layouts. No-op on native.
+// Phone-width shim for web: cap the app at a mobile column, center it, and
+// paint the viewport gutters with the app's deep page color so the browser's
+// default white doesn't bleed through. No-op on native.
 const MOBILE_MAX_WIDTH = 480;
 
 const styles = StyleSheet.create({
+  webBackdrop: {
+    flex: 1,
+    ...Platform.select({
+      web: {
+        backgroundColor: theme.colors.bgPage,
+        alignItems: 'center',
+      },
+      default: {},
+    }),
+  },
   webFrame: {
     flex: 1,
     ...Platform.select({
       web: {
         width: '100%',
         maxWidth: MOBILE_MAX_WIDTH,
-        alignSelf: 'center',
       },
       default: {},
     }),
