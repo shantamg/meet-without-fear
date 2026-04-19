@@ -1,0 +1,10 @@
+node_modules
+.expo
+dist
+.vercel
+android
+ios
+.DS_Store
+coverage
+*.log
+__tests__
