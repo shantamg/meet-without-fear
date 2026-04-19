@@ -1,0 +1,89 @@
+name: Vercel Deploy — App
+
+# Deploys the Expo Web build of `mobile/` to app.meetwithoutfear.com via Vercel.
+# Triggers on changes to mobile/** or shared/** on main, or manual dispatch.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'mobile/**'
+      - 'shared/**'
+      - '.github/workflows/vercel-deploy-app.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-deploy-app-${{ github.sha }}
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        # workflow_dispatch should always deploy
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            app:
+              - 'mobile/**'
+              - 'shared/**'
+              - 'package.json'
+              - 'package-lock.json'
+
+  app:
+    name: Deploy App (Expo Web)
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      # TODO: fill in after creating the `mwf-app` Vercel project (Root Directory = mobile)
+      # See: https://vercel.com/dashboard → Add New → Project → Import
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_APP_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build (expo export --platform web)
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      # Flatten assets if Expo emitted nested node_modules paths (quirk observed in
+      # lovely/peter-app kids-tablet builds; may be a no-op here). Safe to run unconditionally.
+      - name: Flatten nested asset paths (if needed)
+        run: |
+          if [ -d ".vercel/output/static/assets/__node_modules" ]; then
+            cd .vercel/output/static
+            mkdir -p assets/_flat
+            find assets/__node_modules -type f -exec sh -c 'cp "$1" "assets/_flat/$(basename "$1")"' _ {} \;
+            rm -rf assets/__node_modules
+            perl -pi -e 's|/assets/__node_modules/[^"]*?/([^/]+?)"|/assets/_flat/\1"|g' _expo/static/js/web/entry-*.js
+            echo "Flattened nested asset paths"
+          else
+            echo "No nested asset paths to flatten; skipping"
+          fi
+
+      - name: Deploy prebuilt
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

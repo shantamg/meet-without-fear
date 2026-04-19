@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Layers, MoreVertical, Lock, Sparkles } from 'lucide-react-native';
@@ -319,7 +319,7 @@ export function InnerThoughtsScreen({
         disabled={isCreating || sendMessage.isPending}
         emptyStateTitle="Inner Thoughts"
         emptyStateMessage="A private space for reflection. Share what's on your mind."
-        onVoicePress={handleVoicePress}
+        onVoicePress={Platform.OS !== 'web' ? handleVoicePress : undefined}
       />
 
       {/* Suggested Action Buttons - shown when AI suggests next steps */}
