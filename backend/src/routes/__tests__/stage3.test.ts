@@ -16,6 +16,10 @@ jest.mock('../../lib/prisma');
 jest.mock('../../services/needs', () => ({
   extractNeedsFromConversation: jest.fn(),
   findCommonGround: jest.fn(),
+  isExtractionRunning: jest.fn().mockReturnValue(false),
+  acquireExtractionLock: jest.fn(),
+  releaseExtractionLock: jest.fn(),
+  runStage3SafetyNetExtraction: jest.fn(),
 }));
 
 // Mock realtime service
