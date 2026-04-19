@@ -35,6 +35,7 @@ import { consolidateGlobalFacts } from '../services/global-memory';
 import { assembleContextBundle, formatContextForPrompt } from '../services/context-assembler';
 import type { MemoryIntentResult } from '../services/memory-intent';
 import { handleDispatch, type DispatchContext } from '../services/dispatch-handler';
+import { runStage3SafetyNetExtraction } from '../services/needs';
 import { getMilestoneContext, getSharedContentContext } from '../services/shared-context';
 import { CONTEXT_WINDOW, trimConversationHistory } from '../utils/token-budget';
 import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from '../services/llm-telemetry';
@@ -1840,17 +1841,16 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     });
     logger.info(`[sendMessageStream:${requestId}] AI message created: ${aiMessage.id}`);
 
-    // Stage 3 safety net: if user has sent many messages but no needs extracted, trigger extraction
+    // Stage 3 safety net: after enough stage-3 turns with no needs extracted,
+    // run a lightweight extraction so the system surfaces needs the AI may have
+    // missed, rather than just alerting a stalled state. Fire-and-forget —
+    // don't block the response stream on a Bedrock call.
     if (effectiveStage === 3 && stageTurnCount >= 6) {
-      const existingNeeds = await prisma.needScore.findMany({
-        where: { userId: user.id },
-        select: { id: true },
-        take: 1,
-      });
-      if (existingNeeds.length === 0) {
-        logger.warn(`[sendMessageStream:${requestId}] Stage 3 safety net: ${userTurnCount} turns but no needs extracted, notifying for refetch`);
-        await publishSessionEvent(sessionId, 'session.resumed', { userId: user.id, reason: 'needs-safety-net' });
-      }
+      void runStage3SafetyNetExtraction(
+        sessionId,
+        user.id,
+        `[sendMessageStream:${requestId}]`
+      );
     }
 
     // Broadcast to Status Site

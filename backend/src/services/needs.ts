@@ -10,6 +10,7 @@ import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { NeedCategory } from '@meet-without-fear/shared';
 import { getCurrentUserId } from '../lib/request-context';
+import { publishSessionEvent } from './realtime';
 
 // ============================================================================
 // Types
@@ -54,6 +55,96 @@ const MAX_TOKENS = 2048;
  */
 export function resetNeedsClient(): void {
   resetBedrockClient();
+}
+
+// ============================================================================
+// Extraction lock (module-level, shared across callers that trigger extraction)
+// Prevents concurrent AI calls for the same (session, user) — e.g. when the
+// stage 3 controller's `getNeeds` and the stage 3 safety net both decide to
+// run at roughly the same moment.
+// ============================================================================
+
+const extractionLocks = new Map<string, number>();
+const EXTRACTION_LOCK_TIMEOUT_MS = 60_000;
+
+function getExtractionLockKey(sessionId: string, userId: string): string {
+  return `${sessionId}:${userId}`;
+}
+
+export function isExtractionRunning(sessionId: string, userId: string): boolean {
+  const startedAt = extractionLocks.get(getExtractionLockKey(sessionId, userId));
+  if (!startedAt) return false;
+  if (Date.now() - startedAt > EXTRACTION_LOCK_TIMEOUT_MS) {
+    extractionLocks.delete(getExtractionLockKey(sessionId, userId));
+    return false;
+  }
+  return true;
+}
+
+export function acquireExtractionLock(sessionId: string, userId: string): void {
+  extractionLocks.set(getExtractionLockKey(sessionId, userId), Date.now());
+}
+
+export function releaseExtractionLock(sessionId: string, userId: string): void {
+  extractionLocks.delete(getExtractionLockKey(sessionId, userId));
+}
+
+/**
+ * Stage 3 safety-net extraction. If the user's vessel has no identified needs
+ * yet, run extraction against stages 1–2 history so the system surfaces needs
+ * the conversational AI may have missed. Fire-and-forget — callers should not
+ * await this on the message-send hot path.
+ *
+ * No-ops if: no vessel yet, needs already extracted, or another extraction
+ * is already running for this (session, user).
+ */
+export async function runStage3SafetyNetExtraction(
+  sessionId: string,
+  userId: string,
+  logPrefix = '[safety-net]'
+): Promise<void> {
+  try {
+    if (isExtractionRunning(sessionId, userId)) {
+      logger.info(`${logPrefix} Stage 3 safety net: extraction already in flight, skipping`);
+      return;
+    }
+
+    const vessel = await prisma.userVessel.findUnique({
+      where: { userId_sessionId: { userId, sessionId } },
+      select: { id: true },
+    });
+    if (!vessel) {
+      return;
+    }
+
+    const existingCount = await prisma.identifiedNeed.count({
+      where: { vesselId: vessel.id },
+    });
+    if (existingCount > 0) {
+      return;
+    }
+
+    acquireExtractionLock(sessionId, userId);
+    try {
+      logger.warn(`${logPrefix} Stage 3 safety net: no needs extracted yet, running extraction`);
+      const needs = await extractNeedsFromConversation(sessionId, userId);
+      if (needs.length > 0) {
+        try {
+          await publishSessionEvent(sessionId, 'session.needs_extracted' as any, {
+            userId,
+            needsCount: needs.length,
+            reason: 'needs-safety-net',
+          });
+        } catch (err) {
+          logger.error(`${logPrefix} Failed to publish needs_extracted event:`, err);
+        }
+      }
+    } finally {
+      releaseExtractionLock(sessionId, userId);
+    }
+  } catch (err) {
+    logger.error(`${logPrefix} Stage 3 safety-net extraction failed:`, err);
+  }
 }
 
 // ============================================================================
