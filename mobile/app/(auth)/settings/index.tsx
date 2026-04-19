@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -32,6 +33,29 @@ export default function SettingsScreen() {
   const { signOut: clerkSignOut } = useClerk();
 
   const handleSignOut = () => {
+    const performSignOut = async () => {
+      try {
+        // Sign out from Clerk first (clears OAuth session)
+        await clerkSignOut();
+        // Then clear local auth state
+        await signOut();
+        router.replace('/(public)');
+      } catch (error) {
+        console.error('Sign out failed:', error);
+      }
+    };
+
+    // Alert.alert is a no-op in react-native-web, so the native confirmation
+    // flow never fires on web and the button appears inert. Fall back to the
+    // browser-native confirm() dialog on web — same two-button shape, works
+    // everywhere.
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm('Are you sure you want to sign out?')) {
+        void performSignOut();
+      }
+      return;
+    }
+
     Alert.alert(
       'Sign Out',
       'Are you sure you want to sign out?',
@@ -40,17 +64,7 @@ export default function SettingsScreen() {
         {
           text: 'Sign Out',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              // Sign out from Clerk first (clears OAuth session)
-              await clerkSignOut();
-              // Then clear local auth state
-              await signOut();
-              router.replace('/(public)');
-            } catch (error) {
-              console.error('Sign out failed:', error);
-            }
-          },
+          onPress: performSignOut,
         },
       ]
     );
