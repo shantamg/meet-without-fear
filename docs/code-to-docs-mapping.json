@@ -6,6 +6,7 @@
     { "code": "backend/src/app.ts",                      "label": "backend/src/app.ts",            "docs": ["docs/architecture/backend-overview.md"] },
     { "code": "backend/src/server.ts",                   "label": "backend/src/server.ts",         "docs": ["docs/architecture/backend-overview.md"] },
     { "code": "backend/src/routes/**",                   "label": "backend/src/routes",            "docs": ["docs/backend/api/index.md"] },
+    { "code": "backend/src/controllers/**",             "label": "backend/src/controllers",       "docs": ["docs/backend/api/index.md"] },
     { "code": "backend/src/routes/auth.ts",              "label": "backend/src/routes/auth.ts",    "docs": ["docs/backend/api/auth.md"] },
     { "code": "backend/src/controllers/auth.ts",         "label": "backend/src/controllers/auth.ts", "docs": ["docs/backend/api/auth.md"] },
     { "code": "backend/src/routes/stage0.ts",            "label": "backend/src/routes/stage0.ts",  "docs": ["docs/backend/api/stage-0.md", "docs/product/stages/stage-0-onboarding.md"] },
