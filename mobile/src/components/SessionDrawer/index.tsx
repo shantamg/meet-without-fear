@@ -21,7 +21,8 @@ import {
   ActivityIndicator,
   Animated,
   Alert,
-  Dimensions,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { Drawer } from 'react-native-drawer-layout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,8 +38,10 @@ import { colors } from '../../theme';
 import type { SessionSummaryDTO } from '@meet-without-fear/shared';
 import { SessionStatus } from '@meet-without-fear/shared';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const DRAWER_WIDTH = SCREEN_WIDTH * 0.9;
+// On web the app is constrained to a centered mobile column (see mobile/app/_layout.tsx).
+// The drawer must not exceed that column, or `react-native-drawer-layout`'s
+// `left: calc(width * -1)` offset pushes it off-screen.
+const WEB_COLUMN_MAX_WIDTH = 480;
 
 // ============================================================================
 // Session Section Types
@@ -288,6 +291,11 @@ export function SessionDrawer({ children }: SessionDrawerProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isOpen, closeDrawer, openDrawer } = useSessionDrawer();
+  const { width: windowWidth } = useWindowDimensions();
+  const drawerWidth = Math.min(
+    windowWidth * 0.9,
+    Platform.OS === 'web' ? WEB_COLUMN_MAX_WIDTH : windowWidth
+  );
 
   const handleNewSession = useCallback(() => {
     closeDrawer();
@@ -329,7 +337,7 @@ export function SessionDrawer({ children }: SessionDrawerProps) {
       onClose={closeDrawer}
       drawerPosition="left"
       drawerType="front"
-      drawerStyle={styles.drawer}
+      drawerStyle={[styles.drawer, { width: drawerWidth }]}
       overlayStyle={styles.overlay}
       renderDrawerContent={renderDrawerContent}
     >
@@ -348,7 +356,6 @@ const useStyles = () =>
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
     },
     drawer: {
-      width: DRAWER_WIDTH,
       backgroundColor: t.colors.bgPrimary,
     },
     drawerContent: {

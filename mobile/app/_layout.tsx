@@ -131,6 +131,11 @@ const styles = StyleSheet.create({
       web: {
         width: '100%',
         maxWidth: MOBILE_MAX_WIDTH,
+        // Establish a positioning context and clip overflow so absolutely-positioned
+        // descendants (Expo Router's Stack screens, the session drawer) anchor to the
+        // column's edges instead of the viewport.
+        position: 'relative',
+        overflow: 'hidden',
       },
       default: {},
     }),
