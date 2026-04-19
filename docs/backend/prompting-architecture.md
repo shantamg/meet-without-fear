@@ -8,7 +8,7 @@ status: living
 ---
 # Backend Prompting Architecture Audit
 
-**Last Updated:** 2026-03-11
+**Last Updated:** 2026-04-18
 
 This document provides a comprehensive overview of how prompting works in the Meet Without Fear backend, including prompt construction, model usage, parallel vs sequential operations, and memory handling.
 

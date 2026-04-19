@@ -3,6 +3,9 @@ title: API Specification
 sidebar_position: 1
 description: REST API endpoints for the Meet Without Fear backend. All endpoints use JSON request/response bodies.
 slug: /backend/api
+created: 2026-03-11
+updated: 2026-04-19
+status: living
 ---
 # API Specification
 
