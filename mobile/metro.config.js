@@ -29,21 +29,47 @@ config.resolver.alias = {
 };
 
 // =============================================================================
-// E2E Mode: Replace Clerk with mock module
+// Custom module resolution
 // =============================================================================
-// When EXPO_PUBLIC_E2E_MODE=true, substitute @clerk/clerk-expo with a no-op mock.
-// This prevents the "useAuth can only be used within <ClerkProvider>" error
-// because the mock exports don't have the same runtime context requirements.
+// Handles:
+// 1. E2E Mode: Replace @clerk/clerk-expo with mock module
+// 2. Web platform: Replace @sentry/react-native with no-op shim
+// 3. Web platform: Replace @clerk/clerk-expo/token-cache (browser-incompatible)
 // =============================================================================
 
 const isE2EMode = process.env.EXPO_PUBLIC_E2E_MODE === 'true';
 
-if (isE2EMode) {
-  // Save original resolver for fallback
-  const originalResolveRequest = config.resolver.resolveRequest;
+// Save original resolver for fallback
+const originalResolveRequest = config.resolver.resolveRequest;
 
-  config.resolver.resolveRequest = (context, moduleName, platform) => {
-    // Mock @clerk/clerk-expo main module
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // --- Web: shim @sentry/react-native ---
+  if (platform === 'web' && moduleName === '@sentry/react-native') {
+    return {
+      filePath: path.resolve(projectRoot, 'src/shims/sentry-web.ts'),
+      type: 'sourceFile',
+    };
+  }
+
+  // Also shim the Sentry metro plugin import on web (only used at config time, but
+  // prevents any accidental runtime import)
+  if (platform === 'web' && moduleName === '@sentry/react-native/metro') {
+    return {
+      filePath: path.resolve(projectRoot, 'src/shims/sentry-web.ts'),
+      type: 'sourceFile',
+    };
+  }
+
+  // --- Web: shim Clerk Expo token-cache (uses expo-secure-store, browser-incompatible) ---
+  if (platform === 'web' && moduleName === '@clerk/clerk-expo/token-cache') {
+    return {
+      filePath: path.resolve(projectRoot, 'src/shims/clerk-token-cache-web.ts'),
+      type: 'sourceFile',
+    };
+  }
+
+  // --- E2E Mode: mock Clerk ---
+  if (isE2EMode) {
     if (moduleName === '@clerk/clerk-expo') {
       return {
         filePath: path.resolve(projectRoot, 'src/mocks/clerk-expo.ts'),
@@ -51,23 +77,24 @@ if (isE2EMode) {
       };
     }
 
-    // Mock @clerk/clerk-expo/token-cache subpath
     if (moduleName === '@clerk/clerk-expo/token-cache') {
       return {
         filePath: path.resolve(projectRoot, 'src/mocks/clerk-expo-token-cache.ts'),
         type: 'sourceFile',
       };
     }
+  }
 
-    // Fallback to original resolver
-    if (originalResolveRequest) {
-      return originalResolveRequest(context, moduleName, platform);
-    }
+  // Fallback to original resolver
+  if (originalResolveRequest) {
+    return originalResolveRequest(context, moduleName, platform);
+  }
 
-    // Use context's default resolver as final fallback
-    return context.resolveRequest(context, moduleName, platform);
-  };
+  // Use context's default resolver as final fallback
+  return context.resolveRequest(context, moduleName, platform);
+};
 
+if (isE2EMode) {
   console.log('[Metro] E2E Mode: @clerk/clerk-expo replaced with mock module');
 }
 
