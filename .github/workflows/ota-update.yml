@@ -1,0 +1,116 @@
+name: OTA Update — Mobile
+
+# Publishes an Expo OTA update to the `production` branch for iOS users.
+# Android doesn't have a store release, so OTA is iOS-only (matches
+# scripts/publish-ota.sh).
+#
+# Phase 1 (now): workflow_dispatch only, so we can verify a CI-built bundle
+# installs cleanly on device before letting it auto-fire on every push.
+# Phase 2 (after a green manual run): uncomment the push trigger.
+#
+# The lovely/peter-app workflow had to hand-hoist @babel packages out of
+# pnpm's .pnpm/ symlink tree to keep Metro's transform workers happy. MWF
+# uses npm workspaces (flat hoisting) and already sets
+# `config.resolver.disableHierarchicalLookup = true` in mobile/metro.config.js,
+# so that class of CI bundle corruption shouldn't apply here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'OTA update message (defaults to latest commit subject)'
+        required: false
+        type: string
+  # Uncomment once a manual dispatch has shipped cleanly:
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'mobile/**'
+  #     - 'shared/**'
+  #     - 'package.json'
+  #     - 'package-lock.json'
+  #     - '.github/workflows/ota-update.yml'
+
+concurrency:
+  group: ota-update
+  # Never cancel an in-flight eas update — a partially published bundle can
+  # crash production apps on next launch. Queue subsequent runs instead.
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish OTA (iOS)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # eas-cli reads the latest commit subject as a default message.
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Write production .env
+        working-directory: mobile
+        # Metro loads mobile/.env automatically and overrides shell exports,
+        # so writing it is the only reliable way to pin the bundle's env
+        # vars. These values match the `production` profile in
+        # mobile/eas.json (already committed to the repo).
+        run: |
+          cat > .env <<'ENV'
+          EXPO_PUBLIC_API_URL=https://api.meetwithoutfear.com
+          EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_Y2xlcmsubWVldHdpdGhvdXRmZWFyLmNvbSQ
+          EXPO_PUBLIC_MIXPANEL_TOKEN=bde416691ec555209e6949a2aec8abec
+          EXPO_PUBLIC_SENTRY_DSN=https://e22b3e2cd0c3db41a041e161ea0ea5df@o4511090762186752.ingest.us.sentry.io/4511090865930240
+          ENV
+
+      - name: Publish OTA update
+        working-directory: mobile
+        env:
+          CI: '1'
+        run: |
+          if [ -n "${{ inputs.message }}" ]; then
+            MESSAGE="${{ inputs.message }}"
+          else
+            MESSAGE="$(git log -1 --pretty=%s)"
+          fi
+          echo "Publishing to production branch with message: $MESSAGE"
+          eas update \
+            --branch production \
+            --platform ios \
+            --message "$MESSAGE" \
+            --clear-cache \
+            --non-interactive
+
+      - name: Summary
+        if: success()
+        run: |
+          {
+            echo "### OTA update published"
+            echo ""
+            echo "- Branch: \`production\`"
+            echo "- Platform: iOS"
+            echo "- Commit: \`${{ github.sha }}\`"
+            echo ""
+            echo "Users will pick up the update on next app launch. If the update misbehaves:"
+            echo ""
+            echo '```sh'
+            echo "eas update:list --branch production --non-interactive --json"
+            echo "eas update:delete <group-id> --non-interactive"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
