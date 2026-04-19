@@ -36,6 +36,7 @@ jobs:
               - 'website/**'
               - 'package.json'
               - 'package-lock.json'
+              - '.github/workflows/vercel-deploy-website.yml'
 
   website:
     name: Deploy Website (Next.js)
