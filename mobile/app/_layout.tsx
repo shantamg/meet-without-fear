@@ -14,6 +14,7 @@ import { useInvitationLink } from '@/src/hooks/useInvitation';
 import { QueryProvider } from '@/src/providers/QueryProvider';
 import { ToastProvider } from '@/src/contexts/ToastContext';
 import { MixpanelInitializer } from '@/src/components/MixpanelInitializer';
+import { NativeAppBanner } from '@/src/components/NativeAppBanner';
 import { E2EAuthProvider, isE2EMode } from '@/src/providers/E2EAuthProvider';
 import { useOTAUpdate } from '@/src/hooks/useOTAUpdate';
 
@@ -46,6 +47,7 @@ function AppShell({ includeMixpanel = true }: { includeMixpanel?: boolean }) {
   return (
     <View style={styles.webBackdrop}>
       <View style={styles.webFrame}>
+        <NativeAppBanner />
         <GestureHandlerRootView style={styles.container}>
           <SafeAreaProvider>
             <SessionDrawerProvider>
