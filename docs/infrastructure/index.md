@@ -2,7 +2,9 @@
 title: Infrastructure
 sidebar_position: 1
 description: Slam bot (EC2), Render hosting, Vercel deploys, GitHub automation.
-updated: 2026-04-18
+created: 2026-03-11
+updated: 2026-04-19
+status: living
 ---
 
 # Infrastructure
@@ -22,7 +24,7 @@ Operational infrastructure for Meet Without Fear.
 
 | Service | Purpose |
 |---|---|
-| `slam-bot-socket.service` | Socket Mode listener for real-time Slack events. For each DM, first queries `GET /api/slack/session-check` (authenticated with `SLACK_INGRESS_SECRET`) to detect active MWF sessions in Postgres. If `isSession=true`, forwards the payload to `POST /api/slack/mwf-session` (backend Bedrock pipeline); otherwise dispatches to the `slack-triage` workspace. For `#mwf-sessions` lobby messages, always forwards to the backend. |
+| `slam-bot-socket.service` | Socket Mode listener for real-time Slack events. Routes incoming messages by channel: DMs and `#slam-paws`/`#agentic-devs`/`#bugs-and-requests` go to the `slack-triage` workspace; `#mwf-sessions` messages go to the `mwf-session` workspace (or, when `MWF_BACKEND_URL` is set, forward directly to the backend Bedrock pipeline). |
 | `slam-bot-state-scanner.service` | GitHub state scanner daemon (`github-state-scanner.sh` loop). Hardened with `MemoryMax=256M` and `TasksMax=64` to prevent runaway resource use. |
 
 ### Cron jobs
@@ -51,7 +53,7 @@ Local operator scripts live at `scripts/ec2-bot/`:
 | `provision.sh` | One-shot AWS provisioning (security group, EIP, instance, SSH config entry) |
 | `setup.sh` | First-time bootstrap of a fresh instance (Node, gh, claude, directories) |
 | `deploy.sh` | Symlink scripts, install systemd units + crontab + logrotate |
-| `configure-slack.sh` | Write Slack tokens + channel IDs (including `BUGS_AND_REQUESTS_CHANNEL_ID` for `#bugs-and-requests` and `MWF_SESSIONS_CHANNEL_ID` for `#mwf-sessions`) to `/opt/slam-bot/.env` and start the socket service |
+| `configure-slack.sh` | Write Slack tokens + channel IDs (`SLAM_BOT_CHANNEL_ID` for `#slam-paws`, `AGENTIC_DEVS_CHANNEL_ID` for `#agentic-devs`, `BUGS_AND_REQUESTS_CHANNEL_ID` for `#bugs-and-requests`, `MWF_SESSIONS_CHANNEL_ID` for `#mwf-sessions`) to `/opt/slam-bot/.env` and start the socket service |
 | `configure-mixpanel.sh` | Write Mixpanel service-account credentials |
 | `configure-db.sh` | Create/rotate `slam_bot_readonly` role on the Render Postgres |
 
@@ -64,14 +66,19 @@ The bot maintains session state on disk at `~/meet-without-fear/`:
 | `data/mwf-sessions/` | MWF session data, one subdirectory per session ID |
 | `data/mwf-users/` | Per-user profile data (name, previous sessions, etc.) |
 
-### MWF session routing
+### Channel routing
 
-The socket listener implements session-aware message routing:
+The socket listener routes messages by channel config. Each monitored channel maps to a workspace and command slug:
 
-- **Session detection**: On each DM message, queries `GET /api/slack/session-check?channel=C&thread_ts=T` (authenticated with `SLACK_INGRESS_SECRET`) to check if the thread is an active MWF session. Session state lives in Postgres (`SessionSlackThread` table); the backend is the authoritative source.
-- **DM → mwf-session mapping**: Messages where the backend returns `isSession=true` are POSTed to `POST /api/slack/mwf-session` (Bedrock pipeline) instead of dispatched to a Claude agent workspace
-- **Stray DM prevention**: Top-level DMs (outside any thread) in a channel with an active session receive the `activeThreadTs` from the session-check response; the listener nudges the user back to their session thread
-- **Lobby channel**: `#mwf-sessions` is used for session setup only; actual conversations happen in private DMs (one DM thread per user) to enforce vessel privacy at the transport layer
+| Channel | Workspace | Command slug |
+|---|---|---|
+| DM (Shantam) | `slack-triage` | `dm-reply` |
+| `#slam-paws` | `slack-triage` | `slam-paws-reply` |
+| `#agentic-devs` | `slack-triage` | `agentic-devs-reply` |
+| `#bugs-and-requests` | `slack-triage` | `bugs-and-requests-reply` |
+| `#mwf-sessions` | `mwf-session` | `mwf-session-reply` |
+
+For `#mwf-sessions`, when `MWF_BACKEND_URL` is set the listener POSTs directly to the backend Bedrock pipeline instead of spawning a Claude Code agent.
 
 ## Production hosting
 
