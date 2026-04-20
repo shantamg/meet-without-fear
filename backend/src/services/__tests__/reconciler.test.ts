@@ -198,7 +198,7 @@ describe('Reconciler Service', () => {
     });
 
     it('throws on invalid transition', () => {
-      expect(() => transition(EmpathyStatus.HELD, 'GAPS_DETECTED')).toThrow(
+      expect(() => transition(EmpathyStatus.HELD, 'MUTUAL_REVEAL')).toThrow(
         'Invalid empathy state transition'
       );
     });
