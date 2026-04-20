@@ -370,8 +370,8 @@ export async function analyzeEmpathyGap(
   input: ReconcilerAnalysisInput
 ): Promise<ReconcilerResult> {
   logger.info('Analyzing empathy gap', {
-    guesser: input.guesser.name,
-    subject: input.subject.name,
+    guesserId: input.guesser.id,
+    subjectId: input.subject.id,
     empathyPreview: input.empathyStatement.substring(0, 100),
     themes: input.witnessingContent.themes,
   });
@@ -387,7 +387,7 @@ export async function analyzeEmpathyGap(
   });
 
   if (existingResult) {
-    logger.info('Using cached reconciler result', { guesser: input.guesser.name, subject: input.subject.name });
+    logger.info('Using cached reconciler result', { guesserId: input.guesser.id, subjectId: input.subject.id });
     return dbResultToReconcilerResult(existingResult);
   }
 
@@ -433,7 +433,7 @@ export async function analyzeEmpathyGap(
   const abstractGuidance = generateAbstractGuidance(result);
 
   // Save result to database with abstract guidance fields
-  logger.debug('Saving reconciler result to database', { guesser: input.guesser.name, subject: input.subject.name });
+  logger.debug('Saving reconciler result to database', { guesserId: input.guesser.id, subjectId: input.subject.id });
   await prisma.reconcilerResult.create({
     data: {
       sessionId: input.sessionId,

@@ -153,7 +153,7 @@ export const sessionSwitchHandler: IntentHandler = {
 
     const summary = mapSessionToSummary(session, userId);
 
-    logger.info('[SessionSwitch] Switching to session:', session.id, 'with', partnerName);
+    logger.info('[SessionSwitch] Switching to session:', session.id, 'with partner', partner?.userId);
 
     // Convert any pre-session messages to session messages
     try {

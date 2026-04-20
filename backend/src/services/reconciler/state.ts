@@ -187,7 +187,7 @@ export async function runReconcilerForDirection(
     name: subject.firstName || subject.name || 'User',
   };
 
-  logger.debug('Reconciler participants', { guesser: guesserInfo.name, subject: subjectInfo.name });
+  logger.debug('Reconciler participants', { guesserId: guesserInfo.id, subjectId: subjectInfo.id });
 
   // ============================================================================
   // CIRCUIT BREAKER CHECK
@@ -199,7 +199,7 @@ export async function runReconcilerForDirection(
   );
 
   if (shouldSkipReconciler) {
-    logger.info('Circuit breaker tripped, forcing READY', { attempts, guesser: guesserInfo.name, subject: subjectInfo.name });
+    logger.info('Circuit breaker tripped, forcing READY', { attempts, guesserId: guesserInfo.id, subjectId: subjectInfo.id });
     await markEmpathyReady(sessionId, guesserId, subjectInfo.name, true);
     return {
       result: null,
@@ -211,7 +211,7 @@ export async function runReconcilerForDirection(
   // Get guesser's empathy statement
   const empathyData = await getEmpathyData(sessionId, guesserId);
   if (!empathyData) {
-    logger.error('Guesser has not submitted empathy statement', { guesser: guesserInfo.name, sessionId });
+    logger.error('Guesser has not submitted empathy statement', { guesserId: guesserInfo.id, sessionId });
     throw new Error('Guesser has not submitted empathy statement');
   }
   logger.debug('Found guesser empathy statement', { length: empathyData.statement.length });
@@ -219,7 +219,7 @@ export async function runReconcilerForDirection(
   // Get subject's witnessing content (Stage 1)
   const witnessingContent = await getWitnessingContent(sessionId, subjectId);
   if (!witnessingContent.userMessages) {
-    logger.error('Subject has no Stage 1 content', { subject: subjectInfo.name, sessionId });
+    logger.error('Subject has no Stage 1 content', { subjectId: subjectInfo.id, sessionId });
     throw new Error('Subject has no Stage 1 content');
   }
   logger.debug('Found subject witnessing content', { themes: witnessingContent.themes.length, chars: witnessingContent.userMessages.length });
@@ -249,7 +249,7 @@ export async function runReconcilerForDirection(
 
   if (!shouldOfferSharing) {
     // No sharing needed - mark as READY (will reveal when both directions are ready)
-    logger.info('No sharing needed, marking READY', { action, hasSuggestedFocus, guesser: guesserInfo.name, subject: subjectInfo.name });
+    logger.info('No sharing needed, marking READY', { action, hasSuggestedFocus, guesserId: guesserInfo.id, subjectId: subjectInfo.id });
     await markEmpathyReady(sessionId, guesserId, subjectInfo.name);
 
     return {
@@ -280,7 +280,7 @@ export async function runReconcilerForDirection(
   }
 
   // Significant gaps - generate share suggestion for subject
-  logger.info('Significant gaps found, generating share suggestion', { subject: subjectInfo.name });
+  logger.info('Significant gaps found, generating share suggestion', { subjectId: subjectInfo.id });
 
   // Query the DB record once (it was just created in analyzeEmpathyGap)
   const dbReconcilerResult = await prisma.reconcilerResult.findFirst({
@@ -304,7 +304,7 @@ export async function runReconcilerForDirection(
   // Validate and update empathy attempt status to AWAITING_SHARING atomically.
   // The read (for state-machine validation) and write must be in one transaction
   // to prevent a concurrent caller from seeing stale status.
-  logger.info('Updating empathy status to AWAITING_SHARING', { guesser: guesserInfo.name });
+  logger.info('Updating empathy status to AWAITING_SHARING', { guesserId: guesserInfo.id });
   await prisma.$transaction(async (tx) => {
     const attemptForAwait = await tx.empathyAttempt.findFirst({
       where: { sessionId, sourceUserId: guesserId },

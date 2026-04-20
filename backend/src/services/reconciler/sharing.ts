@@ -91,7 +91,7 @@ export async function generatePostShareContinuation(
   partnerName: string,
   sharedContent: string
 ): Promise<string> {
-  logger.info('Generating post-share continuation', { subjectName, subjectId });
+  logger.info('Generating post-share continuation', { subjectId });
 
   // Get subject's current stage
   const stageProgress = await prisma.stageProgress.findFirst({
@@ -291,7 +291,7 @@ Respond with ONLY the message text, no additional formatting.`;
     // Response should be plain text, just trim it
     const trimmed = response.trim();
     if (trimmed.length > 0) {
-      logger.debug('Generated reflection message', { guesserName });
+      logger.debug('Generated reflection message', { sessionId });
       return trimmed;
     }
 
@@ -387,7 +387,7 @@ export async function generateShareSuggestionForDirection(
     witnessingContent
   );
 
-  logger.info('Share suggestion created', { subjectName: subjectInfo.name, guesserId });
+  logger.info('Share suggestion created', { subjectId: subjectInfo.id, guesserId });
 }
 
 /**
@@ -407,7 +407,7 @@ export async function generateShareSuggestion(
   suggestedContent: string;
   reason: string;
 } | null> {
-  logger.info('Generating share suggestion', { subject: subject.name, guesser: guesser.name });
+  logger.info('Generating share suggestion', { subjectId: subject.id, guesserId: guesser.id });
 
   // Generate turnId upfront so COST and RECONCILER logs group together
   const turnId = `${sessionId}-${Date.now()}`;
@@ -520,7 +520,7 @@ async function refineShareSuggestion(
   },
   sessionId: string
 ): Promise<string | null> {
-  logger.info('Refining share suggestion', { subjectName });
+  logger.info('Refining share suggestion', { sessionId });
 
   const turnId = `${sessionId}-refine-${Date.now()}`;
 
