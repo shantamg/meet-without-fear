@@ -100,3 +100,44 @@ export async function hasContextAlreadyBeenShared(
 
   return false;
 }
+
+// ============================================================================
+// Helper: Mark a reconciler result "handled" via a SKIPPED sentinel share offer
+// ============================================================================
+
+/**
+ * When the context-already-shared shortcut fires, the active reconciler result
+ * still carries "significant gap / OFFER_SHARING" from its analysis. Without a
+ * marker, downstream readers (notably the GET /share-offer fallback in
+ * sharing.ts#generateShareOffer) would happily synthesize yet another redundant
+ * share suggestion.
+ *
+ * Attaching a SKIPPED ReconcilerShareOffer to the active result tells every
+ * reader "this one was handled, do not re-offer" without deleting the analysis
+ * itself (which is still useful data for status/summary endpoints).
+ */
+export async function markResultHandledAlreadyShared(
+  sessionId: string,
+  guesserId: string,
+  subjectId: string
+): Promise<void> {
+  const result = await prisma.reconcilerResult.findFirst({
+    where: { sessionId, guesserId, subjectId, supersededAt: null },
+    select: { id: true },
+  });
+  if (!result) return;
+
+  await prisma.reconcilerShareOffer.upsert({
+    where: { resultId: result.id },
+    create: {
+      resultId: result.id,
+      userId: subjectId,
+      status: 'SKIPPED',
+      skippedAt: new Date(),
+    },
+    update: {
+      status: 'SKIPPED',
+      skippedAt: new Date(),
+    },
+  });
+}

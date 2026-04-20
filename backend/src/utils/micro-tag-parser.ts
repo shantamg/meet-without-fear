@@ -49,10 +49,16 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '')
     .trim();
 
-  // 3. Fallback: if all content ended up inside tags, don't return empty
-  if (!responseText && thinking) {
-    logger.warn('[micro-tag-parser] Empty response after tag stripping — using thinking fallback');
-    responseText = '[AI processing — please continue the conversation]';
+  // If everything landed inside tags, leave response empty and let the caller
+  // decide what to do. A dispatch handler may still fill it in; otherwise the
+  // streaming endpoint should send an SSE error and ask the user to retry,
+  // rather than persisting a confusing "AI processing…" placeholder message.
+  if (!responseText && (thinking || draft || dispatchTag)) {
+    logger.warn('[micro-tag-parser] Empty response after tag stripping', {
+      hasThinking: !!thinking,
+      hasDraft: !!draft,
+      dispatchTag: dispatchTag ?? null,
+    });
   }
 
   // 3. Extract flags from thinking string (no JSON needed!)

@@ -31,6 +31,7 @@ import {
   dbResultToReconcilerResult,
   getWitnessingContent,
 } from './analysis';
+import { hasContextAlreadyBeenShared } from './circuit-breaker';
 import { checkAndRevealBothIfReady } from './state';
 
 // ============================================================================
@@ -1046,6 +1047,25 @@ export async function generateShareOffer(
 
   // If share offer already exists and was processed, return null
   if (result.shareOffer && result.shareOffer.status !== 'NOT_OFFERED') {
+    return null;
+  }
+
+  // If the subject has already shared context in this direction, don't synthesize
+  // another suggestion. The asymmetric reconciler shortcuts to READY in this case
+  // (state.ts hasContextAlreadyBeenShared branch), but the GET /share-offer
+  // fallback would otherwise keep re-drafting near-identical share suggestions
+  // every time the guesser refines, making the UX feel redundant and stuck.
+  const contextAlreadyShared = await hasContextAlreadyBeenShared(
+    sessionId,
+    result.guesserId,
+    subjectId
+  );
+  if (contextAlreadyShared) {
+    logger.info('generateShareOffer: context already shared, skipping redundant suggestion', {
+      sessionId,
+      guesserId: result.guesserId,
+      subjectId,
+    });
     return null;
   }
 

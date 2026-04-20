@@ -181,5 +181,30 @@ Response after multiple newlines.`;
       const result = parseMicroTagResponse(raw);
       expect(result.response).toBe('Response after multiple newlines.');
     });
+
+    it('returns empty response (no placeholder) when content is entirely inside thinking', () => {
+      // Regression: previously returned "[AI processing — please continue the conversation]"
+      // which was then saved as the user-facing message. Caller should see empty and decide.
+      const raw = `<thinking>Mode:Witness | FeelHeardCheck:N</thinking>`;
+      const result = parseMicroTagResponse(raw);
+      expect(result.response).toBe('');
+      expect(result.thinking).toContain('Mode:Witness');
+    });
+
+    it('returns empty response (no placeholder) when only dispatch tag is present', () => {
+      // This is the exact shape that caused the "[AI processing...]" message in prod:
+      // model emitted <thinking>...</thinking><dispatch>TAG</dispatch> with no visible text.
+      const raw = `<thinking>User asking for impasse handling</thinking>\n<dispatch>HANDLE_DENIAL_IMPASSE</dispatch>`;
+      const result = parseMicroTagResponse(raw);
+      expect(result.response).toBe('');
+      expect(result.dispatchTag).toBe('HANDLE_DENIAL_IMPASSE');
+    });
+
+    it('returns empty response (no placeholder) when only draft is present', () => {
+      const raw = `<thinking>Mode:Empathy</thinking>\n<draft>A proposed empathy statement.</draft>`;
+      const result = parseMicroTagResponse(raw);
+      expect(result.response).toBe('');
+      expect(result.draft).toBe('A proposed empathy statement.');
+    });
   });
 });

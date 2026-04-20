@@ -1715,20 +1715,6 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       // Clean accumulated text (strip <draft> and <dispatch> tags if they leaked through)
       accumulatedText = parsed.response;
 
-      // Guard: prevent empty AI responses from being saved to DB
-      if (!accumulatedText.trim() && !isDispatchMessage) {
-        logger.error(`[sendMessageStream:${requestId}] Empty AI response after tag stripping — skipping DB save`);
-        // Don't save empty message, but send error event so frontend can retry
-        if (!clientDisconnected) {
-          sendSSE(res, {
-            event: 'error',
-            data: { message: 'Empty AI response — please try again.', retryable: true },
-          });
-        }
-        res.end();
-        return;
-      }
-
       // =========================================================================
       // DISPATCH HANDLING: If dispatch tag detected, get and stream dispatched response
       // Dispatch messages are system responses - skip classifier/embeddings
@@ -1768,6 +1754,18 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           logger.info(`[sendMessageStream:${requestId}] Unknown dispatch tag "${dispatchTag}" — using original AI response`);
           isDispatchMessage = false;
         }
+      }
+
+      // Guard: empty AI response after parsing + dispatch means the model emitted
+      // content entirely inside tags we couldn't route (e.g. an unknown dispatch
+      // tag, or a stray <draft> with no chat text). Treat as a stream error so
+      // the user message is cleaned up and the client gets a retry prompt —
+      // better than persisting a confusing placeholder or a blank AI message.
+      if (!accumulatedText.trim()) {
+        logger.error(`[sendMessageStream:${requestId}] Empty AI response after tag stripping and dispatch`, {
+          dispatchTag: dispatchTag ?? null,
+        });
+        throw new Error('Empty AI response after tag stripping and dispatch');
       }
 
       finalizeTurnMetrics(turnId);
