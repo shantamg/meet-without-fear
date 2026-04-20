@@ -55,6 +55,13 @@ export default function AuthOptionsScreenWeb() {
         strategy,
         redirectUrl: `${origin}/sso-callback`,
         redirectUrlComplete: `${origin}/`,
+        // Always show the OAuth provider's account chooser. Without this,
+        // Google (and Apple) silently return the user if they're already
+        // signed in with exactly one account and have previously authorized
+        // the app — no picker, no option to switch accounts. Matches the
+        // native flow where the in-app browser has no pre-existing session
+        // and the chooser always appears.
+        oidcPrompt: 'select_account',
       });
       // The browser navigates away. Anything below this line only runs if
       // the redirect was blocked somehow.
