@@ -15,12 +15,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useClerk } from '@clerk/clerk-expo';
+import { useClerk, useSignIn, useSignUp } from '@clerk/clerk-expo';
 
 import { colors } from '@/theme';
 
+// Clerk's hosted sign-up continuation UI. Lives under the Account Portal
+// subdomain that ships with every Clerk instance; we don't have to host it.
+// When a Google OAuth sign-up completes but Clerk requires a field Google
+// didn't supply (phone / username / etc.), Clerk redirects here and the
+// Account Portal prompts the user for the remaining field before finalizing
+// the session.
+const CONTINUE_SIGN_UP_URL = 'https://accounts.meetwithoutfear.com/sign-up/continue';
+
 export default function SsoCallbackScreen() {
   const clerk = useClerk();
+  const { signIn } = useSignIn();
+  const { signUp } = useSignUp();
   const router = useRouter();
   const started = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,10 +45,45 @@ export default function SsoCallbackScreen() {
           redirectUrl: '/sso-callback',
           afterSignInUrl: '/',
           afterSignUpUrl: '/',
+          // If the OAuth return leaves a signUp in `missing_requirements`
+          // (Clerk instance requires a field Google didn't supply), Clerk
+          // will navigate the browser here to collect it. Without this,
+          // handleRedirectCallback silently returns with no session and the
+          // user gets bounced back to the welcome screen with no explanation.
+          continueSignUpUrl: CONTINUE_SIGN_UP_URL,
         });
-        // handleRedirectCallback typically triggers navigation on its own.
-        // Belt-and-braces: if we're still here 200ms later, route manually.
-        setTimeout(() => router.replace('/'), 200);
+
+        // Log the post-callback state so we can see exactly what Clerk did.
+        // Useful for debugging when the session doesn't materialize.
+        console.log('[sso-callback] post-callback state', {
+          clerkSession: !!clerk.session,
+          signInStatus: signIn?.status,
+          signUpStatus: signUp?.status,
+          signUpMissingFields: signUp?.missingFields,
+          signUpUnverifiedFields: signUp?.unverifiedFields,
+        });
+
+        // Only fall back if we actually have a session — otherwise letting
+        // Clerk's own navigation (including continueSignUpUrl) complete.
+        if (clerk.session) {
+          setTimeout(() => router.replace('/'), 200);
+          return;
+        }
+
+        // No session and no navigation — surface whatever Clerk knows.
+        const missing =
+          signUp?.missingFields?.join(', ') ||
+          signUp?.unverifiedFields?.join(', ');
+        const status = signUp?.status || signIn?.status;
+        if (missing) {
+          setError(
+            `Sign-up couldn't complete: missing ${missing}. If this doesn't finish on its own, check your Clerk dashboard's required fields.`,
+          );
+        } else if (status) {
+          setError(`Sign-in ended in status "${status}" without a session.`);
+        } else {
+          setError('Sign-in didn\'t complete. Please try again.');
+        }
       } catch (err) {
         console.error('[sso-callback] handleRedirectCallback failed:', err);
         const message =
@@ -48,7 +93,7 @@ export default function SsoCallbackScreen() {
         setError(message);
       }
     })();
-  }, [clerk, router]);
+  }, [clerk, router, signIn, signUp]);
 
   if (error) {
     return (
