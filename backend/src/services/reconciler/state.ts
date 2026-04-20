@@ -51,7 +51,7 @@ async function markEmpathyReady(
 
   // Choose message based on whether circuit breaker tripped
   const alignmentMessage = circuitBreakerTripped
-    ? `You've shared your perspective on what ${subjectName} might be experiencing. Let's move forward — ${subjectName} is also reflecting on your perspective.`
+    ? `Your perspective has been received. ${subjectName} is also reflecting on yours — once they're done, you'll both see what each other shared.`
     : `${subjectName} has felt heard. The reconciler reports your attempt to imagine what they're feeling was quite accurate. ${subjectName} is now considering your perspective, and once they do, you'll both see what each other shared.`;
 
   // Wrap state transition + status update + message creation in a transaction
@@ -284,7 +284,8 @@ export async function runReconcilerForDirection(
       where: { sessionId, sourceUserId: guesserId },
     });
     if (attemptForAwait) {
-      transition(attemptForAwait.status as EmpathyStatus, 'GAPS_DETECTED');
+      transition(attemptForAwait.status as EmpathyStatus, 'START_ANALYSIS');
+      transition(EmpathyStatus.ANALYZING, 'GAPS_DETECTED');
     }
     await tx.empathyAttempt.updateMany({
       where: { sessionId, sourceUserId: guesserId },

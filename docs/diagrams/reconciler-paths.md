@@ -3,7 +3,7 @@ title: Reconciler Outcome Paths - State Diagrams
 sidebar_position: 4
 description: This document provides state diagrams for all reconciler outcome paths from both user perspectives (guesser and subject). These diagrams document the complet...
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-04-20
 status: living
 ---
 # Reconciler Outcome Paths - State Diagrams
@@ -306,7 +306,7 @@ stateDiagram-v2
 
 ## 4. Refinement Loop (One Cycle)
 
-When the subject shares additional context, the guesser can refine their empathy attempt. The reconciler re-runs each cycle. A circuit breaker (`refinement-circuit-breaker.ts`) caps this at **3 attempts per direction** — beyond that, the reconciler is skipped and the attempt is forced into `READY` with the softer "let's move forward" alignment message.
+When the subject shares additional context, the guesser can refine their empathy attempt. The reconciler re-runs each cycle. A circuit breaker (`refinement-circuit-breaker.ts`) caps this at **3 attempts per direction** — beyond that, the reconciler is skipped and the attempt is forced into `READY` with a softer waiting-state alignment message ("Your perspective has been received…").
 
 ### 4.1 Guesser Perspective (Refinement)
 
@@ -562,7 +562,7 @@ stateDiagram-v2
 
 ## 6. Acceptance Check (Guesser Declines to Refine)
 
-When the guesser receives shared context or feedback but chooses not to refine their empathy statement, the backend transitions the attempt to `READY` with a **hardcoded** alignment message — there is no AI call at this junction. The message is chosen from two templates based on whether the circuit breaker tripped: either "`<subjectName>` has felt heard…" (normal path) or "You've shared your perspective… Let's move forward" (circuit-breaker / already-shared-context path).
+When the guesser receives shared context or feedback but chooses not to refine their empathy statement, the backend transitions the attempt to `READY` with a **hardcoded** alignment message — there is no AI call at this junction. The message is chosen from two templates based on whether the circuit breaker tripped: either "`<subjectName>` has felt heard…" (normal path) or "Your perspective has been received. `<subjectName>` is also reflecting on yours…" (circuit-breaker / already-shared-context path).
 
 ### 6.1 Guesser Perspective (Acceptance Check)
 

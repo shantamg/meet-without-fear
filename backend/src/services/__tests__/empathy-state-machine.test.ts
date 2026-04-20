@@ -72,6 +72,12 @@ describe('empathy-state-machine', () => {
     });
 
     // ===== Invalid transitions throw =====
+    it('throws on HELD + GAPS_DETECTED (must go through ANALYZING first)', () => {
+      expect(() => transition(EmpathyStatus.HELD, 'GAPS_DETECTED')).toThrow(
+        'Invalid empathy state transition: HELD + GAPS_DETECTED'
+      );
+    });
+
     it('throws on HELD + VALIDATE (skip to end)', () => {
       expect(() => transition(EmpathyStatus.HELD, 'VALIDATE')).toThrow(
         'Invalid empathy state transition: HELD + VALIDATE'

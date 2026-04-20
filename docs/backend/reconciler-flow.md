@@ -3,7 +3,7 @@ title: "Stage 2: Perspective Stretch - Empathy Exchange Flow"
 sidebar_position: 6
 description: This document describes the empathy exchange flow in Stage 2, including the reconciler system that analyzes empathy accuracy and manages the sharing of addit...
 created: 2026-03-11
-updated: 2026-04-18
+updated: 2026-04-20
 status: living
 ---
 # Stage 2: Perspective Stretch - Empathy Exchange Flow
@@ -521,7 +521,7 @@ If user tries to validate partner's empathy before reconciler finishes:
 ### Case 5: User Responds Before Fetching Share Offer
 If user accepts/declines before the GET endpoint marks offer as `OFFERED`:
 - `respondToShareSuggestion` accepts both `PENDING` and `OFFERED` status, and supports three actions: `accept`, `decline`, and `refine` (re-runs suggestion generation with `refinedContent` feedback from the user)
-- After the circuit-breaker trips, the Guesser's alignment message is softened from the default "your attempt to imagine what they're feeling was quite accurate" to the more honest "You've shared your perspective… Let's move forward" to avoid overclaiming accuracy when refinement was exhausted or context was already shared
+- After the circuit-breaker trips, the Guesser's alignment message is softened from the default "your attempt to imagine what they're feeling was quite accurate" to the more honest "Your perspective has been received. [Partner] is also reflecting on yours — once they're done, you'll both see what each other shared." to avoid overclaiming accuracy when refinement was exhausted or context was already shared
 - Marks as `OFFERED` before processing for proper audit trail
 
 ## Debugging Tips

@@ -1338,8 +1338,8 @@ describe('Reconciler Service', () => {
 
       // The empathyAttempt.findFirst is called multiple times:
       // 1. getEmpathyData (for the guesser's empathy statement) — needs content
-      // 2. For AWAITING_SHARING transition validation — needs status ANALYZING
-      //    (because analyzeEmpathyGap runs first, implicitly the status should be ANALYZING)
+      // 2. For AWAITING_SHARING transition validation — still HELD in the DB
+      //    (the code validates HELD→START_ANALYSIS then ANALYZING→GAPS_DETECTED)
       (prisma.empathyAttempt.findFirst as jest.Mock)
         .mockResolvedValueOnce({
           id: 'attempt-1',
@@ -1353,7 +1353,7 @@ describe('Reconciler Service', () => {
           id: 'attempt-1',
           sessionId,
           sourceUserId: guesserId,
-          status: EmpathyStatus.ANALYZING,
+          status: EmpathyStatus.HELD,
         });
 
       // Mock reconciler result creation — need it for generateShareSuggestion
