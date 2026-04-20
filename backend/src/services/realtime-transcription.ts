@@ -23,6 +23,7 @@ import { Server, IncomingMessage } from 'http';
 import { Socket } from 'net';
 import { logger } from '../lib/logger';
 
+const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
 const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
 const ASSEMBLYAI_TOKEN_URL = 'https://streaming.assemblyai.com/v3/token?expires_in_seconds=300';
 const ASSEMBLYAI_WS_BASE = 'wss://streaming.assemblyai.com/v3/ws';
@@ -37,15 +38,39 @@ const MIN_CHUNK_SIZE = 1600;
 export function attachRealtimeWebSocket(server: Server): void {
   const wss = new WebSocket.Server({ noServer: true });
 
-  server.on('upgrade', (request: IncomingMessage, socket, head: Buffer) => {
-    const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
+  server.on('upgrade', async (request: IncomingMessage, socket, head: Buffer) => {
+    const url = new URL(request.url || '', `http://${request.headers.host}`);
 
-    if (pathname === '/realtime') {
-      wss.handleUpgrade(request, socket as Socket, head, (ws: WebSocket) => {
-        wss.emit('connection', ws, request);
-      });
+    if (url.pathname !== '/realtime') {
+      // Non-/realtime upgrades are ignored (other middleware may handle them)
+      return;
     }
-    // Non-/realtime upgrades are ignored (other middleware may handle them)
+
+    // Verify Clerk JWT before accepting the WebSocket upgrade
+    const token = url.searchParams.get('token');
+    if (!token) {
+      logger.warn('[Realtime] WebSocket upgrade rejected: no token provided');
+      (socket as Socket).write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      (socket as Socket).destroy();
+      return;
+    }
+
+    try {
+      const { verifyToken } = await import('@clerk/express');
+      const session = await verifyToken(token, {
+        secretKey: CLERK_SECRET_KEY!,
+      });
+      logger.info('[Realtime] Authenticated WebSocket upgrade for user:', session.sub);
+    } catch (error) {
+      logger.warn('[Realtime] WebSocket upgrade rejected: invalid token', error);
+      (socket as Socket).write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      (socket as Socket).destroy();
+      return;
+    }
+
+    wss.handleUpgrade(request, socket as Socket, head, (ws: WebSocket) => {
+      wss.emit('connection', ws, request);
+    });
   });
 
   wss.on('connection', async (clientWs: WebSocket, request: import('http').IncomingMessage) => {
