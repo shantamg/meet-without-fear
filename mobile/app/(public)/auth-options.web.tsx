@@ -70,11 +70,12 @@ export default function AuthOptionsScreenWeb() {
         strategy,
         redirectUrl: `${origin}/sso-callback`,
         redirectUrlComplete: `${origin}/`,
-        // Always show the OAuth provider's account chooser. Without this,
-        // Google (and Apple) silently return the user if they're already
-        // signed in with exactly one account and have previously authorized
-        // the app — no picker, no option to switch accounts.
-        oidcPrompt: 'select_account',
+        // Force a full, fresh OAuth screen. `select_account` alone showed
+        // the picker on desktop but Google appeared to skip it in some
+        // mobile browser contexts. `consent` is more forceful — Google
+        // re-shows the whole consent flow, which includes the account
+        // chooser. Space-separated is valid OIDC for multiple prompts.
+        oidcPrompt: 'select_account consent',
       });
       // The browser navigates away. Anything below this line only runs if
       // the redirect was blocked somehow.
