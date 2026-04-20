@@ -13,6 +13,10 @@ describe('empathy-state-machine', () => {
       expect(transition(EmpathyStatus.HELD, 'START_ANALYSIS')).toBe(EmpathyStatus.ANALYZING);
     });
 
+    it('HELD → AWAITING_SHARING on GAPS_DETECTED (skip ANALYZING)', () => {
+      expect(transition(EmpathyStatus.HELD, 'GAPS_DETECTED')).toBe(EmpathyStatus.AWAITING_SHARING);
+    });
+
     it('HELD → READY on MARK_READY (skip analysis)', () => {
       expect(transition(EmpathyStatus.HELD, 'MARK_READY')).toBe(EmpathyStatus.READY);
     });
@@ -120,8 +124,9 @@ describe('empathy-state-machine', () => {
     it('returns correct events for HELD', () => {
       const events = validEventsFor(EmpathyStatus.HELD);
       expect(events).toContain('START_ANALYSIS');
+      expect(events).toContain('GAPS_DETECTED');
       expect(events).toContain('MARK_READY');
-      expect(events).toHaveLength(2);
+      expect(events).toHaveLength(3);
     });
 
     it('returns empty for VALIDATED (terminal)', () => {

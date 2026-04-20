@@ -7,6 +7,7 @@
  *
  * Valid transitions:
  *   HELD → ANALYZING (reconciler starts comparing)
+ *   HELD → AWAITING_SHARING (gaps detected, skip ANALYZING)
  *   HELD → READY (minor/no gaps, skip sharing)
  *   ANALYZING → AWAITING_SHARING (gaps detected)
  *   ANALYZING → READY (no significant gaps)
@@ -38,6 +39,7 @@ export type EmpathyEvent =
 const TRANSITIONS: Record<string, EmpathyStatus | undefined> = {
   // From HELD
   [`${EmpathyStatus.HELD}:START_ANALYSIS`]: EmpathyStatus.ANALYZING,
+  [`${EmpathyStatus.HELD}:GAPS_DETECTED`]: EmpathyStatus.AWAITING_SHARING,
   [`${EmpathyStatus.HELD}:MARK_READY`]: EmpathyStatus.READY,
 
   // From ANALYZING
