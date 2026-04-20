@@ -27,7 +27,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSignIn, useSignUp } from '@clerk/clerk-expo';
+import { useClerk, useSignIn, useSignUp } from '@clerk/clerk-expo';
 import { AntDesign } from '@expo/vector-icons';
 import { colors } from '@/theme';
 
@@ -36,6 +36,7 @@ type OAuthStrategy = 'oauth_google' | 'oauth_apple';
 export default function AuthOptionsScreenWeb() {
   const { signIn, isLoaded: signInLoaded } = useSignIn();
   const { isLoaded: signUpLoaded } = useSignUp();
+  const clerk = useClerk();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busyProvider, setBusyProvider] = useState<OAuthStrategy | null>(null);
@@ -51,6 +52,20 @@ export default function AuthOptionsScreenWeb() {
       const origin =
         typeof window !== 'undefined' ? window.location.origin : '';
 
+      // If a stale Clerk session cookie is still present (common on mobile
+      // browsers that kept a session from earlier testing), Clerk
+      // short-circuits authenticateWithRedirect server-side and the flow
+      // never reaches Google — so `oidcPrompt` has nothing to apply to and
+      // the user just silently lands back signed in with no chooser. Sign
+      // any existing session out first so OAuth always starts fresh.
+      if (clerk?.session) {
+        try {
+          await clerk.signOut({ redirectUrl: undefined });
+        } catch (signOutErr) {
+          console.warn('[auth-options.web] signOut before OAuth failed (non-fatal):', signOutErr);
+        }
+      }
+
       await signIn.authenticateWithRedirect({
         strategy,
         redirectUrl: `${origin}/sso-callback`,
@@ -58,9 +73,7 @@ export default function AuthOptionsScreenWeb() {
         // Always show the OAuth provider's account chooser. Without this,
         // Google (and Apple) silently return the user if they're already
         // signed in with exactly one account and have previously authorized
-        // the app — no picker, no option to switch accounts. Matches the
-        // native flow where the in-app browser has no pre-existing session
-        // and the chooser always appears.
+        // the app — no picker, no option to switch accounts.
         oidcPrompt: 'select_account',
       });
       // The browser navigates away. Anything below this line only runs if
