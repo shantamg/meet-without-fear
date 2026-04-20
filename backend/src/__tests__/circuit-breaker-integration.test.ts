@@ -9,7 +9,7 @@ import { runReconcilerForDirection, incrementAttempts } from '../services/reconc
  * runReconcilerForDirection once. Verifies it:
  *   - Skips the AI analysis entirely
  *   - Marks empathy as READY with circuitBreakerTripped=true
- *   - Creates the "Let's move forward" transition message
+ *   - Creates the "Your perspective has been received" transition message
  *   - Calls checkAndRevealBothIfReady (reveals if both directions are READY)
  *
  * Uses real Prisma against the test DB with mocked Ably (realtime) and empathy-status.
@@ -155,7 +155,7 @@ describe('Circuit Breaker Integration', () => {
       sessionId,
       userAId,
       expect.objectContaining({
-        content: expect.stringContaining("Let's move forward"),
+        content: expect.stringContaining("Your perspective has been received"),
       }),
       expect.anything()
     );
