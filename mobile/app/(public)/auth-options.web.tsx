@@ -34,8 +34,8 @@ import { colors } from '@/theme';
 type OAuthStrategy = 'oauth_google' | 'oauth_apple';
 
 export default function AuthOptionsScreenWeb() {
-  const { signIn, isLoaded: signInLoaded } = useSignIn();
-  const { isLoaded: signUpLoaded } = useSignUp();
+  const { isLoaded: signInLoaded } = useSignIn();
+  const { signUp, isLoaded: signUpLoaded } = useSignUp();
   const clerk = useClerk();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export default function AuthOptionsScreenWeb() {
   const loaded = signInLoaded && signUpLoaded;
 
   const handleOAuthRedirect = async (strategy: OAuthStrategy, provider: string) => {
-    if (!loaded || !signIn || busyProvider) return;
+    if (!loaded || !signUp || busyProvider) return;
     setError(null);
     setBusyProvider(strategy);
 
@@ -66,7 +66,14 @@ export default function AuthOptionsScreenWeb() {
         }
       }
 
-      await signIn.authenticateWithRedirect({
+      // Use the signUp resource as the OAuth entrypoint rather than signIn.
+      // Clerk's signUp auto-transfers back to signIn for existing users, so
+      // both first-time and returning users are handled. Going the other
+      // direction (signIn → signUp) has been observed to stall in
+      // `needs_identifier` for new users on this @clerk/clerk-expo / RN-web
+      // combination — the auto-transfer to signUp doesn't fire and the
+      // signIn resource just returns in its initial state with no session.
+      await signUp.authenticateWithRedirect({
         strategy,
         redirectUrl: `${origin}/sso-callback`,
         redirectUrlComplete: `${origin}/`,
