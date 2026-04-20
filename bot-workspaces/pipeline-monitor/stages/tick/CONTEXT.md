@@ -204,11 +204,12 @@ For each parent issue:
 
 ### 10. Slack notifications for auto-graduations
 
-When checks 7, 8, or 9 take action, post a brief Slack notification to the `daily-summary` channel. Use `shared/slack/slack-post.md` for formatting conventions.
+When checks 7, 8, or 9 take action, post a brief Slack notification to **#bot-ops** (channel ID from `.claude/config/services.json` key `bot-ops`). Use `shared/slack/slack-post.md` for formatting conventions.
 
 ```bash
+CHANNEL=$(cat .claude/config/services.json | jq -r '.slack.channels["bot-ops"]')
 ${SLAM_BOT_SCRIPTS:-/opt/slam-bot/scripts}/slack-post.sh \
-  --channel "C0AMGACJN9E" \
+  --channel "$CHANNEL" \
   --text "🔄 *Pipeline monitor*: <DESCRIPTION> on <https://github.com/shantamg/meet-without-fear/issues/$N|#$N>"
 ```
 

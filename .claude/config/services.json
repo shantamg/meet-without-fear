@@ -29,12 +29,18 @@
     }
   },
   "slack": {
-    "channels": {},
+    "channels": {
+      "bot-ops": "C0ASSFTB7H9",
+      "daily-summary": "C0AT7EV1C4B",
+      "agentic-devs": "C0ATAE7QP3P"
+    },
     "bot_user_id": ""
   },
   "github": {
     "repo": "shantamg/meet-without-fear",
-    "pr_reviewers": ["shantamg"],
+    "pr_reviewers": [
+      "shantamg"
+    ],
     "slack_to_github_users": {}
   }
 }

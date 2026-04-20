@@ -17,7 +17,7 @@
 5. **Doc hygiene** on modified docs: valid frontmatter, `updated` date bumped, correct section, referenced from index
 6. **Fix issues**: update drifted docs, create missing docs, fix frontmatter. Commit changes.
 7. **Create PR** if changes made (via `shared/skills/pr.md`)
-8. **Post summary** to #agentic-devs (channel `C0AM2J47R4L`)
+8. **Post summary** to #agentic-devs (channel ID from `.claude/config/services.json` key `agentic-devs`)
 
 ## Output
 

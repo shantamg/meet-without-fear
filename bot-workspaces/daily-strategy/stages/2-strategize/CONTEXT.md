@@ -118,7 +118,7 @@ Only include sections that have content. If a scanner returned "clean" status, m
 
 ### 5. Post staging summary to #agentic-devs
 
-If there are commits on `bot/staging` ahead of `main`, post a separate message to #agentic-devs with:
+If there are commits on `bot/staging` ahead of `main`, post a separate message to #agentic-devs (channel ID from `.claude/config/services.json` key `agentic-devs`) with:
 - Count of commits ahead
 - List of changes with PR links
 - Link to compare view: `<https://github.com/shantamg/meet-without-fear/compare/main...bot/staging|Compare view>`

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Run a comprehensive 12-point security audit using parallel specialist agents. Report findings to #security-audit and create GitHub issues for CRITICAL/HIGH findings.
+Run a comprehensive 12-point security audit using parallel specialist agents. Report findings to #bot-ops and create GitHub issues for CRITICAL/HIGH findings.
 
 ## Stage Pointers
 
@@ -13,7 +13,7 @@ Run a comprehensive 12-point security audit using parallel specialist agents. Re
 
 - `shared/references/credentials.md` — API access
 - `shared/github/create-issue.md` — Issue creation for findings
-- `shared/slack/slack-post.md` — Report to #security-audit
+- `shared/slack/slack-post.md` — Report to #bot-ops
 - `shared/references/github-ops.md` — Issue labeling and assignment
 
 ## Key Docs to Read First

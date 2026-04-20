@@ -18,7 +18,7 @@
    - MEDIUM: single consolidated issue, label `architecture`
    - LOW/INFO: Slack report only
 
-3. **Post to #eng-systems** (or fallback #pmf1):
+3. **Post to #agentic-devs** (channel ID from `.claude/config/services.json` key `agentic-devs`):
    - Summary: total findings by severity, domains scanned
    - Critical & High findings with file locations and remediation
    - Drift summary: patterns introduced in recent commits that diverge from formalized architecture

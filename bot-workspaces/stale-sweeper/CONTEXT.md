@@ -12,5 +12,5 @@ Process stale GitHub issues and PRs that need action (comments, fixes, conflict 
 ## Shared Resources Used
 
 - `shared/references/github-ops.md` — Issue/PR operations
-- `shared/slack/slack-post.md` — Summary to #agentic-devs
+- `shared/slack/slack-post.md` — Summary to #bot-ops
 - `shared/skills/pr.md` — PR creation for fixes

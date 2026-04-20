@@ -9,7 +9,7 @@ Comprehensive security posture assessment using specialized parallel agents cove
 | `stages/{current}/CONTEXT.md` | Always | Current stage contract |
 | `shared/references/credentials.md` | Stage 1 | API access for scanning |
 | `shared/github/create-issue.md` | Stage 2 | Issue creation for findings |
-| `shared/slack/slack-post.md` | Stage 2 | Report to #security-audit |
+| `shared/slack/slack-post.md` | Stage 2 | Report to #bot-ops |
 | `docs/architecture/system-overview.md` | Stage 1 | System context |
 | `docs/infrastructure/production-access.md` | Stage 1 | Access controls |
 
