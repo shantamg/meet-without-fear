@@ -3,7 +3,7 @@ title: Deployment
 sidebar_position: 1
 description: Production deployment targets and distribution options for the Meet Without Fear platform.
 created: 2026-03-11
-updated: 2026-04-16
+updated: 2026-04-20
 status: living
 ---
 # Deployment
@@ -58,9 +58,19 @@ Build profiles are defined in `mobile/eas.json`. Most profiles set `EXPO_PUBLIC_
 
 | Target | Workspace | Deploy Command |
 |--------|-----------|----------------|
-| Website | `website/` | `npm run website:deploy` (runs `cd website && vercel --prod`) |
+| Website (`meetwithoutfear.com`) | `website/` | `npm run website:deploy` (runs `cd website && vercel --prod`) |
 | Docs site | `docs-site/` | `npm run docs:deploy` (runs Vercel deploy in docs-site workspace) |
 | Status dashboard | `tools/status-dashboard/` | `npm run deploy:status` (runs `cd tools/status-dashboard && vercel --prod`) |
+
+### Web App: Vercel (Expo Web)
+
+The Expo mobile codebase also bundles for web and is served at `app.meetwithoutfear.com`.
+
+- **Vercel project**: `mwf-app` (Root Directory: `mobile/`)
+- **Deploy trigger**: `.github/workflows/vercel-deploy-app.yml` — fires automatically on pushes to `main` that touch `mobile/**` or `shared/**`; also supports `workflow_dispatch`
+- **Build**: `expo export --platform web` (run by `vercel build --prod`)
+- **Env vars / secrets**: `VERCEL_ORG_ID`, `VERCEL_APP_PROJECT_ID` (repo vars), `VERCEL_TOKEN` (repo secret)
+- **Web shims**: Platform-specific overrides live in `mobile/src/shims/` (Clerk token cache, SecureStore, Sentry) and `mobile/src/hooks/*.web.ts` (speech, voice input, OTA, biometrics)
 
 ## CI/CD Pipeline
 
@@ -87,6 +97,19 @@ The pipeline uses a dedicated test database (`meetwithoutfear_test`) with `NODE_
 Runs on push to `main`. A `dorny/paths-filter` step restricts deploys to pushes that actually change `backend/`, `shared/`, the lockfile, `render.yaml`, or the workflow itself. On a match, the workflow `curl -X POST`s the Render **deploy hook** stored in repo secret `RENDER_DEPLOY_HOOK`.
 
 > Render's built-in "auto-deploy on push" must be **off** for the `meet-without-fear-api` service — GitHub Actions is the only deploy trigger. This prevents docs-only pushes from rebuilding the backend.
+
+### `.github/workflows/vercel-deploy-app.yml` — Expo Web deploy on main
+Runs on push to `main` when `mobile/**` or `shared/**` changes (also `workflow_dispatch`). Builds the Expo Web bundle via `vercel build --prod` and deploys it to `app.meetwithoutfear.com` (Vercel project `mwf-app`). Uses repo vars `VERCEL_ORG_ID` / `VERCEL_APP_PROJECT_ID` and secret `VERCEL_TOKEN`.
+
+### `.github/workflows/vercel-deploy-website.yml` — marketing site deploy on main
+Runs on push to `main` when `website/**` changes. Deploys `website/` to Vercel (`meetwithoutfear.com`).
+
+### `.github/workflows/ota-update.yml` — OTA update for iOS
+Runs on push to `main` when `mobile/**` or `shared/**` changes (also `workflow_dispatch` with optional message). Publishes an Expo OTA update to the `production` EAS branch (iOS only) using `eas update`. Uses secret `EXPO_TOKEN`.
+
+- OTA updates are picked up on next app launch — no App Store review required
+- Roll back a bad update: `eas update:list --branch production --non-interactive --json` → `eas update:delete <group-id> --non-interactive`
+- `cancel-in-progress: false` — in-flight EAS update jobs are never cancelled (a partial publish can crash the app)
 
 ## Key Environment Variables
 

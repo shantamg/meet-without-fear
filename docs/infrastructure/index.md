@@ -3,7 +3,7 @@ title: Infrastructure
 sidebar_position: 1
 description: Slam bot (EC2), Render hosting, Vercel deploys, GitHub automation.
 created: 2026-03-11
-updated: 2026-04-19
+updated: 2026-04-20
 status: living
 ---
 
@@ -85,7 +85,8 @@ For `#mwf-sessions`, when `MWF_BACKEND_URL` is set the listener POSTs directly t
 - **Backend API**: Render (`meet-without-fear-api` / `srv-d58bj73uibrs73akacd0`), env group `be-heard-api-env`
 - **Database**: Render Postgres (`be-heard-db` / `dpg-d58660shg0os73bkkpmg-a`), Oregon region
 - **Docs site (this one)**: Vercel
-- **Marketing site**: Vercel
+- **Marketing site**: Vercel (`website/`)
+- **Web app** (`app.meetwithoutfear.com`): Vercel — Expo Web build of `mobile/`, Vercel project `mwf-app`. Deployed via `.github/workflows/vercel-deploy-app.yml` on pushes to `main` that touch `mobile/**` or `shared/**`.
 
 See [deployment](../deployment/index.md) for release procedures and env var reference.
 
@@ -94,3 +95,6 @@ See [deployment](../deployment/index.md) for release procedures and env var refe
 - `.github/workflows/docs-impact.yml` — PR-time check that code changes and their mapped docs are updated together. Mapping rules in `docs/code-to-docs-mapping.json`.
 - `.github/workflows/ci.yml` — PR-time CI: spins up a Postgres 15 service container, installs deps (`npm ci`), generates the Prisma client, runs `npm run check`, migrates the test DB, and runs `npm run test`. Skipped for docs-only changes via `dorny/paths-filter`. A `ci-success` gate job is the single required status check for branch protection.
 - `.github/workflows/render-deploy.yml` — Push-to-`main` backend deploy: filters to pushes that touch `backend/`, `shared/`, the lockfile, `render.yaml`, or the workflow itself, then POSTs the Render deploy hook (stored in repo secret `RENDER_DEPLOY_HOOK`). Render's built-in auto-deploy must be **off** — this workflow is the sole deploy trigger.
+- `.github/workflows/vercel-deploy-app.yml` — Push-to-`main` Expo Web deploy: filters to pushes touching `mobile/**` or `shared/**`, builds the Expo Web bundle, and deploys to `app.meetwithoutfear.com` via Vercel (`mwf-app` project). Also supports `workflow_dispatch`.
+- `.github/workflows/vercel-deploy-website.yml` — Push-to-`main` marketing site deploy: filters to pushes touching `website/**`, deploys to Vercel.
+- `.github/workflows/ota-update.yml` — Push-to-`main` OTA update: publishes an Expo OTA update to the `production` EAS branch for iOS whenever `mobile/**` or `shared/**` changes on `main`. Also supports `workflow_dispatch` with a custom message. Uses `EXPO_TOKEN` secret. Roll back a bad update with `eas update:delete <group-id> --non-interactive`.
