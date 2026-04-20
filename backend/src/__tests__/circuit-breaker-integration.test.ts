@@ -138,7 +138,7 @@ describe('Circuit Breaker Integration', () => {
       orderBy: { timestamp: 'desc' },
     });
     expect(messages.length).toBeGreaterThanOrEqual(1);
-    expect(messages[0].content).toContain("Let's move forward");
+    expect(messages[0].content).toContain("Your perspective has been received");
     expect(messages[0].content).toContain('Bob');
     // Should NOT contain the normal "quite accurate" message
     expect(messages[0].content).not.toContain('quite accurate');
