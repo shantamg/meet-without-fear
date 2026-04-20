@@ -682,7 +682,7 @@ These diagrams are implemented across:
 - **Mobile**: `mobile/src/hooks/useEmpathyActions.ts` (empathy mutations)
 - **Shared**: `shared/src/dto/reconciler.ts` (types and contracts)
 
-> **Note on ANALYZING state:** The `ANALYZING` status and its transitions (`HELD → ANALYZING` via `START_ANALYSIS`, `ANALYZING → READY` via `NO_SIGNIFICANT_GAPS`, `ANALYZING → AWAITING_SHARING` via `GAPS_DETECTED`) are defined in `empathy-state-machine.ts` but are never triggered by the reconciler code. The reconciler in `reconciler/state.ts` updates the database status directly from `HELD` to `READY` or `AWAITING_SHARING`, bypassing the `ANALYZING` state. The state machine definition retains `ANALYZING` for potential future use.
+> **Note on ANALYZING state:** The `ANALYZING` status and its transitions (`HELD → ANALYZING` via `START_ANALYSIS`, `ANALYZING → READY` via `NO_SIGNIFICANT_GAPS`, `ANALYZING → AWAITING_SHARING` via `GAPS_DETECTED`) are defined in `empathy-state-machine.ts` but are never triggered by the reconciler code. The reconciler performs analysis inline and transitions directly from `HELD` — using `HELD + GAPS_DETECTED → AWAITING_SHARING` or `HELD + MARK_READY → READY`. The `ANALYZING` state is retained for potential future use where analysis might be asynchronous.
 
 For detailed specs, see:
 - `docs/archive/specs/when-the-reconciler-responds-with-offeroptional-we-need-to-implement-this.md`
