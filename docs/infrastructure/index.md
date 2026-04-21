@@ -24,7 +24,7 @@ Operational infrastructure for Meet Without Fear.
 
 | Service | Purpose |
 |---|---|
-| `slam-bot-socket.service` | Socket Mode listener for real-time Slack events. Routes incoming messages by channel: DMs and `#slam-paws`/`#agentic-devs`/`#bugs-and-requests` go to the `slack-triage` workspace; `#mwf-sessions` messages go to the `mwf-session` workspace (or, when `MWF_BACKEND_URL` is set, forward directly to the backend Bedrock pipeline). |
+| `slam-bot-socket.service` | Socket Mode listener for real-time Slack events. Routes incoming messages by channel: DMs and `#slam-paws`/`#agentic-devs`/`#bugs-and-requests`/`#most-important-thing` go to the `slack-triage` workspace; `#mwf-sessions` messages go to the `mwf-session` workspace (or, when `MWF_BACKEND_URL` is set, forward directly to the backend Bedrock pipeline). |
 | `slam-bot-state-scanner.service` | GitHub state scanner daemon (`github-state-scanner.sh` loop). Hardened with `MemoryMax=256M` and `TasksMax=64` to prevent runaway resource use. |
 
 ### Cron jobs
@@ -53,7 +53,7 @@ Local operator scripts live at `scripts/ec2-bot/`:
 | `provision.sh` | One-shot AWS provisioning (security group, EIP, instance, SSH config entry) |
 | `setup.sh` | First-time bootstrap of a fresh instance (Node, gh, claude, directories) |
 | `deploy.sh` | Symlink scripts, install systemd units + crontab + logrotate |
-| `configure-slack.sh` | Write Slack tokens + channel IDs (`SLAM_BOT_CHANNEL_ID` for `#slam-paws`, `AGENTIC_DEVS_CHANNEL_ID` for `#agentic-devs`, `BUGS_AND_REQUESTS_CHANNEL_ID` for `#bugs-and-requests`, `MWF_SESSIONS_CHANNEL_ID` for `#mwf-sessions`) to `/opt/slam-bot/.env` and start the socket service |
+| `configure-slack.sh` | Write Slack tokens + channel IDs (`SLAM_BOT_CHANNEL_ID` for `#slam-paws`, `AGENTIC_DEVS_CHANNEL_ID` for `#agentic-devs`, `BUGS_AND_REQUESTS_CHANNEL_ID` for `#bugs-and-requests`, `MOST_IMPORTANT_THING_CHANNEL_ID` for `#most-important-thing`, `MWF_SESSIONS_CHANNEL_ID` for `#mwf-sessions`) to `/opt/slam-bot/.env` and start the socket service |
 | `configure-mixpanel.sh` | Write Mixpanel service-account credentials |
 | `configure-db.sh` | Create/rotate `slam_bot_readonly` role on the Render Postgres |
 
@@ -76,6 +76,7 @@ The socket listener routes messages by channel config. Each monitored channel ma
 | `#slam-paws` | `slack-triage` | `slam-paws-reply` |
 | `#agentic-devs` | `slack-triage` | `agentic-devs-reply` |
 | `#bugs-and-requests` | `slack-triage` | `bugs-and-requests-reply` |
+| `#most-important-thing` | `slack-triage` | `most-important-thing-reply` |
 | `#mwf-sessions` | `mwf-session` | `mwf-session-reply` |
 
 For `#mwf-sessions`, when `MWF_BACKEND_URL` is set the listener POSTs directly to the backend Bedrock pipeline instead of spawning a Claude Code agent.

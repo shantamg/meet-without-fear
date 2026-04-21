@@ -1,7 +1,7 @@
 ---
 title: "Stage 0: Onboarding"
 sidebar_position: 3
-description: Establish the Process Guardian role and secure commitment from both parties through the Curiosity Compact.
+description: Welcome both parties with a brief warm opening and secure acknowledgment before entering the conversation.
 ---
 # Stage 0: Onboarding
 
@@ -75,13 +75,13 @@ Both users must acknowledge the opening message.
 | Scenario | AI Response |
 |----------|-------------|
 | User has concerns | Explore concerns; provide reassurance |
-| User refuses to sign | Explain this is required; offer resources for other options |
+| User refuses to proceed | Explore concerns; explain the format is required; offer resources for other options |
 | Other party not responding | Send reminders; offer to resend invitation |
 | Invitation expires | Allow session creator to send new invitation |
 
 ## Data Captured
 
-- Signature timestamp for each user
+- Acknowledgment timestamp for each user
 - Any concerns raised (for improving onboarding)
 - Invitation/acceptance timing
 
@@ -94,7 +94,7 @@ Both users must acknowledge the opening message.
 
 ### Backend Implementation
 
-- [Stage 0 API](../backend/api/stage-0.md) - Compact signing endpoints
+- [Stage 0 API](../backend/api/stage-0.md) - Onboarding acknowledgment endpoints
 - [Stage 0 Prompt](../backend/prompts/stage-0-opening.md) - Opening message template
 - [Retrieval Contracts](../backend/state-machine/retrieval-contracts.md#stage-0-onboarding)
 
