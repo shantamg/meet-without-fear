@@ -244,8 +244,18 @@ while IFS= read -r WT_LINE; do
   WT_PATH=$(echo "$WT_LINE" | awk '{print $1}')
   WT_BRANCH=$(echo "$WT_LINE" | awk '{print $3}' | tr -d '[]')
 
-  # Skip the main worktree
-  [ "$WT_PATH" = "$REPO_ROOT" ] && continue
+  # Never delete protected branches — hard guard against rm -rf on the main checkout.
+  # git worktree list reports canonical paths; $REPO_ROOT may be a symlink
+  # (/home/ubuntu/meet-without-fear -> /home/ubuntu/projects/meet-without-fear on EC2),
+  # so a path-only check is not sufficient.
+  case "$WT_BRANCH" in
+    main|master|develop) continue ;;
+  esac
+
+  # Skip the main worktree (normalize symlinks before comparing)
+  WT_CANONICAL=$(readlink -f "$WT_PATH" 2>/dev/null || echo "$WT_PATH")
+  REPO_CANONICAL=$(readlink -f "$REPO_ROOT" 2>/dev/null || echo "$REPO_ROOT")
+  [ "$WT_CANONICAL" = "$REPO_CANONICAL" ] && continue
 
   # Skip worktrees less than 2 hours old (may be actively in use)
   WT_AGE_MIN=$(( ($(date +%s) - $(stat -c %Y "$WT_PATH" 2>/dev/null || echo "$(date +%s)")) / 60 ))
@@ -274,8 +284,12 @@ while IFS= read -r WT_LINE; do
   if [ "$PR_STATE" = "MERGED" ] || [ "$PR_STATE" = "CLOSED" ]; then
     SHOULD_REMOVE=true
   elif [ -z "$PR_STATE" ] && [ "$WT_AGE_MIN" -gt 1440 ]; then
-    # No PR found and worktree is >24h old — likely abandoned
-    SHOULD_REMOVE=true
+    # No PR found and worktree is >24h old — likely abandoned.
+    # Restrict to bot-owned branch patterns so a non-bot worktree (or one that
+    # slipped past the protected-branch guard above) can never be deleted here.
+    case "$WT_BRANCH" in
+      bot/*|feat/*|fix/*|chore/*|feature/*) SHOULD_REMOVE=true ;;
+    esac
   fi
 
   if [ "$SHOULD_REMOVE" = "true" ]; then
