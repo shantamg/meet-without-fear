@@ -17,6 +17,12 @@ source "$SCRIPT_DIR/lib/config.sh"
 
 LOGFILE="${BOT_LOG_DIR}/lock-cleanup.log"
 
+# On-disk prefix for bot-owned paths (lockfiles, temp files, worktree dirs).
+# Differs from $BOT_NAME after the slam-bot → slam-paws rename:
+#   BOT_NAME is the identity ("slam-paws"), but LOCK_PREFIX is still "/tmp/slam-bot"
+#   and files on disk still use the "slam-bot-" prefix. Match on this, not BOT_NAME.
+BOT_DISK_PREFIX="${LOCK_PREFIX##*/}"
+
 mkdir -p "$HEARTBEAT_DIR" 2>/dev/null || true
 
 # Clean up any leftover rate limit state files from the removed rate limiting infrastructure
@@ -26,7 +32,7 @@ rm -f "${LOCK_PREFIX}-rate-limited.flag" "${LOCK_PREFIX}-rate-limit-snapshot.txt
 for LOCK in ${LOCK_PREFIX}-*.lock; do
   [ -f "$LOCK" ] || continue
 
-  SLUG=$(basename "$LOCK" | sed "s/^${BOT_NAME}-//; s/\.lock$//")
+  SLUG=$(basename "$LOCK" | sed "s/^${BOT_DISK_PREFIX}-//; s/\.lock$//")
   PID=$(cat "$LOCK" 2>/dev/null)
   LOCK_AGE_MIN=$(( ($(date +%s) - $(stat -c %Y "$LOCK")) / 60 ))
 
@@ -181,9 +187,9 @@ if [ -d "$CLAIMS_DIR" ]; then
 fi
 
 # Clean up temp prompt/context files (>1 hour old)
-find /tmp -maxdepth 1 -name "${BOT_NAME}-prompt-*" -mmin +60 -delete 2>/dev/null
-find /tmp -maxdepth 1 -name "${BOT_NAME}-context-*" -mmin +60 -delete 2>/dev/null
-find /tmp -maxdepth 1 -name "${BOT_NAME}-thread-replies-*" -mmin +60 -delete 2>/dev/null
+find /tmp -maxdepth 1 -name "${BOT_DISK_PREFIX}-prompt-*" -mmin +60 -delete 2>/dev/null
+find /tmp -maxdepth 1 -name "${BOT_DISK_PREFIX}-context-*" -mmin +60 -delete 2>/dev/null
+find /tmp -maxdepth 1 -name "${BOT_DISK_PREFIX}-thread-replies-*" -mmin +60 -delete 2>/dev/null
 
 # Clean up legacy directories (one-time removal)
 rm -rf "${BOT_STATE_DIR}/pmf1-claims" 2>/dev/null
@@ -224,14 +230,14 @@ fi
 # ── Clean up orphaned worktrees (from hard kills where trap didn't run) ───────
 cd "$REPO_ROOT" 2>/dev/null && git worktree prune 2>/dev/null
 # Remove stale worktree temp dirs
-find /tmp -maxdepth 1 -name "${BOT_NAME}-worktree-*" -mmin +20 -exec rm -rf {} \; 2>/dev/null
+find /tmp -maxdepth 1 -name "${BOT_DISK_PREFIX}-worktree-*" -mmin +20 -exec rm -rf {} \; 2>/dev/null
 
 # ── Clean up worktrees whose PRs are merged/closed ──────────────────────────
 # Bot workspaces (general-pr, docs-audit, etc.) create worktrees that persist
 # after their PRs are merged/closed. Without cleanup these accumulate and fill
 # the disk. Only check worktrees older than 2 hours to avoid touching active work.
 # Rate-limit: only run this check once per hour (uses gh API calls per worktree).
-WT_CLEANUP_MARKER="/tmp/${BOT_NAME}-worktree-cleanup-last"
+WT_CLEANUP_MARKER="/tmp/${BOT_DISK_PREFIX}-worktree-cleanup-last"
 WT_CLEANUP_AGE=999
 if [ -f "$WT_CLEANUP_MARKER" ]; then
   WT_CLEANUP_AGE=$(( ($(date +%s) - $(stat -c %Y "$WT_CLEANUP_MARKER" 2>/dev/null || echo 0)) / 60 ))
@@ -263,12 +269,12 @@ while IFS= read -r WT_LINE; do
 
   # Skip if there's an active lock file with a running process
   SKIP=false
-  for LOCK in /tmp/${BOT_NAME}-*.lock; do
+  for LOCK in /tmp/${BOT_DISK_PREFIX}-*.lock; do
     [ -f "$LOCK" ] || continue
     LOCK_PID=$(cat "$LOCK" 2>/dev/null)
     if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
       # Check if the lock slug matches the worktree branch
-      LOCK_SLUG=$(basename "$LOCK" | sed "s/^${BOT_NAME}-//; s/\\.lock\$//")
+      LOCK_SLUG=$(basename "$LOCK" | sed "s/^${BOT_DISK_PREFIX}-//; s/\\.lock\$//")
       if echo "$WT_BRANCH" | grep -q "$LOCK_SLUG" 2>/dev/null; then
         SKIP=true
         break

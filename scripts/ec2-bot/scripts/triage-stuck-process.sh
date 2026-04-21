@@ -18,9 +18,13 @@ PID="${2:-0}"
 AGE_MIN="${3:-0}"
 LOGFILE="${4:-}"
 
-# If no log file or it doesn't exist, can't triage — default to kill
+# If no log file or it doesn't exist, we can't evaluate the process — escalate
+# rather than kill. A missing log most often means the caller passed the wrong
+# path (e.g., a prefix mismatch bug in the slug derivation), not that the
+# process is actually broken. Defaulting to kill here silently terminated
+# legitimate long-running agents; "alert" routes to a human without data loss.
 if [ -z "$LOGFILE" ] || [ ! -f "$LOGFILE" ]; then
-  echo '{"verdict":"kill","reason":"No log file found — cannot determine process state"}'
+  echo "{\"verdict\":\"alert\",\"reason\":\"No log file found at expected path (${LOGFILE:-unset}) — cannot evaluate; escalating instead of killing\"}"
   exit 0
 fi
 
