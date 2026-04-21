@@ -37,12 +37,14 @@ Runs at 7 AM ET and 7 PM ET. Morning sets the day's plan; evening checks in on p
 
 ## Response Loop
 
-The workspace implements a persistent response loop:
+The workspace implements a persistent response loop with a *consensus requirement*:
 
 1. **Post** — Each briefing presents items and asks for input
 2. **Check** — Next run checks the previous briefing's thread for responses
-3. **Carry forward** — Unanswered items re-appear at the top of the next briefing
-4. **Document deferrals** — When the team says "not now" with a reason, the bot records that reason as a comment on the GitHub issue and removes the item from re-presentation
+3. **Require consensus** — Both Shantam and Darryl must agree before an item proceeds or is deferred. A single response is not enough; partial responses carry forward with a note about who has weighed in
+4. **Carry forward** — Unanswered or partially-answered items re-appear at the top of the next briefing
+5. **Surface disagreements** — If one wants to proceed and the other wants to defer, present both perspectives and ask them to align
+6. **Document deferrals** — When *both* agree to defer with a reason, the bot records that reason as a comment on the GitHub issue and removes the item from re-presentation
 
 ## Orchestrator Rules
 

@@ -10,20 +10,26 @@
 
 ### 0. Process previous briefing responses
 
-Before composing the new briefing, act on responses from the previous one:
+Before composing the new briefing, act on responses from the previous one.
 
-**Greenlit items** — Team agreed to proceed. If the item doesn't already have a dispatch label (`bot:pr`, `bot:investigate`, etc.), apply one now so the dispatcher picks it up.
+**Consensus rule:** Both Shantam and Darryl must agree before an item moves forward or is deferred. A single response is not enough — if only one person replied, the item stays in the carry-forward queue with a note about who has weighed in. The Most Important Thing is never skipped unless *both* agree to defer it or a genuinely new higher-priority item emerges (e.g., production outage).
 
-**Deferred items** — Team said "not now" with a reason. For each:
+**Greenlit items** — *Both* team members agreed to proceed. If the item doesn't already have a dispatch label (`bot:pr`, `bot:investigate`, etc.), apply one now so the dispatcher picks it up.
+
+**Deferred items** — *Both* team members agreed to defer, with a reason. For each:
 1. Post a comment on the GitHub issue recording the deferral:
    ```
-   **Deferred by [team member]** (via #daily-summary, [date])
+   **Deferred by consensus** (via #daily-summary, [date])
 
    Reason: [their stated reason]
 
    This item will not be re-presented in the daily strategy until the team re-raises it.
    ```
 2. Remove from the carry-forward queue — do not re-present this item.
+
+**Partial response** — Only one team member replied. The item carries forward. In the next briefing, note who has weighed in and who hasn't yet: "Shantam agreed — waiting on Darryl" or vice versa.
+
+**Disagreement** — Team members gave conflicting responses (one wants to proceed, the other wants to defer). Do NOT move forward. Re-present the item with both perspectives noted, and ask them to align: "Shantam wants to proceed, Darryl wants to defer because [reason]. Please discuss and let me know how you'd like to handle this."
 
 **Questions** — Team asked a follow-up. Include a brief answer or acknowledgment in the new briefing if possible.
 
