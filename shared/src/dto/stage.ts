@@ -139,6 +139,8 @@ export interface CompactStatusResponse {
   partnerSigned: boolean;
   partnerSignedAt: string | null;
   canAdvance: boolean;
+  /** Whether this is the first session for this relationship (no prior resolved sessions) */
+  isFirstSession: boolean;
 }
 
 // ============================================================================

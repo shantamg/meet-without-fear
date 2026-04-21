@@ -88,6 +88,7 @@ interface CompactStatusResponse {
   partnerSigned: boolean;
   partnerSignedAt: string | null;  // Only visible after user signs
   canAdvance: boolean;
+  isFirstSession: boolean;  // No prior resolved sessions for this relationship
 }
 ```
 
@@ -140,11 +141,14 @@ To advance from Stage 0 to Stage 1:
 
 ---
 
-## Compact Content
+## Opening Framing
 
-The Curiosity Compact text is served as static content, not via API. It should be embedded in the mobile app.
+The opening welcome message is served as static content embedded in the mobile app. It replaces the former "Curiosity Compact" formal agreement with a brief, warm AI-spoken message.
 
-See [Stage 0: Onboarding](../../stages/stage-0-onboarding.md#the-curiosity-compact) for the full text.
+- **First session:** "You'll each chat with me privately first. Nothing gets shared without your say. Ready?"
+- **Repeat session:** "Welcome back. Same as before — your space is private, nothing shared without your say. Let's pick up where we left off."
+
+The `isFirstSession` field in the compact status response indicates which variant to show. No formal commitments or checkboxes are required — just a "Ready" / "Let's go" button.
 
 ---
 

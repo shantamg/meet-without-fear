@@ -84,15 +84,12 @@ flowchart TB
     subgraph OnboardingChat[Onboarding View]
         Header0[Welcome to Meet Without Fear]
 
-        subgraph Content0[Compact Presentation]
-            Intro[Process explanation]
-            Diagram[Stage overview diagram]
-            Compact[Curiosity Compact text]
+        subgraph Content0[AI Welcome Message]
+            Message[Brief warm opening with typewriter effect]
         end
 
-        subgraph Actions0[Action Buttons]
-            Questions[I have questions]
-            Sign[Sign and Begin]
+        subgraph Actions0[Action Button]
+            Ready[Ready / Let's go]
         end
     end
 ```
@@ -195,9 +192,9 @@ Before the chat list renders, `UnifiedSessionScreen` can swap in a full-screen m
 
 ## Empty States
 
-### Compact-not-signed (onboarding)
+### Opening not acknowledged (onboarding)
 
-If the caller enters a session but hasn't signed the Curiosity Compact, the list replaces its usual empty state with a `CompactChatItem` (the compact text + "Sign and begin" CTA). This is controlled by `isInOnboardingUnsigned` / `customEmptyState`.
+If the caller enters a session but hasn't acknowledged the opening message, the list replaces its usual empty state with a `CompactChatItem` (a brief AI welcome message). A "Ready" button appears above the input via `CompactAgreementBar`. This is controlled by `isInOnboardingUnsigned` / `customEmptyState`.
 
 ### Waiting for Partner
 

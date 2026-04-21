@@ -1,40 +1,37 @@
 /**
  * InlineCompact Component
  *
- * An inline version of the Curiosity Compact for embedding in the chat interface.
- * Styled to match the demo at docs-site/static/demo/index.html.
+ * An inline version of the opening welcome for embedding in the chat interface
+ * as an AI-triggered action. Shows a warm AI message with a "Ready" button.
  */
 
 import { View, Text, TouchableOpacity } from 'react-native';
-import { useState } from 'react';
 import { createStyles } from '../theme/styled';
-import { colors } from '../theme';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface InlineCompactProps {
-  /** Callback when compact is signed */
+  /** Callback when user taps Ready */
   onSign: () => void;
   /** Whether signing is in progress */
   isPending?: boolean;
+  /** Whether this is the first session for this relationship */
+  isFirstSession?: boolean;
   /** Test ID for testing */
   testID?: string;
 }
 
 // ============================================================================
-// Compact Terms
+// Constants
 // ============================================================================
 
-const COMPACT_TERMS = [
-  'Approach this process with curiosity rather than certainty',
-  'Allow the AI to guide the pace of our work together',
-  'Share honestly within my private space',
-  'Consider the other perspective when presented',
-  'Focus on understanding needs rather than winning',
-  'Take breaks when emotions run high',
-];
+const FIRST_SESSION_TEXT =
+  "You'll each chat with me privately first. Nothing gets shared without your say. Ready?";
+
+const REPEAT_SESSION_TEXT =
+  "Welcome back. Same as before \u2014 your space is private, nothing shared without your say. Let's pick up where we left off.";
 
 // ============================================================================
 // Component
@@ -43,55 +40,27 @@ const COMPACT_TERMS = [
 export function InlineCompact({
   onSign,
   isPending = false,
+  isFirstSession = true,
   testID = 'inline-compact',
 }: InlineCompactProps) {
   const styles = useStyles();
-  const [agreed, setAgreed] = useState(false);
 
-  const handleSign = () => {
-    if (agreed && !isPending) {
-      onSign();
-    }
-  };
+  const messageText = isFirstSession ? FIRST_SESSION_TEXT : REPEAT_SESSION_TEXT;
 
   return (
     <View style={styles.container} testID={testID}>
-      <Text style={styles.title}>The Curiosity Compact</Text>
-
-      <View style={styles.termsContainer}>
-        {COMPACT_TERMS.map((term, index) => (
-          <View key={index} style={styles.termRow}>
-            <Text style={styles.termBullet}>{'>'}</Text>
-            <Text style={styles.termText}>{term}</Text>
-          </View>
-        ))}
-      </View>
-
-      <TouchableOpacity
-        testID={`${testID}-checkbox`}
-        style={styles.agreeRow}
-        onPress={() => setAgreed(!agreed)}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: agreed }}
-      >
-        <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
-          {agreed && <Text style={styles.checkmark}>&#10003;</Text>}
-        </View>
-        <Text style={styles.agreeLabel}>
-          I commit to approaching this with curiosity
-        </Text>
-      </TouchableOpacity>
+      <Text style={styles.messageText}>{messageText}</Text>
 
       <TouchableOpacity
         testID={`${testID}-sign-button`}
-        style={[styles.signButton, !agreed && styles.signButtonDisabled]}
-        onPress={handleSign}
-        disabled={!agreed || isPending}
+        style={[styles.readyButton, isPending && styles.readyButtonDisabled]}
+        onPress={onSign}
+        disabled={isPending}
         accessibilityRole="button"
-        accessibilityState={{ disabled: !agreed || isPending }}
+        accessibilityState={{ disabled: isPending }}
       >
-        <Text style={styles.signButtonText}>
-          {isPending ? 'Signing...' : 'Sign and Begin'}
+        <Text style={styles.readyButtonText}>
+          {isPending ? '...' : isFirstSession ? 'Ready' : "Let's go"}
         </Text>
       </TouchableOpacity>
     </View>
@@ -112,77 +81,23 @@ const useStyles = () =>
       borderWidth: 1,
       borderColor: t.colors.border,
     },
-    title: {
-      fontSize: t.typography.fontSize.xl,
-      fontWeight: '600',
-      color: t.colors.textPrimary,
-      textAlign: 'center',
-      marginBottom: t.spacing.lg,
-    },
-    termsContainer: {
-      marginBottom: t.spacing.lg,
-    },
-    termRow: {
-      flexDirection: 'row',
-      paddingVertical: t.spacing.sm,
-      borderBottomWidth: 1,
-      borderBottomColor: t.colors.border,
-    },
-    termBullet: {
-      color: colors.accent,
-      fontWeight: 'bold',
-      marginRight: t.spacing.md,
-      fontSize: t.typography.fontSize.md,
-    },
-    termText: {
-      flex: 1,
+    messageText: {
       fontSize: t.typography.fontSize.md,
       lineHeight: 22,
       color: t.colors.textPrimary,
-    },
-    agreeRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: t.colors.bgTertiary,
-      borderRadius: t.radius.sm,
-      padding: t.spacing.md,
       marginBottom: t.spacing.lg,
     },
-    checkbox: {
-      width: 22,
-      height: 22,
-      borderRadius: t.radius.sm,
-      borderWidth: 2,
-      borderColor: t.colors.border,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: t.spacing.md,
-    },
-    checkboxChecked: {
-      backgroundColor: 'rgb(59, 130, 246)', // Blue to match "Compact Signed" indicator
-      borderColor: 'rgb(59, 130, 246)',
-    },
-    checkmark: {
-      color: 'white',
-      fontSize: 14,
-      fontWeight: 'bold',
-    },
-    agreeLabel: {
-      flex: 1,
-      fontSize: t.typography.fontSize.md,
-      color: t.colors.textPrimary,
-    },
-    signButton: {
-      backgroundColor: 'rgb(59, 130, 246)', // Blue to match "Compact Signed" indicator
+    readyButton: {
+      backgroundColor: 'rgb(59, 130, 246)',
       paddingVertical: t.spacing.lg,
       paddingHorizontal: t.spacing.xl,
       borderRadius: t.radius.sm,
       alignItems: 'center',
     },
-    signButtonDisabled: {
+    readyButtonDisabled: {
       backgroundColor: t.colors.bgTertiary,
     },
-    signButtonText: {
+    readyButtonText: {
       color: 'white',
       fontSize: t.typography.fontSize.md,
       fontWeight: '600',
