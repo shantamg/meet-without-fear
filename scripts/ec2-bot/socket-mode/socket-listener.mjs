@@ -24,6 +24,7 @@
  *   AGENTIC_DEVS_CHANNEL_ID — Channel ID for the #agentic-devs channel
  *   SLAM_BOT_CHANNEL_ID — Channel ID for the #slam-paws channel
  *   BUGS_AND_REQUESTS_CHANNEL_ID — Channel ID for the #bugs-and-requests channel
+ *   MOST_IMPORTANT_THING_CHANNEL_ID — Channel ID for the #most-important-thing channel
  *   MWF_SESSIONS_CHANNEL_ID — Channel ID for the #mwf-sessions channel
  */
 
@@ -45,6 +46,7 @@ const SHANTAM_DM = process.env.SHANTAM_SLACK_DM;
 const SLAM_BOT_CHANNEL = process.env.SLAM_BOT_CHANNEL_ID;
 const AGENTIC_DEVS_CHANNEL = process.env.AGENTIC_DEVS_CHANNEL_ID;
 const BUGS_AND_REQUESTS_CHANNEL = process.env.BUGS_AND_REQUESTS_CHANNEL_ID;
+const MOST_IMPORTANT_THING_CHANNEL = process.env.MOST_IMPORTANT_THING_CHANNEL_ID;
 const MWF_SESSIONS_CHANNEL = process.env.MWF_SESSIONS_CHANNEL_ID;
 
 // Backend endpoint that owns MWF sessions (Bedrock engine, same as mobile).
@@ -162,6 +164,17 @@ if (BUGS_AND_REQUESTS_CHANNEL) {
     logName: 'check-bugs-and-requests',
     channelName: '#bugs-and-requests',
     commandSlug: 'bugs-and-requests-reply',
+    workspace: 'slack-triage',
+    contextCount: 10,
+  };
+}
+
+// #most-important-thing channel — daily strategy briefing responses
+if (MOST_IMPORTANT_THING_CHANNEL) {
+  CHANNEL_CONFIG[MOST_IMPORTANT_THING_CHANNEL] = {
+    logName: 'check-most-important-thing',
+    channelName: '#most-important-thing',
+    commandSlug: 'most-important-thing-reply',
     workspace: 'slack-triage',
     contextCount: 10,
   };
