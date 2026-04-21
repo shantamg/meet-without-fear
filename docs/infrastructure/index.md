@@ -89,8 +89,10 @@ The repo clone at `/home/ubuntu/projects/meet-without-fear/` has vanished four t
 Persistent auditd watches are installed at `/etc/audit/rules.d/mwf.rules` (keys `mwf_projects`, `mwf_repo`). If the repo disappears again, the first diagnostic is:
 
 ```bash
-# ausearch on this host returns nothing even when the log has events — grep the raw log instead.
-ssh slam-bot "sudo grep -hE 'nametype=(DELETE|RENAME).*meet-without-fear' /var/log/audit/audit.log /var/log/audit/audit.log.*"
+# The `</dev/null` is required. ausearch reads from stdin when stdin isn't a tty,
+# and non-interactive ssh makes stdin a pipe, so without redirection it silently
+# returns `<no matches>` for every query.
+ssh slam-bot "sudo ausearch -k mwf_projects </dev/null | grep -E 'rename|delete|unlink|comm='"
 ```
 
 Pair a matching PATH record with its SYSCALL and PROCTITLE records (same `:NNNNN)` event id) to get the PID, parent chain, and command line. If watches are missing (empty `auditctl -l | grep mwf`), reinstate with `sudo auditctl -R /etc/audit/rules.d/mwf.rules`.
