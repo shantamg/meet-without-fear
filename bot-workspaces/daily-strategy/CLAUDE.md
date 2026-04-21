@@ -1,8 +1,8 @@
 # Daily Strategy Workspace (L1)
 
-Generate a proactive daily strategy briefing with prioritized recommendations and autonomy-tiered actions, posted to #daily-summary.
+Generate a twice-daily "Most Important Thing" strategy briefing posted to #daily-summary. Each briefing leads with a single highest-priority item, clearly marks what needs team input vs. what the bot will handle autonomously, and re-presents unanswered items until the team responds.
 
-Replaces the retrospective daily-digest with a forward-looking plan: what work to proceed with, what to start soon, and what to suggest.
+Runs at 7 AM ET and 7 PM ET. Morning sets the day's plan; evening checks in on progress and tees up tomorrow.
 
 ## What to Load
 
@@ -26,17 +26,26 @@ Replaces the retrospective daily-digest with a forward-looking plan: what work t
 | Resource | Why |
 |---|---|
 | repo source code | Strategy gathers data, doesn't touch code |
-| `shared/github/create-issue.md` | Strategy reports, doesn't create issues |
+| `shared/github/create-issue.md` | Strategy reports, doesn't create issues (except deferral comments) |
 | `shared/skills/pr.md` | No code changes |
 | Other workspaces | Irrelevant context |
 
 ## Stage Progression
 
-1. `1-gather` — Parallel sub-agents collect data from all sources
-2. `2-strategize` — Classify work by autonomy tier, compose strategy, post to Slack
+1. `1-gather` — Parallel sub-agents collect data from all sources + check previous briefing responses
+2. `2-strategize` — Lead with Most Important Thing, classify by autonomy tier, handle deferrals, post to Slack
+
+## Response Loop
+
+The workspace implements a persistent response loop:
+
+1. **Post** — Each briefing presents items and asks for input
+2. **Check** — Next run checks the previous briefing's thread for responses
+3. **Carry forward** — Unanswered items re-appear at the top of the next briefing
+4. **Document deferrals** — When the team says "not now" with a reason, the bot records that reason as a comment on the GitHub issue and removes the item from re-presentation
 
 ## Orchestrator Rules
 
 - Single-pass: gather data, compose, post, exit
-- Cron-triggered: no label swap needed at completion
+- Cron-triggered (twice daily): no label swap needed at completion
 - If all data sources fail, post a short "Strategy briefing failed to gather data. Check bot logs." message and exit

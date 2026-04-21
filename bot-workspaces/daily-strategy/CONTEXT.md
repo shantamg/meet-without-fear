@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Generate a proactive daily strategy briefing that tells the team what work is planned, what needs human input, and what the bot recommends picking up. Replaces the retrospective daily-digest with a forward-looking approach.
+Generate a twice-daily "Most Important Thing" strategy briefing that leads with the single highest-priority item, tells the team what needs their input vs. what the bot will handle, and re-presents unanswered items until the team responds. Runs at 7 AM ET and 7 PM ET.
 
 ## Stage Pointers
 
-- `stages/1-gather/CONTEXT.md` — Parallel sub-agent data collection
-- `stages/2-strategize/CONTEXT.md` — Autonomy classification, composition, Slack posting
+- `stages/1-gather/CONTEXT.md` — Parallel sub-agent data collection + previous briefing response check
+- `stages/2-strategize/CONTEXT.md` — Most Important Thing selection, autonomy classification, deferral handling, Slack posting
 
 ## Shared Resources Used
 
@@ -22,6 +22,8 @@ Generate a proactive daily strategy briefing that tells the team what work is pl
 ## Key Conventions
 
 - Post main message first, then details as thread reply
-- Main message: forward-looking strategy (what's happening today)
-- Thread reply: structured breakdown by autonomy tier, pipeline state, and retrospective data
+- Main message: lead with *The Most Important Thing*, then other items by autonomy tier
+- Thread reply: structured breakdown with retrospective data and scanner results
+- Re-present unanswered items from the previous briefing at the top
+- When team defers an item with a reason, comment on the GitHub issue and stop re-presenting it
 - See `.claude/config/services.json` for #daily-summary channel ID

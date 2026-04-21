@@ -3,23 +3,50 @@
 ## Input
 
 - Gathered data from all sub-agents (stage 1)
+- Previous briefing response summary (from sub-agent 0)
 - Channel ID for #daily-summary from `.claude/config/services.json`
 
 ## Process
 
-### 1. Synthesize scanner findings into top recommendation
+### 0. Process previous briefing responses
 
-Review findings from the proactive scanners (sub-agents 6-9) and select the single most impactful opportunity:
+Before composing the new briefing, act on responses from the previous one:
 
-**Top Recommendation criteria** (pick the highest-priority item):
-1. Production errors correlated with recent deploys (from Sentry scanner)
-2. Session funnel breakage (from Mixpanel scanner — 0 completions is critical)
-3. Critical/high-priority idle issues with all blockers resolved (from idle issue scanner)
-4. High-severity dependency vulnerabilities (from code health scanner)
+**Greenlit items** — Team agreed to proceed. If the item doesn't already have a dispatch label (`bot:pr`, `bot:investigate`, etc.), apply one now so the dispatcher picks it up.
 
-Format the top recommendation prominently in the main message.
+**Deferred items** — Team said "not now" with a reason. For each:
+1. Post a comment on the GitHub issue recording the deferral:
+   ```
+   **Deferred by [team member]** (via #daily-summary, [date])
 
-### 2. Classify work items by autonomy tier
+   Reason: [their stated reason]
+
+   This item will not be re-presented in the daily strategy until the team re-raises it.
+   ```
+2. Remove from the carry-forward queue — do not re-present this item.
+
+**Questions** — Team asked a follow-up. Include a brief answer or acknowledgment in the new briefing if possible.
+
+**Unanswered items** — No response at all. These carry forward and appear prominently in the new briefing under "Still waiting on your input."
+
+### 1. Select The Most Important Thing
+
+This is the centerpiece of every briefing. Pick the *single* highest-priority item from all gathered data, including unanswered carry-forwards.
+
+**Selection criteria** (in priority order):
+1. Unanswered carry-forward items (re-present the same top item if the team hasn't responded)
+2. Production errors correlated with recent deploys (from Sentry scanner)
+3. Session funnel breakage (from Mixpanel scanner — 0 completions is critical)
+4. Critical/high-priority idle issues with all blockers resolved (from idle issue scanner)
+5. High-severity dependency vulnerabilities (from code health scanner)
+6. Newly unblocked work (human answered a `bot:needs-info` question)
+
+For The Most Important Thing, clearly state:
+- *What* it is (one sentence)
+- *Why* it matters (one sentence)
+- Whether it *needs team input* or the bot *will proceed unless told otherwise*
+
+### 2. Classify remaining work items by autonomy tier
 
 Review all gathered data — including proactive scanner findings — and classify every actionable item into one of three tiers. Scanner items come with a pre-classified `autonomy tier` that should be respected unless the strategize stage has additional context to override.
 
@@ -37,6 +64,7 @@ Items the bot will handle autonomously. Apply the appropriate `bot:*` label to e
 - Security verifications and dependency updates
 - Test coverage gaps for existing code
 - Scanner items classified as `proceed` or `will-start`
+- Items greenlit by the team in the previous briefing
 
 **Suggestion (wait for approval)**
 Items the bot recommends but will NOT start without explicit approval:
@@ -48,30 +76,40 @@ Items the bot recommends but will NOT start without explicit approval:
 
 ### 3. Compose main message
 
-Format as a forward-looking strategy briefing:
+Format with The Most Important Thing front and center:
 
 ```
-Good morning! Here's today's plan:
+Good morning! ☀️
 
-*Top recommendation:* [highest-impact opportunity from scanner findings, with reasoning and issue link]
+*🎯 The Most Important Thing:*
+[Single item — what it is, why it matters, and whether it needs your input or the bot will proceed]
+<issue/PR link>
 
-*Proceeding:*
-• [items the bot is starting automatically — labels applied]
+*⏳ Still waiting on your input:*
+• [Unanswered items from the previous briefing, if any]
 
-*Suggestion:*
-• [items that need human approval before starting]
+*✅ Proceeding:*
+• [Items the bot is starting automatically — labels applied]
+
+*💡 Suggestion:*
+• [Items that need your approval before starting]
 
 *Pipeline: N in research, N in spec, N in implementation, N in review, N in verification, N awaiting human review*
+
+Reply in this thread: agree, ask questions, or say "defer [item] — [reason]" and I'll document it.
 ```
 
 Rules for the main message:
-- Lead with the highest-impact items
+- The Most Important Thing is always first and always present
+- "Still waiting on your input" only appears if there are unanswered carry-forwards
 - Keep each bullet to one line with issue link
 - Use `<https://github.com/shantamg/meet-without-fear/issues/N|#N>` for issue links
 - Use `<https://github.com/shantamg/meet-without-fear/pull/N|PR #N>` for PR links
-- If a section has no items, omit it entirely
-- If there are no actionable items at all, say so: "No new work items today. Pipeline is [state]."
+- If a section has no items, omit it entirely (except The Most Important Thing)
+- If there are no actionable items at all, say so: "No new work items. Pipeline is [state]."
 - Pipeline summary is always included as the last line
+- End with the reply prompt so the team knows how to respond
+- Use "Good morning!" for the 7 AM run, "Evening check-in!" for the 7 PM run
 
 ### Action: apply labels for "Proceeding" items
 
@@ -84,10 +122,10 @@ This makes the strategy briefing *actionable* — the bot doesn't just report wh
 
 ### 4. Compose thread reply
 
-Post a thread reply with the retrospective detail (what happened overnight) and full scanner results:
+Post a thread reply with the retrospective detail (what happened since the last briefing) and full scanner results:
 
 ```
-*Overnight Activity:*
+*Recent Activity:*
 
 *GitHub:*
 • [PRs merged/opened/closed]
@@ -112,6 +150,9 @@ Post a thread reply with the retrospective detail (what happened overnight) and 
 
 *Staging:*
 • [What's on bot/staging ahead of main]
+
+*Deferrals recorded:*
+• [Items deferred since last briefing, with reasons — confirms documentation happened]
 ```
 
 Only include sections that have content. If a scanner returned "clean" status, mention it briefly (e.g., "No new Sentry patterns detected") rather than omitting it entirely — this confirms the scan ran.
@@ -126,7 +167,7 @@ If there are commits on `bot/staging` ahead of `main`, post a separate message t
 ### 6. Post to Slack
 
 1. Post main strategy message to #daily-summary, capture timestamp
-2. Post thread reply with overnight activity details
+2. Post thread reply with activity details
 3. Post staging summary to #agentic-devs (if applicable)
 
 ## Output
@@ -134,11 +175,13 @@ If there are commits on `bot/staging` ahead of `main`, post a separate message t
 - Main strategy message posted to #daily-summary
 - Thread reply with retrospective breakdown
 - Staging summary posted to #agentic-devs (if applicable)
+- Deferral comments posted on GitHub issues (if any deferrals from previous briefing)
 
 ## Error Handling
 
 - If any data source failed in stage 1, note it in the thread reply: "Note: [source] data was unavailable"
 - If Slack posting fails, log the error — do not retry indefinitely
+- If the previous briefing response check failed, proceed without carry-forwards (note in thread reply)
 
 ## Completion
 
