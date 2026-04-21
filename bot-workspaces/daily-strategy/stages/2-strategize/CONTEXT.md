@@ -4,7 +4,7 @@
 
 - Gathered data from all sub-agents (stage 1)
 - Previous briefing response summary (from sub-agent 0)
-- Channel ID for #daily-summary from `.claude/config/services.json`
+- Channel ID for #most-important-thing from `.claude/config/services.json`
 
 ## Process
 
@@ -19,7 +19,7 @@ Before composing the new briefing, act on responses from the previous one.
 **Deferred items** — *Both* team members agreed to defer, with a reason. For each:
 1. Post a comment on the GitHub issue recording the deferral:
    ```
-   **Deferred by consensus** (via #daily-summary, [date])
+   **Deferred by consensus** (via #most-important-thing, [date])
 
    Reason: [their stated reason]
 
@@ -172,13 +172,13 @@ If there are commits on `bot/staging` ahead of `main`, post a separate message t
 
 ### 6. Post to Slack
 
-1. Post main strategy message to #daily-summary, capture timestamp
+1. Post main strategy message to #most-important-thing, capture timestamp
 2. Post thread reply with activity details
 3. Post staging summary to #agentic-devs (if applicable)
 
 ## Output
 
-- Main strategy message posted to #daily-summary
+- Main strategy message posted to #most-important-thing
 - Thread reply with retrospective breakdown
 - Staging summary posted to #agentic-devs (if applicable)
 - Deferral comments posted on GitHub issues (if any deferrals from previous briefing)

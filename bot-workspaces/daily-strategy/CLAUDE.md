@@ -1,6 +1,6 @@
 # Daily Strategy Workspace (L1)
 
-Generate a twice-daily "Most Important Thing" strategy briefing posted to #daily-summary. Each briefing leads with a single highest-priority item, clearly marks what needs team input vs. what the bot will handle autonomously, and re-presents unanswered items until the team responds.
+Generate a twice-daily "Most Important Thing" strategy briefing posted to #most-important-thing. Each briefing leads with a single highest-priority item, clearly marks what needs team input vs. what the bot will handle autonomously, and re-presents unanswered items until the team responds.
 
 Runs at 7 AM ET and 7 PM ET. Morning sets the day's plan; evening checks in on progress and tees up tomorrow.
 

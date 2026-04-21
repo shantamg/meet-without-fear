@@ -3,16 +3,16 @@
 ## Input
 
 - Time window: last 12h (twice-daily cadence), or custom from arguments
-- Channel ID for #daily-summary from `.claude/config/services.json`
+- Channel ID for #most-important-thing from `.claude/config/services.json`
 
 ## Process
 
 Run 10 parallel sub-agents to collect all data needed for the strategy briefing. Sub-agent 0 checks responses to the previous briefing. Sub-agents 1-5 gather retrospective data; sub-agents 6-9 run proactive opportunity scanners.
 
 ### Sub-agent 0: Previous Briefing Response Checker
-Fetch the most recent bot message in #daily-summary and check its thread for team responses:
+Fetch the most recent bot message in #most-important-thing and check its thread for team responses:
 
-1. **Find the last briefing** — List recent messages in #daily-summary, find the most recent one posted by the bot
+1. **Find the last briefing** — List recent messages in #most-important-thing, find the most recent one posted by the bot
 2. **Check thread replies** — Fetch thread replies on that message
 3. **Classify each reply:**
    - *Agreement* — Team member says "yes", "agree", "go for it", "approved", thumbs-up emoji, or similar → item is greenlit

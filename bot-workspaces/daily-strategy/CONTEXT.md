@@ -26,4 +26,4 @@ Generate a twice-daily "Most Important Thing" strategy briefing that leads with 
 - Thread reply: structured breakdown with retrospective data and scanner results
 - Re-present unanswered items from the previous briefing at the top
 - When team defers an item with a reason, comment on the GitHub issue and stop re-presenting it
-- See `.claude/config/services.json` for #daily-summary channel ID
+- See `.claude/config/services.json` for #most-important-thing channel ID
