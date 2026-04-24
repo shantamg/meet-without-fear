@@ -23,8 +23,8 @@
 0 11 * * 1  /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled security-audit "Run weekly security audit" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
 0 9 * * 1-5 /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled stale-sweeper "Sweep for stale items" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
 */10 * * * * /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled pr-reviewer "Scan and review open bot PRs" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
-0 11 * * *  /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled daily-strategy "Morning strategy briefing" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
-0 23 * * *  /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled daily-strategy "Evening strategy briefing" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+0 14 * * *  /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled daily-strategy "Morning strategy briefing" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
+0 2 * * *   /opt/slam-bot/scripts/workspace-dispatcher.sh --scheduled daily-strategy "Evening strategy briefing" >> /var/log/slam-bot/workspace-dispatcher.log 2>&1
 
 # ── Staging branch sync (keeps bot/staging in sync with main, PRs accumulated work) ──
 0 8,20 * * * /opt/slam-bot/scripts/sync-staging.sh >> /var/log/slam-bot/cron.log 2>&1
