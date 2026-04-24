@@ -6,11 +6,16 @@
 
 import React, { type PropsWithChildren, useState } from 'react';
 import {
+  QueryCache,
   QueryClient,
   QueryClientProvider,
+  MutationCache,
   focusManager,
 } from '@tanstack/react-query';
 import { AppState, AppStateStatus, Platform } from 'react-native';
+import { ApiClientError } from '../lib/api';
+import { trackError } from '../services/analytics';
+import { ErrorCode } from '@meet-without-fear/shared';
 
 // ============================================================================
 // App Focus Management
@@ -38,8 +43,21 @@ function setupFocusManager(): () => void {
 // Query Client Configuration
 // ============================================================================
 
+function trackNetworkError(error: unknown): void {
+  if (error instanceof ApiClientError && error.code === ErrorCode.SERVICE_UNAVAILABLE) {
+    const errorCode = error.message === 'Request timed out' ? 'TIMEOUT' : 'NETWORK_ERROR';
+    trackError('network', errorCode);
+  }
+}
+
 function createQueryClient(): QueryClient {
   return new QueryClient({
+    queryCache: new QueryCache({
+      onError: (error) => trackNetworkError(error),
+    }),
+    mutationCache: new MutationCache({
+      onError: (error) => trackNetworkError(error),
+    }),
     defaultOptions: {
       queries: {
         // Data considered fresh for 30 seconds
