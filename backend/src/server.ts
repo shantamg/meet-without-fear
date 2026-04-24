@@ -23,8 +23,8 @@ Sentry.init({
       }
     }
     // Strip PII from breadcrumb data
-    if (event.breadcrumbs?.values) {
-      for (const breadcrumb of event.breadcrumbs.values) {
+    if (event.breadcrumbs) {
+      for (const breadcrumb of event.breadcrumbs) {
         if (breadcrumb.data) {
           for (const key of Object.keys(breadcrumb.data)) {
             if (PII_KEYS.has(key)) {
