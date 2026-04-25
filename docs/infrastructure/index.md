@@ -3,7 +3,7 @@ title: Infrastructure
 sidebar_position: 1
 description: Slam bot (EC2), Render hosting, Vercel deploys, GitHub automation.
 created: 2026-03-11
-updated: 2026-04-20
+updated: 2026-04-25
 status: living
 ---
 
@@ -76,6 +76,7 @@ The socket listener routes messages by channel config. Each monitored channel ma
 | `#slam-paws` | `slack-triage` | `slam-paws-reply` |
 | `#agentic-devs` | `slack-triage` | `agentic-devs-reply` |
 | `#bugs-and-requests` | `slack-triage` | `bugs-and-requests-reply` |
+| `#most-important-thing` | `slack-triage` | `most-important-thing-reply` |
 | `#mwf-sessions` | `mwf-session` | `mwf-session-reply` |
 
 For `#mwf-sessions`, when `MWF_BACKEND_URL` is set the listener POSTs directly to the backend Bedrock pipeline instead of spawning a Claude Code agent.
