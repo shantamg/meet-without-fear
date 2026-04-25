@@ -56,6 +56,7 @@ import { useSharingStatus } from '../hooks/useSharingStatus';
 import { usePendingActions } from '../hooks/usePendingActions';
 import { useNeedsComparison } from '../hooks/useStages';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
+import { useToast } from '../contexts/ToastContext';
 import { createStyles } from '../theme/styled';
 import { WaitingBanner } from '../components/WaitingBanner';
 import {
@@ -163,6 +164,7 @@ export function UnifiedSessionScreen({
   const { user, updateUser } = useAuth();
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
+  const { showError } = useToast();
 
   // Sharing status for header button
   const sharingStatus = useSharingStatus(sessionId);
@@ -683,7 +685,7 @@ export function UnifiedSessionScreen({
       console.error('[UnifiedSessionScreen] AI error received via Ably:', payload.error);
       // Note: Ghost dots hide automatically because optimistic message is rolled back on error
       handleAIMessageError(sessionId, payload.userMessageId, payload.error, payload.canRetry);
-      // TODO: Show error toast or UI indicator
+      showError('Something went wrong', 'Your message could not be processed. Please try again.');
     },
   });
 
