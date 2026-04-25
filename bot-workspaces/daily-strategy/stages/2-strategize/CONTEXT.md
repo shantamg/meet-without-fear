@@ -82,10 +82,15 @@ Items the bot recommends but will NOT start without explicit approval:
 
 ### 3. Compose main message
 
-Format with The Most Important Thing front and center:
+Format with The Most Important Thing front and center. **The message must include both a plain English summary and the technical details.** The plain English summary comes first so non-technical readers (like Darryl) can immediately understand the state of play. The technical section follows for those who want specifics.
 
 ```
 Good morning! ☀️
+
+*📋 Quick Overview (plain English):*
+[2-4 sentences in everyday language — no file paths, function names, PR numbers, or technical jargon. Explain what's happening with the product, what the team needs to decide, and what the bot is handling. Write as if explaining to someone who uses the product but doesn't read code.]
+
+---
 
 *🎯 The Most Important Thing:*
 [Single item — what it is, why it matters, and whether it needs your input or the bot will proceed]
@@ -106,12 +111,13 @@ Reply in this thread: agree, ask questions, or say "defer [item] — [reason]" a
 ```
 
 Rules for the main message:
-- The Most Important Thing is always first and always present
+- **Plain English summary is always first** — written for a non-technical reader (no file paths, function names, stack traces, PR/issue numbers, or jargon). Explain the *impact* on users and the product, not the code
+- The Most Important Thing is always present after the summary
 - "Still waiting on your input" only appears if there are unanswered carry-forwards
 - Keep each bullet to one line with issue link
 - Use `<https://github.com/shantamg/meet-without-fear/issues/N|#N>` for issue links
 - Use `<https://github.com/shantamg/meet-without-fear/pull/N|PR #N>` for PR links
-- If a section has no items, omit it entirely (except The Most Important Thing)
+- If a section has no items, omit it entirely (except The Most Important Thing and the Plain English summary)
 - If there are no actionable items at all, say so: "No new work items. Pipeline is [state]."
 - Pipeline summary is always included as the last line
 - End with the reply prompt so the team knows how to respond
