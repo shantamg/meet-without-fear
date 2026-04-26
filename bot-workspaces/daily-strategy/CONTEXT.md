@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Generate a twice-daily "Most Important Thing" strategy briefing that leads with the single highest-priority item, tells the team what needs their input vs. what the bot will handle, and re-presents unanswered items until the team responds. Runs at 7 AM ET and 7 PM ET.
+Generate a twice-daily strategy briefing posted to two channels: a short "Most Important Thing" in #most-important-thing (one item + rationale + response prompt) and a comprehensive daily summary in #daily-summary (full breakdown). Re-presents unanswered items until the team responds. Runs at 7 AM PT and 7 PM PT.
 
 ## Stage Pointers
 
@@ -16,14 +16,13 @@ Generate a twice-daily "Most Important Thing" strategy briefing that leads with 
 - `shared/diagnostics/check-sentry.md` — Error data
 - `shared/diagnostics/render-logs.md` — Production errors
 - `shared/references/github-ops.md` — GitHub query patterns
-- `shared/slack/slack-post.md` — Post main message + thread reply
+- `shared/slack/slack-post.md` — Post messages + thread replies to both channels
 - `shared/references/slack-format.md` — mrkdwn formatting
 
 ## Key Conventions
 
-- Post main message first, then details as thread reply
-- Main message: lead with *The Most Important Thing*, then other items by autonomy tier
-- Thread reply: structured breakdown with retrospective data and scanner results
+- **#most-important-thing**: Short message (one item + rationale + link), thread reply is just a response prompt
+- **#daily-summary**: Comprehensive briefing (Most Important Thing + Proceeding + Suggestion + Pipeline), thread reply has full retrospective and scanner results
 - Re-present unanswered items from the previous briefing at the top
 - When team defers an item with a reason, comment on the GitHub issue and stop re-presenting it
-- See `.claude/config/services.json` for #most-important-thing channel ID
+- See `.claude/config/services.json` for channel IDs

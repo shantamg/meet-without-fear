@@ -4,7 +4,7 @@
 
 - Gathered data from all sub-agents (stage 1)
 - Previous briefing response summary (from sub-agent 0)
-- Channel ID for #most-important-thing from `.claude/config/services.json`
+- Channel IDs for #most-important-thing and #daily-summary from `.claude/config/services.json`
 
 ## Process
 
@@ -80,42 +80,33 @@ Items the bot recommends but will NOT start without explicit approval:
 - Changes to production data, infrastructure plans, or pricing
 - Scanner items classified as `suggestion` (feature abandonment, low-priority debt)
 
-### 3. Compose main message
+### 3. Compose #most-important-thing message
 
-Format with The Most Important Thing front and center:
+This message is intentionally short. One item, one rationale, done.
 
 ```
-Good morning! ☀️
-
-*🎯 The Most Important Thing:*
-[Single item — what it is, why it matters, and whether it needs your input or the bot will proceed]
+*[One-sentence description of the single most important thing]*
+[One sentence: why it matters right now]
 <issue/PR link>
-
-*⏳ Still waiting on your input:*
-• [Unanswered items from the previous briefing, if any]
-
-*✅ Proceeding:*
-• [Items the bot is starting automatically — labels applied]
-
-*💡 Suggestion:*
-• [Items that need your approval before starting]
-
-*Pipeline: N in research, N in spec, N in implementation, N in review, N in verification, N awaiting human review*
-
-Reply in this thread: agree, ask questions, or say "defer [item] — [reason]" and I'll document it.
 ```
 
 Rules for the main message:
-- The Most Important Thing is always first and always present
-- "Still waiting on your input" only appears if there are unanswered carry-forwards
-- Keep each bullet to one line with issue link
-- Use `<https://github.com/shantamg/meet-without-fear/issues/N|#N>` for issue links
-- Use `<https://github.com/shantamg/meet-without-fear/pull/N|PR #N>` for PR links
-- If a section has no items, omit it entirely (except The Most Important Thing)
-- If there are no actionable items at all, say so: "No new work items. Pipeline is [state]."
-- Pipeline summary is always included as the last line
-- End with the reply prompt so the team knows how to respond
-- Use "Good morning!" for the 7 AM run, "Evening check-in!" for the 7 PM run
+- **Maximum 3 lines**: what, why, link. That's it.
+- No sections, no bullet lists, no pipeline summary, no "Proceeding" or "Suggestion" items
+- Plain language — no file paths, function names, or jargon (Darryl reads this)
+- Use `<https://github.com/shantamg/meet-without-fear/issues/N|#N>` for the link
+- If there are unanswered carry-forward items, the carry-forward IS the most important thing — re-present it
+- If there are genuinely no items, say: "Nothing urgent today — pipeline is healthy."
+
+### 4. Compose thread reply (response prompt)
+
+Post a single thread reply that prompts Shantam and Darryl to respond. Keep it short.
+
+```
+Reply here: agree, ask a question, or say "defer — [reason]".
+```
+
+That's the entire thread reply. No activity details, no scanner results, no pipeline summary.
 
 ### Action: apply labels for "Proceeding" items
 
@@ -126,68 +117,101 @@ For every item classified as "Proceeding", apply the appropriate dispatch label 
 
 This makes the strategy briefing *actionable* — the bot doesn't just report what it plans to do, it actually starts the work. Only "Suggestion" items wait for human approval.
 
-### 4. Compose thread reply
+### 5. Compose daily summary for #daily-summary
 
-Post a thread reply with the retrospective detail (what happened since the last briefing) and full scanner results:
+Post the comprehensive briefing to #daily-summary (channel ID from `.claude/config/services.json`). This is where all the detail goes.
+
+```
+Good morning! / Evening check-in!
+
+*The Most Important Thing:*
+[Same item from step 3, with full context]
+<issue/PR link>
+
+*Still waiting on your input:*
+[Unanswered items from the previous briefing, if any]
+
+*Proceeding:*
+[Items the bot is starting automatically — labels applied]
+
+*Suggestion:*
+[Items that need your approval before starting]
+
+*Pipeline: N in research, N in spec, N in implementation, N in review, N in verification, N awaiting human review*
+```
+
+Post a thread reply on the daily summary with retrospective detail and scanner results:
 
 ```
 *Recent Activity:*
 
 *GitHub:*
-• [PRs merged/opened/closed]
-• [Issues opened/closed]
+[PRs merged/opened/closed]
+[Issues opened/closed]
 
 *App Usage:*
-• [Active users, events, funnel metrics]
-• [Funnel health from Mixpanel scanner]
+[Active users, events, funnel metrics]
+[Funnel health from Mixpanel scanner]
 
 *Errors & Health:*
-• [Sentry issues, production status]
-• [Error patterns from Sentry scanner]
+[Sentry issues, production status]
+[Error patterns from Sentry scanner]
 
 *Slack:*
-• [Channel summaries, key conversations]
+[Channel summaries, key conversations]
 
 *Code Health:*
-• [Test coverage, technical debt, vulnerabilities from code health scanner]
+[Test coverage, technical debt, vulnerabilities from code health scanner]
 
 *Idle Issues:*
-• [High-priority idle issues from idle issue scanner]
+[High-priority idle issues from idle issue scanner]
 
 *Staging:*
-• [What's on bot/staging ahead of main]
+[What's on bot/staging ahead of main]
 
 *Deferrals recorded:*
-• [Items deferred since last briefing, with reasons — confirms documentation happened]
+[Items deferred since last briefing, with reasons — confirms documentation happened]
 ```
 
 Only include sections that have content. If a scanner returned "clean" status, mention it briefly (e.g., "No new Sentry patterns detected") rather than omitting it entirely — this confirms the scan ran.
 
-### 5. Post staging summary to #agentic-devs
+Use "Good morning!" for the 7 AM run, "Evening check-in!" for the 7 PM run.
+
+Rules for the daily summary:
+- Keep each bullet to one line with issue link
+- Use `<https://github.com/shantamg/meet-without-fear/issues/N|#N>` for issue links
+- Use `<https://github.com/shantamg/meet-without-fear/pull/N|PR #N>` for PR links
+- If a section has no items, omit it entirely (except The Most Important Thing)
+- If there are no actionable items at all, say so: "No new work items. Pipeline is [state]."
+- Pipeline summary is always included as the last line
+
+### 6. Post staging summary to #agentic-devs
 
 If there are commits on `bot/staging` ahead of `main`, post a separate message to #agentic-devs with:
 - Count of commits ahead
 - List of changes with PR links
 - Link to compare view: `<https://github.com/shantamg/meet-without-fear/compare/main...bot/staging|Compare view>`
 
-### 6. Post to Slack
+### 7. Post to Slack
 
-1. Post main strategy message to #most-important-thing, capture timestamp
-2. Post thread reply with activity details
-3. Post staging summary to #agentic-devs (if applicable)
+1. Post short #most-important-thing message, capture timestamp
+2. Post thread reply with response prompt
+3. Post comprehensive daily summary to #daily-summary, capture timestamp
+4. Post thread reply with retrospective detail on the daily summary
+5. Post staging summary to #agentic-devs (if applicable)
 
 ## Output
 
-- Main strategy message posted to #most-important-thing
-- Thread reply with retrospective breakdown
+- Short strategy message posted to #most-important-thing with response prompt in thread
+- Comprehensive daily summary posted to #daily-summary with retrospective in thread
 - Staging summary posted to #agentic-devs (if applicable)
 - Deferral comments posted on GitHub issues (if any deferrals from previous briefing)
 
 ## Error Handling
 
-- If any data source failed in stage 1, note it in the thread reply: "Note: [source] data was unavailable"
+- If any data source failed in stage 1, note it in the #daily-summary thread reply: "Note: [source] data was unavailable"
 - If Slack posting fails, log the error — do not retry indefinitely
-- If the previous briefing response check failed, proceed without carry-forwards (note in thread reply)
+- If the previous briefing response check failed, proceed without carry-forwards (note in #daily-summary thread reply)
 
 ## Completion
 

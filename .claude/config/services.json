@@ -30,7 +30,8 @@
   },
   "slack": {
     "channels": {
-      "most-important-thing": "C0AU9Q3DENQ"
+      "most-important-thing": "C0AU9Q3DENQ",
+      "daily-summary": "C0AT7EV1C4B"
     },
     "bot_user_id": ""
   },
