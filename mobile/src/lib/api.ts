@@ -210,37 +210,53 @@ apiClient.interceptors.response.use(
       ) {
         originalRequest[RETRY_KEY] = true;
 
-        // Attempt to get a fresh token from Clerk (force refresh to bypass cache)
+        // Attempt to get a fresh token from Clerk (force refresh to bypass cache).
+        // We distinguish three outcomes here because only one of them should
+        // sign the user out:
+        //   1. getToken throws (network hiccup, Clerk API 5xx): transient —
+        //      reject the current request but keep the session alive so the
+        //      user doesn't get booted mid-chat.
+        //   2. getToken returns an invalid-format token: impossible state —
+        //      sign out.
+        //   3. getToken returns null (authoritative "no session"): sign out.
         if (tokenProvider) {
+          let refreshThrew = false;
+          let freshToken: string | null = null;
           try {
-            const freshToken = await tokenProvider.getToken({ forceRefresh: true });
-            if (freshToken) {
-              // Validate the fresh token before retrying
-              if (isValidJwtFormat(freshToken)) {
-                // Update the request with fresh token and retry
-                originalRequest.headers.Authorization = `Bearer ${freshToken}`;
-                return apiClient(originalRequest);
-              } else {
-                // Fresh token is also invalid - don't retry, user needs to re-auth
-                console.warn(
-                  '[API] Fresh token from provider is also invalid. User needs to sign in again.'
-                );
-                originalRequest[INVALID_TOKEN_KEY] = true;
-              }
-            }
+            freshToken = await tokenProvider.getToken({ forceRefresh: true });
           } catch (refreshError) {
-            console.warn('[API] Failed to refresh auth token:', refreshError);
+            refreshThrew = true;
+            console.warn('[API] Token refresh errored (transient):', refreshError);
+            trackError('auth', 'TOKEN_REFRESH_FAILED', originalRequest?.url || 'unknown');
           }
+
+          if (!refreshThrew) {
+            if (freshToken && isValidJwtFormat(freshToken)) {
+              originalRequest.headers.Authorization = `Bearer ${freshToken}`;
+              return apiClient(originalRequest);
+            }
+            if (freshToken) {
+              // Got a token back but it's malformed — treat as unrecoverable.
+              console.warn(
+                '[API] Fresh token from provider is invalid. User needs to sign in again.'
+              );
+              originalRequest[INVALID_TOKEN_KEY] = true;
+            }
+            // Either freshToken was null (Clerk says no session) or invalid.
+            // Fall through to handleAuthFailure below.
+            console.warn('[API] Unauthorized - session expired, signing out');
+            trackError('auth', 'SESSION_EXPIRED', originalRequest?.url || 'unknown');
+            await handleAuthFailure();
+          }
+          // If refreshThrew: do NOT sign out. Fall through and reject this
+          // request with the original 401 so callers can surface an error;
+          // the next retriable API call will try the refresh again.
+        } else {
+          // No token provider wired up at all — nothing we can do.
+          console.warn('[API] No token provider; cannot refresh auth');
+          trackError('auth', 'SESSION_EXPIRED', originalRequest?.url || 'unknown');
+          await handleAuthFailure();
         }
-
-        // If we couldn't refresh or token is invalid, the user needs to re-authenticate
-        console.warn('[API] Unauthorized - session may have expired, please sign in again');
-
-        // Track auth error
-        trackError('auth', 'SESSION_EXPIRED', originalRequest?.url || 'unknown');
-
-        // Sign out the user to force re-authentication
-        await handleAuthFailure();
       }
 
       // Create standardized API error
@@ -260,7 +276,6 @@ apiClient.interceptors.response.use(
 
     // Network error or timeout
     if (error.code === 'ECONNABORTED') {
-      trackError('network', 'TIMEOUT', error.config?.url || 'unknown');
       return Promise.reject(
         new ApiClientError(
           { code: ErrorCode.SERVICE_UNAVAILABLE, message: 'Request timed out' },
@@ -269,7 +284,6 @@ apiClient.interceptors.response.use(
       );
     }
 
-    trackError('network', 'NETWORK_ERROR', error.config?.url || 'unknown');
     return Promise.reject(
       new ApiClientError(
         { code: ErrorCode.SERVICE_UNAVAILABLE, message: 'Network error' },
