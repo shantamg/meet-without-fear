@@ -309,12 +309,23 @@ export async function getCompactStatus(req: Request, res: Response): Promise<voi
       partnerSignedAt = partner?.gatesSatisfied?.signedAt ?? null;
     }
 
+    // Check if this is the first session for this relationship
+    const session = sessionCheck.session as { relationshipId: string };
+    const priorResolvedCount = await prisma.session.count({
+      where: {
+        relationshipId: session.relationshipId,
+        id: { not: sessionId },
+        status: 'RESOLVED',
+      },
+    });
+
     successResponse(res, {
       mySigned,
       mySignedAt,
       partnerSigned,
       partnerSignedAt,
       canAdvance: mySigned && partnerSigned,
+      isFirstSession: priorResolvedCount === 0,
     });
   } catch (error) {
     logger.error('[getCompactStatus] Error:', error);

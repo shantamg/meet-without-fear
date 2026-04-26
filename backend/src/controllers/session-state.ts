@@ -249,12 +249,22 @@ export async function getSessionState(req: Request, res: Response): Promise<void
     const myGates = myStage0Record?.gatesSatisfied as CompactGates | null;
     const partnerGates = partnerStage0Record?.gatesSatisfied as CompactGates | null;
 
+    // Check if this is the first session for this relationship
+    const priorResolvedCount = await prisma.session.count({
+      where: {
+        relationshipId: session.relationshipId,
+        id: { not: sessionId },
+        status: 'RESOLVED',
+      },
+    });
+
     const compactResponse = {
       mySigned: myGates?.compactSigned ?? false,
       mySignedAt: myGates?.signedAt ?? null,
       partnerSigned: partnerGates?.compactSigned ?? false,
       partnerSignedAt: partnerGates?.signedAt ?? null,
       canAdvance: (myGates?.compactSigned ?? false) && ((partnerGates?.compactSigned ?? false) || !partnerId),
+      isFirstSession: priorResolvedCount === 0,
     };
 
     // Return consolidated response

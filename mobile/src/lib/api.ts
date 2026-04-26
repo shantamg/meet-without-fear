@@ -260,7 +260,6 @@ apiClient.interceptors.response.use(
 
     // Network error or timeout
     if (error.code === 'ECONNABORTED') {
-      trackError('network', 'TIMEOUT', error.config?.url || 'unknown');
       return Promise.reject(
         new ApiClientError(
           { code: ErrorCode.SERVICE_UNAVAILABLE, message: 'Request timed out' },
@@ -269,7 +268,6 @@ apiClient.interceptors.response.use(
       );
     }
 
-    trackError('network', 'NETWORK_ERROR', error.config?.url || 'unknown');
     return Promise.reject(
       new ApiClientError(
         { code: ErrorCode.SERVICE_UNAVAILABLE, message: 'Network error' },

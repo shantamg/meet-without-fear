@@ -1,82 +1,49 @@
 ---
 title: "Stage 0: Onboarding"
 sidebar_position: 3
-description: Establish the Process Guardian role and secure commitment from both parties through the Curiosity Compact.
+description: Welcome both parties with a brief warm opening and secure acknowledgment before entering the conversation.
 ---
 # Stage 0: Onboarding
 
 ## Purpose
 
-Establish the Process Guardian role and secure commitment from both parties through the Curiosity Compact.
+Welcome users with a brief, warm opening and secure acknowledgment before entering the conversation.
 
 ## AI Goal
 
-- Acknowledge the courage it takes to begin this process
-- Offer to guide both parties through a process of being heard
-- Present the possibility of a win-win outcome
-- Secure explicit agreement to proceed with curiosity rather than judgment
+- Briefly explain the private chat format
+- Reassure users that nothing is shared without consent
+- Get a simple "Ready" acknowledgment to proceed
 
 ## Opening Message
 
-The AI opens with a simple, warm message:
+The AI opens with a brief, warm message. The message varies based on whether this is the user's first session with this partner:
 
-> "Congratulations [Name], you have taken the first step towards strengthening your connections. Are you open to me guiding you and [Partner] through a process where you both can be heard? I think there is a way we can find a win-win here."
+**First session:**
+> "You'll each chat with me privately first. Nothing gets shared without your say. Ready?"
+
+**Repeat session:**
+> "Welcome back. Same as before — your space is private, nothing shared without your say. Let's pick up where we left off."
 
 This message:
-- Celebrates the courage to begin
-- Asks for consent to guide
-- Frames the goal as mutual understanding
-- Offers hope without overpromising
+- Speaks in the AI's first person voice
+- Explains the private chat format
+- Reassures about consent before sharing
+- Asks for a simple acknowledgment to proceed
 
 ## Flow
 
 ```mermaid
 flowchart TD
-    Entry[User enters system] --> Welcome[Simple welcome message]
-    Welcome --> Consent{Open to being guided?}
-    Consent -->|Yes| Compact[Present Curiosity Compact]
-    Consent -->|Questions| Clarify[AI answers questions]
-    Clarify --> Consent
+    Entry[User enters system] --> Welcome[AI welcome message]
+    Welcome --> Ready{User taps Ready?}
+    Ready -->|Yes| Acknowledged[Record acknowledgment]
 
-    Compact --> Review[User reviews terms]
-    Review --> Questions{Questions?}
-    Questions -->|Yes| Clarify[AI clarifies]
-    Clarify --> Review
-    Questions -->|No| Decision{Sign compact?}
-
-    Decision -->|Yes| Signed[Record signature]
-    Decision -->|Not ready| Concerns[Explore concerns]
-    Decision -->|Refuse| CannotProceed[Explain requirements]
-
-    Concerns --> Address[AI addresses concerns]
-    Address --> Decision
-    CannotProceed --> Exit[Exit with resources]
-
-    Signed --> WaitOther{Other signed?}
+    Acknowledged --> WaitOther{Other acknowledged?}
     WaitOther -->|Yes| Advance[Advance to Stage 1]
     WaitOther -->|No| Wait[Waiting room]
-    Wait --> Notify[Notify when other signs]
+    Wait --> Notify[Notify when other acknowledges]
     Notify --> Advance
-```
-
-## The Curiosity Compact
-
-A commitment that both parties make before beginning:
-
-```
-I commit to:
-- Approach this process with curiosity rather than certainty
-- Allow the AI to guide the pace of our work
-- Share honestly within my private space
-- Consider the others perspective when presented
-- Focus on understanding needs rather than winning arguments
-- Take breaks when emotions run high
-
-I understand that:
-- The AI will not judge who is right or wrong
-- My raw thoughts remain private unless I consent to share
-- Progress requires both parties to complete each stage
-- I can pause at any time but cannot skip ahead
 ```
 
 ## Wireframe: Onboarding Screen
@@ -90,40 +57,31 @@ flowchart TB
         end
 
         subgraph Content[Main Content]
-            Title[Welcome to Meet Without Fear]
-            Intro[Brief explanation paragraph]
-            Steps[Visual stage overview]
-        end
-
-        subgraph CompactSection[Curiosity Compact]
-            CompactTitle[Your Commitment]
-            Terms[Scrollable terms]
-            Checkbox[I agree to proceed with curiosity]
+            Message[AI welcome message with typewriter effect]
         end
 
         subgraph Actions[Actions]
-            Questions[I have questions]
-            Sign[Sign and Begin]
+            Ready[Ready / Let's go button]
         end
     end
 ```
 
 ## Success Criteria
 
-Both users must sign the Curiosity Compact.
+Both users must acknowledge the opening message.
 
 ## Failure Paths
 
 | Scenario | AI Response |
 |----------|-------------|
 | User has concerns | Explore concerns; provide reassurance |
-| User refuses to sign | Explain this is required; offer resources for other options |
+| User refuses to proceed | Explore concerns; explain the format is required; offer resources for other options |
 | Other party not responding | Send reminders; offer to resend invitation |
 | Invitation expires | Allow session creator to send new invitation |
 
 ## Data Captured
 
-- Signature timestamp for each user
+- Acknowledgment timestamp for each user
 - Any concerns raised (for improving onboarding)
 - Invitation/acceptance timing
 
@@ -136,7 +94,7 @@ Both users must sign the Curiosity Compact.
 
 ### Backend Implementation
 
-- [Stage 0 API](../backend/api/stage-0.md) - Compact signing endpoints
+- [Stage 0 API](../backend/api/stage-0.md) - Onboarding acknowledgment endpoints
 - [Stage 0 Prompt](../backend/prompts/stage-0-opening.md) - Opening message template
 - [Retrieval Contracts](../backend/state-machine/retrieval-contracts.md#stage-0-onboarding)
 

@@ -276,6 +276,7 @@ describe('Stage 0 API', () => {
       // Mock: session with relationship
       (prisma.session.findUnique as jest.Mock).mockResolvedValue({
         id: mockSessionId,
+        relationshipId: 'rel-1',
         status: 'ACTIVE',
         relationship: {
           members: [{ userId: mockUser.id }, { userId: mockPartner.id }],
@@ -290,6 +291,9 @@ describe('Stage 0 API', () => {
         stage: 0,
         gatesSatisfied: { compactSigned: true, signedAt: '2024-01-02T00:00:00Z' },
       });
+
+      // Mock: no prior resolved sessions (first session)
+      (prisma.session.count as jest.Mock).mockResolvedValue(0);
 
       const req = createMockRequest({
         user: mockUser,
@@ -321,6 +325,7 @@ describe('Stage 0 API', () => {
       // Mock: session with relationship
       (prisma.session.findUnique as jest.Mock).mockResolvedValue({
         id: mockSessionId,
+        relationshipId: 'rel-1',
         status: 'ACTIVE',
         relationship: {
           members: [{ userId: mockUser.id }, { userId: mockPartner.id }],
@@ -335,6 +340,9 @@ describe('Stage 0 API', () => {
         stage: 0,
         gatesSatisfied: { compactSigned: true, signedAt: '2024-01-02T00:00:00Z' },
       });
+
+      // Mock: no prior resolved sessions
+      (prisma.session.count as jest.Mock).mockResolvedValue(0);
 
       const req = createMockRequest({
         user: mockUser,
@@ -372,6 +380,7 @@ describe('Stage 0 API', () => {
       // Mock: session with relationship
       (prisma.session.findUnique as jest.Mock).mockResolvedValue({
         id: mockSessionId,
+        relationshipId: 'rel-1',
         status: 'ACTIVE',
         relationship: {
           members: [{ userId: mockUser.id }, { userId: mockPartner.id }],
@@ -380,6 +389,9 @@ describe('Stage 0 API', () => {
 
       // Mock: partner has NOT signed
       (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(null);
+
+      // Mock: no prior resolved sessions
+      (prisma.session.count as jest.Mock).mockResolvedValue(0);
 
       const req = createMockRequest({
         user: mockUser,

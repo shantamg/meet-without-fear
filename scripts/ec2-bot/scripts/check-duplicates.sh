@@ -31,6 +31,19 @@ log() { echo "[$(date)] $1" >> "$LOGFILE" 2>/dev/null || true; }
 
 ISSUE_NUMBER="${1:?Usage: check-duplicates.sh <issue_number>}"
 
+# ─── Skip pull requests ──────────────────────────────────────────────────────
+# GitHub numbers PRs and issues in the same sequence, and the dispatcher
+# intentionally enumerates both (some bot:* labels are PR-bound, e.g.
+# bot:review-impl). But duplicate detection only makes sense for issues:
+# a bot-opened PR's title usually mirrors the issue it closes, so running
+# the detector on the PR guarantees a 100% match against that issue and
+# auto-closes the PR as a "duplicate" of its own parent. Early-exit here.
+IS_PR=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER" --jq '.pull_request != null' 2>/dev/null || echo "")
+if [ "$IS_PR" = "true" ]; then
+  log "Skipping #$ISSUE_NUMBER — item is a pull request, not an issue"
+  exit 0
+fi
+
 # ─── Fetch the issue ─────────────────────────────────────────────────────────
 
 ISSUE_DATA=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" \
