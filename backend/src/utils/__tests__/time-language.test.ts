@@ -6,12 +6,32 @@ import {
   getTimeContext,
   formatMessageWithTimeContext,
   getRecencyGuidance,
-  type TimeContext,
 } from '../time-language';
 
 describe('time-language utilities', () => {
-  // Use current time for consistent testing
-  const NOW = new Date();
+  // Pin the wall clock to a fixed local midday. Two reasons:
+  //
+  // 1. `getTimeContext` buckets via local-calendar-day (`isSameDay` uses
+  //    `getDate`/`getMonth`/`getYear`). Under `new Date()` + UTC CI, any run
+  //    between 00:00–04:00 UTC made `NOW - 4h` cross the previous UTC midnight,
+  //    bucketing "earlier same day" content as 'yesterday'.
+  //
+  // 2. `getRecencyGuidance` calls `getTimeContext(t)` without passing `now`,
+  //    so production code falls back to `new Date()`. Pinning only a local
+  //    `NOW` constant would desync it from production's real clock. Fake
+  //    timers mock `Date` globally so both sides see the same instant.
+  //
+  // Noon gives every `NOW - Xh` case here enough headroom to stay on the
+  // same local day, in any timezone.
+  const NOW = new Date('2026-04-15T12:00:00');
+
+  beforeAll(() => {
+    jest.useFakeTimers({ now: NOW, doNotFake: ['setTimeout', 'setImmediate', 'setInterval'] });
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
 
   describe('getTimeContext', () => {
     it('should identify just_now for content < 1 hour old', () => {

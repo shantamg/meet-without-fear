@@ -3,12 +3,12 @@ title: Backend Prompting Architecture Audit
 sidebar_position: 5
 description: "Last Updated: 2026-03-11"
 created: 2026-03-11
-updated: 2026-04-18
+updated: 2026-04-20
 status: living
 ---
 # Backend Prompting Architecture Audit
 
-**Last Updated:** 2026-04-18
+**Last Updated:** 2026-04-20
 
 This document provides a comprehensive overview of how prompting works in the Meet Without Fear backend, including prompt construction, model usage, parallel vs sequential operations, and memory handling.
 
@@ -484,7 +484,7 @@ graph TD
    When `PromptContext.invitedSessionNudge` is set (non-null), its content is appended to the dynamic block as `OPERATIONAL NUDGE:`. This signals the AI to weave in an invite-expiry reminder. Only used for Slack-originated `INVITED` sessions approaching their 7-day TTL.
 
 5. **Dynamic Elements:**
-   - Turn count
+   - **Stage turn count** (`stageTurnCount`) — counts only messages in the *current stage*, not the session total. This ensures stage-specific guards (e.g. `earlyStage3`, feel-heard timing) fire correctly regardless of how many turns occurred in prior stages.
    - Emotional intensity
    - Surfacing style
    - Stage transition acknowledgments
@@ -924,7 +924,7 @@ The `buildBudgetedContext()` function in `backend/src/utils/token-budget.ts` man
 - `backend/src/services/reconciler/` - Empathy gap analysis (modular: `analysis.ts`, `state.ts`, `sharing.ts`, `circuit-breaker.ts`)
 - `backend/src/services/crisis-detector.ts` - Pattern-based safety detection (additive safety net alongside LLM prompts)
 - `backend/src/services/input-sanitizer.ts` - Prompt injection defense (XML delimiters + pattern detection)
-- `backend/src/services/needs.ts` - Need extraction
+- `backend/src/services/needs.ts` - Need extraction + Stage 3 safety-net extraction (`runStage3SafetyNetExtraction`, fires at `stageTurnCount ≥ 6` if no needs identified yet) + shared extraction lock (`isExtractionRunning` / `acquireExtractionLock` / `releaseExtractionLock`)
 
 ---
 

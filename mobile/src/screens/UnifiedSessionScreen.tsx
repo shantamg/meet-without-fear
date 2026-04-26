@@ -1579,11 +1579,11 @@ export function UnifiedSessionScreen({
   // Memoized Empty State Element (prevents typewriter restart on re-render)
   // -------------------------------------------------------------------------
   // Use useMemo to create a stable element reference, not a render function
-  // Adapt intro text for invitees who accepted the invitation
-  const isInvitee = invitation && !invitation.isInviter;
+  // Pass isFirstSession from compact data to show appropriate welcome message
+  const isFirstSession = compactData?.isFirstSession ?? true;
   const compactEmptyStateElement = useMemo(() => {
-    return <CompactChatItem testID="inline-compact" isAfterInvitationAcceptance={isInvitee} />;
-  }, [isInvitee]);
+    return <CompactChatItem testID="inline-compact" isFirstSession={isFirstSession} />;
+  }, [isFirstSession]);
 
   // -------------------------------------------------------------------------
   // Render Overlays
@@ -1829,6 +1829,7 @@ export function UnifiedSessionScreen({
               handleSignCompact(() => onStageComplete?.(Stage.ONBOARDING));
             }}
             isPending={isSigningCompact}
+            isFirstSession={isFirstSession}
             testID="compact-agreement-bar"
           />
         );
@@ -2112,6 +2113,7 @@ export function UnifiedSessionScreen({
     sessionId,
     invitation?.isInviter,
     isSigningCompact,
+    isFirstSession,
     isTypewriterAnimating,
     isConfirmingFeelHeard,
     isSharingEmpathy,

@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Generate a proactive daily strategy briefing that tells the team what work is planned, what needs human input, and what the bot recommends picking up. Replaces the retrospective daily-digest with a forward-looking approach.
+Generate a twice-daily strategy briefing posted to two channels: a short "Most Important Thing" in #most-important-thing (one item + rationale + response prompt) and a comprehensive daily summary in #daily-summary (full breakdown). Re-presents unanswered items until the team responds. Runs at 7 AM PT and 7 PM PT.
 
 ## Stage Pointers
 
-- `stages/1-gather/CONTEXT.md` — Parallel sub-agent data collection
-- `stages/2-strategize/CONTEXT.md` — Autonomy classification, composition, Slack posting
+- `stages/1-gather/CONTEXT.md` — Parallel sub-agent data collection + previous briefing response check
+- `stages/2-strategize/CONTEXT.md` — Most Important Thing selection, autonomy classification, deferral handling, Slack posting
 
 ## Shared Resources Used
 
@@ -16,12 +16,13 @@ Generate a proactive daily strategy briefing that tells the team what work is pl
 - `shared/diagnostics/check-sentry.md` — Error data
 - `shared/diagnostics/render-logs.md` — Production errors
 - `shared/references/github-ops.md` — GitHub query patterns
-- `shared/slack/slack-post.md` — Post main message + thread reply
+- `shared/slack/slack-post.md` — Post messages + thread replies to both channels
 - `shared/references/slack-format.md` — mrkdwn formatting
 
 ## Key Conventions
 
-- Post main message first, then details as thread reply
-- Main message: forward-looking strategy (what's happening today)
-- Thread reply: structured breakdown by autonomy tier, pipeline state, and retrospective data
-- See `.claude/config/services.json` for #daily-summary channel ID
+- **#most-important-thing**: Short message (one item + rationale + link), thread reply is just a response prompt
+- **#daily-summary**: Comprehensive briefing (Most Important Thing + Proceeding + Suggestion + Pipeline), thread reply has full retrospective and scanner results
+- Re-present unanswered items from the previous briefing at the top
+- When team defers an item with a reason, comment on the GitHub issue and stop re-presenting it
+- See `.claude/config/services.json` for channel IDs
