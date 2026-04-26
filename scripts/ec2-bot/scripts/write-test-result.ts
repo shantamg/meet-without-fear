@@ -228,6 +228,7 @@ async function main() {
       status: 'running',
       started_at: new Date(startedAtMs).toISOString(),
       code_sha: codeSha,
+      trigger_source: triggerSource,
     });
   }
 

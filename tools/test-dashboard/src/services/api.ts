@@ -80,9 +80,31 @@ export function getRun(id: string): Promise<RunDetail> {
   );
 }
 
+type FlatSnapshotRow = Snapshot & { run_count: number };
+
+function assembleSnapshotTree(rows: FlatSnapshotRow[]): SnapshotNode[] {
+  const byId = new Map<string, SnapshotNode>();
+  for (const row of rows) {
+    byId.set(row.id, { ...row, children: [] });
+  }
+  const roots: SnapshotNode[] = [];
+  for (const node of byId.values()) {
+    const parent = node.parent_id ? byId.get(node.parent_id) : undefined;
+    if (parent) {
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  return roots;
+}
+
 export function listSnapshots(): Promise<SnapshotNode[]> {
   return withFallback<SnapshotNode[]>(
-    () => getJSON<SnapshotNode[]>('/api/snapshots'),
+    async () => {
+      const rows = await getJSON<FlatSnapshotRow[]>('/api/snapshots');
+      return assembleSnapshotTree(rows);
+    },
     () => buildMockSnapshotTree(),
     'listSnapshots'
   );

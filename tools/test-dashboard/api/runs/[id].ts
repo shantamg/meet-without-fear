@@ -25,6 +25,8 @@ const VALID_STATUSES = new Set([
   'cancelled',
 ]);
 
+const VALID_TRIGGER_SOURCES = new Set(['slack', 'cron', 'web', 'manual']);
+
 const PATCHABLE_FIELDS = [
   'status',
   'started_at',
@@ -34,6 +36,7 @@ const PATCHABLE_FIELDS = [
   'starting_snapshot_id',
   'ending_snapshot_id',
   'code_sha',
+  'trigger_source',
   'triggered_by',
   'error_message',
   'failed_assertion',
@@ -94,7 +97,7 @@ async function getRun(id: string, res: VercelResponse) {
   }
 
   return json(res, 200, {
-    run,
+    ...run,
     artifacts: artifactsResult.rows,
     starting_snapshot: startingSnapshot,
     ending_snapshot: endingSnapshot,
@@ -117,6 +120,17 @@ async function patchRun(id: string, req: VercelRequest, res: VercelResponse) {
     !VALID_STATUSES.has(updates.status)
   ) {
     return jsonError(res, 400, `invalid status: ${updates.status}`);
+  }
+
+  if (
+    typeof updates.trigger_source === 'string' &&
+    !VALID_TRIGGER_SOURCES.has(updates.trigger_source)
+  ) {
+    return jsonError(
+      res,
+      400,
+      `invalid trigger_source: ${updates.trigger_source}`
+    );
   }
 
   if (Object.keys(updates).length === 0) {
