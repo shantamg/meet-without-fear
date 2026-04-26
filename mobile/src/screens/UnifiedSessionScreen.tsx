@@ -1980,6 +1980,16 @@ export function UnifiedSessionScreen({
               />
 
               <TouchableOpacity
+                style={styles.refineInvitationButton}
+                onPress={() => setShowInvitationRefine(true)}
+                testID="invitation-refine-button"
+              >
+                <Text style={styles.refineInvitationButtonText}>
+                  Refine invitation
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={styles.continueButton}
                 onPress={() => {
                   // Track invitation sent
@@ -2754,6 +2764,20 @@ const useStyles = () =>
       marginBottom: t.spacing.sm,
       paddingHorizontal: t.spacing.md,
       lineHeight: 22,
+    },
+    refineInvitationButton: {
+      marginTop: t.spacing.sm,
+      marginHorizontal: t.spacing.lg,
+      paddingVertical: t.spacing.sm,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: t.colors.accent,
+      borderRadius: t.radius.md,
+    },
+    refineInvitationButtonText: {
+      fontSize: t.typography.fontSize.md,
+      color: t.colors.accent,
+      fontWeight: '600' as const,
     },
     continueButton: {
       marginTop: t.spacing.sm,
