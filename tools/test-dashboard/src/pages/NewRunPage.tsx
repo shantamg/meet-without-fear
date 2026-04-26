@@ -74,6 +74,10 @@ export function NewRunPage() {
         </div>
       </div>
 
+      <div className="error-banner" style={{ background: '#1f2937', borderColor: '#fbbf24', color: '#fbbf24' }}>
+        Phase 1A: this form is staged. Production deploys reject web POSTs until Phase 1B wires user auth — use the EC2 writer script to queue runs for now.
+      </div>
+
       {error && <div className="error-banner">Error: {error}</div>}
 
       <form onSubmit={handleSubmit} className="form">

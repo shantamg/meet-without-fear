@@ -137,10 +137,10 @@ export BLOB_READ_WRITE_TOKEN=<from-step-3>
 
 Reload: `source ~/.bashrc`.
 
-Make sure the repo is present (it likely already is at `~/projects/meet-without-fear/`):
+Make sure the repo is present (it likely already is at `~/projects/meet-without-fear/`) and that root deps are installed (`@vercel/blob` is declared at the repo root so the bot script can resolve it):
 
 ```bash
-cd ~/projects/meet-without-fear && git pull
+cd ~/projects/meet-without-fear && git pull && npm install
 ```
 
 Smoke test the writer:
@@ -163,6 +163,13 @@ vercel domains add test-dashboard.meetwithoutfear.com mwf-test-dashboard
 ```
 
 Add the CNAME record per Vercel's instructions, then update `TEST_DASHBOARD_API_URL` on the EC2 bot to the new domain.
+
+## Auth model (Phase 1A)
+
+- `GET /api/runs`, `GET /api/runs/:id`, `GET /api/snapshots`, `GET /api/snapshots/:id` — **public read**. Anyone with the URL can browse runs.
+- `POST /api/runs`, `PATCH /api/runs/:id`, `POST /api/snapshots`, `POST /api/artifacts` — **bot-token only**. Requires `x-bot-token: <BOT_WRITER_TOKEN>` header.
+
+This means the dashboard's "New Run" page **does not work in production** until Phase 1B wires Clerk-based user auth. The form is staged but the server rejects unauthenticated POSTs. To queue a run today, use the EC2 writer script directly. This was a deliberate choice — leaving POST open on a public deployment lets anyone enqueue work that the EC2 bot will execute.
 
 ## Troubleshooting
 

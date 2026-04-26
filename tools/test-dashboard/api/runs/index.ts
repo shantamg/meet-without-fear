@@ -11,6 +11,7 @@ import {
   json,
   jsonError,
   parseJsonBody,
+  requireBotToken,
 } from '../_lib/db.js';
 
 export const config = { runtime: 'nodejs' };
@@ -32,6 +33,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await listRuns(req, res);
     }
     if (req.method === 'POST') {
+      // Phase 1A: queueing is bot-only (the EC2 writer + cron + future
+      // bot-mediated Slack flow). The web "New run" page is staged for
+      // Phase 1B and gets locked behind Clerk auth then. Until then the
+      // public deployment must not let anonymous clients enqueue work
+      // that the EC2 bot will execute.
+      requireBotToken(req);
       return await createRun(req, res);
     }
     return jsonError(res, 405, `Method ${req.method} not allowed`);

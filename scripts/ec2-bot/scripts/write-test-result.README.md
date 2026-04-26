@@ -14,11 +14,10 @@ Set them in the bot's systemd unit or `.env` (sourced before the script runs).
 
 ## Install
 
-The bot already has `tsx` available (or run via `npx tsx`). Required npm deps in the working directory:
+`@vercel/blob` is declared in the repo-root `package.json`, so a normal `npm install` at the repo root makes it resolvable from this script's path. If `tsx` isn't already on the bot, install it once:
 
 ```
-npm i -D tsx
-npm i @vercel/blob
+npm install -g tsx
 ```
 
 ## Invocation
