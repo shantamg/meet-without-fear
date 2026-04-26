@@ -70,7 +70,10 @@ export const sessionSwitchHandler: IntentHandler = {
     // If not found by ID, try by partner name
     if (!session && intent.person?.firstName) {
       const partnerName = intent.person.firstName.toLowerCase();
-      logger.info('[SessionSwitch] Searching by partner name:', partnerName);
+      logger.info('[SessionSwitch] Searching by partner name', {
+        userId,
+        hasPartnerHint: true,
+      });
 
       const sessions = await prisma.session.findMany({
         where: {
