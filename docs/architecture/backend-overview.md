@@ -3,7 +3,7 @@ title: Architecture
 sidebar_position: 2
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-04-20
 status: living
 ---
 # Architecture
@@ -195,7 +195,7 @@ status: living
 ## Cross-Cutting Concerns
 
 **Logging:**
-- Backend: Winston structured logger (`backend/src/lib/logger.ts`) with JSON output in production, pretty-print in development; automatically injects request context (turnId, sessionId, userId, requestId); Sentry transport forwards error-level logs
+- Backend: Winston structured logger (`backend/src/lib/logger.ts`) with JSON output in production, pretty-print in development; automatically injects request context (turnId, sessionId, userId, requestId); Sentry transport forwards error-level logs; PII fields stripped via `beforeSend` hook before transmission
 - Mobile: Handled by error tracking provider (Sentry integration possible); development console logs
 
 **Validation:**

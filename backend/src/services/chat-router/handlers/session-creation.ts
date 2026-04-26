@@ -385,5 +385,5 @@ export function startPendingCreation(userId: string, personFirstName: string): v
     confirmedByUser: false,
     conversationHistory: [],
   });
-  logger.info('[SessionCreation] Started pending creation for:', personFirstName);
+  logger.info('[SessionCreation] Started pending creation', { userId });
 }
