@@ -34,6 +34,7 @@ All required environment variables for Meet Without Fear services.
 | `RATE_LIMIT_WINDOW_MS` | Rate limit window | `60000` |
 | `RATE_LIMIT_MAX` | Max requests per window | `100` |
 | `EXPO_ACCESS_TOKEN` | Expo push notification token | (optional) |
+| `OPENAI_API_KEY` | OpenAI key for TTS (`/api/tts` → `tts-1` / `tts-1-hd`). Without it, TTS returns 500 and meditation/gratitude/chat read-aloud features are broken. | (none) |
 
 ## JWT Configuration
 

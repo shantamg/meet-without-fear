@@ -2,6 +2,15 @@
 
 Structured interview loop for vague or incomplete requests. Asks clarifying questions, polls for responses, and graduates the issue when enough context is gathered.
 
+## Modes
+
+The dispatcher always invokes this workspace at `entry_stage: 01-create-issue` because there is no per-issue stage state in the registry. Determine the actual current stage from the issue's bot comments before loading a stage CONTEXT.md:
+
+- **No bot comment with `<!-- bot:needs-info-meta` metadata exists** → fresh issue, load `stages/01-create-issue/CONTEXT.md`.
+- **A bot comment with `<!-- bot:needs-info-meta` metadata exists** → re-entry, load `stages/02-interview/CONTEXT.md` directly. Do NOT exit early expecting a "next tick" to handle stage 02 — the next tick will re-enter at stage 01 again, producing an infinite re-dispatch loop (every 30 min, while `bot:needs-info` carries `keep_label: true`).
+
+The `waiting-human-${ISSUE_NUMBER}.txt` marker file in the claims dir is the only signal that gates re-dispatch. Whichever stage runs MUST leave that marker present on every exit path that does not graduate or close the issue.
+
 ## What to Load
 
 | Resource | When | Why |

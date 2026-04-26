@@ -31,7 +31,9 @@ Any other `gh` read call indicates a bug.
 ## Process
 
 1. **Confirm the label** via the state file helper `github_state_issue_has_label`. Then **read the issue body** via `gh issue view <number>`.
-2. **Check for existing bot comments** on the issue. If the bot has already posted an initial comment, skip to stage 02 (this is a re-entry).
+2. **Detect re-entry**: check for existing bot comments on the issue.
+   - **If a bot comment with `<!-- bot:needs-info-meta` metadata already exists**, this is a re-entry. The dispatcher always invokes this workspace at stage 01 because there is no per-issue stage state. Do NOT exit. Instead, **read `stages/02-interview/CONTEXT.md` and execute its Process section in this same invocation** — that's where response handling, follow-ups, nudges, and the waiting-human marker live. After running stage 02's logic, exit.
+   - **If no prior bot comment exists**, this is a first run — continue with steps 3–5 below.
 3. **Classify the request category**:
    - `bug` — user describes something broken but lacks specifics
    - `feature` — user wants something new but scope is unclear
@@ -44,12 +46,25 @@ Any other `gh` read call indicates a bug.
    ```
    <!-- bot:needs-info-meta: {"questions_asked": 1, "category": "<category>", "created": "<ISO>"} -->
    ```
+6. **Write the waiting-human marker** so the dispatcher does not re-fire on every cooldown expiry (every 30 min) while waiting for the user's first response:
+   ```bash
+   date -Iseconds > "${CLAIMS_DIR:-/opt/slam-bot/state/claims}/waiting-human-${ISSUE_NUMBER}.txt"
+   ```
 
 ## Output
 
-- Initial interview comment posted on the GitHub issue
-- Category classification stored in metadata
+- Initial interview comment posted on the GitHub issue (first run only)
+- Category classification stored in metadata (first run only)
+- `waiting-human-${ISSUE_NUMBER}.txt` marker present in claims dir on every exit path
+
+## Failsafe
+
+If, for any reason, this stage exits without having executed stage 02's logic AND without having posted a fresh bot comment, write the marker before exiting:
+```bash
+date -Iseconds > "${CLAIMS_DIR:-/opt/slam-bot/state/claims}/waiting-human-${ISSUE_NUMBER}.txt"
+```
+This prevents an infinite re-dispatch loop if the LLM misroutes the re-entry path.
 
 ## Completion
 
-Proceed to `stages/02-interview/` on the next dispatcher tick.
+A single invocation handles either the first-run interview (steps 3–5) or the re-entry by inlining stage 02. There is no "next tick" handoff — the marker file is the only signal that gates re-dispatch.

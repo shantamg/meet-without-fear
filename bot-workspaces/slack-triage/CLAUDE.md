@@ -1,6 +1,6 @@
 # Slack Triage Workspace (L1)
 
-Triage actionable messages from any Slack channel (DMs, #pmf1, #agentic-devs, #slam-paws, #bugs-and-requests). Classify each message and dispatch the appropriate action. **All substantive work must flow through GitHub issues with `bot:*` labels** — Slack is an intake channel, GitHub is where work happens visibly.
+Triage actionable messages from any Slack channel (DMs, #pmf1, #agentic-devs, #slam-paws, #bugs-and-requests, #most-important-thing). Classify each message and dispatch the appropriate action. **All substantive work must flow through GitHub issues with `bot:*` labels** — Slack is an intake channel, GitHub is where work happens visibly.
 
 ## What to Load
 
@@ -55,6 +55,14 @@ Adapt tone based on the source channel:
 - Keep it non-technical: no file paths, function names, stack traces
 - Acknowledge the report, link to the GitHub issue you filed
 - Warm and brief — mirror #pmf1 tone
+
+**#most-important-thing** — Twice-daily strategy briefing channel. Shantam and Darryl respond here.
+- Messages are typically responses to the daily strategy briefing (agree, defer, questions)
+- Acknowledge their response briefly — formal processing happens at the next scheduled run
+- If they agree to an item, confirm you've noted it
+- If they defer with a reason, confirm you'll document it at the next run
+- If they ask a question, answer it directly
+- Be concise — this channel is about quick decisions, not long discussions
 
 **DMs** — Direct conversation with a team member.
 - Match their tone and technical level
