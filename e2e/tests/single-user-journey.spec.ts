@@ -121,15 +121,10 @@ test.describe('Single User Journey', () => {
 
     // Step 3: Sign the compact (curiosity agreement)
     console.log(`${elapsed()} Step 3: Signing compact...`);
-    // The compact agreement bar shows at the bottom with checkbox and Begin button
-    const agreeCheckbox = page.getByTestId('compact-agree-checkbox');
-    await expect(agreeCheckbox).toBeVisible({ timeout: 10000 });
-
-    // Check the agreement checkbox
-    await agreeCheckbox.click();
-
-    // Click Begin button
+    // The compact agreement bar shows at the bottom with the Ready/Sign button.
+    // (UI was simplified — the standalone agree-checkbox no longer exists; the bar is just a single CTA.)
     const signButton = page.getByTestId('compact-sign-button');
+    await expect(signButton).toBeVisible({ timeout: 30000 });
     await signButton.click();
 
     await page.screenshot({ path: 'test-results/single-user-02-compact-signed.png' });
