@@ -1,0 +1,34 @@
+{
+  "name": "test-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:vercel": "vercel dev",
+    "build": "tsc && vite build",
+    "check": "tsc",
+    "deploy": "vercel --prod",
+    "migrate": "tsx db/migrate.ts"
+  },
+  "dependencies": {
+    "@clerk/clerk-react": "^5.61.1",
+    "@vercel/blob": "^0.27.0",
+    "@vercel/postgres": "^0.10.0",
+    "ably": "^2.16.0",
+    "pg": "^8.13.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-router-dom": "^7.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vercel/node": "^3.2.0",
+    "@vitejs/plugin-react": "^5.1.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0"
+  }
+}
