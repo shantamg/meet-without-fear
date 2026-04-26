@@ -89,30 +89,49 @@ if [ -z "$COMMAND_SLUG" ]; then
 fi
 
 # --- Cancellation check (#562) ---
-# Before processing, verify the message hasn't been cancelled (deleted or ❌ reacted)
+# Before processing, verify the message hasn't been cancelled (deleted or ❌ reacted).
+# conversations.history does NOT return threaded replies — fetching a thread reply
+# via that endpoint always returns 0 messages, which previously caused the script
+# to falsely conclude the message was deleted and cancel without removing the
+# hourglass. Use conversations.replies for thread replies so they're actually found.
 if [ -n "$SLACK_CHANNEL" ] && [ -n "$SLACK_TS" ]; then
   # Secrets already loaded by config.sh
   if [ -n "${SLACK_BOT_TOKEN:-}" ]; then
-    # Check if the original message still exists
-    MSG_CHECK=$(curl -s -X GET \
-      "https://slack.com/api/conversations.history?channel=${SLACK_CHANNEL}&oldest=${SLACK_TS}&latest=${SLACK_TS}&inclusive=true&limit=1" \
-      -H "Authorization: Bearer $SLACK_BOT_TOKEN" 2>/dev/null || echo '{}')
+    if [ -n "$THREAD_TS" ] && [ "$THREAD_TS" != "$SLACK_TS" ]; then
+      # Threaded reply — pin the window to SLACK_TS so we don't pull the entire thread
+      MSG_CHECK=$(curl -s -X GET \
+        "https://slack.com/api/conversations.replies?channel=${SLACK_CHANNEL}&ts=${THREAD_TS}&oldest=${SLACK_TS}&latest=${SLACK_TS}&inclusive=true&limit=1" \
+        -H "Authorization: Bearer $SLACK_BOT_TOKEN" 2>/dev/null || echo '{}')
+    else
+      # Top-level message
+      MSG_CHECK=$(curl -s -X GET \
+        "https://slack.com/api/conversations.history?channel=${SLACK_CHANNEL}&oldest=${SLACK_TS}&latest=${SLACK_TS}&inclusive=true&limit=1" \
+        -H "Authorization: Bearer $SLACK_BOT_TOKEN" 2>/dev/null || echo '{}')
+    fi
 
-    MSG_COUNT=$(echo "$MSG_CHECK" | jq -r '.messages | length // 0' 2>/dev/null || echo "0")
+    # Find the message whose ts matches SLACK_TS exactly. conversations.replies
+    # always echoes the thread parent in addition to the requested message, so a
+    # ts-equality filter is required to avoid false matches.
+    TARGET_MSG=$(echo "$MSG_CHECK" | jq --arg ts "$SLACK_TS" 'first(.messages[]? | select(.ts == $ts))' 2>/dev/null)
 
-    if [ "$MSG_COUNT" = "0" ] || [ "$MSG_COUNT" = "null" ]; then
+    if [ -z "$TARGET_MSG" ] || [ "$TARGET_MSG" = "null" ]; then
       echo "[$(date)] CANCELLED $COMMAND_SLUG — original message deleted (channel=$SLACK_CHANNEL ts=$SLACK_TS)" >> "$LOGFILE"
+      # Always remove the hourglass on cancel — otherwise the user sees a stuck
+      # :hourglass_flowing_sand: indicating queued work that will never run.
+      curl -s -X POST https://slack.com/api/reactions.remove \
+        -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "$(jq -n --arg ch "$SLACK_CHANNEL" --arg ts "$SLACK_TS" \
+          '{channel: $ch, timestamp: $ts, name: "hourglass_flowing_sand"}')" > /dev/null 2>&1 || true
       rm -f "$OLDEST"
       exit 0
     fi
 
     # Check if the message has a ❌ (x) reaction — user wants to cancel
-    REACTIONS=$(echo "$MSG_CHECK" | jq -r '.messages[0].reactions // []' 2>/dev/null)
-    HAS_CANCEL=$(echo "$REACTIONS" | jq -r '[.[] | select(.name == "x")] | length' 2>/dev/null || echo "0")
+    HAS_CANCEL=$(echo "$TARGET_MSG" | jq -r '[(.reactions // [])[] | select(.name == "x")] | length' 2>/dev/null || echo "0")
 
     if [ "$HAS_CANCEL" != "0" ] && [ "$HAS_CANCEL" != "null" ]; then
       echo "[$(date)] CANCELLED $COMMAND_SLUG — ❌ reaction found (channel=$SLACK_CHANNEL ts=$SLACK_TS)" >> "$LOGFILE"
-      # Remove the hourglass emoji to indicate cancellation
       curl -s -X POST https://slack.com/api/reactions.remove \
         -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
         -H "Content-Type: application/json" \
