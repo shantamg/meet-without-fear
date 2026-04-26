@@ -283,9 +283,10 @@ test.describe('Single User Journey', () => {
     console.log(`${elapsed()} Empathy shared indicator is visible`);
 
     // Step 19b: Assert waiting status panel is visible
-    // After sharing empathy, user should see "Waiting for Test Partner to feel heard"
+    // After sharing empathy, user should see "<Partner> is working on their perspective"
+    // (copy was previously "Waiting for <Partner> to feel heard"; updated to lower stakes)
     console.log(`${elapsed()} Step 19b: Verifying waiting status panel...`);
-    const waitingStatus = page.getByText(/Waiting for Darryl to feel heard/i);
+    const waitingStatus = page.getByText(/Darryl is working on their perspective/i);
     await expect(waitingStatus).toBeVisible({ timeout: 5000 });
     console.log(`${elapsed()} Waiting status panel is visible`);
 
