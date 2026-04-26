@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { colors } from '@/theme';
@@ -16,11 +16,15 @@ export default function WelcomeScreen() {
   };
 
   const handleTerms = () => {
-    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/terms');
+    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/terms').catch(() => {
+      Alert.alert('Error', 'Could not open Terms of Service');
+    });
   };
 
   const handlePrivacy = () => {
-    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/privacy');
+    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/privacy').catch(() => {
+      Alert.alert('Error', 'Could not open Privacy Policy');
+    });
   };
 
   return (

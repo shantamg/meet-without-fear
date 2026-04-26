@@ -62,7 +62,9 @@ export default function HelpSupportScreen() {
   };
 
   const handleOpenDocs = () => {
-    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/docs');
+    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/docs').catch(() => {
+      Alert.alert('Error', 'Could not open documentation');
+    });
   };
 
   const handleFeedback = () => {
