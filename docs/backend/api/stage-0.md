@@ -1,16 +1,16 @@
 ---
 title: "Stage 0 API: Onboarding"
 sidebar_position: 5
-description: Endpoints for the Curiosity Compact signing flow.
+description: Endpoints for the Stage 0 onboarding acknowledgment flow.
 slug: /backend/api/stage-0
 ---
 # Stage 0 API: Onboarding
 
-Endpoints for the Curiosity Compact signing flow.
+Endpoints for the Stage 0 onboarding acknowledgment flow.
 
-## Sign Curiosity Compact
+## Sign Compact
 
-Sign the Curiosity Compact to commit to the process.
+Record acknowledgment of the opening welcome message to proceed.
 
 ```
 POST /api/v1/sessions/:id/compact/sign
@@ -106,7 +106,8 @@ interface CompactStatusResponse {
     "mySignedAt": "2024-01-16T14:30:00Z",
     "partnerSigned": false,
     "partnerSignedAt": null,
-    "canAdvance": false
+    "canAdvance": false,
+    "isFirstSession": true
   }
 }
 ```
@@ -121,7 +122,8 @@ interface CompactStatusResponse {
     "mySignedAt": "2024-01-16T14:30:00Z",
     "partnerSigned": true,
     "partnerSignedAt": "2024-01-16T14:45:00Z",
-    "canAdvance": true
+    "canAdvance": true,
+    "isFirstSession": false
   }
 }
 ```
