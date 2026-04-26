@@ -1,8 +1,8 @@
 # Daily Strategy Workspace (L1)
 
-Generate a twice-daily "Most Important Thing" strategy briefing posted to #most-important-thing. Each briefing leads with a single highest-priority item, clearly marks what needs team input vs. what the bot will handle autonomously, and re-presents unanswered items until the team responds.
+Generate a twice-daily strategy briefing posted to two channels: a short "Most Important Thing" message to #most-important-thing (one item, one rationale, response prompt) and a comprehensive daily summary to #daily-summary (full breakdown with proceeding/suggestion items, pipeline state, and retrospective). Re-presents unanswered items until the team responds.
 
-Runs at 7 AM ET and 7 PM ET. Morning sets the day's plan; evening checks in on progress and tees up tomorrow.
+Runs at 7 AM PT and 7 PM PT. Morning sets the day's plan; evening checks in on progress and tees up tomorrow.
 
 ## What to Load
 
@@ -33,7 +33,7 @@ Runs at 7 AM ET and 7 PM ET. Morning sets the day's plan; evening checks in on p
 ## Stage Progression
 
 1. `1-gather` — Parallel sub-agents collect data from all sources + check previous briefing responses
-2. `2-strategize` — Lead with Most Important Thing, classify by autonomy tier, handle deferrals, post to Slack
+2. `2-strategize` — Lead with Most Important Thing, classify by autonomy tier, handle deferrals, post to #most-important-thing (short) and #daily-summary (comprehensive)
 
 ## Response Loop
 
