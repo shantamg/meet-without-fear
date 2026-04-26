@@ -3,7 +3,7 @@ title: Infrastructure
 sidebar_position: 1
 description: Slam bot (EC2), Render hosting, Vercel deploys, GitHub automation.
 created: 2026-03-11
-updated: 2026-04-20
+updated: 2026-04-25
 status: living
 ---
 
