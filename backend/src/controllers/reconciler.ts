@@ -948,6 +948,8 @@ export async function refinementFinalizeHandler(
           sharedContent: content,
           refinedContent: content,
           sharedAt: now,
+          deliveryStatus: 'DELIVERED',
+          deliveredAt: now,
         },
       });
 

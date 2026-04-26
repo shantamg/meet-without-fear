@@ -34,6 +34,7 @@ import {
   getSharedContextForGuesser,
   generateShareSuggestionForDirection,
   hasContextAlreadyBeenShared,
+  markResultHandledAlreadyShared,
   incrementAttempts,
 } from '../services/reconciler';
 import { isSessionCreator } from '../utils/session';
@@ -133,6 +134,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
           `[triggerReconcilerAndUpdateStatuses] Context already shared B→A, skipping AWAITING_SHARING for User A`
         );
         statusA = EmpathyStatus.READY;
+        await markResultHandledAlreadyShared(sessionId, userAId, userBId);
       } else {
         statusA = hasSignificantGapsA ? EmpathyStatus.AWAITING_SHARING : EmpathyStatus.READY;
       }
@@ -193,6 +195,7 @@ async function triggerReconcilerAndUpdateStatuses(sessionId: string): Promise<vo
           `[triggerReconcilerAndUpdateStatuses] Context already shared A→B, skipping AWAITING_SHARING for User B`
         );
         statusB = EmpathyStatus.READY;
+        await markResultHandledAlreadyShared(sessionId, userBId, userAId);
       } else {
         statusB = hasSignificantGapsB ? EmpathyStatus.AWAITING_SHARING : EmpathyStatus.READY;
       }

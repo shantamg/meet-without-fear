@@ -28,6 +28,7 @@ export {
   checkAttempts,
   incrementAttempts,
   hasContextAlreadyBeenShared,
+  markResultHandledAlreadyShared,
 } from './circuit-breaker';
 
 // Analysis

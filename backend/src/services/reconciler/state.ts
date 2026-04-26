@@ -28,7 +28,7 @@ import {
   getWitnessingContent,
   analyzeEmpathyGap,
 } from './analysis';
-import { checkAttempts, hasContextAlreadyBeenShared } from './circuit-breaker';
+import { checkAttempts, hasContextAlreadyBeenShared, markResultHandledAlreadyShared } from './circuit-breaker';
 import { generateShareSuggestion } from './sharing';
 
 // ============================================================================
@@ -54,6 +54,17 @@ async function markEmpathyReady(
     ? `You've shared your perspective on what ${subjectName} might be experiencing. Let's move forward — ${subjectName} is also reflecting on your perspective.`
     : `${subjectName} has felt heard. The reconciler reports your attempt to imagine what they're feeling was quite accurate. ${subjectName} is now considering your perspective, and once they do, you'll both see what each other shared.`;
 
+  // De-dup guard: reconciliation iterates every time either side refines, so
+  // the shortcut path can fire several times in a row with the same message
+  // content. If the last AI message to this guesser already says the same
+  // thing, just update the empathy status without re-posting the chat line.
+  const lastAiMessageForGuesser = await prisma.message.findFirst({
+    where: { sessionId, forUserId: guesserId, role: 'AI' },
+    orderBy: { timestamp: 'desc' },
+    select: { content: true },
+  });
+  const alreadyPosted = lastAiMessageForGuesser?.content?.trim() === alignmentMessage.trim();
+
   // Wrap state transition + status update + message creation in a transaction
   // to ensure atomicity — a partial write here could leave the attempt READY
   // without a corresponding alignment message, or vice versa.
@@ -72,6 +83,10 @@ async function markEmpathyReady(
       data: { status: 'READY', statusVersion: { increment: 1 } },
     });
 
+    if (alreadyPosted) {
+      return null;
+    }
+
     // Create alignment message
     const msg = await tx.message.create({
       data: {
@@ -86,6 +101,13 @@ async function markEmpathyReady(
 
     return msg;
   });
+
+  if (!savedMessage) {
+    logger.info('Skipping duplicate alignment message', { guesserId });
+    // Still need to check mutual reveal after the status update above.
+    await checkAndRevealBothIfReady(sessionId);
+    return;
+  }
 
   logger.debug('Created alignment message', { guesserId, alignmentMessage });
 
@@ -245,6 +267,10 @@ export async function runReconcilerForDirection(
     // Mark READY to prevent infinite loop, but use the honest "let's move forward"
     // message instead of the false "quite accurate" claim.
     await markEmpathyReady(sessionId, guesserId, subjectInfo.name, true);
+
+    // Mark the reconciler result "handled" so the GET /share-offer fallback
+    // (and any other downstream reader) won't synthesize a redundant suggestion.
+    await markResultHandledAlreadyShared(sessionId, guesserId, subjectId);
 
     return {
       result,
