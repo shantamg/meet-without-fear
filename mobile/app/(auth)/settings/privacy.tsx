@@ -12,6 +12,7 @@ import {
   ScrollView,
   Switch,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -26,11 +27,15 @@ export default function PrivacySettingsScreen() {
   const [shareAnonymousAnalytics, setShareAnonymousAnalytics] = useState(true);
 
   const handlePrivacyPolicyPress = () => {
-    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/privacy');
+    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/privacy').catch(() => {
+      Alert.alert('Error', 'Could not open Privacy Policy');
+    });
   };
 
   const handleTermsPress = () => {
-    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/terms');
+    WebBrowser.openBrowserAsync('https://meetwithoutfear.com/terms').catch(() => {
+      Alert.alert('Error', 'Could not open Terms of Service');
+    });
   };
 
   return (
