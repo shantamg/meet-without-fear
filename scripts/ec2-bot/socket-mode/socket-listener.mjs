@@ -47,6 +47,7 @@ const SLAM_BOT_CHANNEL = process.env.SLAM_BOT_CHANNEL_ID;
 const AGENTIC_DEVS_CHANNEL = process.env.AGENTIC_DEVS_CHANNEL_ID;
 const BUGS_AND_REQUESTS_CHANNEL = process.env.BUGS_AND_REQUESTS_CHANNEL_ID;
 const MOST_IMPORTANT_THING_CHANNEL = process.env.MOST_IMPORTANT_THING_CHANNEL_ID;
+const DAILY_SUMMARY_CHANNEL = process.env.DAILY_SUMMARY_CHANNEL_ID;
 const MWF_SESSIONS_CHANNEL = process.env.MWF_SESSIONS_CHANNEL_ID;
 
 // Backend endpoint that owns MWF sessions (Bedrock engine, same as mobile).
@@ -175,6 +176,17 @@ if (MOST_IMPORTANT_THING_CHANNEL) {
     logName: 'check-most-important-thing',
     channelName: '#most-important-thing',
     commandSlug: 'most-important-thing-reply',
+    workspace: 'slack-triage',
+    contextCount: 10,
+  };
+}
+
+// #daily-summary channel — bot's twice-daily activity summaries (replies expected)
+if (DAILY_SUMMARY_CHANNEL) {
+  CHANNEL_CONFIG[DAILY_SUMMARY_CHANNEL] = {
+    logName: 'check-daily-summary',
+    channelName: '#daily-summary',
+    commandSlug: 'daily-summary-reply',
     workspace: 'slack-triage',
     contextCount: 10,
   };
