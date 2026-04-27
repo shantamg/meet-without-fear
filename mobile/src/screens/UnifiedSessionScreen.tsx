@@ -560,7 +560,7 @@ export function UnifiedSessionScreen({
       }
 
       // -----------------------------------------------------------------------
-      // Stage 3: Need Mapping Events
+      // Stage 3: What Matters Events
       // -----------------------------------------------------------------------
       // Note: event type cast to string for forward-compat with new event types
       // defined in shared/src/dto/realtime.ts SessionEventType

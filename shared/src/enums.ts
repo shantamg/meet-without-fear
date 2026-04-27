@@ -44,7 +44,7 @@ export const STAGE_NAMES: Record<Stage, string> = {
   [Stage.ONBOARDING]: 'Onboarding',
   [Stage.WITNESS]: 'The Witness',
   [Stage.PERSPECTIVE_STRETCH]: 'Perspective Stretch',
-  [Stage.NEED_MAPPING]: 'Need Mapping',
+  [Stage.NEED_MAPPING]: 'What Matters',
   [Stage.STRATEGIC_REPAIR]: 'Strategic Repair',
   [Stage.INFORMED_EMPATHY]: 'Informed Empathy',
 };
