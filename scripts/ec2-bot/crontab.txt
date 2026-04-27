@@ -48,6 +48,11 @@
 0 4 * * * /opt/slam-bot/scripts/prune-journal.sh >> /var/log/slam-bot/cron.log 2>&1
 5 4 * * * /opt/slam-bot/scripts/prune-claude-projects.sh >> /var/log/slam-bot/cron.log 2>&1
 
+# ── Daily smoke test (publishes to test-dashboard.vercel.app) ────────────────
+# 04:00 UTC ≈ 21:00 PT, off-peak. Publishes pass/fail + screenshots to the
+# test-dashboard via write-test-result.ts. See run-and-publish.README.md.
+0 4 * * * /opt/slam-bot/scripts/run-and-publish.sh single-user-journey --trigger-source cron --triggered-by daily-smoke >> /var/log/slam-bot/test-runs.log 2>&1
+
 # ── API budget monitoring ────────────────────────────────────────────────────
 * * * * * /opt/slam-bot/scripts/api-budget-monitor.sh >> /var/log/slam-bot/cron.log 2>&1
 # Post daily API consumption summary to #bot-ops + check for over-budget workspaces
