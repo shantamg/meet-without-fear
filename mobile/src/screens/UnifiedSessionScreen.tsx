@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState, Keyboard, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1003,6 +1003,35 @@ export function UnifiedSessionScreen({
   // Animation for the invitation panel slide-up
   const invitationPanelAnim = useRef(new Animated.Value(0)).current;
 
+  // Animation for collapsing the invitation panel when the keyboard is visible.
+  // 1 = full height, 0 = collapsed. Multiplied with invitationPanelAnim's maxHeight.
+  const invitationKeyboardCollapseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, () => {
+      Animated.timing(invitationKeyboardCollapseAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: false,
+      }).start();
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      Animated.timing(invitationKeyboardCollapseAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: false,
+      }).start();
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [invitationKeyboardCollapseAnim]);
+
   // Animation for the empathy statement review panel slide-up
   const empathyPanelAnim = useRef(new Animated.Value(0)).current;
 
@@ -1939,15 +1968,18 @@ export function UnifiedSessionScreen({
         return (
           <Animated.View
             style={{
-              // 1. Animate Opacity
-              opacity: invitationPanelAnim,
+              // 1. Animate Opacity — fade out when keyboard collapses panel
+              opacity: Animated.multiply(invitationPanelAnim, invitationKeyboardCollapseAnim),
 
               // 2. Animate Height (Slide in effect)
-              // We use maxHeight to safely animate from 0 to a value large enough to fit content
-              maxHeight: invitationPanelAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 400], // 400 is arbitrary but large enough for your message + buttons
-              }),
+              // Multiply by keyboard collapse anim so the panel shrinks to 0 when keyboard is visible
+              maxHeight: Animated.multiply(
+                invitationPanelAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 400],
+                }),
+                invitationKeyboardCollapseAnim,
+              ),
 
               // 3. Optional: Add a slight slide-up transform for visual flair
               transform: [{
