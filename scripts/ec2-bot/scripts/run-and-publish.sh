@@ -87,7 +87,10 @@ done
 : "${BOT_WRITER_TOKEN:?BOT_WRITER_TOKEN must be set}"
 : "${BLOB_READ_WRITE_TOKEN:=}"   # screenshots only; non-fatal if missing
 
-REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Resolve symlinks before walking up — on EC2 this script is invoked via
+# /opt/slam-bot/scripts/run-and-publish.sh which symlinks to the repo.
+SCRIPT_REAL="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")"
+REPO_ROOT="$(cd "$(dirname "$SCRIPT_REAL")/../../.." && pwd)"
 E2E_DIR="$REPO_ROOT/e2e"
 RESULTS_DIR="$E2E_DIR/test-results"
 SUMMARY_FILE="$RESULTS_DIR/dashboard-summary.json"

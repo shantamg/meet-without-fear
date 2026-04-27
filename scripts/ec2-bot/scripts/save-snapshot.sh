@@ -72,7 +72,9 @@ done
 : "${BOT_WRITER_TOKEN:?BOT_WRITER_TOKEN must be set}"
 : "${DATABASE_URL:?DATABASE_URL must be set (read by backend/snapshots/create-snapshot.ts)}"
 
-REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# Resolve symlinks before walking up (EC2 invokes via /opt/slam-bot/scripts/...).
+SCRIPT_REAL="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")"
+REPO_ROOT="$(cd "$(dirname "$SCRIPT_REAL")/../../.." && pwd)"
 SNAPSHOTS_DIR="$REPO_ROOT/backend/snapshots"
 
 if [ ! -d "$SNAPSHOTS_DIR" ]; then
