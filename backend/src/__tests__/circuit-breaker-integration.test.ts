@@ -9,7 +9,7 @@ import { runReconcilerForDirection, incrementAttempts } from '../services/reconc
  * runReconcilerForDirection once. Verifies it:
  *   - Skips the AI analysis entirely
  *   - Marks empathy as READY with circuitBreakerTripped=true
- *   - Creates the "Let's move forward" transition message
+ *   - Creates the waiting-state transition message
  *   - Calls checkAndRevealBothIfReady (reveals if both directions are READY)
  *
  * Uses real Prisma against the test DB with mocked Ably (realtime) and empathy-status.
@@ -138,7 +138,7 @@ describe('Circuit Breaker Integration', () => {
       orderBy: { timestamp: 'desc' },
     });
     expect(messages.length).toBeGreaterThanOrEqual(1);
-    expect(messages[0].content).toContain("Let's move forward");
+    expect(messages[0].content).toContain("you'll both see what each other shared");
     expect(messages[0].content).toContain('Bob');
     // Should NOT contain the normal "quite accurate" message
     expect(messages[0].content).not.toContain('quite accurate');
@@ -155,7 +155,7 @@ describe('Circuit Breaker Integration', () => {
       sessionId,
       userAId,
       expect.objectContaining({
-        content: expect.stringContaining("Let's move forward"),
+        content: expect.stringContaining("you'll both see what each other shared"),
       }),
       expect.anything()
     );
