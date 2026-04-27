@@ -54,7 +54,7 @@ flowchart TB
 
         subgraph Stage3Box[Stage 3]
             S3Icon[Lock]
-            S3Label[Need Mapping]
+            S3Label[What Matters]
             S3Status[Locked]
         end
     end
@@ -186,7 +186,7 @@ flowchart TB
 flowchart TB
     subgraph LockedHeader[Locked Stage Header]
         LockedBadge[Upcoming]
-        LockedTitle[Stage 3: Need Mapping]
+        LockedTitle[Stage 3: What Matters]
         LockedDesc[Finding common ground]
         LockedNote[Complete Stage 2 to unlock]
     end

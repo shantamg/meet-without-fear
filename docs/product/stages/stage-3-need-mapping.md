@@ -1,97 +1,99 @@
 ---
-title: "Stage 3: Need Mapping"
+title: "Stage 3: What Matters"
 sidebar_position: 6
-description: Transition from surface-level stories and complaints to identifying universal human needs that both parties share.
+description: Help each user explore what truly matters to them in the conflict — in terms of their own needs, not what is wrong with the other person.
 ---
-# Stage 3: Need Mapping
+# Stage 3: What Matters
 
 ## Purpose
 
-Transition from surface-level stories and complaints to identifying universal human needs that both parties share.
+Help each user explore what truly matters to them in the conflict — in terms of their own needs, not what is wrong with the other person.
 
 ## AI Goal
 
-- Synthesize underlying needs from each users sharing
-- Translate complaints and positions into needs language
-- Identify at least one common-ground need
-- Reframe accusations into I-statements and needs
+- Facilitate **user-driven exploration** of underlying needs
+- Redirect other-focused answers back to the user's own experience
+- Offer language as suggestions for the user to confirm or refine — never as corrections
+- Ensure identified needs are universal and do not depend on a specific person acting a specific way
+- Help users move from surface complaints to what genuinely matters
 
-## Visual Design: Gentle and Soft
+## Opening
 
-Stage 3 uses **softer colors** to create a gentle, calming feel that supports the reflective nature of this work:
+The AI opens Stage 3 with:
 
-- Soft blues and teals for need cards
-- Gentle greens for common ground elements
-- Rounded corners and generous padding
-- **Side-by-side layout is key** - users see both sets of needs simultaneously
+> "What's this really about for you? Answer in terms of what matters to you — not what's wrong with them."
 
-The visual juxtaposition of both parties' needs creates the insight moment where users recognize shared humanity.
+This framing sets the tone: Stage 3 is about self-exploration, not analysis of the other person.
+
+## Redirect for Other-Focused Answers
+
+When a user answers in terms of what the other person is doing wrong, the AI gently redirects:
+
+> "Let me bring it back to you — what feels important or missing for you?"
+
+The redirect is warm and non-judgmental. The user may need several redirects before shifting from "they always..." to "what matters to me is..."
 
 ## Flow
 
 ```mermaid
 flowchart TD
-    Enter[Enter Stage 3] --> Intro[AI introduces needs work]
-    Intro --> Review[Review what has been shared]
+    Enter[Enter Stage 3] --> Open[AI: What is this really about for you?]
 
-    subgraph Translation[Complaint to Need Translation]
-        C1[Surface complaint] --> E1[Underlying emotion]
-        E1 --> N1[Core need]
-    end
+    Open --> Response{User response}
 
-    Review --> Translation
-    Translation --> Present[Present needs map to user]
+    Response -->|Self-focused| Explore[AI explores deeper]
+    Response -->|Other-focused| Redirect[AI: What feels important or missing for you?]
+    Redirect --> Response
 
-    Present --> Validate{User validates?}
-    Validate -->|Adjustments| Refine[Refine understanding]
-    Refine --> Present
-    Validate -->|Confirmed| Compare[Compare both maps]
+    Explore --> Suggest[AI offers language as suggestion]
+    Suggest --> Check{User confirms?}
 
-    Compare --> Search[Search for overlap]
-    Search --> Found{Common need?}
+    Check -->|Adjusts| Refine[User refines in own words]
+    Refine --> Suggest
+    Check -->|Confirms| Deeper{More to explore?}
 
-    Found -->|Yes| Highlight[Highlight shared need]
-    Found -->|Not obvious| Deeper[Dig to deeper needs]
-    Deeper --> Search
+    Deeper -->|Yes| Open2[AI: What else matters here?]
+    Open2 --> Response
+    Deeper -->|No| Validate[Validate needs are universal]
 
-    Highlight --> Confirm{Both confirm?}
-    Confirm -->|Yes| Complete[Stage 3 complete]
-    Confirm -->|Disagreement| Explore[Explore the difference]
-    Explore --> Search
+    Validate --> Independent{Needs independent of specific behavior?}
+    Independent -->|No| Reframe[AI suggests reframe as suggestion]
+    Reframe --> Check
+    Independent -->|Yes| Confirm[User confirms final needs]
 
+    Confirm --> Complete[Stage 3 complete]
     Complete --> Advance[Advance to Stage 4]
 ```
 
-## From Stories to Needs
+## Key Constraints
 
-```mermaid
-flowchart LR
-    subgraph Stories[Surface Level]
-        S1[They never listen to me]
-        S2[They always criticize]
-        S3[They work too much]
-    end
+### Needs Must Be Universal
 
-    subgraph Emotions[Emotional Layer]
-        E1[Feeling unimportant]
-        E2[Feeling inadequate]
-        E3[Feeling lonely]
-    end
+A valid need does not depend on a specific person acting a specific way. The AI checks for this:
 
-    subgraph Needs[Universal Needs]
-        N1[Need for recognition]
-        N2[Need for acceptance]
-        N3[Need for connection]
-    end
+| Not a universal need | Universal need |
+|---------------------|----------------|
+| "I need them to stop criticizing me" | "I need acceptance" |
+| "I need them to come home earlier" | "I need connection and quality time" |
+| "I need them to agree with me" | "I need to feel heard and respected" |
 
-    S1 --> E1 --> N1
-    S2 --> E2 --> N2
-    S3 --> E3 --> N3
+### Language as Suggestion, Not Correction
+
+The AI offers reframes as possibilities, not corrections:
+
 ```
+User: "I just need them to listen to me for once."
+
+AI: "It sounds like being heard really matters to you. Would you
+    say this is about needing to feel that your voice counts —
+    or does it feel like something else?"
+```
+
+The user always has the final word on what their needs are. The AI suggests; the user decides.
 
 ## Universal Needs Framework
 
-The AI maps to universal human needs:
+The AI maps to universal human needs (aligned with Rosenberg's framework):
 
 | Category | Example Needs |
 |----------|---------------|
@@ -102,96 +104,50 @@ The AI maps to universal human needs:
 | **Meaning** | Purpose, contribution, growth, significance |
 | **Fairness** | Justice, equality, reciprocity, balance |
 
-## Accusation Reframing
-
-The AI transforms accusatory language:
-
-| Original Statement | Reframed to Needs |
-|--------------------|-------------------|
-| "You never help around the house" | "I have a need for partnership and shared responsibility" |
-| "You always take their side" | "I need to feel like you are on my team" |
-| "You care more about work than me" | "I need quality time and to feel prioritized" |
-
-## Wireframe: Need Mapping Interface
+## Wireframe: What Matters Interface
 
 ```mermaid
 flowchart TB
-    subgraph Screen[Need Mapping Screen]
+    subgraph Screen[What Matters Screen]
         subgraph Header[Header]
             Logo[Meet Without Fear]
-            Stage[Stage 3: Need Mapping]
-            Status[Finding common ground]
-        end
-
-        subgraph YourNeeds[Your Identified Needs]
-            Title1[What you need most]
-            Need1[Safety - feeling secure in the relationship]
-            Need2[Recognition - being seen for your efforts]
-            Edit[Adjust these?]
-        end
-
-        subgraph CommonGround[Common Ground]
-            Title2[Shared Needs Discovered]
-            Shared1[Both need: Safety]
-            Shared2[Both need: Connection]
-            Insight[You both want to feel secure together]
+            Stage[Stage 3: What Matters]
+            Status[Exploring what matters]
         end
 
         subgraph Chat[Exploration Chat]
-            AI1[AI explores and refines needs]
-            User1[User clarifies]
+            AI1[AI: What is this really about for you?]
+            User1[User shares freely]
+            AI2[AI offers language as suggestion]
+            User2[User refines or confirms]
         end
 
-        subgraph Confirm[Confirmation]
-            Question[Does this capture what you need?]
-            Yes[Yes this is right]
-            Adjust[I want to adjust]
+        subgraph Input[Input Area]
+            TextBox[Type your thoughts...]
+            Send[Send]
         end
     end
 ```
 
 ## Success Criteria
 
-At least one common-ground need is identified and confirmed by both parties.
-
-## Common Ground Discovery
-
-```mermaid
-flowchart TD
-    subgraph UserA[User A Needs]
-        A1[Safety]
-        A2[Recognition]
-        A3[Autonomy]
-    end
-
-    subgraph UserB[User B Needs]
-        B1[Connection]
-        B2[Safety]
-        B3[Fairness]
-    end
-
-    A1 --- Common{Common: Safety}
-    B2 --- Common
-
-    Common --> Highlight[Both need Safety]
-    Highlight --> Build[Build on this foundation]
-```
+User has identified at least one universal need in their own words, confirmed by the user (not imposed by the AI).
 
 ## Failure Paths
 
 | Scenario | AI Response |
 |----------|-------------|
-| No obvious overlap | Dig deeper - surface needs often share deeper roots |
-| User rejects need synthesis | Refine and re-present; ask clarifying questions |
-| Accusatory language persists | Apply reframing; return to Stage 2 if needed |
-| One user dominates narrative | Balance attention; ensure both needs are mapped |
+| User stays other-focused | Gentle, repeated redirects back to self |
+| User rejects AI suggestion | Accept gracefully; ask user to describe in their own words |
+| Accusatory language persists | Redirect to needs; return to Stage 2 if needed |
+| User struggles to articulate | Offer multiple framings as possibilities to try on |
 
 ## Data Captured
 
-- Identified needs for each user
-- Common ground discovered
-- Reframing transformations applied
-- Confirmation of accuracy
+- User's self-described needs (in their own words)
+- AI suggestions offered and user responses
+- Redirect interactions
+- Confirmation of final needs
 
 ---
 

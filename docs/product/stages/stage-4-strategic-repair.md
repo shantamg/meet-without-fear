@@ -74,10 +74,8 @@ flowchart TD
 
     Discuss --> Document[Document micro-experiment]
 
-    Document --> FollowUp{Schedule check-in?}
-    FollowUp -->|Yes| Schedule[Set follow-up date]
-    FollowUp -->|No| Complete[Stage 4 complete]
-    Schedule --> Complete
+    Document --> Schedule[Schedule follow-up check-in]
+    Schedule --> Complete[Stage 4 complete]
 
     Complete --> Resolution[Resolution achieved]
 ```
@@ -92,14 +90,14 @@ flowchart TB
         G1[Specific: One 15-min check-in per day]
         G2[Time-bounded: For the next week]
         G3[Reversible: Can adjust or stop]
-        G4[Measurable: Did we do it? How did it feel?]
+        G4[Observable: Did we do it? How did it feel?]
     end
 
     subgraph Bad[Too Big - Not a Micro-Experiment]
         B1[Vague: Communicate better]
         B2[Permanent: Always do X]
         B3[High stakes: Major life change]
-        B4[Unmeasurable: Be more supportive]
+        B4[Not observable: Be more supportive]
     end
 ```
 
@@ -224,7 +222,7 @@ flowchart TB
 
 ## Success Criteria
 
-Mutual agreement on at least one micro-experiment.
+Mutual agreement on at least one micro-experiment with an observable outcome and a scheduled follow-up check-in.
 
 ## Agreement Documentation
 
@@ -238,9 +236,9 @@ Date agreed: [Date]
 
 Experiment: [Specific description]
 Duration: [Time period]
-Success measure: [How to know if it worked]
+Observable outcome: [How both parties will know if it worked]
 
-Check-in scheduled: [Date/time if applicable]
+Check-in scheduled: [Date/time — required]
 ```
 
 ## Failure Paths
@@ -252,9 +250,9 @@ Check-in scheduled: [Date/time if applicable]
 | Proposals too ambitious | Help scope down; emphasize "small and reversible" |
 | One party uncooperative | Acknowledge difficulty; explore barriers |
 
-## Follow-Up Support
+## Follow-Up Check-In (Required)
 
-If users schedule a check-in:
+Every micro-experiment includes a scheduled follow-up check-in. This is not optional — accountability is part of the repair process.
 
 ```mermaid
 flowchart TD
@@ -290,7 +288,7 @@ flowchart TD
 
 ## Related Documents
 
-- [Previous: Stage 3 - Need Mapping](./stage-3-need-mapping.md)
+- [Previous: Stage 3 - What Matters](./stage-3-need-mapping.md)
 - [User Journey](../overview/user-journey.md)
 - [System Guardrails](../mechanisms/guardrails.md)
 
