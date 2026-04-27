@@ -21,6 +21,12 @@ export const createInnerWorkSessionRequestSchema = z.object({
   title: z.string().max(200).optional(),
   /** Optional initial message - if provided, creates session with user message first (no AI greeting) */
   initialMessage: z.string().min(1).max(10000).optional(),
+  /** Optional linked partner session ID (CUID format) */
+  linkedPartnerSessionId: z.string().cuid().optional(),
+  /** Optional stage at which linking occurred */
+  linkedAtStage: z.number().int().min(0).max(4).optional(),
+  /** Optional trigger that caused the link */
+  linkedTrigger: z.string().max(100).optional(),
 });
 
 export type CreateInnerWorkSessionRequestInput = z.infer<typeof createInnerWorkSessionRequestSchema>;

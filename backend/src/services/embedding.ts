@@ -11,6 +11,7 @@
  */
 
 import { logger } from '../lib/logger';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { getEmbedding } from '../lib/bedrock';
 
@@ -409,7 +410,7 @@ export async function searchInnerWorkSessionContent(
       s.id,
       s.theme,
       s."contentEmbedding" <=> ${vectorToSql(queryEmbedding)}::vector as distance,
-      ${linkedPartnerSessionId ? `(s."linkedPartnerSessionId" = ${linkedPartnerSessionId})` : 'false'} as is_linked
+      ${linkedPartnerSessionId ? Prisma.sql`(s."linkedPartnerSessionId" = ${linkedPartnerSessionId})` : Prisma.sql`false`} as is_linked
     FROM "InnerWorkSession" s
     WHERE s."userId" = ${userId}
       AND s."contentEmbedding" IS NOT NULL
