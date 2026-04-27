@@ -2,19 +2,58 @@
  * Run db/schema.sql against the configured Postgres instance.
  *
  * Usage:
+ *   npm run migrate                                # auto-loads .env.local
  *   POSTGRES_URL=postgres://... npx tsx db/migrate.ts
- *   # or DATABASE_URL=...
+ *   DATABASE_URL=postgres://... npx tsx db/migrate.ts
  *
  * Idempotent — safe to run repeatedly. Logs each statement as it executes.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from 'pg';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Minimal `.env.local` loader so the documented `vercel env pull` →
+ * `npm run migrate` flow works without an extra dotenv dep. Existing
+ * process.env values win, so CI / explicit shell exports still take
+ * precedence.
+ */
+function loadDotEnvLocal(): void {
+  const candidates = [
+    join(__dirname, '..', '.env.local'),
+    join(process.cwd(), '.env.local'),
+  ];
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    const content = readFileSync(path, 'utf8');
+    for (const rawLine of content.split('\n')) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) continue;
+      const eq = line.indexOf('=');
+      if (eq <= 0) continue;
+      const key = line.slice(0, eq).trim();
+      let value = line.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) {
+        process.env[key] = value;
+      }
+    }
+    console.log(`[migrate] loaded env from ${path}`);
+    return;
+  }
+}
+
 async function main() {
+  loadDotEnvLocal();
+
   const connectionString =
     process.env.POSTGRES_URL ||
     process.env.DATABASE_URL ||
@@ -22,7 +61,7 @@ async function main() {
 
   if (!connectionString) {
     console.error(
-      'ERROR: set POSTGRES_URL (or DATABASE_URL) in the environment before running migrate.'
+      'ERROR: no Postgres URL found. Either run `vercel env pull .env.local` first, or set POSTGRES_URL / DATABASE_URL in the environment before running migrate.'
     );
     process.exit(1);
   }
