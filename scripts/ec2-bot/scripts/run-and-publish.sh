@@ -167,7 +167,7 @@ if [ ! -f "$SUMMARY_FILE" ]; then
   "failed_test_line": null,
   "console_logs": "",
   "page_errors": "",
-  "transcript": "",
+  "spec_stdout": "",
   "screenshot_dir": "$RESULTS_DIR/dashboard-screenshots",
   "test_count": 0,
   "pass_count": 0,
@@ -220,11 +220,52 @@ if [ -d "$SCREENSHOT_DIR" ] && [ -n "$(ls -A "$SCREENSHOT_DIR" 2>/dev/null)" ]; 
   CMD+=(--screenshots-dir "$SCREENSHOT_DIR")
 fi
 
-# Capture transcript as a side-file the writer can post.
+# ── Console artifact: spec stdout (test runner progress logs) ────────────────
+CONSOLE_FILE="$RESULTS_DIR/dashboard-console.txt"
+jq -r '.spec_stdout // ""' "$SUMMARY_FILE" > "$CONSOLE_FILE"
+if [ -s "$CONSOLE_FILE" ]; then
+  CMD+=(--console-file "$CONSOLE_FILE")
+fi
+
+# ── Transcript artifact: AI conversation messages from the backend DB ────────
+# Query Messages created during the test window. The test DB is fresh per run
+# (Playwright's globalSetup truncates), so any rows post-STARTED_AT are ours.
 TRANSCRIPT_FILE="$RESULTS_DIR/dashboard-transcript.txt"
-jq -r '.transcript' "$SUMMARY_FILE" > "$TRANSCRIPT_FILE"
+> "$TRANSCRIPT_FILE"
+
+# Source e2e/.env.test for the test DATABASE_URL.
+TEST_ENV_FILE="$E2E_DIR/.env.test"
+TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgresql://mwf_user:mwf_password@localhost:5432/meet_without_fear_test}"
+if [ -f "$TEST_ENV_FILE" ]; then
+  TEST_DATABASE_URL=$(grep '^DATABASE_URL=' "$TEST_ENV_FILE" | head -1 | cut -d= -f2- | tr -d '"' || echo "$TEST_DATABASE_URL")
+fi
+
+if command -v psql >/dev/null 2>&1; then
+  # Format: [Speaker] content
+  # Speaker: user.name if senderId set, else role (USER/AI/SYSTEM/...).
+  # Use \n between rows in the SELECT itself to avoid shell-side line joining.
+  psql "$TEST_DATABASE_URL" -tA -F$'\x1f' -c "
+    SELECT
+      COALESCE(
+        '[' || u.name || ']',
+        '[' || m.role::text || ']'
+      ),
+      m.content
+    FROM \"Message\" m
+    LEFT JOIN \"User\" u ON u.id = m.\"senderId\"
+    WHERE m.\"timestamp\" >= '$REAL_STARTED_AT'::timestamptz
+    ORDER BY m.\"timestamp\" ASC;
+  " 2>/dev/null | awk -F$'\x1f' 'NF==2 { print $1 " " $2 }' > "$TRANSCRIPT_FILE" || {
+    echo "[run-and-publish] WARN: failed to query Messages from $TEST_DATABASE_URL — transcript will be empty"
+  }
+fi
+
 if [ -s "$TRANSCRIPT_FILE" ]; then
+  TRANSCRIPT_LINES=$(wc -l < "$TRANSCRIPT_FILE" | tr -d ' ')
+  echo "[run-and-publish] transcript: $TRANSCRIPT_LINES message(s) from Message table"
   CMD+=(--transcript-file "$TRANSCRIPT_FILE")
+else
+  echo "[run-and-publish] transcript: no messages found in test DB (test may have failed before any messages were created)"
 fi
 
 echo "[run-and-publish] publishing run (status=$STATUS, scenario=$SCENARIO)"
