@@ -64,7 +64,7 @@ We use `@anthropic-ai/bedrock-sdk`. As of Feb 2026, **automatic caching** (top-l
 | `BEDROCK_SONNET_MODEL_ID` | `global.anthropic.claude-sonnet-4-5-20250929-v1:0` | Override Sonnet model ID |
 | `BEDROCK_HAIKU_MODEL_ID` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Override Haiku model ID |
 | `BEDROCK_TITAN_EMBED_MODEL_ID` | `amazon.titan-embed-text-v2:0` | Override Titan embedding model ID |
-| `DISABLE_PROMPT_LOGGING` | `false` | Disable prompt debug logging to filesystem |
+| `ENABLE_PROMPT_LOGGING` | `false` | Enable prompt debug logging to filesystem (dev only, blocked in production) |
 | `ENABLE_AUDIT_STREAM` | `false` | Enable AI audit stream channel for monitoring |
 
 ### Cross-User Caching

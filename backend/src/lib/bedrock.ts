@@ -78,8 +78,8 @@ function logPromptToFile(params: {
   sessionId?: string;
   turnId?: string;
 }): string | null {
-  // Skip if env var is set to disable
-  if (process.env.DISABLE_PROMPT_LOGGING === 'true') {
+  // Opt-in: only log when explicitly enabled AND not in production
+  if (process.env.ENABLE_PROMPT_LOGGING !== 'true' || process.env.NODE_ENV === 'production') {
     return null;
   }
 
@@ -137,7 +137,7 @@ function logPromptToFile(params: {
  */
 function logResponseToFile(promptFilepath: string | null, response: string | null): void {
   if (!promptFilepath || !response) return;
-  if (process.env.DISABLE_PROMPT_LOGGING === 'true') return;
+  if (process.env.ENABLE_PROMPT_LOGGING !== 'true' || process.env.NODE_ENV === 'production') return;
 
   try {
     // Replace .txt with _response.txt
@@ -401,7 +401,7 @@ export async function getModelCompletion(
     turnId: options.turnId,
     activityType: ActivityType.LLM_CALL,
     model: modelId,
-    input: { systemPrompt: systemPromptText, messages, operation },
+    input: { operation, messageCount: messages.length, systemPromptLength: systemPromptText.length },
     metadata: { maxTokens },
     callType: options.callType,
   });
@@ -605,7 +605,7 @@ export async function getEmbedding(text: string, options?: { sessionId?: string;
           turnId: options?.turnId,
           activityType: ActivityType.EMBEDDING,
           model: BEDROCK_TITAN_EMBED_MODEL_ID,
-          input: { text: truncatedText },
+          input: { textLength: truncatedText.length },
         });
       } catch (logError) {
         logger.warn('[Bedrock] Failed to log embedding activity (continuing without logging):', (logError as Error).message);
@@ -796,9 +796,9 @@ export async function* getSonnetStreamingResponse(
     activityType: ActivityType.LLM_CALL,
     model: BEDROCK_SONNET_MODEL_ID,
     input: {
-      systemPrompt: systemPromptText,
-      messages,
       operation: options.operation,
+      messageCount: messages.length,
+      systemPromptLength: systemPromptText.length,
       streaming: true,
     },
     metadata: {
