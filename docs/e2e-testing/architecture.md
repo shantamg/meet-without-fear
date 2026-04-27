@@ -3,7 +3,7 @@ title: E2E Testing Architecture
 sidebar_position: 2
 description: This document describes the end-to-end testing approach used in Meet Without Fear.
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-04-27
 status: living
 ---
 # E2E Testing Architecture
@@ -310,8 +310,10 @@ export default defineConfig({
       },
     },
     {
-      command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082',
+      // --no-dev forces a production-mode bundle for deterministic rendering on slow hardware (EC2).
+      command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082 --no-dev',
       port: 8082,
+      timeout: 300000, // 300s for cold production bundle compilation
     },
   ],
 });

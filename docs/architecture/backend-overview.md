@@ -3,7 +3,7 @@ title: Architecture
 sidebar_position: 2
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-04-20
+updated: 2026-04-27
 status: living
 ---
 # Architecture
@@ -132,7 +132,7 @@ status: living
 **Backend API Server:**
 - Location: `backend/src/app.ts` (middleware + route mounting) and `backend/src/server.ts` (HTTP + WebSocket listener)
 - Triggers: `npm run dev:api` in development; PORT=3000 (default) in production
-- Responsibilities: Initializes Express app with middleware; mounts all route modules under both `/api` and `/api/v1` (dual-prefix for compatibility); attaches the `/realtime` WebSocket for real-time transcription via `attachRealtimeWebSocket(server)`; handles errors consistently
+- Responsibilities: Initializes Express app with middleware; mounts all route modules under both `/api` and `/api/v1` (dual-prefix for compatibility); attaches the `/realtime` WebSocket for real-time transcription via `attachRealtimeWebSocket(server)` (requires Clerk JWT via `?token=` query parameter on upgrade); handles errors consistently
 - Compression: the compression middleware is explicitly disabled for `/messages/stream` paths to prevent SSE buffering
 
 **Mobile App Entry:**
