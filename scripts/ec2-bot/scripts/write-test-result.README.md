@@ -33,12 +33,14 @@ tsx scripts/ec2-bot/scripts/write-test-result.ts \
   --failed-test-line 87
 ```
 
-Full pass with screenshots + transcript:
+Full pass with screenshots + transcript + real test timing:
 
 ```bash
 tsx scripts/ec2-bot/scripts/write-test-result.ts \
   --scenario single-user-journey \
   --status pass \
+  --started-at 2026-04-26T18:30:12.000Z \
+  --finished-at 2026-04-26T18:34:48.000Z \
   --screenshots-dir /tmp/playwright/screenshots/run-2026-04-26 \
   --transcript-file /tmp/playwright/transcripts/run-2026-04-26.txt \
   --starting-snapshot-id 01HXY... \
@@ -46,6 +48,8 @@ tsx scripts/ec2-bot/scripts/write-test-result.ts \
   --final-stage 4 \
   --trigger-source cron
 ```
+
+Always pass `--started-at` (and ideally `--finished-at` or `--duration-ms`) from the runner — without them, `duration_ms` only covers the writer's upload phase and the dashboard misreports test latency.
 
 Update an existing queued run (when the dashboard's web UI enqueued it):
 
@@ -74,4 +78,6 @@ Use `NN-short-description.png`, e.g. `01-opens-app.png`, `02-types-message.png`,
 
 ## Failure handling
 
-Any HTTP failure exits non-zero with the API response body printed. The bot's process supervisor decides whether to retry.
+- Missing optional inputs (no `--screenshots-dir`, dir not found, transcript file not found) → warning, script continues.
+- Once an artifact upload starts, any failure (Vercel Blob 5xx, `/api/artifacts` non-2xx, file read error) propagates and the script exits non-zero.
+- Before re-throwing, the script makes a best-effort PATCH to set the run's status to `error` with `error_message: "writer failure: ..."`. This prevents stuck-at-`running` rows in the dashboard when the writer dies mid-upload.

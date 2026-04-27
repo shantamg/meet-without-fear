@@ -39,6 +39,9 @@ interface Args {
   failedAssertion?: string;
   failedTestFile?: string;
   failedTestLine?: number;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -67,6 +70,9 @@ function parseArgs(argv: string[]): Args {
       case '--failed-assertion':    args.failedAssertion    = take(); break;
       case '--failed-test-file':    args.failedTestFile     = take(); break;
       case '--failed-test-line':    args.failedTestLine     = Number(take()); break;
+      case '--started-at':          args.startedAt          = take(); break;
+      case '--finished-at':         args.finishedAt         = take(); break;
+      case '--duration-ms':         args.durationMs         = Number(take()); break;
       case '--help':
       case '-h':
         printHelpAndExit();
@@ -101,6 +107,9 @@ Optional:
   --failed-assertion <text>
   --failed-test-file <path>
   --failed-test-line <n>
+  --started-at <ISO>             real test start time (defaults to script start — under-reports)
+  --finished-at <ISO>            real test end time (defaults to now)
+  --duration-ms <n>              overrides finished_at - started_at
 `);
   process.exit(0);
 }
@@ -199,19 +208,31 @@ async function main() {
   const codeSha = args.codeSha ?? gitSha();
   const triggerSource: TriggerSource = args.triggerSource ?? 'manual';
 
+  // Real test timing comes from the runner via flags. Falling back to script
+  // time means duration only reflects the upload phase — useless for analysis.
+  if (!args.startedAt) {
+    console.warn(
+      '[write-test-result] WARN: --started-at not provided; duration will only cover the writer\'s execution, not the test run'
+    );
+  }
+  const scriptStartMs = Date.now();
+  const startedAtIso = args.startedAt ?? new Date(scriptStartMs).toISOString();
+
   // 1. Create or mark-running.
-  const startedAtMs = Date.now();
   let runId: string;
 
   if (args.runId) {
     runId = args.runId;
-    await apiFetch(apiBase, botToken, `/api/runs/${runId}`, 'PATCH', {
+    // Don't clobber the row's started_at unless the caller passed one — for a
+    // queued run, started_at was set when the user enqueued it.
+    const reusePatch: Record<string, unknown> = {
       status: 'running',
-      started_at: new Date(startedAtMs).toISOString(),
       code_sha: codeSha,
       starting_snapshot_id: args.startingSnapshotId,
       triggered_by: args.triggeredBy,
-    });
+    };
+    if (args.startedAt) reusePatch.started_at = args.startedAt;
+    await apiFetch(apiBase, botToken, `/api/runs/${runId}`, 'PATCH', reusePatch);
     console.log(`[write-test-result] reusing run ${runId} -> running`);
   } else {
     const created = (await apiFetch(apiBase, botToken, '/api/runs', 'POST', {
@@ -226,11 +247,52 @@ async function main() {
     // immediately PATCH to the real values for non-web triggers.
     await apiFetch(apiBase, botToken, `/api/runs/${runId}`, 'PATCH', {
       status: 'running',
-      started_at: new Date(startedAtMs).toISOString(),
+      started_at: startedAtIso,
       code_sha: codeSha,
       trigger_source: triggerSource,
     });
   }
+
+  // From here on, any failure should leave the row marked `error` rather
+  // than stuck `running` — otherwise the dashboard misreports state.
+  try {
+    await uploadArtifactsAndFinalize({
+      apiBase,
+      botToken,
+      blobToken,
+      runId,
+      args,
+      startedAtIso,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[write-test-result] artifact/finalize phase failed: ${msg}`);
+    try {
+      await apiFetch(apiBase, botToken, `/api/runs/${runId}`, 'PATCH', {
+        status: 'error',
+        finished_at: new Date().toISOString(),
+        error_message: `writer failure: ${msg}`,
+      });
+    } catch (recoverErr) {
+      console.error(
+        `[write-test-result] failed to mark run as error: ${(recoverErr as Error).message}`
+      );
+    }
+    throw err;
+  }
+}
+
+interface FinalizeCtx {
+  apiBase: string;
+  botToken: string;
+  blobToken: string | undefined;
+  runId: string;
+  args: Args;
+  startedAtIso: string;
+}
+
+async function uploadArtifactsAndFinalize(ctx: FinalizeCtx): Promise<void> {
+  const { apiBase, botToken, blobToken, runId, args, startedAtIso } = ctx;
 
   // 2. Upload screenshots and post artifact rows.
   if (args.screenshotsDir) {
@@ -239,62 +301,75 @@ async function main() {
         '[write-test-result] BLOB_READ_WRITE_TOKEN missing — skipping screenshot uploads'
       );
     } else {
+      // Probe existence as a warning case (missing optional dir is fine).
+      // Once we know the dir is real, upload errors propagate — losing
+      // screenshots silently would defeat the point of the dashboard.
+      let isDir = false;
       try {
-        const stat = statSync(args.screenshotsDir);
-        if (!stat.isDirectory()) {
-          console.warn(
-            `[write-test-result] --screenshots-dir is not a directory: ${args.screenshotsDir}`
-          );
-        } else {
-          const files = listScreenshots(args.screenshotsDir);
-          console.log(
-            `[write-test-result] uploading ${files.length} screenshot(s) from ${args.screenshotsDir}`
-          );
-          for (let i = 0; i < files.length; i++) {
-            const filename = files[i];
-            const path = join(args.screenshotsDir, filename);
-            const data = readFileSync(path);
-            const ext = extname(filename).toLowerCase();
-            const contentType =
-              ext === '.png'
-                ? 'image/png'
-                : ext === '.webp'
-                ? 'image/webp'
-                : 'image/jpeg';
-
-            const blobKey = `runs/${runId}/${String(i).padStart(3, '0')}-${basename(filename)}`;
-            const uploaded = await put(blobKey, data, {
-              access: 'public',
-              contentType,
-              token: blobToken,
-            });
-
-            const stepIndex = extractStepIndex(filename) ?? i;
-            const caption = captionFromFilename(filename);
-
-            await apiFetch(apiBase, botToken, '/api/artifacts', 'POST', {
-              run_id: runId,
-              type: 'screenshot',
-              blob_url: uploaded.url,
-              caption,
-              step_index: stepIndex,
-            });
-            console.log(
-              `[write-test-result]   step ${stepIndex} (${caption}) -> ${uploaded.url}`
-            );
-          }
-        }
-      } catch (err) {
+        isDir = statSync(args.screenshotsDir).isDirectory();
+      } catch {
+        // ENOENT etc. — treat as warning below.
+      }
+      if (!isDir) {
         console.warn(
-          `[write-test-result] screenshot processing failed: ${(err as Error).message}`
+          `[write-test-result] --screenshots-dir not found or not a directory: ${args.screenshotsDir}`
         );
+      } else {
+        const files = listScreenshots(args.screenshotsDir);
+        console.log(
+          `[write-test-result] uploading ${files.length} screenshot(s) from ${args.screenshotsDir}`
+        );
+        for (let i = 0; i < files.length; i++) {
+          const filename = files[i];
+          const path = join(args.screenshotsDir, filename);
+          const data = readFileSync(path);
+          const ext = extname(filename).toLowerCase();
+          const contentType =
+            ext === '.png'
+              ? 'image/png'
+              : ext === '.webp'
+              ? 'image/webp'
+              : 'image/jpeg';
+
+          const blobKey = `runs/${runId}/${String(i).padStart(3, '0')}-${basename(filename)}`;
+          const uploaded = await put(blobKey, data, {
+            access: 'public',
+            contentType,
+            token: blobToken,
+          });
+
+          const stepIndex = extractStepIndex(filename) ?? i;
+          const caption = captionFromFilename(filename);
+
+          await apiFetch(apiBase, botToken, '/api/artifacts', 'POST', {
+            run_id: runId,
+            type: 'screenshot',
+            blob_url: uploaded.url,
+            caption,
+            step_index: stepIndex,
+          });
+          console.log(
+            `[write-test-result]   step ${stepIndex} (${caption}) -> ${uploaded.url}`
+          );
+        }
       }
     }
   }
 
-  // 3. Transcript artifact.
+  // 3. Transcript artifact. Same split: missing-file is a warning, read/post
+  // failures propagate.
   if (args.transcriptFile) {
+    let exists = false;
     try {
+      exists = statSync(args.transcriptFile).isFile();
+    } catch {
+      // ENOENT etc. — warn below.
+    }
+    if (!exists) {
+      console.warn(
+        `[write-test-result] --transcript-file not found: ${args.transcriptFile}`
+      );
+    } else {
       const text = readFileSync(args.transcriptFile, 'utf8');
       await apiFetch(apiBase, botToken, '/api/artifacts', 'POST', {
         run_id: runId,
@@ -304,20 +379,22 @@ async function main() {
         step_index: 9999, // sort transcript last
       });
       console.log(`[write-test-result] transcript posted (${text.length} chars)`);
-    } catch (err) {
-      console.warn(
-        `[write-test-result] transcript read failed: ${(err as Error).message}`
-      );
     }
   }
 
   // 4. Final PATCH with status + timing + failure metadata.
-  const finishedAtMs = Date.now();
-  const durationMs = finishedAtMs - startedAtMs;
+  // Real timing comes from the runner; if not provided, we have to lie a bit.
+  const finishedAtIso = args.finishedAt ?? new Date().toISOString();
+  const computedDuration =
+    args.durationMs ??
+    (Date.parse(finishedAtIso) - Date.parse(startedAtIso));
+  const durationMs = Number.isFinite(computedDuration)
+    ? Math.max(0, computedDuration)
+    : 0;
 
   await apiFetch(apiBase, botToken, `/api/runs/${runId}`, 'PATCH', {
     status: args.status,
-    finished_at: new Date(finishedAtMs).toISOString(),
+    finished_at: finishedAtIso,
     duration_ms: durationMs,
     final_stage: args.finalStage ?? null,
     ending_snapshot_id: args.endingSnapshotId,
