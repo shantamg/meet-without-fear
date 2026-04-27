@@ -681,6 +681,122 @@ async function postMwfForwardFallback(event) {
 // Event handling
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Test-dashboard trigger — `@slam_paws test <scenario> [from-snapshot:<id>]`
+// ---------------------------------------------------------------------------
+
+const TEST_TRIGGER_RE = /^test\s+(\S+)/i;
+const FROM_SNAPSHOT_RE = /from-snapshot:(\S+)/i;
+const RUN_AND_PUBLISH = `${SCRIPTS_DIR}/run-and-publish.sh`;
+
+/**
+ * Parse a message text for the test-trigger command. Strips the bot mention
+ * and any leading whitespace; returns { scenario, startingSnapshotId } or
+ * null if it isn't a test command.
+ */
+function parseTestCommand(text) {
+  if (!text) return null;
+  const mentionPrefix = `<@${BOT_USER_ID}>`;
+  if (!text.includes(mentionPrefix)) return null;
+  const stripped = text.replace(mentionPrefix, '').trim();
+  const m = stripped.match(TEST_TRIGGER_RE);
+  if (!m) return null;
+  // Reject "tests" / "testing" — only "test" exactly.
+  const verb = stripped.match(/^(\w+)/)?.[1];
+  if (verb && verb.toLowerCase() !== 'test') return null;
+  const scenario = m[1];
+  // Only treat as a scenario if it looks like a spec name (lowercase, dashes).
+  if (!/^[a-z0-9][a-z0-9-]*$/i.test(scenario)) return null;
+  const snapMatch = stripped.match(FROM_SNAPSHOT_RE);
+  return {
+    scenario,
+    startingSnapshotId: snapMatch ? snapMatch[1] : null,
+  };
+}
+
+/**
+ * If the message is a test trigger, claim it and spawn run-and-publish.sh
+ * detached. Posts a starting reply to the thread, then a result reply when
+ * the wrapper exits. Returns true if handled (caller should short-circuit
+ * normal channel routing), false otherwise.
+ */
+async function tryHandleTestCommand(event) {
+  const cmd = parseTestCommand(event.text);
+  if (!cmd) return false;
+
+  const { channel, ts, user } = event;
+  const replyTs = event.thread_ts || ts;
+
+  if (!claimMessage(channel, ts)) {
+    logMain(`Test trigger: skipping already-claimed ${ts}`);
+    return true;
+  }
+
+  const triggeredBy = user || 'slack-unknown';
+  logMain(`Test trigger: scenario=${cmd.scenario} channel=${channel} user=${triggeredBy}`);
+
+  await addReaction(channel, ts, 'eyes');
+  try {
+    await slack.chat.postMessage({
+      channel,
+      thread_ts: replyTs,
+      text: `Running \`${cmd.scenario}\`${cmd.startingSnapshotId ? ` from snapshot \`${cmd.startingSnapshotId}\`` : ''}… result will appear here when the run completes.`,
+    });
+  } catch (err) {
+    logMain(`Test trigger: failed to post starting reply: ${err.message}`);
+  }
+
+  const args = [cmd.scenario, '--trigger-source', 'slack', '--triggered-by', triggeredBy];
+  if (cmd.startingSnapshotId) {
+    args.push('--starting-snapshot-id', cmd.startingSnapshotId);
+  }
+
+  let stdoutBuf = '';
+  const child = spawn(RUN_AND_PUBLISH, args, {
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: process.env,
+  });
+  child.unref();
+
+  child.stdout.on('data', (d) => { stdoutBuf += d.toString(); });
+  child.stderr.on('data', (d) => { stdoutBuf += d.toString(); });
+
+  child.on('error', async (err) => {
+    logMain(`Test trigger: spawn failed: ${err.message}`);
+    await removeReaction(channel, ts, 'eyes');
+    await addReaction(channel, ts, 'x');
+    try {
+      await slack.chat.postMessage({
+        channel,
+        thread_ts: replyTs,
+        text: `❌ Could not launch \`${cmd.scenario}\`: ${err.message}`,
+      });
+    } catch { /* ignore */ }
+  });
+
+  child.on('exit', async (code) => {
+    await removeReaction(channel, ts, 'eyes');
+    await addReaction(channel, ts, code === 0 ? 'white_check_mark' : 'x');
+
+    const viewMatch = stdoutBuf.match(/view:\s+(\S+)/);
+    const url = viewMatch ? viewMatch[1] : null;
+    const status = code === 0 ? '✅ pass' : '❌ fail';
+    const text = url
+      ? `${status}: \`${cmd.scenario}\`\n${url}`
+      : `${status}: \`${cmd.scenario}\` (could not parse run URL — check /var/log/slam-bot/test-runs.log)`;
+
+    try {
+      await slack.chat.postMessage({ channel, thread_ts: replyTs, text });
+    } catch (err) {
+      logMain(`Test trigger: failed to post result reply: ${err.message}`);
+    }
+    logMain(`Test trigger: ${cmd.scenario} exited ${code}`);
+  });
+
+  return true;
+}
+
 async function handleMessageEvent(event) {
   // Only process actual message events (skip app_mention, reaction_added, etc.)
   if (event.type && event.type !== 'message') return;
@@ -692,6 +808,15 @@ async function handleMessageEvent(event) {
 
   // Skip message subtypes we don't care about (edits, deletes, joins, etc.)
   if (subtype && subtype !== 'file_share') return;
+
+  // ── Test-dashboard trigger ────────────────────────────────────────────────
+  // `@slam_paws test <scenario>` short-circuits the normal channel routing
+  // and runs an e2e scenario via run-and-publish.sh. Works in any channel
+  // where the bot can read messages, including ones not in CHANNEL_CONFIG.
+  if (await tryHandleTestCommand(event)) {
+    writeFileSync(HEARTBEAT_FILE, new Date().toISOString());
+    return;
+  }
 
   // Check if this channel is configured
   const config = CHANNEL_CONFIG[channel];
