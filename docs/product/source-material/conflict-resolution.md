@@ -42,7 +42,7 @@ AI-Facilitated Conflict Metabolism System
 | 0 | Onboarding | Establish Process Guardian authority; explain stages | Both users sign Curiosity Compact |
 | 1 | The Witness | Deep reflection (parallel) | User confirms: “I feel fully heard by the AI” |
 | 2 | Perspective Stretch | Empathy training (parallel) | User can accurately state the other’s needs without judgment |
-| 3 | Need Mapping | Transition from stories → universal needs | Identification of at least one common-ground need (e.g., “Safety”) |
+| 3 | What Matters | User-driven exploration of what truly matters | User-confirmed universal needs |
 | 4 | Strategic Repair | Propose small, reversible actions | Mutual agreement on one Micro-Experiment |
 
 ---

@@ -27,7 +27,7 @@
       { "n": 0, "name": "Onboarding",          "doc": "docs/product/stages/stage-0-onboarding.md" },
       { "n": 1, "name": "Witness",             "doc": "docs/product/stages/stage-1-witness.md" },
       { "n": 2, "name": "Perspective Stretch", "doc": "docs/product/stages/stage-2-perspective-stretch.md" },
-      { "n": 3, "name": "Need Mapping",        "doc": "docs/product/stages/stage-3-need-mapping.md" },
+      { "n": 3, "name": "What Matters",         "doc": "docs/product/stages/stage-3-need-mapping.md" },
       { "n": 4, "name": "Strategic Repair",    "doc": "docs/product/stages/stage-4-strategic-repair.md" }
     ]
   },
