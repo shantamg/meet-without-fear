@@ -120,7 +120,7 @@ Emotional tracking across all stages.
 | `GET` | `/sessions/:id/emotions` | Get emotional history |
 | `POST` | `/sessions/:id/exercises/complete` | Log exercise completion |
 
-### [Stage 3: Need Mapping](./stage-3.md)
+### [Stage 3: What Matters](./stage-3.md)
 Need synthesis and common ground discovery.
 
 | Method | Endpoint | Description |
