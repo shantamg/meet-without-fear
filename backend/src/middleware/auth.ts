@@ -71,10 +71,13 @@ async function verifyClerkToken(req: Request): Promise<string | null> {
 
 /**
  * E2E auth bypass handler
- * When E2E_AUTH_BYPASS=true, accepts x-e2e-user-id and x-e2e-user-email headers
+ * When E2E_AUTH_BYPASS=true AND NODE_ENV is not production, accepts x-e2e-user-id and x-e2e-user-email headers
  */
 async function handleE2EAuthBypass(req: Request): Promise<boolean> {
   if (process.env.E2E_AUTH_BYPASS !== 'true') {
+    return false;
+  }
+  if (process.env.NODE_ENV === 'production') {
     return false;
   }
 

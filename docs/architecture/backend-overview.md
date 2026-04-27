@@ -3,7 +3,7 @@ title: Architecture
 sidebar_position: 2
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-04-20
+updated: 2026-04-27
 status: living
 ---
 # Architecture
@@ -174,7 +174,7 @@ status: living
 - Inner work system: Needs assessment, meditation, gratitude journaling
 
 **E2E Testing:**
-- E2E testing helpers at `POST /api/e2e/*` (cleanup, seed, trigger-reconciler)
+- E2E testing helpers at `POST /api/e2e/*` (cleanup, seed, trigger-reconciler) — only registered when `NODE_ENV !== 'production'`
 - Fixture-based mock LLM responses
 
 **Deprecated:**
@@ -203,7 +203,7 @@ status: living
 - Mobile: Zod schemas in shared contracts; React Hook Form for UI validation
 
 **Authentication:**
-- Backend: Clerk JWT in `Authorization: Bearer` header; middleware extracts + verifies with `verifyToken()` (from @clerk/express). When `E2E_AUTH_BYPASS=true`, the middleware also accepts `x-e2e-user-id` and `x-e2e-user-email` headers and resolves them to a DB user instead of a Clerk session.
+- Backend: Clerk JWT in `Authorization: Bearer` header; middleware extracts + verifies with `verifyToken()` (from @clerk/express). When `E2E_AUTH_BYPASS=true` **and** `NODE_ENV !== 'production'`, the middleware also accepts `x-e2e-user-id` and `x-e2e-user-email` headers and resolves them to a DB user instead of a Clerk session. A startup assertion in `server.ts` prevents the server from starting if `E2E_AUTH_BYPASS=true` is set in a production environment.
 - Mobile: Clerk Expo SDK manages tokens; `useAuth()` hook provides `token` for API calls; E2E mode sends the `x-e2e-user-id` / `x-e2e-user-email` headers described above instead of a Clerk token.
 
 **Rate Limiting:**
@@ -211,7 +211,7 @@ status: living
   - `streamingRateLimit`: 10 req/min (LLM-backed streaming endpoints)
   - `empathyRateLimit`: 20 req/min (reconciler endpoints)
   - `authRateLimit`: 30 req/min (auth token endpoints)
-- Global fallback: 100 req/min; skipped during E2E tests
+- Global fallback: 100 req/min; skipped during E2E tests (non-production only)
 
 **AI Safety Gates:**
 - Backend: Three service-level circuit breakers (`bedrockCircuitBreaker`, `embeddingCircuitBreaker`, `ablyCircuitBreaker`) with states CLOSED/OPEN/HALF_OPEN prevent cascading failures; stage validators check user progress before AI prompts; crisis detector (`backend/src/services/crisis-detector.ts`) provides pattern-based safety net for suicide/self-harm, domestic violence, imminent danger, and child abuse; input sanitizer (`backend/src/services/input-sanitizer.ts`) wraps user input in XML delimiters to defend against prompt injection

@@ -35,7 +35,9 @@ router.use('/brain', brainRoutes);
 router.use('/auth', authRoutes);
 router.use('/tts', ttsRoutes);
 router.use(voiceRoutes); // Voice transcription token endpoint
-router.use('/e2e', e2eRoutes); // E2E testing helpers - must be BEFORE routers with global auth middleware
+if (process.env.NODE_ENV !== 'production') {
+  router.use('/e2e', e2eRoutes); // E2E testing helpers - must be BEFORE routers with global auth middleware
+}
 router.use(slackRoutes); // Slack ingress (socket-listener → backend) — uses shared-secret auth
 router.use(chatRoutes); // Unified chat router
 router.use(invitationsRoutes); // Must be before innerWorkRoutes (has public endpoints)
