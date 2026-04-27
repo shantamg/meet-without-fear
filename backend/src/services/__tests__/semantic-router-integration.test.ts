@@ -14,7 +14,7 @@ import { handleDispatch, type DispatchContext } from '../dispatch-handler';
 // Mock the bedrock module to avoid actual API calls in dispatch handler
 jest.mock('../../lib/bedrock', () => ({
   getSonnetResponse: jest.fn().mockResolvedValue(
-    'In the Witness Stage you get to be fully heard. Then Perspective Stretch helps you understand your partner. Need Mapping identifies what you both really need. Finally, Strategic Repair helps you find solutions.'
+    'In the Witness Stage you get to be fully heard. Then Perspective Stretch helps you understand your partner. What Matters identifies what you both really need. Finally, Strategic Repair helps you find solutions.'
   ),
   BrainActivityCallType: {
     ORCHESTRATED_RESPONSE: 'ORCHESTRATED_RESPONSE',

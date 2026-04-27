@@ -126,8 +126,8 @@ describe('Stage Prompts Service', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(3, context));
 
-      expect(prompt).toContain('Need Mapping');
-      expect(prompt).toContain('needs underneath');
+      expect(prompt).toContain('What Matters');
+      expect(prompt).toContain('what truly matters');
     });
 
     it('returns Stage 4 prompt for stage 4', () => {
@@ -246,11 +246,11 @@ describe('Stage Prompts Service', () => {
       // Transition injection content
       expect(prompt).toContain('TRANSITION:');
       expect(prompt).toContain('empathy');
-      expect(prompt).toContain('need');
+      expect(prompt).toContain('what matters');
       expect(prompt).toContain('Partner');
       expect(prompt).toContain('PRIVATELY');
       // Regular Stage 3 prompt content
-      expect(prompt).toContain('Need Mapping');
+      expect(prompt).toContain('What Matters');
     });
 
     it('returns transition injection + regular Stage 4 prompt for Stage 3 → Stage 4', () => {

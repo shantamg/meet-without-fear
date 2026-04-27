@@ -198,7 +198,7 @@ function getStageContext(stage: number): string {
     case 2:
       return 'Perspective Stretch - user is trying to understand their partner\'s viewpoint';
     case 3:
-      return 'Need Mapping - user is identifying underlying needs';
+      return 'What Matters - user is identifying underlying needs';
     case 4:
       return 'Strategic Repair - user is designing experiments and agreements';
     default:

@@ -1,7 +1,7 @@
 /**
  * Stage 3 Controller
  *
- * Handles the Need Mapping stage endpoints:
+ * Handles the What Matters stage endpoints:
  * - GET /sessions/:id/needs - Get AI-synthesized needs
  * - POST /sessions/:id/needs/confirm - Confirm needs
  * - POST /sessions/:id/needs/consent - Consent to share needs
