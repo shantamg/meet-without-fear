@@ -138,11 +138,11 @@ flowchart TB
     end
 ```
 
-### Stage 3: Need Mapping Chat
+### Stage 3: What Matters Chat
 
 ```mermaid
 flowchart TB
-    subgraph NeedChat[Need Mapping View]
+    subgraph NeedChat[What Matters View]
         Header3[Stage 3: Finding Common Ground]
 
         subgraph NeedPanels[Need Panels]

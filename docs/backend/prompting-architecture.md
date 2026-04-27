@@ -428,7 +428,7 @@ graph TD
 
     CHECK_STAGE -->|Stage 2| PERSPECTIVE_PROMPT[buildStage2Prompt<br/>Perspective stretch<br/>Empathy building]
 
-    CHECK_STAGE -->|Stage 3| NEEDS_PROMPT[buildStage3Prompt<br/>Need mapping<br/>Crystallize needs]
+    CHECK_STAGE -->|Stage 3| NEEDS_PROMPT[buildStage3Prompt<br/>What Matters / Self-directed needs<br/>Needs clarity]
 
     CHECK_STAGE -->|Stage 4| REPAIR_PROMPT[buildStage4Prompt<br/>Strategic repair<br/>Experiments]
 
@@ -465,7 +465,7 @@ graph TD
 2. **Stage-Specific Content:**
    - Stage 1: Witnessing techniques. The Response Protocol exposes these named modes to the model: `WITNESS`, `PERSPECTIVE`, `NEEDS`, `REPAIR`, `ONBOARDING`, `DISPATCH` — the model self-selects per turn.
    - Stage 2: Empathy building, perspective-taking
-   - Stage 3: Need mapping, no solutions
+   - Stage 3: What Matters, no solutions
    - Stage 4: Strategic repair, experiments
 
 3. **Context Injection (Fact-Ledger Order):**
