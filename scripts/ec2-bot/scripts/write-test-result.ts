@@ -42,6 +42,7 @@ interface Args {
   startedAt?: string;
   finishedAt?: string;
   durationMs?: number;
+  consoleFile?: string;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -73,6 +74,7 @@ function parseArgs(argv: string[]): Args {
       case '--started-at':          args.startedAt          = take(); break;
       case '--finished-at':         args.finishedAt         = take(); break;
       case '--duration-ms':         args.durationMs         = Number(take()); break;
+      case '--console-file':        args.consoleFile        = take(); break;
       case '--help':
       case '-h':
         printHelpAndExit();
@@ -291,6 +293,43 @@ interface FinalizeCtx {
   startedAtIso: string;
 }
 
+/**
+ * Post a text artifact (transcript or console) from a file. Missing file is
+ * a warning; read/post failures propagate.
+ */
+async function postTextArtifact(
+  ctx: FinalizeCtx,
+  filePath: string,
+  type: 'transcript' | 'console',
+  stepIndex: number
+): Promise<void> {
+  let exists = false;
+  try {
+    exists = statSync(filePath).isFile();
+  } catch {
+    // ENOENT etc. — warn below.
+  }
+  if (!exists) {
+    console.warn(
+      `[write-test-result] --${type}-file not found: ${filePath}`
+    );
+    return;
+  }
+  const text = readFileSync(filePath, 'utf8');
+  if (text.trim().length === 0) {
+    console.log(`[write-test-result] ${type} file empty, skipping post`);
+    return;
+  }
+  await apiFetch(ctx.apiBase, ctx.botToken, '/api/artifacts', 'POST', {
+    run_id: ctx.runId,
+    type,
+    inline_text: text,
+    caption: basename(filePath),
+    step_index: stepIndex,
+  });
+  console.log(`[write-test-result] ${type} posted (${text.length} chars)`);
+}
+
 async function uploadArtifactsAndFinalize(ctx: FinalizeCtx): Promise<void> {
   const { apiBase, botToken, blobToken, runId, args, startedAtIso } = ctx;
 
@@ -356,30 +395,15 @@ async function uploadArtifactsAndFinalize(ctx: FinalizeCtx): Promise<void> {
     }
   }
 
-  // 3. Transcript artifact. Same split: missing-file is a warning, read/post
-  // failures propagate.
+  // 3a. Transcript artifact (AI conversation messages). Same split:
+  // missing-file is a warning, read/post failures propagate.
   if (args.transcriptFile) {
-    let exists = false;
-    try {
-      exists = statSync(args.transcriptFile).isFile();
-    } catch {
-      // ENOENT etc. — warn below.
-    }
-    if (!exists) {
-      console.warn(
-        `[write-test-result] --transcript-file not found: ${args.transcriptFile}`
-      );
-    } else {
-      const text = readFileSync(args.transcriptFile, 'utf8');
-      await apiFetch(apiBase, botToken, '/api/artifacts', 'POST', {
-        run_id: runId,
-        type: 'transcript',
-        inline_text: text,
-        caption: basename(args.transcriptFile),
-        step_index: 9999, // sort transcript last
-      });
-      console.log(`[write-test-result] transcript posted (${text.length} chars)`);
-    }
+    await postTextArtifact(ctx, args.transcriptFile, 'transcript', 9999);
+  }
+
+  // 3b. Console artifact (test runner stdout — spec progress logs).
+  if (args.consoleFile) {
+    await postTextArtifact(ctx, args.consoleFile, 'console', 9998);
   }
 
   // 4. Final PATCH with status + timing + failure metadata.

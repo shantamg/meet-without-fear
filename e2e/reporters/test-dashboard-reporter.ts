@@ -18,7 +18,9 @@
  *     failed_test_line: number | null,
  *     console_logs: string,             // newline-joined
  *     page_errors: string,              // newline-joined
- *     transcript: string,               // newline-joined console.log() output from spec
+ *     spec_stdout: string,              // newline-joined console.log() output from spec
+ *                                       //   (NOT the AI conversation — wrapper queries the
+ *                                       //    Message table for that and posts as transcript)
  *     screenshot_dir: string,           // absolute path; same as Playwright's outputDir per-test
  *   }
  *
@@ -61,7 +63,12 @@ interface SummaryShape {
   failed_test_line: number | null;
   console_logs: string;
   page_errors: string;
-  transcript: string;
+  /**
+   * Test runner stdout — the spec's own console.log() calls (step labels,
+   * timing, etc). Useful for debugging spec failures. NOT the AI conversation;
+   * the wrapper queries the backend Message table separately for that.
+   */
+  spec_stdout: string;
   screenshot_dir: string;
   test_count: number;
   pass_count: number;
@@ -77,7 +84,7 @@ export default class TestDashboardReporter implements Reporter {
   private screenshotDir: string;
   private consoleLogs: string[] = [];
   private pageErrors: string[] = [];
-  private transcript: string[] = [];
+  private specStdout: string[] = [];
   private firstFailure: { test: TestCase; result: TestResult } | null = null;
   private testCount = 0;
   private passCount = 0;
@@ -112,7 +119,7 @@ export default class TestDashboardReporter implements Reporter {
     // stdout / stderr — captured per-test by Playwright. We accumulate.
     for (const out of result.stdout) {
       const text = typeof out === 'string' ? out : out.toString('utf8');
-      this.transcript.push(text.trimEnd());
+      this.specStdout.push(text.trimEnd());
     }
     for (const err of result.stderr) {
       const text = typeof err === 'string' ? err : err.toString('utf8');
@@ -193,7 +200,7 @@ export default class TestDashboardReporter implements Reporter {
       failed_test_line: failure?.test.location.line ?? null,
       console_logs: this.consoleLogs.join('\n'),
       page_errors: this.pageErrors.join('\n'),
-      transcript: this.transcript.join('\n'),
+      spec_stdout: this.specStdout.join('\n'),
       screenshot_dir: this.screenshotDir,
       test_count: this.testCount,
       pass_count: this.passCount,
@@ -203,7 +210,7 @@ export default class TestDashboardReporter implements Reporter {
     const summaryPath = join(this.outputDir, 'dashboard-summary.json');
     writeFileSync(summaryPath, JSON.stringify(summary, null, 2));
     console.log(
-      `[dashboard-reporter] wrote ${summaryPath} (status=${summary.status}, ${summary.test_count} tests, ${this.transcript.length} stdout chunks)`
+      `[dashboard-reporter] wrote ${summaryPath} (status=${summary.status}, ${summary.test_count} tests, ${this.specStdout.length} stdout chunks)`
     );
   }
 
@@ -217,9 +224,9 @@ export default class TestDashboardReporter implements Reporter {
   }
 
   private parseFinalStage(): number | null {
-    // If the test name or transcript mentions "stage N", capture it.
+    // If the test name or spec stdout mentions "stage N", capture it.
     const re = /\bstage[\s-]*(\d)\b/i;
-    const sources = [...this.transcript, this.firstFailure?.test.title ?? ''].join('\n');
+    const sources = [...this.specStdout, this.firstFailure?.test.title ?? ''].join('\n');
     const m = sources.match(re);
     if (m) {
       const n = Number(m[1]);
