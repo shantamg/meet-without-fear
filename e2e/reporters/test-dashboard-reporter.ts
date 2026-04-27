@@ -69,7 +69,10 @@ interface SummaryShape {
 }
 
 export default class TestDashboardReporter implements Reporter {
-  private startedAtMs = Date.now();
+  // Construction time — captures globalSetup + test phase. When globalSetup
+  // fails (e.g. Prisma migration error), Playwright skips onBegin so the
+  // duration would otherwise be 0; this gives operators something useful.
+  private readonly startedAtMs = Date.now();
   private outputDir: string;
   private screenshotDir: string;
   private consoleLogs: string[] = [];
@@ -88,7 +91,6 @@ export default class TestDashboardReporter implements Reporter {
   }
 
   onBegin(config: FullConfig, _suite: Suite): void {
-    this.startedAtMs = Date.now();
     // Repo root: walk up from the e2e dir to find package.json with workspaces.
     this.repoRoot = config.rootDir ? resolve(config.rootDir, '..') : process.cwd();
     if (!existsSync(this.outputDir)) {
