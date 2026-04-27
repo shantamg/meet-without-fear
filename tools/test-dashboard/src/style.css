@@ -783,7 +783,8 @@ pre.log-block.error {
   box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
-.form-field .hint {
+.form-field .hint,
+.hint {
   font-size: 0.72rem;
   color: var(--text-muted);
   margin-top: var(--space-1);
