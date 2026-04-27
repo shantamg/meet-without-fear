@@ -99,7 +99,9 @@ The reconciler runs when one user confirms "feel heard" (completing Stage 1) and
 >
 > **Message de-duplication:** `markEmpathyReady()` in `state.ts` checks whether the alignment message it would post is identical to the last AI message the Guesser already saw. If so, it updates the empathy status without creating a redundant chat line — preventing duplicate messages during multi-cycle refinement runs.
 >
-> **Redundant share-suggestion guard:** `generateShareOffer()` in `sharing.ts` calls `hasContextAlreadyBeenShared()` before generating a new suggestion. If context was already shared in that direction, it returns `null` and `markResultHandledAlreadyShared()` is called to mark the reconciler result handled — preventing the Guesser from seeing repeated offer messages.
+> **Redundant share-suggestion guard (API endpoint):** `generateShareOffer()` in `sharing.ts` calls `hasContextAlreadyBeenShared()` before generating a suggestion. If context was already shared in that direction, it returns `null`, and the API responds with `hasSuggestion: false` — preventing the Guesser from seeing a repeated offer message.
+>
+> **Reconciler processing guard:** `triggerReconcilerAndUpdateStatuses()` in `stage2.ts` independently calls `hasContextAlreadyBeenShared()`. If context was already shared, it calls `markResultHandledAlreadyShared()` and sets the guesser's status directly to `READY`, bypassing the `AWAITING_SHARING` step.
 
 ### Reconciler Decision Tree
 
