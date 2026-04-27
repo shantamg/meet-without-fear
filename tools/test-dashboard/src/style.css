@@ -606,8 +606,6 @@ code, pre, .mono {
   height: auto;
   display: block;
   background: #000;
-  aspect-ratio: 16/10;
-  object-fit: cover;
 }
 
 .screenshot-card .caption {
