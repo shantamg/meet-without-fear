@@ -4,6 +4,10 @@ import type { RunArtifact, RunDetail } from '../types';
 import { getRun, queueRun } from '../services/api';
 import { useTestRunsChannel } from '../hooks/useAbly';
 import {
+  QUEUEING_DISABLED_MESSAGE,
+  WEB_QUEUEING_ENABLED,
+} from '../services/featureFlags';
+import {
   formatDuration,
   formatTimestamp,
   githubFileUrl,
@@ -157,9 +161,15 @@ export function RunDetailPage() {
             type="button"
             className="btn btn-primary"
             onClick={() => handleRequeue(true)}
-            disabled={busy || !run.starting_snapshot_id}
+            disabled={
+              busy ||
+              !run.starting_snapshot_id ||
+              !WEB_QUEUEING_ENABLED
+            }
             title={
-              run.starting_snapshot_id
+              !WEB_QUEUEING_ENABLED
+                ? QUEUEING_DISABLED_MESSAGE
+                : run.starting_snapshot_id
                 ? 'Re-run with this run’s starting snapshot'
                 : 'No starting snapshot recorded'
             }
@@ -170,7 +180,10 @@ export function RunDetailPage() {
             type="button"
             className="btn"
             onClick={() => handleRequeue(false)}
-            disabled={busy}
+            disabled={busy || !WEB_QUEUEING_ENABLED}
+            title={
+              WEB_QUEUEING_ENABLED ? undefined : QUEUEING_DISABLED_MESSAGE
+            }
           >
             Re-run with latest code
           </button>
@@ -183,6 +196,11 @@ export function RunDetailPage() {
             </Link>
           )}
         </div>
+        {!WEB_QUEUEING_ENABLED && (
+          <div className="hint" style={{ marginTop: '0.5rem' }}>
+            {QUEUEING_DISABLED_MESSAGE}
+          </div>
+        )}
       </section>
 
       {(run.error_message ||

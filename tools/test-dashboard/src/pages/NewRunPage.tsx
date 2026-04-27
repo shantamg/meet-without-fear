@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Snapshot } from '../types';
 import { listSnapshotsFlat, queueRun } from '../services/api';
+import {
+  QUEUEING_DISABLED_MESSAGE,
+  WEB_QUEUEING_ENABLED,
+} from '../services/featureFlags';
 
 // Hardcoded list of e2e specs (mirrored in SnapshotDetailPage).
 // In Phase 1B the API can return the canonical list.
@@ -74,9 +78,11 @@ export function NewRunPage() {
         </div>
       </div>
 
-      <div className="error-banner" style={{ background: '#1f2937', borderColor: '#fbbf24', color: '#fbbf24' }}>
-        Phase 1A: this form is staged. Production deploys reject web POSTs until Phase 1B wires user auth — use the EC2 writer script to queue runs for now.
-      </div>
+      {!WEB_QUEUEING_ENABLED && (
+        <div className="error-banner" style={{ background: '#1f2937', borderColor: '#fbbf24', color: '#fbbf24' }}>
+          {QUEUEING_DISABLED_MESSAGE}
+        </div>
+      )}
 
       {error && <div className="error-banner">Error: {error}</div>}
 
@@ -134,7 +140,10 @@ export function NewRunPage() {
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={busy || !scenario}
+            disabled={busy || !scenario || !WEB_QUEUEING_ENABLED}
+            title={
+              WEB_QUEUEING_ENABLED ? undefined : QUEUEING_DISABLED_MESSAGE
+            }
           >
             {busy ? 'Queueing…' : 'Queue run'}
           </button>

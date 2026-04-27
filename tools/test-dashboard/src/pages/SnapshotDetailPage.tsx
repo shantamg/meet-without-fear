@@ -3,6 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Snapshot, TestRun } from '../types';
 import { getSnapshot, queueRun } from '../services/api';
 import {
+  QUEUEING_DISABLED_MESSAGE,
+  WEB_QUEUEING_ENABLED,
+} from '../services/featureFlags';
+import {
   formatDuration,
   formatRelative,
   shortSha,
@@ -143,11 +147,19 @@ export function SnapshotDetailPage() {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={busy || !scenario}
+              disabled={busy || !scenario || !WEB_QUEUEING_ENABLED}
+              title={
+                WEB_QUEUEING_ENABLED ? undefined : QUEUEING_DISABLED_MESSAGE
+              }
             >
               {busy ? 'Queueing…' : 'Queue run'}
             </button>
           </div>
+          {!WEB_QUEUEING_ENABLED && (
+            <div className="hint" style={{ marginTop: '0.5rem' }}>
+              {QUEUEING_DISABLED_MESSAGE}
+            </div>
+          )}
         </form>
       </section>
 
