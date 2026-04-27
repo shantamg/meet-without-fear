@@ -93,8 +93,10 @@ export function RunDetailPage() {
       <div className="page-header">
         <div>
           <h2>
-            <span className={`status-badge status-${run.status}`}>{run.status}</span>{' '}
-            {run.scenario}
+            <span className={`status-badge status-${run.status}`}>{run.status}</span>
+            <span className="mono" style={{ fontWeight: 600 }}>
+              {run.scenario}
+            </span>
           </h2>
           <div className="page-subtitle">
             Started {formatTimestamp(run.started_at)} · Finished{' '}
@@ -246,7 +248,9 @@ export function RunDetailPage() {
       )}
 
       <section className="detail-section">
-        <h3>Screenshots ({screenshots.length})</h3>
+        <h3>
+          Screenshots <span className="count">{screenshots.length}</span>
+        </h3>
         {screenshots.length === 0 ? (
           <div className="empty" style={{ padding: '1rem' }}>
             No screenshots.
@@ -262,7 +266,9 @@ export function RunDetailPage() {
 
       {pageErrors.length > 0 && (
         <section className="detail-section">
-          <h3>Page errors ({pageErrors.length})</h3>
+          <h3>
+            Page errors <span className="count">{pageErrors.length}</span>
+          </h3>
           {pageErrors.map((a) => (
             <pre key={a.id} className="log-block error">
               {a.inline_text ?? a.caption ?? '(empty)'}
@@ -273,7 +279,9 @@ export function RunDetailPage() {
 
       {consoleLogs.length > 0 && (
         <section className="detail-section">
-          <h3>Console log</h3>
+          <h3>
+            Console log <span className="count">{consoleLogs.length}</span>
+          </h3>
           {consoleLogs.map((a) => (
             <pre key={a.id} className="log-block">
               {a.inline_text ?? '(empty)'}
@@ -315,8 +323,8 @@ function ScreenshotCard({ artifact }: { artifact: RunArtifact }) {
         </div>
       )}
       <div className="caption">
-        <span className="mono">#{artifact.step_index}</span>{' '}
-        {artifact.caption ?? '(no caption)'}
+        <span className="step">#{artifact.step_index}</span>
+        <span>{artifact.caption ?? '(no caption)'}</span>
       </div>
     </div>
   );

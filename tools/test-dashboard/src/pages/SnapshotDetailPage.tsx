@@ -86,7 +86,11 @@ export function SnapshotDetailPage() {
     <div>
       <div className="page-header">
         <div>
-          <h2>{snapshot.name}</h2>
+          <h2>
+            <span className="mono" style={{ fontWeight: 600 }}>
+              {snapshot.name}
+            </span>
+          </h2>
           {snapshot.description && (
             <div className="page-subtitle">{snapshot.description}</div>
           )}
@@ -164,7 +168,9 @@ export function SnapshotDetailPage() {
       </section>
 
       <section className="detail-section">
-        <h3>Child snapshots ({children.length})</h3>
+        <h3>
+          Child snapshots <span className="count">{children.length}</span>
+        </h3>
         {children.length === 0 ? (
           <div className="empty" style={{ padding: '1rem' }}>
             No children yet.
@@ -183,7 +189,9 @@ export function SnapshotDetailPage() {
       </section>
 
       <section className="detail-section">
-        <h3>Runs that started here ({runs.length})</h3>
+        <h3>
+          Runs that started here <span className="count">{runs.length}</span>
+        </h3>
         {runs.length === 0 ? (
           <div className="empty" style={{ padding: '1rem' }}>
             No runs yet.
@@ -191,7 +199,12 @@ export function SnapshotDetailPage() {
         ) : (
           <div className="card-list">
             {runs.map((run) => (
-              <Link key={run.id} to={`/run/${run.id}`} className="run-card">
+              <Link
+                key={run.id}
+                to={`/run/${run.id}`}
+                className="run-card"
+                data-status={run.status}
+              >
                 <div className="run-card-header">
                   <span className={`status-badge status-${run.status}`}>
                     {run.status}
@@ -199,9 +212,18 @@ export function SnapshotDetailPage() {
                   <span className="scenario">{run.scenario}</span>
                 </div>
                 <div className="run-card-meta">
-                  <span>{formatRelative(run.started_at)}</span>
-                  <span>{formatDuration(run.duration_ms)}</span>
-                  <span className="mono">{shortSha(run.code_sha)}</span>
+                  <div className="field">
+                    <span className="label">Started</span>
+                    <span className="value">{formatRelative(run.started_at)}</span>
+                  </div>
+                  <div className="field">
+                    <span className="label">Duration</span>
+                    <span className="value">{formatDuration(run.duration_ms)}</span>
+                  </div>
+                  <div className="field">
+                    <span className="label">SHA</span>
+                    <span className="value">{shortSha(run.code_sha)}</span>
+                  </div>
                 </div>
               </Link>
             ))}
