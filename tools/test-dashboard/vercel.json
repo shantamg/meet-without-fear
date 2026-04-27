@@ -3,6 +3,9 @@
   "installCommand": "npm install",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!api/|assets/|@|src/|node_modules/)[^.]+)",
+      "destination": "/index.html"
+    }
   ]
 }

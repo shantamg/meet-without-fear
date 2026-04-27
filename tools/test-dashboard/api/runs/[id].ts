@@ -144,21 +144,16 @@ async function patchRun(id: string, req: VercelRequest, res: VercelResponse) {
   }
 
   // Build a parameterized UPDATE manually (sql tag doesn't support dynamic columns).
+  // Note: we use sql.query (the function form) instead of db.connect() because
+  // the Neon HTTP driver doesn't support TCP-pooled connections.
   const cols = Object.keys(updates) as PatchableField[];
   const setClauses = cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
   const values = cols.map((c) => updates[c]);
   values.push(id);
 
-  // Use the underlying client via @vercel/postgres' `db` export.
-  const { db } = await import('@vercel/postgres');
-  const client = await db.connect();
-  try {
-    const result = await client.query(
-      `UPDATE test_runs SET ${setClauses} WHERE id = $${values.length} RETURNING *`,
-      values
-    );
-    return json(res, 200, result.rows[0]);
-  } finally {
-    client.release();
-  }
+  const result = await sql.query(
+    `UPDATE test_runs SET ${setClauses} WHERE id = $${values.length} RETURNING *`,
+    values
+  );
+  return json(res, 200, result.rows[0]);
 }
