@@ -20,7 +20,7 @@ export default defineConfig({
   testMatch: /live-ai-.*\.spec\.ts/,
   timeout: 1800000, // 30 minutes per test (two-browser real-AI flow can take 15+ min)
   expect: {
-    timeout: 90000, // real-AI roundtrips can take 60s+; pad for empathy/strategy turns
+    timeout: 180000, // structured-output turns (invitation/empathy/strategy drafts) can spike to 120s+ on Bedrock
   },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,

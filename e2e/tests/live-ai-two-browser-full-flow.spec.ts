@@ -35,10 +35,13 @@ test.use(devices['iPhone 12']);
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 
-// Real-AI roundtrip per turn can hit 60-90s during empathy/strategy stretches.
-const AI_RESPONSE_TIMEOUT = 90000;
+// Real-AI roundtrip per turn can hit 60-90s for plain followups, but
+// structured-output turns (invitation draft, empathy draft, strategy proposal)
+// can spike to 120s+ on Bedrock. Padded to 180s — first EC2 run hung at 90s
+// on the invitation-draft turn after 4 successful followups.
+const AI_RESPONSE_TIMEOUT = 180000;
 // Reconciler involves multiple AI calls; pad for real AI.
-const RECONCILER_TIMEOUT = 90000;
+const RECONCILER_TIMEOUT = 180000;
 
 // User A messages — same arcs proven by live-ai-full-flow.spec.ts, with one
 // extra Stage 0 turn for cushion since the partner narrative is slightly
