@@ -1383,6 +1383,16 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         // Fetch shared context from partner
         const sharedContextResult = await getSharedContextForGuesser(sessionId, user.id);
         stage2BSharedContext = sharedContextResult.content;
+      } else {
+        // Regular Stage 2 — load empathy draft so AI can see/edit the current draft
+        const currentEmpathyDraft = await prisma.empathyDraft.findUnique({
+          where: { sessionId_userId: { sessionId, userId: user.id } },
+          select: { content: true },
+        });
+        if (currentEmpathyDraft) {
+          empathyDraftContent = currentEmpathyDraft.content;
+          logger.info(`[sendMessageStream:${requestId}] Stage 2: found existing empathy draft (${empathyDraftContent.length} chars)`);
+        }
       }
     }
 
