@@ -48,6 +48,13 @@
 0 4 * * * /opt/slam-bot/scripts/prune-journal.sh >> /var/log/slam-bot/cron.log 2>&1
 5 4 * * * /opt/slam-bot/scripts/prune-claude-projects.sh >> /var/log/slam-bot/cron.log 2>&1
 
+# ── Test-dashboard runs ──────────────────────────────────────────────────────
+# Triggered on-demand only — via @slam_paws test <scenario> in Slack, or by
+# SSH'ing in and running /opt/slam-bot/scripts/run-and-publish.sh directly.
+# No scheduled cron because we don't want noisy nightly failures filling the
+# dashboard when the value of a heartbeat is low. Re-add a weekly entry here
+# if the dashboard ever feels too sparse.
+
 # ── API budget monitoring ────────────────────────────────────────────────────
 * * * * * /opt/slam-bot/scripts/api-budget-monitor.sh >> /var/log/slam-bot/cron.log 2>&1
 # Post daily API consumption summary to #bot-ops + check for over-budget workspaces

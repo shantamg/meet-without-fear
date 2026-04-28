@@ -53,10 +53,15 @@ export default defineConfig({
       },
     },
     {
-      command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082',
+      // --no-dev forces production-mode bundle. Dev-mode ships hundreds of
+      // lazy module fetches that race the test's first interaction (the
+      // compact bar) on slower hardware (CI, EC2). Production-mode is
+      // deterministic — single bundle, single round-trip, then mounts.
+      // Mirrors the single-user-journey fix in PR #192.
+      command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082 --no-dev',
       url: 'http://localhost:8082',
       reuseExistingServer: false,
-      timeout: 180000,
+      timeout: 300000,
     },
   ],
   globalSetup: require.resolve('./global-setup'),

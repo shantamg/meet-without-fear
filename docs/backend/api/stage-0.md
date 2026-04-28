@@ -147,7 +147,12 @@ To advance from Stage 0 to Stage 1:
 
 The opening welcome message is served as static content embedded in the mobile app. It replaces the former "Curiosity Compact" formal agreement with a brief, warm AI-spoken message.
 
-- **First session:** "You'll each chat with me privately first. Nothing gets shared without your say. Ready?"
+- **First session:**
+  > "I am here to help you work through conflict—step by step.
+  >
+  > You'll start by sharing what you believe is happening, privately.
+  >
+  > I don't share anything unless you approve it, ever."
 - **Repeat session:** "Welcome back. Same as before — your space is private, nothing shared without your say. Let's pick up where we left off."
 
 The `isFirstSession` field in the compact status response indicates which variant to show. No formal commitments or checkboxes are required — just a "Ready" / "Let's go" button.

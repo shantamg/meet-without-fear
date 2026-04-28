@@ -1,0 +1,40 @@
+Test Dashboard — npm dependencies the API + migrate script need
+================================================================
+
+Add these to tools/test-dashboard/package.json (the frontend agent owns
+that file). The Vercel build resolves serverless function deps from the
+project-root package.json, so no separate api/package.json is required.
+
+dependencies:
+  @vercel/postgres   (sql template-tag client used by every API route)
+  @vercel/blob       (used by scripts/ec2-bot/scripts/write-test-result.ts; not directly by API routes, but kept here in case the API ever proxies uploads)
+  pg                 (used by db/migrate.ts only — Vercel API routes use @vercel/postgres)
+  ulid               (NOT required at runtime; api/_lib/db.ts ships its own ulid generator. Listed for reference if you prefer to swap in the official lib later.)
+
+devDependencies:
+  @vercel/node       (TypeScript types: `import type { VercelRequest, VercelResponse } from '@vercel/node'`)
+  @types/pg          (types for the pg client used in migrate.ts)
+  tsx                (run db/migrate.ts and bot scripts: `npx tsx db/migrate.ts`)
+
+Suggested package.json additions:
+  "dependencies": {
+    "@vercel/postgres": "^0.10.0",
+    "@vercel/blob": "^0.27.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.2.0",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.0"
+  }
+
+Suggested scripts:
+  "scripts": {
+    "migrate": "tsx db/migrate.ts"
+  }
+
+Environment variables (Vercel project settings → Environment Variables):
+  POSTGRES_URL              — auto-set by Vercel Postgres integration
+  POSTGRES_URL_NON_POOLING  — auto-set; used by migrate
+  BOT_WRITER_TOKEN          — long random string; required by PATCH /api/runs/:id, POST /api/snapshots, POST /api/artifacts
+  BLOB_READ_WRITE_TOKEN     — auto-set by Vercel Blob integration; needed by the EC2 bot writer script (NOT by the API)

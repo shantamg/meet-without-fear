@@ -169,11 +169,13 @@ export async function navigateToShareFromSession(
  * @param page - Playwright Page instance
  * @param timeout - Maximum time to wait for compact UI (default: 10000)
  */
-export async function signCompact(page: Page, timeout = 10000): Promise<void> {
-  const agreeCheckbox = page.getByTestId('compact-agree-checkbox');
-  await expect(agreeCheckbox).toBeVisible({ timeout });
-  await agreeCheckbox.click();
-  await page.getByTestId('compact-sign-button').click();
+export async function signCompact(page: Page, timeout = 30000): Promise<void> {
+  // The compact agreement bar was simplified — the standalone agree-checkbox
+  // no longer exists; the bar is now just a single Sign/Ready CTA. Mirrors
+  // the fix in PR #192 (single-user-journey.spec.ts).
+  const signButton = page.getByTestId('compact-sign-button');
+  await expect(signButton).toBeVisible({ timeout });
+  await signButton.click();
 }
 
 /**

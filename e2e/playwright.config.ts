@@ -21,10 +21,15 @@ const webServers = (fixtureId: string) => [
     },
   },
   {
-    command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082',
+    // --no-dev forces a production-mode bundle. The dev-mode bundle ships
+    // hundreds of lazy module fetches that race the test's first interaction
+    // on slower hardware (CI, EC2), producing intermittent "blank page"
+    // failures even after the dev server reports ready. Production-mode is
+    // deterministic — single bundle, single network round-trip, then mounts.
+    command: 'cd ../mobile && EXPO_PUBLIC_E2E_MODE=true EXPO_PUBLIC_API_URL=http://localhost:3000 npx expo start --web --port 8082 --no-dev',
     url: 'http://localhost:8082',
     reuseExistingServer: false,
-    timeout: 180000,
+    timeout: 300000,
   },
 ];
 

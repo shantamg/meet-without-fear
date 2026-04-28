@@ -27,6 +27,7 @@ const corsOrigins: (string | RegExp)[] = [
   'http://localhost:3002',
   'http://localhost:5173',
   'http://localhost:8081',
+  'http://localhost:8082', // e2e Playwright suite uses this port to avoid clashing with local dev on 8081
 ];
 if (process.env.DASHBOARD_URL) {
   corsOrigins.push(process.env.DASHBOARD_URL);

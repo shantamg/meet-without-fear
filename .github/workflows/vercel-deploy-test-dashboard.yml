@@ -1,0 +1,66 @@
+name: Vercel Deploy — Test Dashboard
+
+# Deploys the Vite SPA + Vercel serverless functions in `tools/test-dashboard/`
+# to Vercel. Triggers on changes to tools/test-dashboard/** on main, or manual dispatch.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'tools/test-dashboard/**'
+      - '.github/workflows/vercel-deploy-test-dashboard.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-deploy-test-dashboard-${{ github.sha }}
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      test_dashboard: ${{ steps.filter.outputs.test_dashboard }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        # workflow_dispatch should always deploy
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            test_dashboard:
+              - 'tools/test-dashboard/**'
+              - '.github/workflows/vercel-deploy-test-dashboard.yml'
+
+  test_dashboard:
+    name: Deploy Test Dashboard (Vite)
+    needs: changes
+    if: needs.changes.outputs.test_dashboard == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/test-dashboard
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_TEST_DASHBOARD_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      # Standard Vite + Vercel functions setup builds cleanly on Vercel's own
+      # build environment, so skip the `vercel build` / `deploy --prebuilt`
+      # dance that the Expo Web app needs.
+      - name: Deploy to Vercel
+        run: vercel deploy --prod --yes --token=${{ secrets.VERCEL_TOKEN }}

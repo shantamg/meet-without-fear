@@ -3,7 +3,7 @@ title: "Stage 2: Perspective Stretch - Empathy Exchange Flow"
 sidebar_position: 6
 description: This document describes the empathy exchange flow in Stage 2, including the reconciler system that analyzes empathy accuracy and manages the sharing of addit...
 created: 2026-03-11
-updated: 2026-04-18
+updated: 2026-04-27
 status: living
 ---
 # Stage 2: Perspective Stretch - Empathy Exchange Flow
@@ -96,6 +96,12 @@ The reconciler runs when one user confirms "feel heard" (completing Stage 1) and
 > - `index.ts` — Barrel re-exports.
 >
 > Status transitions are formally validated by `backend/src/services/empathy-state-machine.ts` which enforces a strict transition table.
+>
+> **Message de-duplication:** `markEmpathyReady()` in `state.ts` checks whether the alignment message it would post is identical to the last AI message the Guesser already saw. If so, it updates the empathy status without creating a redundant chat line — preventing duplicate messages during multi-cycle refinement runs.
+>
+> **Redundant share-suggestion guard (API endpoint):** `generateShareOffer()` in `sharing.ts` calls `hasContextAlreadyBeenShared()` before generating a suggestion. If context was already shared in that direction, it returns `null`, and the API responds with `hasSuggestion: false` — preventing the Guesser from seeing a repeated offer message.
+>
+> **Reconciler processing guard:** `triggerReconcilerAndUpdateStatuses()` in `stage2.ts` independently calls `hasContextAlreadyBeenShared()`. If context was already shared, it calls `markResultHandledAlreadyShared()` and sets the guesser's status directly to `READY`, bypassing the `AWAITING_SHARING` step.
 
 ### Reconciler Decision Tree
 
