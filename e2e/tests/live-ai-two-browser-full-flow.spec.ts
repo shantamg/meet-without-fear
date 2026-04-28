@@ -348,7 +348,21 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
     // answering the AI's "what do you need?" opener so extraction triggers
     // on the GET /needs call.
 
+    // After empathy share, chat-input was hidden ("waiting for partner").
+    // Reload to pick up Stage 3 state after empathy/validate, then wait for
+    // chat-input to become visible before attempting to send messages —
+    // otherwise fill() silently no-ops on a hidden input.
     console.log(`${elapsed()} === STAGE 3: Need Mapping (parallel) ===`);
+    await Promise.all([harness.userAPage.reload(), harness.userBPage.reload()]);
+    await Promise.all([
+      harness.userAPage.waitForLoadState('networkidle'),
+      harness.userBPage.waitForLoadState('networkidle'),
+    ]);
+    await handleMoodCheck(harness.userAPage);
+    await handleMoodCheck(harness.userBPage);
+    await expect(harness.userAPage.getByTestId('chat-input')).toBeVisible({ timeout: 30000 });
+    await expect(harness.userBPage.getByTestId('chat-input')).toBeVisible({ timeout: 30000 });
+
     const sendStage3Message = async (
       page: import('@playwright/test').Page,
       message: string
@@ -356,8 +370,10 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
       await page.getByTestId('chat-input').fill(message);
       await page.getByTestId('send-button').click();
       const typingIndicator = page.getByTestId('typing-indicator');
-      // Visible→hidden = AI streaming finished.
-      await typingIndicator.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+      // Wait for typing-indicator to appear (AI started). If it doesn't appear
+      // within 30s, the message didn't dispatch — fail loudly rather than
+      // silently no-op the hidden-wait.
+      await typingIndicator.waitFor({ state: 'visible', timeout: 30000 });
       await typingIndicator.waitFor({ state: 'hidden', timeout: AI_RESPONSE_TIMEOUT });
     };
 
