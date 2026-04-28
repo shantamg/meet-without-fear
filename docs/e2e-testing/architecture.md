@@ -3,7 +3,7 @@ title: E2E Testing Architecture
 sidebar_position: 2
 description: This document describes the end-to-end testing approach used in Meet Without Fear.
 created: 2026-03-11
-updated: 2026-04-27
+updated: 2026-04-28
 status: living
 ---
 # E2E Testing Architecture
@@ -397,6 +397,7 @@ Enabled only when `E2E_AUTH_BYPASS=true`:
 | `e2e/playwright.live-ai.config.ts` | Playwright config for live AI tests (real LLM, no mocking) |
 | `e2e/global-setup.ts` | Pre-test database cleanup |
 | `e2e/helpers/` | Test utilities (SessionBuilder, headers) |
+| `e2e/reporters/test-dashboard-reporter.ts` | Custom Playwright reporter; writes `dashboard-summary.json` for publishing |
 | `backend/src/fixtures/` | TypeScript fixture definitions |
 | `backend/src/fixtures/index.ts` | Fixture registry |
 | `backend/src/fixtures/types.ts` | Fixture type definitions |
@@ -405,6 +406,58 @@ Enabled only when `E2E_AUTH_BYPASS=true`:
 | `backend/src/routes/e2e.ts` | E2E helper endpoints |
 | `backend/src/testing/state-factory.ts` | Session stage creation |
 | `mobile/src/providers/E2EAuthProvider.tsx` | Mobile auth bypass |
+
+## Test Run Publishing & Dashboard
+
+The **MWF Test Dashboard** (`tools/test-dashboard/`) is a Vercel-deployed React UI for browsing Playwright test runs, screenshots, and snapshots. It replaces Slack screenshot threads as the primary browse surface.
+
+### Publishing pipeline (`run-and-publish.sh`)
+
+`scripts/ec2-bot/scripts/run-and-publish.sh` wraps a Playwright run and publishes results:
+
+1. Selects the right config based on scenario prefix (`two-browser-*`, `live-ai-*`, or default)
+2. Appends `e2e/reporters/test-dashboard-reporter.ts` to capture a `dashboard-summary.json`
+3. Calls `scripts/ec2-bot/scripts/write-test-result.ts` to upload screenshots to Vercel Blob and PATCH the run row in Vercel Postgres
+
+Artifacts written per run:
+- `e2e/test-results/dashboard-summary.json` — source of truth for the writer
+- `e2e/test-results/dashboard-screenshots/*.png` — screenshots renamed in step order
+- `e2e/test-results/dashboard-transcript.txt` — AI conversation transcript
+
+### Slack trigger (`@slam_paws test`)
+
+Any Slack channel where the bot is present accepts:
+
+```
+@slam_paws test single-user-journey
+@slam_paws test two-browser-stage-2
+@slam_paws test stage-3-4-complete from-snapshot:01HK1234
+```
+
+- Bot reacts 👀 and posts a thread reply immediately
+- `run-and-publish.sh` runs in the background (non-blocking; multiple in-flight OK)
+- On completion: reaction swaps to ✅ (pass) or ❌ (fail) and a dashboard URL is posted
+
+Scenario names must match `[a-z0-9][a-z0-9-]*` (shell-safety guard).
+
+### On-demand only
+
+Test-dashboard runs are triggered on-demand (Slack or SSH) — there is no scheduled cron. See `scripts/ec2-bot/crontab.txt` for the comment explaining the tradeoff.
+
+### Required env vars (EC2 bot)
+
+| Var | Purpose |
+|-----|---------|
+| `TEST_DASHBOARD_API_URL` | e.g. `https://mwf-test-dashboard.vercel.app` |
+| `BOT_WRITER_TOKEN` | Bot write token for the dashboard API |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob token for screenshot uploads |
+
+### Dashboard architecture
+
+- **Frontend**: React 19 + Vite + react-router-dom v7, deployed to Vercel
+- **API**: `tools/test-dashboard/api/*.ts` — Vercel serverless functions
+- **Storage**: Vercel Postgres (run/snapshot metadata) + Vercel Blob (screenshots)
+- **Realtime**: Ably channel `test-runs:updates` for live progress
 
 ## Two-Browser Testing
 
