@@ -27,13 +27,32 @@ import {
   sendAndWaitForPanel,
   confirmFeelHeard,
   waitForReconcilerComplete,
-  navigateToShareFromSession,
   navigateBackToChat,
 } from '../helpers/test-utils';
 
 test.use(devices['iPhone 12']);
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
+const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
+
+// Direct goto to /share — avoids the in-app navigation helper, which has
+// modal/indicator timing variance that's hard to satisfy with real AI's
+// state-update cadence. We're testing AI quality across stages, not the
+// chat→share routing (mocked two-browser-* specs cover that).
+async function gotoShare(
+  page: import('@playwright/test').Page,
+  sessionId: string,
+  userId: string,
+  userEmail: string
+): Promise<void> {
+  const params = new URLSearchParams({
+    'e2e-user-id': userId,
+    'e2e-user-email': userEmail,
+  });
+  await page.goto(`${APP_BASE_URL}/session/${sessionId}/share?${params.toString()}`);
+  await page.waitForLoadState('domcontentloaded');
+  await handleMoodCheck(page, 2000);
+}
 
 // Real-AI roundtrip per turn can hit 60-90s for plain followups, but
 // structured-output turns (invitation draft, empathy draft, strategy proposal)
@@ -296,8 +315,8 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
     const apiB = makeApiRequest(request, harness.config.userB.email, harness.userBId);
 
     // Verify share page renders partner empathy + validation buttons.
-    await navigateToShareFromSession(harness.userAPage);
-    await navigateToShareFromSession(harness.userBPage);
+    await gotoShare(harness.userAPage, harness.sessionId, harness.userAId, harness.config.userA.email);
+    await gotoShare(harness.userBPage, harness.sessionId, harness.userBId, harness.config.userB.email);
 
     const userAPartnerEmpathy = harness.userAPage
       .locator('[data-testid^="share-screen-partner-tab-item-partner-empathy-"]')
