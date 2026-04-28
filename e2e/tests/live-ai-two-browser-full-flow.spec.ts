@@ -342,12 +342,41 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
     // ==========================================
     // === STAGE 3: NEEDS EXTRACTION ===
     // ==========================================
+    // Backend gate (stage3.ts:191): needs extraction won't run unless the
+    // user has sent at least one message in Stage 3 — prevents needs from
+    // appearing before any conversation. Each user sends one message
+    // answering the AI's "what do you need?" opener so extraction triggers
+    // on the GET /needs call.
+
+    console.log(`${elapsed()} === STAGE 3: Need Mapping (parallel) ===`);
+    const sendStage3Message = async (
+      page: import('@playwright/test').Page,
+      message: string
+    ): Promise<void> => {
+      await page.getByTestId('chat-input').fill(message);
+      await page.getByTestId('send-button').click();
+      const typingIndicator = page.getByTestId('typing-indicator');
+      // Visible→hidden = AI streaming finished.
+      await typingIndicator.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+      await typingIndicator.waitFor({ state: 'hidden', timeout: AI_RESPONSE_TIMEOUT });
+    };
+
+    await Promise.all([
+      sendStage3Message(
+        harness.userAPage,
+        "What I really need is to feel like Taylor sees the effort I'm putting in and to feel partnered with, not interrogated. I need to be able to bring up something at home without it feeling like an attack."
+      ),
+      sendStage3Message(
+        harness.userBPage,
+        "What I need is to feel like I can come home and recover without it feeling like another performance review. I need space to be human, not perfect, and to feel appreciated for what I do manage."
+      ),
+    ]);
+    console.log(`${elapsed()} Stage 3 messages exchanged — triggering needs extraction`);
 
     // Trigger needs extraction via API. Real AI takes ~30-60s — the GET
     // endpoint blocks until extraction completes, so the Promise.all is the
     // wait. (Mocked specs need a tiny waitForTimeout because their fixture
     // returns instantly; with real AI the API itself is the wait.)
-    console.log(`${elapsed()} Triggering needs extraction (real AI, ~30-60s/user)...`);
     await Promise.all([
       apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`),
       apiB.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`),
