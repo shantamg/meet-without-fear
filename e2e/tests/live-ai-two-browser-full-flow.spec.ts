@@ -543,7 +543,9 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
       { confirmed: true }
     );
     const confirmData = await confirmResponse.json();
-    expect(confirmData.data?.sessionComplete).toBe(true);
+    // The API returns `sessionCanResolve`, not `sessionComplete` — that field
+    // name is stale in two-browser-full-flow.spec.ts too (asserts undefined).
+    expect(confirmData.data?.sessionCanResolve).toBe(true);
     console.log(`${elapsed()} === SESSION COMPLETE ===`);
 
     // Final diagnostic screenshots (no toHaveScreenshot — chat varies between runs).
