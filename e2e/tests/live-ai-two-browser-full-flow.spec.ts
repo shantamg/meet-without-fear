@@ -35,10 +35,14 @@ test.use(devices['iPhone 12']);
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
 
-// Direct goto to /share — avoids the in-app navigation helper, which has
-// modal/indicator timing variance that's hard to satisfy with real AI's
-// state-update cadence. We're testing AI quality across stages, not the
-// chat→share routing (mocked two-browser-* specs cover that).
+// Direct goto to the share screen — avoids the in-app navigation helper,
+// which has modal/indicator timing variance that's hard to satisfy with
+// real AI's state-update cadence. We're testing AI quality across stages,
+// not the chat→share routing (mocked two-browser-* specs cover that).
+//
+// The screen file is `sharing-status.tsx`; the existing helper's regex
+// `/\/session\/.*\/share/` matches "sharing-status" as a substring, which
+// is why other specs appear to navigate to "/share".
 async function gotoShare(
   page: import('@playwright/test').Page,
   sessionId: string,
@@ -49,7 +53,7 @@ async function gotoShare(
     'e2e-user-id': userId,
     'e2e-user-email': userEmail,
   });
-  await page.goto(`${APP_BASE_URL}/session/${sessionId}/share?${params.toString()}`);
+  await page.goto(`${APP_BASE_URL}/session/${sessionId}/sharing-status?${params.toString()}`);
   await page.waitForLoadState('domcontentloaded');
   await handleMoodCheck(page, 2000);
 }
