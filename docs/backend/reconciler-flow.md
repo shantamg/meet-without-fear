@@ -3,7 +3,7 @@ title: "Stage 2: Perspective Stretch - Empathy Exchange Flow"
 sidebar_position: 6
 description: This document describes the empathy exchange flow in Stage 2, including the reconciler system that analyzes empathy accuracy and manages the sharing of addit...
 created: 2026-03-11
-updated: 2026-04-27
+updated: 2026-04-28
 status: living
 ---
 # Stage 2: Perspective Stretch - Empathy Exchange Flow
@@ -209,7 +209,8 @@ sequenceDiagram
     Note over A,B: Stage 1 Complete - Both felt heard
 
     A->>AI: Chat about B's perspective
-    AI->>A: Guides empathy development
+    Note over AI: Loads current empathy draft (if any) as editing context
+    AI->>A: Guides empathy development / refines existing draft
     AI->>A: Proposes empathy statement
 
     A->>System: Share empathy statement

@@ -57,6 +57,7 @@
     { "code": "render.yaml",                             "label": "render.yaml",                   "docs": ["docs/deployment/render-config.md", "docs/deployment/index.md"] },
     { "code": "scripts/ec2-bot/**",                      "label": "scripts/ec2-bot",               "docs": ["docs/infrastructure/index.md"] },
     { "code": "bot-workspaces/**",                       "label": "bot-workspaces",                "docs": ["docs/infrastructure/index.md"] },
-    { "code": ".github/workflows/**",                    "label": ".github/workflows",             "docs": ["docs/infrastructure/index.md"] }
+    { "code": ".github/workflows/**",                    "label": ".github/workflows",             "docs": ["docs/infrastructure/index.md"] },
+    { "code": "tools/test-dashboard/**",                 "label": "tools/test-dashboard",           "docs": ["docs/e2e-testing/architecture.md", "docs/infrastructure/index.md"] }
   ]
 }
