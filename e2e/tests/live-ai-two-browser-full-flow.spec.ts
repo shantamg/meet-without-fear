@@ -134,29 +134,23 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
     const elapsed = () => `[${((Date.now() - testStart) / 1000).toFixed(1)}s]`;
 
     // ==========================================
-    // === STAGE 0: COMPACT SIGNING ===
+    // === STAGE 0: USER A ALONE (invitation crafting) ===
     // ==========================================
+    // CRITICAL: User B's invitation must remain PENDING during Stage 0. The
+    // Stage 0 system prompt's job is to get User A to draft an invitation
+    // for their partner. With real AI, if the invitation is already ACCEPTED
+    // (the mocked-test default in TwoBrowserHarness), the AI correctly
+    // recognizes "the partner is already onboard" and refuses to produce
+    // the <draft> tag. So we set up + sign in only User A here, mirroring
+    // the real-life flow: A drafts → "sends" → B accepts.
 
-    await harness.setupUserB(browser, request);
-    await harness.acceptInvitation();
-
-    console.log(`${elapsed()} Both users navigating + signing compact...`);
+    console.log(`${elapsed()} User A navigating + signing compact...`);
     await harness.navigateUserA();
     await signCompact(harness.userAPage);
     await handleMoodCheck(harness.userAPage);
 
-    await harness.navigateUserB();
-    await signCompact(harness.userBPage);
-    await handleMoodCheck(harness.userBPage);
-
     await expect(harness.userAPage.getByTestId('chat-input')).toBeVisible();
-    await expect(harness.userBPage.getByTestId('chat-input')).toBeVisible();
-    console.log(`${elapsed()} Compact signed, chat ready for both`);
-
-    // ==========================================
-    // === STAGE 0: USER A INVITATION ===
-    // ==========================================
-    // Only User A goes through the invitation flow — User B accepted via API.
+    console.log(`${elapsed()} Compact signed, chat ready for User A`);
 
     console.log(`${elapsed()} === USER A: Invitation Crafting ===`);
     const invitationTurns = await sendAndWaitForPanel(
@@ -172,7 +166,19 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
     await expect(invitationContinueButton).toBeVisible({ timeout: 10000 });
     await invitationContinueButton.click();
     await expect(harness.userAPage.getByTestId('invitation-draft-panel')).not.toBeVisible({ timeout: 10000 });
-    console.log(`${elapsed()} Invitation confirmed`);
+    console.log(`${elapsed()} Invitation confirmed — User B can now join`);
+
+    // ==========================================
+    // === USER B: ACCEPT + JOIN ===
+    // ==========================================
+
+    await harness.setupUserB(browser, request);
+    await harness.acceptInvitation();
+    await harness.navigateUserB();
+    await signCompact(harness.userBPage);
+    await handleMoodCheck(harness.userBPage);
+    await expect(harness.userBPage.getByTestId('chat-input')).toBeVisible();
+    console.log(`${elapsed()} User B accepted + signed compact`);
 
     // ==========================================
     // === STAGE 1: WITNESSING (parallel) ===
