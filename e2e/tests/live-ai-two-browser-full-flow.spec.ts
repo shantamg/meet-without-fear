@@ -25,7 +25,6 @@ import {
   signCompact,
   handleMoodCheck,
   sendAndWaitForPanel,
-  confirmFeelHeard,
   waitForReconcilerComplete,
   navigateBackToChat,
 } from '../helpers/test-utils';
@@ -34,6 +33,35 @@ test.use(devices['iPhone 12']);
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
+
+// Robust feel-heard confirmation. The shared confirmFeelHeard helper uses
+// click({ force: true }), which still waits for the locator to be visible
+// — if the element re-renders or briefly detaches mid-stage-transition
+// (which happens with real-AI's longer streaming windows), Playwright waits
+// up to the full test timeout (30 min) for it to reattach. We saw User B
+// hang for ~26 min on this in run 01KQ8YJRDMP1D14EYF6BHF38H9.
+//
+// JS-evaluate-click bypasses every Playwright actionability check; we then
+// poll for disappearance with a hard cap.
+async function confirmFeelHeardRobust(
+  page: import('@playwright/test').Page
+): Promise<void> {
+  const btn = page.getByTestId('feel-heard-yes');
+  await expect(btn).toBeVisible({ timeout: 10000 });
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    await btn.evaluate((el: HTMLElement) => el.click()).catch(() => {});
+    // Poll for panel to disappear; if it does, we're done.
+    for (let poll = 0; poll < 5; poll++) {
+      await page.waitForTimeout(1000);
+      if (!(await btn.isVisible().catch(() => false))) {
+        await page.waitForTimeout(1000);
+        return;
+      }
+    }
+  }
+  throw new Error('feel-heard-yes panel did not disappear after 8 click attempts (40s)');
+}
 
 // Direct goto to the share screen — avoids the in-app navigation helper,
 // which has modal/indicator timing variance that's hard to satisfy with
@@ -230,8 +258,8 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
     console.log(`${elapsed()} Feel-heard appeared (A: ${userATurns1} turns, B: ${userBTurns1} turns)`);
 
     await Promise.all([
-      confirmFeelHeard(harness.userAPage),
-      confirmFeelHeard(harness.userBPage),
+      confirmFeelHeardRobust(harness.userAPage),
+      confirmFeelHeardRobust(harness.userBPage),
     ]);
     console.log(`${elapsed()} Both users confirmed feel-heard`);
 
