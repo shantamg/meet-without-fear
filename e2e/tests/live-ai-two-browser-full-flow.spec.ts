@@ -43,15 +43,17 @@ const AI_RESPONSE_TIMEOUT = 180000;
 // Reconciler involves multiple AI calls; pad for real AI.
 const RECONCILER_TIMEOUT = 180000;
 
-// User A messages — same arcs proven by live-ai-full-flow.spec.ts, with one
-// extra Stage 0 turn for cushion since the partner narrative is slightly
-// different from the single-user version.
+// User A messages — Stage 0 needs concrete dialogue, not just "we argued",
+// because the AI gates the invitation draft on having enough substance to
+// summarize. First EC2 retry hit prompt compliance: AI kept asking "what was
+// actually said?" and never produced <draft> until 5 messages were exhausted.
 const USER_A_STAGE_0_MESSAGES = [
   "My partner Taylor and I have been struggling to communicate lately. Every conversation about household responsibilities turns into an argument and I feel like we're not hearing each other.",
-  'Last night we tried to talk about chores and it blew up again. I ended up sleeping on the couch.',
-  "I just want us to be able to talk without it turning into a fight.",
-  "We've been together 5 years and this is the worst it's been. I want to invite Taylor to try this process with me.",
-  "Yeah, I'm ready to send the invitation now.",
+  "Last night I came home and the kitchen was a mess. I asked Taylor 'didn't we agree you'd handle the dishes today?' and they snapped 'I had a bad day, can you not start with this right now?' I said 'I'm not starting anything, I just walked in.' They said 'this is exactly what I mean, you always have something to complain about.' I went to the couch and slept there.",
+  "I keep replaying it. I feel unheard and dismissed — like nothing I bring up gets received as me reaching for them, only as criticism.",
+  "We've been together 5 years and this is the worst it's been. I want to invite Taylor to try this Meet Without Fear process with me — to have a conversation that doesn't blow up.",
+  "Yes, I'm ready to send the invitation now.",
+  "I've told you what happened — Taylor said I always have something to complain about, and I slept on the couch. I want to invite them to do this with me.",
 ];
 
 const USER_A_STAGE_1_MESSAGES = [
