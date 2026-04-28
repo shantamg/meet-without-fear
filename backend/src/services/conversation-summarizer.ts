@@ -179,7 +179,7 @@ ${conversationText}`;
   const result = await getHaikuJson<SummarizationResult>({
     systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
-    maxTokens: 800,
+    maxTokens: 1500,
     sessionId,
     operation: 'conversation-summary',
     turnId,
@@ -641,7 +641,7 @@ ${conversationText}`;
   const result = await getHaikuJson<SummarizationResult>({
     systemPrompt,
     messages: [{ role: 'user', content: userPrompt }],
-    maxTokens: 800,
+    maxTokens: 1500,
     innerWorkSessionId: sessionId,
     operation: 'inner-thoughts-summary',
     turnId,
