@@ -32,7 +32,6 @@ import {
 test.use(devices['iPhone 12']);
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
-const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
 
 // Robust feel-heard confirmation. The shared confirmFeelHeard helper uses
 // click({ force: true }), which still waits for the locator to be visible
@@ -63,28 +62,13 @@ async function confirmFeelHeardRobust(
   throw new Error('feel-heard-yes panel did not disappear after 8 click attempts (40s)');
 }
 
-// Direct goto to the share screen — avoids the in-app navigation helper,
-// which has modal/indicator timing variance that's hard to satisfy with
-// real AI's state-update cadence. We're testing AI quality across stages,
-// not the chat→share routing (mocked two-browser-* specs cover that).
-//
-// The screen file is `sharing-status.tsx`; the existing helper's regex
-// `/\/session\/.*\/share/` matches "sharing-status" as a substring, which
-// is why other specs appear to navigate to "/share".
-async function gotoShare(
-  page: import('@playwright/test').Page,
-  sessionId: string,
-  userId: string,
-  userEmail: string
-): Promise<void> {
-  const params = new URLSearchParams({
-    'e2e-user-id': userId,
-    'e2e-user-email': userEmail,
-  });
-  await page.goto(`${APP_BASE_URL}/session/${sessionId}/sharing-status?${params.toString()}`);
-  await page.waitForLoadState('domcontentloaded');
-  await handleMoodCheck(page, 2000);
-}
+// Note: There is no longer a separate /share or /sharing-status screen —
+// `sharing-status.tsx` is a redirect stub back to /session/{id} ("@deprecated
+// Sharing functionality has been moved to the Partner tab"). The
+// share-screen-partner-tab-item-partner-empathy-* testID two-browser-full-flow
+// asserts against has also been removed from the codebase. We skip share-screen
+// UI verification entirely and rely on the empathy/validate API call to
+// advance the state machine into Stage 3.
 
 // Real-AI roundtrip per turn can hit 60-90s for plain followups, but
 // structured-output turns (invitation draft, empathy draft, strategy proposal)
@@ -346,20 +330,9 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
     const apiA = makeApiRequest(request, harness.config.userA.email, harness.userAId);
     const apiB = makeApiRequest(request, harness.config.userB.email, harness.userBId);
 
-    // Verify share page renders partner empathy + validation buttons.
-    await gotoShare(harness.userAPage, harness.sessionId, harness.userAId, harness.config.userA.email);
-    await gotoShare(harness.userBPage, harness.sessionId, harness.userBId, harness.config.userB.email);
-
-    const userAPartnerEmpathy = harness.userAPage
-      .locator('[data-testid^="share-screen-partner-tab-item-partner-empathy-"]')
-      .first();
-    const userBPartnerEmpathy = harness.userBPage
-      .locator('[data-testid^="share-screen-partner-tab-item-partner-empathy-"]')
-      .first();
-    await expect(userAPartnerEmpathy).toBeVisible({ timeout: 15000 });
-    await expect(userBPartnerEmpathy).toBeVisible({ timeout: 15000 });
-
-    // Validate empathy via API to advance both into Stage 3.
+    // Validate empathy via API to advance both into Stage 3. Skips
+    // share-screen UI verification — that path is covered by mocked
+    // two-browser-* specs and the route + testIDs have shifted under us.
     await Promise.all([
       apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/empathy/validate`, { validated: true }),
       apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/empathy/validate`, { validated: true }),
@@ -423,7 +396,7 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
     // ==========================================
 
     let commonGroundComplete = false;
-    const cgDeadline = Date.now() + 90000; // 90s — real AI generates this
+    const cgDeadline = Date.now() + 180000; // 180s — real AI generates this; structured-output spike margin
     while (Date.now() < cgDeadline && !commonGroundComplete) {
       const cgResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground`);
       const cgData = await cgResponse.json();
@@ -434,7 +407,7 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
       }
     }
     if (!commonGroundComplete) {
-      throw new Error('Common ground analysis did not complete within 90s');
+      throw new Error('Common ground analysis did not complete within 180s');
     }
     console.log(`${elapsed()} Common ground generated`);
 
