@@ -19,16 +19,16 @@ curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
 
 ## Default Check (both projects in parallel)
 
-### Gateway issues
+### Backend issues
 ```bash
 curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
-  "https://sentry.io/api/0/projects/meet-without-fear-mind/meet-without-fear-families-gateway/issues/?query=is:unresolved&sort=date&limit=15"
+  "https://sentry.io/api/0/projects/meet-without-fear/mwf-backend/issues/?query=is:unresolved&sort=date&limit=15"
 ```
 
 ### Mobile issues
 ```bash
 curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
-  "https://sentry.io/api/0/projects/meet-without-fear-mind/meet-without-fear-families-mobile/issues/?query=is:unresolved&sort=date&limit=15"
+  "https://sentry.io/api/0/projects/meet-without-fear/mwf-mobile/issues/?query=is:unresolved&sort=date&limit=15"
 ```
 
 ## Priority Signals
