@@ -3,7 +3,7 @@ title: Testing Patterns
 sidebar_position: 9
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-03-11
+updated: 2026-04-28
 status: living
 ---
 # Testing Patterns
@@ -31,6 +31,7 @@ status: living
   - `e2e/playwright.live-ai.config.ts` - real Bedrock AI run (slow, separate workflow)
   - `e2e/playwright.two-browser.config.ts` - multi-user scenarios. `testMatch: /two-browser-.*\.spec\.ts/`. `MOCK_LLM=true`, no global fixture ID — each browser sets its own via the `X-E2E-Fixture-ID` header.
 - Assertion: Playwright built-in matchers
+- **Publishing**: `scripts/ec2-bot/scripts/run-and-publish.sh` wraps any Playwright run and publishes results (screenshots, transcript, metadata) to the [Test Dashboard](../e2e-testing/architecture.md#test-run-publishing--dashboard) (Vercel). Trigger via `@slam_paws test <scenario>` in Slack or run the script directly on EC2.
 
 **Run Commands:**
 ```bash
