@@ -1,0 +1,497 @@
+/**
+ * Live AI Two-Browser Full Flow E2E Test
+ *
+ * Two users + real Bedrock + Stages 0→4. Companion to:
+ *   - live-ai-full-flow.spec.ts        (real AI, single user, stages 0-2)
+ *   - two-browser-full-flow.spec.ts    (mocked AI, two users, stages 0-4)
+ *
+ * This spec proves real AI quality across the entire arc with both partners.
+ * It is the highest-coverage but slowest scenario in the suite — ~25 min,
+ * ~$1-3 in Bedrock per run. Run on demand only via @slam_paws.
+ *
+ * Assertion strategy:
+ *   - testIDs only (real AI text is non-deterministic)
+ *   - generous timeouts (real AI: 50-90s per turn; reconciler: up to 90s)
+ *   - no toHaveScreenshot snapshots (chat content varies between runs)
+ *
+ * Run with:
+ *   npx playwright test --config=e2e/playwright.live-ai.config.ts \
+ *     --grep live-ai-two-browser-full-flow
+ */
+
+import { test, expect, devices, APIRequestContext } from '@playwright/test';
+import { TwoBrowserHarness, getE2EHeaders } from '../helpers';
+import {
+  signCompact,
+  handleMoodCheck,
+  sendAndWaitForPanel,
+  confirmFeelHeard,
+  waitForReconcilerComplete,
+  navigateToShareFromSession,
+  navigateBackToChat,
+} from '../helpers/test-utils';
+
+test.use(devices['iPhone 12']);
+
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
+
+// Real-AI roundtrip per turn can hit 60-90s during empathy/strategy stretches.
+const AI_RESPONSE_TIMEOUT = 90000;
+// Reconciler involves multiple AI calls; pad for real AI.
+const RECONCILER_TIMEOUT = 90000;
+
+// User A messages — same arcs proven by live-ai-full-flow.spec.ts, with one
+// extra Stage 0 turn for cushion since the partner narrative is slightly
+// different from the single-user version.
+const USER_A_STAGE_0_MESSAGES = [
+  "My partner Taylor and I have been struggling to communicate lately. Every conversation about household responsibilities turns into an argument and I feel like we're not hearing each other.",
+  'Last night we tried to talk about chores and it blew up again. I ended up sleeping on the couch.',
+  "I just want us to be able to talk without it turning into a fight.",
+  "We've been together 5 years and this is the worst it's been. I want to invite Taylor to try this process with me.",
+  "Yeah, I'm ready to send the invitation now.",
+];
+
+const USER_A_STAGE_1_MESSAGES = [
+  "The worst part is feeling like Taylor doesn't care about my perspective. When I try to explain how I feel, they just shut down.",
+  "I've started dreading coming home because I never know if it's going to be a good night or a fight.",
+  "Sometimes I wonder if Taylor even wants to be in this relationship anymore.",
+  "I think what I really need is to feel like my feelings matter. Like I'm not just being dismissed.",
+  "Yeah, I just want to be heard. That's really what it comes down to.",
+  "It hurts because I know we used to be so good at talking to each other. Something changed.",
+  "I feel unappreciated and invisible in my own home.",
+];
+
+const USER_A_STAGE_2_MESSAGES = [
+  "I guess Taylor might be dealing with a lot of stress at work. They mentioned their team is understaffed and they feel overwhelmed.",
+  "Taylor grew up in a family where nobody talked about feelings. Shutting down is probably the only way they know to cope when things get intense.",
+  "When I bring up problems, Taylor probably hears it as criticism, like they're failing at the relationship. That must feel awful for someone who's already trying so hard.",
+  "I think Taylor is scared of losing us. They shut down not because they don't care, but because they care so much that the conflict feels threatening.",
+  "I think I really understand now. Taylor loves me but feels overwhelmed, criticized, and afraid. Their shutting down is their way of trying to protect what we have, even though it pushes me away.",
+  "Yes, I feel ready to share this with Taylor. I want them to know that I see their struggle and I understand why they withdraw.",
+  "I understand Taylor's perspective well enough now. I'd like to share my understanding with them.",
+];
+
+// User B (Taylor) — mirror of User A's narrative from Taylor's POV.
+const USER_B_STAGE_1_MESSAGES = [
+  "My partner Shantam has been bringing up complaints about chores constantly, and I just shut down because nothing I do seems good enough.",
+  "I've been working really long hours and coming home is supposed to feel safe, but it feels like another performance review.",
+  "What hurts is that I'm trying so hard at home and at work, and Shantam only seems to notice the things I haven't done yet.",
+  "I just want to feel like Shantam sees the effort I'm putting in, even when I'm overwhelmed.",
+  "I think what I really need is to feel like my struggles matter too, not just the household stuff.",
+  "I want us to be a team again, not adversaries on opposite sides of the kitchen.",
+  "Yes, I feel like you really hear me now. That's exactly it.",
+];
+
+const USER_B_STAGE_2_MESSAGES = [
+  "I think Shantam might feel taken for granted. They probably do a lot of invisible work that I don't acknowledge.",
+  "Shantam grew up in a household where keeping things tidy was how love was shown. When I let things slide, that probably feels like I'm withdrawing love.",
+  "When Shantam asks about chores, they're probably not criticizing me — they're trying to feel partnered with me, like we're a team.",
+  "Shantam doesn't want me to be perfect. They just want to feel seen and like we're in this together.",
+  "I think Shantam wants connection and partnership. My shutting down probably reads as 'I don't care', when really I'm just overwhelmed and afraid of failing.",
+  "I really understand now. Shantam wants us to be a team — they're not attacking me, they're reaching for me.",
+  "Yes, I'm ready to share this with Shantam.",
+];
+
+function makeApiRequest(
+  request: APIRequestContext,
+  userEmail: string,
+  userId: string
+) {
+  const headers = getE2EHeaders(userEmail, userId);
+  return {
+    get: (url: string) => request.get(url, { headers }),
+    post: (url: string, data?: object) => request.post(url, { headers, data }),
+  };
+}
+
+test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
+  let harness: TwoBrowserHarness;
+
+  test.beforeEach(async ({ browser, request }) => {
+    // No fixtureId — real Bedrock, not mocked.
+    harness = new TwoBrowserHarness({
+      userA: { email: 'live-ai-2b-a@e2e.test', name: 'Shantam' },
+      userB: { email: 'live-ai-2b-b@e2e.test', name: 'Taylor' },
+    });
+
+    await harness.cleanup();
+    await harness.setupUserA(browser, request);
+    await harness.createSession();
+  });
+
+  test.afterEach(async () => {
+    await harness.teardown();
+  });
+
+  test('both users complete full session with real AI', async ({ browser, request }) => {
+    test.setTimeout(1800000); // 30 minutes — real AI is ~50-90s per turn
+    const testStart = Date.now();
+    const elapsed = () => `[${((Date.now() - testStart) / 1000).toFixed(1)}s]`;
+
+    // ==========================================
+    // === STAGE 0: COMPACT SIGNING ===
+    // ==========================================
+
+    await harness.setupUserB(browser, request);
+    await harness.acceptInvitation();
+
+    console.log(`${elapsed()} Both users navigating + signing compact...`);
+    await harness.navigateUserA();
+    await signCompact(harness.userAPage);
+    await handleMoodCheck(harness.userAPage);
+
+    await harness.navigateUserB();
+    await signCompact(harness.userBPage);
+    await handleMoodCheck(harness.userBPage);
+
+    await expect(harness.userAPage.getByTestId('chat-input')).toBeVisible();
+    await expect(harness.userBPage.getByTestId('chat-input')).toBeVisible();
+    console.log(`${elapsed()} Compact signed, chat ready for both`);
+
+    // ==========================================
+    // === STAGE 0: USER A INVITATION ===
+    // ==========================================
+    // Only User A goes through the invitation flow — User B accepted via API.
+
+    console.log(`${elapsed()} === USER A: Invitation Crafting ===`);
+    const invitationTurns = await sendAndWaitForPanel(
+      harness.userAPage,
+      USER_A_STAGE_0_MESSAGES,
+      'invitation-draft-panel',
+      USER_A_STAGE_0_MESSAGES.length,
+      AI_RESPONSE_TIMEOUT
+    );
+    console.log(`${elapsed()} Invitation panel appeared after ${invitationTurns} message(s)`);
+
+    const invitationContinueButton = harness.userAPage.getByTestId('invitation-continue-button');
+    await expect(invitationContinueButton).toBeVisible({ timeout: 10000 });
+    await invitationContinueButton.click();
+    await expect(harness.userAPage.getByTestId('invitation-draft-panel')).not.toBeVisible({ timeout: 10000 });
+    console.log(`${elapsed()} Invitation confirmed`);
+
+    // ==========================================
+    // === STAGE 1: WITNESSING (parallel) ===
+    // ==========================================
+    // Both users drive their own conversations toward feel-heard. No
+    // cross-user side effects until either shares empathy in Stage 2, so we
+    // can run the Stage 1 message loops in parallel.
+
+    console.log(`${elapsed()} === STAGE 1: Witnessing (parallel) ===`);
+    const [userATurns1, userBTurns1] = await Promise.all([
+      sendAndWaitForPanel(
+        harness.userAPage,
+        USER_A_STAGE_1_MESSAGES,
+        'feel-heard-yes',
+        USER_A_STAGE_1_MESSAGES.length,
+        AI_RESPONSE_TIMEOUT
+      ),
+      sendAndWaitForPanel(
+        harness.userBPage,
+        USER_B_STAGE_1_MESSAGES,
+        'feel-heard-yes',
+        USER_B_STAGE_1_MESSAGES.length,
+        AI_RESPONSE_TIMEOUT
+      ),
+    ]);
+    console.log(`${elapsed()} Feel-heard appeared (A: ${userATurns1} turns, B: ${userBTurns1} turns)`);
+
+    await Promise.all([
+      confirmFeelHeard(harness.userAPage),
+      confirmFeelHeard(harness.userBPage),
+    ]);
+    console.log(`${elapsed()} Both users confirmed feel-heard`);
+
+    // ==========================================
+    // === STAGE 2: EMPATHY DRAFT (parallel) ===
+    // ==========================================
+    // Both must reach empathy-review-button BEFORE either shares — sharing
+    // triggers an Ably-delivered transition message into the partner's chat,
+    // which would inject an unexpected AI message mid-loop.
+
+    console.log(`${elapsed()} === STAGE 2: Empathy Drafting (parallel) ===`);
+    const [userATurns2, userBTurns2] = await Promise.all([
+      sendAndWaitForPanel(
+        harness.userAPage,
+        USER_A_STAGE_2_MESSAGES,
+        'empathy-review-button',
+        USER_A_STAGE_2_MESSAGES.length,
+        AI_RESPONSE_TIMEOUT
+      ),
+      sendAndWaitForPanel(
+        harness.userBPage,
+        USER_B_STAGE_2_MESSAGES,
+        'empathy-review-button',
+        USER_B_STAGE_2_MESSAGES.length,
+        AI_RESPONSE_TIMEOUT
+      ),
+    ]);
+    console.log(`${elapsed()} Empathy review appeared (A: ${userATurns2} turns, B: ${userBTurns2} turns)`);
+
+    // ==========================================
+    // === STAGE 2: SHARE EMPATHY (sequential) ===
+    // ==========================================
+    // User A shares first (no reconciler trigger). User B shares second
+    // (triggers reconciler).
+
+    console.log(`${elapsed()} User A sharing empathy...`);
+    const reviewBtnA = harness.userAPage.getByTestId('empathy-review-button');
+    await expect(reviewBtnA).toBeVisible({ timeout: 10000 });
+    // JS click bypasses pointer-events: none from the typewriter wrapper.
+    await reviewBtnA.evaluate((el: HTMLElement) => el.click());
+
+    const shareBtnA = harness.userAPage.getByTestId('share-empathy-button');
+    await expect(shareBtnA).toBeVisible({ timeout: 10000 });
+    await shareBtnA.evaluate((el: HTMLElement) => el.click());
+    console.log(`${elapsed()} User A shared`);
+
+    // Allow Ably delivery to User B before B shares (which triggers reconciler).
+    await harness.userAPage.waitForTimeout(2000);
+
+    console.log(`${elapsed()} User B sharing empathy (triggers reconciler)...`);
+    const reviewBtnB = harness.userBPage.getByTestId('empathy-review-button');
+    await expect(reviewBtnB).toBeVisible({ timeout: 10000 });
+    await reviewBtnB.evaluate((el: HTMLElement) => el.click());
+
+    const shareBtnB = harness.userBPage.getByTestId('share-empathy-button');
+    await expect(shareBtnB).toBeVisible({ timeout: 10000 });
+    await shareBtnB.evaluate((el: HTMLElement) => el.click());
+    console.log(`${elapsed()} User B shared`);
+
+    // ==========================================
+    // === RECONCILER COMPLETION ===
+    // ==========================================
+
+    await harness.userAPage.waitForTimeout(2000);
+    console.log(`${elapsed()} Waiting for reconciler...`);
+
+    const userAReconcilerComplete = await waitForReconcilerComplete(harness.userAPage, RECONCILER_TIMEOUT);
+    if (!userAReconcilerComplete) {
+      await harness.userAPage.screenshot({ path: 'test-results/live-ai-2b-reconciler-timeout-A.png' });
+      await harness.userBPage.screenshot({ path: 'test-results/live-ai-2b-reconciler-timeout-B.png' });
+      throw new Error(`Reconciler did not complete within ${RECONCILER_TIMEOUT}ms for User A`);
+    }
+    const userBReconcilerComplete = await waitForReconcilerComplete(harness.userBPage, RECONCILER_TIMEOUT);
+    if (!userBReconcilerComplete) {
+      await harness.userBPage.screenshot({ path: 'test-results/live-ai-2b-reconciler-timeout-B.png' });
+      throw new Error(`Reconciler did not complete within ${RECONCILER_TIMEOUT}ms for User B`);
+    }
+    console.log(`${elapsed()} Reconciler complete for both users`);
+
+    // ==========================================
+    // === STAGE 2 → 3 TRANSITION ===
+    // ==========================================
+
+    const apiA = makeApiRequest(request, harness.config.userA.email, harness.userAId);
+    const apiB = makeApiRequest(request, harness.config.userB.email, harness.userBId);
+
+    // Verify share page renders partner empathy + validation buttons.
+    await navigateToShareFromSession(harness.userAPage);
+    await navigateToShareFromSession(harness.userBPage);
+
+    const userAPartnerEmpathy = harness.userAPage
+      .locator('[data-testid^="share-screen-partner-tab-item-partner-empathy-"]')
+      .first();
+    const userBPartnerEmpathy = harness.userBPage
+      .locator('[data-testid^="share-screen-partner-tab-item-partner-empathy-"]')
+      .first();
+    await expect(userAPartnerEmpathy).toBeVisible({ timeout: 15000 });
+    await expect(userBPartnerEmpathy).toBeVisible({ timeout: 15000 });
+
+    // Validate empathy via API to advance both into Stage 3.
+    await Promise.all([
+      apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/empathy/validate`, { validated: true }),
+      apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/empathy/validate`, { validated: true }),
+    ]);
+    await harness.userAPage.waitForTimeout(2000);
+    console.log(`${elapsed()} Empathy validated by both, advancing to Stage 3`);
+
+    // ==========================================
+    // === STAGE 3: NEEDS EXTRACTION ===
+    // ==========================================
+
+    await navigateBackToChat(harness.userAPage);
+    await navigateBackToChat(harness.userBPage);
+    await handleMoodCheck(harness.userAPage);
+    await handleMoodCheck(harness.userBPage);
+
+    await Promise.all([
+      apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`),
+      apiB.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`),
+    ]);
+    await harness.userAPage.waitForTimeout(3000);
+
+    // Reload to render the needs review UI.
+    await Promise.all([harness.userAPage.reload(), harness.userBPage.reload()]);
+    await Promise.all([
+      harness.userAPage.waitForLoadState('networkidle'),
+      harness.userBPage.waitForLoadState('networkidle'),
+    ]);
+    await handleMoodCheck(harness.userAPage);
+    await handleMoodCheck(harness.userBPage);
+
+    await expect(harness.userAPage.getByText('Confirm my needs')).toBeVisible({ timeout: 60000 });
+    await expect(harness.userBPage.getByText('Confirm my needs')).toBeVisible({ timeout: 60000 });
+    console.log(`${elapsed()} Needs review UI rendered`);
+
+    const needsResponseA = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`);
+    const needsDataA = await needsResponseA.json();
+    const needsA = needsDataA.data?.needs || [];
+
+    const needsResponseB = await apiB.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`);
+    const needsDataB = await needsResponseB.json();
+    const needsB = needsDataB.data?.needs || [];
+
+    expect(needsA.length, 'Needs extraction returned no needs for User A').toBeGreaterThan(0);
+    expect(needsB.length, 'Needs extraction returned no needs for User B').toBeGreaterThan(0);
+
+    if (needsA.length > 0) {
+      const needIdsA = needsA.map((n: { id: string }) => n.id);
+      await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/confirm`, { needIds: needIdsA });
+      await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/consent`, { needIds: needIdsA });
+    }
+    if (needsB.length > 0) {
+      const needIdsB = needsB.map((n: { id: string }) => n.id);
+      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/confirm`, { needIds: needIdsB });
+      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/consent`, { needIds: needIdsB });
+    }
+    console.log(`${elapsed()} Needs confirmed + consented (A: ${needsA.length}, B: ${needsB.length})`);
+
+    // ==========================================
+    // === STAGE 3: COMMON GROUND ===
+    // ==========================================
+
+    let commonGroundComplete = false;
+    const cgDeadline = Date.now() + 90000; // 90s — real AI generates this
+    while (Date.now() < cgDeadline && !commonGroundComplete) {
+      const cgResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground`);
+      const cgData = await cgResponse.json();
+      if (cgData.data?.commonGround && cgData.data.commonGround.length > 0) {
+        commonGroundComplete = true;
+      } else {
+        await harness.userAPage.waitForTimeout(3000);
+      }
+    }
+    if (!commonGroundComplete) {
+      throw new Error('Common ground analysis did not complete within 90s');
+    }
+    console.log(`${elapsed()} Common ground generated`);
+
+    await Promise.all([harness.userAPage.reload(), harness.userBPage.reload()]);
+    await Promise.all([
+      harness.userAPage.waitForLoadState('networkidle'),
+      harness.userBPage.waitForLoadState('networkidle'),
+    ]);
+    await handleMoodCheck(harness.userAPage);
+    await handleMoodCheck(harness.userBPage);
+
+    await expect(harness.userAPage.getByText(/Shared Needs Discovered/i)).toBeVisible({ timeout: 15000 });
+    await expect(harness.userBPage.getByText(/Shared Needs Discovered/i)).toBeVisible({ timeout: 15000 });
+
+    const finalCgResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground`);
+    const finalCgData = await finalCgResponse.json();
+    const commonGroundItems = finalCgData.data?.commonGround || [];
+    const commonGroundIds = commonGroundItems.map((cg: { id: string }) => cg.id);
+
+    if (commonGroundIds.length > 0) {
+      await Promise.all([
+        apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground/confirm`, { commonGroundIds }),
+        apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground/confirm`, { commonGroundIds }),
+      ]);
+    }
+    await harness.userAPage.waitForTimeout(1000);
+
+    const advanceResponseA = await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
+    const advanceDataA = await advanceResponseA.json();
+    if (!advanceDataA.data?.advanced && advanceDataA.data?.blockedReason === 'PARTNER_NOT_READY') {
+      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
+      await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
+    } else {
+      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
+    }
+    await harness.userAPage.waitForTimeout(1000);
+    console.log(`${elapsed()} Advanced to Stage 4`);
+
+    // ==========================================
+    // === STAGE 4: STRATEGIES + AGREEMENT ===
+    // ==========================================
+
+    await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies`, {
+      description: 'Have a 10-minute phone-free conversation at dinner each day',
+      needsAddressed: ['Connection', 'Recognition'],
+    });
+    await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies`, {
+      description: 'Use a pause signal when conversations get heated',
+      needsAddressed: ['Safety', 'Connection'],
+    });
+    await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies`, {
+      description: 'Say one specific thing I appreciate each morning',
+      needsAddressed: ['Recognition'],
+    });
+
+    const strategiesResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies`);
+    const strategiesData = await strategiesResponse.json();
+    const strategies = strategiesData.data?.strategies || [];
+    expect(strategies.length).toBe(3);
+
+    await Promise.all([harness.userAPage.reload(), harness.userBPage.reload()]);
+    await Promise.all([
+      harness.userAPage.waitForLoadState('networkidle'),
+      harness.userBPage.waitForLoadState('networkidle'),
+    ]);
+    await handleMoodCheck(harness.userAPage);
+    await handleMoodCheck(harness.userBPage);
+
+    await Promise.all([
+      apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies/ready`),
+      apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies/ready`),
+    ]);
+
+    const [s1, s2, s3] = strategies;
+    await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies/rank`, {
+      rankedIds: [s1.id, s2.id, s3.id],
+    });
+    const rankBResponse = await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies/rank`, {
+      rankedIds: [s1.id, s3.id, s2.id],
+    });
+    const rankBData = await rankBResponse.json();
+    expect(rankBData.data?.canReveal).toBe(true);
+
+    const overlapResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/strategies/overlap`);
+    const overlapData = await overlapResponse.json();
+    const overlapStrategies = overlapData.data?.overlap || [];
+    expect(overlapStrategies.length).toBeGreaterThanOrEqual(1);
+    console.log(`${elapsed()} Strategy overlap: ${overlapStrategies.length} strategies`);
+
+    const followUpDate = new Date();
+    followUpDate.setDate(followUpDate.getDate() + 7);
+
+    const agreementResponse = await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/agreements`, {
+      strategyId: overlapStrategies[0].id,
+      description: overlapStrategies[0].description,
+      type: 'MICRO_EXPERIMENT',
+      followUpDate: followUpDate.toISOString(),
+    });
+    const agreementData = await agreementResponse.json();
+    const agreementId = agreementData.data?.agreement?.id;
+    expect(agreementId, 'Agreement creation did not return an id').toBeTruthy();
+
+    const confirmResponse = await apiB.post(
+      `${API_BASE_URL}/api/sessions/${harness.sessionId}/agreements/${agreementId}/confirm`,
+      { confirmed: true }
+    );
+    const confirmData = await confirmResponse.json();
+    expect(confirmData.data?.sessionComplete).toBe(true);
+    console.log(`${elapsed()} === SESSION COMPLETE ===`);
+
+    // Final diagnostic screenshots (no toHaveScreenshot — chat varies between runs).
+    await Promise.all([harness.userAPage.reload(), harness.userBPage.reload()]);
+    await Promise.all([
+      harness.userAPage.waitForLoadState('networkidle'),
+      harness.userBPage.waitForLoadState('networkidle'),
+    ]);
+    await handleMoodCheck(harness.userAPage);
+    await handleMoodCheck(harness.userBPage);
+    await harness.userAPage.screenshot({ path: 'test-results/live-ai-2b-final-A.png' });
+    await harness.userBPage.screenshot({ path: 'test-results/live-ai-2b-final-B.png' });
+  });
+});

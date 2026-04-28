@@ -1,6 +1,10 @@
 /**
  * Playwright config for live-AI tests (MOCK_LLM=false).
  *
+ * Picks up any spec named `live-ai-*.spec.ts` (single-user or two-browser).
+ * No E2E_FIXTURE_ID in webServer env — per-user fixtures (when used) flow
+ * through the X-E2E-Fixture-ID header from each browser context.
+ *
  * Run with:
  *   npx playwright test --config=e2e/playwright.live-ai.config.ts
  */
@@ -13,10 +17,10 @@ dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: 'live-ai-full-flow.spec.ts',
-  timeout: 900000, // 15 minutes per test (real AI: ~50-60s per response including classifier timeout)
+  testMatch: /live-ai-.*\.spec\.ts/,
+  timeout: 1800000, // 30 minutes per test (two-browser real-AI flow can take 15+ min)
   expect: {
-    timeout: 15000,
+    timeout: 90000, // real-AI roundtrips can take 60s+; pad for empathy/strategy turns
   },
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
@@ -33,7 +37,7 @@ export default defineConfig({
   projects: [
     {
       name: 'live-ai-flow',
-      testMatch: /live-ai-full-flow\.spec\.ts/,
+      testMatch: /live-ai-.*\.spec\.ts/,
       use: {
         baseURL: 'http://localhost:8082',
       },
@@ -50,6 +54,9 @@ export default defineConfig({
         ...process.env,
         E2E_AUTH_BYPASS: 'true',
         MOCK_LLM: 'false',
+        // No E2E_FIXTURE_ID — two-browser specs supply per-user fixtures via
+        // X-E2E-Fixture-ID header. The single-user live-ai-full-flow spec
+        // does not rely on a global fixture id either (it reaches real LLM).
       },
     },
     {
