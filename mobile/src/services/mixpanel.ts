@@ -48,6 +48,7 @@ const createNoOpClient = (): IMixpanel => {
 // This will hold our client, either the real one or the no-op one.
 let mixpanelClient: IMixpanel;
 let didInit = false;
+let identifiedUserId: string | null = null;
 
 /**
  * Initialize the Mixpanel client.
@@ -94,22 +95,19 @@ export const track = (eventName: string, properties?: Record<string, unknown>): 
 };
 
 /**
- * Simple identify function with dev guard.
- * This should be called when a user logs in or when the app loads with a stored user.
+ * Identify the current user. Skips if already identified with the same userId
+ * to prevent errAnonDistinctIdAssignedAlready errors from the Mixpanel SDK.
  */
 export const identify = (userId: string): void => {
-  console.log('[Mixpanel] identify() called', {
-    userId,
-    didInit,
-    clientExists: !!mixpanelClient,
-    timestamp: new Date().toISOString(),
-  });
-
   assertInit();
+
+  if (identifiedUserId === userId) {
+    return;
+  }
 
   try {
     mixpanelClient?.identify(userId);
-    console.log('[Mixpanel] identify() completed successfully for user:', userId);
+    identifiedUserId = userId;
   } catch (error) {
     console.error('[Mixpanel] identify() failed:', error);
   }
@@ -189,6 +187,7 @@ export const registerSuperProperties = (properties: Record<string, unknown>): vo
  */
 export const reset = (): void => {
   mixpanelClient?.reset();
+  identifiedUserId = null;
 };
 
 /**
