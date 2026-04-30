@@ -331,9 +331,9 @@ WHERE cc."sharedVesselId" = $sharedVesselId
 
 ---
 
-## Stage 3: Need Mapping
+## Stage 3: What Matters
 
-**Purpose**: Identify universal needs and find common ground. See [Stage 3 Documentation](../../stages/stage-3-need-mapping.md).
+**Purpose**: Identify universal needs and find common ground. See [Stage 3 Documentation](../../stages/stage-3-what-matters.md).
 
 ### Retrieval Contract
 
@@ -536,7 +536,7 @@ function determineMemoryIntent(
 
 - [Stage 1: The Witness](../../stages/stage-1-witness.md)
 - [Stage 2: Perspective Stretch](../../stages/stage-2-perspective-stretch.md)
-- [Stage 3: Need Mapping](../../stages/stage-3-need-mapping.md)
+- [Stage 3: What Matters](../../stages/stage-3-what-matters.md)
 - [Stage 4: Strategic Repair](../../stages/stage-4-strategic-repair.md)
 - [Vessel Model](../../privacy/vessel-model.md)
 - [Consensual Bridge](../../mechanisms/consensual-bridge.md)

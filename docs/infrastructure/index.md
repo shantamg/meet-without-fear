@@ -38,7 +38,7 @@ The crontab (installed by `deploy.sh`) covers roughly the following categories. 
 | every 1 min | `workspace-dispatcher.sh` | Drive label-based workspace dispatch |
 | every 1 min | `process-queue.sh` | Drain queued work items |
 | every 1 min | `api-budget-monitor.sh` | Track Claude API spend per workspace |
-| every 5 min | `clear-stale-locks.sh` | Unblock wedged dispatcher runs |
+| every 5 min | `clear-stale-locks.sh` | Unblock wedged dispatcher runs; auto-clear `waiting-human` markers when a non-bot reply is detected |
 | every 5 min | `check-socket-mode.sh` | Restart socket listener if Slack disconnects |
 | every 10 min | `pipeline-monitor.sh` | Watch PR / workflow state |
 | every 30 min | `thread-tracker.sh` | Reconcile Slack threads with GitHub activity |

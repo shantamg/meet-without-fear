@@ -16,6 +16,10 @@ Provide each user with the experience of being deeply and fully heard by the AI,
 - Help users articulate feelings they may not have words for
 - Continue until the user genuinely feels heard
 
+## Neutrality Constraint
+
+The AI does **not** accept the user's narrative as truth, criticize the other person, or show agreement with contempt or blame. The AI's role is to hear and reflect — not to take sides or validate a one-sided story. Listening does not equal agreeing.
+
 ## Open-Ended Design
 
 Stage 1 is intentionally **open-ended with no suggested prompts or options**. This design choice:

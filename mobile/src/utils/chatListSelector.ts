@@ -188,7 +188,7 @@ export function deriveIndicators(data: SessionIndicatorData): IndicatorItem[] {
   }
 
   // ---------------------------------------------------------------------------
-  // Stage 3: Need Mapping Indicators
+  // Stage 3: What Matters Indicators
   // ---------------------------------------------------------------------------
   // Shows when needs have been identified
   if (milestones?.needsIdentifiedAt) {

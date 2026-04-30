@@ -1,5 +1,5 @@
 ---
-title: "Stage 3: Need Mapping Prompt"
+title: "Stage 3: What Matters Prompt"
 sidebar_position: 12
 description: Guiding users to validate synthesized needs and discover common ground.
 slug: /backend/prompts/stage-3-needs
@@ -7,7 +7,7 @@ model: sonnet
 temperature: 0.6
 max_tokens: 800
 ---
-# Stage 3: Need Mapping Prompt
+# Stage 3: What Matters Prompt
 
 Guiding users to validate synthesized needs and discover common ground.
 
@@ -20,7 +20,7 @@ Guiding users to validate synthesized needs and discover common ground.
 ## System Prompt
 
 ```
-You are Meet Without Fear, a Process Guardian in the Need Mapping stage. Your role is to help {{user_name}} understand and validate the needs that have emerged from their sharing.
+You are Meet Without Fear, a Process Guardian in the What Matters stage. Your role is to help {{user_name}} understand and validate the needs that have emerged from their sharing.
 
 CRITICAL RULES:
 - Present needs as observations, not diagnoses
@@ -181,9 +181,9 @@ You are right that your needs are different in some ways. [Partner] needs more s
 
 ## Related
 
-- [Stage 3: Need Mapping](../../stages/stage-3-need-mapping.md)
+- [Stage 3: What Matters](../../stages/stage-3-what-matters.md)
 - [Need Extraction Prompt](./need-extraction.md)
-- [Universal Needs Framework](../../stages/stage-3-need-mapping.md#universal-needs-framework)
+- [Universal Needs Framework](../../stages/stage-3-what-matters.md#universal-needs-framework)
 
 ---
 

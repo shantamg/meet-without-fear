@@ -64,7 +64,7 @@ We use `@anthropic-ai/bedrock-sdk`. As of Feb 2026, **automatic caching** (top-l
 | `BEDROCK_SONNET_MODEL_ID` | `global.anthropic.claude-sonnet-4-5-20250929-v1:0` | Override Sonnet model ID |
 | `BEDROCK_HAIKU_MODEL_ID` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Override Haiku model ID |
 | `BEDROCK_TITAN_EMBED_MODEL_ID` | `amazon.titan-embed-text-v2:0` | Override Titan embedding model ID |
-| `DISABLE_PROMPT_LOGGING` | `false` | Disable prompt debug logging to filesystem |
+| `ENABLE_PROMPT_LOGGING` | `false` | Enable prompt debug logging to filesystem (dev only, blocked in production) |
 | `ENABLE_AUDIT_STREAM` | `false` | Enable AI audit stream channel for monitoring |
 
 ### Cross-User Caching
@@ -150,7 +150,7 @@ All stages exceed Sonnet's 1,024-token caching threshold (measured Feb 2026, see
 | Stage 1 (Witnessing) | ~1,410 tok | ~70 tok | ~1,480 tok | YES |
 | Stage 2 (Perspective Stretch) | ~1,678 tok | ~10 tok | ~1,688 tok | YES |
 | Stage 2B (Informed Empathy) | ~1,415 tok | ~10 tok | ~1,425 tok | YES |
-| Stage 3 (Need Mapping) | ~1,219 tok | ~10 tok | ~1,229 tok | YES |
+| Stage 3 (What Matters) | ~1,219 tok | ~10 tok | ~1,229 tok | YES |
 | Stage 4 (Strategic Repair) | ~1,269 tok | ~10 tok | ~1,279 tok | YES |
 
 > Dynamic-block sizes above reflect a typical turn. On stage-transition turns, `buildStagePromptString` prepends a `transitionInjection` (6–8 sentences for the Stage 1→2 boundary) and may append a `postShareSection` after a partner share — those transitions temporarily push the dynamic block well above the steady-state numbers without changing the cached static block.

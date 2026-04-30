@@ -38,7 +38,7 @@ export const streamingRateLimit = rateLimit({
       message: 'Too many messages. Please wait a moment before sending another.',
     },
   },
-  skip: () => process.env.E2E_AUTH_BYPASS === 'true',
+  skip: () => process.env.E2E_AUTH_BYPASS === 'true' && process.env.NODE_ENV !== 'production',
   validate,
 });
 
@@ -59,7 +59,7 @@ export const empathyRateLimit = rateLimit({
       message: 'Too many requests. Please wait a moment.',
     },
   },
-  skip: () => process.env.E2E_AUTH_BYPASS === 'true',
+  skip: () => process.env.E2E_AUTH_BYPASS === 'true' && process.env.NODE_ENV !== 'production',
   validate,
 });
 
@@ -80,7 +80,7 @@ export const authRateLimit = rateLimit({
       message: 'Too many auth requests. Please wait a moment.',
     },
   },
-  skip: () => process.env.E2E_AUTH_BYPASS === 'true',
+  skip: () => process.env.E2E_AUTH_BYPASS === 'true' && process.env.NODE_ENV !== 'production',
   validate,
 });
 
@@ -101,6 +101,6 @@ export const globalRateLimit = rateLimit({
       message: 'Too many requests. Please slow down.',
     },
   },
-  skip: () => process.env.E2E_AUTH_BYPASS === 'true',
+  skip: () => process.env.E2E_AUTH_BYPASS === 'true' && process.env.NODE_ENV !== 'production',
   validate,
 });

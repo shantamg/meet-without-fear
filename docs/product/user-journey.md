@@ -25,7 +25,7 @@ flowchart TD
 
     Stage0 --> Stage1[Stage 1: The Witness]
     Stage1 --> Stage2[Stage 2: Perspective Stretch]
-    Stage2 --> Stage3[Stage 3: Need Mapping]
+    Stage2 --> Stage3[Stage 3: What Matters]
     Stage3 --> Stage4[Stage 4: Strategic Repair]
     Stage4 --> Resolution[Resolution achieved]
 
@@ -137,7 +137,7 @@ flowchart TD
 
 ---
 
-### Stage 3: Need Mapping
+### Stage 3: What Matters
 
 ```mermaid
 flowchart TD
@@ -282,7 +282,7 @@ stateDiagram-v2
 - [Stage 0: Onboarding](../stages/stage-0-onboarding.md)
 - [Stage 1: The Witness](../stages/stage-1-witness.md)
 - [Stage 2: Perspective Stretch](../stages/stage-2-perspective-stretch.md)
-- [Stage 3: Need Mapping](../stages/stage-3-need-mapping.md)
+- [Stage 3: What Matters](../stages/stage-3-what-matters.md)
 - [Stage 4: Strategic Repair](../stages/stage-4-strategic-repair.md)
 - [Emotional Barometer](../mechanisms/emotional-barometer.md)
 

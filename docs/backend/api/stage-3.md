@@ -1,10 +1,10 @@
 ---
-title: "Stage 3 API: Need Mapping"
+title: "Stage 3 API: What Matters"
 sidebar_position: 10
 description: Endpoints for identifying needs, confirming them, and discovering common ground.
 slug: /backend/api/stage-3
 ---
-# Stage 3 API: Need Mapping
+# Stage 3 API: What Matters
 
 Endpoints for identifying needs, confirming them, and discovering common ground.
 
@@ -398,15 +398,15 @@ In Stage 3, the API enforces these retrieval rules:
 
 Vector search is scoped to needs only (not raw events).
 
-See [Retrieval Contracts: Stage 3](../state-machine/retrieval-contracts.md#stage-3-need-mapping).
+See [Retrieval Contracts: Stage 3](../state-machine/retrieval-contracts.md#stage-3-what-matters).
 
 ---
 
 ## Related Documentation
 
-- [Stage 3: Need Mapping](../../stages/stage-3-need-mapping.md)
+- [Stage 3: What Matters](../../stages/stage-3-what-matters.md)
 - [Need Extraction Prompt](../prompts/need-extraction.md)
-- [Universal Needs Framework](../../stages/stage-3-need-mapping.md#universal-needs-framework)
+- [Universal Needs Framework](../../stages/stage-3-what-matters.md#universal-needs-framework)
 
 ---
 

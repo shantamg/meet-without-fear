@@ -77,8 +77,11 @@ export function MixpanelInitializer() {
     if (!isLoaded) return;
 
     async function handleAuthChange() {
-      // Sign in transition
-      if (isSignedIn && user && prevSignedIn.current === false) {
+      const wasPrevSignedIn = prevSignedIn.current;
+      prevSignedIn.current = isSignedIn ?? false;
+
+      // Sign in transition (includes first load with existing session: null → true)
+      if (isSignedIn && user && wasPrevSignedIn !== true) {
         const userId = user.id;
 
         // Check if we need to alias (first time this user on this device)
@@ -107,17 +110,18 @@ export function MixpanelInitializer() {
         // Register user_id as super property
         registerSuperProperties({ user_id: userId });
 
-        // Determine provider and if new user
-        const provider = user.externalAccounts?.[0]?.provider || 'unknown';
-        const createdAt = user.createdAt ? new Date(user.createdAt).getTime() : 0;
-        const isNewUser = Date.now() - createdAt < 60000; // Created within last minute
+        // Track sign in/up only for real sign-in transitions (not app launch with existing session)
+        if (wasPrevSignedIn === false) {
+          const provider = user.externalAccounts?.[0]?.provider || 'unknown';
+          const createdAt = user.createdAt ? new Date(user.createdAt).getTime() : 0;
+          const isNewUser = Date.now() - createdAt < 60000; // Created within last minute
 
-        // Track sign in/up
-        track(isNewUser ? 'Sign Up Completed' : 'Sign In Completed', {
-          method: 'oauth',
-          provider,
-          user_id: userId,
-        });
+          track(isNewUser ? 'Sign Up Completed' : 'Sign In Completed', {
+            method: 'oauth',
+            provider,
+            user_id: userId,
+          });
+        }
 
         // Set user properties
         setUserPropertiesOnce({
@@ -133,28 +137,24 @@ export function MixpanelInitializer() {
       }
 
       // Sign out transition
-      if (!isSignedIn && prevSignedIn.current === true) {
+      if (!isSignedIn && wasPrevSignedIn === true) {
         track('Logout');
         reset();
         // Mark that we reset Mixpanel - this prevents alias() errors on next login
         // since the SDK's anonymous distinctId may be invalid after reset()
         await AsyncStorage.setItem(RESET_FLAG, 'true');
       }
-
-      prevSignedIn.current = isSignedIn ?? false;
     }
 
     handleAuthChange();
   }, [isLoaded, isSignedIn, user]);
 
-  // Re-identify on app foreground (defensive)
+  // Update session properties on app foreground
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !user) return;
 
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active' && user?.id) {
-        // Re-identify and update session
-        identify(user.id);
         registerSuperProperties({
           app_session_id: getCurrentSessionId(),
           user_id: user.id,

@@ -184,6 +184,50 @@ if [ -d "$CLAIMS_DIR" ]; then
   # waiting for human input. 7 days matches the spec-builder stale threshold.
   WAITING_CLEANED=$(find "$CLAIMS_DIR" -name "waiting-human-*.txt" -mmin +10080 -delete -print 2>/dev/null | wc -l)
   [ "$WAITING_CLEANED" -gt 0 ] && echo "[$(date)] Cleaned $WAITING_CLEANED stale waiting-human markers" >> "$LOGFILE"
+
+  # Auto-clear waiting-human markers when a non-bot user has replied on the issue.
+  # Without this, the bot stays deaf to human replies once a marker is written
+  # (pipeline-monitor Check 7 only runs while a bot:milestone-builder issue is open).
+  # Gate on github-state.json updatedAt to avoid unnecessary API calls.
+  # Refs: #150, #151, #152, #169, #173
+  GITHUB_STATE_FILE="${GITHUB_STATE_FILE:-${BOT_STATE_DIR}/github-state.json}"
+  for MARKER in "$CLAIMS_DIR"/waiting-human-*.txt; do
+    [ -f "$MARKER" ] || continue
+    ISSUE_NUM=$(basename "$MARKER" | sed 's/^waiting-human-//; s/\.txt$//')
+    [ -z "$ISSUE_NUM" ] && continue
+
+    # Gate: only check if the issue has been updated since the marker was written
+    MARKER_EPOCH=$(stat -c %Y "$MARKER" 2>/dev/null || echo 0)
+    if [ -f "$GITHUB_STATE_FILE" ]; then
+      UPDATED_AT=$(jq -r --arg n "$ISSUE_NUM" '.issues[$n].updatedAt // empty' "$GITHUB_STATE_FILE" 2>/dev/null)
+      if [ -n "$UPDATED_AT" ]; then
+        UPDATED_EPOCH=$(date -d "$UPDATED_AT" +%s 2>/dev/null || echo 0)
+        if [ "$UPDATED_EPOCH" -le "$MARKER_EPOCH" ]; then
+          continue  # Issue not updated since marker — skip API call
+        fi
+      fi
+    fi
+
+    # Fetch the latest comment on the issue
+    LATEST_COMMENT=$(gh api "repos/${GITHUB_REPO}/issues/${ISSUE_NUM}/comments?per_page=1&direction=desc" 2>/dev/null | jq '.[0] // empty' 2>/dev/null)
+    [ -z "$LATEST_COMMENT" ] && continue
+
+    COMMENT_AUTHOR=$(echo "$LATEST_COMMENT" | jq -r '.user.login // empty')
+    COMMENT_DATE=$(echo "$LATEST_COMMENT" | jq -r '.created_at // empty')
+    [ -z "$COMMENT_AUTHOR" ] || [ -z "$COMMENT_DATE" ] && continue
+
+    # Skip if the latest comment is from the bot itself
+    if [ "$COMMENT_AUTHOR" = "$BOT_NAME" ] || [ "$COMMENT_AUTHOR" = "slam-paws" ]; then
+      continue
+    fi
+
+    # Only clear if the comment was posted after the marker was written
+    COMMENT_EPOCH=$(date -d "$COMMENT_DATE" +%s 2>/dev/null || echo 0)
+    if [ "$COMMENT_EPOCH" -gt "$MARKER_EPOCH" ]; then
+      rm -f "$MARKER"
+      echo "[$(date)] Auto-cleared waiting-human-${ISSUE_NUM} — human reply from $COMMENT_AUTHOR at $COMMENT_DATE" >> "$LOGFILE"
+    fi
+  done
 fi
 
 # Clean up temp prompt/context files (>1 hour old)

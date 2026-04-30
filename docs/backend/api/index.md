@@ -120,8 +120,8 @@ Emotional tracking across all stages.
 | `GET` | `/sessions/:id/emotions` | Get emotional history |
 | `POST` | `/sessions/:id/exercises/complete` | Log exercise completion |
 
-### [Stage 3: Need Mapping](./stage-3.md)
-Need synthesis and common ground discovery.
+### [Stage 3: What Matters](./stage-3.md)
+User-driven self-reflection on what truly matters; AI facilitates needs clarity, not extraction.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
