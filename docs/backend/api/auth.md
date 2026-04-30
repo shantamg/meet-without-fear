@@ -3,6 +3,9 @@ title: Authentication API
 sidebar_position: 13
 description: Authentication via Clerk with backend user provisioning and Ably token management.
 slug: /backend/api/auth
+created: 2026-03-11
+updated: 2026-04-30
+status: living
 ---
 # Authentication API
 
@@ -24,7 +27,7 @@ import { clerkMiddleware, requireAuth } from '@clerk/express';
 app.use(clerkMiddleware());
 app.use('/api/v1', requireAuth(), apiRouter);
 ```
-3) **User provisioning**: The auth middleware (`backend/src/middleware/auth.ts`) upserts a local `User` row keyed by the Clerk user ID on every authenticated request, copying profile fields (email, firstName/lastName) from the Clerk session. Controllers downstream of the middleware (including `GET /auth/me`) assume the User row already exists and only read from it.
+3) **User provisioning**: The auth middleware (`backend/src/middleware/auth.ts`) finds or creates a local `User` row keyed by the Clerk user ID on every authenticated request, copying profile fields (email, firstName/lastName) from the Clerk session. The implementation uses `findUnique` + conditional `update`/`create` (with a P2002 fallback for concurrent-create races) rather than `upsert`, to avoid PostgreSQL deadlocks under concurrent requests. Controllers downstream of the middleware (including `GET /auth/me`) assume the User row already exists and only read from it.
 4) **Token characteristics**: Tokens are Clerk session JWTs; no backend refresh endpoint is needed. Expiration/rotation is managed by Clerk.
 
 The only backend-issued tokens are for Ably (`/auth/ably-token`) which require a valid Clerk session token on the request.
@@ -58,7 +61,7 @@ interface GetMeResponse {
 ```
 
 `GET /auth/me`:
-- Trusts the Clerk middleware for auth context and the middleware-upserted local user row.
+- Trusts the Clerk middleware for auth context and the middleware-provisioned local user row.
 - Returns the current user profile plus `activeSessions` (count of sessions in `ACTIVE`, `WAITING`, or `PAUSED` state) and `pushNotificationsEnabled` (true iff a non-null `pushToken` is stored).
 
 ---
