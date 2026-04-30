@@ -562,7 +562,7 @@ stateDiagram-v2
 
 ## 6. Acceptance Check (Guesser Declines to Refine)
 
-When the guesser receives shared context or feedback but chooses not to refine their empathy statement, the backend transitions the attempt to `READY` with a **hardcoded** alignment message — there is no AI call at this junction. The message is chosen from two templates based on whether the circuit breaker tripped: either "`<subjectName>` has felt heard…" (normal path) or "You've shared your perspective… Let's move forward" (circuit-breaker / already-shared-context path).
+When the guesser receives shared context or feedback but chooses not to refine their empathy statement, the backend transitions the attempt to `READY` with a **hardcoded** alignment message — there is no AI call at this junction. The message is chosen from two templates based on whether the circuit breaker tripped: either "`<subjectName>` has felt heard… Your attempt to imagine what they're feeling was quite accurate…" (normal path) or "You've shared your perspective… [Partner] is also reflecting on your perspective — once they're done, you'll both see what each other shared" (circuit-breaker / already-shared-context path).
 
 ### 6.1 Guesser Perspective (Acceptance Check)
 
