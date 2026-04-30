@@ -43,6 +43,15 @@ import app from './app';
 import { logger } from './lib/logger';
 import { attachRealtimeWebSocket } from './services/realtime-transcription';
 
+// Fail fast: E2E_AUTH_BYPASS must never be enabled in production
+if (process.env.E2E_AUTH_BYPASS === 'true' && process.env.NODE_ENV === 'production') {
+  throw new Error(
+    'FATAL: E2E_AUTH_BYPASS=true is set in a production environment. ' +
+    'This disables all authentication and security controls. ' +
+    'Remove E2E_AUTH_BYPASS from the production environment variables.'
+  );
+}
+
 const PORT = process.env.PORT || 3000;
 
 // Create HTTP server from Express app (required for WebSocket upgrade handling)

@@ -277,7 +277,7 @@ flowchart TB
 ## Related Documents
 
 - [Previous: Stage 1 - The Witness](./stage-1-witness.md)
-- [Next: Stage 3 - Need Mapping](./stage-3-need-mapping.md)
+- [Next: Stage 3 - What Matters](./stage-3-what-matters.md)
 - [Mirror Intervention](../mechanisms/mirror-intervention.md)
 - [Consensual Bridge](../mechanisms/consensual-bridge.md)
 

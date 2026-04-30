@@ -14,7 +14,7 @@ See `.claude/config/services.json` for Render service ID.
 
 ```bash
 curl -s -H "Authorization: Bearer $RENDER_API_KEY" \
-  "https://api.render.com/v1/logs?ownerId=tea-d0a2sd8gjchc73bc8bs0&resource=srv-d6cl3lfpm1nc7399boig&limit=100&direction=backward"
+  "https://api.render.com/v1/logs?ownerId=tea-d0a2sd8gjchc73bc8bs0&resource=srv-d58bj73uibrs73akacd0&limit=100&direction=backward"
 ```
 
 Useful query parameters: `limit` (default 100), `direction` (`backward`/`forward`), `startTime` and `endTime` (ISO 8601).

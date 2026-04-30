@@ -150,7 +150,7 @@ Optional variables include Twilio SMS credentials, Neural Monitor dashboard sett
 | Variable | Purpose |
 |----------|---------|
 | `SENTRY_DSN` | Sentry error tracking DSN |
-| `DISABLE_PROMPT_LOGGING` | Disable prompt/completion logging (boolean) |
+| `ENABLE_PROMPT_LOGGING` | Enable prompt debug logging (dev only, blocked in production) |
 
 ## Documents
 

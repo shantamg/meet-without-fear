@@ -788,16 +788,16 @@ Respond in JSON format:
             ? parsed.response
             : bothShared
               ? `Thank you for sharing your attempt. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
-              : `That took courage - trying to imagine ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will try to imagine what you might be feeling. While you wait, you can use Inner Thoughts to continue processing privately.`;
+              : `You've done something difficult — thank you for staying with it. You've completed your part for now. We'll notify you when ${partnerName || 'your partner'} has completed their side. Then you'll each see the other's attempt to understand.`;
         } catch {
           transitionContent = bothShared
             ? `Thank you for sharing your attempt. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
-            : `That took courage - trying to imagine ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will try to imagine what you might be feeling. While you wait, you can use Inner Thoughts to continue processing privately.`;
+            : `You've done something difficult — thank you for staying with it. You've completed your part for now. We'll notify you when ${partnerName || 'your partner'} has completed their side. Then you'll each see the other's attempt to understand.`;
         }
       } else {
         transitionContent = bothShared
           ? `Thank you for sharing your attempt. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
-          : `That took courage - trying to imagine ${partnerName || 'your partner'}'s perspective. Now ${partnerName || 'your partner'} will try to imagine what you might be feeling. While you wait, you can use Inner Thoughts to continue processing privately.`;
+          : `You've done something difficult — thank you for staying with it. You've completed your part for now. We'll notify you when ${partnerName || 'your partner'} has completed their side. Then you'll each see the other's attempt to understand.`;
       }
 
       // Save the transition message to the database

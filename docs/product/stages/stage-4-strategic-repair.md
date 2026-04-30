@@ -248,7 +248,7 @@ Check-in scheduled: [Date/time if applicable]
 | Scenario | AI Response |
 |----------|-------------|
 | No proposals generated | AI suggests options based on identified needs |
-| Repeated rejection | Explore what would work; may need to return to need mapping |
+| Repeated rejection | Explore what would work; may need to return to what matters |
 | Proposals too ambitious | Help scope down; emphasize "small and reversible" |
 | One party uncooperative | Acknowledge difficulty; explore barriers |
 
@@ -290,7 +290,7 @@ flowchart TD
 
 ## Related Documents
 
-- [Previous: Stage 3 - Need Mapping](./stage-3-need-mapping.md)
+- [Previous: Stage 3 - What Matters](./stage-3-what-matters.md)
 - [User Journey](../overview/user-journey.md)
 - [System Guardrails](../mechanisms/guardrails.md)
 

@@ -76,7 +76,7 @@ stateDiagram-v2
 | 0 (Onboarding) | `compactSigned`, `partnerCompactSigned` | User signed, partner signed |
 | 1 (Witness) | `feelHeardConfirmed` | User posts feel-heard true |
 | 2 (Perspective) | `empathyDraftReady`, `empathyConsented`, `partnerConsented`, `partnerValidated` | Draft marked ready, user consents to share, partner consents, partner validates (or user accepts feedback path) |
-| 3 (Need Mapping) | `needsConfirmed`, `partnerNeedsConfirmed`, `commonGroundConfirmed` | User confirms needs, partner confirms theirs, both confirm common ground |
+| 3 (What Matters) | `needsConfirmed`, `partnerNeedsConfirmed`, `commonGroundConfirmed` | User confirms needs, partner confirms theirs, both confirm common ground |
 | 4 (Strategic Repair) | `strategiesSubmitted`, `rankingsSubmitted`, `overlapIdentified`, `agreementCreated` | Both submitted strategies (or declared none), both rankings in, overlap revealed, Agreement saved |
 
 Advancement rule: a user can advance when all gate keys for their current stage are true AND any stage-level preconditions (e.g., Stage 4 only after both Stage 3 complete). WAITING state is derived when one user satisfies gates and the other has not.

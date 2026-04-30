@@ -37,7 +37,7 @@ Meet Without Fear uses Claude models via AWS Bedrock:
 | [Stage 1: Witnessing](./stage-1-witnessing.md) | 1 | Deep listening and reflection |
 | [Stage 2: Perspective](./stage-2-perspective.md) | 2 | Building empathy guess; also hosts the `MIRROR` mode (redirect judgment) and other internal modes as branches of `buildStage2Prompt` |
 | Stage 2B: Informed Empathy | 21 (internal code) | Refining empathy after receiving partner's shared context (`buildStage2BPrompt`) |
-| [Stage 3: Need Mapping](./stage-3-needs.md) | 3 | Validating needs, extracting universal needs from venting, and surfacing common ground (need extraction lives inside `buildStage3Prompt`) |
+| [Stage 3: What Matters](./stage-3-needs.md) | 3 | User-driven self-reflection on what truly matters; AI redirects other-focused answers back to the user's own needs (lives inside `buildStage3Prompt`) |
 | [Stage 4: Strategic Repair](./stage-4-repair.md) | 4 | Collaborative strategy creation |
 
 ### Cross-Stage

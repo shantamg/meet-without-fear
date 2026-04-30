@@ -1354,7 +1354,7 @@ export class StateFactory {
    * - Validated each other's empathy as accurate
    * - Now in Stage 2 COMPLETED, ready for Stage 3
    *
-   * This stage is ideal for testing the Stage 3 (Need Mapping) flow.
+   * This stage is ideal for testing the Stage 3 (What Matters) flow.
    */
   private async createEmpathyRevealedState(
     tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
@@ -1439,7 +1439,7 @@ export class StateFactory {
       },
     });
 
-    // Stage 3 - IN_PROGRESS (Need Mapping)
+    // Stage 3 - IN_PROGRESS (What Matters)
     await tx.stageProgress.create({
       data: {
         sessionId,
@@ -1730,7 +1730,7 @@ export class StateFactory {
       },
     });
 
-    // Stage 3 - COMPLETED (Need Mapping)
+    // Stage 3 - COMPLETED (What Matters)
     await tx.stageProgress.create({
       data: {
         sessionId,

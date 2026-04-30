@@ -35,7 +35,7 @@ if (process.env.DASHBOARD_URL) {
 const corsOptions: cors.CorsOptions = {
   origin: corsOrigins,
 };
-if (process.env.E2E_AUTH_BYPASS === 'true') {
+if (process.env.E2E_AUTH_BYPASS === 'true' && process.env.NODE_ENV !== 'production') {
   corsOptions.allowedHeaders = '*';
 } else {
   corsOptions.allowedHeaders = [

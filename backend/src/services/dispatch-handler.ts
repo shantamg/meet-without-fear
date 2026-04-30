@@ -69,8 +69,8 @@ Each person gets private time with the AI to share what's on their mind. Deep li
 **Stage 2 - Perspective Stretch**
 You imagine what the other person might be experiencing. You craft an empathy statement that gets shared with them (with your consent). They do the same for you.
 
-**Stage 3 - Need Mapping**
-Identify what you each truly need underneath the conflict - safety, respect, connection, autonomy.
+**Stage 3 - What Matters**
+Explore what truly matters to each of you - in terms of your own needs, not what's wrong with the other person.
 
 **Stage 4 - Strategic Repair**
 Design small testable experiments - specific things to try that address both people's needs.

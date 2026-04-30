@@ -51,8 +51,8 @@ async function markEmpathyReady(
 
   // Choose message based on whether circuit breaker tripped
   const alignmentMessage = circuitBreakerTripped
-    ? `You've shared your perspective on what ${subjectName} might be experiencing. Let's move forward — ${subjectName} is also reflecting on your perspective.`
-    : `${subjectName} has felt heard. The reconciler reports your attempt to imagine what they're feeling was quite accurate. ${subjectName} is now considering your perspective, and once they do, you'll both see what each other shared.`;
+    ? `You've shared your perspective on what ${subjectName} might be experiencing. ${subjectName} is also reflecting on your perspective — once they're done, you'll both see what each other shared.`
+    : `${subjectName} has felt heard. Your attempt to imagine what they're feeling was quite accurate. ${subjectName} is now considering your perspective, and once they're done, you'll both see what each other shared.`;
 
   // De-dup guard: reconciliation iterates every time either side refines, so
   // the shortcut path can fire several times in a row with the same message
@@ -264,8 +264,8 @@ export async function runReconcilerForDirection(
   if (contextAlreadyShared) {
     logger.info('Context already shared, skipping AWAITING_SHARING and marking READY', { subjectId, guesserId });
     // Context was already shared but gaps remain after resubmission.
-    // Mark READY to prevent infinite loop, but use the honest "let's move forward"
-    // message instead of the false "quite accurate" claim.
+    // Mark READY to prevent infinite loop, using the circuit breaker message
+    // (neutral waiting language) instead of the false "quite accurate" claim.
     await markEmpathyReady(sessionId, guesserId, subjectInfo.name, true);
 
     // Mark the reconciler result "handled" so the GET /share-offer fallback

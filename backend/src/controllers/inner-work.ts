@@ -319,12 +319,8 @@ export const createInnerWorkSession = asyncHandler(
       });
     }
 
-    const { title, initialMessage } = parseResult.data;
-
-    // Extract optional linked session fields (not in shared schema yet)
-    const linkedPartnerSessionId = req.body.linkedPartnerSessionId as string | undefined;
-    const linkedAtStage = req.body.linkedAtStage as number | undefined;
-    const linkedTrigger = req.body.linkedTrigger as string | undefined;
+    const { title, initialMessage, linkedPartnerSessionId, linkedAtStage, linkedTrigger } =
+      parseResult.data;
 
     // If linking to a partner session, verify it exists and user is a participant
     if (linkedPartnerSessionId) {

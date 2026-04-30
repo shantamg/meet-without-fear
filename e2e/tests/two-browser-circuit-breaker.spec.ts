@@ -15,7 +15,7 @@
  * - Reconciler returns OFFER_SHARING again → Subject shares → Guesser refines (attempt 3)
  * - Reconciler returns OFFER_SHARING again → Subject shares → Guesser refines (attempt 4)
  * - Circuit breaker trips on 4th attempt → Reconciler skipped → READY forced
- * - Guesser sees circuit breaker transition message ("Let's move forward")
+ * - Guesser sees circuit breaker transition message (waiting-state language)
  * - Both users see empathy revealed
  *
  * SUCCESS CRITERIA:

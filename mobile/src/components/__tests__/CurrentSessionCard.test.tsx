@@ -51,7 +51,7 @@ describe('CurrentSessionCard', () => {
       expect(screen.getByText('The Witness')).toBeTruthy();
     });
 
-    it('shows stage name for Need Mapping', () => {
+    it('shows stage name for What Matters', () => {
       render(
         <CurrentSessionCard
           sessionId="session-123"
@@ -62,7 +62,7 @@ describe('CurrentSessionCard', () => {
         />
       );
 
-      expect(screen.getByText('Need Mapping')).toBeTruthy();
+      expect(screen.getByText('What Matters')).toBeTruthy();
     });
   });
 

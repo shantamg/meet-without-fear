@@ -338,12 +338,12 @@ function getDefaultIntentForStage(
       );
 
     case 3:
-      // Stage 3: Need mapping - moderate recall
+      // Stage 3: What Matters - moderate recall
       return buildResult(
         {
           intent: 'recall_commitment',
           depth: 'full',
-          reason: 'Stage 3 need mapping - full context for synthesis',
+          reason: 'Stage 3 What Matters - full context for needs exploration',
         },
         stageConfig
       );

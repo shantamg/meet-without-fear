@@ -71,7 +71,7 @@ The AI maintains an internal working model:
 
 | Content | Purpose |
 |---------|---------|
-| Need mapping | Identified needs for each user |
+| What matters | Identified needs for each user |
 | Conflict patterns | Recurring dynamics |
 | Common ground | Potential shared needs |
 | Progress tracking | Where each user is in process |

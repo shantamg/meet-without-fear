@@ -20,20 +20,16 @@ Welcome users with a brief, warm opening and secure acknowledgment before enteri
 The AI opens with a brief, warm message. The message varies based on whether this is the user's first session with this partner:
 
 **First session:**
-> "I am here to help you work through conflict—step by step.
->
-> You'll start by sharing what you believe is happening, privately.
->
-> I don't share anything unless you approve it, ever."
+> "I am here to help you work through conflict — step by step. You'll start by sharing what you believe is happening, privately. I won't share anything you've said unless you explicitly approve it."
 
 **Repeat session:**
-> "Welcome back. Same as before — your space is private, nothing shared without your say. Let's pick up where we left off."
+> "Welcome back. Same as before — everything stays private unless you approve sharing. Let's pick up where we left off."
 
 This message:
 - Speaks in the AI's first person voice
+- Sets expectation of a step-by-step process
 - Explains the private chat format
 - Reassures about consent before sharing
-- Asks for a simple acknowledgment to proceed
 
 ## Flow
 
