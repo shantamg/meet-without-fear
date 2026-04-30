@@ -74,8 +74,10 @@ flowchart TD
 
     Discuss --> Document[Document micro-experiment]
 
-    Document --> Schedule[Schedule follow-up check-in]
-    Schedule --> Complete[Stage 4 complete]
+    Document --> FollowUp{Schedule check-in?}
+    FollowUp -->|Yes| Schedule[Set follow-up date]
+    FollowUp -->|No| Complete[Stage 4 complete]
+    Schedule --> Complete
 
     Complete --> Resolution[Resolution achieved]
 ```
@@ -90,14 +92,14 @@ flowchart TB
         G1[Specific: One 15-min check-in per day]
         G2[Time-bounded: For the next week]
         G3[Reversible: Can adjust or stop]
-        G4[Observable: Did we do it? How did it feel?]
+        G4[Measurable: Did we do it? How did it feel?]
     end
 
     subgraph Bad[Too Big - Not a Micro-Experiment]
         B1[Vague: Communicate better]
         B2[Permanent: Always do X]
         B3[High stakes: Major life change]
-        B4[Not observable: Be more supportive]
+        B4[Unmeasurable: Be more supportive]
     end
 ```
 
@@ -222,7 +224,7 @@ flowchart TB
 
 ## Success Criteria
 
-Mutual agreement on at least one micro-experiment with an observable outcome and a scheduled follow-up check-in.
+Mutual agreement on at least one micro-experiment.
 
 ## Agreement Documentation
 
@@ -236,9 +238,9 @@ Date agreed: [Date]
 
 Experiment: [Specific description]
 Duration: [Time period]
-Observable outcome: [How both parties will know if it worked]
+Success measure: [How to know if it worked]
 
-Check-in scheduled: [Date/time — required]
+Check-in scheduled: [Date/time if applicable]
 ```
 
 ## Failure Paths
@@ -246,13 +248,13 @@ Check-in scheduled: [Date/time — required]
 | Scenario | AI Response |
 |----------|-------------|
 | No proposals generated | AI suggests options based on identified needs |
-| Repeated rejection | Explore what would work; may need to return to need mapping |
+| Repeated rejection | Explore what would work; may need to return to what matters |
 | Proposals too ambitious | Help scope down; emphasize "small and reversible" |
 | One party uncooperative | Acknowledge difficulty; explore barriers |
 
-## Follow-Up Check-In (Required)
+## Follow-Up Support
 
-Every micro-experiment includes a scheduled follow-up check-in. This is not optional — accountability is part of the repair process.
+If users schedule a check-in:
 
 ```mermaid
 flowchart TD
@@ -288,7 +290,7 @@ flowchart TD
 
 ## Related Documents
 
-- [Previous: Stage 3 - What Matters](./stage-3-need-mapping.md)
+- [Previous: Stage 3 - What Matters](./stage-3-what-matters.md)
 - [User Journey](../overview/user-journey.md)
 - [System Guardrails](../mechanisms/guardrails.md)
 

@@ -29,8 +29,9 @@ flowchart TD
     Stage3 --> Stage4[Stage 4: Strategic Repair]
     Stage4 --> Resolution[Resolution achieved]
 
-    Resolution --> CheckIn[Scheduled follow-up check-in]
-    CheckIn --> Complete[Session complete]
+    Resolution --> Followup{Future check-in?}
+    Followup -->|Yes| CheckIn[Scheduled follow-up]
+    Followup -->|No| Complete[Session complete]
 ```
 
 ## Detailed Stage Flow with Success/Failure Loops
@@ -281,7 +282,7 @@ stateDiagram-v2
 - [Stage 0: Onboarding](../stages/stage-0-onboarding.md)
 - [Stage 1: The Witness](../stages/stage-1-witness.md)
 - [Stage 2: Perspective Stretch](../stages/stage-2-perspective-stretch.md)
-- [Stage 3: What Matters](../stages/stage-3-need-mapping.md)
+- [Stage 3: What Matters](../stages/stage-3-what-matters.md)
 - [Stage 4: Strategic Repair](../stages/stage-4-strategic-repair.md)
 - [Emotional Barometer](../mechanisms/emotional-barometer.md)
 

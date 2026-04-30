@@ -177,7 +177,7 @@ flowchart TD
 ## Related Documents
 
 - [Stage 2: Perspective Stretch](../stages/stage-2-perspective-stretch.md)
-- [Stage 3: What Matters](../stages/stage-3-need-mapping.md)
+- [Stage 3: What Matters](../stages/stage-3-what-matters.md)
 - [System Guardrails](./guardrails.md)
 
 ---

@@ -121,7 +121,7 @@ Emotional tracking across all stages.
 | `POST` | `/sessions/:id/exercises/complete` | Log exercise completion |
 
 ### [Stage 3: What Matters](./stage-3.md)
-Need synthesis and common ground discovery.
+User-driven self-reflection on what truly matters; AI facilitates needs clarity, not extraction.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
