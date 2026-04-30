@@ -5,6 +5,7 @@
  */
 
 let didInit = false;
+let identifiedUserId: string | null = null;
 
 const log = (message: string, ...args: unknown[]) => {
   if (__DEV__) {
@@ -23,7 +24,9 @@ export const track = (eventName: string, properties?: Record<string, unknown>): 
 };
 
 export const identify = (userId: string): void => {
+  if (identifiedUserId === userId) return;
   log('Identify:', userId);
+  identifiedUserId = userId;
 };
 
 export const alias = (aliasId: string): void => {
@@ -44,6 +47,7 @@ export const registerSuperProperties = (properties: Record<string, unknown>): vo
 
 export const reset = (): void => {
   log('Reset');
+  identifiedUserId = null;
 };
 
 export const isInitialized = (): boolean => didInit;
