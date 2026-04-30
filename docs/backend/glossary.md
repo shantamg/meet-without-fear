@@ -53,7 +53,7 @@ Canonical definitions for Meet Without Fear backend terminology. Use these terms
 
 | Term | Definition | Implementation |
 |------|------------|----------------|
-| **RLS** | Row-Level Security. Postgres feature enforcing access at database level. | Prisma + SET LOCAL |
+| **RLS** | Row-Level Security. Postgres feature for database-level access control; currently documented as future hardening, not active runtime protection. | Not active |
 | **Dirty Flag** | Boolean indicating AI Synthesis cache needs regeneration. | StageProgress.isSynthesisDirty |
 | **Airlock** | (Future) Async queue for notifications when partner is offline. | BullMQ/Redis; not required for MVP (use Ably + Expo push directly) |
 | **Context Bundle** | Pre-assembled data package sent to Large Model. | Context Assembler |

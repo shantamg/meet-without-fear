@@ -112,7 +112,6 @@ project-root/
 - Purpose: Infrastructure + third-party clients
 - Contains:
   - `prisma.ts` - Singleton Prisma client
-  - `prisma-rls.ts` - PostgreSQL Row Level Security helper (`withUserContext()` sets `app.current_user_id` session variable)
   - `bedrock.ts` - AWS Bedrock LLM client (with circuit breaker integration)
   - `logger.ts` - Winston structured logger with JSON output in production, pretty-print in dev; auto-injects request context; Sentry transport for errors
   - Note: Backend Ably client lives in `backend/src/services/realtime.ts` (no separate backend/lib file). The *mobile* Ably client singleton is a separate file at `mobile/src/lib/ably.ts`.

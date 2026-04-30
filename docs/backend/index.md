@@ -53,8 +53,8 @@ These rules are constitutional and must never be compromised:
 ## Technology Stack
 
 - **Runtime**: Node.js with Express
-- **ORM**: Prisma (RLS middleware wired in `lib/prisma-rls.ts`, not every query path uses it)
-- **Database**: PostgreSQL (Render). `pgvector` extension is currently disabled (commented out in `schema.prisma`); embeddings fields are placeholders for future vector search. Row-Level Security is in use for session-scoped reads.
+- **ORM**: Prisma with application-layer access-control filters.
+- **Database**: PostgreSQL (Render). `pgvector` extension is currently disabled (commented out in `schema.prisma`); embeddings fields are placeholders for future vector search. PostgreSQL RLS is not active runtime protection.
 - **Realtime**: Ably (pub/sub + presence detection for immediate partner notifications)
 - **Push**: Expo Push Notifications (for offline users)
 - **AI Models**: AWS Bedrock (Haiku for mechanics, Sonnet for facilitation)
@@ -93,7 +93,7 @@ Model stratification, prompt templates for each stage, transformation prompts
 REST endpoints for session management, stage progression, and consent flows
 
 ### [Security](./security/index.md)
-Row-level security policies, access control, consent enforcement
+Application-layer access control, consent enforcement, and RLS status
 
 ### [Testing](./testing/index.md)
 Unit, integration, and E2E testing strategy
