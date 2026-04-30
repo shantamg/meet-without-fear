@@ -82,18 +82,22 @@ Items the bot recommends but will NOT start without explicit approval:
 
 ### 3. Compose #most-important-thing message
 
-This message is intentionally short. One item, one rationale, done.
+This message has two sections so both readers get what they need.
 
 ```
 *[One-sentence description of the single most important thing]*
 [One sentence: why it matters right now]
+[One sentence: what the bot wants to do about it]
 <issue/PR link>
+
+*Technical detail:*
+[2-4 sentences with code-level context for Shantam — file paths, architecture impact, implementation approach]
 ```
 
 Rules for the main message:
-- **Maximum 3 lines**: what, why, link. That's it.
-- No sections, no bullet lists, no pipeline summary, no "Proceeding" or "Suggestion" items
-- Plain language — no file paths, function names, or jargon (Darryl reads this)
+- **Top section is plain English** for Darryl — no file paths, function names, stack traces, or jargon
+- **Bottom section ("Technical detail")** is for Shantam — include technical specifics, code references, architecture context
+- Both sections appear in every briefing so each person gets what they need
 - Use `<https://github.com/shantamg/meet-without-fear/issues/N|#N>` for the link
 - If there are unanswered carry-forward items, the carry-forward IS the most important thing — re-present it
 - If there are genuinely no items, say: "Nothing urgent today — pipeline is healthy."
@@ -175,7 +179,7 @@ Post a thread reply on the daily summary with retrospective detail and scanner r
 
 Only include sections that have content. If a scanner returned "clean" status, mention it briefly (e.g., "No new Sentry patterns detected") rather than omitting it entirely — this confirms the scan ran.
 
-Use "Good morning!" for the 7 AM run, "Evening check-in!" for the 7 PM run.
+Use "Good morning!" as the greeting.
 
 Rules for the daily summary:
 - Keep each bullet to one line with issue link
