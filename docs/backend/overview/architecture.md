@@ -42,7 +42,7 @@ flowchart TB
     end
 
     subgraph "Data Layer"
-        SQL[(PostgreSQL + RLS)]
+        SQL[(PostgreSQL)]
         VEC[(pgvector)]
     end
 
@@ -161,95 +161,34 @@ If User B disconnects between presence check and Ably publish (rare race conditi
 const missed = await api.get('/notifications/unread');
 ```
 
-## Row-Level Security (RLS)
+## Access Control Boundary
 
-Meet Without Fear uses Postgres RLS to enforce vessel isolation at the database level.
+Meet Without Fear currently enforces data isolation in the application layer.
+PostgreSQL RLS is not active runtime protection; see
+[Database Row-Level Security](../security/rls-policies.md) for the current
+status and future requirements.
 
-### The Prisma + RLS Challenge
-
-Prisma connects as a single app user, which bypasses RLS by default. We solve this with **Interactive Transactions with Local Settings**.
-
-### RLS Middleware Pattern
-
-Every query sets three locals for RLS evaluation:
+Controllers and services must scope Prisma queries with authenticated user
+context and session membership checks:
 
 ```typescript
-type ActorRole = 'user' | 'ai' | 'admin';
-
-// Middleware wraps every Prisma query
-async function withRLS<T>(
-  actorId: string,
-  actorRole: ActorRole,
-  sessionId: string | null,
-  operation: (tx: PrismaClient) => Promise<T>
-): Promise<T> {
-  return prisma.$transaction(async (tx) => {
-    // Always set all three locals - use empty string for null to fail closed
-    await tx.$executeRaw`SET LOCAL app.actor_id = ${actorId}`;
-    await tx.$executeRaw`SET LOCAL app.actor_role = ${actorRole}`;
-    await tx.$executeRaw`SET LOCAL app.current_session_id = ${sessionId ?? ''}`;
-
-    // Now run the actual query - RLS policies will apply
-    return operation(tx);
-  });
-}
-
-// User query - scoped to their own vessels (keyed by userId, not vesselId)
-const userEvents = await withRLS(currentUserId, 'user', null, async (tx) => {
-  return tx.userEvent.findMany({
-    where: { vessel: { userId: currentUserId } }
-  });
-});
-
-// AI query - scoped to specific session + user being served
-// Key by (sessionId, userId), let DB join to vessel - avoids vesselId foot-gun
-const aiContext = await withRLS(targetUserId, 'ai', sessionId, async (tx) => {
-  return tx.userEvent.findMany({
-    where: { vessel: { sessionId, userId: targetUserId } }
-  });
+const userEvents = await prisma.userEvent.findMany({
+  where: {
+    vessel: {
+      userId: currentUserId,
+      session: { relationship: { members: { some: { userId: currentUserId } } } },
+    },
+  },
 });
 ```
 
-### AI System Actor (Session-Scoped Access)
+AI reads use the same boundary. The AI does not get a blanket user or service
+identity for relationship data; context assembly must retrieve only the data
+allowed for the user and session being served.
 
-The AI does NOT get blanket read access. RLS enforces that AI can only access:
-- The specific user's data it is currently serving
-- Within the specific session it is processing
-
-```sql
--- RLS policy for UserEvent (strict session-scoped AI access)
-CREATE POLICY user_event_access ON "UserEvent"
-FOR SELECT
-USING (
-  -- User access: only their own vessels
-  (
-    current_setting('app.actor_role', true) = 'user'
-    AND "vesselId" IN (
-      SELECT id FROM "UserVessel"
-      WHERE "userId" = current_setting('app.actor_id', true)
-    )
-  )
-  OR
-  -- AI access: only within explicit scoped session context
-  (
-    current_setting('app.actor_role', true) = 'ai'
-    -- Require non-null AND non-empty session ID (fail closed)
-    AND NULLIF(current_setting('app.current_session_id', true), '') IS NOT NULL
-    AND "vesselId" IN (
-      SELECT uv.id FROM "UserVessel" uv
-      WHERE uv."sessionId" = current_setting('app.current_session_id', true)
-        -- AI can only access the user it is currently serving
-        AND uv."userId" = current_setting('app.actor_id', true)
-    )
-  )
-);
-```
-
-**Critical**: This keeps "RLS is truth" true. The AI cannot access partner data even if app-layer validation fails - the database enforces it.
-
-**Future hardening note**: If DB-level stage enforcement is needed later, add `app.current_stage` and `app.user_stage_status` locals. Currently stage enforcement is in the app layer via retrieval contracts.
-
-**Source of truth for stage enforcement (MVP)**: Retrieval contracts + StageProgress gates in the application layer are authoritative. Database locals (`app.current_stage`) are only used for defense-in-depth on SharedVessel reads in Stage 2+ and should mirror the app value, not override it.
+Stage enforcement is also application-layer: retrieval contracts and
+`StageProgress` gates are authoritative. Missing `userId`, `sessionId`,
+relationship membership, consent, or stage filters are security defects.
 
 ## Dual-Layer Data Strategy
 

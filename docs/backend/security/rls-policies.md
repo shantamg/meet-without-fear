@@ -1,385 +1,84 @@
 ---
-title: Row-Level Security Policies
+title: Database Row-Level Security
 sidebar_position: 2
-description: PostgreSQL RLS policies enforcing privacy at the database level.
+description: Current database RLS status and requirements for future enforcement.
 slug: /backend/security/rls-policies
 ---
-# Row-Level Security Policies
-
-PostgreSQL RLS policies enforcing privacy at the database level.
-
-## Overview
-
-Row-Level Security (RLS) ensures that even if application code has bugs, the database itself prevents unauthorized data access. Every query is filtered based on the current actor's identity and role.
-
-## Session Variables
-
-Before each request, the backend sets these PostgreSQL session variables:
-
-```sql
--- Set by middleware before any queries
-SET LOCAL app.actor_id = 'user_123';
-SET LOCAL app.actor_role = 'user';  -- or 'ai'
-SET LOCAL app.current_session_id = 'sess_abc';
-SET LOCAL app.current_stage = '2';
-```
-
-## Enabling RLS
-
-```sql
--- Enable RLS on all sensitive tables
-ALTER TABLE "UserVessel" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "UserEvent" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "EmotionalReading" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "IdentifiedNeed" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "Boundary" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "Message" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "ConsentedContent" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "ConsentRecord" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "StageProgress" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "EmpathyDraft" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "EmpathyAttempt" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "EmpathyValidation" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "StrategyProposal" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "StrategyRanking" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "EmotionalExerciseCompletion" ENABLE ROW LEVEL SECURITY;
-
--- Force RLS even for table owners
-ALTER TABLE "UserVessel" FORCE ROW LEVEL SECURITY;
--- ... repeat for all tables
-```
-
-## UserVessel Policies
-
-The UserVessel is completely private to its owner.
-
-```sql
--- Users can only see their own vessels
-CREATE POLICY user_vessel_select ON "UserVessel"
-  FOR SELECT
-  USING (
-    "userId" = current_setting('app.actor_id', true)
-  );
-
--- Users can only insert their own vessels
-CREATE POLICY user_vessel_insert ON "UserVessel"
-  FOR INSERT
-  WITH CHECK (
-    "userId" = current_setting('app.actor_id', true)
-  );
-
--- Users can only update their own vessels
-CREATE POLICY user_vessel_update ON "UserVessel"
-  FOR UPDATE
-  USING (
-    "userId" = current_setting('app.actor_id', true)
-  );
-
--- No delete policy - vessels are never deleted
-```
-
-## UserEvent Policies
-
-Events are private to the vessel owner.
-
-```sql
--- Select: Only owner can see their events
-CREATE POLICY user_event_select ON "UserEvent"
-  FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM "UserVessel" uv
-      WHERE uv.id = "UserEvent"."vesselId"
-        AND uv."userId" = current_setting('app.actor_id', true)
-    )
-  );
-
--- Insert: Only owner can add events to their vessel
-CREATE POLICY user_event_insert ON "UserEvent"
-  FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM "UserVessel" uv
-      WHERE uv.id = "vesselId"
-        AND uv."userId" = current_setting('app.actor_id', true)
-    )
-  );
-```
-
-## EmotionalReading Policies
-
-Same pattern as UserEvent - private to vessel owner.
-
-```sql
-CREATE POLICY emotional_reading_select ON "EmotionalReading"
-  FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM "UserVessel" uv
-      WHERE uv.id = "EmotionalReading"."vesselId"
-        AND uv."userId" = current_setting('app.actor_id', true)
-    )
-  );
-```
-
-## Message Policies
-
-Messages are visible to session participants only.
-
-```sql
--- Select: Session participants can see messages
-CREATE POLICY message_select ON "Message"
-  FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM "Session" s
-      JOIN "Relationship" r ON s."relationshipId" = r.id
-      JOIN "RelationshipMember" rm ON rm."relationshipId" = r.id
-      WHERE s.id = "Message"."sessionId"
-        AND rm."userId" = current_setting('app.actor_id', true)
-    )
-  );
-
--- Insert: Only participants can send messages
-CREATE POLICY message_insert ON "Message"
-  FOR INSERT
-  WITH CHECK (
-    -- Sender must be a participant (or null for AI)
-    (
-      "senderId" IS NULL  -- AI message
-      OR "senderId" = current_setting('app.actor_id', true)
-    )
-    AND EXISTS (
-      SELECT 1 FROM "Session" s
-      JOIN "Relationship" r ON s."relationshipId" = r.id
-      JOIN "RelationshipMember" rm ON rm."relationshipId" = r.id
-      WHERE s.id = "sessionId"
-        AND rm."userId" = current_setting('app.actor_id', true)
-    )
-  );
-```
-
-## ConsentedContent Policies
-
-Shared content requires active consent verification.
-
-```sql
--- Select: Only accessible if consent is active
-CREATE POLICY consented_content_select ON "ConsentedContent"
-  FOR SELECT
-  USING (
-    -- Must be a session participant
-    EXISTS (
-      SELECT 1 FROM "SharedVessel" sv
-      JOIN "Session" s ON sv."sessionId" = s.id
-      JOIN "Relationship" r ON s."relationshipId" = r.id
-      JOIN "RelationshipMember" rm ON rm."relationshipId" = r.id
-      WHERE sv.id = "ConsentedContent"."sharedVesselId"
-        AND rm."userId" = current_setting('app.actor_id', true)
-    )
-    -- AND consent must be active
-    AND "consentActive" = true
-  );
-```
-
-## StageProgress Policies
-
-Users can see their own progress and partner's stage (not gate details).
-
-```sql
--- Select own progress: Full access
-CREATE POLICY stage_progress_own ON "StageProgress"
-  FOR SELECT
-  USING (
-    "userId" = current_setting('app.actor_id', true)
-  );
-
--- Select partner progress: Limited (stage and status only, enforced at app layer)
-CREATE POLICY stage_progress_partner ON "StageProgress"
-  FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM "Session" s
-      JOIN "Relationship" r ON s."relationshipId" = r.id
-      JOIN "RelationshipMember" rm ON rm."relationshipId" = r.id
-      WHERE s.id = "StageProgress"."sessionId"
-        AND rm."userId" = current_setting('app.actor_id', true)
-    )
-  );
-```
-
-## AI Actor Policies
-
-When AI is querying, it inherits the user's context but cannot access more than the user could.
-
-```sql
--- AI queries use actor_role = 'ai' but still scoped to actor_id
--- The AI is "acting on behalf of" a specific user
-
--- Example: AI can read user's vessel when serving them
-CREATE POLICY user_vessel_ai ON "UserVessel"
-  FOR SELECT
-  USING (
-    current_setting('app.actor_role', true) = 'ai'
-    AND "userId" = current_setting('app.actor_id', true)
-    AND "sessionId" = current_setting('app.current_session_id', true)
-  );
-```
-
-## Stage-Based Restrictions
-
-Some policies are stage-dependent (enforced primarily at app layer, with DB as backup).
-
-```sql
--- Example: SharedVessel only accessible in Stage 2+
--- This is enforced at app layer via retrieval contracts
--- DB provides defense in depth
-
-CREATE POLICY shared_content_stage_check ON "ConsentedContent"
-  FOR SELECT
-  USING (
-    "consentActive" = true
-    AND current_setting('app.current_stage', true)::int >= 2
-);
-```
-
-## Stage 2 Policies (Empathy)
-
-```sql
--- Draft: only owner can read/write their draft
-CREATE POLICY empathy_draft_rw ON "EmpathyDraft"
-  USING ("userId" = current_setting('app.actor_id', true))
-  WITH CHECK ("userId" = current_setting('app.actor_id', true));
-
--- Attempt: session participants can read only the attempt addressed to them or they authored
-CREATE POLICY empathy_attempt_select ON "EmpathyAttempt"
-  FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM "Session" s
-      JOIN "Relationship" r ON s."relationshipId" = r.id
-      JOIN "RelationshipMember" rm ON rm."relationshipId" = r.id
-      WHERE s.id = "EmpathyAttempt"."sessionId"
-        AND rm."userId" = current_setting('app.actor_id', true)
-    )
-  );
-
--- Validation: only recipient can write their validation
-CREATE POLICY empathy_validation_rw ON "EmpathyValidation"
-  USING ("userId" = current_setting('app.actor_id', true))
-  WITH CHECK ("userId" = current_setting('app.actor_id', true));
-```
-
-## Stage 4 Policies (Strategies)
-
-```sql
--- Strategy proposals are session-scoped; source userId is hidden at API layer
-CREATE POLICY strategy_proposal_select ON "StrategyProposal"
-  FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM "Session" s
-      JOIN "Relationship" r ON s."relationshipId" = r.id
-      JOIN "RelationshipMember" rm ON rm."relationshipId" = r.id
-      WHERE s.id = "StrategyProposal"."sessionId"
-        AND rm."userId" = current_setting('app.actor_id', true)
-    )
-  );
-
-CREATE POLICY strategy_ranking_rw ON "StrategyRanking"
-  USING ("userId" = current_setting('app.actor_id', true))
-  WITH CHECK ("userId" = current_setting('app.actor_id', true));
-```
-
-## Emotional Exercise Completion
-
-```sql
-CREATE POLICY exercise_completion_rw ON "EmotionalExerciseCompletion"
-  USING ("userId" = current_setting('app.actor_id', true))
-  WITH CHECK ("userId" = current_setting('app.actor_id', true));
-```
-
-## Stage locals and enforcement
-
-Stage enforcement remains app-layer for MVP. DB locals (`app.current_stage`) are only used to block SharedVessel reads below Stage 2; they must mirror StageProgress and never be treated as primary truth.
-
-## Middleware Implementation
-
-```typescript
-// Express middleware to set RLS context
-async function setRLSContext(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
-  const userId = req.user?.id;
-  const sessionId = req.params.sessionId;
-  const stage = await getCurrentStage(userId, sessionId);
-
-  await prisma.$executeRaw`
-    SET LOCAL app.actor_id = ${userId};
-    SET LOCAL app.actor_role = 'user';
-    SET LOCAL app.current_session_id = ${sessionId || ''};
-    SET LOCAL app.current_stage = ${stage?.toString() || '0'};
-  `;
-
-  next();
-}
-
-// For AI queries
-async function setAIContext(userId: string, sessionId: string) {
-  const stage = await getCurrentStage(userId, sessionId);
-
-  await prisma.$executeRaw`
-    SET LOCAL app.actor_id = ${userId};
-    SET LOCAL app.actor_role = 'ai';
-    SET LOCAL app.current_session_id = ${sessionId};
-    SET LOCAL app.current_stage = ${stage.toString()};
-  `;
-}
-```
-
-## Testing RLS
-
-```sql
--- Test as a specific user
-SET LOCAL app.actor_id = 'user_123';
-SET LOCAL app.actor_role = 'user';
-
--- This should return only user_123's vessels
-SELECT * FROM "UserVessel";
-
--- This should return nothing (partner's data)
-SET LOCAL app.actor_id = 'user_456';
-SELECT * FROM "UserVessel" WHERE "userId" = 'user_123';
--- Expected: 0 rows
-```
-
-## Common Pitfalls
-
-| Pitfall | Solution |
-|---------|----------|
-| Forgetting to set context | Middleware sets it on every request |
-| Bypassing RLS in migrations | Use separate admin connection |
-| Leaking via JOINs | RLS applies to each table in JOIN |
-| Performance impact | Create indexes on policy columns |
-
-## Performance Indexes
-
-```sql
--- Index for RLS lookups
-CREATE INDEX idx_user_vessel_user ON "UserVessel" ("userId");
-CREATE INDEX idx_user_event_vessel ON "UserEvent" ("vesselId");
-CREATE INDEX idx_message_session ON "Message" ("sessionId");
-CREATE INDEX idx_consented_active ON "ConsentedContent" ("sharedVesselId", "consentActive");
-CREATE INDEX idx_relationship_member_user ON "RelationshipMember" ("userId");
-```
+# Database Row-Level Security
+
+PostgreSQL Row-Level Security (RLS) is not part of the active runtime security
+model today. Data isolation is enforced in application code with authenticated
+request context, explicit Prisma filters, relationship/session membership
+checks, consent checks, and stage retrieval contracts.
+
+## Current Status
+
+Migration `20260430000000_remove_unenforced_rls` disables the previously created
+RLS policies for:
+
+- `InnerWorkSession`
+- `InnerWorkMessage`
+- `UserVessel`
+- `UserMemory`
+- `StageProgress`
+- `EmpathyDraft`
+
+The removed policies were created by
+`20260311000000_add_row_level_security`, but they were not enforced at runtime:
+
+- Prisma connects using the database owner role, which bypasses RLS unless every
+  protected table has `FORCE ROW LEVEL SECURITY`.
+- Production code did not set `app.current_user_id` before querying protected
+  tables.
+- No non-owner application database role was provisioned for normal runtime
+  traffic.
+- Several sensitive tables were never covered by the original policy set.
+
+Keeping those policies in place gave a false impression that the database was
+providing defense in depth. Removing them makes the security boundary explicit.
+
+## Active Isolation Model
+
+The backend relies on application-layer authorization:
+
+- Auth middleware resolves the caller before protected routes run.
+- Controllers and services scope Prisma queries with `userId`, `sessionId`, and
+  relationship membership checks.
+- Consent-sensitive data is read through consent records and shared-content
+  state, including `consentActive` and revocation fields.
+- Stage-specific access is governed by retrieval contracts and `StageProgress`
+  gates before context is assembled for AI prompts.
+- Admin and background jobs must keep explicit filters when reading user,
+  session, relationship, vessel, message, consent, empathy, and strategy data.
+
+Because this is the sole runtime access-control layer, missing filters in
+controllers or services are security defects.
+
+## Future RLS Requirements
+
+RLS should only be reintroduced as an end-to-end project. A partial migration is
+not sufficient. A future implementation must include:
+
+- A non-owner application database role for normal runtime traffic.
+- `FORCE ROW LEVEL SECURITY` on every protected table, with a separate owner or
+  migration role for schema changes.
+- Request-scoped transaction helpers that set PostgreSQL locals before every
+  protected Prisma query path.
+- Policies for all sensitive tables, including message, consent, empathy,
+  strategy, memory, vessel, and inner-work data.
+- Tests that prove cross-user reads and writes fail at the database layer, not
+  only in route handlers.
+- Deployment documentation for database roles, grants, connection strings, and
+  admin bypass procedures.
+
+Until all of those pieces exist, current documentation should treat RLS as
+future hardening rather than an active guarantee.
 
 ## Related Documentation
 
 - [Retrieval Contracts](../state-machine/retrieval-contracts.md) - App-layer access rules
 - [Prisma Schema](../data-model/prisma-schema.md) - Data model
-- [Architecture](../overview/architecture.md) - RLS middleware pattern
+- [Security Architecture](./index.md) - Current security model
 
 ---
 

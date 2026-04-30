@@ -252,12 +252,12 @@ SELECT ue.*
 FROM "UserEvent" ue
 JOIN "UserVessel" uv ON ue."vesselId" = uv.id
 JOIN "Session" s ON uv."sessionId" = s.id
-WHERE uv."userId" = current_setting('app.actor_id', true)
-  AND s."relationshipId" = (SELECT "relationshipId" FROM "Session" WHERE id = current_setting('app.current_session_id', true))
+WHERE uv."userId" = $currentUserId
+  AND s."relationshipId" = (SELECT "relationshipId" FROM "Session" WHERE id = $currentSessionId)
   AND ue.embedding <=> $queryEmbedding < 0.3;
 
 -- FORBIDDEN: Any query touching partner's data
--- RLS policy will return zero rows even if attempted
+-- Application code must not construct or execute this query.
 ```
 
 ---

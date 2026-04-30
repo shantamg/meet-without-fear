@@ -716,18 +716,16 @@ enum GlobalLibrarySource {
 
 ### AI System Access
 
-The AI does NOT have a special user ID with blanket access. Instead, RLS uses three locals:
-
-- `app.actor_id` - The user being served (not an AI ID)
-- `app.actor_role` - Set to `'ai'` when AI is querying
-- `app.current_session_id` - The specific session being processed
+The AI does NOT have a special user ID with blanket access. Context assembly
+uses the user and session being served to apply explicit Prisma filters before
+data is included in prompts.
 
 This means:
-- AI can only access the specific user's data it is currently serving
-- AI can only access within the specific session context
-- RLS enforces this at the database level, not just app layer
+- AI can only receive the specific user's data it is currently serving
+- AI can only receive data within the specific session context
+- Application-layer filters and retrieval contracts are the active enforcement boundary
 
-See [Architecture: RLS Middleware](../overview/architecture.md#row-level-security-rls) for the full implementation pattern.
+See [Architecture: Access Control Boundary](../overview/architecture.md#access-control-boundary) for the current implementation model.
 
 ## pgvector Configuration
 
