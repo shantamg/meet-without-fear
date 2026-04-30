@@ -177,23 +177,31 @@ async function handleClerkAuth(
     const lastName = clerkUser.lastName || null;
     const name = [firstName, lastName].filter(Boolean).join(' ') || null;
 
-    // Upsert user based on Clerk ID
-    const user = await prisma.user.upsert({
-      where: { clerkId: clerkUserId },
-      update: {
-        email,
-        name,
-        firstName,
-        lastName,
-      },
-      create: {
-        clerkId: clerkUserId,
-        email,
-        name,
-        firstName,
-        lastName,
-      },
-    });
+    // Find-or-create user by Clerk ID.
+    // Avoids prisma.user.upsert() which uses SELECT FOR UPDATE internally
+    // and deadlocks (40P01) when concurrent requests race on the same user.
+    let user = await prisma.user.findUnique({ where: { clerkId: clerkUserId } });
+
+    if (user) {
+      user = await prisma.user.update({
+        where: { clerkId: clerkUserId },
+        data: { email, name, firstName, lastName },
+      });
+    } else {
+      try {
+        user = await prisma.user.create({
+          data: { clerkId: clerkUserId, email, name, firstName, lastName },
+        });
+      } catch (error) {
+        // Concurrent create race: another request inserted first
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          user = await prisma.user.findUnique({ where: { clerkId: clerkUserId } });
+          if (!user) throw error;
+        } else {
+          throw error;
+        }
+      }
+    }
 
     req.user = user;
     req.clerkUserId = clerkUserId;

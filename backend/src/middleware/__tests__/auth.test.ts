@@ -143,14 +143,15 @@ describe('Auth Middleware', () => {
       expect(next).not.toHaveBeenCalled();
     });
 
-    it('authenticates user with valid Clerk token', async () => {
+    it('authenticates existing user with valid Clerk token (find + update)', async () => {
       mockVerifyToken.mockResolvedValue({ sub: 'clerk-user-123' });
       mockGetUser.mockResolvedValue({
         firstName: 'Test',
         lastName: 'User',
         emailAddresses: [{ emailAddress: 'test@example.com' }],
       });
-      (prisma.user.upsert as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.user.update as jest.Mock).mockResolvedValue(mockUser);
 
       const req = createMockRequest({
         headers: { authorization: 'Bearer valid-clerk-token' },
@@ -160,24 +161,76 @@ describe('Auth Middleware', () => {
 
       await requireAuth(req as Request, res as Response, next);
 
-      expect(mockVerifyToken).toHaveBeenCalledWith('valid-clerk-token', {
-        secretKey: 'sk_test_xxx',
-      });
-      expect(mockGetUser).toHaveBeenCalledWith('clerk-user-123');
-      expect(prisma.user.upsert).toHaveBeenCalledWith({
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { clerkId: 'clerk-user-123' },
-        update: { email: 'test@example.com', name: 'Test User', firstName: 'Test', lastName: 'User' },
-        create: {
-          clerkId: 'clerk-user-123',
-          email: 'test@example.com',
-          name: 'Test User',
-          firstName: 'Test',
-          lastName: 'User',
-        },
       });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { clerkId: 'clerk-user-123' },
+        data: { email: 'test@example.com', name: 'Test User', firstName: 'Test', lastName: 'User' },
+      });
+      expect(prisma.user.create).not.toHaveBeenCalled();
       expect(next).toHaveBeenCalled();
       expect(req.user).toEqual(mockUser);
       expect(req.clerkUserId).toBe('clerk-user-123');
+    });
+
+    it('creates new user when not found (find + create)', async () => {
+      mockVerifyToken.mockResolvedValue({ sub: 'clerk-new-user' });
+      mockGetUser.mockResolvedValue({
+        firstName: 'New',
+        lastName: 'User',
+        emailAddresses: [{ emailAddress: 'new@example.com' }],
+      });
+      const newUser = { ...mockUser, id: 'user-new', clerkId: 'clerk-new-user', email: 'new@example.com', name: 'New User' };
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.user.create as jest.Mock).mockResolvedValue(newUser);
+
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer valid-clerk-token' },
+      });
+      const { res } = createMockResponse();
+      const next = jest.fn();
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { clerkId: 'clerk-new-user' },
+      });
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: { clerkId: 'clerk-new-user', email: 'new@example.com', name: 'New User', firstName: 'New', lastName: 'User' },
+      });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalled();
+      expect(req.user).toEqual(newUser);
+    });
+
+    it('handles concurrent create race (P2002 fallback)', async () => {
+      const { Prisma } = jest.requireActual('@prisma/client');
+      mockVerifyToken.mockResolvedValue({ sub: 'clerk-race-user' });
+      mockGetUser.mockResolvedValue({
+        firstName: 'Race',
+        lastName: 'User',
+        emailAddresses: [{ emailAddress: 'race@example.com' }],
+      });
+      const raceUser = { ...mockUser, id: 'user-race', clerkId: 'clerk-race-user', email: 'race@example.com' };
+      // First findUnique: not found. Create fails with P2002. Second findUnique: found.
+      (prisma.user.findUnique as jest.Mock)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(raceUser);
+      const p2002Error = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: '5.0.0' });
+      (prisma.user.create as jest.Mock).mockRejectedValue(p2002Error);
+
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer valid-clerk-token' },
+      });
+      const { res } = createMockResponse();
+      const next = jest.fn();
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect(prisma.user.findUnique).toHaveBeenCalledTimes(2);
+      expect(next).toHaveBeenCalled();
+      expect(req.user).toEqual(raceUser);
     });
   });
 
@@ -201,7 +254,8 @@ describe('Auth Middleware', () => {
         lastName: 'User',
         emailAddresses: [{ emailAddress: 'test@example.com' }],
       });
-      (prisma.user.upsert as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.user.update as jest.Mock).mockResolvedValue(mockUser);
 
       const req = createMockRequest({
         headers: { authorization: 'Bearer valid-clerk-token' },
