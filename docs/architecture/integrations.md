@@ -46,7 +46,7 @@ status: living
   - Cost attribution: `CompletionOptions.sessionId` / `.turnId` are optional at the type level (`sessionId?: string`) but required in practice — `SonnetStreamingOptions.sessionId` is non-optional, and call sites/telemetry assume both are present for `BrainActivity` attribution.
   - Haiku JSON retry: `getHaikuJson()` retries once with operation suffix `-retry` if the first response fails JSON parsing, before returning `null`.
   - Legacy model support: `PRICING` still includes entries for `claude-sonnet-4-6`, `claude-3-5-sonnet-20241022-v2:0`, and `claude-3-5-haiku-20241022-v1:0`, and a legacy `BEDROCK_MODEL_ID` export aliases Sonnet. Safe to reference when resurrecting old calls; new call sites should use the named constants.
-  - Prompt debug logging (local dev only): every Bedrock prompt + response is written to `backend/tmp/prompts/` as paired `<stem>.txt` / `<stem>_response.txt` files unless `DISABLE_PROMPT_LOGGING=true`. Directory is gitignored.
+  - Prompt debug logging (local dev only): every Bedrock prompt + response is written to `backend/tmp/prompts/` as paired `<stem>.txt` / `<stem>_response.txt` files when `ENABLE_PROMPT_LOGGING=true` **and** `NODE_ENV !== 'production'`. Disabled by default. Directory is gitignored.
 
 **Real-time Communication:**
 - Ably - WebSocket-based pub/sub messaging
@@ -211,7 +211,7 @@ status: living
 - `MOCK_LLM=true` - Toggle mock LLM responses for E2E testing
 - `E2E_AUTH_BYPASS=true` - Bypass auth for E2E tests
 - `E2E_FIXTURE_ID` - Use pre-canned responses for E2E tests
-- `DISABLE_PROMPT_LOGGING` - Disable prompt debug logging
+- `ENABLE_PROMPT_LOGGING` - Enable prompt debug logging (dev only, blocked in production)
 - `ENABLE_AUDIT_STREAM` - Enable AI audit stream channel for monitoring
 - `BEDROCK_TITAN_EMBED_MODEL_ID` - Override Titan embedding model ID
 - `OPENAI_API_KEY` - OpenAI API key (for voice preview generation in `tts.ts` and `generate-voice-previews.ts`)
