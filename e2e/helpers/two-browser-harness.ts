@@ -11,8 +11,10 @@ import { cleanupE2EData } from './cleanup';
 import { createUserContext, navigateToSession, handleMoodCheck } from './test-utils';
 
 export interface TwoBrowserConfig {
-  userA: { email: string; name: string; fixtureId: string };
-  userB: { email: string; name: string; fixtureId: string };
+  // fixtureId is optional: omit for real-AI runs (MOCK_LLM=false), provide for
+  // mocked runs that match a backend test fixture.
+  userA: { email: string; name: string; fixtureId?: string };
+  userB: { email: string; name: string; fixtureId?: string };
   apiBaseUrl?: string;  // defaults to process.env.API_BASE_URL || 'http://localhost:3000'
   appBaseUrl?: string;  // defaults to process.env.APP_BASE_URL || 'http://localhost:8082'
 }
