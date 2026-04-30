@@ -1,8 +1,8 @@
 # Daily Strategy Workspace (L1)
 
-Generate a twice-daily strategy briefing posted to two channels: a short "Most Important Thing" message to #most-important-thing (one item, one rationale, response prompt) and a comprehensive daily summary to #daily-summary (full breakdown with proceeding/suggestion items, pipeline state, and retrospective). Re-presents unanswered items until the team responds.
+Generate a once-daily strategy briefing posted to two channels: a short "Most Important Thing" message to #most-important-thing (one item, one rationale, response prompt) and a comprehensive daily summary to #daily-summary (full breakdown with proceeding/suggestion items, pipeline state, and retrospective). Re-presents unanswered items until the team responds.
 
-Runs at 7 AM PT and 7 PM PT. Morning sets the day's plan; evening checks in on progress and tees up tomorrow.
+Runs at 7 AM PT. Sets the day's plan and reviews yesterday's progress.
 
 ## What to Load
 
@@ -49,5 +49,5 @@ The workspace implements a persistent response loop with a *consensus requiremen
 ## Orchestrator Rules
 
 - Single-pass: gather data, compose, post, exit
-- Cron-triggered (twice daily): no label swap needed at completion
+- Cron-triggered (once daily at 7 AM PT): no label swap needed at completion
 - If all data sources fail, post a short "Strategy briefing failed to gather data. Check bot logs." message and exit
