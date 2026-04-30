@@ -13,7 +13,7 @@ Meet Without Fear guides users through a structured five-stage process. Each sta
 flowchart LR
     S0[Stage 0\nOnboarding] --> S1[Stage 1\nThe Witness]
     S1 --> S2[Stage 2\nPerspective Stretch]
-    S2 --> S3[Stage 3\nNeed Mapping]
+    S2 --> S3[Stage 3\nWhat Matters]
     S3 --> S4[Stage 4\nStrategic Repair]
 ```
 
@@ -24,7 +24,7 @@ flowchart LR
 | [Stage 0](./stage-0-onboarding.md) | Onboarding | Establish trust and process | Both sign Curiosity Compact |
 | [Stage 1](./stage-1-witness.md) | The Witness | Deep reflection and being heard | Both feel fully heard |
 | [Stage 2](./stage-2-perspective-stretch.md) | Perspective Stretch | Build empathy for other view | Can state other needs accurately; feels accurately reflected |
-| [Stage 3](./stage-3-need-mapping.md) | Need Mapping | Identify universal needs | Common ground identified |
+| [Stage 3](./stage-3-need-mapping.md) | What Matters | Explore what truly matters to each user | User-confirmed universal needs |
 | [Stage 4](./stage-4-strategic-repair.md) | Strategic Repair | Commit to action | Agree on micro-experiment |
 
 ## Parallel vs Sequential Work
@@ -39,7 +39,7 @@ flowchart TD
     subgraph Parallel[Parallel - Independent Work]
         S1[Stage 1: The Witness]
         S2[Stage 2: Perspective Stretch]
-        S3[Stage 3: Need Mapping]
+        S3[Stage 3: What Matters]
     end
 ```
 

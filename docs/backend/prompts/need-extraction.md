@@ -199,7 +199,7 @@ Stage 3 should:
 
 ## Related
 
-- [Stage 3: Need Mapping](../../stages/stage-3-need-mapping.md)
+- [Stage 3: What Matters](../../stages/stage-3-need-mapping.md)
 - [Stage 3 Prompt](./stage-3-needs.md)
 - [Universal Needs Framework](../../stages/stage-3-need-mapping.md#universal-needs-framework)
 

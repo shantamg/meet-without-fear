@@ -71,8 +71,15 @@ flowchart TD
     Ready --> Consent1{Consent to share attempt?}
     Consent1 -->|No| MoreTime[More time to refine]
     MoreTime --> Attempt
-    Consent1 -->|Yes| WaitExchange[Wait for partner]
+    Consent1 -->|Yes| PostShare[Post-sharing message]
+    PostShare --> WaitExchange[Wait for partner]
 ```
+
+### Post-Sharing Message
+
+Once a user consents to share their empathy attempt, the AI delivers:
+
+> "You've done something difficult — thank you for staying with it. You've completed your part for now. We'll notify you when [partner] has completed their side. Then you'll each see the other's attempt to understand."
 
 ### Phase 2: Mutual Exchange
 
@@ -126,7 +133,7 @@ flowchart TD
 
     subgraph Example[Example Exchange]
         User[User: They are just happy I am miserable]
-        AI[AI: I hear how painful that is. When we are hurting this much it can feel like the other person must be causing it on purpose. What fear might be driving their behavior?]
+        AI[AI: I hear how painful that is. When we are hurting this much it can feel like the other person must be causing it on purpose. What do you think might be going on for them underneath that?]
     end
 
     Reflect --> Example
@@ -150,7 +157,7 @@ The [Consensual Bridge](../mechanisms/consensual-bridge.md) mechanism controls t
 
 ## The Empathy Attempt
 
-Each user builds their best guess at what their partner is experiencing:
+Each user builds their best guess at what their partner is experiencing. The AI frames this as exploring **possibilities**, not making assertions:
 
 ```
 AI: [After listening] "What do you imagine [Partner] might be
@@ -158,8 +165,12 @@ AI: [After listening] "What do you imagine [Partner] might be
 
 User: [Builds their attempt - open-ended, not steered]
 
-AI: [Reflects, helps refine without telling them what to think]
+AI: [Offers possibilities to consider, not assertions]
+    "One possibility is that they might be feeling... Does that
+    resonate, or does something else feel closer?"
 ```
+
+The AI helps the user explore what their partner *might* be experiencing without asserting what the partner *is* experiencing. All suggestions are framed as possibilities the user can confirm, adjust, or reject.
 
 **Readiness criteria:**
 - User feels they have put together their best guess
@@ -277,7 +288,7 @@ flowchart TB
 ## Related Documents
 
 - [Previous: Stage 1 - The Witness](./stage-1-witness.md)
-- [Next: Stage 3 - Need Mapping](./stage-3-need-mapping.md)
+- [Next: Stage 3 - What Matters](./stage-3-need-mapping.md)
 - [Mirror Intervention](../mechanisms/mirror-intervention.md)
 - [Consensual Bridge](../mechanisms/consensual-bridge.md)
 
