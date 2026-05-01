@@ -126,7 +126,7 @@ export function MixpanelInitializer() {
         // Set user properties
         setUserPropertiesOnce({
           first_seen_at: new Date().toISOString(),
-          signup_source: 'mobile',
+          signup_source: Platform.OS === 'web' ? 'web' : 'mobile',
         });
 
         setUserProperties({
