@@ -25,6 +25,24 @@ BOT_DISK_PREFIX="${LOCK_PREFIX##*/}"
 
 mkdir -p "$HEARTBEAT_DIR" 2>/dev/null || true
 
+# GitHub-backed cleanup is best-effort maintenance. It must not be allowed to
+# starve the state scanner or review-request handling of GraphQL budget.
+GH_CLEANUP_MIN_GRAPHQL_REMAINING="${GH_CLEANUP_MIN_GRAPHQL_REMAINING:-1000}"
+GH_CLEANUP_CHECK_LIMIT="${GH_CLEANUP_CHECK_LIMIT:-25}"
+GH_CLEANUP_LOCK="/tmp/${BOT_DISK_PREFIX}-github-cleanup.lock"
+GH_CLEANUP_LOCK_HELD=false
+
+github_graphql_remaining() {
+  gh api rate_limit --jq '.resources.graphql.remaining // 0' 2>/dev/null || echo 0
+}
+
+cleanup_github_lock() {
+  if [ "$GH_CLEANUP_LOCK_HELD" = "true" ]; then
+    rmdir "$GH_CLEANUP_LOCK" 2>/dev/null || true
+  fi
+}
+trap cleanup_github_lock EXIT
+
 # Clean up any leftover rate limit state files from the removed rate limiting infrastructure
 rm -f "${LOCK_PREFIX}-rate-limit-state.json" "${LOCK_PREFIX}-github-rate-limit-state.json" 2>/dev/null || true
 rm -f "${LOCK_PREFIX}-rate-limited.flag" "${LOCK_PREFIX}-rate-limit-snapshot.txt" "${LOCK_PREFIX}-rate-limit-warning.flag" 2>/dev/null || true
@@ -287,10 +305,31 @@ if [ -f "$WT_CLEANUP_MARKER" ]; then
   WT_CLEANUP_AGE=$(( ($(date +%s) - $(stat -c %Y "$WT_CLEANUP_MARKER" 2>/dev/null || echo 0)) / 60 ))
 fi
 if [ "$WT_CLEANUP_AGE" -ge 60 ]; then
-touch "$WT_CLEANUP_MARKER"
+  if [ -d "$GH_CLEANUP_LOCK" ]; then
+    GH_CLEANUP_LOCK_AGE=$(( ($(date +%s) - $(stat -c %Y "$GH_CLEANUP_LOCK" 2>/dev/null || echo "$(date +%s)")) / 60 ))
+    if [ "$GH_CLEANUP_LOCK_AGE" -ge 120 ]; then
+      rmdir "$GH_CLEANUP_LOCK" 2>/dev/null || true
+    fi
+  fi
+  if ! mkdir "$GH_CLEANUP_LOCK" 2>/dev/null; then
+    echo "[$(date)] Skipping GitHub-backed cleanup — another cleanup is already running" >> "$LOGFILE"
+  else
+    GH_CLEANUP_LOCK_HELD=true
+    touch "$WT_CLEANUP_MARKER"
+    GH_REMAINING=$(github_graphql_remaining)
+    if [ "$GH_REMAINING" -lt "$GH_CLEANUP_MIN_GRAPHQL_REMAINING" ]; then
+      echo "[$(date)] Skipping GitHub-backed cleanup — GraphQL remaining ${GH_REMAINING} below ${GH_CLEANUP_MIN_GRAPHQL_REMAINING}" >> "$LOGFILE"
+      exit 0
+    fi
+
 MERGED_WT_COUNT=0
+GH_CLEANUP_CHECKS=0
 while IFS= read -r WT_LINE; do
   [ -z "$WT_LINE" ] && continue
+  if [ "$GH_CLEANUP_CHECKS" -ge "$GH_CLEANUP_CHECK_LIMIT" ]; then
+    echo "[$(date)] Stopping worktree cleanup after ${GH_CLEANUP_CHECKS} GitHub checks (limit=${GH_CLEANUP_CHECK_LIMIT})" >> "$LOGFILE"
+    break
+  fi
   WT_PATH=$(echo "$WT_LINE" | awk '{print $1}')
   WT_BRANCH=$(echo "$WT_LINE" | awk '{print $3}' | tr -d '[]')
 
@@ -330,6 +369,7 @@ while IFS= read -r WT_LINE; do
   # Check if the branch's PR is merged or closed (squash merges aren't
   # detected by `git branch --merged`, so we ask GitHub directly)
   SHOULD_REMOVE=false
+  GH_CLEANUP_CHECKS=$((GH_CLEANUP_CHECKS + 1))
   PR_STATE=$(gh pr list --repo "$GITHUB_REPO" --head "$WT_BRANCH" --state all --json state --jq '.[0].state' 2>/dev/null || echo "")
   if [ "$PR_STATE" = "MERGED" ] || [ "$PR_STATE" = "CLOSED" ]; then
     SHOULD_REMOVE=true
@@ -363,7 +403,12 @@ for BRANCH in $(git branch --list 'bot/*' 2>/dev/null | tr -d ' *'); do
 done
 # Also clean merged feature branches not in use by worktrees
 for BRANCH in $(git branch 2>/dev/null | grep -E '^\s*(feat|fix|feature|chore)/' | tr -d ' *'); do
+  if [ "$GH_CLEANUP_CHECKS" -ge "$GH_CLEANUP_CHECK_LIMIT" ]; then
+    echo "[$(date)] Stopping branch cleanup after ${GH_CLEANUP_CHECKS} GitHub checks (limit=${GH_CLEANUP_CHECK_LIMIT})" >> "$LOGFILE"
+    break
+  fi
   if ! git worktree list 2>/dev/null | grep -q "$BRANCH"; then
+    GH_CLEANUP_CHECKS=$((GH_CLEANUP_CHECKS + 1))
     PR_STATE=$(gh pr list --repo "$GITHUB_REPO" --head "$BRANCH" --state all --json state --jq '.[0].state' 2>/dev/null || echo "")
     if [ "$PR_STATE" = "MERGED" ] || [ "$PR_STATE" = "CLOSED" ]; then
       git branch -D "$BRANCH" 2>/dev/null || true
@@ -372,4 +417,7 @@ for BRANCH in $(git branch 2>/dev/null | grep -E '^\s*(feat|fix|feature|chore)/'
   fi
 done
 
+    cleanup_github_lock
+    GH_CLEANUP_LOCK_HELD=false
+  fi
 fi # end hourly worktree cleanup gate
