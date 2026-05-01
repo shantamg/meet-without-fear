@@ -77,6 +77,7 @@ export const alias = (aliasId: string): void => {
   }
   try {
     mixpanel.alias(aliasId);
+    console.log('[Mixpanel Web] alias() completed for user:', aliasId);
   } catch (error) {
     console.error('[Mixpanel Web] alias() failed:', error);
   }
