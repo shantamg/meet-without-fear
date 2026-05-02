@@ -43,6 +43,13 @@ const isE2EMode = process.env.EXPO_PUBLIC_E2E_MODE === 'true';
 const originalResolveRequest = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === '@meet-without-fear/shared') {
+    return {
+      filePath: path.resolve(workspaceRoot, 'shared/src/index.ts'),
+      type: 'sourceFile',
+    };
+  }
+
   // Expo's web HMR client expects the pretty-format@29 CJS export shape.
   // The monorepo also installs pretty-format@30 for testing-library, and Metro
   // can otherwise resolve that newer ESM shape into the runtime and blank the

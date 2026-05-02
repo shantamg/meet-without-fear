@@ -198,32 +198,32 @@ export async function confirmInvitationTopicAndContinue(
   const confirmTopicButton = page.getByTestId('topic-frame-confirm-button');
   const regenerateTopicButton = page.getByTestId('topic-frame-generate-button');
   const continueButton = page.getByTestId('invitation-continue-button');
-  const deadline = Date.now() + timeout;
 
-  while (Date.now() < deadline) {
-    if (await continueButton.isEnabled().catch(() => false)) {
-      await continueButton.click();
-      return;
-    }
-
-    if (
-      await regenerateTopicButton.isVisible().catch(() => false) &&
-      await regenerateTopicButton.isEnabled().catch(() => false)
-    ) {
-      await regenerateTopicButton.click();
-    }
-
-    if (
-      await confirmTopicButton.isVisible().catch(() => false) &&
-      await confirmTopicButton.isEnabled().catch(() => false)
-    ) {
-      await confirmTopicButton.click();
-    }
-
-    await page.waitForTimeout(500);
+  if (await regenerateTopicButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+    const generateResponse = page.waitForResponse(
+      response => response.url().includes('/topic-frame/generate'),
+      { timeout }
+    );
+    await regenerateTopicButton.click();
+    await generateResponse;
   }
 
-  await expect(continueButton).toBeEnabled({ timeout: 1 });
+  if (await confirmTopicButton.isVisible({ timeout }).catch(() => false)) {
+    const confirmResponse = page.waitForResponse(
+      response => response.url().includes('/topic-frame/confirm'),
+      { timeout }
+    );
+    await confirmTopicButton.click();
+    await confirmResponse;
+    await expect(confirmTopicButton).not.toBeVisible({ timeout });
+  }
+
+  const invitationResponse = page.waitForResponse(
+    response => response.url().includes('/invitation/confirm'),
+    { timeout }
+  );
+  await continueButton.click();
+  await invitationResponse;
 }
 
 /**
