@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // useRouter removed - share navigation replaced by ActivityDrawer
-import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion, ConfirmAgreementResponse, MAX_AGREEMENTS } from '@meet-without-fear/shared';
+import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion, ConfirmAgreementResponse, MAX_AGREEMENTS, EmpathyStatus } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
@@ -23,7 +23,6 @@ import { BodyScanExercise } from '../components/BodyScanExercise';
 import { SupportOptionsModal, SupportOption } from '../components/SupportOptionsModal';
 import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
 import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
-import { ValidationCoachChat } from '../components/ValidationCoachChat';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
 import { ShareTopicPanel } from '../components/ShareTopicPanel';
 // NeedsSection and CommonGroundCard removed - now used inside NeedsDrawer
@@ -44,8 +43,10 @@ import { ActivityDrawer } from '../components/ActivityDrawer';
 import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
+import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
+import { useValidationFeedbackCoachChat } from '../hooks/useRefinementChat';
 import { useChatUIState } from '../hooks/useChatUIState';
 import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
@@ -265,6 +266,7 @@ export function UnifiedSessionScreen({
     handleShareEmpathy,
     handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
+    handleSkipRefinement,
     handleConfirmAllNeeds,
     handleConsentToShareNeeds,
     handleConfirmCommonGround,
@@ -750,7 +752,7 @@ export function UnifiedSessionScreen({
   const [showAccuracyFeedbackDrawer, setShowAccuracyFeedbackDrawer] = useState(false);
   const [showShareTopicDrawer, setShowShareTopicDrawer] = useState(false);
   const [showFeedbackCoachChat, setShowFeedbackCoachChat] = useState(false);
-  const [feedbackCoachInitialDraft, setFeedbackCoachInitialDraft] = useState('');
+  const [feedbackCoachRoughFeedback, setFeedbackCoachRoughFeedback] = useState('');
 
   // -------------------------------------------------------------------------
   // Activity Menu Modal
@@ -761,6 +763,19 @@ export function UnifiedSessionScreen({
   // Refinement Modal
   const [refinementOfferId, setRefinementOfferId] = useState<string | null>(null);
   const [refinementInitialSuggestion, setRefinementInitialSuggestion] = useState('');
+  const {
+    messages: feedbackCoachMessages,
+    isLoading: isFeedbackCoachLoading,
+    isFinalizing: isFeedbackCoachFinalizing,
+    isFinalized: isFeedbackCoachFinalized,
+    sendMessage: sendFeedbackCoachMessage,
+    finalizeFeedback,
+    resetChat: resetFeedbackCoachChat,
+  } = useValidationFeedbackCoachChat(
+    sessionId,
+    feedbackCoachRoughFeedback,
+    partnerEmpathyData?.attempt?.content || ''
+  );
 
   // -------------------------------------------------------------------------
   // Needs Drawer (Stage 3)
@@ -803,6 +818,19 @@ export function UnifiedSessionScreen({
   // Extract frequently-read booleans to prevent FlatList re-renders
   const isEmpathyValidated = completedActions.has('validated-empathy');
   const isEmpathyShared = completedActions.has('shared-empathy');
+
+  useEffect(() => {
+    if (showFeedbackCoachChat) {
+      resetFeedbackCoachChat();
+    }
+  }, [showFeedbackCoachChat, resetFeedbackCoachChat]);
+
+  useEffect(() => {
+    if (isFeedbackCoachFinalized) {
+      setShowFeedbackCoachChat(false);
+      setFeedbackCoachRoughFeedback('');
+    }
+  }, [isFeedbackCoachFinalized]);
 
 
 
@@ -1059,7 +1087,9 @@ export function UnifiedSessionScreen({
   // are destructured from the hook at the top of this component.
 
   // Whether user is in "refining" mode (received shared context from partner)
-  const isRefiningEmpathy = !!empathyStatusData?.hasNewSharedContext;
+  const isRefiningEmpathy =
+    !!empathyStatusData?.hasNewSharedContext ||
+    empathyStatusData?.myAttempt?.status === EmpathyStatus.REFINING;
 
   // -------------------------------------------------------------------------
   // Animation Target Flags - Used ONLY for animation target values
@@ -1408,6 +1438,11 @@ export function UnifiedSessionScreen({
   }, [markCompleted, handleValidatePartnerEmpathy]);
 
   const handleValidationNotQuite = useCallback(() => {
+    setShowAccuracyFeedbackDrawer(true);
+  }, []);
+
+  const openFeedbackCoachWithRoughFeedback = useCallback((roughFeedback: string) => {
+    setFeedbackCoachRoughFeedback(roughFeedback);
     setShowFeedbackCoachChat(true);
   }, []);
 
@@ -2537,6 +2572,12 @@ export function UnifiedSessionScreen({
             sendMessage(refined);
             setShowEmpathyDrawer(false);
           }}
+          onAcceptWithoutRevising={() => {
+            handleSkipRefinement(true);
+          }}
+          onDeclineAcceptance={(reason) => {
+            handleSkipRefinement(false, reason);
+          }}
           onClose={() => setShowEmpathyDrawer(false)}
         />
       )}
@@ -2556,45 +2597,44 @@ export function UnifiedSessionScreen({
           }}
           onPartiallyAccurate={() => {
             markCompleted('validated-empathy');
-            handleValidatePartnerEmpathy(false, 'Some parts are accurate');
+            handleValidatePartnerEmpathy(true, 'Some parts are accurate');
             setShowAccuracyFeedbackDrawer(false);
           }}
-          onInaccurate={() => {
+          onInaccurate={(roughFeedback) => {
             setShowAccuracyFeedbackDrawer(false);
-            setFeedbackCoachInitialDraft('');
-            setShowFeedbackCoachChat(true);
+            openFeedbackCoachWithRoughFeedback(roughFeedback);
           }}
           onClose={() => setShowAccuracyFeedbackDrawer(false)}
         />
       )}
 
       {/* Validation Feedback Coach - AI-mediated feedback crafting for inaccurate empathy */}
-      {showFeedbackCoachChat && (
-        <Modal
-          visible={showFeedbackCoachChat}
-          animationType="slide"
-          presentationStyle="fullScreen"
-          onRequestClose={() => setShowFeedbackCoachChat(false)}
-        >
-          <ValidationCoachChat
-            sessionId={sessionId}
-            initialDraft={feedbackCoachInitialDraft}
-            partnerName={partnerName}
-            onCancel={() => {
-              setShowFeedbackCoachChat(false);
-              setFeedbackCoachInitialDraft('');
-            }}
-            onComplete={(feedback) => {
-              setShowFeedbackCoachChat(false);
-              setFeedbackCoachInitialDraft('');
-              markCompleted('validated-empathy');
-              // Submit the AI-crafted feedback as inaccurate validation
-              handleValidatePartnerEmpathy(false, feedback);
-            }}
-            testID="validation-feedback-coach"
-          />
-        </Modal>
-      )}
+      <GuidedDraftChatModal
+        visible={showFeedbackCoachChat}
+        title="Feedback Coach"
+        sessionKey={`feedback-coach-${sessionId}`}
+        messages={feedbackCoachMessages}
+        isLoading={isFeedbackCoachLoading}
+        isFinalizing={isFeedbackCoachFinalizing}
+        partnerName={partnerName}
+        proposalTitle="Proposed Feedback"
+        proposalSubtitle={`This is what will be sent to ${partnerName}`}
+        finalActionLabel="Send Feedback"
+        onSendMessage={sendFeedbackCoachMessage}
+        onFinalize={(feedback) => {
+          markCompleted('validated-empathy');
+          handleValidatePartnerEmpathy(false, feedback);
+          finalizeFeedback(feedback);
+        }}
+        onClose={() => {
+          setShowFeedbackCoachChat(false);
+          setFeedbackCoachRoughFeedback('');
+        }}
+        emptyStateTitle="Feedback Coach"
+        emptyStateMessage="Share what felt off, and I will help you phrase it clearly."
+        finalButtonTestID="send-feedback-button"
+        testID="validation-feedback-coach"
+      />
 
       {/* ShareTopicDrawer - Phase 1 of two-phase share flow */}
       {shareOfferData?.hasSuggestion && shareOfferData.suggestion &&

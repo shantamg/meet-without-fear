@@ -14,6 +14,7 @@ import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { EmpathyStatus } from '@prisma/client';
 import {
+  MessageRole,
   saveEmpathyDraftRequestSchema,
   consentToShareRequestSchema,
   validateEmpathyRequestSchema,
@@ -993,6 +994,7 @@ export async function validateEmpathy(
     }
 
     const { validated, feedback } = parseResult.data;
+    const trimmedFeedback = feedback?.trim();
 
     // Check session exists and user has access
     const session = await prisma.session.findFirst({
@@ -1089,12 +1091,14 @@ export async function validateEmpathy(
         sessionId,
         userId: user.id,
         validated,
-        feedback,
+        feedback: trimmedFeedback,
+        feedbackShared: !validated,
         validatedAt: now,
       },
       update: {
         validated,
-        feedback,
+        feedback: trimmedFeedback,
+        feedbackShared: !validated,
         validatedAt: now,
       },
     });
@@ -1108,6 +1112,28 @@ export async function validateEmpathy(
           statusVersion: { increment: 1 },
           deliveryStatus: 'SEEN',
           seenAt: new Date(),
+        },
+      });
+    } else if (trimmedFeedback && partnerId) {
+      await prisma.empathyAttempt.update({
+        where: { id: partnerAttempt.id },
+        data: {
+          status: 'REFINING',
+          statusVersion: { increment: 1 },
+          deliveryStatus: 'DELIVERED',
+          deliveredAt: now,
+        },
+      });
+
+      await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: user.id,
+          forUserId: partnerId,
+          role: MessageRole.VALIDATION_FEEDBACK,
+          content: trimmedFeedback,
+          stage: 2,
+          timestamp: now,
         },
       });
     }
@@ -1133,28 +1159,29 @@ export async function validateEmpathy(
     if (partnerId) {
       const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
       const partnerEmpathyStatus = await buildEmpathyExchangeStatus(sessionId, partnerId);
-      await notifyPartner(sessionId, partnerId, 'partner.stage_completed', {
-        stage: 2,
-        validated,
-        completedBy: user.id,
-        empathyStatus: partnerEmpathyStatus,
-        // Include triggeredByUserId so frontend can filter out events triggered by self
-        triggeredByUserId: user.id,
-      }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions
 
-      // If validated, also send empathy.status_updated with validation info
-      // so the partner (whose empathy was validated) can see the modal
       if (validated) {
-        await notifyPartner(sessionId, partnerId, 'empathy.status_updated', {
-          status: 'VALIDATED',
-          // Include forUserId so mobile can filter - only the guesser whose empathy was validated should see modal
-          forUserId: partnerId,
+        await notifyPartner(sessionId, partnerId, 'partner.stage_completed', {
+          stage: 2,
+          validated,
+          completedBy: user.id,
           empathyStatus: partnerEmpathyStatus,
-          validatedBy: user.id,
           // Include triggeredByUserId so frontend can filter out events triggered by self
           triggeredByUserId: user.id,
         }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions
       }
+
+      await notifyPartner(sessionId, partnerId, 'empathy.status_updated', {
+        status: validated ? 'VALIDATED' : 'REFINING',
+        // Include forUserId so mobile can filter - only the guesser whose empathy was validated/refined should see modal
+        forUserId: partnerId,
+        empathyStatus: partnerEmpathyStatus,
+        validatedBy: user.id,
+        feedbackShared: !validated,
+        validationFeedback: !validated ? trimmedFeedback : undefined,
+        // Include triggeredByUserId so frontend can filter out events triggered by self
+        triggeredByUserId: user.id,
+      }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions
     }
 
     // Determine whether partner has validated my empathy attempt

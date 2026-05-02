@@ -12,6 +12,10 @@ import { MessageRole } from '@meet-without-fear/shared';
 import { post } from '../lib/api';
 import { stageKeys, notificationKeys } from './queryKeys';
 import type { ChatMessage } from '../components/ChatInterface';
+import {
+  useRefineValidationFeedback,
+  useSaveValidationFeedbackDraft,
+} from './useStages';
 
 // ============================================================================
 // Types
@@ -174,6 +178,147 @@ export function useRefinementChat(sessionId: string, offerId: string, initialSug
     isFinalized: finalizeMutation.isSuccess,
     sendMessage,
     finalizeShare,
+    resetChat,
+  };
+}
+
+export function useValidationFeedbackCoachChat(
+  sessionId: string,
+  roughFeedback: string,
+  partnerEmpathyStatement: string
+) {
+  const [messages, setMessages] = useState<RefinementMessage[]>([]);
+  const [isFinalized, setIsFinalized] = useState(false);
+  const roughFeedbackRef = useRef(roughFeedback);
+  const partnerStatementRef = useRef(partnerEmpathyStatement);
+  const { mutate: refineFeedback, isPending: isRefining } = useRefineValidationFeedback();
+  const { mutate: saveDraft, isPending: isSavingDraft } = useSaveValidationFeedbackDraft();
+
+  const addErrorMessage = useCallback(() => {
+    const errorMsg: RefinementMessage = {
+      id: `feedback-err-${Date.now()}`,
+      sessionId,
+      role: MessageRole.SYSTEM,
+      content: 'Sorry, I had trouble processing that. Please try again.',
+      timestamp: new Date().toISOString(),
+      senderId: null,
+      stage: 2,
+    };
+    setMessages((prev) => [...prev, errorMsg]);
+  }, [sessionId]);
+
+  const requestRefinement = useCallback(
+    (content: string, partnerStatement = partnerStatementRef.current) => {
+      const message = [
+        partnerStatement
+          ? `Partner empathy statement:\n"${partnerStatement}"`
+          : null,
+        `What feels off:\n"${content}"`,
+        'Help me turn this into feedback I can send.',
+      ].filter(Boolean).join('\n\n');
+
+      refineFeedback(
+        { sessionId, message },
+        {
+          onSuccess: (data) => {
+            const aiMsg: RefinementMessage = {
+              id: `feedback-ai-${Date.now()}`,
+              sessionId,
+              role: MessageRole.AI,
+              content: data.response,
+              timestamp: new Date().toISOString(),
+              senderId: null,
+              stage: 2,
+              proposedContent: data.proposedFeedback,
+            };
+
+            setMessages((prev) => [...prev, aiMsg]);
+
+            if (data.proposedFeedback) {
+              saveDraft({
+                sessionId,
+                content: data.proposedFeedback,
+                readyToShare: false,
+              });
+            }
+          },
+          onError: (error) => {
+            console.error('[useValidationFeedbackCoachChat] Error:', error);
+            addErrorMessage();
+          },
+        }
+      );
+    },
+    [addErrorMessage, refineFeedback, saveDraft, sessionId]
+  );
+
+  const sendMessage = useCallback(
+    (content: string) => {
+      const userMsg: RefinementMessage = {
+        id: `feedback-user-${Date.now()}`,
+        sessionId,
+        role: MessageRole.USER,
+        content,
+        timestamp: new Date().toISOString(),
+        senderId: 'me',
+        stage: 2,
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      requestRefinement(content);
+    },
+    [requestRefinement, sessionId]
+  );
+
+  const finalizeFeedback = useCallback((content: string) => {
+    setIsFinalized(true);
+    saveDraft({
+      sessionId,
+      content,
+      readyToShare: true,
+    });
+  }, [saveDraft, sessionId]);
+
+  const resetChat = useCallback(() => {
+    roughFeedbackRef.current = roughFeedback;
+    partnerStatementRef.current = partnerEmpathyStatement;
+    setIsFinalized(false);
+
+    const initialMessages: RefinementMessage[] = [{
+      id: `feedback-initial-${Date.now()}`,
+      sessionId,
+      role: MessageRole.AI,
+      content: `Thanks for naming what felt off. I'll help you turn that into feedback ${partnerEmpathyStatement ? 'that responds to the statement you received' : 'your partner can understand'} without making it harsher than it needs to be.`,
+      timestamp: new Date().toISOString(),
+      senderId: null,
+      stage: 2,
+    }];
+
+    if (roughFeedback.trim()) {
+      initialMessages.push({
+        id: `feedback-rough-${Date.now()}`,
+        sessionId,
+        role: MessageRole.USER,
+        content: roughFeedback.trim(),
+        timestamp: new Date().toISOString(),
+        senderId: 'me',
+        stage: 2,
+      });
+    }
+
+    setMessages(initialMessages);
+
+    if (roughFeedback.trim()) {
+      requestRefinement(roughFeedback.trim(), partnerEmpathyStatement);
+    }
+  }, [partnerEmpathyStatement, requestRefinement, roughFeedback, sessionId]);
+
+  return {
+    messages,
+    isLoading: isRefining,
+    isFinalizing: isSavingDraft,
+    isFinalized,
+    sendMessage,
+    finalizeFeedback,
     resetChat,
   };
 }

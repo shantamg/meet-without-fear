@@ -920,6 +920,23 @@ export async function getSharedContextForGuesser(
   content: string | null;
   sharedAt: string | null;
 }> {
+  const contextMessage = await prisma.message.findFirst({
+    where: {
+      sessionId,
+      forUserId: guesserId,
+      role: { in: [MessageRole.SHARED_CONTEXT, MessageRole.VALIDATION_FEEDBACK] },
+    },
+    orderBy: { timestamp: 'desc' },
+  });
+
+  if (contextMessage) {
+    return {
+      hasSharedContext: true,
+      content: contextMessage.content,
+      sharedAt: contextMessage.timestamp.toISOString(),
+    };
+  }
+
   const shareOffer = await prisma.reconcilerShareOffer.findFirst({
     where: {
       result: {

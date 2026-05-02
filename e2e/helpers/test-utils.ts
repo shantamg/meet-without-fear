@@ -103,14 +103,15 @@ export async function navigateToSession(
 }
 
 /**
- * Navigate from the session chat screen to the Share screen via in-app UI.
- * This avoids deep-linking directly to /share, which can mask stale data issues.
+ * Open the in-session Activity drawer where sharing/validation state now lives.
+ * This avoids deep-linking to deprecated sharing routes, which now redirect back
+ * to the session screen.
  */
 export async function navigateToShareFromSession(
   page: Page,
   timeout = 10000
 ): Promise<void> {
-  if (page.url().includes('/share')) {
+  if (await page.getByTestId('activity-drawer').isVisible({ timeout: 1000 }).catch(() => false)) {
     return;
   }
 
@@ -158,8 +159,7 @@ export async function navigateToShareFromSession(
   // Mood check can occasionally re-appear after route/state updates.
   await handleMoodCheck(page, 2000);
 
-  await page.waitForURL(/\/session\/.*\/share/, { timeout });
-  await page.waitForLoadState('domcontentloaded');
+  await page.getByTestId('activity-drawer').waitFor({ state: 'visible', timeout });
 }
 
 /**
@@ -314,14 +314,21 @@ export async function waitForReconcilerComplete(page: Page, timeout = 30000): Pr
 }
 
 /**
- * Navigate back to the chat screen from any other screen (e.g., Share).
- * If already on chat, returns immediately.
+ * Navigate back to the chat screen from any other in-session surface.
+ * If already on chat with no activity drawer open, returns immediately.
  *
  * @param page - Playwright Page instance
  * @param timeout - Maximum time to wait for navigation (default: 10000)
  */
 export async function navigateBackToChat(page: Page, timeout = 10000): Promise<void> {
-  // If already on chat (not on /share), return immediately
+  const activityDrawer = page.getByTestId('activity-drawer');
+  if (await activityDrawer.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await page.mouse.click(20, 20);
+    await activityDrawer.waitFor({ state: 'hidden', timeout }).catch(() => {});
+    return;
+  }
+
+  // If already on chat (not on a legacy share route), return immediately
   if (!page.url().includes('/share')) {
     return;
   }

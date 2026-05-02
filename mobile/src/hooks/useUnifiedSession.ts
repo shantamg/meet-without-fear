@@ -51,6 +51,7 @@ import {
   useShareOffer,
   useRespondToShareOffer,
   useResubmitEmpathy,
+  useSkipRefinement,
 } from './useStages';
 
 // ============================================================================
@@ -301,6 +302,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   });
   const { mutate: validateEmpathy } = useValidateEmpathy();
   const { mutate: resubmitEmpathy } = useResubmitEmpathy();
+  const { mutate: skipRefinement } = useSkipRefinement();
   const { mutate: confirmNeeds, isPending: isConfirmingNeeds } = useConfirmNeeds();
   const { mutate: consentShareNeeds } = useConsentShareNeeds();
   const { mutate: confirmCommonGroundMutation } = useConfirmCommonGround();
@@ -947,6 +949,14 @@ export function useUnifiedSession(sessionId: string | undefined) {
     [sessionId, validateEmpathy]
   );
 
+  const handleSkipRefinement = useCallback(
+    (willingToAccept: boolean, reason?: string) => {
+      if (!sessionId) return;
+      skipRefinement({ sessionId, willingToAccept, reason });
+    },
+    [sessionId, skipRefinement]
+  );
+
   const handleConfirmAllNeeds = useCallback(
     (onSuccess?: () => void) => {
       if (!sessionId || needs.length === 0) return;
@@ -1189,6 +1199,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     handleShareEmpathy,
     handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
+    handleSkipRefinement,
     handleConfirmAllNeeds,
     handleConsentToShareNeeds,
     handleConfirmCommonGround,

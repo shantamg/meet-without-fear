@@ -17,6 +17,7 @@ import {
   useConsentToShareEmpathy,
   usePartnerEmpathy,
   useValidateEmpathy,
+  useSkipRefinement,
   useNeeds,
   useConfirmNeeds,
   useAddNeed,
@@ -399,6 +400,52 @@ describe('useStages', () => {
           validated: true,
           feedback: 'Yes, you understood me',
         });
+      });
+    });
+
+    describe('useSkipRefinement hook', () => {
+      it('accepts partner experience without further revision', async () => {
+        mockPost.mockResolvedValueOnce({ success: true });
+
+        const { result } = renderHook(() => useSkipRefinement(), {
+          wrapper: createWrapper(),
+        });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            willingToAccept: true,
+          });
+        });
+
+        expect(mockPost).toHaveBeenCalledWith(
+          `/sessions/${sessionId}/empathy/skip-refinement`,
+          { willingToAccept: true }
+        );
+      });
+
+      it('declines partner experience with a reason', async () => {
+        mockPost.mockResolvedValueOnce({ success: true });
+
+        const { result } = renderHook(() => useSkipRefinement(), {
+          wrapper: createWrapper(),
+        });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            willingToAccept: false,
+            reason: 'This still misses the impact.',
+          });
+        });
+
+        expect(mockPost).toHaveBeenCalledWith(
+          `/sessions/${sessionId}/empathy/skip-refinement`,
+          {
+            willingToAccept: false,
+            reason: 'This still misses the impact.',
+          }
+        );
       });
     });
   });

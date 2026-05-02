@@ -642,6 +642,7 @@ enum MessageRole {
   EMPATHY_STATEMENT // User's shared empathy statement (shown in chat history)
   EMPATHY_REVEAL_INTRO // AI intro message when revealing partner's empathy to user
   SHARED_CONTEXT // Context shared by subject to help guesser refine empathy
+  VALIDATION_FEEDBACK // Constructive feedback after subject marks empathy as not quite
   SHARE_SUGGESTION // Suggested content for subject to share (reconciler)
   EMPATHY_VALIDATION_PROMPT // AI prompt asking user to validate partner's understanding
 }

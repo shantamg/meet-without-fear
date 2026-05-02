@@ -115,6 +115,7 @@ test.describe('Stage 2: Empathy Sharing and Reconciler', () => {
       "Hi, I'm having a conflict with my partner", // Response 0: initial greeting
       'We keep arguing about household chores', // Response 1: invitation draft - triggers invitation panel
       'Thanks, I sent the invitation', // Response 2: post-invitation
+      'This has been building for months, and I feel worn down by it',
       "I feel like I do most of the work and they don't notice or appreciate it", // Response 3: FeelHeardCheck: Y
     ];
 
