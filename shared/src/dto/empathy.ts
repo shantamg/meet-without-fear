@@ -162,6 +162,7 @@ export interface SaveValidationFeedbackDraftResponse {
 
 export interface RefineValidationFeedbackRequest {
   message: string;
+  history?: Array<{ role: 'coach' | 'user'; content: string }>;
 }
 
 export interface RefineValidationFeedbackResponse {

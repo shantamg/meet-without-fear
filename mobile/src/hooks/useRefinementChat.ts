@@ -208,7 +208,7 @@ export function useValidationFeedbackCoachChat(
   }, [sessionId]);
 
   const requestRefinement = useCallback(
-    (content: string, partnerStatement = partnerStatementRef.current) => {
+    (content: string, currentMessages: RefinementMessage[], partnerStatement = partnerStatementRef.current) => {
       const message = [
         partnerStatement
           ? `Partner empathy statement:\n"${partnerStatement}"`
@@ -217,8 +217,18 @@ export function useValidationFeedbackCoachChat(
         'Help me turn this into feedback I can send.',
       ].filter(Boolean).join('\n\n');
 
+      // Build conversation history from prior coach/user exchanges
+      const history: Array<{ role: 'coach' | 'user'; content: string }> = [];
+      for (const msg of currentMessages) {
+        if (msg.role === MessageRole.AI && msg.proposedContent) {
+          history.push({ role: 'coach', content: `${msg.content}\n\nProposed feedback: ${msg.proposedContent}` });
+        } else if (msg.role === MessageRole.USER) {
+          history.push({ role: 'user', content: msg.content });
+        }
+      }
+
       refineFeedback(
-        { sessionId, message },
+        { sessionId, message, history: history.length > 0 ? history : undefined },
         {
           onSuccess: (data) => {
             const aiMsg: RefinementMessage = {
@@ -263,8 +273,11 @@ export function useValidationFeedbackCoachChat(
         senderId: 'me',
         stage: 2,
       };
-      setMessages((prev) => [...prev, userMsg]);
-      requestRefinement(content);
+      setMessages((prev) => {
+        const updated = [...prev, userMsg];
+        requestRefinement(content, updated);
+        return updated;
+      });
     },
     [requestRefinement, sessionId]
   );
@@ -324,7 +337,7 @@ export function useValidationFeedbackCoachChat(
     setMessages(initialMessages);
 
     if (roughFeedback.trim()) {
-      requestRefinement(roughFeedback.trim(), partnerEmpathyStatement);
+      requestRefinement(roughFeedback.trim(), [], partnerEmpathyStatement);
     }
   }, [partnerEmpathyStatement, requestRefinement, roughFeedback, sessionId]);
 
