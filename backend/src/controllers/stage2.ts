@@ -1440,10 +1440,13 @@ Your goal is to help them rephrase their feedback to be constructive, specific, 
 User's raw feedback: "${message}"
 
 1. Acknowledge the validity of their feeling.
-2. Draft a "Proposed Feedback" statement that they could send to their partner. This should be:
+2. Draft a "Proposed Feedback" statement that they can send inside Meet Without Fear. This should be:
    - Direct but kind.
    - Focus on what was missed or misunderstood.
    - Avoid "You are wrong" language; use "I felt..." or "My experience was...".
+   - Ask the partner to revise their empathy attempt in the app, not to start a direct side conversation.
+   - Do not include wording like "ask me directly", "can we talk about this", "can we try that", or other language that implies the next step is an outside conversation.
+   - End with an in-app revision request, such as "Could you revise your understanding with that in mind?"
 
 Respond in JSON format:
 \`\`\`json
