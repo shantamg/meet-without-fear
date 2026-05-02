@@ -44,6 +44,7 @@ type SessionWithIncludes = {
   // Optional: empathy attempts for Stage 2 status display
   empathyAttempts?: Array<{
     sourceUserId: string | null;
+    status?: string;
   }>;
   // Optional: user vessel for read state tracking
   userVessels?: Array<{
@@ -407,8 +408,37 @@ export function mapSessionToSummary(
   }
 
   // User is actively working → they still have things to do
+  // But for Stage 2 (Perspective Stretch), check empathy sub-state to avoid
+  // showing "Ready for you" when user is actually waiting on partner/system
   if (myProgress.status === StageStatus.IN_PROGRESS) {
-    selfActionNeeded.push('continue_stage');
+    if (myProgress.stage === Stage.PERSPECTIVE_STRETCH && session.empathyAttempts?.length) {
+      const userEmpathy = session.empathyAttempts.find(
+        (a) => a.sourceUserId === currentUserId
+      );
+      const partnerEmpathy = session.empathyAttempts.find(
+        (a) => a.sourceUserId !== currentUserId
+      );
+
+      // User has action if:
+      // - Their empathy needs refinement
+      // - Partner's empathy is revealed (needs validation)
+      // - Partner's empathy is awaiting sharing (user must respond)
+      const userNeedsToRefine =
+        userEmpathy?.status === 'REFINING' || userEmpathy?.status === 'NEEDS_WORK';
+      const userNeedsToValidate = partnerEmpathy?.status === 'REVEALED';
+      const userNeedsToRespondToShare = partnerEmpathy?.status === 'AWAITING_SHARING';
+
+      if (userNeedsToRefine || userNeedsToValidate || userNeedsToRespondToShare) {
+        selfActionNeeded.push('continue_stage');
+      }
+      // If user hasn't sent empathy yet, they still have work to do
+      else if (!userEmpathy) {
+        selfActionNeeded.push('continue_stage');
+      }
+      // Otherwise: user is waiting on partner/system — no selfActionNeeded
+    } else {
+      selfActionNeeded.push('continue_stage');
+    }
   }
 
   // User at gate, waiting for partner to also reach gate
