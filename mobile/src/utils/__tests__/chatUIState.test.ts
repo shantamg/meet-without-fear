@@ -581,7 +581,7 @@ describe('Needs Review Panel Visibility', () => {
     expect(result.panels.showNeedsReviewPanel).toBe(false);
   });
 
-  it('does not show when needs are already confirmed', () => {
+  it('still shows after needs are confirmed so the user can share explicitly', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -593,7 +593,8 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(false);
+    expect(result.panels.showNeedsReviewPanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('needs-review');
   });
 
   it('does not show when needs are already shared', () => {
@@ -611,7 +612,7 @@ describe('Needs Review Panel Visibility', () => {
     expect(result.panels.showNeedsReviewPanel).toBe(false);
   });
 
-  it('does not show when local latch is set (prevents flash)', () => {
+  it('still shows when only the confirm latch is set and needs are not shared', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -623,7 +624,7 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(false);
+    expect(result.panels.showNeedsReviewPanel).toBe(true);
   });
 
   it('does not show when no needs available', () => {

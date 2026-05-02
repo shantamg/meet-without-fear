@@ -19,7 +19,7 @@ import {
   acquireExtractionLock,
   releaseExtractionLock,
 } from '../services/needs';
-import { confirmNeedsRequestSchema, ConsentContentType } from '@meet-without-fear/shared';
+import { confirmNeedsRequestSchema, ConsentContentType, NeedCategory } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
@@ -103,6 +103,31 @@ async function hasPartnerSharedNeeds(
 
   const gates = partnerProgress.gatesSatisfied as Record<string, unknown> | null;
   return gates?.needsShared === true;
+}
+
+async function hasPartnerValidatedNeeds(
+  sessionId: string,
+  currentUserId: string
+): Promise<boolean> {
+  const partnerId = await getPartnerUserId(sessionId, currentUserId);
+  if (!partnerId) return false;
+
+  const partnerProgress = await prisma.stageProgress.findUnique({
+    where: {
+      sessionId_userId_stage: {
+        sessionId,
+        userId: partnerId,
+        stage: 3,
+      },
+    },
+  });
+
+  const gates = partnerProgress?.gatesSatisfied as Record<string, unknown> | null;
+  return gates?.commonGroundConfirmed === true || gates?.needsValidated === true;
+}
+
+function isNeedCategory(value: unknown): value is NeedCategory {
+  return typeof value === 'string' && Object.values(NeedCategory).includes(value as NeedCategory);
 }
 
 // ============================================================================
@@ -240,6 +265,126 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
   } catch (error) {
     logger.error('[getNeeds] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get needs', 500);
+  }
+}
+
+/**
+ * Capture needs from an AI summary card
+ * POST /sessions/:id/needs/capture
+ */
+export async function captureNeeds(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const { needs } = req.body as {
+      needs?: Array<{
+        need?: string;
+        category?: unknown;
+        description?: string;
+        evidence?: unknown;
+      }>;
+    };
+
+    if (!Array.isArray(needs) || needs.length === 0) {
+      errorResponse(res, 'VALIDATION_ERROR', 'needs array is required', 400);
+      return;
+    }
+
+    for (const need of needs) {
+      if (!need.need || !need.description || !isNeedCategory(need.category)) {
+        errorResponse(
+          res,
+          'VALIDATION_ERROR',
+          'Each need requires need, description, and a valid category',
+          400
+        );
+        return;
+      }
+    }
+
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        relationship: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+
+    if (session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+
+    const progress = await prisma.stageProgress.findFirst({
+      where: { sessionId, userId: user.id },
+      orderBy: { stage: 'desc' },
+    });
+
+    const currentStage = progress?.stage ?? 0;
+    if (currentStage !== 3) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        `Cannot capture needs: you are in stage ${currentStage}, but stage 3 is required`,
+        400
+      );
+      return;
+    }
+
+    const userVessel = await getOrCreateUserVessel(sessionId, user.id);
+    const now = new Date();
+
+    const capturedNeeds = [];
+    for (const item of needs) {
+      const evidence = Array.isArray(item.evidence)
+        ? item.evidence.filter((entry): entry is string => typeof entry === 'string')
+        : [];
+
+      const created = await prisma.identifiedNeed.create({
+        data: {
+          vesselId: userVessel.id,
+          need: item.description || item.need!,
+          category: item.category as NeedCategory,
+          evidence,
+          aiConfidence: 0.85,
+          confirmed: false,
+        },
+      });
+      capturedNeeds.push(created);
+    }
+
+    successResponse(
+      res,
+      {
+        needs: capturedNeeds.map((n) => ({
+          id: n.id,
+          need: n.need,
+          category: n.category,
+          description: n.need,
+          evidence: n.evidence,
+          confirmed: n.confirmed,
+          aiConfidence: n.aiConfidence,
+        })),
+        capturedAt: now.toISOString(),
+      },
+      201
+    );
+  } catch (error) {
+    logger.error('[captureNeeds] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to capture needs', 500);
   }
 }
 
@@ -553,26 +698,11 @@ export async function consentToShareNeeds(
       });
     }
 
-    // If both have shared, auto-trigger common ground analysis and notify
+    // If both have shared, notify clients that the side-by-side reveal is ready.
     if (partnerShared && partnerId) {
-      // Use lock to prevent concurrent findCommonGround calls from both users' consent
-      if (!isCommonGroundAnalysisRunning(sessionId)) {
-        setCommonGroundLock(sessionId);
-        try {
-          await findCommonGround(sessionId, user.id, partnerId);
-          logger.info('[consentToShareNeeds] Common ground analysis triggered for session', sessionId);
-        } catch (err) {
-          logger.error('[consentToShareNeeds] Failed to trigger common ground analysis:', err);
-        } finally {
-          clearCommonGroundLock(sessionId);
-        }
-      } else {
-        logger.info('[consentToShareNeeds] Common ground analysis already running for session', sessionId);
-      }
-
-      await publishSessionEvent(sessionId, 'session.common_ground_ready', {
+      await publishSessionEvent(sessionId, 'session.needs_reveal_ready' as any, {
         stage: 3,
-        commonGroundReady: true,
+        needsRevealReady: true,
       });
     }
 
@@ -585,6 +715,196 @@ export async function consentToShareNeeds(
   } catch (error) {
     logger.error('[consentToShareNeeds] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to consent to share needs', 500);
+  }
+}
+
+/**
+ * Validate revealed needs lists.
+ * POST /sessions/:id/needs/validate
+ */
+export async function validateNeeds(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const { validated = true } = req.body as { validated?: boolean };
+
+    if (typeof validated !== 'boolean') {
+      errorResponse(res, 'VALIDATION_ERROR', 'validated boolean is required', 400);
+      return;
+    }
+
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        relationship: {
+          members: {
+            some: { userId: user.id },
+          },
+        },
+      },
+      include: {
+        relationship: {
+          include: {
+            members: {
+              orderBy: { joinedAt: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+
+    if (session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+
+    const progress = await prisma.stageProgress.findFirst({
+      where: { sessionId, userId: user.id },
+      orderBy: { stage: 'desc' },
+    });
+
+    const currentStage = progress?.stage ?? 0;
+    if (currentStage !== 3) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        `Cannot validate needs: you are in stage ${currentStage}, but stage 3 is required`,
+        400
+      );
+      return;
+    }
+
+    const userGates = progress?.gatesSatisfied as Record<string, unknown> | null;
+    if (userGates?.needsShared !== true || !(await hasPartnerSharedNeeds(sessionId, user.id))) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Both partners must consent to reveal needs before validation',
+        400
+      );
+      return;
+    }
+
+    const now = new Date();
+    const gatesSatisfied = {
+      ...(progress?.gatesSatisfied as Record<string, unknown> || {}),
+      needsValidated: validated,
+      needsValidatedAt: validated ? now.toISOString() : null,
+    } satisfies Prisma.InputJsonValue;
+
+    await prisma.stageProgress.update({
+      where: {
+        sessionId_userId_stage: {
+          sessionId,
+          userId: user.id,
+          stage: 3,
+        },
+      },
+      data: {
+        gatesSatisfied,
+        status: 'GATE_PENDING',
+        completedAt: null,
+      },
+    });
+
+    const partnerValidated = await hasPartnerValidatedNeeds(sessionId, user.id);
+    const partnerId = await getPartnerUserId(sessionId, user.id);
+    if (partnerId) {
+      await notifyPartner(sessionId, partnerId, 'partner.needs_validated' as any, {
+        stage: 3,
+        validatedBy: user.id,
+        validated,
+        allValidatedByBoth: validated && partnerValidated,
+      });
+    }
+
+    const canAdvance = validated && partnerValidated;
+    if (canAdvance && partnerId) {
+      await prisma.stageProgress.updateMany({
+        where: {
+          sessionId,
+          stage: 3,
+          userId: { in: [user.id, partnerId] },
+        },
+        data: {
+          status: 'COMPLETED',
+          completedAt: now,
+        },
+      });
+
+      for (const uid of [user.id, partnerId]) {
+        await prisma.stageProgress.upsert({
+          where: {
+            sessionId_userId_stage: {
+              sessionId,
+              userId: uid,
+              stage: 4,
+            },
+          },
+          create: {
+            sessionId,
+            userId: uid,
+            stage: 4,
+            status: 'IN_PROGRESS',
+            startedAt: now,
+          },
+          update: {},
+        });
+      }
+
+      const transitionContent =
+        'You have both checked the needs lists and marked them valid. Now move to strategies that can honor what each of you needs.';
+
+      const transitionMessages: Array<{ id: string; content: string; timestamp: Date }> = [];
+      for (const uid of [user.id, partnerId]) {
+        const message = await prisma.message.create({
+          data: {
+            sessionId,
+            senderId: null,
+            forUserId: uid,
+            role: 'AI',
+            content: transitionContent,
+            stage: 4,
+          },
+        });
+        transitionMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp });
+      }
+
+      const firstMessage = transitionMessages[0];
+      await publishSessionEvent(sessionId, 'partner.stage_completed', {
+        previousStage: 3,
+        currentStage: 4,
+        userId: user.id,
+        triggeredByUserId: user.id,
+        message: firstMessage
+          ? {
+              id: firstMessage.id,
+              content: firstMessage.content,
+              timestamp: firstMessage.timestamp,
+            }
+          : undefined,
+      });
+    }
+
+    successResponse(res, {
+      validated,
+      validatedAt: validated ? now.toISOString() : null,
+      partnerValidated,
+      canAdvance,
+    });
+  } catch (error) {
+    logger.error('[validateNeeds] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to validate needs', 500);
   }
 }
 
@@ -978,14 +1298,14 @@ export async function confirmCommonGround(
     const now = new Date();
 
     if (isNoOverlap) {
-      // noOverlap case: no common ground to confirm, proceed directly to stage transition
-      logger.info('[confirmCommonGround] noOverlap case - advancing Stage 3->4 for session', sessionId);
+      logger.info('[confirmCommonGround] noOverlap case confirmed for session', sessionId);
 
-      // Mark this user's Stage 3 as having confirmed (even though there's nothing to confirm)
       const gatesSatisfied = {
         ...(progress?.gatesSatisfied as Record<string, unknown> || {}),
         commonGroundConfirmed: true,
         confirmedAt: now.toISOString(),
+        needsValidated: true,
+        needsValidatedAt: now.toISOString(),
         noOverlap: true,
       } satisfies Prisma.InputJsonValue;
 
@@ -999,104 +1319,28 @@ export async function confirmCommonGround(
         },
         data: {
           gatesSatisfied,
-          status: 'COMPLETED',
-          completedAt: now,
+          status: 'GATE_PENDING',
+          completedAt: null,
         },
       });
 
-      // Check if partner has also confirmed (or confirm for both in noOverlap)
+      const partnerValidated = await hasPartnerValidatedNeeds(sessionId, user.id);
       const partnerId = await getPartnerUserId(sessionId, user.id);
-
-      // In noOverlap case, also mark partner's Stage 3 as completed and advance both to Stage 4
       if (partnerId) {
-        await prisma.stageProgress.updateMany({
-          where: {
-            sessionId,
-            stage: 3,
-            userId: { in: [user.id, partnerId] },
-          },
-          data: {
-            status: 'COMPLETED',
-            completedAt: now,
-          },
-        });
-
-        // Create Stage 4 progress records for both users
-        const userIds = [user.id, partnerId];
-        for (const uid of userIds) {
-          await prisma.stageProgress.upsert({
-            where: {
-              sessionId_userId_stage: {
-                sessionId,
-                userId: uid,
-                stage: 4,
-              },
-            },
-            create: {
-              sessionId,
-              userId: uid,
-              stage: 4,
-              status: 'IN_PROGRESS',
-              startedAt: now,
-            },
-            update: {},
-          });
-        }
-
-        // Generate transition message for each user
-        const transitionContent =
-          "Even though your needs don't overlap directly, that's okay -- understanding " +
-          "each other's needs is itself a breakthrough. Let's move to the final stage: " +
-          "building concrete strategies and agreements that honor what you both need.";
-
-        const transitionMessages: Array<{ id: string; content: string; timestamp: Date }> = [];
-        for (const uid of userIds) {
-          const msg = await prisma.message.create({
-            data: {
-              sessionId,
-              senderId: null,
-              forUserId: uid,
-              role: 'AI',
-              content: transitionContent,
-              stage: 4,
-            },
-          });
-          transitionMessages.push({ id: msg.id, content: msg.content, timestamp: msg.timestamp });
-        }
-
-        // Publish stage completed event
-        const firstMessage = transitionMessages[0];
-        await publishSessionEvent(sessionId, 'partner.stage_completed', {
-          previousStage: 3,
-          currentStage: 4,
-          userId: user.id,
-          triggeredByUserId: user.id,
-          message: firstMessage
-            ? {
-                id: firstMessage.id,
-                content: firstMessage.content,
-                timestamp: firstMessage.timestamp,
-              }
-            : undefined,
-        });
-
-        // Notify partner
         await notifyPartner(sessionId, partnerId, 'partner.common_ground_confirmed', {
           stage: 3,
           confirmedBy: user.id,
-          allConfirmedByBoth: true,
+          allConfirmedByBoth: partnerValidated,
           noOverlap: true,
         });
-
-        logger.info('[confirmCommonGround] noOverlap Stage 3->4 transition completed for session', sessionId);
       }
 
       successResponse(res, {
         confirmed: true,
         confirmedAt: now.toISOString(),
         allConfirmedByMe: true,
-        allConfirmedByBoth: true,
-        canAdvance: true,
+        allConfirmedByBoth: partnerValidated,
+        canAdvance: partnerValidated,
         noOverlap: true,
       });
       return;
@@ -1164,8 +1408,8 @@ export async function confirmCommonGround(
         },
         data: {
           gatesSatisfied,
-          status: allConfirmedByBoth ? 'COMPLETED' : 'GATE_PENDING',
-          completedAt: allConfirmedByBoth ? now : null,
+          status: 'GATE_PENDING',
+          completedAt: null,
         },
       });
     }
@@ -1178,88 +1422,6 @@ export async function confirmCommonGround(
         confirmedBy: user.id,
         allConfirmedByBoth,
       });
-    }
-
-    // If both confirmed all common ground, trigger Stage 3 -> 4 transition
-    if (allConfirmedByBoth && partnerId) {
-      try {
-        // Also mark partner's Stage 3 as COMPLETED (they may not have updated yet)
-        await prisma.stageProgress.updateMany({
-          where: {
-            sessionId,
-            stage: 3,
-            userId: { in: [user.id, partnerId] },
-          },
-          data: {
-            status: 'COMPLETED',
-            completedAt: now,
-          },
-        });
-
-        // Create Stage 4 progress records for both users
-        const userIds = [user.id, partnerId];
-        for (const uid of userIds) {
-          await prisma.stageProgress.upsert({
-            where: {
-              sessionId_userId_stage: {
-                sessionId,
-                userId: uid,
-                stage: 4,
-              },
-            },
-            create: {
-              sessionId,
-              userId: uid,
-              stage: 4,
-              status: 'IN_PROGRESS',
-              startedAt: now,
-            },
-            update: {},
-          });
-        }
-
-        // Generate transition message for each user
-        const transitionContent =
-          "You've found common ground together -- that's a real breakthrough. " +
-          "Now let's move to the final stage: building concrete strategies and agreements " +
-          "that honor what you both need.";
-
-        const transitionMessages: Array<{ id: string; content: string; timestamp: Date }> = [];
-        for (const uid of userIds) {
-          const msg = await prisma.message.create({
-            data: {
-              sessionId,
-              senderId: null,
-              forUserId: uid,
-              role: 'AI',
-              content: transitionContent,
-              stage: 4,
-            },
-          });
-          transitionMessages.push({ id: msg.id, content: msg.content, timestamp: msg.timestamp });
-        }
-
-        // Publish stage completed event
-        const firstMessage = transitionMessages[0];
-        await publishSessionEvent(sessionId, 'partner.stage_completed', {
-          previousStage: 3,
-          currentStage: 4,
-          userId: user.id,
-          triggeredByUserId: user.id,
-          message: firstMessage
-            ? {
-                id: firstMessage.id,
-                content: firstMessage.content,
-                timestamp: firstMessage.timestamp,
-              }
-            : undefined,
-        });
-
-        logger.info('[confirmCommonGround] Stage 3->4 transition completed for session', sessionId);
-      } catch (err) {
-        logger.error('[confirmCommonGround] Failed to trigger Stage 3->4 transition:', err);
-        // Non-fatal - the transition can be triggered manually
-      }
     }
 
     successResponse(res, {
@@ -1387,29 +1549,16 @@ export async function getNeedsComparison(
       }),
     ]);
 
-    // Get common ground
-    const sharedVessel = await prisma.sharedVessel.findUnique({
-      where: { sessionId },
+    const partnerProgress = await prisma.stageProgress.findUnique({
+      where: {
+        sessionId_userId_stage: {
+          sessionId,
+          userId: partnerId,
+          stage: 3,
+        },
+      },
     });
-
-    let commonGround: Awaited<ReturnType<typeof prisma.commonGround.findMany>> = [];
-    let noOverlap = false;
-
-    if (sharedVessel) {
-      commonGround = await prisma.commonGround.findMany({
-        where: { sharedVesselId: sharedVessel.id },
-        orderBy: { id: 'asc' },
-      });
-
-      // If shared vessel exists but no common ground, analysis ran with no overlap
-      if (commonGround.length === 0) {
-        noOverlap = true;
-      }
-    }
-
-    // Determine A/B role for confirmedByMe/confirmedByPartner
-    const members = session.relationship.members;
-    const userIsA = members[0]?.userId === user.id;
+    const partnerGates = partnerProgress?.gatesSatisfied as Record<string, unknown> | null;
 
     successResponse(res, {
       myNeeds: myNeeds.map((n) => ({
@@ -1424,15 +1573,12 @@ export async function getNeedsComparison(
         need: n.need,
         confirmed: n.confirmed,
       })),
-      commonGround: commonGround.map((cg) => ({
-        id: cg.id,
-        category: cg.category,
-        need: cg.need,
-        confirmedByMe: userIsA ? cg.confirmedByA : cg.confirmedByB,
-        confirmedByPartner: userIsA ? cg.confirmedByB : cg.confirmedByA,
-      })),
+      myValidated: userGates?.needsValidated === true,
+      partnerValidated: partnerGates?.needsValidated === true,
+      canAdvance: userGates?.needsValidated === true && partnerGates?.needsValidated === true,
+      commonGround: [],
       analysisComplete: true,
-      noOverlap,
+      noOverlap: false,
     });
   } catch (error) {
     logger.error('[getNeedsComparison] Error:', error);

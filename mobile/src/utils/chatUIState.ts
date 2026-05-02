@@ -316,13 +316,13 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  // Local latch: Once user confirms, hide panel immediately (prevents flash during refetch)
-  if (hasConfirmedNeedsLocal) {
+  // Local latch: once the user shares, hide panel immediately.
+  if (hasConfirmedNeedsLocal && needsShared) {
     return false;
   }
 
-  // Already confirmed and shared - no need to show
-  if (allNeedsConfirmed || needsShared) {
+  // Already shared - reveal/waiting state owns the next step.
+  if (needsShared) {
     return false;
   }
 
