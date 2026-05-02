@@ -27,14 +27,19 @@ GET /api/v1/invitations/:id
 ```typescript
 interface InvitationDTO {
   id: string;
-  sessionId: string;
   invitedBy: {
     id: string;
     name: string | null;
   };
+  name: string | null;
   status: InvitationStatus;  // PENDING, ACCEPTED, DECLINED, EXPIRED
   createdAt: string;
   expiresAt: string;
+  session: {
+    id: string;
+    status: string;
+    topicFrame: string | null;  // AI-confirmed Stage 0 topic anchor shown before accept
+  };
 }
 ```
 
@@ -44,15 +49,22 @@ interface InvitationDTO {
 {
   "success": true,
   "data": {
-    "id": "inv_def456",
-    "sessionId": "sess_abc123",
-    "invitedBy": {
-      "id": "user_123",
-      "name": "Jordan"
-    },
-    "status": "PENDING",
-    "createdAt": "2024-01-15T10:30:00Z",
-    "expiresAt": "2024-01-22T10:30:00Z"
+    "invitation": {
+      "id": "inv_def456",
+      "invitedBy": {
+        "id": "user_123",
+        "name": "Jordan"
+      },
+      "name": "Alex",
+      "status": "PENDING",
+      "createdAt": "2024-01-15T10:30:00Z",
+      "expiresAt": "2024-01-22T10:30:00Z",
+      "session": {
+        "id": "sess_abc123",
+        "status": "INVITED",
+        "topicFrame": "Tuesday pickup disagreement"
+      }
+    }
   }
 }
 ```

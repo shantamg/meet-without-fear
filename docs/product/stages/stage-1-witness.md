@@ -9,6 +9,8 @@ description: Provide each user with the experience of being deeply and fully hea
 
 Provide each user with the experience of being deeply and fully heard by the AI, without interruption or judgment.
 
+The conflict topic has already been anchored in Stage 0 through the AI-confirmed invitation topic frame. Stage 1 uses that orientation only as context; it does not renegotiate the invite topic.
+
 ## AI Goal
 
 - Create a safe space for venting and expression

@@ -51,6 +51,8 @@ Session creation, invitations, and lifecycle management.
 | `POST` | `/sessions` | Create new session and invite partner |
 | `GET`  | `/sessions` | List user's sessions |
 | `GET`  | `/sessions/:id` | Get session details |
+| `POST` | `/sessions/:id/topic-frame/generate` | Generate and store a proposed Stage 0 invite topic frame |
+| `POST` | `/sessions/:id/topic-frame/confirm` | Confirm the proposed topic frame or steer the AI toward a revised neutral frame |
 | `POST` | `/sessions/:id/archive` | Archive a finished/abandoned session |
 | `DELETE` | `/sessions/:id` | Mark session `ABANDONED` (hard delete-equivalent) |
 

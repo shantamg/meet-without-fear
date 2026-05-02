@@ -11,6 +11,8 @@ status: living
 
 Endpoints for the witness stage - being heard by the AI.
 
+Topic framing is complete before Stage 1 starts. The Stage 0 invitation flow owns `/sessions/:id/topic-frame/*`; Stage 1 message handlers should not generate or revise the invite topic frame.
+
 ## Send Message (streaming, primary)
 
 Send a message and receive the AI response as a server-sent-event (SSE) stream. This is the active path.

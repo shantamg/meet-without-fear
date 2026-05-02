@@ -52,11 +52,12 @@ status: living
 1. User A creates session via mobile → `POST /sessions` → Backend creates Session row + Invitation row
 2. Backend publishes `session-created` event to Ably `ai-audit-stream` channel via `publishSessionCreated` (for monitoring dashboard)
 3. Mobile's `useRealtime` hook receives event → invalidates sessionKeys cache → UI refreshes
-4. User A sends invitation message via mobile → `POST /sessions/{id}/messages` with `messageType: 'invitation'`
-5. Backend streams response via SSE; `handleMetadata` callback updates cache directly
-6. User B receives invite link, clicks → `POST /sessions/{id}/invitations/accept`
-7. Backend creates Invitation acceptance record; publishes `session.joined` event
-8. Both users' `sessionKeys.state` cache updates; chat UI becomes available
+4. User A drafts the invitation in Stage 0; the backend saves the draft from stream metadata.
+5. Mobile calls `/sessions/{id}/topic-frame/generate` and `/sessions/{id}/topic-frame/confirm`; the backend stores `Session.topicFrame` and `topicFrameConfirmedAt`.
+6. `/sessions/{id}/invitation/confirm` requires the finalized topic frame before the session moves `CREATED → INVITED`.
+7. User B receives invite link, sees the topic frame in `GET /invitations/{id}`, then accepts via `POST /invitations/{id}/accept`.
+8. Backend creates Invitation acceptance record; publishes `session.joined` event.
+9. Both users' `sessionKeys.state` cache updates; chat UI becomes available.
 
 **Message Flow (Chat & AI):**
 
