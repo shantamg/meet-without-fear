@@ -1768,14 +1768,16 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
       // Guard: empty AI response after parsing + dispatch means the model emitted
       // content entirely inside tags we couldn't route (e.g. an unknown dispatch
-      // tag, or a stray <draft> with no chat text). Treat as a stream error so
-      // the user message is cleaned up and the client gets a retry prompt —
-      // better than persisting a confusing placeholder or a blank AI message.
+      // tag with no user-facing text). Instead of throwing (which deletes the
+      // user message and shows "Message not sent"), inject a warm fallback so
+      // the conversation continues smoothly.
       if (!accumulatedText.trim()) {
-        logger.error(`[sendMessageStream:${requestId}] Empty AI response after tag stripping and dispatch`, {
+        const fallback = 'I\'m here with you. Could you tell me more about what you\'re experiencing?';
+        logger.warn(`[sendMessageStream:${requestId}] Empty AI response after tag stripping — using fallback`, {
           dispatchTag: dispatchTag ?? null,
         });
-        throw new Error('Empty AI response after tag stripping and dispatch');
+        sendSSE(res, { event: 'chunk', data: { text: fallback } });
+        accumulatedText = fallback;
       }
 
       finalizeTurnMetrics(turnId);
