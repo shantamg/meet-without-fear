@@ -16,7 +16,7 @@
  */
 
 import { test, expect, devices } from '@playwright/test';
-import { cleanupE2EData, getE2EHeaders } from '../helpers';
+import { cleanupE2EData, confirmInvitationTopicAndContinue, getE2EHeaders } from '../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
@@ -177,11 +177,9 @@ test.describe('Single User Journey', () => {
 
     await page.screenshot({ path: 'test-results/single-user-04-invitation-panel.png' });
 
-    // Step 8: Click the share button (or continue button)
-    console.log(`${elapsed()} Step 8: Clicking invitation continue...`);
-    // The invitation-share-button opens the share sheet, invitation-continue-button confirms sent
-    const continueButton = page.getByTestId('invitation-continue-button');
-    await continueButton.click();
+    // Step 8: Confirm the topic frame, then confirm invitation sent
+    console.log(`${elapsed()} Step 8: Confirming topic frame and invitation...`);
+    await confirmInvitationTopicAndContinue(page);
 
     // Wait for panel to close
     await expect(invitationPanel).not.toBeVisible({ timeout: 5000 });

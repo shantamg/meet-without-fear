@@ -20,6 +20,7 @@ import {
   handleMoodCheck,
   signCompact,
   navigateToSession,
+  confirmInvitationTopicAndContinue,
 } from '../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
@@ -121,10 +122,7 @@ test.describe('Live AI Full Flow', () => {
 
     await page.screenshot({ path: 'test-results/live-ai-01-invitation-panel.png' });
 
-    // Click continue (mark invitation as sent)
-    const continueButton = page.getByTestId('invitation-continue-button');
-    await expect(continueButton).toBeVisible({ timeout: 5000 });
-    await continueButton.click();
+    await confirmInvitationTopicAndContinue(page, AI_RESPONSE_TIMEOUT);
 
     // Wait for invitation panel to close
     await expect(page.getByTestId('invitation-draft-panel')).not.toBeVisible({ timeout: 5000 });

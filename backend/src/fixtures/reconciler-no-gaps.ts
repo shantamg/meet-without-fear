@@ -148,6 +148,14 @@ Does this capture what you'd like to express to them?
   // Operation-specific mock responses for non-streaming AI calls
   // These are used by the reconciler and other JSON-response operations
   operations: {
+    'topic-frame-generate': {
+      response: 'Household chores disagreement',
+    },
+
+    'topic-frame-confirm': {
+      response: 'Household chores disagreement',
+    },
+
     // Reconciler analysis - finds NO significant gaps, empathy proceeds normally
     'reconciler-analysis': {
       response: {

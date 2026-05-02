@@ -31,6 +31,7 @@ import {
   signCompact,
   handleMoodCheck,
   sendAndWaitForPanel,
+  confirmInvitationTopicAndContinue,
   confirmFeelHeard,
   waitForReconcilerComplete,
   navigateBackToChat,
@@ -121,12 +122,8 @@ test.describe('Circuit Breaker: Force READY After 3 Refinement Attempts', () => 
       await harness.userAPage.waitForTimeout(500);
     }
 
-    // Dismiss invitation panel
-    const dismissInvitation = harness.userAPage.getByText("I've sent it - Continue");
-    if (await dismissInvitation.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await dismissInvitation.click();
-      await harness.userAPage.waitForTimeout(500);
-    }
+    await confirmInvitationTopicAndContinue(harness.userAPage);
+    await harness.userAPage.waitForTimeout(500);
 
     // Send remaining messages until feel-heard panel
     const remainingMessagesA = userAStage1Messages.slice(2);

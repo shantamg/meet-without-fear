@@ -179,6 +179,54 @@ export async function signCompact(page: Page, timeout = 30000): Promise<void> {
 }
 
 /**
+ * Complete the Stage 0 invitation gate by confirming the AI topic frame, then
+ * confirming that the invitation was sent.
+ *
+ * The invitation continue button is disabled until the topic frame is finalized,
+ * so tests that dismiss the panel need to mirror the production flow.
+ *
+ * @param page - Playwright Page instance
+ * @param timeout - Maximum time to wait for the topic/continue flow
+ */
+export async function confirmInvitationTopicAndContinue(
+  page: Page,
+  timeout = 30000
+): Promise<void> {
+  const invitationPanel = page.getByTestId('invitation-draft-panel');
+  await expect(invitationPanel).toBeVisible({ timeout });
+
+  const confirmTopicButton = page.getByTestId('topic-frame-confirm-button');
+  const regenerateTopicButton = page.getByTestId('topic-frame-generate-button');
+  const continueButton = page.getByTestId('invitation-continue-button');
+  const deadline = Date.now() + timeout;
+
+  while (Date.now() < deadline) {
+    if (await continueButton.isEnabled().catch(() => false)) {
+      await continueButton.click();
+      return;
+    }
+
+    if (
+      await regenerateTopicButton.isVisible().catch(() => false) &&
+      await regenerateTopicButton.isEnabled().catch(() => false)
+    ) {
+      await regenerateTopicButton.click();
+    }
+
+    if (
+      await confirmTopicButton.isVisible().catch(() => false) &&
+      await confirmTopicButton.isEnabled().catch(() => false)
+    ) {
+      await confirmTopicButton.click();
+    }
+
+    await page.waitForTimeout(500);
+  }
+
+  await expect(continueButton).toBeEnabled({ timeout: 1 });
+}
+
+/**
  * Complete the "feel heard" confirmation by clicking the Yes button.
  * Waits for the backend API request to complete to ensure stage transition
  * has propagated before subsequent messages are sent.

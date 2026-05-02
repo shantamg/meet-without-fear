@@ -37,6 +37,7 @@ import {
   signCompact,
   handleMoodCheck,
   sendAndWaitForPanel,
+  confirmInvitationTopicAndContinue,
   confirmFeelHeard,
   waitForReconcilerComplete,
   navigateToShareFromSession,
@@ -130,12 +131,8 @@ test.describe('Stage 2: Empathy Sharing and Reconciler', () => {
       await harness.userAPage.waitForTimeout(500);
     }
 
-    // Dismiss invitation panel by clicking "I've sent it - Continue"
-    const dismissInvitation = harness.userAPage.getByText("I've sent it - Continue");
-    if (await dismissInvitation.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await dismissInvitation.click();
-      await harness.userAPage.waitForTimeout(500);
-    }
+    await confirmInvitationTopicAndContinue(harness.userAPage);
+    await harness.userAPage.waitForTimeout(500);
 
     // Send remaining messages until feel-heard panel appears
     const remainingMessagesA = userAStage1Messages.slice(2);
