@@ -19,7 +19,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { X, Send, MessageCircle } from 'lucide-react-native';
+import { X, Send, MessageCircle, Check, CircleX } from 'lucide-react-native';
 import { colors } from '@/theme';
 
 export interface ViewEmpathyStatementDrawerProps {
@@ -39,6 +39,8 @@ export interface ViewEmpathyStatementDrawerProps {
   onSendRefinement?: (message: string) => void;
   /** Callback when user accepts the feedback without revising (acceptance check) */
   onAcceptWithoutRevising?: () => void;
+  /** Callback when user cannot accept the feedback without revising */
+  onDeclineAcceptance?: (reason: string) => void;
 }
 
 export function ViewEmpathyStatementDrawer({
@@ -50,9 +52,12 @@ export function ViewEmpathyStatementDrawer({
   onClose,
   onSendRefinement,
   onAcceptWithoutRevising,
+  onDeclineAcceptance,
 }: ViewEmpathyStatementDrawerProps) {
   const [isRefining, setIsRefining] = useState(false);
+  const [isDeclining, setIsDeclining] = useState(false);
   const [refinementText, setRefinementText] = useState('');
+  const [declineReason, setDeclineReason] = useState('');
   const scrollViewRef = useRef<ScrollView>(null);
 
   // When the refinement composer opens (and keyboard comes up), ensure we scroll the input into view.
@@ -73,6 +78,22 @@ export function ViewEmpathyStatementDrawer({
     };
   }, [isRefining]);
 
+  useEffect(() => {
+    if (!isDeclining) return;
+
+    const raf = requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    });
+    const t = setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 150);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
+  }, [isDeclining]);
+
   const handleSendRefinement = () => {
     const trimmed = refinementText.trim();
     if (!trimmed) return;
@@ -80,6 +101,16 @@ export function ViewEmpathyStatementDrawer({
     onSendRefinement?.(trimmed);
     setRefinementText('');
     setIsRefining(false);
+    onClose();
+  };
+
+  const handleDeclineAcceptance = () => {
+    const trimmed = declineReason.trim();
+    if (!trimmed) return;
+
+    onDeclineAcceptance?.(trimmed);
+    setDeclineReason('');
+    setIsDeclining(false);
     onClose();
   };
 
@@ -181,6 +212,54 @@ export function ViewEmpathyStatementDrawer({
                   </Text>
                 </TouchableOpacity>
               </View>
+            ) : isDeclining ? (
+              <View style={styles.refineComposer}>
+                <View style={styles.refineComposerHeader}>
+                  <Text style={styles.refineComposerTitle}>What makes this hard to accept?</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIsDeclining(false);
+                      setDeclineReason('');
+                    }}
+                    accessibilityLabel="Close decline reason"
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    testID="close-decline-acceptance-reason"
+                  >
+                    <X color={colors.textSecondary} size={20} />
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  style={styles.refineInput}
+                  multiline
+                  placeholder="Share what still feels unresolved..."
+                  placeholderTextColor={colors.textMuted}
+                  value={declineReason}
+                  onChangeText={setDeclineReason}
+                  autoFocus
+                  onFocus={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+                  testID="decline-acceptance-reason-input"
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.sendRefineButton,
+                    !declineReason.trim() && styles.sendRefineButtonDisabled,
+                  ]}
+                  onPress={handleDeclineAcceptance}
+                  disabled={!declineReason.trim()}
+                  activeOpacity={0.8}
+                  testID="submit-decline-acceptance-button"
+                >
+                  <Send color={declineReason.trim() ? 'white' : colors.textMuted} size={20} />
+                  <Text
+                    style={[
+                      styles.sendRefineButtonText,
+                      !declineReason.trim() && styles.sendRefineButtonTextDisabled,
+                    ]}
+                  >
+                    Submit
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               <View style={styles.footer}>
                 {isRevising && onAcceptWithoutRevising && (
@@ -193,7 +272,19 @@ export function ViewEmpathyStatementDrawer({
                     testID="accept-without-revising-button"
                     activeOpacity={0.8}
                   >
+                    <Check color={colors.textSecondary} size={18} />
                     <Text style={styles.acceptButtonText}>I accept their experience</Text>
+                  </TouchableOpacity>
+                )}
+                {isRevising && onDeclineAcceptance && (
+                  <TouchableOpacity
+                    style={styles.declineButton}
+                    onPress={() => setIsDeclining(true)}
+                    testID="decline-acceptance-button"
+                    activeOpacity={0.8}
+                  >
+                    <CircleX color={colors.error} size={18} />
+                    <Text style={styles.declineButtonText}>I cannot accept this</Text>
                   </TouchableOpacity>
                 )}
                 <View style={styles.actionButtons}>
@@ -375,6 +466,7 @@ const styles = StyleSheet.create({
   },
   acceptButton: {
     width: '100%',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bgSecondary,
@@ -384,11 +476,31 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
+    gap: 8,
   },
   acceptButtonText: {
     fontSize: 14,
     fontWeight: '500',
     color: colors.textSecondary,
+  },
+  declineButton: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bgPrimary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.error,
+    gap: 8,
+  },
+  declineButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.error,
   },
 });
 

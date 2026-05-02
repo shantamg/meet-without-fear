@@ -43,6 +43,17 @@ const isE2EMode = process.env.EXPO_PUBLIC_E2E_MODE === 'true';
 const originalResolveRequest = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Expo's web HMR client expects the pretty-format@29 CJS export shape.
+  // The monorepo also installs pretty-format@30 for testing-library, and Metro
+  // can otherwise resolve that newer ESM shape into the runtime and blank the
+  // web app before React mounts.
+  if (platform === 'web' && moduleName === 'pretty-format') {
+    return {
+      filePath: require.resolve('@expo/metro-runtime/node_modules/pretty-format'),
+      type: 'sourceFile',
+    };
+  }
+
   // --- Web: shim @sentry/react-native ---
   if (platform === 'web' && moduleName === '@sentry/react-native') {
     return {

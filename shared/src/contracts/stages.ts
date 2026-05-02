@@ -109,6 +109,14 @@ export type ConsentToShareResponseInput = z.infer<typeof consentToShareResponseS
 export const validateEmpathyRequestSchema = z.object({
   validated: z.boolean(),
   feedback: z.string().max(500, 'Feedback too long').optional(),
+}).superRefine((value, ctx) => {
+  if (!value.validated && !value.feedback?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['feedback'],
+      message: 'Feedback is required when empathy is not validated',
+    });
+  }
 });
 
 export type ValidateEmpathyRequestInput = z.infer<typeof validateEmpathyRequestSchema>;

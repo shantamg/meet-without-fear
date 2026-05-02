@@ -72,6 +72,7 @@ export enum MessageRole {
   EMPATHY_STATEMENT = 'EMPATHY_STATEMENT', // User's shared empathy statement (shown in chat history)
   SHARE_SUGGESTION = 'SHARE_SUGGESTION', // Suggested content for subject to share (reconciler)
   SHARED_CONTEXT = 'SHARED_CONTEXT', // Additional context shared by subject to guesser (reconciler)
+  VALIDATION_FEEDBACK = 'VALIDATION_FEEDBACK', // Feedback sent after a "Not quite" validation response
 }
 
 export enum Attribution {
