@@ -71,6 +71,23 @@ export const feelHeardResponseSchema = z.object({
 export type FeelHeardResponseInput = z.infer<typeof feelHeardResponseSchema>;
 
 // ============================================================================
+// Topic Frame (post-Stage 1 confirmation)
+// ============================================================================
+
+export const confirmTopicFrameRequestSchema = z.object({
+  topicFrame: z.string().min(2, 'Topic frame too short').max(100, 'Topic frame too long'),
+});
+
+export type ConfirmTopicFrameRequestInput = z.infer<typeof confirmTopicFrameRequestSchema>;
+
+export const confirmTopicFrameResponseSchema = z.object({
+  topicFrame: z.string(),
+  confirmedAt: z.string().datetime(),
+});
+
+export type ConfirmTopicFrameResponseInput = z.infer<typeof confirmTopicFrameResponseSchema>;
+
+// ============================================================================
 // Stage 2: Perspective Stretch / Empathy
 // ============================================================================
 

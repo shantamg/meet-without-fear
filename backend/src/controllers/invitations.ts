@@ -461,6 +461,7 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
           select: {
             id: true,
             status: true,
+            topicFrame: true,
           },
         },
       },
@@ -486,7 +487,10 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
         status,
         createdAt: invitation.createdAt,
         expiresAt: invitation.expiresAt,
-        session: invitation.session,
+        session: {
+          ...invitation.session,
+          topicFrame: invitation.session.topicFrame ?? null,
+        },
       },
     });
   } catch (error) {

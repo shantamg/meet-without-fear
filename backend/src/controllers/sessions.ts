@@ -770,6 +770,7 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
         status: invitation.status,
         expiresAt: invitation.expiresAt.toISOString(),
         isInviter,
+        topicFrame: session.topicFrame ?? null,
       },
     });
   } catch (error) {
