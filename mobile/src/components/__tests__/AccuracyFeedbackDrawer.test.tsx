@@ -28,6 +28,15 @@ describe('AccuracyFeedbackDrawer', () => {
     expect(defaultProps.onClose).not.toHaveBeenCalled();
   });
 
+  it('can open directly to rough feedback', () => {
+    render(<AccuracyFeedbackDrawer {...defaultProps} initialStep="feedback" />);
+
+    expect(screen.getByText('What feels off?')).toBeTruthy();
+    expect(screen.getByTestId('accuracy-rough-feedback-input')).toBeTruthy();
+    expect(screen.queryByText('How accurate is this?')).toBeNull();
+    expect(screen.queryByTestId('accuracy-feedback-back')).toBeNull();
+  });
+
   it('requires non-empty rough feedback', () => {
     render(<AccuracyFeedbackDrawer {...defaultProps} />);
 
