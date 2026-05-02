@@ -2595,6 +2595,7 @@ export function UnifiedSessionScreen({
           visible={showAccuracyFeedbackDrawer}
           statement={partnerEmpathyData.attempt.content}
           partnerName={partnerName}
+          initialStep="feedback"
           onAccurate={() => {
             markCompleted('validated-empathy');
             handleValidatePartnerEmpathy(true);

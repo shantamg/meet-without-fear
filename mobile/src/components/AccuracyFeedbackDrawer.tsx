@@ -37,6 +37,8 @@ export interface AccuracyFeedbackDrawerProps {
   onInaccurate: (feedback: string) => void;
   /** Callback when drawer is closed */
   onClose: () => void;
+  /** Which step to show first when the drawer opens */
+  initialStep?: 'accuracy' | 'feedback';
 }
 
 export function AccuracyFeedbackDrawer({
@@ -47,18 +49,21 @@ export function AccuracyFeedbackDrawer({
   onPartiallyAccurate,
   onInaccurate,
   onClose,
+  initialStep = 'accuracy',
 }: AccuracyFeedbackDrawerProps) {
-  const [isFeedbackStep, setIsFeedbackStep] = useState(false);
+  const [isFeedbackStep, setIsFeedbackStep] = useState(initialStep === 'feedback');
   const [roughFeedback, setRoughFeedback] = useState('');
   const [showFeedbackError, setShowFeedbackError] = useState(false);
 
   useEffect(() => {
-    if (!visible) {
-      setIsFeedbackStep(false);
+    if (visible) {
+      setIsFeedbackStep(initialStep === 'feedback');
+    } else {
+      setIsFeedbackStep(initialStep === 'feedback');
       setRoughFeedback('');
       setShowFeedbackError(false);
     }
-  }, [visible]);
+  }, [visible, initialStep]);
 
   const handleAccurate = () => {
     onAccurate();
@@ -102,7 +107,7 @@ export function AccuracyFeedbackDrawer({
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           {/* Header with close button */}
           <View style={styles.header}>
-            {isFeedbackStep && (
+            {isFeedbackStep && initialStep !== 'feedback' && (
               <TouchableOpacity
                 style={styles.backButton}
                 onPress={handleBackToOptions}
@@ -139,7 +144,9 @@ export function AccuracyFeedbackDrawer({
                 {partnerName}'s understanding
               </Text>
               <Text style={styles.subtitle}>
-                {partnerName} shared this to show they understand your perspective. How well does it capture your experience?
+                {isFeedbackStep
+                  ? 'Here is the understanding you are responding to.'
+                  : `${partnerName} shared this to show they understand your perspective. How well does it capture your experience?`}
               </Text>
 
               {/* Partner's empathy statement */}
