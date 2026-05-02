@@ -2058,7 +2058,7 @@ export function UnifiedSessionScreen({
               maxHeight: Animated.multiply(
                 invitationPanelAnim.interpolate({
                   inputRange: [0, 1],
-	                  outputRange: [0, 560],
+	                  outputRange: [0, 600],
                 }),
                 invitationKeyboardCollapseAnim,
               ),
@@ -2076,116 +2076,114 @@ export function UnifiedSessionScreen({
             }}
             pointerEvents="auto"
           >
-            {/* 5. INNER CONTAINER
-           Move the styles that contain padding/bg/borders HERE.
-           This ensures they don't take up space when the parent height is 0.
-        */}
+            {/* 5. INNER CONTAINER — Two-phase invitation flow:
+                 Phase 1: Topic confirmation only (until confirmed)
+                 Phase 2: Invitation sharing (after topic confirmed)
+            */}
             <View style={styles.invitationDraftContainer} testID="invitation-draft-panel">
-              <Text style={styles.invitationDraftMessage}>
-                "{invitationMessage}"
-              </Text>
+              {!topicFrameConfirmed ? (
+                /* Phase 1: Topic confirmation — show only the topic step */
+                <View style={styles.topicFrameContainer}>
+                  <Text style={styles.topicFrameLabel}>Topic</Text>
+                  {isGeneratingTopicFrame ? (
+                    <View style={styles.topicFrameLoading}>
+                      <ActivityIndicator size="small" color={styles.accentColor.color} />
+                      <Text style={styles.topicFrameStatus}>Preparing topic...</Text>
+                    </View>
+                  ) : topicFrame ? (
+                    <>
+                      <Text style={styles.topicFrameText}>{topicFrame}</Text>
+                      <TextInput
+                        style={styles.topicFrameInput}
+                        value={topicFrameSteer}
+                        onChangeText={setTopicFrameSteer}
+                        placeholder="Suggest a different direction"
+                        placeholderTextColor={styles.topicFramePlaceholder.color}
+                        maxLength={100}
+                        testID="topic-frame-steer-input"
+                      />
+                      <TouchableOpacity
+                        style={[
+                          styles.topicFrameButton,
+                          isConfirmingTopicFrame && styles.topicFrameButtonDisabled,
+                        ]}
+                        onPress={handleConfirmTopicFrame}
+                        disabled={isConfirmingTopicFrame}
+                        testID="topic-frame-confirm-button"
+                      >
+                        {isConfirmingTopicFrame ? (
+                          <ActivityIndicator size="small" color={styles.topicFrameButtonText.color} />
+                        ) : (
+                          <Text style={styles.topicFrameButtonText}>
+                            {topicFrameSteer.trim() ? 'Update and confirm' : 'Confirm topic'}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.topicFrameButton}
+                      onPress={() => {
+                        topicFrameRequestedRef.current = true;
+                        generateTopicFrame({ sessionId });
+                      }}
+                      testID="topic-frame-generate-button"
+                    >
+                      <Text style={styles.topicFrameButtonText}>Prepare topic</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                /* Phase 2: Invitation sharing — topic confirmed, show invitation */
+                <>
+                  <Text style={styles.invitationDraftMessage}>
+                    "{invitationMessage}"
+                  </Text>
 
-              <View style={styles.topicFrameContainer}>
-                <Text style={styles.topicFrameLabel}>Topic</Text>
-                {isGeneratingTopicFrame ? (
-                  <View style={styles.topicFrameLoading}>
-                    <ActivityIndicator size="small" color={styles.accentColor.color} />
-                    <Text style={styles.topicFrameStatus}>Preparing topic...</Text>
-                  </View>
-                ) : topicFrame ? (
-                  <>
+                  <View style={styles.topicFrameContainer}>
+                    <Text style={styles.topicFrameLabel}>Topic</Text>
                     <Text style={styles.topicFrameText}>{topicFrame}</Text>
-                    {!topicFrameConfirmed && (
-                      <>
-                        <TextInput
-                          style={styles.topicFrameInput}
-                          value={topicFrameSteer}
-                          onChangeText={setTopicFrameSteer}
-                          placeholder="Steer the topic direction"
-                          placeholderTextColor={styles.topicFramePlaceholder.color}
-                          maxLength={100}
-                          testID="topic-frame-steer-input"
-                        />
-                        <TouchableOpacity
-                          style={[
-                            styles.topicFrameButton,
-                            isConfirmingTopicFrame && styles.topicFrameButtonDisabled,
-                          ]}
-                          onPress={handleConfirmTopicFrame}
-                          disabled={isConfirmingTopicFrame}
-                          testID="topic-frame-confirm-button"
-                        >
-                          {isConfirmingTopicFrame ? (
-                            <ActivityIndicator size="small" color={styles.topicFrameButtonText.color} />
-                          ) : (
-                            <Text style={styles.topicFrameButtonText}>
-                              {topicFrameSteer.trim() ? 'Update and confirm' : 'Confirm topic'}
-                            </Text>
-                          )}
-                        </TouchableOpacity>
-                      </>
-                    )}
-                  </>
-                ) : (
+                  </View>
+
+                  <InvitationShareButton
+                    invitationMessage={invitationMessage!}
+                    invitationUrl={invitationUrl}
+                    topicFrame={topicFrame}
+                    partnerName={partnerName}
+                    senderName={user?.name || user?.firstName || undefined}
+                    testID="invitation-share-button"
+                  />
+
                   <TouchableOpacity
-                    style={styles.topicFrameButton}
-                    onPress={() => {
-                      topicFrameRequestedRef.current = true;
-                      generateTopicFrame({ sessionId });
-                    }}
-                    testID="topic-frame-generate-button"
+                    style={styles.refineInvitationButton}
+                    onPress={() => setShowInvitationRefine(true)}
+                    testID="invitation-refine-button"
                   >
-                    <Text style={styles.topicFrameButtonText}>Prepare topic</Text>
+                    <Text style={styles.refineInvitationButtonText}>
+                      Refine invitation
+                    </Text>
                   </TouchableOpacity>
-                )}
-              </View>
 
-              <InvitationShareButton
-                invitationMessage={invitationMessage!}
-                invitationUrl={invitationUrl}
-                topicFrame={topicFrame}
-                partnerName={partnerName}
-                senderName={user?.name || user?.firstName || undefined}
-                disabled={!topicFrameConfirmed}
-                testID="invitation-share-button"
-              />
-
-              <TouchableOpacity
-                style={styles.refineInvitationButton}
-                onPress={() => setShowInvitationRefine(true)}
-                testID="invitation-refine-button"
-              >
-                <Text style={styles.refineInvitationButtonText}>
-                  Refine invitation
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.continueButton,
-                  !topicFrameConfirmed && styles.continueButtonDisabled,
-                ]}
-                onPress={() => {
-                  if (!topicFrameConfirmed) {
-                    showError('Confirm the topic first', 'The invitation needs a finalized topic before it can be shared.');
-                    return;
-                  }
-                  // Track invitation sent
-                  trackInvitationSent(sessionId, 'share_sheet');
-                  setIsRefiningInvitation(false); // Exit refinement mode
-                  // Local latch: Immediately hide panel, survives cache race conditions
-                  markCompleted('confirmed-invitation');
-                  // Cache-First: useConfirmInvitationMessage.onMutate sets invitation.messageConfirmed optimistically
-                  // The indicator will appear immediately because the cache is updated
-                  handleConfirmInvitationMessage(invitationMessage!);
-                }}
-                disabled={!topicFrameConfirmed}
-                testID="invitation-continue-button"
-              >
-                <Text style={styles.continueButtonText}>
-                  {isRefiningInvitation ? "I've sent it - Back to conversation" : "I've sent it - Continue"}
-                </Text>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.continueButton}
+                    onPress={() => {
+                      // Track invitation sent
+                      trackInvitationSent(sessionId, 'share_sheet');
+                      setIsRefiningInvitation(false); // Exit refinement mode
+                      // Local latch: Immediately hide panel, survives cache race conditions
+                      markCompleted('confirmed-invitation');
+                      // Cache-First: useConfirmInvitationMessage.onMutate sets invitation.messageConfirmed optimistically
+                      // The indicator will appear immediately because the cache is updated
+                      handleConfirmInvitationMessage(invitationMessage!);
+                    }}
+                    testID="invitation-continue-button"
+                  >
+                    <Text style={styles.continueButtonText}>
+                      {isRefiningInvitation ? "I've sent it - Back to conversation" : "I've sent it - Continue"}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </Animated.View>
         );

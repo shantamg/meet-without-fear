@@ -90,10 +90,10 @@ export async function generateTopicFrame(req: Request, res: Response): Promise<v
       messages: [
         {
           role: 'user',
-          content: `The user is drafting an invitation for their partner to join a conflict resolution session. Here is the invitation message they have written:\n\n"${invitationRecord.invitationMessage}"\n\nGenerate a neutral topic frame (3-5 words) that captures what this conflict is about.`,
+          content: `The user is drafting an invitation for their partner to join a conflict resolution session. Here is the invitation message they have written:\n\n"${invitationRecord.invitationMessage}"\n\nGenerate a neutral topic frame (3-5 words) that captures what this conflict is about. Think through several candidates, critique them, then output your final choice on the last line.`,
         },
       ],
-      maxTokens: 50,
+      maxTokens: 300,
       sessionId,
       turnId,
       operation: 'topic-frame-generate',
@@ -206,10 +206,10 @@ export async function confirmTopicFrame(req: Request, res: Response): Promise<vo
         messages: [
           {
             role: 'user',
-            content: `${contextParts.join('\n\n')}\n\nGenerate the final neutral topic frame (3-5 words). You have final say on the framing — guard against inappropriate or blaming language.`,
+            content: `${contextParts.join('\n\n')}\n\nGenerate the final neutral topic frame (3-5 words). Think through several candidates, critique them, then output your final choice on the last line. You have final say on the framing — guard against inappropriate or blaming language.`,
           },
         ],
-        maxTokens: 50,
+        maxTokens: 300,
         sessionId,
         turnId,
         operation: 'topic-frame-confirm',
@@ -257,20 +257,36 @@ const TOPIC_FRAME_SYSTEM_PROMPT = `You are generating a neutral topic frame for 
 
 Based on the user's invitation message (written during Stage 0 invite drafting), produce a SHORT, NEUTRAL phrase (3-5 words) that describes the conflict topic. This will be shown to the other person when they receive the invitation, so they know what conflict they've been invited to engage with.
 
+PROCESS:
+First, think through 3-5 candidate topic frames. For each one, briefly critique it:
+- Is it too clinical or jargon-heavy? (e.g. "Communication frequency expectations" — bad, sounds like a therapy textbook)
+- Is it too vague? (e.g. "Relationship issues" — bad, could mean anything)
+- Is it a thinly disguised restatement of one side? (e.g. "Excessive contact requests" — bad, takes a side)
+- Does it capture the real-world situation in plain language the other person would recognize?
+Then pick the best one, or synthesize a better option from your candidates.
+
 RULES:
-- 3-5 words only. No more.
+- 3-5 words only for the final topic.
 - Neutral tone — no blame, no judgment, no emotional loading.
 - Specific enough that the other person recognizes it, but not so detailed it feels like a summary.
 - Use plain, everyday language. No clinical or therapeutic jargon.
 - Do NOT include names.
-- Output ONLY the topic frame text. No quotes, no explanation, no preamble.
 
-GOOD EXAMPLES:
+OUTPUT FORMAT:
+Write your thinking and candidates first, then on the last line write ONLY the final topic frame text (no quotes, no label, no explanation).
+
+GOOD EXAMPLES of final topics:
 - Tuesday pickup disagreement
 - Moving plans conversation
 - Holiday visit tension
 - Morning routine frustration
 - Budget priorities discussion
+- How often we talk
+
+BAD EXAMPLES (too clinical):
+- Communication frequency expectations
+- Interpersonal boundary negotiation
+- Parental contact dynamics
 
 BAD EXAMPLES (too vague):
 - Relationship issues
@@ -285,16 +301,26 @@ BAD EXAMPLES (too blaming):
 function normalizeTopicFrame(raw: string | null | undefined): string | null {
   if (!raw) return null;
 
-  const singleLine = raw
-    .trim()
-    .replace(/^["']|["']$/g, '')
-    .replace(/\s+/g, ' ');
+  // The response may contain thinking/critique lines followed by the final topic
+  // on the last line. Try each line from the end until we find a valid 3-5 word frame.
+  const lines = raw.trim().split('\n').filter((l) => l.trim());
 
-  if (!singleLine) return null;
-  if (/[.!?;:]/.test(singleLine)) return null;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const candidate = lines[i]
+      .trim()
+      .replace(/^["']|["']$/g, '')
+      .replace(/^[-•*]\s*/, '') // strip leading bullet
+      .replace(/\s+/g, ' ')
+      .trim();
 
-  const words = singleLine.split(' ').filter(Boolean);
-  if (words.length < 3 || words.length > 5) return null;
+    if (!candidate) continue;
+    if (/[.!?;:]/.test(candidate)) continue;
 
-  return singleLine;
+    const words = candidate.split(' ').filter(Boolean);
+    if (words.length < 3 || words.length > 5) continue;
+
+    return candidate;
+  }
+
+  return null;
 }
