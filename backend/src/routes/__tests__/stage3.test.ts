@@ -1,10 +1,14 @@
 import { Request, Response } from 'express';
 import {
   getNeeds,
+  captureNeeds,
   confirmNeeds,
   consentToShareNeeds,
+  validateNeeds,
   getCommonGround,
+  confirmCommonGround,
 } from '../../controllers/stage3';
+import { advanceStage } from '../../controllers/sessions';
 import { prisma } from '../../lib/prisma';
 import * as needsService from '../../services/needs';
 
@@ -70,6 +74,8 @@ describe('Stage 3 API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (needsService.isExtractionRunning as jest.Mock).mockReturnValue(false);
+    (prisma.commonGround.findMany as jest.Mock).mockReset();
   });
 
   describe('GET /sessions/:id/needs (getNeeds)', () => {
@@ -288,6 +294,75 @@ describe('Stage 3 API', () => {
             synthesizedAt: null,
             isDirty: false,
           },
+        })
+      );
+    });
+  });
+
+  describe('POST /sessions/:id/needs/capture (captureNeeds)', () => {
+    it('captures needs from a summary card without confirming them', async () => {
+      const mockStageProgress = {
+        id: 'progress-1',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 3,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      };
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+        id: mockSessionId,
+        status: 'ACTIVE',
+      });
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
+      (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue({ id: mockVesselId });
+      (prisma.identifiedNeed.create as jest.Mock).mockResolvedValue({
+        id: mockNeedId1,
+        vesselId: mockVesselId,
+        need: 'To feel heard before problem solving',
+        category: 'CONNECTION',
+        evidence: ['I just want you to listen first'],
+        confirmed: false,
+        aiConfidence: 0.85,
+        createdAt: new Date(),
+      });
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: {
+          needs: [
+            {
+              need: 'Connection',
+              category: 'CONNECTION',
+              description: 'To feel heard before problem solving',
+              evidence: ['I just want you to listen first'],
+            },
+          ],
+        },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await captureNeeds(req as Request, res as Response);
+
+      expect(prisma.identifiedNeed.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            vesselId: mockVesselId,
+            need: 'To feel heard before problem solving',
+            category: 'CONNECTION',
+            confirmed: false,
+          }),
+        })
+      );
+      expect(statusMock).toHaveBeenCalledWith(201);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            needs: [expect.objectContaining({ id: mockNeedId1, confirmed: false })],
+            capturedAt: expect.any(String),
+          }),
         })
       );
     });
@@ -669,6 +744,274 @@ describe('Stage 3 API', () => {
         expect.objectContaining({
           success: false,
           error: expect.objectContaining({ code: 'UNAUTHORIZED' }),
+        })
+      );
+    });
+  });
+
+  describe('POST /sessions/:id/needs/validate (validateNeeds)', () => {
+    it('validates revealed needs and opens Stage 4 when partner already validated', async () => {
+      const mockStageProgress = {
+        id: 'progress-1',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 3,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: { needsConfirmed: true, needsShared: true },
+      };
+
+      const partnerProgress = {
+        id: 'progress-2',
+        sessionId: mockSessionId,
+        userId: mockPartnerId,
+        stage: 3,
+        status: 'GATE_PENDING',
+        gatesSatisfied: {
+          needsConfirmed: true,
+          needsShared: true,
+          commonGroundConfirmed: true,
+        },
+      };
+
+      const mockCommonGround = [
+        {
+          id: 'clcomm0001aaaaaaaaa',
+          sharedVesselId: 'shared-vessel-1',
+          need: 'Both need calm repair',
+          category: 'SAFETY',
+          confirmedByA: false,
+          confirmedByB: true,
+          confirmedAt: null,
+        },
+      ];
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+        id: mockSessionId,
+        status: 'ACTIVE',
+        relationship: {
+          members: [{ userId: mockUser.id }, { userId: mockPartnerId }],
+        },
+      });
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        id: mockSessionId,
+        relationship: { members: [{ userId: mockUser.id }, { userId: mockPartnerId }] },
+      });
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
+      (prisma.stageProgress.findUnique as jest.Mock)
+        .mockResolvedValueOnce(partnerProgress)
+        .mockResolvedValueOnce(partnerProgress);
+      (prisma.sharedVessel.findUnique as jest.Mock).mockResolvedValue({
+        id: 'shared-vessel-1',
+        sessionId: mockSessionId,
+      });
+      (prisma.commonGround.findMany as jest.Mock)
+        .mockResolvedValueOnce(mockCommonGround)
+        .mockResolvedValueOnce([{ ...mockCommonGround[0], confirmedByA: true }]);
+      (prisma.commonGround.update as jest.Mock).mockResolvedValue({
+        ...mockCommonGround[0],
+        confirmedByA: true,
+      });
+      (prisma.commonGround.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+      (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
+        ...mockStageProgress,
+        status: 'GATE_PENDING',
+      });
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await validateNeeds(req as Request, res as Response);
+
+      expect(prisma.stageProgress.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'GATE_PENDING',
+            completedAt: null,
+          }),
+        })
+      );
+      expect(prisma.stageProgress.upsert).toHaveBeenCalledTimes(2);
+      expect(prisma.message.create).toHaveBeenCalledTimes(2);
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            validated: true,
+            partnerValidated: true,
+            canAdvance: true,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('POST /sessions/:id/common-ground/confirm (confirmCommonGround)', () => {
+    it('satisfies the Stage 3 gate without auto-advancing to Stage 4', async () => {
+      const mockStageProgress = {
+        id: 'progress-1',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 3,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: { needsConfirmed: true, needsShared: true },
+      };
+
+      const mockCommonGround = [
+        {
+          id: 'clcomm0001aaaaaaaaa',
+          sharedVesselId: 'shared-vessel-1',
+          need: 'Both need reliable follow-through',
+          category: 'RECOGNITION',
+          confirmedByA: true,
+          confirmedByB: true,
+          confirmedAt: new Date(),
+        },
+      ];
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+        id: mockSessionId,
+        status: 'ACTIVE',
+        relationship: {
+          members: [{ userId: mockUser.id }, { userId: mockPartnerId }],
+        },
+      });
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        id: mockSessionId,
+        relationship: { members: [{ userId: mockUser.id }, { userId: mockPartnerId }] },
+      });
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
+      (prisma.sharedVessel.findUnique as jest.Mock).mockResolvedValue({
+        id: 'shared-vessel-1',
+        sessionId: mockSessionId,
+      });
+      (prisma.commonGround.findMany as jest.Mock)
+        .mockResolvedValueOnce(mockCommonGround)
+        .mockResolvedValueOnce(mockCommonGround);
+      (prisma.commonGround.findUnique as jest.Mock).mockResolvedValue(mockCommonGround[0]);
+      (prisma.commonGround.update as jest.Mock).mockResolvedValue(mockCommonGround[0]);
+      (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
+        ...mockStageProgress,
+        status: 'GATE_PENDING',
+      });
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+        body: { commonGroundIds: ['clcomm0001aaaaaaaaa'] },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await confirmCommonGround(req as Request, res as Response);
+
+      expect(prisma.stageProgress.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'GATE_PENDING',
+            completedAt: null,
+          }),
+        })
+      );
+      expect(prisma.stageProgress.upsert).not.toHaveBeenCalled();
+      expect(prisma.message.create).not.toHaveBeenCalled();
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            confirmed: true,
+            allConfirmedByBoth: true,
+            canAdvance: true,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('POST /sessions/:id/stages/advance from Stage 3', () => {
+    it('allows explicit Stage 4 advancement after both users satisfy Stage 3 gates', async () => {
+      const currentProgress = {
+        id: 'progress-1',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 3,
+        status: 'GATE_PENDING',
+        gatesSatisfied: {
+          needsConfirmed: true,
+          needsShared: true,
+          commonGroundConfirmed: true,
+        },
+      };
+      const partnerProgress = {
+        id: 'progress-2',
+        sessionId: mockSessionId,
+        userId: mockPartnerId,
+        stage: 3,
+        status: 'GATE_PENDING',
+        gatesSatisfied: {
+          needsConfirmed: true,
+          needsShared: true,
+          commonGroundConfirmed: true,
+        },
+      };
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue({
+        id: mockSessionId,
+        status: 'ACTIVE',
+        stageProgress: [currentProgress, partnerProgress],
+        relationship: {
+          members: [{ userId: mockUser.id }, { userId: mockPartnerId }],
+        },
+      });
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue({
+        id: mockSessionId,
+        relationship: { members: [{ userId: mockUser.id }, { userId: mockPartnerId }] },
+      });
+      (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
+        ...currentProgress,
+        status: 'COMPLETED',
+      });
+      (prisma.stageProgress.create as jest.Mock).mockResolvedValue({
+        id: 'progress-4',
+        sessionId: mockSessionId,
+        userId: mockUser.id,
+        stage: 4,
+        status: 'IN_PROGRESS',
+      });
+
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await advanceStage(req as Request, res as Response);
+
+      expect(prisma.stageProgress.update).toHaveBeenCalledWith({
+        where: { id: 'progress-1' },
+        data: expect.objectContaining({ status: 'COMPLETED' }),
+      });
+      expect(prisma.stageProgress.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            sessionId: mockSessionId,
+            userId: mockUser.id,
+            stage: 4,
+            status: 'IN_PROGRESS',
+          }),
+        })
+      );
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            advanced: true,
+            newStage: 4,
+          }),
         })
       );
     });
