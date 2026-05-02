@@ -638,17 +638,27 @@ export async function advanceStage(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Special check for Stage 4: requires both users to complete Stage 3
+    // Special check for Stage 4: requires both users to satisfy Stage 3 gates.
+    // Stage 3 validation no longer auto-creates Stage 4 rows; each user advances explicitly.
     if (nextStage === 4) {
       const partnerId = await getPartnerUserId(sessionId, user.id);
       if (partnerId) {
-        // Check specifically if partner's Stage 3 is completed
-        // (not their highest stage, as they may already be in Stage 4)
+        const partnerCurrentProgress = session.stageProgress
+          .filter((sp) => sp.userId === partnerId)
+          .sort((a, b) => b.stage - a.stage)[0];
+
         const partnerStage3 = session.stageProgress.find(
           (sp) => sp.userId === partnerId && sp.stage === 3
         );
+        const partnerStage3Gates = checkGates(
+          3,
+          partnerStage3?.gatesSatisfied as Record<string, unknown> | null
+        );
 
-        if (!partnerStage3 || partnerStage3.status !== 'COMPLETED') {
+        if (
+          partnerCurrentProgress?.stage !== 4 &&
+          (!partnerStage3 || !partnerStage3Gates.satisfied)
+        ) {
           successResponse(res, {
             advanced: false,
             newStage: currentStage,

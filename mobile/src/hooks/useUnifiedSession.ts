@@ -35,8 +35,8 @@ import {
   useNeeds,
   useConfirmNeeds,
   useConsentShareNeeds,
-  useCommonGround,
-  useConfirmCommonGround,
+  useNeedsComparison,
+  useValidateNeeds,
   useStrategies,
   useRequestStrategySuggestions,
   useProposeStrategy,
@@ -95,6 +95,14 @@ export interface InlineChatCard {
   props: Record<string, unknown>;
   dismissible?: boolean;
 }
+
+type LegacyCommonGroundItem = {
+  id: string;
+  need: string;
+  category: string;
+  confirmedByMe: boolean;
+  confirmedByPartner: boolean;
+};
 
 // Re-export WaitingStatusState from the new pure derivation module
 // This maintains backward compatibility while centralizing the type definition
@@ -265,12 +273,10 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const needsForGating = needsData?.needs ?? [];
   const allNeedsConfirmedForGating = needsForGating.length > 0 && needsForGating.every((n) => n.confirmed);
 
-  // Common ground query is gated on needs being confirmed to prevent
-  // racing with the needs confirmation/sharing flow
-  const { data: commonGroundData } = useCommonGround(sessionId, {
-    allNeedsConfirmed: allNeedsConfirmedForGating,
-    needsShared: allNeedsConfirmedForGating, // Sharing happens immediately after confirmation
-  });
+  const { data: needsComparisonData } = useNeedsComparison(
+    sessionId,
+    allNeedsConfirmedForGating
+  );
 
   // Stage 4: Strategies - always fetch to avoid waterfall
   const { data: strategyData } = useStrategies(sessionId);
@@ -303,7 +309,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { mutate: resubmitEmpathy } = useResubmitEmpathy();
   const { mutate: confirmNeeds, isPending: isConfirmingNeeds } = useConfirmNeeds();
   const { mutate: consentShareNeeds } = useConsentShareNeeds();
-  const { mutate: confirmCommonGroundMutation } = useConfirmCommonGround();
+  const { mutate: validateNeedsMutation } = useValidateNeeds();
   const { mutate: proposeStrategy, isPending: isProposing } = useProposeStrategy();
   const { mutate: requestSuggestions, isPending: isGenerating } =
     useRequestStrategySuggestions();
@@ -312,24 +318,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { mutate: confirmAgreement } = useConfirmAgreement();
   const { mutate: createAgreement } = useCreateAgreement();
   const { mutate: resolveSession } = useResolveSession();
-
-  // Auto-consent to share needs when needs are confirmed but common ground hasn't started.
-  // This handles the case where needs were confirmed without the consent-to-share step.
-  const autoConsentTriggered = useRef(false);
-  useEffect(() => {
-    if (
-      sessionId &&
-      allNeedsConfirmedForGating &&
-      commonGroundData &&
-      !commonGroundData.analysisComplete &&
-      commonGroundData.commonGround.length === 0 &&
-      !autoConsentTriggered.current
-    ) {
-      autoConsentTriggered.current = true;
-      const needIds = needsForGating.map((n) => n.id);
-      consentShareNeeds({ sessionId, needIds });
-    }
-  }, [sessionId, allNeedsConfirmedForGating, commonGroundData, needsForGating, consentShareNeeds]);
 
   // Streaming message hook with callbacks for metadata handling
   const handleStreamMetadata = useCallback(
@@ -504,8 +492,14 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Needs confirmation state
   const needs = useMemo(() => needsData?.needs ?? [], [needsData?.needs]);
   const allNeedsConfirmed = needs.length > 0 && needs.every((n) => n.confirmed);
-  const commonGround = useMemo(() => commonGroundData?.commonGround ?? [], [commonGroundData?.commonGround]);
-  const commonGroundComplete = commonGroundData?.bothConfirmed ?? false;
+  const commonGround = useMemo<LegacyCommonGroundItem[]>(() => [], []);
+  const needsRevealReady =
+    (needsComparisonData?.myNeeds?.length ?? 0) > 0 &&
+    (needsComparisonData?.partnerNeeds?.length ?? 0) > 0;
+  const commonGroundData = needsRevealReady
+    ? { commonGround: [], analysisComplete: true, bothConfirmed: false, noOverlap: false }
+    : undefined;
+  const commonGroundComplete = false;
 
   // Strategy phase
   const strategyPhase = strategyData?.phase ?? StrategyPhase.COLLECTING;
@@ -956,16 +950,11 @@ export function useUnifiedSession(sessionId: string | undefined) {
       confirmNeeds(
         { sessionId, needIds },
         {
-          onSuccess: () => {
-            // After confirming needs, automatically consent to share for common ground discovery.
-            // This eliminates the need for a separate consent step.
-            consentShareNeeds({ sessionId, needIds });
-            onSuccess?.();
-          },
+          onSuccess: () => onSuccess?.(),
         }
       );
     },
-    [sessionId, needs, confirmNeeds, consentShareNeeds]
+    [sessionId, needs, confirmNeeds]
   );
 
   const handleConsentToShareNeeds = useCallback(
@@ -990,17 +979,24 @@ export function useUnifiedSession(sessionId: string | undefined) {
     (onSuccess?: () => void) => {
       if (!sessionId) return;
 
-      // Allow empty confirmations for noOverlap case (no common ground found)
-      if (commonGround.length === 0 && !commonGroundData?.noOverlap) return;
-
-      const confirmations = commonGround.map((cg) => ({
-        commonGroundId: cg.id,
-        confirmed: true,
-      }));
-
-      confirmCommonGroundMutation({ sessionId, confirmations }, { onSuccess });
+      validateNeedsMutation(
+        { sessionId, validated: true },
+        { onSuccess: () => onSuccess?.() }
+      );
     },
-    [sessionId, commonGround, commonGroundData?.noOverlap, confirmCommonGroundMutation]
+    [sessionId, validateNeedsMutation]
+  );
+
+  const handleNeedsNotValidYet = useCallback(
+    (onSuccess?: () => void) => {
+      if (!sessionId) return;
+
+      validateNeedsMutation(
+        { sessionId, validated: false },
+        { onSuccess: () => onSuccess?.() }
+      );
+    },
+    [sessionId, validateNeedsMutation]
   );
 
   const handleAddStrategy = useCallback(
@@ -1156,6 +1152,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     commonGroundData,
     commonGround,
     commonGroundComplete,
+    needsComparisonData,
     strategyData,
     strategyPhase,
     strategies,
@@ -1192,6 +1189,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     handleConfirmAllNeeds,
     handleConsentToShareNeeds,
     handleConfirmCommonGround,
+    handleNeedsNotValidYet,
     handleAddStrategy,
     handleRequestMoreStrategies,
     handleMarkReadyToRank,

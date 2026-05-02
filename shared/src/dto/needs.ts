@@ -107,7 +107,7 @@ export interface CaptureNeedsResponse {
 
 export interface ValidateNeedsResponse {
   validated: boolean;
-  validatedAt: string;
+  validatedAt: string | null;
   partnerValidated: boolean;
   canAdvance: boolean;
 }
@@ -177,4 +177,7 @@ export interface NeedsComparisonNeedDTO {
 export interface GetNeedsComparisonResponse {
   myNeeds: NeedsComparisonNeedDTO[];
   partnerNeeds: NeedsComparisonNeedDTO[];
+  myValidated?: boolean;
+  partnerValidated?: boolean;
+  canAdvance?: boolean;
 }

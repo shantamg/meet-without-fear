@@ -26,6 +26,10 @@ import {
   handleMoodCheck,
   sendAndWaitForPanel,
   waitForReconcilerComplete,
+  expectNeedsComparisonFromApi,
+  expectNeedsSummaryFromApi,
+  waitForNeedsReveal,
+  waitForStage,
 } from '../helpers/test-utils';
 
 test.use(devices['iPhone 12']);
@@ -399,11 +403,6 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
     ]);
     console.log(`${elapsed()} Needs extraction complete`);
 
-    // Skip the "Confirm my needs" UI assertion — that text only renders inside
-    // NeedsDrawer, which doesn't auto-open (only via the needs-review-button
-    // click handler in UnifiedSessionScreen). We verify needs presence via API
-    // instead, same approach as the share-screen step.
-
     const needsResponseA = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`);
     const needsDataA = await needsResponseA.json();
     const needsA = needsDataA.data?.needs || [];
@@ -414,6 +413,8 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
 
     expect(needsA.length, 'Needs extraction returned no needs for User A').toBeGreaterThan(0);
     expect(needsB.length, 'Needs extraction returned no needs for User B').toBeGreaterThan(0);
+    await expectNeedsSummaryFromApi(apiA, API_BASE_URL, harness.sessionId, 'User A');
+    await expectNeedsSummaryFromApi(apiB, API_BASE_URL, harness.sessionId, 'User B');
 
     if (needsA.length > 0) {
       const needIdsA = needsA.map((n: { id: string }) => n.id);
@@ -428,50 +429,24 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
     console.log(`${elapsed()} Needs confirmed + consented (A: ${needsA.length}, B: ${needsB.length})`);
 
     // ==========================================
-    // === STAGE 3: COMMON GROUND ===
+    // === STAGE 3: NEEDS REVEAL ===
     // ==========================================
 
-    let commonGroundComplete = false;
-    const cgDeadline = Date.now() + 180000; // 180s — real AI generates this; structured-output spike margin
-    while (Date.now() < cgDeadline && !commonGroundComplete) {
-      const cgResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground`);
-      const cgData = await cgResponse.json();
-      if (cgData.data?.commonGround && cgData.data.commonGround.length > 0) {
-        commonGroundComplete = true;
-      } else {
-        await harness.userAPage.waitForTimeout(3000);
-      }
-    }
-    if (!commonGroundComplete) {
-      throw new Error('Common ground analysis did not complete within 180s');
-    }
-    console.log(`${elapsed()} Common ground generated`);
+    await waitForNeedsReveal(apiA, API_BASE_URL, harness.sessionId, 'User A', 180000);
+    console.log(`${elapsed()} Needs reveal ready`);
 
-    // Skip "Shared Needs Discovered" UI assertion for the same drawer-mounting
-    // reason — the text lives inside the NeedsDrawer (common-ground mode).
+    await expectNeedsComparisonFromApi(apiA, API_BASE_URL, harness.sessionId, 'User A');
+    await expectNeedsComparisonFromApi(apiB, API_BASE_URL, harness.sessionId, 'User B');
 
-    const finalCgResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground`);
-    const finalCgData = await finalCgResponse.json();
-    const commonGroundItems = finalCgData.data?.commonGround || [];
-    const commonGroundIds = commonGroundItems.map((cg: { id: string }) => cg.id);
-
-    if (commonGroundIds.length > 0) {
-      await Promise.all([
-        apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground/confirm`, { commonGroundIds }),
-        apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground/confirm`, { commonGroundIds }),
-      ]);
-    }
+    await Promise.all([
+      apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/validate`, { validated: true }),
+      apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/validate`, { validated: true }),
+    ]);
     await harness.userAPage.waitForTimeout(1000);
-
-    const advanceResponseA = await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
-    const advanceDataA = await advanceResponseA.json();
-    if (!advanceDataA.data?.advanced && advanceDataA.data?.blockedReason === 'PARTNER_NOT_READY') {
-      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
-      await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
-    } else {
-      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
-    }
-    await harness.userAPage.waitForTimeout(1000);
+    await Promise.all([
+      waitForStage(apiA, API_BASE_URL, harness.sessionId, 4, 'User A', 30000),
+      waitForStage(apiB, API_BASE_URL, harness.sessionId, 4, 'User B', 30000),
+    ]);
     console.log(`${elapsed()} Advanced to Stage 4`);
 
     // ==========================================
