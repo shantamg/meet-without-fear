@@ -17,6 +17,7 @@ export {
   navigateToSession,
   navigateToShareFromSession,
   signCompact,
+  confirmInvitationTopicAndContinue,
   confirmFeelHeard,
 } from './test-utils';
 export { TwoBrowserHarness, waitForPartnerUpdate } from './two-browser-harness';

@@ -33,6 +33,7 @@ import {
   signCompact,
   handleMoodCheck,
   sendAndWaitForPanel,
+  confirmInvitationTopicAndContinue,
   confirmFeelHeard,
   waitForReconcilerComplete,
   navigateToShareFromSession,
@@ -131,17 +132,11 @@ test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
       await harness.userAPage.waitForTimeout(500);
     }
 
-    // Dismiss invitation panel
-    // Wait for typewriter animation to complete before clicking (pointer-events: none during animation).
-    // Using force:true bypasses DOM checks but NOT React event handlers, so we must wait for
-    // the animation to finish first. Use plain click() like the full-flow test.
+    // Confirm the topic frame and invitation
     await expect(harness.userAPage.getByTestId('typing-indicator')).not.toBeVisible({ timeout: 30000 });
-    await harness.userAPage.waitForTimeout(500); // Allow React state to settle after animation
-    const dismissInvitation = harness.userAPage.getByText("I've sent it - Continue");
-    if (await dismissInvitation.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await dismissInvitation.click();
-      await harness.userAPage.waitForTimeout(1000);
-    }
+    await harness.userAPage.waitForTimeout(500);
+    await confirmInvitationTopicAndContinue(harness.userAPage);
+    await harness.userAPage.waitForTimeout(1000);
 
     // Send remaining messages until feel-heard panel
     const remainingMessagesA = userAStage1Messages.slice(2);

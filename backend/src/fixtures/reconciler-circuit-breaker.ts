@@ -156,6 +156,14 @@ Does this capture what you'd like to express to them?
   // returns shouldSkipReconciler=true and the reconciler never runs (fixture is
   // never consulted).
   operations: {
+    'topic-frame-generate': {
+      response: 'Household chores disagreement',
+    },
+
+    'topic-frame-confirm': {
+      response: 'Household chores disagreement',
+    },
+
     // Reconciler analysis - ALWAYS finds SIGNIFICANT gaps
     // This is identical to reconciler-refinement.ts BUT unlike that fixture,
     // we don't rely on hasContextAlreadyBeenShared guard to stop the loop.
