@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
   continueButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fff',
+    color: colors.textPrimary,
   },
 });
 

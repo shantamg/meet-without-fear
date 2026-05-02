@@ -38,7 +38,7 @@ stateDiagram-v2
     READY --> REVEALED: Both directions are READY (mutual reveal)
 
     REVEALED --> VALIDATED: Subject validates empathy as accurate
-    REVEALED --> REFINING: Subject sends Feedback Coach validation feedback
+    REVEALED --> REFINING: Subject sends Feedback Coach validation feedback (VALIDATION_FEEDBACK_SENT)
     REFINING --> VALIDATED: Guesser accepts remaining difference (skip-refinement)
 
     note right of HELD
@@ -50,7 +50,8 @@ stateDiagram-v2
 
     note right of REVEALED
         NEEDS_WORK is marked as legacy in Prisma schema.
-        Validation feedback uses REFINING plus a targeted
+        Validation feedback uses the VALIDATION_FEEDBACK_SENT
+        event, REFINING status, and a targeted
         VALIDATION_FEEDBACK chat message.
     end note
 
@@ -385,7 +386,7 @@ Only one panel shows at a time, in this priority order:
 | `empathy.status_updated` (status=`AWAITING_SHARING`) | Reconciler offers a share prompt (Moderate+focus or Significant gap) | `shareOffer`, `empathyStatus` | Show share suggestion panel (message: "&lt;name&gt; is considering a suggestion to share more") |
 | `empathy.context_shared` | Subject shares additional context | `empathyStatus`, `shareOffer`, `messages` | Guesser sees shared context |
 | `empathy.revealed` | Empathy revealed (no significant gaps) | `empathyStatus`, `partnerEmpathy` | Subject can validate |
-| `partner.stage_completed` | Partner completes a stage | `empathyStatus`, `progress` | Update waiting status |
+| `partner.stage_completed` | Partner completes a stage; Stage 2 validation emits this only for `validated=true` | `empathyStatus`, `progress` | Update waiting status |
 | `partner.session_viewed` | Partner views session | `empathyStatus` (delivery status) | Update delivery indicator |
 | `empathy.validated` | Partner validates empathy | `empathyStatus` | Show validation result |
 | `empathy.status_updated` (status=`REFINING`) | Subject sends Feedback Coach validation feedback | `empathyStatus`, `messages` | Guesser sees targeted feedback and revision UI |

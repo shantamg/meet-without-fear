@@ -17,6 +17,7 @@
  *   REFINING → AWAITING_SHARING (re-analysis after resubmit shows gaps)
  *   READY → REVEALED (both users ready, mutual reveal)
  *   REVEALED → VALIDATED (recipient validates accuracy)
+ *   REVEALED → REFINING (recipient sends validation feedback)
  */
 
 import { EmpathyStatus } from '@prisma/client';
@@ -31,7 +32,8 @@ export type EmpathyEvent =
   | 'DECLINE_SHARING'
   | 'RESUBMIT_WITH_GAPS'
   | 'MUTUAL_REVEAL'
-  | 'VALIDATE';
+  | 'VALIDATE'
+  | 'VALIDATION_FEEDBACK_SENT';
 
 /**
  * Transition table: maps (currentStatus, event) → newStatus
@@ -61,6 +63,7 @@ const TRANSITIONS: Record<string, EmpathyStatus | undefined> = {
 
   // From REVEALED
   [`${EmpathyStatus.REVEALED}:VALIDATE`]: EmpathyStatus.VALIDATED,
+  [`${EmpathyStatus.REVEALED}:VALIDATION_FEEDBACK_SENT`]: EmpathyStatus.REFINING,
 
   // Legacy: NEEDS_WORK is treated as equivalent to AWAITING_SHARING
   [`${EmpathyStatus.NEEDS_WORK}:CONTEXT_SHARED`]: EmpathyStatus.REFINING,

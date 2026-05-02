@@ -75,7 +75,7 @@ export function GuidedDraftChatModal({
           testID={finalButtonTestID || `${testID}-final-button`}
         >
           {isFinalizing ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={colors.textPrimary} />
           ) : (
             <Text style={styles.finalButtonText}>{finalActionLabel}</Text>
           )}
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   finalButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fff',
+    color: colors.textPrimary,
   },
 });
 

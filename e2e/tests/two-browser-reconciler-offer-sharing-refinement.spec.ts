@@ -42,6 +42,11 @@ import {
 // Use iPhone 12 viewport
 test.use(devices['iPhone 12']);
 
+// Current full-flow screenshots include dynamic chat content, timestamps, and
+// Activity Drawer layout changes. Keep this centralized so the tolerance can be
+// tightened when baselines are regenerated for the new Stage 2 UI.
+const SCREENSHOT_MAX_DIFF_PIXELS = 100000;
+
 test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
   let harness: TwoBrowserHarness;
 
@@ -224,10 +229,10 @@ test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
     const userBReconcilerComplete = await waitForReconcilerComplete(harness.userBPage, 60000);
     if (!userBReconcilerComplete) {
       await expect(harness.userAPage).toHaveScreenshot('offer-sharing-reconciler-timeout-a.png', {
-        maxDiffPixels: 100000,
+        maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
       });
       await expect(harness.userBPage).toHaveScreenshot('offer-sharing-reconciler-timeout-b.png', {
-        maxDiffPixels: 100000,
+        maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
       });
       throw new Error('Reconciler did not complete within 60s for User B');
     }
@@ -241,12 +246,12 @@ test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
 
     // Screenshot User A (guesser): Should show waiting state
     await expect(harness.userAPage).toHaveScreenshot('offer-sharing-01-guesser-waiting.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
 
     // Screenshot User B (subject): May show "Almost There" modal
     await expect(harness.userBPage).toHaveScreenshot('offer-sharing-01-subject-modal.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
 
     // Dismiss "Almost There" modal for User A (guesser side notification)
@@ -274,7 +279,7 @@ test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
 
     // Screenshot after modal dismissed - User B sees the share topic panel
     await expect(harness.userBPage).toHaveScreenshot('offer-sharing-01-subject-panel.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
 
     // ==========================================
@@ -294,7 +299,7 @@ test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
 
     // Screenshot the suggestion card
     await expect(harness.userBPage).toHaveScreenshot('offer-sharing-02-subject-card.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
 
     // ==========================================
@@ -319,10 +324,10 @@ test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
 
     // Screenshot both users
     await expect(harness.userAPage).toHaveScreenshot('offer-sharing-03-guesser-received-context.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
     await expect(harness.userBPage).toHaveScreenshot('offer-sharing-03-subject-shared.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
 
     // ==========================================
@@ -335,10 +340,10 @@ test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
 
     // Screenshot Share screens
     await expect(harness.userAPage).toHaveScreenshot('offer-sharing-04-guesser-share.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
     await expect(harness.userBPage).toHaveScreenshot('offer-sharing-04-subject-share.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
 
     // Navigate back to Chat
@@ -363,10 +368,10 @@ test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
 
     // Screenshot after reveal
     await expect(harness.userAPage).toHaveScreenshot('offer-sharing-05-guesser-revealed.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
     await expect(harness.userBPage).toHaveScreenshot('offer-sharing-05-subject-revealed.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
 
     // ==========================================
@@ -382,13 +387,13 @@ test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
     if (await accuracyFeedbackPanel.isVisible({ timeout: 10000 }).catch(() => false)) {
       // Accuracy feedback is visible, screenshot the current state
       await expect(harness.userBPage).toHaveScreenshot('offer-sharing-06-subject-feedback.png', {
-        maxDiffPixels: 100000,
+        maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
       });
     } else {
       // Known issue: Accuracy feedback may not appear due to Ably timing
       console.log('KNOWN ISSUE: Accuracy feedback panel not visible (Ably event timing)');
       await expect(harness.userBPage).toHaveScreenshot('offer-sharing-06-subject-no-feedback.png', {
-        maxDiffPixels: 100000,
+        maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
       });
     }
 
@@ -404,10 +409,10 @@ test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
 
     // Final Share screenshots
     await expect(harness.userAPage).toHaveScreenshot('offer-sharing-07-guesser-final-share.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
     await expect(harness.userBPage).toHaveScreenshot('offer-sharing-07-subject-final-share.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
 
     // Navigate to Chat
@@ -419,10 +424,10 @@ test.describe('Reconciler: OFFER_SHARING + Refinement Path', () => {
 
     // Final Chat screenshots
     await expect(harness.userAPage).toHaveScreenshot('offer-sharing-08-guesser-final-chat.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
     await expect(harness.userBPage).toHaveScreenshot('offer-sharing-08-subject-final-chat.png', {
-      maxDiffPixels: 100000,
+      maxDiffPixels: SCREENSHOT_MAX_DIFF_PIXELS,
     });
 
     // Note: User A may still have a pending share suggestion (B→A direction) covering chat-input.

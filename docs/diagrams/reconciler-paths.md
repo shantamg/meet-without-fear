@@ -509,7 +509,7 @@ stateDiagram-v2
 stateDiagram-v2
     [*] --> REVEALED: Empathy shared with partner
 
-    REVEALED --> REFINING: Partner marks inaccurate
+    REVEALED --> REFINING: Partner marks inaccurate (VALIDATION_FEEDBACK_SENT)
     note right of REVEALED
         NEEDS_WORK is legacy/deprecated in Prisma schema.
         When validated=false with feedback, status moves
