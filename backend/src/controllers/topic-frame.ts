@@ -58,9 +58,13 @@ export async function generateTopicFrame(req: Request, res: Response): Promise<v
       return;
     }
 
-    // If topic frame already confirmed, return it
+    // If topic frame already exists, return it. It may be a proposal or a finalized frame.
     if (session.topicFrame) {
-      successResponse(res, { topicFrame: session.topicFrame, alreadyConfirmed: true });
+      successResponse(res, {
+        topicFrame: session.topicFrame,
+        alreadyConfirmed: !!session.topicFrameConfirmedAt,
+        confirmedAt: session.topicFrameConfirmedAt?.toISOString(),
+      });
       return;
     }
 
@@ -96,12 +100,20 @@ export async function generateTopicFrame(req: Request, res: Response): Promise<v
       callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
     });
 
-    const topicFrame = proposed?.trim().replace(/^["']|["']$/g, '') || null;
-
+    const topicFrame = normalizeTopicFrame(proposed);
     if (!topicFrame) {
+      logger.warn(`[generateTopicFrame] Invalid topic frame from AI for session ${sessionId}: "${proposed}"`);
       errorResponse(res, 'INTERNAL_ERROR', 'Failed to generate topic frame', 500);
       return;
     }
+
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        topicFrame,
+        topicFrameConfirmedAt: null,
+      },
+    });
 
     successResponse(res, { topicFrame, alreadyConfirmed: false });
   } catch (error) {
@@ -165,38 +177,50 @@ export async function confirmTopicFrame(req: Request, res: Response): Promise<vo
       return;
     }
 
+    const invitationMessage = session.invitations[0]?.invitationMessage;
+    if (!invitationMessage) {
+      errorResponse(res, 'VALIDATION_ERROR', 'No invitation message found — draft the invitation first', 400);
+      return;
+    }
+
     // Build context for AI moderation
     const contextParts: string[] = [];
-    const invitationMessage = session.invitations[0]?.invitationMessage;
-    if (invitationMessage) {
-      contextParts.push(`Invitation message: "${invitationMessage}"`);
-    }
+    contextParts.push(`Invitation message: "${invitationMessage}"`);
     if (session.topicFrame) {
-      contextParts.push(`Previously proposed topic frame: "${session.topicFrame}"`);
+      contextParts.push(`Current AI-proposed topic frame: "${session.topicFrame}"`);
     }
     if (steer) {
       contextParts.push(`The user wants to steer the framing toward: "${steer}"`);
     }
 
-    const turnId = `${sessionId}-${user.id}-topic-frame-confirm`;
+    let finalTopicFrame = !steer && session.topicFrame
+      ? normalizeTopicFrame(session.topicFrame)
+      : null;
 
-    // AI moderates the final frame — user's steer is guidance only
-    const aiGenerated = await getSonnetResponse({
-      systemPrompt: TOPIC_FRAME_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: `${contextParts.join('\n\n')}\n\nGenerate the final neutral topic frame (3-5 words). You have final say on the framing — guard against inappropriate or blaming language.`,
-        },
-      ],
-      maxTokens: 50,
-      sessionId,
-      turnId,
-      operation: 'topic-frame-confirm',
-      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
-    });
+    if (!finalTopicFrame) {
+      const turnId = `${sessionId}-${user.id}-topic-frame-confirm`;
 
-    const finalTopicFrame = aiGenerated?.trim().replace(/^["']|["']$/g, '') || null;
+      // AI moderates the final frame — user's steer is guidance only
+      const aiGenerated = await getSonnetResponse({
+        systemPrompt: TOPIC_FRAME_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: `${contextParts.join('\n\n')}\n\nGenerate the final neutral topic frame (3-5 words). You have final say on the framing — guard against inappropriate or blaming language.`,
+          },
+        ],
+        maxTokens: 50,
+        sessionId,
+        turnId,
+        operation: 'topic-frame-confirm',
+        callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
+      });
+
+      finalTopicFrame = normalizeTopicFrame(aiGenerated);
+      if (!finalTopicFrame) {
+        logger.warn(`[confirmTopicFrame] Invalid topic frame from AI for session ${sessionId}: "${aiGenerated}"`);
+      }
+    }
 
     if (!finalTopicFrame) {
       errorResponse(res, 'INTERNAL_ERROR', 'Failed to generate topic frame', 500);
@@ -207,7 +231,10 @@ export async function confirmTopicFrame(req: Request, res: Response): Promise<vo
     const now = new Date();
     const updated = await prisma.session.update({
       where: { id: sessionId },
-      data: { topicFrame: finalTopicFrame },
+      data: {
+        topicFrame: finalTopicFrame,
+        topicFrameConfirmedAt: now,
+      },
     });
 
     logger.info(`[confirmTopicFrame] Topic frame confirmed for session ${sessionId}: "${finalTopicFrame}"`);
@@ -254,3 +281,20 @@ BAD EXAMPLES (too blaming):
 - Your anger problem
 - When you lied
 - Your spending habits`;
+
+function normalizeTopicFrame(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+
+  const singleLine = raw
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\s+/g, ' ');
+
+  if (!singleLine) return null;
+  if (/[.!?;:]/.test(singleLine)) return null;
+
+  const words = singleLine.split(' ').filter(Boolean);
+  if (words.length < 3 || words.length > 5) return null;
+
+  return singleLine;
+}

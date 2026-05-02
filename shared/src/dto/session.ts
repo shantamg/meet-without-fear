@@ -134,6 +134,10 @@ export interface InvitationDTO {
   messageConfirmed?: boolean;
   /** When the user confirmed the invitation message (for chat indicator positioning) */
   messageConfirmedAt?: string | null;
+  /** AI-finalized neutral topic frame shown to the invited user */
+  topicFrame?: string | null;
+  /** When the topic frame was finalized */
+  topicFrameConfirmedAt?: string | null;
 }
 
 export enum InvitationStatus {

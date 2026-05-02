@@ -31,6 +31,8 @@ export interface RefineInvitationDrawerProps {
   invitationMessage: string;
   /** The invitation URL */
   invitationUrl: string;
+  /** AI-finalized neutral topic frame */
+  topicFrame?: string | null;
   /** Partner's name */
   partnerName?: string;
   /** Sender's name (current user) */
@@ -49,6 +51,7 @@ export function RefineInvitationDrawer({
   visible,
   invitationMessage,
   invitationUrl,
+  topicFrame,
   partnerName,
   senderName,
   isRefining: isRefiningProp = false,
@@ -210,10 +213,11 @@ export function RefineInvitationDrawer({
                     <Text style={styles.refineButtonText}>Refine invitation</Text>
                   </TouchableOpacity>
                   <View style={styles.shareButtonWrapper}>
-                    <InvitationShareButton
-                      invitationMessage={invitationMessage}
-                      invitationUrl={invitationUrl}
-                      partnerName={partnerName}
+	                    <InvitationShareButton
+	                      invitationMessage={invitationMessage}
+	                      invitationUrl={invitationUrl}
+	                      topicFrame={topicFrame}
+	                      partnerName={partnerName}
                       senderName={senderName}
                       onShareSuccess={onShareSuccess}
                       testID="refine-invitation-share"

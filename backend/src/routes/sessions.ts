@@ -133,7 +133,7 @@ router.post('/sessions/:id/topic-frame/generate', requireAuth, requireSessionAcc
 
 /**
  * @route POST /api/v1/sessions/:id/topic-frame/confirm
- * @description Confirm (or edit) the session topic frame
+ * @description Confirm or steer the AI-generated session topic frame
  * @access Private - requires authentication and session access (creator only)
  */
 router.post('/sessions/:id/topic-frame/confirm', requireAuth, requireSessionAccess, asyncHandler(confirmTopicFrame));

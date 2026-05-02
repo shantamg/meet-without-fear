@@ -231,6 +231,8 @@ export async function getSessionState(req: Request, res: Response): Promise<void
           invitationMessage: invitation.invitationMessage,
           messageConfirmed: invitation.messageConfirmed,
           messageConfirmedAt: invitation.messageConfirmedAt?.toISOString() ?? null,
+          topicFrame: session.topicFrame ?? null,
+          topicFrameConfirmedAt: session.topicFrameConfirmedAt?.toISOString() ?? null,
           acceptedAt: invitation.acceptedAt?.toISOString() ?? null,
           isInviter,
         }
