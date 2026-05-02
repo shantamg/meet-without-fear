@@ -920,6 +920,10 @@ export async function getSharedContextForGuesser(
   content: string | null;
   sharedAt: string | null;
 }> {
+  // During REFINING, the most recent targeted message is the actionable context
+  // for the guesser. Validation feedback intentionally supersedes older shared
+  // context because it reflects the subject's latest response to the revealed
+  // empathy attempt.
   const contextMessage = await prisma.message.findFirst({
     where: {
       sessionId,

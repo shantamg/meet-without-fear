@@ -66,6 +66,10 @@ describe('empathy-state-machine', () => {
       expect(transition(EmpathyStatus.REVEALED, 'VALIDATE')).toBe(EmpathyStatus.VALIDATED);
     });
 
+    it('REVEALED → REFINING on VALIDATION_FEEDBACK_SENT', () => {
+      expect(transition(EmpathyStatus.REVEALED, 'VALIDATION_FEEDBACK_SENT')).toBe(EmpathyStatus.REFINING);
+    });
+
     // ===== Legacy NEEDS_WORK =====
     it('NEEDS_WORK → REFINING on CONTEXT_SHARED', () => {
       expect(transition(EmpathyStatus.NEEDS_WORK, 'CONTEXT_SHARED')).toBe(EmpathyStatus.REFINING);
@@ -93,6 +97,7 @@ describe('empathy-state-machine', () => {
         'START_ANALYSIS', 'GAPS_DETECTED', 'NO_SIGNIFICANT_GAPS',
         'MARK_READY', 'CONTEXT_SHARED', 'DECLINE_SHARING',
         'RESUBMIT_WITH_GAPS', 'MUTUAL_REVEAL', 'VALIDATE',
+        'VALIDATION_FEEDBACK_SENT',
       ];
       for (const event of events) {
         expect(() => transition(EmpathyStatus.VALIDATED, event)).toThrow(
@@ -112,6 +117,7 @@ describe('empathy-state-machine', () => {
     it('returns true for valid transitions', () => {
       expect(canTransition(EmpathyStatus.HELD, 'START_ANALYSIS')).toBe(true);
       expect(canTransition(EmpathyStatus.READY, 'MUTUAL_REVEAL')).toBe(true);
+      expect(canTransition(EmpathyStatus.REVEALED, 'VALIDATION_FEEDBACK_SENT')).toBe(true);
     });
 
     it('returns false for invalid transitions', () => {
@@ -136,6 +142,11 @@ describe('empathy-state-machine', () => {
     it('returns MUTUAL_REVEAL for READY', () => {
       const events = validEventsFor(EmpathyStatus.READY);
       expect(events).toEqual(['MUTUAL_REVEAL']);
+    });
+
+    it('returns validation events for REVEALED', () => {
+      const events = validEventsFor(EmpathyStatus.REVEALED);
+      expect(events).toEqual(['VALIDATE', 'VALIDATION_FEEDBACK_SENT']);
     });
   });
 });

@@ -42,6 +42,7 @@ import { isSessionCreator } from '../utils/session';
 import { publishSessionEvent } from '../services/realtime';
 import { updateContext } from '../lib/request-context';
 import { routeModel, scoreAmbiguity } from '../services/model-router';
+import { transition } from '../services/empathy-state-machine';
 
 // ============================================================================
 // Types
@@ -1125,10 +1126,14 @@ export async function validateEmpathy(
         },
       });
     } else if (trimmedFeedback && partnerId) {
+      const newStatus = transition(
+        partnerAttempt.status as EmpathyStatus,
+        'VALIDATION_FEEDBACK_SENT'
+      );
       await prisma.empathyAttempt.update({
         where: { id: partnerAttempt.id },
         data: {
-          status: 'REFINING',
+          status: newStatus,
           statusVersion: { increment: 1 },
           deliveryStatus: 'DELIVERED',
           deliveredAt: now,
@@ -1282,24 +1287,6 @@ export async function skipRefinement(
         sessionId,
         userId: user.id,
         validated: true, // Treated as validated for gate purposes
-        // We use a feedback value to indicate the special status since we don't have a status enum on Validation
-        // Or we could store it in JSON metadata if available, but for now strict feedback string or validated boolean is what we have.
-        // Wait, the test expects 'status' field in create, but EmpathyValidation model doesn't have a status enum field visible in the previous schema view.
-        // Let's check schema again. EmpathyValidation has: validated (bool), feedback (string), feedbackShared (bool).
-        // The test expects: create: expect.objectContaining({ status: 'ACCEPTED_DIFFERENCE' })
-        // This implies I should have added a status field or used a different model.
-        // But checking schema again (lines 620+), EmpathyValidation only has validated, feedback, feedbackShared.
-        // So the test is asserting on a field that implies a schema change I haven't made or I misunderstood.
-        // Let's assume for now I should store this status in the `feedback` field or add a new field.
-        // Actually, looking at the previous implementation plan, "Mark as 'Accepted Difference'" was the goal.
-        // But since I didn't add a status field to EmpathyValidation, I should probably put this info in `feedback` or just relying on StageProgress keys.
-        // However, the test is written expecting a `status` field in the create/update payload.
-        // This means my test is out of sync with my schema.
-        // I should probably fix the TEST to check for what I actually implemented (updating StageProgress), OR update the schema to support this status.
-        // Given I already updated StageProgress in the code, I will update the tests to match the implementation logic (checking StageProgress and EmpathyAttempt updates),
-        // rather than checking for a non-existent EmpathyValidation.status field.
-        // BUT, I do need to mark it as validated in EmpathyValidation so `validateEmpathy` logic elsewhere works.
-
         feedback: willingToAccept ? 'ACCEPTED_DIFFERENCE' : `REJECTED_OTHER_EXPERIENCE: ${reason || ''}`,
       },
       update: {
