@@ -268,7 +268,6 @@ export function UnifiedSessionScreen({
     handleShareEmpathy,
     handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
-    handleSkipRefinement,
     handleConfirmAllNeeds,
     handleConsentToShareNeeds,
     handleConfirmCommonGround,
@@ -2687,12 +2686,6 @@ export function UnifiedSessionScreen({
             // Prefix to make intent clear to the AI/prompt that this is a draft update
             sendMessage(refined);
             setShowEmpathyDrawer(false);
-          }}
-          onAcceptWithoutRevising={() => {
-            handleSkipRefinement(true);
-          }}
-          onDeclineAcceptance={(reason) => {
-            handleSkipRefinement(false, reason);
           }}
           onClose={() => setShowEmpathyDrawer(false)}
         />
