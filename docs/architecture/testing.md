@@ -78,7 +78,7 @@ npm run test -- --coverage --workspace=backend
   - `src/screens/__tests__/PersonDetailScreen.test.tsx` - Screen tests
 - E2E: `e2e/tests/` flat with organized subdirectories
   - `e2e/tests/stage-2-empathy/reconciler/*.spec.ts` - Feature paths, with named fixtures driving outcomes: `user-b-partner-journey` (standard gaps detected), `reconciler-no-gaps` (PROCEED action), `reconciler-circuit-breaker` (forces refinement loop until safety circuit trips)
-  - `e2e/tests/two-browser-*.spec.ts` - Multi-user flows requiring two browser contexts (see `playwright.two-browser.config.ts`). Includes `two-browser-circuit-breaker.spec.ts` which verifies the infinite-refinement safety circuit trips on the 4th attempt
+  - `e2e/tests/two-browser-*.spec.ts` - Multi-user flows requiring two browser contexts (see `playwright.two-browser.config.ts`). Includes `two-browser-stage-2.spec.ts` for the current Stage 2 validation/Feedback Coach path, `two-browser-reconciler-offer-sharing-refinement.spec.ts` for OFFER_SHARING plus revision, and `two-browser-circuit-breaker.spec.ts` which verifies the infinite-refinement safety circuit trips on the 4th attempt
   - `e2e/tests/homepage.spec.ts`, `single-user-journey.spec.ts` - Top-level flows
   - `e2e/helpers/stage-flows.ts` - Composite flow helpers with shared fixture messages (reduces test boilerplate)
 
@@ -466,6 +466,8 @@ npm run test -- --coverage --workspace=mobile
 - Examples:
   - `e2e/tests/single-user-journey.spec.ts` - Full session flow
   - `e2e/tests/stage-2-empathy/reconciler/*.spec.ts` - Feature-specific flows
+  - `e2e/tests/two-browser-stage-2.spec.ts` - Two-user Stage 2 validation path with Feedback Coach coverage
+  - `e2e/tests/two-browser-reconciler-offer-sharing-refinement.spec.ts` - Two-user OFFER_SHARING, Activity Drawer, revision, and validation path
   - `e2e/tests/live-ai-full-flow.spec.ts` - Real AI (slow, optional)
 - Run: `npm run e2e` (headless) or `npm run e2e:headed`
 

@@ -15,7 +15,12 @@
  */
 
 import { test, expect, devices } from '@playwright/test';
-import { cleanupE2EData, getE2EHeaders, waitForAIResponse } from '../helpers';
+import {
+  cleanupE2EData,
+  confirmInvitationTopicAndContinue,
+  getE2EHeaders,
+  waitForAIResponse,
+} from '../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
@@ -121,8 +126,7 @@ test.describe('Transition Message Display', () => {
     // Step 4: Confirm invitation sent
     const invitationPanel = page.getByTestId('invitation-draft-panel');
     await expect(invitationPanel).toBeVisible({ timeout: 5000 });
-    const continueButton = page.getByTestId('invitation-continue-button');
-    await continueButton.click();
+    await confirmInvitationTopicAndContinue(page);
     await expect(invitationPanel).not.toBeVisible({ timeout: 5000 });
     console.log(`${elapsed()} Invitation confirmed`);
 
@@ -255,8 +259,7 @@ test.describe('Transition Message Display', () => {
 
     // CRITICAL: Confirm invitation was sent
     console.log(`${elapsed()} Confirming invitation sent...`);
-    const continueButton = page.getByTestId('invitation-continue-button');
-    await continueButton.click();
+    await confirmInvitationTopicAndContinue(page);
 
     // Wait for panel to close
     await expect(invitationPanel).not.toBeVisible({ timeout: 5000 });

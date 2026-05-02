@@ -14,7 +14,7 @@ Backend-specific documentation for the Express + Prisma API server.
 
 - [Prompting Architecture](prompting-architecture.md) -- How prompts are constructed, model stratification, memory retrieval, decision layers
 - [Prompt Caching](prompt-caching.md) -- Bedrock caching strategy, cache_control placement, cost optimization
-- [Reconciler Flow](reconciler-flow.md) -- Stage 2 empathy exchange, asymmetric reconciler, share suggestions, circuit breaker
+- [Reconciler Flow](reconciler-flow.md) -- Stage 2 empathy exchange, asymmetric reconciler, share suggestions, Feedback Coach validation feedback, circuit breaker
 
 ## See Also
 

@@ -3,10 +3,15 @@ title: "Stage 1 API: The Witness"
 sidebar_position: 6
 description: Endpoints for the witness stage - being heard by the AI.
 slug: /backend/api/stage-1
+created: 2026-03-11
+updated: 2026-05-02
+status: living
 ---
 # Stage 1 API: The Witness
 
 Endpoints for the witness stage - being heard by the AI.
+
+Topic framing is complete before Stage 1 starts. The Stage 0 invitation flow owns `/sessions/:id/topic-frame/*`; Stage 1 message handlers should not generate or revise the invite topic frame.
 
 ## Send Message (streaming, primary)
 
@@ -22,10 +27,24 @@ The stream emits these event kinds until the connection closes:
 
 | Event | Payload |
 |-------|---------|
-| `chunk` | `{ content: string }` — an incremental text fragment |
-| `text_complete` | `{ content: string }` — the full assembled assistant text |
-| `metadata` | `{ messageId, emotionalReading?, suggestPause?, pauseReason? }` — message-level metadata once persistence is complete |
-| `error` | `{ code, message }` — stream-terminating error |
+| `user_message` | `{ id: string; content: string; timestamp: string }` — server-confirmed user message (replaces optimistic copy) |
+| `chunk` | `{ text: string }` — an incremental text fragment |
+| `metadata` | `{ metadata: StreamMetadata }` — AI tool-call metadata, emitted before `text_complete` |
+| `text_complete` | `{ metadata: StreamMetadata }` — AI text fully streamed (sent before DB persistence completes) |
+| `complete` | `{ messageId: string; metadata: StreamMetadata }` — AI message persisted and stream closed |
+| `error` | `{ message: string; retryable: boolean }` — stream-terminating error |
+
+Where `StreamMetadata` carries optional fields from the AI's session-state tool call:
+
+```typescript
+interface StreamMetadata {
+  offerFeelHeardCheck?: boolean;
+  offerReadyToShare?: boolean;
+  invitationMessage?: string;
+  proposedEmpathyStatement?: string;
+  proposedStrategies?: string[];
+}
+```
 
 ### Legacy non-streaming endpoint (deprecated)
 

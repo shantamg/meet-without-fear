@@ -86,6 +86,14 @@ Before we continue, I want to check in with you: Do you feel like I understand w
   // Operation-specific mock responses for non-streaming AI calls
   // These are used by the reconciler and other JSON-response operations
   operations: {
+    'topic-frame-generate': {
+      response: 'Household chores disagreement',
+    },
+
+    'topic-frame-confirm': {
+      response: 'Household chores disagreement',
+    },
+
     // Reconciler analysis - finds significant gaps so we can test the share suggestion flow
     'reconciler-analysis': {
       response: {

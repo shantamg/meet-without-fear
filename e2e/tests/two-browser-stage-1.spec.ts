@@ -17,7 +17,13 @@
 
 import { test, expect, devices } from '@playwright/test';
 import { TwoBrowserHarness } from '../helpers';
-import { signCompact, handleMoodCheck, sendAndWaitForPanel, confirmFeelHeard } from '../helpers/test-utils';
+import {
+  signCompact,
+  handleMoodCheck,
+  sendAndWaitForPanel,
+  confirmInvitationTopicAndContinue,
+  confirmFeelHeard,
+} from '../helpers/test-utils';
 
 // Use iPhone 12 viewport
 test.use(devices['iPhone 12']);
@@ -100,12 +106,8 @@ test.describe('Stage 1: Witnessing - Feel Heard', () => {
       await harness.userAPage.waitForTimeout(500);
     }
 
-    // Dismiss invitation panel by clicking "I've sent it - Continue"
-    const dismissInvitation = harness.userAPage.getByText("I've sent it - Continue");
-    if (await dismissInvitation.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await dismissInvitation.click();
-      await harness.userAPage.waitForTimeout(500);
-    }
+    await confirmInvitationTopicAndContinue(harness.userAPage);
+    await harness.userAPage.waitForTimeout(500);
 
     // Send remaining messages until feel-heard panel appears
     const remainingMessages = userAMessages.slice(2);

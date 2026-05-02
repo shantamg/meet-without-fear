@@ -97,6 +97,7 @@ describe('Prisma Schema', () => {
       expect(MessageRole.USER).toBe('USER');
       expect(MessageRole.AI).toBe('AI');
       expect(MessageRole.SYSTEM).toBe('SYSTEM');
+      expect(MessageRole.VALIDATION_FEEDBACK).toBe('VALIDATION_FEEDBACK');
     });
 
     it('exports Attribution enum with correct values', () => {

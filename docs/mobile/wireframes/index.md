@@ -14,7 +14,7 @@ UI concepts and screen layouts for key Meet Without Fear interfaces.
 - **[New Session Flow](./new-session-flow.md)** - Invitation and session creation
 
 ### Core Experience
-- **[Chat Interface](./chat-interface.md)** - The primary `UnifiedSessionScreen` — chat + inline stage cards + integrated barometer
+- **[Chat Interface](./chat-interface.md)** - The primary `UnifiedSessionScreen` — chat + inline stage cards + Stage 2 Feedback Coach modal + integrated barometer
 
 ### Inner Work (solo reflection)
 The mobile app ships an Inner Work hub alongside partner sessions. These surfaces don't have dedicated wireframe pages yet; refer to the components directly:
@@ -40,7 +40,7 @@ Settings screens exist in the app but don't have dedicated wireframe docs yet. R
 |-----------|-----------|
 | Minimalist | Reduce cognitive load during emotional work |
 | Typing indicators surface waiting state | Ghost-dots in both partner chat and Inner Thoughts signal "AI is responding", derived from cache — they're part of the UX, not avoided |
-| Stage-controlled | `UnifiedSessionScreen` swaps inline cards + overlays per stage; stage labels come from `STAGE_FRIENDLY_NAMES` (e.g., Stage 3 = "What Matters Most", Stage 4 = "Moving Forward Together") |
+| Stage-controlled | `UnifiedSessionScreen` swaps inline cards + overlays per stage; Stage 0 includes invite drafting plus topic-frame confirmation before sharing, and Stage 2 uses drawers/modals for empathy review, share suggestions, and Feedback Coach validation feedback. Stage labels come from `STAGE_FRIENDLY_NAMES` (e.g., Stage 3 = "What Matters Most", Stage 4 = "Moving Forward Together") |
 | Integrated safety surfacing | Barometer readings ≥9 auto-open the `support-options` overlay |
 | Calm aesthetic | Support emotional regulation |
 | Clear boundaries | Visual separation of private/shared content; chapter markers in the timeline mark stage transitions |

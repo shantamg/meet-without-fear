@@ -7,12 +7,12 @@
  */
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState, Keyboard, Platform } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState, Keyboard, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // useRouter removed - share navigation replaced by ActivityDrawer
-import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion, ConfirmAgreementResponse, MAX_AGREEMENTS } from '@meet-without-fear/shared';
+import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion, ConfirmAgreementResponse, MAX_AGREEMENTS, EmpathyStatus } from '@meet-without-fear/shared';
 
 import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
@@ -23,7 +23,6 @@ import { BodyScanExercise } from '../components/BodyScanExercise';
 import { SupportOptionsModal, SupportOption } from '../components/SupportOptionsModal';
 import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
 import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
-import { ValidationCoachChat } from '../components/ValidationCoachChat';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
 import { ShareTopicPanel } from '../components/ShareTopicPanel';
 // NeedsSection and CommonGroundCard removed - now used inside NeedsDrawer
@@ -44,8 +43,11 @@ import { ActivityDrawer } from '../components/ActivityDrawer';
 import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
+import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
+import { useGenerateTopicFrame, useConfirmTopicFrame } from '../hooks/useSessions';
+import { useValidationFeedbackCoachChat } from '../hooks/useRefinementChat';
 import { useChatUIState } from '../hooks/useChatUIState';
 import { createInvitationLink } from '../hooks/useInvitation';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
@@ -165,6 +167,7 @@ export function UnifiedSessionScreen({
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
   const { showError } = useToast();
+  const topicFrameRequestedRef = useRef(false);
 
   // Sharing status for header button
   const sharingStatus = useSharingStatus(sessionId);
@@ -265,6 +268,7 @@ export function UnifiedSessionScreen({
     handleShareEmpathy,
     handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
+    handleSkipRefinement,
     handleConfirmAllNeeds,
     handleConsentToShareNeeds,
     handleConfirmCommonGround,
@@ -751,17 +755,71 @@ export function UnifiedSessionScreen({
   const [showAccuracyFeedbackDrawer, setShowAccuracyFeedbackDrawer] = useState(false);
   const [showShareTopicDrawer, setShowShareTopicDrawer] = useState(false);
   const [showFeedbackCoachChat, setShowFeedbackCoachChat] = useState(false);
-  const [feedbackCoachInitialDraft, setFeedbackCoachInitialDraft] = useState('');
+  const [feedbackCoachRoughFeedback, setFeedbackCoachRoughFeedback] = useState('');
+  const feedbackCoachInitializedRef = useRef(false);
 
   // -------------------------------------------------------------------------
   // Activity Menu Modal
   // -------------------------------------------------------------------------
   const [showActivityMenu, setShowActivityMenu] = useState(false);
   const [showInvitationRefine, setShowInvitationRefine] = useState(false);
+  const [topicFrameSteer, setTopicFrameSteer] = useState('');
+  const topicFrame = invitation && 'topicFrame' in invitation
+    ? (invitation.topicFrame as string | null)
+    : null;
+  const topicFrameConfirmed = !!(
+    invitation &&
+    'topicFrameConfirmedAt' in invitation &&
+    (invitation.topicFrameConfirmedAt as string | null)
+  );
+  const { mutate: generateTopicFrame, isPending: isGeneratingTopicFrame } = useGenerateTopicFrame({
+    onError: (error) => {
+      console.error('[UnifiedSessionScreen] Failed to generate topic frame:', error);
+      showError('Topic not ready', 'Please try preparing the topic again.');
+    },
+  });
+  const { mutate: confirmTopicFrame, isPending: isConfirmingTopicFrame } = useConfirmTopicFrame({
+    onError: (error) => {
+      console.error('[UnifiedSessionScreen] Failed to confirm topic frame:', error);
+      showError('Topic not confirmed', 'Please try confirming the topic again.');
+    },
+    onSuccess: () => {
+      setTopicFrameSteer('');
+    },
+  });
+
+  useEffect(() => {
+    if (!sessionId || !isInvitationPhase || !invitation?.invitationMessage || topicFrame || topicFrameRequestedRef.current) {
+      return;
+    }
+
+    topicFrameRequestedRef.current = true;
+    generateTopicFrame({ sessionId });
+  }, [sessionId, isInvitationPhase, invitation?.invitationMessage, topicFrame, generateTopicFrame]);
+
+  const handleConfirmTopicFrame = useCallback(() => {
+    if (!sessionId || isConfirmingTopicFrame) return;
+
+    const steer = topicFrameSteer.trim();
+    confirmTopicFrame({ sessionId, steer: steer || undefined });
+  }, [sessionId, isConfirmingTopicFrame, topicFrameSteer, confirmTopicFrame]);
 
   // Refinement Modal
   const [refinementOfferId, setRefinementOfferId] = useState<string | null>(null);
   const [refinementInitialSuggestion, setRefinementInitialSuggestion] = useState('');
+  const {
+    messages: feedbackCoachMessages,
+    isLoading: isFeedbackCoachLoading,
+    isFinalizing: isFeedbackCoachFinalizing,
+    isFinalized: isFeedbackCoachFinalized,
+    sendMessage: sendFeedbackCoachMessage,
+    finalizeFeedback,
+    resetChat: resetFeedbackCoachChat,
+  } = useValidationFeedbackCoachChat(
+    sessionId,
+    feedbackCoachRoughFeedback,
+    partnerEmpathyData?.attempt?.content || ''
+  );
 
   // -------------------------------------------------------------------------
   // Needs Drawer (Stage 3)
@@ -809,6 +867,22 @@ export function UnifiedSessionScreen({
   // Extract frequently-read booleans to prevent FlatList re-renders
   const isEmpathyValidated = completedActions.has('validated-empathy');
   const isEmpathyShared = completedActions.has('shared-empathy');
+
+  useEffect(() => {
+    if (showFeedbackCoachChat && !feedbackCoachInitializedRef.current) {
+      resetFeedbackCoachChat();
+      feedbackCoachInitializedRef.current = true;
+    } else if (!showFeedbackCoachChat) {
+      feedbackCoachInitializedRef.current = false;
+    }
+  }, [showFeedbackCoachChat, resetFeedbackCoachChat]);
+
+  useEffect(() => {
+    if (isFeedbackCoachFinalized) {
+      setShowFeedbackCoachChat(false);
+      setFeedbackCoachRoughFeedback('');
+    }
+  }, [isFeedbackCoachFinalized]);
 
 
 
@@ -1065,7 +1139,9 @@ export function UnifiedSessionScreen({
   // are destructured from the hook at the top of this component.
 
   // Whether user is in "refining" mode (received shared context from partner)
-  const isRefiningEmpathy = !!empathyStatusData?.hasNewSharedContext;
+  const isRefiningEmpathy =
+    !!empathyStatusData?.hasNewSharedContext ||
+    empathyStatusData?.myAttempt?.status === EmpathyStatus.REFINING;
 
   // -------------------------------------------------------------------------
   // Animation Target Flags - Used ONLY for animation target values
@@ -1414,6 +1490,12 @@ export function UnifiedSessionScreen({
   }, [markCompleted, handleValidatePartnerEmpathy]);
 
   const handleValidationNotQuite = useCallback(() => {
+    setShowAccuracyFeedbackDrawer(true);
+  }, []);
+
+  const openFeedbackCoachWithRoughFeedback = useCallback((roughFeedback: string) => {
+    setFeedbackCoachRoughFeedback(roughFeedback);
+    feedbackCoachInitializedRef.current = false;
     setShowFeedbackCoachChat(true);
   }, []);
 
@@ -1982,7 +2064,7 @@ export function UnifiedSessionScreen({
               maxHeight: Animated.multiply(
                 invitationPanelAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [0, 400],
+	                  outputRange: [0, 600],
                 }),
                 invitationKeyboardCollapseAnim,
               ),
@@ -2000,51 +2082,114 @@ export function UnifiedSessionScreen({
             }}
             pointerEvents="auto"
           >
-            {/* 5. INNER CONTAINER
-           Move the styles that contain padding/bg/borders HERE.
-           This ensures they don't take up space when the parent height is 0.
-        */}
+            {/* 5. INNER CONTAINER — Two-phase invitation flow:
+                 Phase 1: Topic confirmation only (until confirmed)
+                 Phase 2: Invitation sharing (after topic confirmed)
+            */}
             <View style={styles.invitationDraftContainer} testID="invitation-draft-panel">
-              <Text style={styles.invitationDraftMessage}>
-                "{invitationMessage}"
-              </Text>
+              {!topicFrameConfirmed ? (
+                /* Phase 1: Topic confirmation — show only the topic step */
+                <View style={styles.topicFrameContainer}>
+                  <Text style={styles.topicFrameLabel}>Topic</Text>
+                  {isGeneratingTopicFrame ? (
+                    <View style={styles.topicFrameLoading}>
+                      <ActivityIndicator size="small" color={styles.accentColor.color} />
+                      <Text style={styles.topicFrameStatus}>Preparing topic...</Text>
+                    </View>
+                  ) : topicFrame ? (
+                    <>
+                      <Text style={styles.topicFrameText}>{topicFrame}</Text>
+                      <TextInput
+                        style={styles.topicFrameInput}
+                        value={topicFrameSteer}
+                        onChangeText={setTopicFrameSteer}
+                        placeholder="Suggest a different direction"
+                        placeholderTextColor={styles.topicFramePlaceholder.color}
+                        maxLength={100}
+                        testID="topic-frame-steer-input"
+                      />
+                      <TouchableOpacity
+                        style={[
+                          styles.topicFrameButton,
+                          isConfirmingTopicFrame && styles.topicFrameButtonDisabled,
+                        ]}
+                        onPress={handleConfirmTopicFrame}
+                        disabled={isConfirmingTopicFrame}
+                        testID="topic-frame-confirm-button"
+                      >
+                        {isConfirmingTopicFrame ? (
+                          <ActivityIndicator size="small" color={styles.topicFrameButtonText.color} />
+                        ) : (
+                          <Text style={styles.topicFrameButtonText}>
+                            {topicFrameSteer.trim() ? 'Update and confirm' : 'Confirm topic'}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.topicFrameButton}
+                      onPress={() => {
+                        topicFrameRequestedRef.current = true;
+                        generateTopicFrame({ sessionId });
+                      }}
+                      testID="topic-frame-generate-button"
+                    >
+                      <Text style={styles.topicFrameButtonText}>Prepare topic</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                /* Phase 2: Invitation sharing — topic confirmed, show invitation */
+                <>
+                  <Text style={styles.invitationDraftMessage}>
+                    "{invitationMessage}"
+                  </Text>
 
-              <InvitationShareButton
-                invitationMessage={invitationMessage!}
-                invitationUrl={invitationUrl}
-                partnerName={partnerName}
-                senderName={user?.name || user?.firstName || undefined}
-                testID="invitation-share-button"
-              />
+                  <View style={styles.topicFrameContainer}>
+                    <Text style={styles.topicFrameLabel}>Topic</Text>
+                    <Text style={styles.topicFrameText}>{topicFrame}</Text>
+                  </View>
 
-              <TouchableOpacity
-                style={styles.refineInvitationButton}
-                onPress={() => setShowInvitationRefine(true)}
-                testID="invitation-refine-button"
-              >
-                <Text style={styles.refineInvitationButtonText}>
-                  Refine invitation
-                </Text>
-              </TouchableOpacity>
+                  <InvitationShareButton
+                    invitationMessage={invitationMessage!}
+                    invitationUrl={invitationUrl}
+                    topicFrame={topicFrame}
+                    partnerName={partnerName}
+                    senderName={user?.name || user?.firstName || undefined}
+                    testID="invitation-share-button"
+                  />
 
-              <TouchableOpacity
-                style={styles.continueButton}
-                onPress={() => {
-                  // Track invitation sent
-                  trackInvitationSent(sessionId, 'share_sheet');
-                  setIsRefiningInvitation(false); // Exit refinement mode
-                  // Local latch: Immediately hide panel, survives cache race conditions
-                  markCompleted('confirmed-invitation');
-                  // Cache-First: useConfirmInvitationMessage.onMutate sets invitation.messageConfirmed optimistically
-                  // The indicator will appear immediately because the cache is updated
-                  handleConfirmInvitationMessage(invitationMessage!);
-                }}
-                testID="invitation-continue-button"
-              >
-                <Text style={styles.continueButtonText}>
-                  {isRefiningInvitation ? "I've sent it - Back to conversation" : "I've sent it - Continue"}
-                </Text>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.refineInvitationButton}
+                    onPress={() => setShowInvitationRefine(true)}
+                    testID="invitation-refine-button"
+                  >
+                    <Text style={styles.refineInvitationButtonText}>
+                      Refine invitation
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.continueButton}
+                    onPress={() => {
+                      // Track invitation sent
+                      trackInvitationSent(sessionId, 'share_sheet');
+                      setIsRefiningInvitation(false); // Exit refinement mode
+                      // Local latch: Immediately hide panel, survives cache race conditions
+                      markCompleted('confirmed-invitation');
+                      // Cache-First: useConfirmInvitationMessage.onMutate sets invitation.messageConfirmed optimistically
+                      // The indicator will appear immediately because the cache is updated
+                      handleConfirmInvitationMessage(invitationMessage!);
+                    }}
+                    testID="invitation-continue-button"
+                  >
+                    <Text style={styles.continueButtonText}>
+                      {isRefiningInvitation ? "I've sent it - Back to conversation" : "I've sent it - Continue"}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </Animated.View>
         );
@@ -2543,6 +2688,12 @@ export function UnifiedSessionScreen({
             sendMessage(refined);
             setShowEmpathyDrawer(false);
           }}
+          onAcceptWithoutRevising={() => {
+            handleSkipRefinement(true);
+          }}
+          onDeclineAcceptance={(reason) => {
+            handleSkipRefinement(false, reason);
+          }}
           onClose={() => setShowEmpathyDrawer(false)}
         />
       )}
@@ -2555,6 +2706,7 @@ export function UnifiedSessionScreen({
           visible={showAccuracyFeedbackDrawer}
           statement={partnerEmpathyData.attempt.content}
           partnerName={partnerName}
+          initialStep="feedback"
           onAccurate={() => {
             markCompleted('validated-empathy');
             handleValidatePartnerEmpathy(true);
@@ -2562,45 +2714,44 @@ export function UnifiedSessionScreen({
           }}
           onPartiallyAccurate={() => {
             markCompleted('validated-empathy');
-            handleValidatePartnerEmpathy(false, 'Some parts are accurate');
+            handleValidatePartnerEmpathy(true, 'Some parts are accurate');
             setShowAccuracyFeedbackDrawer(false);
           }}
-          onInaccurate={() => {
+          onInaccurate={(roughFeedback) => {
             setShowAccuracyFeedbackDrawer(false);
-            setFeedbackCoachInitialDraft('');
-            setShowFeedbackCoachChat(true);
+            openFeedbackCoachWithRoughFeedback(roughFeedback);
           }}
           onClose={() => setShowAccuracyFeedbackDrawer(false)}
         />
       )}
 
       {/* Validation Feedback Coach - AI-mediated feedback crafting for inaccurate empathy */}
-      {showFeedbackCoachChat && (
-        <Modal
-          visible={showFeedbackCoachChat}
-          animationType="slide"
-          presentationStyle="fullScreen"
-          onRequestClose={() => setShowFeedbackCoachChat(false)}
-        >
-          <ValidationCoachChat
-            sessionId={sessionId}
-            initialDraft={feedbackCoachInitialDraft}
-            partnerName={partnerName}
-            onCancel={() => {
-              setShowFeedbackCoachChat(false);
-              setFeedbackCoachInitialDraft('');
-            }}
-            onComplete={(feedback) => {
-              setShowFeedbackCoachChat(false);
-              setFeedbackCoachInitialDraft('');
-              markCompleted('validated-empathy');
-              // Submit the AI-crafted feedback as inaccurate validation
-              handleValidatePartnerEmpathy(false, feedback);
-            }}
-            testID="validation-feedback-coach"
-          />
-        </Modal>
-      )}
+      <GuidedDraftChatModal
+        visible={showFeedbackCoachChat}
+        title="Feedback Coach"
+        sessionKey={`feedback-coach-${sessionId}`}
+        messages={feedbackCoachMessages}
+        isLoading={isFeedbackCoachLoading}
+        isFinalizing={isFeedbackCoachFinalizing}
+        partnerName={partnerName}
+        proposalTitle="Proposed Feedback"
+        proposalSubtitle={`This is what will be sent to ${partnerName}`}
+        finalActionLabel="Send Feedback"
+        onSendMessage={sendFeedbackCoachMessage}
+        onFinalize={(feedback) => {
+          markCompleted('validated-empathy');
+          handleValidatePartnerEmpathy(false, feedback);
+          finalizeFeedback(feedback);
+        }}
+        onClose={() => {
+          setShowFeedbackCoachChat(false);
+          setFeedbackCoachRoughFeedback('');
+        }}
+        emptyStateTitle="Feedback Coach"
+        emptyStateMessage="Share what felt off, and I will help you phrase it clearly."
+        finalButtonTestID="send-feedback-button"
+        testID="validation-feedback-coach"
+      />
 
       {/* ShareTopicDrawer - Phase 1 of two-phase share flow */}
       {shareOfferData?.hasSuggestion && shareOfferData.suggestion &&
@@ -2747,9 +2898,11 @@ export function UnifiedSessionScreen({
         visible={showInvitationRefine}
         invitationMessage={invitationMessage || ''}
         invitationUrl={invitationUrl}
+        topicFrame={topicFrame}
         partnerName={partnerName}
         senderName={user?.name || user?.firstName || undefined}
         isRefining={isGenerating}
+        shareDisabled={!topicFrameConfirmed}
         onSendRefinement={(text) => {
           sendMessage(`Refine invitation: ${text}`);
         }}
@@ -2833,10 +2986,73 @@ const useStyles = () =>
       paddingVertical: t.spacing.sm,
       alignItems: 'center',
     },
+    continueButtonDisabled: {
+      opacity: 0.5,
+    },
     continueButtonText: {
       fontSize: t.typography.fontSize.md,
       color: t.colors.textSecondary,
       textDecorationLine: 'underline',
+    },
+    topicFrameContainer: {
+      marginHorizontal: t.spacing.lg,
+      marginTop: t.spacing.sm,
+      marginBottom: t.spacing.xs,
+      padding: t.spacing.md,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      backgroundColor: t.colors.bgPrimary,
+    },
+    topicFrameLabel: {
+      fontSize: t.typography.fontSize.sm,
+      color: t.colors.textSecondary,
+      fontWeight: '600' as const,
+      marginBottom: t.spacing.xs,
+    },
+    topicFrameText: {
+      fontSize: t.typography.fontSize.md,
+      color: t.colors.textPrimary,
+      fontWeight: '600' as const,
+    },
+    topicFrameLoading: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.spacing.sm,
+    },
+    topicFrameStatus: {
+      color: t.colors.textSecondary,
+      fontSize: t.typography.fontSize.sm,
+    },
+    topicFrameInput: {
+      marginTop: t.spacing.sm,
+      paddingHorizontal: t.spacing.md,
+      paddingVertical: t.spacing.sm,
+      borderRadius: t.radius.sm,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      color: t.colors.textPrimary,
+      backgroundColor: t.colors.bgSecondary,
+    },
+    topicFramePlaceholder: {
+      color: t.colors.textMuted,
+    },
+    topicFrameButton: {
+      marginTop: t.spacing.sm,
+      minHeight: 40,
+      borderRadius: t.radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.colors.accent,
+      paddingHorizontal: t.spacing.md,
+    },
+    topicFrameButtonDisabled: {
+      opacity: 0.6,
+    },
+    topicFrameButtonText: {
+      color: t.colors.textOnAccent,
+      fontSize: t.typography.fontSize.md,
+      fontWeight: '600' as const,
     },
 
     // Feel Heard Panel

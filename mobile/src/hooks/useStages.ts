@@ -1320,6 +1320,8 @@ export function useSkipRefinement(
     },
     onSuccess: (_, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
     },
     ...options,
@@ -1342,7 +1344,7 @@ export function useSaveValidationFeedbackDraft(
   return useMutation({
     mutationFn: async ({ sessionId, ...request }) => {
       return post<SaveValidationFeedbackDraftResponse>(
-        `/sessions/${sessionId}/empathy/feedback/draft`,
+        `/sessions/${sessionId}/empathy/validation-feedback/draft`,
         request
       );
     },
@@ -1366,7 +1368,7 @@ export function useRefineValidationFeedback(
   return useMutation({
     mutationFn: async ({ sessionId, ...request }) => {
       return post<RefineValidationFeedbackResponse>(
-        `/sessions/${sessionId}/empathy/feedback/refine`,
+        `/sessions/${sessionId}/empathy/validation-feedback/refine`,
         request
       );
     },

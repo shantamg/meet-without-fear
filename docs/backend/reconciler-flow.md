@@ -3,7 +3,7 @@ title: "Stage 2: Perspective Stretch - Empathy Exchange Flow"
 sidebar_position: 6
 description: This document describes the empathy exchange flow in Stage 2, including the reconciler system that analyzes empathy accuracy and manages the sharing of addit...
 created: 2026-03-11
-updated: 2026-04-28
+updated: 2026-05-02
 status: living
 ---
 # Stage 2: Perspective Stretch - Empathy Exchange Flow
@@ -38,7 +38,8 @@ stateDiagram-v2
     READY --> REVEALED: Both directions are READY (mutual reveal)
 
     REVEALED --> VALIDATED: Subject validates empathy as accurate
-    REVEALED --> REVEALED: Subject says empathy is inaccurate (validated=false; status stays REVEALED)
+    REVEALED --> REFINING: Subject sends Feedback Coach validation feedback (VALIDATION_FEEDBACK_SENT)
+    REFINING --> VALIDATED: Guesser accepts remaining difference (skip-refinement)
 
     note right of HELD
         The ANALYZING state exists in empathy-state-machine.ts
@@ -49,8 +50,9 @@ stateDiagram-v2
 
     note right of REVEALED
         NEEDS_WORK is marked as legacy in Prisma schema.
-        Current code does NOT transition to NEEDS_WORK.
-        When validated=false, the status remains REVEALED.
+        Validation feedback uses the VALIDATION_FEEDBACK_SENT
+        event, REFINING status, and a targeted
+        VALIDATION_FEEDBACK chat message.
     end note
 
     VALIDATED --> [*]
@@ -97,7 +99,7 @@ The reconciler runs when one user confirms "feel heard" (completing Stage 1) and
 >
 > Status transitions are formally validated by `backend/src/services/empathy-state-machine.ts` which enforces a strict transition table.
 >
-> **Message de-duplication:** `markEmpathyReady()` in `state.ts` checks whether the alignment message it would post is identical to the last AI message the Guesser already saw. If so, it updates the empathy status without creating a redundant chat line — preventing duplicate messages during multi-cycle refinement runs.
+> **Message de-duplication:** `markEmpathyReady()` in `state.ts` checks whether the alignment message it would post is identical to the last AI message the Guesser already saw. If so, it updates the empathy status without creating a redundant chat line — preventing duplicate messages during multi-cycle refinement runs. The guard ignores targeted `VALIDATION_FEEDBACK` messages so partner feedback is not mistaken for an AI alignment message.
 >
 > **Redundant share-suggestion guard (API endpoint):** `generateShareOffer()` in `sharing.ts` calls `hasContextAlreadyBeenShared()` before generating a suggestion. If context was already shared in that direction, it returns `null`, and the API responds with `hasSuggestion: false` — preventing the Guesser from seeing a repeated offer message.
 >
@@ -263,25 +265,27 @@ sequenceDiagram
     Sub->>UI: Opens validation panel
     UI->>Sub: Shows partner's empathy statement
 
-    Sub->>UI: Validates empathy (yes/no)
+    Sub->>UI: Chooses Accurate or Not quite yet
 
-    alt Optional feedback
-        Sub->>UI: Adds text feedback
-    end
-
-    UI->>API: POST /empathy/validate<br/>{ validated: boolean, feedback?: string }
-
-    alt Validated (validated=true)
-        API->>API: Status → VALIDATED
+    alt Accurate
+        UI->>API: POST /empathy/validate<br/>{ validated: true }
+        API->>API: Status -> VALIDATED
         API->>Sub: Success response
         Note over Sub,Guesser: Both can proceed to Stage 3
-    else Not validated (validated=false)
-        API->>API: Status stays REVEALED (no status change)
-        Note over API: NEEDS_WORK exists in schema for legacy<br/>compatibility but is never set by current code
+    else Not quite yet
+        Sub->>UI: Adds rough notes about what feels off
+        UI->>API: POST /empathy/validation-feedback/draft
+        API-->>UI: Feedback Coach draft
+        Sub->>UI: Refines/approves coach message
+        UI->>API: POST /empathy/validation-feedback/refine<br/>(optional iterations)
+        UI->>API: POST /empathy/validate<br/>{ validated: false, feedback }
+        API->>API: Status -> REFINING
+        API->>API: Create targeted chat message<br/>role VALIDATION_FEEDBACK
+        API->>Guesser: empathy.status_updated<br/>with validationFeedback
     end
 ```
 
-### Refinement Flow (When Validation is Inaccurate)
+### Refinement Flow (When Validation Feedback Is Sent)
 
 ```mermaid
 sequenceDiagram
@@ -290,13 +294,13 @@ sequenceDiagram
     participant API as Backend
     participant Sub as Subject
 
-    Note over G: Empathy validated as inaccurate (status stays REVEALED)
+    Note over G: Empathy status is REFINING after targeted feedback
 
     G->>API: GET /empathy/status
-    API-->>G: refinementHint from reconciler
+    API-->>G: validationFeedback and refinementHint
 
     G->>AI: Chat to refine understanding
-    AI->>G: Guidance based on gap analysis
+    AI->>G: Guidance based on validation feedback and gap analysis
 
     G->>AI: Draft revised empathy
     AI->>G: Proposes updated statement
@@ -312,6 +316,11 @@ sequenceDiagram
     else No significant gaps
         API->>API: Status → REVEALED
         API->>Sub: Show revised empathy for validation
+    end
+
+    alt Guesser accepts remaining difference
+        G->>API: POST /empathy/skip-refinement<br/>{ willingToAccept: true }
+        API->>API: Record accepted difference and unblock Stage 2 gate
     end
 ```
 
@@ -377,9 +386,10 @@ Only one panel shows at a time, in this priority order:
 | `empathy.status_updated` (status=`AWAITING_SHARING`) | Reconciler offers a share prompt (Moderate+focus or Significant gap) | `shareOffer`, `empathyStatus` | Show share suggestion panel (message: "&lt;name&gt; is considering a suggestion to share more") |
 | `empathy.context_shared` | Subject shares additional context | `empathyStatus`, `shareOffer`, `messages` | Guesser sees shared context |
 | `empathy.revealed` | Empathy revealed (no significant gaps) | `empathyStatus`, `partnerEmpathy` | Subject can validate |
-| `partner.stage_completed` | Partner completes a stage | `empathyStatus`, `progress` | Update waiting status |
+| `partner.stage_completed` | Partner completes a stage; Stage 2 validation emits this only for `validated=true` | `empathyStatus`, `progress` | Update waiting status |
 | `partner.session_viewed` | Partner views session | `empathyStatus` (delivery status) | Update delivery indicator |
 | `empathy.validated` | Partner validates empathy | `empathyStatus` | Show validation result |
+| `empathy.status_updated` (status=`REFINING`) | Subject sends Feedback Coach validation feedback | `empathyStatus`, `messages` | Guesser sees targeted feedback and revision UI |
 
 ## Data Models
 
@@ -496,9 +506,23 @@ Only one panel shows at a time, in this priority order:
   sessionId: string;
   userId: string;             // The validator (subject)
   validated: boolean;         // Overall validation (true/false, no rating scale)
-  feedback: string | null;    // Optional text feedback
-  feedbackShared: boolean;    // Whether feedback was shared with guesser
+  feedback: string | null;    // Feedback Coach-approved text when validated=false
+  feedbackShared: boolean;    // validated=false shares feedback with guesser
   validatedAt: Date;
+}
+```
+
+### ValidationFeedbackDraft
+
+```typescript
+{
+  id: string;
+  sessionId: string;
+  userId: string;             // The validator drafting feedback
+  attemptId: string | null;   // Partner attempt being validated
+  content: string;            // Current draft / coach output
+  readyToShare: boolean;
+  version: number;
 }
 ```
 
@@ -520,12 +544,15 @@ If user tries to validate partner's empathy before reconciler finishes:
 - Frontend should wait for `empathy.revealed` event
 - Or poll `empathyStatus` until attempt is in `REVEALED` status
 
-### Case 4: Share Suggestion Without suggestedContent
+### Case 4: Feedback Coach Draft Without Final Send
+Saving or refining `/empathy/validation-feedback/*` drafts does not notify the partner. The partner only receives a targeted `VALIDATION_FEEDBACK` chat message when the validator submits `/empathy/validate` with `validated=false` and final feedback text.
+
+### Case 5: Share Suggestion Without suggestedContent
 **Issue discovered during debugging**: If `generateShareSuggestion` fails to find the `ReconcilerResult` (race condition), the `suggestedContent` will be null. The fix includes:
 - Retry logic (3 attempts with 100ms delay) in `generateShareSuggestion`
 - Frontend fallback to display `offerMessage` if `suggestedContent` is missing
 
-### Case 5: User Responds Before Fetching Share Offer
+### Case 6: User Responds Before Fetching Share Offer
 If user accepts/declines before the GET endpoint marks offer as `OFFERED`:
 - `respondToShareSuggestion` accepts both `PENDING` and `OFFERED` status, and supports three actions: `accept`, `decline`, and `refine` (re-runs suggestion generation with `refinedContent` feedback from the user)
 - After the circuit-breaker trips, the Guesser's alignment message uses neutral waiting language ("You've shared your perspective… [Partner] is also reflecting on your perspective — once they're done, you'll both see what each other shared") instead of the normal "quite accurate" feedback, to avoid overclaiming accuracy when refinement was exhausted or context was already shared

@@ -30,6 +30,7 @@ import {
   markShareTabViewed,
   getUnreadSessionCount,
 } from '../controllers/sessions';
+import { generateTopicFrame, confirmTopicFrame } from '../controllers/topic-frame';
 import { getSessionState } from '../controllers/session-state';
 import { getLinkedInnerThoughts } from '../controllers/inner-work';
 import { getTimeline } from '../controllers/timeline';
@@ -122,6 +123,20 @@ router.put('/sessions/:id/invitation/message', requireAuth, requireSessionAccess
  * @access Private - requires authentication and session access
  */
 router.post('/sessions/:id/invitation/confirm', requireAuth, requireSessionAccess, asyncHandler(confirmInvitationMessage));
+
+/**
+ * @route POST /api/v1/sessions/:id/topic-frame/generate
+ * @description AI-generate a topic frame from user 1's Stage 0 invitation draft
+ * @access Private - requires authentication and session access (creator only)
+ */
+router.post('/sessions/:id/topic-frame/generate', requireAuth, requireSessionAccess, asyncHandler(generateTopicFrame));
+
+/**
+ * @route POST /api/v1/sessions/:id/topic-frame/confirm
+ * @description Confirm or steer the AI-generated session topic frame
+ * @access Private - requires authentication and session access (creator only)
+ */
+router.post('/sessions/:id/topic-frame/confirm', requireAuth, requireSessionAccess, asyncHandler(confirmTopicFrame));
 
 /**
  * @route GET /api/v1/sessions/:id/inner-thoughts

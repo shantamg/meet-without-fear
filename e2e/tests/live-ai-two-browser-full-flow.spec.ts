@@ -25,6 +25,7 @@ import {
   signCompact,
   handleMoodCheck,
   sendAndWaitForPanel,
+  confirmInvitationTopicAndContinue,
   waitForReconcilerComplete,
   expectNeedsComparisonFromApi,
   expectNeedsSummaryFromApi,
@@ -200,9 +201,7 @@ test.describe('Live AI Full Partner Journey: Stages 0-4', () => {
     );
     console.log(`${elapsed()} Invitation panel appeared after ${invitationTurns} message(s)`);
 
-    const invitationContinueButton = harness.userAPage.getByTestId('invitation-continue-button');
-    await expect(invitationContinueButton).toBeVisible({ timeout: 10000 });
-    await invitationContinueButton.click();
+    await confirmInvitationTopicAndContinue(harness.userAPage, AI_RESPONSE_TIMEOUT);
     await expect(harness.userAPage.getByTestId('invitation-draft-panel')).not.toBeVisible({ timeout: 10000 });
     console.log(`${elapsed()} Invitation confirmed — User B can now join`);
 

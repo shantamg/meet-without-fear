@@ -487,6 +487,134 @@ describe('Stage 2 API', () => {
         })
       );
     });
+
+    it('requires feedback when empathy is not validated', async () => {
+      const req = mockRequest({
+        body: { validated: false, feedback: '   ' },
+      });
+      const res = mockResponse();
+
+      await validateEmpathy(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+        })
+      );
+      expect(prisma.empathyValidation.upsert).not.toHaveBeenCalled();
+    });
+
+    it('shares feedback and moves partner attempt to refining when not validated', async () => {
+      const req = mockRequest({
+        body: { validated: false, feedback: 'You missed the part about feeling dismissed.' },
+      });
+      const res = mockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 2,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      });
+      (prisma.empathyAttempt.findFirst as jest.Mock)
+        .mockResolvedValueOnce({
+          id: 'attempt-1',
+          sourceUserId: 'partner-1',
+          status: 'REVEALED',
+        })
+        .mockResolvedValueOnce({
+          id: 'my-attempt-1',
+          sourceUserId: 'user-1',
+        });
+      (prisma.empathyAttempt.update as jest.Mock).mockResolvedValue({
+        id: 'attempt-1',
+        status: 'REFINING',
+      });
+      (prisma.empathyValidation.upsert as jest.Mock).mockResolvedValue({
+        id: 'validation-1',
+        validated: false,
+        feedbackShared: true,
+        validatedAt: new Date(),
+      });
+      (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
+        gatesSatisfied: { empathyValidated: false },
+      });
+      (prisma.message.create as jest.Mock).mockResolvedValue({
+        id: 'feedback-message-1',
+        timestamp: new Date(),
+      });
+      (prisma.empathyValidation.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await validateEmpathy(req, res);
+
+      expect(prisma.empathyValidation.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            validated: false,
+            feedback: 'You missed the part about feeling dismissed.',
+            feedbackShared: true,
+          }),
+          update: expect.objectContaining({
+            validated: false,
+            feedback: 'You missed the part about feeling dismissed.',
+            feedbackShared: true,
+          }),
+        })
+      );
+      expect(prisma.empathyAttempt.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'attempt-1' },
+          data: expect.objectContaining({
+            status: 'REFINING',
+            statusVersion: { increment: 1 },
+          }),
+        })
+      );
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            sessionId: 'session-123',
+            senderId: 'user-1',
+            forUserId: 'partner-1',
+            role: 'VALIDATION_FEEDBACK',
+            content: 'You missed the part about feeling dismissed.',
+            stage: 2,
+          }),
+        })
+      );
+      expect(notifyPartner).toHaveBeenCalledWith(
+        'session-123',
+        'partner-1',
+        'empathy.status_updated',
+        expect.objectContaining({
+          status: 'REFINING',
+          forUserId: 'partner-1',
+          feedbackShared: true,
+          validationFeedback: 'You missed the part about feeling dismissed.',
+        }),
+        { excludeUserId: 'user-1' }
+      );
+      expect(notifyPartner).not.toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        'partner.stage_completed',
+        expect.any(Object),
+        expect.any(Object)
+      );
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            validated: false,
+            feedbackShared: true,
+            awaitingRevision: true,
+            canAdvance: false,
+          }),
+        })
+      );
+    });
   });
 });
 
@@ -544,6 +672,40 @@ describe('Validation Feedback Routes', () => {
             response: 'AI response',
             proposedFeedback: 'Refined feedback',
           }),
+        })
+      );
+    });
+
+    it('passes refinement history and process guardrails to the model', async () => {
+      const req = mockRequest({
+        body: {
+          message: "Don't water that down",
+          history: [
+            { role: 'user', content: 'He was drunk with poop in his pants' },
+            { role: 'coach', content: 'Proposed feedback: serious incidents at drop-off' },
+          ],
+        },
+      });
+      const res = mockResponse();
+
+      const { extractJsonFromResponse } = require('../../utils/json-extractor');
+      const { getModelCompletion } = require('../../lib/bedrock');
+      extractJsonFromResponse.mockReturnValueOnce({
+        response: 'AI response',
+        proposedFeedback: 'Refined feedback',
+      });
+
+      await refineValidationFeedback(req, res);
+
+      expect(getModelCompletion).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          systemPrompt: expect.stringContaining('do not preserve personal attacks, threats, ultimatums'),
+          messages: [
+            { role: 'user', content: 'He was drunk with poop in his pants' },
+            { role: 'assistant', content: 'Proposed feedback: serious incidents at drop-off' },
+            { role: 'user', content: "Don't water that down" },
+          ],
         })
       );
     });
@@ -609,4 +771,3 @@ describe('Validation Feedback Routes', () => {
     });
   });
 });
-

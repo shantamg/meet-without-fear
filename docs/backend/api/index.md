@@ -51,6 +51,8 @@ Session creation, invitations, and lifecycle management.
 | `POST` | `/sessions` | Create new session and invite partner |
 | `GET`  | `/sessions` | List user's sessions |
 | `GET`  | `/sessions/:id` | Get session details |
+| `POST` | `/sessions/:id/topic-frame/generate` | Generate and store a proposed Stage 0 invite topic frame |
+| `POST` | `/sessions/:id/topic-frame/confirm` | Confirm the proposed topic frame or steer the AI toward a revised neutral frame |
 | `POST` | `/sessions/:id/archive` | Archive a finished/abandoned session |
 | `DELETE` | `/sessions/:id` | Mark session `ABANDONED` (hard delete-equivalent) |
 
@@ -98,7 +100,7 @@ A unified entry point that dispatches a user message to the correct stage handle
 | `POST` | `/chat/cancel` | Cancel an in-flight router turn |
 
 ### [Stage 2: Perspective Stretch](./stage-2.md)
-Empathy exchange, share suggestions (asymmetric reconciler), and consent flows.
+Empathy exchange, share suggestions (asymmetric reconciler), Feedback Coach validation feedback, and consent flows.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -108,8 +110,11 @@ Empathy exchange, share suggestions (asymmetric reconciler), and consent flows.
 | `GET`  | `/sessions/:id/empathy/partner` | Get partner's empathy attempt |
 | `POST` | `/sessions/:id/empathy/validate` | Validate partner's attempt |
 | `GET`  | `/sessions/:id/empathy/status` | Authoritative Stage-2 status + gate data |
+| `POST` | `/sessions/:id/empathy/skip-refinement` | Record that the partner accepts or declines the remaining difference without another revision |
 | `GET`  | `/sessions/:id/empathy/share-suggestion` | Fetch a reconciler share suggestion when the partner missed feelings |
 | `POST` | `/sessions/:id/empathy/share-suggestion/respond` | Accept / decline a share suggestion |
+| `POST` | `/sessions/:id/empathy/validation-feedback/draft` | Save Feedback Coach draft text for a "Not quite yet" validation path |
+| `POST` | `/sessions/:id/empathy/validation-feedback/refine` | Refine validation feedback through the Feedback Coach |
 
 ### [Emotional Barometer](./emotional-barometer.md)
 Emotional tracking across all stages.

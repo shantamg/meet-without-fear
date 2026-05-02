@@ -2,7 +2,7 @@
 title: Chat Interface
 sidebar_position: 3
 description: The primary conversation interface where users interact with the AI.
-updated: 2026-04-26
+updated: 2026-05-02
 status: living
 ---
 # Chat Interface
@@ -91,11 +91,18 @@ flowchart TB
             Message[Brief warm opening with typewriter effect]
         end
 
-        subgraph Actions0[Action Button]
-            Ready[Ready / Let's go]
+        subgraph Actions0[Stage 0 Actions]
+            Draft[Invitation draft]
+            Topic[AI topic frame confirmation]
+            Share[Share invitation]
         end
     end
 ```
+
+The invite drafting phase uses a two-step bottom panel:
+
+1. **Topic confirmation** — The panel first shows only the AI-proposed neutral 3-5 word topic frame with an optional steering input and a confirm button. The invitation message and share controls are hidden.
+2. **Invitation sharing** — Once the topic is confirmed, the panel transitions to show the drafted invite message, the confirmed topic, the share button, a refine option, and the "sent it" continuation.
 
 ### Stage 1: The Witness Chat
 
@@ -123,17 +130,24 @@ flowchart TB
 ```mermaid
 flowchart TB
     subgraph StretchChat[Perspective Stretch View]
-        Header2[Stage 2: Understanding Their View]
+        Header2[Stage 2: Imagine their side]
 
-        subgraph OtherPerspective[Partner Perspective Panel]
-            PTitle[What your partner shared]
-            PSummary[Curated summary of key points and needs]
+        subgraph StageCards[Inline Stage 2 Cards]
+            Draft[View your empathy attempt]
+            Share[Share suggestion panel]
+            Validate[Accuracy feedback card]
         end
 
         subgraph Chat2[Reflection Conversation]
-            AI21[How does hearing this land for you?]
+            AI21[AI helps build or revise empathy]
             User21[User response]
-            AI22[AI reflection or intervention]
+            AI22[AI reflection or Mirror Intervention]
+        end
+
+        subgraph FeedbackCoach[Feedback Coach Modal]
+            Rough[What feels off?]
+            Coach[Guided draft chat]
+            Send[Send refined validation feedback]
         end
     end
 ```
@@ -263,7 +277,7 @@ The chat input hosts an inline emotion slider (`barometerValue` / `handleBaromet
 
 ## Typewriter + inline Stage 2 cards
 
-The chat list tracks `isTypewriterAnimating` (set while a new AI message is being typed in) so it can delay the appearance of inline cards until the text has finished. In Stage 2 (`PERSPECTIVE_STRETCH`), the list renders **validation cards** directly in the timeline (`validationCards`) with "Accurate / Partially / Off" buttons wired to `handleValidationAccurate` / `handleValidationNotQuite` instead of routing users to a separate screen.
+The chat list tracks `isTypewriterAnimating` (set while a new AI message is being typed in) so it can delay the appearance of inline cards until the text has finished. In Stage 2 (`PERSPECTIVE_STRETCH`), the list renders **validation cards** directly in the timeline (`validationCards`) with "Accurate / Partially / Off" buttons wired to `handleValidationAccurate` / `handleValidationNotQuite` instead of routing users to a separate screen. The "Not quite yet" path opens `AccuracyFeedbackDrawer` for rough notes and then `GuidedDraftChatModal` as the Feedback Coach before the final feedback is submitted.
 
 ## Stage label map
 

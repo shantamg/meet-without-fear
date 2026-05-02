@@ -10,21 +10,13 @@ status: living
 
 This document describes how users validate their partner's empathy attempt, including the UI component behavior and API interactions.
 
-> **WARNING (2026-03-11 Audit):** The accuracy feedback UI exists in code but is currently
-> **unreachable at runtime**. The `AccuracyFeedbackDrawer` component is declared
-> (UnifiedSessionScreen.tsx:2502-2523) and its state variable exists (line 748), but
-> `setShowAccuracyFeedbackDrawer(true)` is **never called anywhere** in the codebase.
-> The `skipRefinement` endpoint also exists but is never called from mobile.
->
-> This document describes the *intended* behavior. Implementation is required to make it work.
-
 ## Overview
 
 After a user's empathy attempt is **REVEALED** to their partner (the subject), the subject can provide feedback on how accurately the guesser's attempt resonates with their actual feelings. This feedback determines whether the guesser needs to revise their empathy attempt.
 
 ## When Accuracy Feedback Appears
 
-The accuracy feedback panel should appear when:
+The accuracy feedback panel appears when:
 1. Partner's empathy status is `REVEALED` (not yet validated)
 2. Current user is the "subject" (the one whose perspective the partner attempted to imagine)
 3. No share suggestion panel is pending
@@ -45,7 +37,7 @@ flowchart TB
 
 ### Panel Location
 
-The accuracy feedback panel should appear **above the chat input**, not at the bottom of the screen. It follows the panel priority system:
+The accuracy feedback panel appears **above the chat input** and follows the panel priority system:
 
 ```
 ┌─────────────────────────────────────┐
@@ -120,18 +112,18 @@ sequenceDiagram
         API-->>Panel: Success
     else Inaccurate
         User->>Panel: Taps "Not quite"
-        Panel->>User: Shows input for initial thoughts
-        User->>Panel: Submits initial thoughts
-        Panel->>User: Closes panel, opens Chat
+        Panel->>User: Shows "What feels off?" rough-feedback step
+        User->>Panel: Submits rough notes
+        Panel->>User: Closes panel, opens Feedback Coach
         Note over User: Enters Feedback Coach Chat (Subject)
-        Note over User: **Design Intent — Not Yet Fully Implemented.**<br/>FeedbackCoachChat component exists but<br/>backend flow to deliver feedback to partner is incomplete.
 
         User->>AI: Chat to refine feedback
         AI->>User: Helps craft constructive feedback
         User->>AI: Approves final feedback message
 
         AI->>API: POST /empathy/validate<br/>{validated: false, feedback: "final message"}
-        API->>Partner: Notify "Partner shared feedback"
+        API->>API: Partner attempt status -> REFINING
+        API->>Partner: VALIDATION_FEEDBACK message<br/>and empathy.status_updated
 
         Note over Partner: Enters Refinement Chat (Guesser)
         alt Refines
@@ -156,13 +148,17 @@ sequenceDiagram
 
 ## AI Feedback Coach (Subject's Experience)
 
-> **Design Intent — Not Yet Fully Implemented.** The `FeedbackCoachChat` component exists in
-> the mobile codebase, but the backend flow to deliver the crafted feedback to the partner is
-> incomplete. The end-to-end flow described below is the intended behavior.
+The "Not quite" path starts with a lightweight rough-feedback step in the
+`AccuracyFeedbackDrawer`: **"What feels off?"** The drawer requires non-empty rough notes
+before opening the Feedback Coach. The coach then helps the subject turn those notes into
+constructive feedback that focuses on their experience instead of the partner's failure.
 
-This flow mirrors the **Reconciler Share Suggestion** flow...
-
-[... standard feedback coach details ...]
+When the subject approves the final coach draft, mobile sends it through
+`POST /sessions/:id/empathy/validate` with `validated: false` and the final `feedback`.
+The backend stores an `EmpathyValidation` with `feedbackShared: true`, creates a targeted
+`VALIDATION_FEEDBACK` chat message for the partner, moves the partner's empathy attempt to
+`REFINING`, and publishes `empathy.status_updated` with `status: 'REFINING'`,
+`feedbackShared: true`, and the `validationFeedback` text.
 
 ## Acceptance Check (Guesser's Experience)
 If the Guesser cannot/will not refine their statement to match the Subject's feedback:
@@ -179,8 +175,8 @@ If the Guesser cannot/will not refine their statement to match the Subject's fee
 **Request:**
 ```typescript
 {
-  validated: boolean;     // true for accurate/partially_accurate, false for inaccurate
-  feedback?: string;      // Optional text feedback
+  validated: boolean;     // true for accurate/partially_accurate, false for not quite
+  feedback?: string;      // Required when validated is false; optional note when true
   // Note: there is NO "rating" field in the actual API.
   // "Partially Accurate" and "Accurate" both send validated: true (no distinction).
 }
@@ -189,8 +185,11 @@ If the Guesser cannot/will not refine their statement to match the Subject's fee
 **Response:**
 ```typescript
 {
-  success: true;
-  myAttemptStatus: string;         // Current user's empathy status
+  validated: boolean;
+  validatedAt: string;
+  feedbackShared: boolean;
+  awaitingRevision: boolean;
+  canAdvance: boolean;
   partnerValidated: boolean;       // Whether partner has validated current user's empathy
 }
 ```
@@ -203,14 +202,14 @@ If the Guesser cannot/will not refine their statement to match the Subject's fee
 |---------------|-------------------|------------|
 | REVEALED | Accurate (validated: true) | VALIDATED |
 | REVEALED | Partially accurate (validated: true) | VALIDATED |
-| REVEALED | Inaccurate (validated: false) | Status stays REVEALED (NEEDS_WORK is legacy/deprecated) |
+| REVEALED | Inaccurate (validated: false, feedback present) | REFINING |
 
 ### What Happens Next
 
 | New Status | For Subject | For Guesser |
 |------------|-------------|-------------|
 | VALIDATED | Panel closes, can proceed | Can proceed to Stage 3 |
-| REVEALED (unchanged) | Panel closes (validated: false submitted) | Feedback coach flow begins (design intent, not yet fully implemented) |
+| REFINING | Feedback Coach final send completes | Partner receives `VALIDATION_FEEDBACK` and can refine or skip refinement |
 
 ## Frontend Implementation
 
@@ -262,18 +261,6 @@ const activePanel = panels
   .filter(p => p.show)
   .sort((a, b) => a.priority - b.priority)[0];
 ```
-
-## Known Issues
-
-### Issue: Panel Position
-**Problem:** Panel appears at bottom of screen instead of above chat input
-**Expected:** Panel should be in the `AboveInputPanel` slot, same as other panels
-**Fix:** Ensure `AccuracyFeedbackPanel` is rendered in the panel area, not as a separate absolute-positioned component
-
-### Issue: Non-functional Buttons
-**Problem:** Rating buttons don't trigger API calls
-**Expected:** Tapping a button should call `POST /empathy/validate`
-**Fix:** Connect button onPress handlers to mutation function
 
 ## Debugging
 

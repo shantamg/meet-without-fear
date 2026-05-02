@@ -31,12 +31,16 @@ export interface RefineInvitationDrawerProps {
   invitationMessage: string;
   /** The invitation URL */
   invitationUrl: string;
+  /** AI-finalized neutral topic frame */
+  topicFrame?: string | null;
   /** Partner's name */
   partnerName?: string;
   /** Sender's name (current user) */
   senderName?: string;
   /** Whether a refinement is in progress */
   isRefining?: boolean;
+  /** Whether sharing should be disabled until prerequisite gates are complete */
+  shareDisabled?: boolean;
   /** Callback when user sends a refinement request */
   onSendRefinement?: (message: string) => void;
   /** Callback when share is successful */
@@ -49,9 +53,11 @@ export function RefineInvitationDrawer({
   visible,
   invitationMessage,
   invitationUrl,
+  topicFrame,
   partnerName,
   senderName,
   isRefining: isRefiningProp = false,
+  shareDisabled = false,
   onSendRefinement,
   onShareSuccess,
   onClose,
@@ -213,8 +219,10 @@ export function RefineInvitationDrawer({
                     <InvitationShareButton
                       invitationMessage={invitationMessage}
                       invitationUrl={invitationUrl}
+                      topicFrame={topicFrame}
                       partnerName={partnerName}
                       senderName={senderName}
+                      disabled={shareDisabled}
                       onShareSuccess={onShareSuccess}
                       testID="refine-invitation-share"
                     />

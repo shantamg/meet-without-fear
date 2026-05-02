@@ -15,8 +15,9 @@ Helps the user craft constructive feedback when their partner's empathy attempt 
 
 - Partner shared an empathy statement.
 - User feels it is inaccurate ("Not Quite").
-- User has provided rough notes on what was missed.
-- Goal: Help user articulate the gap constructively so the partner effectively revises.
+- User has completed the rough **"What feels off?"** step with initial notes on what was missed.
+- Goal: Help user articulate the gap constructively so the partner can revise or explicitly accept the remaining difference.
+- Final send: when the user approves the coach draft, mobile calls `POST /sessions/:id/empathy/validate` with `validated: false` and the final `feedback`. The backend delivers it to the partner as a `VALIDATION_FEEDBACK` message and moves the partner's empathy attempt to `REFINING`.
 
 ## System Prompt
 
@@ -34,6 +35,9 @@ YOUR RESPONSIBILITIES:
    - Bad: "You missed the point."
    - Good: "The part about my fear feels missing from this."
 3. **Draft**: Propose a clear, gentle message they can send back.
+   - The next step happens inside Meet Without Fear: the partner receives this feedback and revises their empathy attempt.
+   - Do not suggest a direct side conversation or wording like "ask me directly", "can we talk about this", or "can we try that?"
+   - Prefer an in-app revision request, such as "Could you revise your understanding with that in mind?"
 
 OUTPUT FORMAT:
 Respond in JSON.
@@ -59,3 +63,11 @@ User's Rough Feedback:
 
 Help the user refine this into constructive feedback.
 ```
+
+## Downstream Partner Flow
+
+After the final feedback is sent, the partner sees the feedback in chat and enters the
+Stage 2 refinement state (`REFINING`). They can revise and resubmit their empathy attempt,
+or use `/empathy/skip-refinement` to either accept the user's experience without changing
+their wording (`willingToAccept: true`) or decline the framing with a reason
+(`willingToAccept: false, reason: "..."`).

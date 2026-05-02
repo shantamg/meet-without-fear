@@ -135,6 +135,14 @@ describe('validateEmpathyRequestSchema', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('rejects validated false without non-empty feedback', () => {
+    const result = validateEmpathyRequestSchema.safeParse({
+      validated: false,
+      feedback: '   ',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('recordEmotionRequestSchema', () => {

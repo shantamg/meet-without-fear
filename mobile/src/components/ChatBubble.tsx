@@ -70,7 +70,10 @@ export function ChatBubble({
   const isUser = message.role === MessageRole.USER;
   const isSystem = message.role === MessageRole.SYSTEM;
   const isEmpathyStatement = message.role === MessageRole.EMPATHY_STATEMENT;
-  const isSharedContext = (message.role as string) === 'SHARED_CONTEXT';
+  const isSharedContext =
+    (message.role as string) === 'SHARED_CONTEXT' ||
+    (message.role as string) === 'VALIDATION_FEEDBACK';
+  const isValidationFeedback = (message.role as string) === 'VALIDATION_FEEDBACK';
   const isShareSuggestion = (message.role as string) === 'SHARE_SUGGESTION';
   const isAI = !isUser && !isSystem && !isEmpathyStatement && !isSharedContext && !isShareSuggestion;
   const isIntervention = message.isIntervention ?? false;
@@ -262,9 +265,9 @@ export function ChatBubble({
 
     // Shared context (from reconciler) - use fade-in for new messages
     if (isSharedContext) {
-      const contextLabel = partnerName
-        ? `New context from ${partnerName}`
-        : 'New context from your partner';
+      const contextLabel = isValidationFeedback
+        ? (partnerName ? `Feedback from ${partnerName}` : 'Feedback from your partner')
+        : (partnerName ? `New context from ${partnerName}` : 'New context from your partner');
       const deliveryStatus = message.sharedContentDeliveryStatus;
       const content = (
         <View>

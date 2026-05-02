@@ -12,20 +12,9 @@
  */
 
 import React, { useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Modal,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X } from 'lucide-react-native';
-import { colors } from '@/theme';
-import { ChatInterface, ChatMessage } from '../components/ChatInterface';
-import { useRefinementChat, RefinementMessage } from '../hooks/useRefinementChat';
+import { Alert } from 'react-native';
+import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
+import { useRefinementChat } from '../hooks/useRefinementChat';
 
 // ============================================================================
 // Types
@@ -56,7 +45,6 @@ export function RefinementModalScreen({
   onShareComplete,
   testID = 'refinement-modal',
 }: RefinementModalScreenProps) {
-  const insets = useSafeAreaInsets();
   const {
     messages,
     isLoading,
@@ -101,125 +89,25 @@ export function RefinementModalScreen({
     );
   }, [messages.length, onClose]);
 
-  // Render inline draft card below AI messages that have proposedContent
-  const renderMessageExtra = useCallback((message: ChatMessage) => {
-    const rfMsg = message as RefinementMessage;
-    if (!rfMsg.proposedContent) return null;
-    return (
-      <View style={styles.draftCard}>
-        <Text style={styles.draftContent}>"{rfMsg.proposedContent}"</Text>
-        <TouchableOpacity
-          style={[styles.shareButton, isFinalizing && styles.shareButtonDisabled]}
-          onPress={() => handleShareVersion(rfMsg.proposedContent!)}
-          disabled={isFinalizing}
-          testID={`${testID}-share-button`}
-        >
-          {isFinalizing ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.shareButtonText}>Share This Version</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    );
-  }, [isFinalizing, handleShareVersion, testID]);
-
-  // Cast messages to ChatMessage[] for ChatInterface compatibility
-  const chatMessages: ChatMessage[] = messages;
-
   return (
-    <Modal
+    <GuidedDraftChatModal
       visible={visible}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={handleClose}
+      title="Refining"
+      sessionKey={`refinement-${sessionId}-${offerId}`}
+      messages={messages}
+      isLoading={isLoading}
+      isFinalizing={isFinalizing}
+      partnerName={partnerName}
+      proposalTitle="Draft"
+      proposalSubtitle={`This is what will be shared with ${partnerName}`}
+      finalActionLabel="Share This Version"
+      onSendMessage={sendMessage}
+      onFinalize={handleShareVersion}
+      onClose={handleClose}
+      finalButtonTestID={`${testID}-share-button`}
       testID={testID}
-    >
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={[styles.header, { paddingTop: Math.max(insets.top, 12) }]}>
-          <Text style={styles.headerTitle}>Refining</Text>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={handleClose}
-            testID={`${testID}-close`}
-          >
-            <X color={colors.textPrimary} size={24} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Chat interface */}
-        <ChatInterface
-          sessionId={`refinement-${sessionId}-${offerId}`}
-          messages={chatMessages}
-          onSendMessage={sendMessage}
-          isLoading={isLoading}
-          partnerName={partnerName}
-          renderMessageExtra={renderMessageExtra}
-        />
-      </SafeAreaView>
-    </Modal>
+    />
   );
 }
-
-// ============================================================================
-// Styles
-// ============================================================================
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bgPrimary,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  closeButton: {
-    padding: 4,
-  },
-  draftCard: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 4,
-    padding: 12,
-    backgroundColor: colors.bgSecondary,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.accent,
-  },
-  draftContent: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.textPrimary,
-    fontStyle: 'italic',
-    marginBottom: 12,
-  },
-  shareButton: {
-    backgroundColor: colors.accent,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  shareButtonDisabled: {
-    opacity: 0.6,
-  },
-  shareButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#fff',
-  },
-});
 
 export default RefinementModalScreen;

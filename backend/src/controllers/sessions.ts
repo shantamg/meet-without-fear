@@ -780,6 +780,8 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
         status: invitation.status,
         expiresAt: invitation.expiresAt.toISOString(),
         isInviter,
+        topicFrame: session.topicFrame ?? null,
+        topicFrameConfirmedAt: session.topicFrameConfirmedAt?.toISOString() ?? null,
       },
     });
   } catch (error) {
@@ -850,17 +852,28 @@ export async function updateInvitationMessage(req: Request, res: Response): Prom
       return;
     }
 
-    // Update invitation message
-    const updatedInvitation = await prisma.invitation.update({
-      where: { id: invitation.id },
-      data: { invitationMessage: message },
-    });
+    // Update invitation message and clear any topic frame derived from the old draft.
+    const [updatedInvitation] = await prisma.$transaction([
+      prisma.invitation.update({
+        where: { id: invitation.id },
+        data: { invitationMessage: message },
+      }),
+      prisma.session.update({
+        where: { id: sessionId },
+        data: {
+          topicFrame: null,
+          topicFrameConfirmedAt: null,
+        },
+      }),
+    ]);
 
     successResponse(res, {
       invitation: {
         id: updatedInvitation.id,
         invitationMessage: updatedInvitation.invitationMessage,
         messageConfirmed: updatedInvitation.messageConfirmed,
+        topicFrame: null,
+        topicFrameConfirmedAt: null,
       },
     });
   } catch (error) {
@@ -923,8 +936,14 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
           invitationMessage: invitation.invitationMessage,
           messageConfirmed: true,
           messageConfirmedAt: invitation.messageConfirmedAt?.toISOString() ?? null,
+          topicFrame: session.topicFrame ?? null,
         },
       });
+      return;
+    }
+
+    if (!session.topicFrame || !session.topicFrameConfirmedAt) {
+      errorResponse(res, ErrorCode.VALIDATION_ERROR, 'Topic frame must be confirmed before sharing invitation', 400);
       return;
     }
 
@@ -1059,6 +1078,7 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
         invitationMessage: updatedInvitation.invitationMessage,
         messageConfirmed: updatedInvitation.messageConfirmed,
         messageConfirmedAt: updatedInvitation.messageConfirmedAt?.toISOString() ?? null,
+        topicFrame: session.topicFrame,
       },
       advancedToStage: 1,
     });

@@ -71,6 +71,25 @@ export const feelHeardResponseSchema = z.object({
 export type FeelHeardResponseInput = z.infer<typeof feelHeardResponseSchema>;
 
 // ============================================================================
+// Topic Frame (Stage 0 — drafted during invite, before Stage 1)
+// ============================================================================
+
+export const confirmTopicFrameRequestSchema = z.object({
+  // Optional steering direction from the user. The AI has final say on the
+  // 3-5 word frame; the user can only suggest a direction, not set the text directly.
+  steer: z.string().min(2, 'Steer too short').max(100, 'Steer too long').optional(),
+});
+
+export type ConfirmTopicFrameRequestInput = z.infer<typeof confirmTopicFrameRequestSchema>;
+
+export const confirmTopicFrameResponseSchema = z.object({
+  topicFrame: z.string(),
+  confirmedAt: z.string().datetime(),
+});
+
+export type ConfirmTopicFrameResponseInput = z.infer<typeof confirmTopicFrameResponseSchema>;
+
+// ============================================================================
 // Stage 2: Perspective Stretch / Empathy
 // ============================================================================
 
@@ -109,6 +128,14 @@ export type ConsentToShareResponseInput = z.infer<typeof consentToShareResponseS
 export const validateEmpathyRequestSchema = z.object({
   validated: z.boolean(),
   feedback: z.string().max(500, 'Feedback too long').optional(),
+}).superRefine((value, ctx) => {
+  if (!value.validated && !value.feedback?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['feedback'],
+      message: 'Feedback is required when empathy is not validated',
+    });
+  }
 });
 
 export type ValidateEmpathyRequestInput = z.infer<typeof validateEmpathyRequestSchema>;
@@ -155,6 +182,10 @@ export type SaveValidationFeedbackDraftResponseInput = z.infer<typeof saveValida
 
 export const refineValidationFeedbackRequestSchema = z.object({
   message: z.string().min(1, 'Message is required'),
+  history: z.array(z.object({
+    role: z.enum(['coach', 'user']),
+    content: z.string(),
+  })).optional(),
 });
 
 export type RefineValidationFeedbackRequestInput = z.infer<typeof refineValidationFeedbackRequestSchema>;

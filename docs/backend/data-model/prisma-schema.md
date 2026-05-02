@@ -104,6 +104,10 @@ model Session {
   updatedAt      DateTime      @updatedAt
   resolvedAt     DateTime?
 
+  // Explicit topic frame (3-5 word neutral description, e.g., "Tuesday pickup disagreement")
+  topicFrame            String?
+  topicFrameConfirmedAt DateTime?
+
   // Slack origin (null for mobile-originated sessions)
   slackJoinCode String?              @unique // 6-char code for partner to pair via lobby
   slackThreads  SessionSlackThread[]
@@ -611,6 +615,29 @@ model EmpathyValidation {
 }
 ```
 
+### ValidationFeedbackDraft
+
+Drafts used by the Stage 2 "Not quite yet" Feedback Coach before the final validation feedback is sent to the partner.
+
+```prisma
+model ValidationFeedbackDraft {
+  id        String   @id @default(cuid())
+  session   Session  @relation(fields: [sessionId], references: [id])
+  sessionId String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  attempt   EmpathyAttempt? @relation(fields: [attemptId], references: [id])
+  attemptId String?
+  content   String   @db.Text
+  readyToShare Boolean @default(false)
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, userId])
+}
+```
+
 ## Stage 4: Strategies and Rankings
 
 ### StrategyProposal
@@ -672,8 +699,11 @@ enum MessageRole {
   USER
   AI
   SYSTEM
+  VALIDATION_FEEDBACK
 }
 ```
+
+`VALIDATION_FEEDBACK` is a targeted partner-visible chat message created when a Stage 2 validator sends Feedback Coach-approved feedback with `validated=false`.
 
 ## Global Library (Stage 4 Suggestions)
 
@@ -833,6 +863,7 @@ These subsystems share the same database but aren't documented in full here. Con
 - `ReconcilerResult` — alignment score, gap summary, and decision (PROCEED / OFFER_OPTIONAL / OFFER_SHARING) per Stage-2 attempt pair.
 - `ReconcilerShareOffer` — share-suggestion flow state (`NOT_OFFERED` / `ACCEPTED` / `DECLINED` / `EXPIRED` / `SKIPPED`).
 - `RefinementAttemptCounter` — bounded refinement-loop counter, used by the asymmetric reconciler circuit breaker.
+- `ValidationFeedbackDraft` — transient Feedback Coach draft text for the Stage 2 "Not quite yet" validation path.
 
 ### Empathy state machine
 `EmpathyStatus` enum: `HELD`, `ANALYZING`, `AWAITING_SHARING`, `REFINING`, `VALIDATED`, etc. — state transitions drive `/empathy/status` and the reconciler flow.

@@ -370,7 +370,130 @@ interface SessionInvitationResponse {
     expiresAt: string;
     /** Whether the current user is the inviter (true) or invitee (false) */
     isInviter: boolean;
+    /** AI-finalized neutral topic frame shown to the invited user */
+    topicFrame: string | null;
+    /** When the topic frame was finalized */
+    topicFrameConfirmedAt: string | null;
   };
+}
+
+interface TopicFrameResponse {
+  topicFrame: string;
+  alreadyConfirmed?: boolean;
+  confirmedAt?: string;
+}
+
+/**
+ * Generate an AI-proposed topic frame from the current Stage 0 invitation draft.
+ */
+export function useGenerateTopicFrame(
+  options?: Omit<
+    UseMutationOptions<TopicFrameResponse, ApiClientError, { sessionId: string }>,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  const { onSuccess, ...restOptions } = options ?? {};
+
+  return useMutation({
+    mutationFn: async ({ sessionId }) => {
+      return post<TopicFrameResponse>(`/sessions/${sessionId}/topic-frame/generate`, {});
+    },
+    onSuccess: (data, variables, onMutateResult, context) => {
+      const { sessionId } = variables;
+      queryClient.setQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId),
+        (old) => {
+          if (!old?.invitation) return old;
+          const existingConfirmedAt =
+            'topicFrameConfirmedAt' in old.invitation
+              ? old.invitation.topicFrameConfirmedAt
+              : null;
+          return {
+            ...old,
+            invitation: {
+              ...old.invitation,
+              topicFrame: data.topicFrame,
+              topicFrameConfirmedAt: data.alreadyConfirmed
+                ? (data.confirmedAt ?? existingConfirmedAt ?? new Date().toISOString())
+                : null,
+            },
+          };
+        }
+      );
+      queryClient.setQueryData<SessionInvitationResponse>(
+        sessionKeys.sessionInvitation(sessionId),
+        (old) => {
+          if (!old?.invitation) return old;
+          return {
+            ...old,
+            invitation: {
+              ...old.invitation,
+              topicFrame: data.topicFrame,
+              topicFrameConfirmedAt: data.alreadyConfirmed
+                ? (data.confirmedAt ?? old.invitation.topicFrameConfirmedAt ?? new Date().toISOString())
+                : null,
+            },
+          };
+        }
+      );
+      onSuccess?.(data, variables, onMutateResult, context);
+    },
+    ...restOptions,
+  });
+}
+
+/**
+ * Confirm the AI topic frame, optionally steering the AI toward a different neutral framing.
+ */
+export function useConfirmTopicFrame(
+  options?: Omit<
+    UseMutationOptions<TopicFrameResponse, ApiClientError, { sessionId: string; steer?: string }>,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  const { onSuccess, ...restOptions } = options ?? {};
+
+  return useMutation({
+    mutationFn: async ({ sessionId, steer }) => {
+      return post<TopicFrameResponse>(`/sessions/${sessionId}/topic-frame/confirm`, steer ? { steer } : {});
+    },
+    onSuccess: (data, variables, onMutateResult, context) => {
+      const { sessionId } = variables;
+      const confirmedAt = data.confirmedAt ?? new Date().toISOString();
+      queryClient.setQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId),
+        (old) => {
+          if (!old?.invitation) return old;
+          return {
+            ...old,
+            invitation: {
+              ...old.invitation,
+              topicFrame: data.topicFrame,
+              topicFrameConfirmedAt: confirmedAt,
+            },
+          };
+        }
+      );
+      queryClient.setQueryData<SessionInvitationResponse>(
+        sessionKeys.sessionInvitation(sessionId),
+        (old) => {
+          if (!old?.invitation) return old;
+          return {
+            ...old,
+            invitation: {
+              ...old.invitation,
+              topicFrame: data.topicFrame,
+              topicFrameConfirmedAt: confirmedAt,
+            },
+          };
+        }
+      );
+      onSuccess?.(data, variables, onMutateResult, context);
+    },
+    ...restOptions,
+  });
 }
 
 /**
@@ -449,13 +572,13 @@ interface ConfirmInvitationContext {
  */
 export function useConfirmInvitationMessage(
   options?: Omit<
-    UseMutationOptions<
-      {
-        confirmed: boolean;
-        invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean; messageConfirmedAt?: string };
-        advancedToStage?: number;
-        transitionMessage?: { id: string; content: string; timestamp: string };
-      },
+	    UseMutationOptions<
+	      {
+	        confirmed: boolean;
+	        invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean; messageConfirmedAt?: string; topicFrame?: string | null };
+	        advancedToStage?: number;
+	        transitionMessage?: { id: string; content: string; timestamp: string };
+	      },
       ApiClientError,
       { sessionId: string; message?: string },
       ConfirmInvitationContext
@@ -465,24 +588,24 @@ export function useConfirmInvitationMessage(
 ) {
   const queryClient = useQueryClient();
 
-  return useMutation<
-    {
-      confirmed: boolean;
-      invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean; messageConfirmedAt?: string };
-      advancedToStage?: number;
-      transitionMessage?: { id: string; content: string; timestamp: string };
-    },
+	  return useMutation<
+	    {
+	      confirmed: boolean;
+	      invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean; messageConfirmedAt?: string; topicFrame?: string | null };
+	      advancedToStage?: number;
+	      transitionMessage?: { id: string; content: string; timestamp: string };
+	    },
     ApiClientError,
     { sessionId: string; message?: string },
     ConfirmInvitationContext
   >({
     mutationFn: async ({ sessionId, message }) => {
-      return post<{
-        confirmed: boolean;
-        invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean; messageConfirmedAt?: string };
-        advancedToStage?: number;
-        transitionMessage?: { id: string; content: string; timestamp: string };
-      }>(`/sessions/${sessionId}/invitation/confirm`, { message });
+	      return post<{
+	        confirmed: boolean;
+	        invitation: { id: string; invitationMessage: string | null; messageConfirmed: boolean; messageConfirmedAt?: string; topicFrame?: string | null };
+	        advancedToStage?: number;
+	        transitionMessage?: { id: string; content: string; timestamp: string };
+	      }>(`/sessions/${sessionId}/invitation/confirm`, { message });
     },
 
     // =========================================================================

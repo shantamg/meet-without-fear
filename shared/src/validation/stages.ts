@@ -25,6 +25,12 @@ export {
   type FeelHeardRequestInput,
   type FeelHeardResponseInput,
 
+  // Topic Frame (Stage 0 — drafted during invite)
+  confirmTopicFrameRequestSchema,
+  confirmTopicFrameResponseSchema,
+  type ConfirmTopicFrameRequestInput,
+  type ConfirmTopicFrameResponseInput,
+
   // Stage 2: Perspective Stretch / Empathy
   saveEmpathyDraftRequestSchema,
   saveEmpathyDraftResponseSchema,

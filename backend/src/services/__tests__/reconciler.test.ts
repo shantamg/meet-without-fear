@@ -197,6 +197,10 @@ describe('Reconciler Service', () => {
       expect(transition(EmpathyStatus.REVEALED, 'VALIDATE')).toBe(EmpathyStatus.VALIDATED);
     });
 
+    it('transitions from REVEALED to REFINING on VALIDATION_FEEDBACK_SENT', () => {
+      expect(transition(EmpathyStatus.REVEALED, 'VALIDATION_FEEDBACK_SENT')).toBe(EmpathyStatus.REFINING);
+    });
+
     it('throws on invalid transition', () => {
       expect(() => transition(EmpathyStatus.HELD, 'MUTUAL_REVEAL')).toThrow(
         'Invalid empathy state transition'

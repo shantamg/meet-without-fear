@@ -190,7 +190,9 @@ The frontend doesn't reconstruct session state from `GET /sessions/:id` alone. U
 | `POST` | `/api/v1/sessions/:id/share-tab-viewed` | Mark the Sharing tab as viewed |
 | `GET`  | `/api/v1/sessions/:id/invitation` | Get the current draft invitation message (inviter only) |
 | `PUT`  | `/api/v1/sessions/:id/invitation/message` | Replace the draft invitation message |
-| `POST` | `/api/v1/sessions/:id/invitation/confirm` | Confirm the invitation message; transitions session `CREATED → INVITED` |
+| `POST` | `/api/v1/sessions/:id/invitation/confirm` | Confirm the invitation message; requires a finalized topic frame and transitions session `CREATED → INVITED` |
+| `POST` | `/api/v1/sessions/:id/topic-frame/generate` | AI-generate and store a proposed neutral 3-5 word topic frame from user 1's Stage 0 invitation draft (creator only) |
+| `POST` | `/api/v1/sessions/:id/topic-frame/confirm` | Confirm the proposed frame or steer the AI toward a revised frame; persists `Session.topicFrameConfirmedAt` (creator only) |
 | `GET`  | `/api/v1/sessions/:id/inner-thoughts` | Fetch the linked Inner Thoughts entry (if any) |
 
 > **Stage gates** (code: `STAGE_GATES`): Stage 0 requires `compactSigned`; Stage 1 requires `feelHeardConfirmed`; later stages have their own gate keys. `/progress` surfaces which gates the caller and the partner still need to satisfy.

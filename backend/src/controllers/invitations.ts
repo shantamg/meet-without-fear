@@ -461,6 +461,7 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
           select: {
             id: true,
             status: true,
+            topicFrame: true,
           },
         },
       },
@@ -486,7 +487,10 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
         status,
         createdAt: invitation.createdAt,
         expiresAt: invitation.expiresAt,
-        session: invitation.session,
+        session: {
+          ...invitation.session,
+          topicFrame: invitation.session.topicFrame ?? null,
+        },
       },
     });
   } catch (error) {
@@ -548,6 +552,16 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
         data: { status: 'EXPIRED' },
       });
       errorResponse(res, 'EXPIRED', 'Invitation has expired', 410);
+      return;
+    }
+
+    if (
+      invitation.session.status !== 'INVITED' ||
+      !invitation.messageConfirmed ||
+      !invitation.session.topicFrame ||
+      !invitation.session.topicFrameConfirmedAt
+    ) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invitation is not ready to accept', 400);
       return;
     }
 

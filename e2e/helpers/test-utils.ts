@@ -158,14 +158,15 @@ export async function navigateToSession(
 }
 
 /**
- * Navigate from the session chat screen to the Share screen via in-app UI.
- * This avoids deep-linking directly to /share, which can mask stale data issues.
+ * Open the in-session Activity drawer where sharing/validation state now lives.
+ * This avoids deep-linking to deprecated sharing routes, which now redirect back
+ * to the session screen.
  */
 export async function navigateToShareFromSession(
   page: Page,
   timeout = 10000
 ): Promise<void> {
-  if (page.url().includes('/share')) {
+  if (await page.getByTestId('activity-drawer').isVisible({ timeout: 1000 }).catch(() => false)) {
     return;
   }
 
@@ -213,8 +214,7 @@ export async function navigateToShareFromSession(
   // Mood check can occasionally re-appear after route/state updates.
   await handleMoodCheck(page, 2000);
 
-  await page.waitForURL(/\/session\/.*\/share/, { timeout });
-  await page.waitForLoadState('domcontentloaded');
+  await page.getByTestId('activity-drawer').waitFor({ state: 'visible', timeout });
 }
 
 /**
@@ -231,6 +231,54 @@ export async function signCompact(page: Page, timeout = 30000): Promise<void> {
   const signButton = page.getByTestId('compact-sign-button');
   await expect(signButton).toBeVisible({ timeout });
   await signButton.click();
+}
+
+/**
+ * Complete the Stage 0 invitation gate by confirming the AI topic frame, then
+ * confirming that the invitation was sent.
+ *
+ * The invitation continue button is disabled until the topic frame is finalized,
+ * so tests that dismiss the panel need to mirror the production flow.
+ *
+ * @param page - Playwright Page instance
+ * @param timeout - Maximum time to wait for the topic/continue flow
+ */
+export async function confirmInvitationTopicAndContinue(
+  page: Page,
+  timeout = 30000
+): Promise<void> {
+  const invitationPanel = page.getByTestId('invitation-draft-panel');
+  await expect(invitationPanel).toBeVisible({ timeout });
+
+  const confirmTopicButton = page.getByTestId('topic-frame-confirm-button');
+  const regenerateTopicButton = page.getByTestId('topic-frame-generate-button');
+  const continueButton = page.getByTestId('invitation-continue-button');
+
+  if (await regenerateTopicButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+    const generateResponse = page.waitForResponse(
+      response => response.url().includes('/topic-frame/generate'),
+      { timeout }
+    );
+    await regenerateTopicButton.click();
+    await generateResponse;
+  }
+
+  if (await confirmTopicButton.isVisible({ timeout }).catch(() => false)) {
+    const confirmResponse = page.waitForResponse(
+      response => response.url().includes('/topic-frame/confirm'),
+      { timeout }
+    );
+    await confirmTopicButton.click();
+    await confirmResponse;
+    await expect(confirmTopicButton).not.toBeVisible({ timeout });
+  }
+
+  const invitationResponse = page.waitForResponse(
+    response => response.url().includes('/invitation/confirm'),
+    { timeout }
+  );
+  await continueButton.click();
+  await invitationResponse;
 }
 
 /**
@@ -369,14 +417,21 @@ export async function waitForReconcilerComplete(page: Page, timeout = 30000): Pr
 }
 
 /**
- * Navigate back to the chat screen from any other screen (e.g., Share).
- * If already on chat, returns immediately.
+ * Navigate back to the chat screen from any other in-session surface.
+ * If already on chat with no activity drawer open, returns immediately.
  *
  * @param page - Playwright Page instance
  * @param timeout - Maximum time to wait for navigation (default: 10000)
  */
 export async function navigateBackToChat(page: Page, timeout = 10000): Promise<void> {
-  // If already on chat (not on /share), return immediately
+  const activityDrawer = page.getByTestId('activity-drawer');
+  if (await activityDrawer.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await page.mouse.click(20, 20);
+    await activityDrawer.waitFor({ state: 'hidden', timeout }).catch(() => {});
+    return;
+  }
+
+  // If already on chat (not on a legacy share route), return immediately
   if (!page.url().includes('/share')) {
     return;
   }

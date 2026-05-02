@@ -128,6 +128,14 @@ Does this capture what you'd like to express to them?
 
   // Operation-specific mock responses for non-streaming AI calls (Stage 3-4)
   operations: {
+    'topic-frame-generate': {
+      response: 'Household chores disagreement',
+    },
+
+    'topic-frame-confirm': {
+      response: 'Household chores disagreement',
+    },
+
     // Needs extraction operation - returns 3 deterministic needs for User A
     'extract-needs': {
       response: {

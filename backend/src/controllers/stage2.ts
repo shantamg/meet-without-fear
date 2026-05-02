@@ -14,6 +14,7 @@ import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { EmpathyStatus } from '@prisma/client';
 import {
+  MessageRole,
   saveEmpathyDraftRequestSchema,
   consentToShareRequestSchema,
   validateEmpathyRequestSchema,
@@ -41,6 +42,7 @@ import { isSessionCreator } from '../utils/session';
 import { publishSessionEvent } from '../services/realtime';
 import { updateContext } from '../lib/request-context';
 import { routeModel, scoreAmbiguity } from '../services/model-router';
+import { transition } from '../services/empathy-state-machine';
 
 // ============================================================================
 // Types
@@ -993,6 +995,17 @@ export async function validateEmpathy(
     }
 
     const { validated, feedback } = parseResult.data;
+    const trimmedFeedback = feedback?.trim();
+
+    if (!validated && !trimmedFeedback) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Feedback is required when empathy is not validated',
+        400
+      );
+      return;
+    }
 
     // Check session exists and user has access
     const session = await prisma.session.findFirst({
@@ -1089,12 +1102,14 @@ export async function validateEmpathy(
         sessionId,
         userId: user.id,
         validated,
-        feedback,
+        feedback: trimmedFeedback,
+        feedbackShared: !validated,
         validatedAt: now,
       },
       update: {
         validated,
-        feedback,
+        feedback: trimmedFeedback,
+        feedbackShared: !validated,
         validatedAt: now,
       },
     });
@@ -1108,6 +1123,32 @@ export async function validateEmpathy(
           statusVersion: { increment: 1 },
           deliveryStatus: 'SEEN',
           seenAt: new Date(),
+        },
+      });
+    } else if (trimmedFeedback && partnerId) {
+      const newStatus = transition(
+        partnerAttempt.status as EmpathyStatus,
+        'VALIDATION_FEEDBACK_SENT'
+      );
+      await prisma.empathyAttempt.update({
+        where: { id: partnerAttempt.id },
+        data: {
+          status: newStatus,
+          statusVersion: { increment: 1 },
+          deliveryStatus: 'DELIVERED',
+          deliveredAt: now,
+        },
+      });
+
+      await prisma.message.create({
+        data: {
+          sessionId,
+          senderId: user.id,
+          forUserId: partnerId,
+          role: MessageRole.VALIDATION_FEEDBACK,
+          content: trimmedFeedback,
+          stage: 2,
+          timestamp: now,
         },
       });
     }
@@ -1133,28 +1174,29 @@ export async function validateEmpathy(
     if (partnerId) {
       const { buildEmpathyExchangeStatus } = await import('../services/empathy-status');
       const partnerEmpathyStatus = await buildEmpathyExchangeStatus(sessionId, partnerId);
-      await notifyPartner(sessionId, partnerId, 'partner.stage_completed', {
-        stage: 2,
-        validated,
-        completedBy: user.id,
-        empathyStatus: partnerEmpathyStatus,
-        // Include triggeredByUserId so frontend can filter out events triggered by self
-        triggeredByUserId: user.id,
-      }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions
 
-      // If validated, also send empathy.status_updated with validation info
-      // so the partner (whose empathy was validated) can see the modal
       if (validated) {
-        await notifyPartner(sessionId, partnerId, 'empathy.status_updated', {
-          status: 'VALIDATED',
-          // Include forUserId so mobile can filter - only the guesser whose empathy was validated should see modal
-          forUserId: partnerId,
+        await notifyPartner(sessionId, partnerId, 'partner.stage_completed', {
+          stage: 2,
+          validated,
+          completedBy: user.id,
           empathyStatus: partnerEmpathyStatus,
-          validatedBy: user.id,
           // Include triggeredByUserId so frontend can filter out events triggered by self
           triggeredByUserId: user.id,
         }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions
       }
+
+      await notifyPartner(sessionId, partnerId, 'empathy.status_updated', {
+        status: validated ? 'VALIDATED' : 'REFINING',
+        // Include forUserId so mobile can filter - only the guesser whose empathy was validated/refined should see modal
+        forUserId: partnerId,
+        empathyStatus: partnerEmpathyStatus,
+        validatedBy: user.id,
+        feedbackShared: !validated,
+        validationFeedback: !validated ? trimmedFeedback : undefined,
+        // Include triggeredByUserId so frontend can filter out events triggered by self
+        triggeredByUserId: user.id,
+      }, { excludeUserId: user.id }); // Exclude actor to prevent race conditions
     }
 
     // Determine whether partner has validated my empathy attempt
@@ -1245,24 +1287,6 @@ export async function skipRefinement(
         sessionId,
         userId: user.id,
         validated: true, // Treated as validated for gate purposes
-        // We use a feedback value to indicate the special status since we don't have a status enum on Validation
-        // Or we could store it in JSON metadata if available, but for now strict feedback string or validated boolean is what we have.
-        // Wait, the test expects 'status' field in create, but EmpathyValidation model doesn't have a status enum field visible in the previous schema view.
-        // Let's check schema again. EmpathyValidation has: validated (bool), feedback (string), feedbackShared (bool).
-        // The test expects: create: expect.objectContaining({ status: 'ACCEPTED_DIFFERENCE' })
-        // This implies I should have added a status field or used a different model.
-        // But checking schema again (lines 620+), EmpathyValidation only has validated, feedback, feedbackShared.
-        // So the test is asserting on a field that implies a schema change I haven't made or I misunderstood.
-        // Let's assume for now I should store this status in the `feedback` field or add a new field.
-        // Actually, looking at the previous implementation plan, "Mark as 'Accepted Difference'" was the goal.
-        // But since I didn't add a status field to EmpathyValidation, I should probably put this info in `feedback` or just relying on StageProgress keys.
-        // However, the test is written expecting a `status` field in the create/update payload.
-        // This means my test is out of sync with my schema.
-        // I should probably fix the TEST to check for what I actually implemented (updating StageProgress), OR update the schema to support this status.
-        // Given I already updated StageProgress in the code, I will update the tests to match the implementation logic (checking StageProgress and EmpathyAttempt updates),
-        // rather than checking for a non-existent EmpathyValidation.status field.
-        // BUT, I do need to mark it as validated in EmpathyValidation so `validateEmpathy` logic elsewhere works.
-
         feedback: willingToAccept ? 'ACCEPTED_DIFFERENCE' : `REJECTED_OTHER_EXPERIENCE: ${reason || ''}`,
       },
       update: {
@@ -1402,24 +1426,35 @@ export async function refineValidationFeedback(
       return;
     }
 
-    const { message } = parseResult.data;
+    const { message, history } = parseResult.data;
 
     // Create turnId
     const turnId = `${sessionId}-${user.id}-feedback-refine-${Date.now()}`;
     updateContext({ turnId, sessionId, userId: user.id });
+
+    const isRefinement = history && history.length > 0;
 
     // Prompt for feedback coaching
     const systemPrompt = `You are a Feedback Coach for Meet Without Fear.
 The user wants to give feedback to their partner about an empathy statement that felt "off" or inaccurate.
 Your goal is to help them rephrase their feedback to be constructive, specific, and non-blaming (Non-Violent Communication style).
 
-User's raw feedback: "${message}"
+CRITICAL: Preserve the user's concrete meaning: their specific facts, descriptions, and intensity. The goal is to restructure how they say it, not what they need understood. Do not replace concrete details with vague summaries or softer language. Keep the Meet Without Fear process guardrails: do not preserve personal attacks, threats, ultimatums, or requests for an outside side conversation verbatim; translate those into direct, non-blaming language while preserving the substance.
 
-1. Acknowledge the validity of their feeling.
-2. Draft a "Proposed Feedback" statement that they could send to their partner. This should be:
-   - Direct but kind.
+User's current message: "${message}"
+
+1. Keep the conversational coaching response concise: 1-2 short sentences, no more than 45 words.
+2. Acknowledge the validity of their feeling without over-explaining or giving a long lesson.
+3. Explicitly tell them they can keep refining or send the proposed feedback as-is.
+4. Draft a "Proposed Feedback" statement that they can send inside Meet Without Fear. This should be:
+   - Direct and honest — preserve the user's specific words and details.
    - Focus on what was missed or misunderstood.
-   - Avoid "You are wrong" language; use "I felt..." or "My experience was...".
+   - Use "I" framing ("I felt...", "My experience was...") but keep the user's actual details intact.
+   - Ask the partner to revise their empathy attempt in the app, not to start a direct side conversation.
+   - Do not include wording like "ask me directly", "can we talk about this", "can we try that", or other language that implies the next step is an outside conversation.
+   - End with an in-app revision request, such as "Could you revise your understanding with that in mind?"
+${isRefinement ? `
+IMPORTANT — This is a refinement round. The user has already seen your previous proposed feedback and is now telling you what to adjust. Their current message is a correction directed at YOU (the coach), not new raw feedback about the partner. Apply their adjustment to the most recent proposed feedback, using the history for the original context.` : ''}
 
 Respond in JSON format:
 \`\`\`json
@@ -1436,9 +1471,23 @@ Respond in JSON format:
       messageLength: message.length,
     });
 
+    // Build message history for context continuity
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    if (isRefinement) {
+      for (const entry of history) {
+        messages.push({
+          role: entry.role === 'coach' ? 'assistant' : 'user',
+          content: entry.content,
+        });
+      }
+      messages.push({ role: 'user', content: message });
+    } else {
+      messages.push({ role: 'user', content: 'Help me refine this.' });
+    }
+
     const aiResponse = await getModelCompletion(routingDecision.model, {
       systemPrompt,
-      messages: [{ role: 'user', content: 'Help me refine this.' }],
+      messages,
       maxTokens: 512,
       sessionId,
       operation: `feedback-refinement-${routingDecision.model}`,

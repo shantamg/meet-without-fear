@@ -85,6 +85,8 @@ export interface SessionStateResponse {
     invitationMessage?: string | null;
     messageConfirmed?: boolean;
     messageConfirmedAt?: string | null;
+    topicFrame?: string | null;
+    topicFrameConfirmedAt?: string | null;
     acceptedAt?: string | null;
     isInviter: boolean;
   } | null;

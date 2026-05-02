@@ -141,6 +141,11 @@ model Session {
   updatedAt      DateTime      @updatedAt
   resolvedAt     DateTime?
 
+  // Explicit topic frame (3-5 word neutral description of the conflict, e.g., "Tuesday pickup disagreement")
+  // Proposed by AI from user 1's Stage 0 invitation draft, finalized before invite is shared
+  topicFrame            String?
+  topicFrameConfirmedAt DateTime?
+
   // Slack origin (null for mobile-originated sessions)
   slackJoinCode String?              @unique // 6-char code for partner to pair via lobby
   slackThreads  SessionSlackThread[]
@@ -642,6 +647,7 @@ enum MessageRole {
   EMPATHY_STATEMENT // User's shared empathy statement (shown in chat history)
   EMPATHY_REVEAL_INTRO // AI intro message when revealing partner's empathy to user
   SHARED_CONTEXT // Context shared by subject to help guesser refine empathy
+  VALIDATION_FEEDBACK // Constructive feedback after subject marks empathy as not quite
   SHARE_SUGGESTION // Suggested content for subject to share (reconciler)
   EMPATHY_VALIDATION_PROMPT // AI prompt asking user to validate partner's understanding
 }

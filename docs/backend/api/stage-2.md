@@ -208,7 +208,7 @@ Besides the Phase-1 / Phase-2 core above, the routes file exposes these controll
 | `GET`  | `/api/v1/sessions/:id/empathy/status` | Single-call status for the whole Stage 2 exchange — returns draft, attempt, refinement state (`NEEDS_WORK`, `REFINING`, `ANALYZING`, etc.), and gate flags |
 | `POST` | `/api/v1/sessions/:id/empathy/refine` | Run AI refinement on the caller's current draft (used by the validation feedback / coach loop) |
 | `POST` | `/api/v1/sessions/:id/empathy/resubmit` | After refinement, resubmit an updated `EmpathyAttempt` on top of an existing validation request |
-| `POST` | `/api/v1/sessions/:id/empathy/skip-refinement` | Accept the current gap as a "willing-to-accept" difference and advance without further refinement; updates `skippedRefinement`, `willingToAccept`, `skipReason` on the caller's StageProgress |
+| `POST` | `/api/v1/sessions/:id/empathy/skip-refinement` | Accept or decline the current gap as a "willing-to-accept" difference and advance without further refinement; updates `skippedRefinement`, `willingToAccept`, `skipReason` on the caller's StageProgress |
 | `GET`  | `/api/v1/sessions/:id/empathy/share-suggestion` | Asymmetric reconciler: fetch a suggestion to help the caller close an empathy gap for the partner |
 | `POST` | `/api/v1/sessions/:id/empathy/share-suggestion/respond` | Accept or decline a share suggestion |
 | `POST` | `/api/v1/sessions/:id/empathy/validation-feedback/draft` | Draft feedback via the "Feedback Coach" AI flow |
@@ -228,9 +228,9 @@ POST /api/v1/sessions/:id/empathy/validate
 
 ```typescript
 interface ValidateEmpathyRequest {
-  validated: boolean;  // true = "feels accurate", false = "needs refinement"
-  feedback?: string;   // If not validated, what's missing
-  consentToShareFeedback?: boolean;  // Allow feedback to be shared with partner
+  validated: boolean;  // true = "accurate/partial", false = "not quite"
+  feedback?: string;   // Required for validated: false; optional note for validated: true
+  consentToShareFeedback?: boolean;  // Legacy client hint; validated: false shares feedback
 }
 ```
 
@@ -252,6 +252,14 @@ interface ValidateEmpathyResponse {
 ```
 
 Validation: feedback max 1000 chars; one validation per recipient per attempt (idempotent overwrite allowed).
+
+For the "Not quite" path, mobile first collects rough notes with the `What feels off?`
+step, then the Feedback Coach refines those notes into a final message. The final send
+uses this validation endpoint with `validated: false` and the coach-approved `feedback`.
+The backend stores the validation, creates a targeted partner chat message with role
+`VALIDATION_FEEDBACK`, updates the partner's empathy attempt to `REFINING`, and emits
+`empathy.status_updated` for that partner with `status: 'REFINING'`,
+`feedbackShared: true`, and `validationFeedback`.
 
 ### Gate keys set by Stage 2 endpoints
 - `empathyDraftReady`: set when `readyToShare: true` on draft save
@@ -278,7 +286,7 @@ curl -X POST /api/v1/sessions/sess_abc123/empathy/validate \
   "success": true,
   "data": {
     "validated": false,
-    "validatedAt": null,
+    "validatedAt": "2024-01-16T17:05:00.000Z",
     "feedbackShared": true,
     "awaitingRevision": true,
     "canAdvance": false,
@@ -290,10 +298,30 @@ curl -X POST /api/v1/sessions/sess_abc123/empathy/validate \
 ### Revision Loop
 
 If feedback is shared:
-1. Partner receives notification with feedback
-2. Partner can revise their empathy attempt
-3. User receives revised attempt
-4. User can validate again
+1. Partner receives a targeted `VALIDATION_FEEDBACK` message and their attempt status becomes `REFINING`
+2. Partner can revise and resubmit their empathy attempt
+3. User receives the revised attempt and can validate again
+4. Partner can also accept or decline the remaining difference via `/empathy/skip-refinement`
+
+### Skip Refinement / Acceptance Check
+
+```
+POST /api/v1/sessions/:id/empathy/skip-refinement
+```
+
+Request:
+
+```typescript
+interface SkipRefinementRequest {
+  willingToAccept: boolean;
+  reason?: string; // Used when willingToAccept is false
+}
+```
+
+`willingToAccept: true` records that the partner accepts the subject's experience without
+editing their statement further. `willingToAccept: false` records that they do not accept
+the framing; the optional `reason` captures why. Both paths set `skippedRefinement` and
+allow the Stage 2 mutual gate logic to advance without another revision cycle.
 
 ---
 
@@ -328,9 +356,13 @@ flowchart TD
         WaitState --> Wait
         Wait -->|Yes| Receive[Receive partner attempt]
         Receive --> Validate{Accurate?}
-        Validate -->|No| Feedback[Share feedback]
+        Validate -->|No| Rough[What feels off?]
+        Rough --> Coach[Feedback Coach]
+        Coach --> Feedback[POST validate false]
         Feedback --> AwaitRevision[Await revision]
         AwaitRevision --> Receive
+        AwaitRevision --> Skip[Partner skip-refinement]
+        Skip --> PartnerValidated
         Validate -->|Yes| Confirmed[Mark validated]
     end
 

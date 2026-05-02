@@ -21,7 +21,7 @@ The reconciler runs **asymmetrically**. Two entry points:
 
 ## NEEDS_WORK Status (Legacy/Deprecated)
 
-The `NEEDS_WORK` status exists in the Prisma schema but is **legacy and unreachable** from the reconciler. When `validated: false` is submitted, the empathy status stays at `REVEALED` -- no transition to `NEEDS_WORK` occurs in current code. All flow descriptions in this document reflect this: validation with `validated: false` does not change the EmpathyAttempt status.
+The `NEEDS_WORK` status exists in the Prisma schema but is **legacy and unreachable** from the reconciler. Reconciler gap paths use `AWAITING_SHARING` and `REFINING`. Post-reveal accuracy feedback also uses `REFINING`: when `validated: false` is submitted with feedback, the partner's `EmpathyAttempt` moves from `REVEALED` to `REFINING` and the feedback is delivered as a targeted `VALIDATION_FEEDBACK` message.
 
 ## Ably Event Payloads
 
@@ -466,7 +466,7 @@ stateDiagram-v2
 
     INITIAL_THOUGHTS --> FEEDBACK_CHAT: Submits initial thoughts
     note right of FEEDBACK_CHAT
-        UI: Panel closes, opens Chat<br/>AI Feedback Coach activates<br/>"Let's craft constructive feedback"
+        UI: Panel closes, opens Feedback Coach<br/>Rough "What feels off?" notes<br/>seed the coach chat
     end note
 
     FEEDBACK_CHAT --> CRAFT_FEEDBACK: Chats with AI to refine
@@ -481,7 +481,7 @@ stateDiagram-v2
 
     APPROVE_FEEDBACK --> FEEDBACK_SENT: Feedback delivered to partner
     note right of FEEDBACK_SENT
-        Partner sees feedback in chat<br/>Partner enters refinement flow<br/>or acceptance check
+        API: POST /empathy/validate<br/>{validated: false, feedback}<br/>Partner sees VALIDATION_FEEDBACK<br/>Partner attempt status: REFINING
     end note
 
     FEEDBACK_SENT --> WAIT_RESPONSE: Waiting for partner action
@@ -509,17 +509,15 @@ stateDiagram-v2
 stateDiagram-v2
     [*] --> REVEALED: Empathy shared with partner
 
-    REVEALED --> REVEALED: Partner marks inaccurate
+    REVEALED --> REFINING: Partner marks inaccurate (VALIDATION_FEEDBACK_SENT)
     note right of REVEALED
         NEEDS_WORK is legacy/deprecated in Prisma schema.
-        When validated=false, status stays REVEALED
-        (no transition occurs in current code).
-        UI: Feedback message in chat
-        "Partner shared feedback"
-        Shows partner's feedback
+        When validated=false with feedback, status moves
+        to REFINING and a targeted VALIDATION_FEEDBACK
+        message is created for the guesser.
     end note
 
-    REVEALED --> REFINE_DECISION: Reviews feedback
+    REFINING --> REFINE_DECISION: Reviews feedback
     note right of REFINE_DECISION
         UI: "Refine your statement" option<br/>OR<br/>"Skip refinement" option
     end note
