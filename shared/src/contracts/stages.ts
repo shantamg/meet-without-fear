@@ -71,11 +71,13 @@ export const feelHeardResponseSchema = z.object({
 export type FeelHeardResponseInput = z.infer<typeof feelHeardResponseSchema>;
 
 // ============================================================================
-// Topic Frame (post-Stage 1 confirmation)
+// Topic Frame (Stage 0 — drafted during invite, before Stage 1)
 // ============================================================================
 
 export const confirmTopicFrameRequestSchema = z.object({
-  topicFrame: z.string().min(2, 'Topic frame too short').max(100, 'Topic frame too long'),
+  // Optional steering direction from the user. The AI has final say on the
+  // 3-5 word frame; the user can only suggest a direction, not set the text directly.
+  steer: z.string().min(2, 'Steer too short').max(100, 'Steer too long').optional(),
 });
 
 export type ConfirmTopicFrameRequestInput = z.infer<typeof confirmTopicFrameRequestSchema>;

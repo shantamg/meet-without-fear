@@ -304,7 +304,6 @@ export async function confirmFeelHeard(
       timestamp: string;
       stage: number;
     } | null = null;
-    let proposedTopicFrame: string | null = null;
 
     if (confirmed) {
       try {
@@ -470,34 +469,6 @@ export async function confirmFeelHeard(
           logger.warn('[confirmFeelHeard] Failed to embed session content:', err)
         );
 
-        // Generate a proposed topic frame from Stage 1 conversation (non-blocking for the response,
-        // but we await it since it's fast and the mobile will show it as a one-turn confirmation)
-        try {
-          const conversationText = conversationHistory
-            .map((m) => `${m.role === 'USER' ? 'User' : 'AI'}: ${m.content}`)
-            .join('\n');
-
-          const topicFrameResponse = await getSonnetResponse({
-            systemPrompt: TOPIC_FRAME_PROMPT,
-            messages: [
-              { role: 'user', content: `Stage 1 conversation:\n\n${conversationText}\n\nGenerate a neutral topic frame (3-5 words).` },
-            ],
-            maxTokens: 50,
-            sessionId,
-            turnId: `${turnId}-topic-frame`,
-            operation: 'topic-frame-generate',
-            callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
-          });
-
-          proposedTopicFrame = topicFrameResponse?.trim().replace(/^["']|["']$/g, '') || null;
-          if (proposedTopicFrame) {
-            logger.info(`[confirmFeelHeard] Generated topic frame for session ${sessionId}: "${proposedTopicFrame}"`);
-          }
-        } catch (topicFrameError) {
-          logger.warn('[confirmFeelHeard] Failed to generate topic frame:', topicFrameError);
-          // Non-critical — mobile can call /topic-frame/generate separately
-        }
-
         transitionMessage = {
           id: aiMessage.id,
           content: aiMessage.content,
@@ -629,7 +600,6 @@ export async function confirmFeelHeard(
       transitionMessage,
       advancedToStage: advancedToStage2 ? 2 : null,
       reconcilerTriggered,
-      proposedTopicFrame,
     });
   } catch (error) {
     logger.error('[confirmFeelHeard] Error:', error);
@@ -2083,35 +2053,3 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
   }
 }
 
-// ============================================================================
-// Topic Frame Prompt (used in confirmFeelHeard)
-// ============================================================================
-
-const TOPIC_FRAME_PROMPT = `You are generating a neutral topic frame for a conflict resolution session.
-
-Based on the user's Stage 1 conversation (where they shared what's been going on), produce a SHORT, NEUTRAL phrase (3-5 words) that describes the conflict topic. This will be shown to the other person when they receive the invitation, so they know what conflict they've been invited to engage with.
-
-RULES:
-- 3-5 words only. No more.
-- Neutral tone — no blame, no judgment, no emotional loading.
-- Specific enough that the other person recognizes it, but not so detailed it feels like a summary.
-- Use plain, everyday language. No clinical or therapeutic jargon.
-- Do NOT include names.
-- Output ONLY the topic frame text. No quotes, no explanation, no preamble.
-
-GOOD EXAMPLES:
-- Tuesday pickup disagreement
-- Moving plans conversation
-- Holiday visit tension
-- Morning routine frustration
-- Budget priorities discussion
-
-BAD EXAMPLES (too vague):
-- Relationship issues
-- Communication problems
-- Our situation
-
-BAD EXAMPLES (too blaming):
-- Your anger problem
-- When you lied
-- Your spending habits`;
