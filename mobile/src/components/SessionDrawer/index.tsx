@@ -11,13 +11,12 @@
  * - Closes on session selection
  */
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   SectionList,
-  RefreshControl,
   ActivityIndicator,
   Animated,
   Alert,
@@ -59,7 +58,15 @@ interface SessionSection {
 function ConversationsList({ onClose }: { onClose: () => void }) {
   const styles = useStyles();
   const router = useRouter();
-  const { data, isLoading, refetch, isRefetching } = useSessions();
+  const { isOpen } = useSessionDrawer();
+  const { data, isLoading, refetch } = useSessions();
+
+  // Auto-refresh sessions when the drawer opens
+  useEffect(() => {
+    if (isOpen) {
+      refetch();
+    }
+  }, [isOpen, refetch]);
   const archiveSession = useArchiveSession();
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
@@ -271,7 +278,6 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
       renderSectionHeader={renderSectionHeader}
       keyExtractor={(item) => item.id}
       contentContainerStyle={styles.listContent}
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       stickySectionHeadersEnabled={false}
     />
