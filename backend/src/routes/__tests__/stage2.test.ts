@@ -675,6 +675,40 @@ describe('Validation Feedback Routes', () => {
         })
       );
     });
+
+    it('passes refinement history and process guardrails to the model', async () => {
+      const req = mockRequest({
+        body: {
+          message: "Don't water that down",
+          history: [
+            { role: 'user', content: 'He was drunk with poop in his pants' },
+            { role: 'coach', content: 'Proposed feedback: serious incidents at drop-off' },
+          ],
+        },
+      });
+      const res = mockResponse();
+
+      const { extractJsonFromResponse } = require('../../utils/json-extractor');
+      const { getModelCompletion } = require('../../lib/bedrock');
+      extractJsonFromResponse.mockReturnValueOnce({
+        response: 'AI response',
+        proposedFeedback: 'Refined feedback',
+      });
+
+      await refineValidationFeedback(req, res);
+
+      expect(getModelCompletion).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          systemPrompt: expect.stringContaining('do not preserve personal attacks, threats, ultimatums'),
+          messages: [
+            { role: 'user', content: 'He was drunk with poop in his pants' },
+            { role: 'assistant', content: 'Proposed feedback: serious incidents at drop-off' },
+            { role: 'user', content: "Don't water that down" },
+          ],
+        })
+      );
+    });
   });
 
   describe('POST /sessions/:id/empathy/skip-refinement', () => {
