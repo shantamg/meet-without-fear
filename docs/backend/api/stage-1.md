@@ -38,10 +38,9 @@ Where `StreamMetadata` carries optional fields from the AI's session-state tool 
 interface StreamMetadata {
   offerFeelHeardCheck?: boolean;
   offerReadyToShare?: boolean;
-  invitationMessage?: string | null;
-  proposedEmpathyStatement?: string | null;
+  invitationMessage?: string;
+  proposedEmpathyStatement?: string;
   proposedStrategies?: string[];
-  analysis?: string;
 }
 ```
 
