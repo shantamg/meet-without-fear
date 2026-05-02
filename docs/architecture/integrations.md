@@ -3,7 +3,7 @@ title: External Integrations
 sidebar_position: 6
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-03-12
+updated: 2026-05-01
 status: living
 ---
 # External Integrations
@@ -87,11 +87,12 @@ status: living
 
 **Analytics & Monitoring:**
 - Mixpanel - Event analytics
-  - SDK: `mixpanel-react-native` (mobile), `mixpanel-browser` (website)
+  - SDK: `mixpanel-react-native` (mobile/native), `mixpanel-browser` (mobile/Expo web build)
   - Auth: `EXPO_PUBLIC_MIXPANEL_TOKEN` (environment variable, public token)
   - Tracking: Session events, user actions, completion milestones
   - Files:
-    - Mobile: `mobile/src/services/mixpanel.ts`, `mobile/src/services/analytics.ts`
+    - Mobile (native): `mobile/src/services/mixpanel.ts`, `mobile/src/services/analytics.ts`
+    - Mobile (Expo web build): `mobile/src/services/mixpanel.web.ts` (platform override using `mixpanel-browser`)
     - Website: Google Analytics via Next.js
 
 ## Data Storage

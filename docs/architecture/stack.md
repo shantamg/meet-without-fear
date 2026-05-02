@@ -3,7 +3,7 @@ title: Technology Stack
 sidebar_position: 7
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-04-15
+updated: 2026-05-01
 status: living
 ---
 # Technology Stack
@@ -96,7 +96,7 @@ status: living
 - Clerk 1.7.73 (backend) / 2.19.26 (mobile) / 6.38.1 (website) - Authentication provider
 
 **Analytics & Logging:**
-- Mixpanel 3.1.3 (mobile) / 2.73.0 (web) - Event analytics
+- Mixpanel `mixpanel-react-native` 3.1.3 (mobile/native), `mixpanel-browser` 2.78.0 (mobile/Expo web build), 2.73.0 (website) - Event analytics
 - Winston 3.19.0 - Structured logging framework (backend)
 - @sentry/node 10.43.0 - Error tracking and monitoring (used in logger.ts)
 
