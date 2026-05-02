@@ -1426,29 +1426,35 @@ export async function refineValidationFeedback(
       return;
     }
 
-    const { message } = parseResult.data;
+    const { message, history } = parseResult.data;
 
     // Create turnId
     const turnId = `${sessionId}-${user.id}-feedback-refine-${Date.now()}`;
     updateContext({ turnId, sessionId, userId: user.id });
+
+    const isRefinement = history && history.length > 0;
 
     // Prompt for feedback coaching
     const systemPrompt = `You are a Feedback Coach for Meet Without Fear.
 The user wants to give feedback to their partner about an empathy statement that felt "off" or inaccurate.
 Your goal is to help them rephrase their feedback to be constructive, specific, and non-blaming (Non-Violent Communication style).
 
-User's raw feedback: "${message}"
+CRITICAL: Preserve the user's concrete meaning: their specific facts, descriptions, and intensity. The goal is to restructure how they say it, not what they need understood. Do not replace concrete details with vague summaries or softer language. Keep the Meet Without Fear process guardrails: do not preserve personal attacks, threats, ultimatums, or requests for an outside side conversation verbatim; translate those into direct, non-blaming language while preserving the substance.
+
+User's current message: "${message}"
 
 1. Keep the conversational coaching response concise: 1-2 short sentences, no more than 45 words.
 2. Acknowledge the validity of their feeling without over-explaining or giving a long lesson.
 3. Explicitly tell them they can keep refining or send the proposed feedback as-is.
 4. Draft a "Proposed Feedback" statement that they can send inside Meet Without Fear. This should be:
-   - Direct but kind.
+   - Direct and honest — preserve the user's specific words and details.
    - Focus on what was missed or misunderstood.
-   - Avoid "You are wrong" language; use "I felt..." or "My experience was...".
+   - Use "I" framing ("I felt...", "My experience was...") but keep the user's actual details intact.
    - Ask the partner to revise their empathy attempt in the app, not to start a direct side conversation.
    - Do not include wording like "ask me directly", "can we talk about this", "can we try that", or other language that implies the next step is an outside conversation.
    - End with an in-app revision request, such as "Could you revise your understanding with that in mind?"
+${isRefinement ? `
+IMPORTANT — This is a refinement round. The user has already seen your previous proposed feedback and is now telling you what to adjust. Their current message is a correction directed at YOU (the coach), not new raw feedback about the partner. Apply their adjustment to the most recent proposed feedback, using the history for the original context.` : ''}
 
 Respond in JSON format:
 \`\`\`json
@@ -1465,9 +1471,23 @@ Respond in JSON format:
       messageLength: message.length,
     });
 
+    // Build message history for context continuity
+    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+    if (isRefinement) {
+      for (const entry of history) {
+        messages.push({
+          role: entry.role === 'coach' ? 'assistant' : 'user',
+          content: entry.content,
+        });
+      }
+      messages.push({ role: 'user', content: message });
+    } else {
+      messages.push({ role: 'user', content: 'Help me refine this.' });
+    }
+
     const aiResponse = await getModelCompletion(routingDecision.model, {
       systemPrompt,
-      messages: [{ role: 'user', content: 'Help me refine this.' }],
+      messages,
       maxTokens: 512,
       sessionId,
       operation: `feedback-refinement-${routingDecision.model}`,

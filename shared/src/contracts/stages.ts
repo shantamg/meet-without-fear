@@ -182,6 +182,10 @@ export type SaveValidationFeedbackDraftResponseInput = z.infer<typeof saveValida
 
 export const refineValidationFeedbackRequestSchema = z.object({
   message: z.string().min(1, 'Message is required'),
+  history: z.array(z.object({
+    role: z.enum(['coach', 'user']),
+    content: z.string(),
+  })).optional(),
 });
 
 export type RefineValidationFeedbackRequestInput = z.infer<typeof refineValidationFeedbackRequestSchema>;
