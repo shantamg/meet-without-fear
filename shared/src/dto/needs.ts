@@ -1,7 +1,7 @@
 /**
  * Need Mapping DTOs (Stage 3)
  *
- * Data Transfer Objects for need synthesis and common ground discovery.
+ * Data Transfer Objects for need identification, capture, and validation.
  */
 
 import { NeedCategory } from '../enums';
@@ -79,46 +79,41 @@ export interface ConsentShareNeedsResponse {
   consented: boolean;
   sharedAt: string;
   waitingForPartner: boolean;
-  commonGroundReady: boolean;
 }
 
 // ============================================================================
-// Common Ground
+// Capture Needs (from AI summary card)
 // ============================================================================
 
-export interface CommonGroundDTO {
-  id: string;
+export interface CapturedNeedInput {
   need: string;
   category: NeedCategory;
   description: string;
-  confirmedByMe: boolean;
-  confirmedByPartner: boolean;
-  confirmedAt: string | null;
+  evidence: string[];
 }
 
-export interface GetCommonGroundResponse {
-  commonGround: CommonGroundDTO[];
-  analysisComplete: boolean;
-  bothConfirmed: boolean;
-  noOverlap?: boolean; // True when AI analysis found no shared needs
+export interface CaptureNeedsRequest {
+  needs: CapturedNeedInput[];
 }
 
-export interface ConfirmCommonGroundRequest {
-  confirmations: {
-    commonGroundId: string;
-    confirmed: boolean;
-  }[];
+export interface CaptureNeedsResponse {
+  needs: IdentifiedNeedDTO[];
+  capturedAt: string;
 }
 
-export interface ConfirmCommonGroundResponse {
-  updated: CommonGroundDTO[];
-  allConfirmedByMe: boolean;
-  allConfirmedByBoth: boolean;
+// ============================================================================
+// Validate Needs (user affirms both lists as valid)
+// ============================================================================
+
+export interface ValidateNeedsResponse {
+  validated: boolean;
+  validatedAt: string;
+  partnerValidated: boolean;
   canAdvance: boolean;
 }
 
 // ============================================================================
-// Needs Comparison (Side-by-Side View)
+// Needs Comparison (Side-by-Side Reveal)
 // ============================================================================
 
 export interface NeedsComparisonNeedDTO {
@@ -128,18 +123,7 @@ export interface NeedsComparisonNeedDTO {
   confirmed: boolean;
 }
 
-export interface NeedsComparisonCommonGroundDTO {
-  id: string;
-  category: NeedCategory;
-  need: string;
-  confirmedByMe: boolean;
-  confirmedByPartner: boolean;
-}
-
 export interface GetNeedsComparisonResponse {
   myNeeds: NeedsComparisonNeedDTO[];
   partnerNeeds: NeedsComparisonNeedDTO[];
-  commonGround: NeedsComparisonCommonGroundDTO[];
-  analysisComplete: boolean;
-  noOverlap: boolean;
 }
