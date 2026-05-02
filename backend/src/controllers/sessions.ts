@@ -771,6 +771,7 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
         expiresAt: invitation.expiresAt.toISOString(),
         isInviter,
         topicFrame: session.topicFrame ?? null,
+        topicFrameConfirmedAt: session.topicFrameConfirmedAt?.toISOString() ?? null,
       },
     });
   } catch (error) {
@@ -914,8 +915,14 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
           invitationMessage: invitation.invitationMessage,
           messageConfirmed: true,
           messageConfirmedAt: invitation.messageConfirmedAt?.toISOString() ?? null,
+          topicFrame: session.topicFrame ?? null,
         },
       });
+      return;
+    }
+
+    if (!session.topicFrame || !session.topicFrameConfirmedAt) {
+      errorResponse(res, ErrorCode.VALIDATION_ERROR, 'Topic frame must be confirmed before sharing invitation', 400);
       return;
     }
 
@@ -1050,6 +1057,7 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
         invitationMessage: updatedInvitation.invitationMessage,
         messageConfirmed: updatedInvitation.messageConfirmed,
         messageConfirmedAt: updatedInvitation.messageConfirmedAt?.toISOString() ?? null,
+        topicFrame: session.topicFrame,
       },
       advancedToStage: 1,
     });

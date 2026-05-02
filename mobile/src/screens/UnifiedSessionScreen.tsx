@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState, Keyboard, Platform } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState, Keyboard, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -46,6 +46,7 @@ import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
+import { useGenerateTopicFrame, useConfirmTopicFrame } from '../hooks/useSessions';
 import { useValidationFeedbackCoachChat } from '../hooks/useRefinementChat';
 import { useChatUIState } from '../hooks/useChatUIState';
 import { createInvitationLink } from '../hooks/useInvitation';
@@ -166,6 +167,7 @@ export function UnifiedSessionScreen({
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
   const { showError } = useToast();
+  const topicFrameRequestedRef = useRef(false);
 
   // Sharing status for header button
   const sharingStatus = useSharingStatus(sessionId);
@@ -760,6 +762,46 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   const [showActivityMenu, setShowActivityMenu] = useState(false);
   const [showInvitationRefine, setShowInvitationRefine] = useState(false);
+  const [topicFrameSteer, setTopicFrameSteer] = useState('');
+  const topicFrame = invitation && 'topicFrame' in invitation
+    ? (invitation.topicFrame as string | null)
+    : null;
+  const topicFrameConfirmed = !!(
+    invitation &&
+    'topicFrameConfirmedAt' in invitation &&
+    (invitation.topicFrameConfirmedAt as string | null)
+  );
+  const { mutate: generateTopicFrame, isPending: isGeneratingTopicFrame } = useGenerateTopicFrame({
+    onError: (error) => {
+      console.error('[UnifiedSessionScreen] Failed to generate topic frame:', error);
+      showError('Topic not ready', 'Please try preparing the topic again.');
+    },
+  });
+  const { mutate: confirmTopicFrame, isPending: isConfirmingTopicFrame } = useConfirmTopicFrame({
+    onError: (error) => {
+      console.error('[UnifiedSessionScreen] Failed to confirm topic frame:', error);
+      showError('Topic not confirmed', 'Please try confirming the topic again.');
+    },
+    onSuccess: () => {
+      setTopicFrameSteer('');
+    },
+  });
+
+  useEffect(() => {
+    if (!sessionId || !isInvitationPhase || !invitation?.invitationMessage || topicFrame || topicFrameRequestedRef.current) {
+      return;
+    }
+
+    topicFrameRequestedRef.current = true;
+    generateTopicFrame({ sessionId });
+  }, [sessionId, isInvitationPhase, invitation?.invitationMessage, topicFrame, generateTopicFrame]);
+
+  const handleConfirmTopicFrame = useCallback(() => {
+    if (!sessionId || isConfirmingTopicFrame) return;
+
+    const steer = topicFrameSteer.trim();
+    confirmTopicFrame({ sessionId, steer: steer || undefined });
+  }, [sessionId, isConfirmingTopicFrame, topicFrameSteer, confirmTopicFrame]);
 
   // Refinement Modal
   const [refinementOfferId, setRefinementOfferId] = useState<string | null>(null);
@@ -2016,7 +2058,7 @@ export function UnifiedSessionScreen({
               maxHeight: Animated.multiply(
                 invitationPanelAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [0, 400],
+	                  outputRange: [0, 560],
                 }),
                 invitationKeyboardCollapseAnim,
               ),
@@ -2043,11 +2085,68 @@ export function UnifiedSessionScreen({
                 "{invitationMessage}"
               </Text>
 
+              <View style={styles.topicFrameContainer}>
+                <Text style={styles.topicFrameLabel}>Topic</Text>
+                {isGeneratingTopicFrame ? (
+                  <View style={styles.topicFrameLoading}>
+                    <ActivityIndicator size="small" color={styles.accentColor.color} />
+                    <Text style={styles.topicFrameStatus}>Preparing topic...</Text>
+                  </View>
+                ) : topicFrame ? (
+                  <>
+                    <Text style={styles.topicFrameText}>{topicFrame}</Text>
+                    {!topicFrameConfirmed && (
+                      <>
+                        <TextInput
+                          style={styles.topicFrameInput}
+                          value={topicFrameSteer}
+                          onChangeText={setTopicFrameSteer}
+                          placeholder="Steer the topic direction"
+                          placeholderTextColor={styles.topicFramePlaceholder.color}
+                          maxLength={100}
+                          testID="topic-frame-steer-input"
+                        />
+                        <TouchableOpacity
+                          style={[
+                            styles.topicFrameButton,
+                            isConfirmingTopicFrame && styles.topicFrameButtonDisabled,
+                          ]}
+                          onPress={handleConfirmTopicFrame}
+                          disabled={isConfirmingTopicFrame}
+                          testID="topic-frame-confirm-button"
+                        >
+                          {isConfirmingTopicFrame ? (
+                            <ActivityIndicator size="small" color={styles.topicFrameButtonText.color} />
+                          ) : (
+                            <Text style={styles.topicFrameButtonText}>
+                              {topicFrameSteer.trim() ? 'Update and confirm' : 'Confirm topic'}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.topicFrameButton}
+                    onPress={() => {
+                      topicFrameRequestedRef.current = true;
+                      generateTopicFrame({ sessionId });
+                    }}
+                    testID="topic-frame-generate-button"
+                  >
+                    <Text style={styles.topicFrameButtonText}>Prepare topic</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               <InvitationShareButton
                 invitationMessage={invitationMessage!}
                 invitationUrl={invitationUrl}
+                topicFrame={topicFrame}
                 partnerName={partnerName}
                 senderName={user?.name || user?.firstName || undefined}
+                disabled={!topicFrameConfirmed}
                 testID="invitation-share-button"
               />
 
@@ -2062,8 +2161,15 @@ export function UnifiedSessionScreen({
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.continueButton}
+                style={[
+                  styles.continueButton,
+                  !topicFrameConfirmed && styles.continueButtonDisabled,
+                ]}
                 onPress={() => {
+                  if (!topicFrameConfirmed) {
+                    showError('Confirm the topic first', 'The invitation needs a finalized topic before it can be shared.');
+                    return;
+                  }
                   // Track invitation sent
                   trackInvitationSent(sessionId, 'share_sheet');
                   setIsRefiningInvitation(false); // Exit refinement mode
@@ -2073,6 +2179,7 @@ export function UnifiedSessionScreen({
                   // The indicator will appear immediately because the cache is updated
                   handleConfirmInvitationMessage(invitationMessage!);
                 }}
+                disabled={!topicFrameConfirmed}
                 testID="invitation-continue-button"
               >
                 <Text style={styles.continueButtonText}>
@@ -2774,10 +2881,11 @@ export function UnifiedSessionScreen({
 
       {/* Refine Invitation Drawer - opened from Activity Menu Sent tab */}
       <RefineInvitationDrawer
-        visible={showInvitationRefine}
-        invitationMessage={invitationMessage || ''}
-        invitationUrl={invitationUrl}
-        partnerName={partnerName}
+	        visible={showInvitationRefine}
+	        invitationMessage={invitationMessage || ''}
+	        invitationUrl={invitationUrl}
+	        topicFrame={topicFrame}
+	        partnerName={partnerName}
         senderName={user?.name || user?.firstName || undefined}
         isRefining={isGenerating}
         onSendRefinement={(text) => {
@@ -2863,10 +2971,73 @@ const useStyles = () =>
       paddingVertical: t.spacing.sm,
       alignItems: 'center',
     },
+    continueButtonDisabled: {
+      opacity: 0.5,
+    },
     continueButtonText: {
       fontSize: t.typography.fontSize.md,
       color: t.colors.textSecondary,
       textDecorationLine: 'underline',
+    },
+    topicFrameContainer: {
+      marginHorizontal: t.spacing.lg,
+      marginTop: t.spacing.sm,
+      marginBottom: t.spacing.xs,
+      padding: t.spacing.md,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      backgroundColor: t.colors.bgPrimary,
+    },
+    topicFrameLabel: {
+      fontSize: t.typography.fontSize.sm,
+      color: t.colors.textSecondary,
+      fontWeight: '600' as const,
+      marginBottom: t.spacing.xs,
+    },
+    topicFrameText: {
+      fontSize: t.typography.fontSize.md,
+      color: t.colors.textPrimary,
+      fontWeight: '600' as const,
+    },
+    topicFrameLoading: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.spacing.sm,
+    },
+    topicFrameStatus: {
+      color: t.colors.textSecondary,
+      fontSize: t.typography.fontSize.sm,
+    },
+    topicFrameInput: {
+      marginTop: t.spacing.sm,
+      paddingHorizontal: t.spacing.md,
+      paddingVertical: t.spacing.sm,
+      borderRadius: t.radius.sm,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      color: t.colors.textPrimary,
+      backgroundColor: t.colors.bgSecondary,
+    },
+    topicFramePlaceholder: {
+      color: t.colors.textMuted,
+    },
+    topicFrameButton: {
+      marginTop: t.spacing.sm,
+      minHeight: 40,
+      borderRadius: t.radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.colors.accent,
+      paddingHorizontal: t.spacing.md,
+    },
+    topicFrameButtonDisabled: {
+      opacity: 0.6,
+    },
+    topicFrameButtonText: {
+      color: t.colors.textOnAccent,
+      fontSize: t.typography.fontSize.md,
+      fontWeight: '600' as const,
     },
 
     // Feel Heard Panel

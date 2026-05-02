@@ -24,10 +24,11 @@ export interface InvitationDetails {
   status: InvitationStatus;
   createdAt: string;
   expiresAt: string;
-  session: {
-    id: string;
-    status: string;
-  };
+	  session: {
+	    id: string;
+	    status: string;
+	    topicFrame: string | null;
+	  };
 }
 
 /** Error types for invitation fetching */

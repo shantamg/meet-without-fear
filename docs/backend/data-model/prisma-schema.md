@@ -105,7 +105,8 @@ model Session {
   resolvedAt     DateTime?
 
   // Explicit topic frame (3-5 word neutral description, e.g., "Tuesday pickup disagreement")
-  topicFrame String?
+  topicFrame            String?
+  topicFrameConfirmedAt DateTime?
 
   // Slack origin (null for mobile-originated sessions)
   slackJoinCode String?              @unique // 6-char code for partner to pair via lobby

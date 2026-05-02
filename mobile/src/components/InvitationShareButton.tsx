@@ -15,6 +15,8 @@ interface InvitationShareButtonProps {
   invitationMessage: string;
   /** The invitation URL to share */
   invitationUrl: string;
+  /** AI-finalized neutral topic frame */
+  topicFrame?: string | null;
   /** Partner's name for the share dialog */
   partnerName?: string;
   /** The sender's name (user inviting) */
@@ -30,6 +32,7 @@ interface InvitationShareButtonProps {
 export function InvitationShareButton({
   invitationMessage,
   invitationUrl,
+  topicFrame,
   partnerName,
   senderName,
   disabled = false,
@@ -41,7 +44,8 @@ export function InvitationShareButton({
 
     try {
       const senderDisplay = senderName || 'Someone';
-      const shareMessage = `${senderDisplay} would like to invite you to Meet Without Fear\n\n${invitationUrl}\n\n${invitationMessage}`;
+      const topicLine = topicFrame ? `Topic: ${topicFrame}\n\n` : '';
+      const shareMessage = `${senderDisplay} would like to invite you to Meet Without Fear\n\n${topicLine}${invitationUrl}\n\n${invitationMessage}`;
 
       const result = await Share.share({
         message: shareMessage,
