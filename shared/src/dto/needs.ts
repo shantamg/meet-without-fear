@@ -1,7 +1,7 @@
 /**
  * Need Mapping DTOs (Stage 3)
  *
- * Data Transfer Objects for need synthesis and common ground discovery.
+ * Data Transfer Objects for need identification, capture, and validation.
  */
 
 import { NeedCategory } from '../enums';
@@ -79,13 +79,47 @@ export interface ConsentShareNeedsResponse {
   consented: boolean;
   sharedAt: string;
   waitingForPartner: boolean;
-  commonGroundReady: boolean;
 }
 
 // ============================================================================
-// Common Ground
+// Capture Needs (from AI summary card)
 // ============================================================================
 
+export interface CapturedNeedInput {
+  need: string;
+  category: NeedCategory;
+  description: string;
+  evidence: string[];
+}
+
+export interface CaptureNeedsRequest {
+  needs: CapturedNeedInput[];
+}
+
+export interface CaptureNeedsResponse {
+  needs: IdentifiedNeedDTO[];
+  capturedAt: string;
+}
+
+// ============================================================================
+// Validate Needs (user affirms both lists as valid)
+// ============================================================================
+
+export interface ValidateNeedsResponse {
+  validated: boolean;
+  validatedAt: string;
+  partnerValidated: boolean;
+  canAdvance: boolean;
+}
+
+// ============================================================================
+// Legacy Common Ground Compatibility
+// ============================================================================
+
+/**
+ * @deprecated Common ground is being removed in the Stage 3 redesign.
+ * Kept as a type-only compatibility shim while downstream clients migrate.
+ */
 export interface CommonGroundDTO {
   id: string;
   need: string;
@@ -96,13 +130,21 @@ export interface CommonGroundDTO {
   confirmedAt: string | null;
 }
 
+/**
+ * @deprecated Common ground is being removed in the Stage 3 redesign.
+ * Kept as a type-only compatibility shim while downstream clients migrate.
+ */
 export interface GetCommonGroundResponse {
   commonGround: CommonGroundDTO[];
   analysisComplete: boolean;
   bothConfirmed: boolean;
-  noOverlap?: boolean; // True when AI analysis found no shared needs
+  noOverlap?: boolean;
 }
 
+/**
+ * @deprecated Common ground is being removed in the Stage 3 redesign.
+ * Kept as a type-only compatibility shim while downstream clients migrate.
+ */
 export interface ConfirmCommonGroundRequest {
   confirmations: {
     commonGroundId: string;
@@ -110,6 +152,10 @@ export interface ConfirmCommonGroundRequest {
   }[];
 }
 
+/**
+ * @deprecated Common ground is being removed in the Stage 3 redesign.
+ * Kept as a type-only compatibility shim while downstream clients migrate.
+ */
 export interface ConfirmCommonGroundResponse {
   updated: CommonGroundDTO[];
   allConfirmedByMe: boolean;
@@ -118,7 +164,7 @@ export interface ConfirmCommonGroundResponse {
 }
 
 // ============================================================================
-// Needs Comparison (Side-by-Side View)
+// Needs Comparison (Side-by-Side Reveal)
 // ============================================================================
 
 export interface NeedsComparisonNeedDTO {
@@ -128,18 +174,7 @@ export interface NeedsComparisonNeedDTO {
   confirmed: boolean;
 }
 
-export interface NeedsComparisonCommonGroundDTO {
-  id: string;
-  category: NeedCategory;
-  need: string;
-  confirmedByMe: boolean;
-  confirmedByPartner: boolean;
-}
-
 export interface GetNeedsComparisonResponse {
   myNeeds: NeedsComparisonNeedDTO[];
   partnerNeeds: NeedsComparisonNeedDTO[];
-  commonGround: NeedsComparisonCommonGroundDTO[];
-  analysisComplete: boolean;
-  noOverlap: boolean;
 }
