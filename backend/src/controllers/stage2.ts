@@ -1439,8 +1439,10 @@ Your goal is to help them rephrase their feedback to be constructive, specific, 
 
 User's raw feedback: "${message}"
 
-1. Acknowledge the validity of their feeling.
-2. Draft a "Proposed Feedback" statement that they can send inside Meet Without Fear. This should be:
+1. Keep the conversational coaching response concise: 1-2 short sentences, no more than 45 words.
+2. Acknowledge the validity of their feeling without over-explaining or giving a long lesson.
+3. Explicitly tell them they can keep refining or send the proposed feedback as-is.
+4. Draft a "Proposed Feedback" statement that they can send inside Meet Without Fear. This should be:
    - Direct but kind.
    - Focus on what was missed or misunderstood.
    - Avoid "You are wrong" language; use "I felt..." or "My experience was...".
