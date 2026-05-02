@@ -147,7 +147,7 @@ project-root/
   - `ChatInterface.tsx` - Main chat UI (29KB; messages, input, streaming)
   - `ChatBubble.tsx` - Single message bubble (20KB, handles AI streaming animation)
   - `EmotionalBarometer.tsx` - Emotion slider UI
-  - Stage 2 components are integrated into UnifiedSessionScreen.tsx and its sub-components in `components/sharing/` and `components/SessionDrawer/`
+  - Stage 2 components are integrated into UnifiedSessionScreen.tsx and its sub-components in `components/sharing/`, `components/SessionDrawer/`, `AccuracyFeedbackDrawer.tsx`, `ViewEmpathyStatementDrawer.tsx`, and reusable guided chat modals like `GuidedDraftChatModal.tsx`
   - `NeedCard.tsx`, `StrategyCard.tsx` - Stage 3-4 components
   - `WaitingRoom.tsx`, `WaitingBanner.tsx` - Waiting state UI
   - Subdirectories: `chat/`, `sharing/`, `SessionDrawer/` for organized subsets
@@ -163,7 +163,7 @@ project-root/
   - `cacheHelpers.ts` - Type-safe React Query cache mutation helpers (`typedSetQueryData`, `typedGetQueryData`)
   - `useMessages.ts` - Message querying + mutations (30KB); optimistic updates + streaming. Also hosts emotion tracking for messages (`useEmotionalHistory`, `useRecordEmotion`) alongside `useEmotions.ts`. `useInfiniteMessages` here is still the pagination source (wrapped by `useUnifiedSession`); `useTimeline.ts` is a newer companion hook that does not yet fully replace it.
   - `useSessions.ts` - Session CRUD + list (32KB). Uses the cache-first pattern: `useConfirmInvitationMessage` optimistically updates the cache in `onMutate` before the server confirms. `useArchiveSession` is deprecated in favor of `useDeleteSession`, which handles proper data cleanup.
-  - `useStages.ts` - Stage mutations + gate validation (64KB)
+  - `useStages.ts` - Stage mutations + gate validation (64KB), including Stage 2 Feedback Coach draft/refine and skip-refinement endpoints
   - `useRealtime.ts` - Ably subscription setup (29KB); session-scoped realtime events + fire-and-forget AI messages with stale-closure defense via `userIdRef`. Exports convenience hooks: `usePartnerTyping()`, `usePartnerPresence()`, `useSessionEvents()`, `useUserSessionUpdates()`. Handles app foreground/background state (re-enters/leaves presence, reconnects on resume).
   - `useStreamingMessage.ts` - SSE streaming setup + metadata handling (27KB)
   - `useChatUIState.ts` - Derives UI state from cache values (9KB wrapper around `utils/chatUIState.ts`)
@@ -245,7 +245,7 @@ project-root/
   - `session-state.ts` - SessionProgress, stage enums
   - `message.ts` - Message + MessageDTO
   - `chat-item.ts` - ChatItem union type (messages + notifications)
-  - `empathy.ts` - Empathy statement, share offer, reconciler data
+  - `empathy.ts` - Empathy statement, share offer, validation feedback, reconciler data
   - `needs.ts`, `stage.ts`, `strategy.ts` - Stage-specific DTOs
   - `auth.ts`, `consent.ts`, `meditation.ts`, `gratitude.ts`, `memory.ts`, `realtime.ts` - Feature DTOs
 - Key: These are imported by backend services + mobile hooks; define exact shapes of API responses

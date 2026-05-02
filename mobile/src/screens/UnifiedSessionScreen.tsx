@@ -753,6 +753,7 @@ export function UnifiedSessionScreen({
   const [showShareTopicDrawer, setShowShareTopicDrawer] = useState(false);
   const [showFeedbackCoachChat, setShowFeedbackCoachChat] = useState(false);
   const [feedbackCoachRoughFeedback, setFeedbackCoachRoughFeedback] = useState('');
+  const feedbackCoachInitializedRef = useRef(false);
 
   // -------------------------------------------------------------------------
   // Activity Menu Modal
@@ -820,8 +821,11 @@ export function UnifiedSessionScreen({
   const isEmpathyShared = completedActions.has('shared-empathy');
 
   useEffect(() => {
-    if (showFeedbackCoachChat) {
+    if (showFeedbackCoachChat && !feedbackCoachInitializedRef.current) {
       resetFeedbackCoachChat();
+      feedbackCoachInitializedRef.current = true;
+    } else if (!showFeedbackCoachChat) {
+      feedbackCoachInitializedRef.current = false;
     }
   }, [showFeedbackCoachChat, resetFeedbackCoachChat]);
 
@@ -1443,6 +1447,7 @@ export function UnifiedSessionScreen({
 
   const openFeedbackCoachWithRoughFeedback = useCallback((roughFeedback: string) => {
     setFeedbackCoachRoughFeedback(roughFeedback);
+    feedbackCoachInitializedRef.current = false;
     setShowFeedbackCoachChat(true);
   }, []);
 

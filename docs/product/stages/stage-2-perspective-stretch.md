@@ -86,14 +86,17 @@ flowchart TD
     ReceiveAttempt --> Feedback{How accurate is this?}
 
     Feedback -->|Accurate| Validated[Feel understood by partner]
-    Feedback -->|Partially| Clarify[Provide feedback to AI]
+    Feedback -->|Not quite| RoughNotes[Share what feels off]
+    RoughNotes --> Coach[Feedback Coach refines message]
+    Coach --> Clarify[Confirm feedback to partner]
     Feedback -->|Way off| Clarify
 
-    Clarify --> Consent2{Consent to share feedback?}
-    Consent2 -->|Yes| SendFeedback[AI takes feedback to partner]
-    Consent2 -->|No| Private[Keep feedback private]
+    Clarify --> SendFeedback[AI takes feedback to partner]
 
     SendFeedback --> PartnerRevises[Partner revises their attempt]
+    PartnerRevises --> AcceptGap{Partner willing to accept gap?}
+    AcceptGap -->|No| PartnerRevises
+    AcceptGap -->|Yes| Validated
     PartnerRevises --> ReceiveAttempt
 
     Validated --> BothValidated{Both feel understood?}
@@ -143,7 +146,7 @@ Nothing is shared without explicit consent. The AI holds all partner information
 | Shared (with consent) | Never shared automatically |
 |----------------------|---------------------------|
 | User's empathy attempt | Partner's raw words |
-| Feedback on accuracy | Venting or accusations |
+| Feedback Coach-approved accuracy feedback | Venting or accusations |
 | Revised attempts | Any content without consent |
 
 The [Consensual Bridge](../mechanisms/consensual-bridge.md) mechanism controls this.
@@ -176,17 +179,19 @@ Each user sees the other's attempt to understand them - not AI-curated content, 
 flowchart TD
     Receive[See partners empathy attempt] --> Check{Does this feel accurate?}
     Check -->|Yes| Validated[Feel understood by partner]
-    Check -->|Partially/No| Feedback[Provide feedback]
-    Feedback --> Consent{Share feedback with partner?}
-    Consent -->|Yes| Send[AI takes feedback to partner]
-    Consent -->|No| Private[Keep private]
+    Check -->|Not quite| Rough[What feels off?]
+    Rough --> Coach[Feedback Coach drafts and refines]
+    Coach --> Send[Send validation feedback]
     Send --> Revise[Partner revises attempt]
+    Revise --> Accept{Partner accepts remaining difference?}
+    Accept -->|Yes| Validated
+    Accept -->|No| Revise
     Revise --> Receive
 ```
 
 The loop continues until:
 - The user confirms they feel accurately understood by their partner
-- Or the user chooses to proceed
+- Or the partner records that they are willing to accept the remaining difference without another revision
 
 ### Why This Matters
 
@@ -239,8 +244,10 @@ flowchart TB
         end
 
         subgraph Response[Your Response]
-            TextField[Open text field for feedback]
-            Send[Send]
+            Accurate[Accurate button]
+            NotQuite[Not quite yet button]
+            Coach[Feedback Coach modal]
+            Send[Send refined feedback]
         end
     end
 ```
@@ -251,6 +258,7 @@ flowchart TB
 2. User has consented to share their attempt
 3. User has seen partner's attempt to understand them
 4. User feels accurately understood by partner (or chooses to proceed)
+5. If validation feedback is needed, the Feedback Coach helps turn rough notes into a shareable message before the partner receives it
 
 ## Failure Paths
 

@@ -123,17 +123,24 @@ flowchart TB
 ```mermaid
 flowchart TB
     subgraph StretchChat[Perspective Stretch View]
-        Header2[Stage 2: Understanding Their View]
+        Header2[Stage 2: Imagine their side]
 
-        subgraph OtherPerspective[Partner Perspective Panel]
-            PTitle[What your partner shared]
-            PSummary[Curated summary of key points and needs]
+        subgraph StageCards[Inline Stage 2 Cards]
+            Draft[View your empathy attempt]
+            Share[Share suggestion panel]
+            Validate[Accuracy feedback card]
         end
 
         subgraph Chat2[Reflection Conversation]
-            AI21[How does hearing this land for you?]
+            AI21[AI helps build or revise empathy]
             User21[User response]
-            AI22[AI reflection or intervention]
+            AI22[AI reflection or Mirror Intervention]
+        end
+
+        subgraph FeedbackCoach[Feedback Coach Modal]
+            Rough[What feels off?]
+            Coach[Guided draft chat]
+            Send[Send refined validation feedback]
         end
     end
 ```
@@ -263,7 +270,7 @@ The chat input hosts an inline emotion slider (`barometerValue` / `handleBaromet
 
 ## Typewriter + inline Stage 2 cards
 
-The chat list tracks `isTypewriterAnimating` (set while a new AI message is being typed in) so it can delay the appearance of inline cards until the text has finished. In Stage 2 (`PERSPECTIVE_STRETCH`), the list renders **validation cards** directly in the timeline (`validationCards`) with "Accurate / Partially / Off" buttons wired to `handleValidationAccurate` / `handleValidationNotQuite` instead of routing users to a separate screen.
+The chat list tracks `isTypewriterAnimating` (set while a new AI message is being typed in) so it can delay the appearance of inline cards until the text has finished. In Stage 2 (`PERSPECTIVE_STRETCH`), the list renders **validation cards** directly in the timeline (`validationCards`) with "Accurate / Partially / Off" buttons wired to `handleValidationAccurate` / `handleValidationNotQuite` instead of routing users to a separate screen. The "Not quite yet" path opens `AccuracyFeedbackDrawer` for rough notes and then `GuidedDraftChatModal` as the Feedback Coach before the final feedback is submitted.
 
 ## Stage label map
 

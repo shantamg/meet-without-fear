@@ -996,6 +996,16 @@ export async function validateEmpathy(
     const { validated, feedback } = parseResult.data;
     const trimmedFeedback = feedback?.trim();
 
+    if (!validated && !trimmedFeedback) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        'Feedback is required when empathy is not validated',
+        400
+      );
+      return;
+    }
+
     // Check session exists and user has access
     const session = await prisma.session.findFirst({
       where: {
