@@ -9,7 +9,7 @@
  * - Both users complete Stage 0 (compact signing)
  * - Both users complete Stage 1 (witnessing + feel-heard)
  * - Both users complete Stage 2 (empathy drafting + sharing + reconciler)
- * - Both users complete Stage 3 (needs extraction + common ground)
+ * - Both users complete Stage 3 (needs extraction + side-by-side validation)
  * - Both users complete Stage 4 (strategies + ranking + agreement)
  * - Session marked complete after agreement confirmation
  * - Test passes 3 consecutive runs without flakiness
@@ -30,6 +30,12 @@ import {
   waitForReconcilerComplete,
   navigateToShareFromSession,
   navigateBackToChat,
+  confirmNeedsSummaryAndConsent,
+  confirmSideBySideRevealAndValidation,
+  expectNeedsComparisonFromApi,
+  expectNeedsSummaryFromApi,
+  waitForNeedsReveal,
+  waitForStage,
 } from '../helpers/test-utils';
 
 // Use iPhone 12 viewport
@@ -353,9 +359,10 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     await handleMoodCheck(harness.userAPage);
     await handleMoodCheck(harness.userBPage);
 
-    // Wait for "Confirm my needs" text to be visible
-    await expect(harness.userAPage.getByText('Confirm my needs')).toBeVisible({ timeout: 30000 });
-    await expect(harness.userBPage.getByText('Confirm my needs')).toBeVisible({ timeout: 30000 });
+    await expect(harness.userAPage.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
+    await expect(harness.userBPage.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
+    await expectNeedsSummaryFromApi(apiA, API_BASE_URL, harness.sessionId, 'User A');
+    await expectNeedsSummaryFromApi(apiB, API_BASE_URL, harness.sessionId, 'User B');
 
     // Screenshot needs review state
     // Note: maxDiffPixels 500 to allow for sub-pixel rendering variance between
@@ -367,65 +374,11 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
       maxDiffPixels: 500,
     });
 
-    // Get needs for both users
-    const needsResponseA = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`);
-    const needsDataA = await needsResponseA.json();
-    const needsA = needsDataA.data?.needs || [];
+    await confirmNeedsSummaryAndConsent(harness.userAPage, apiA, API_BASE_URL, harness.sessionId, 'User A');
+    await confirmNeedsSummaryAndConsent(harness.userBPage, apiB, API_BASE_URL, harness.sessionId, 'User B');
+    await waitForNeedsReveal(apiA, API_BASE_URL, harness.sessionId, 'User A', 30000);
 
-    const needsResponseB = await apiB.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs`);
-    const needsDataB = await needsResponseB.json();
-    const needsB = needsDataB.data?.needs || [];
-
-    // Confirm needs for both users
-    if (needsA.length > 0) {
-      const needIdsA = needsA.map((n: { id: string }) => n.id);
-      await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/confirm`, {
-        needIds: needIdsA,
-      });
-    }
-
-    if (needsB.length > 0) {
-      const needIdsB = needsB.map((n: { id: string }) => n.id);
-      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/confirm`, {
-        needIds: needIdsB,
-      });
-    }
-
-    // Consent to share needs for both users
-    if (needsA.length > 0) {
-      await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/consent`, {
-        needIds: needsA.map((n: { id: string }) => n.id),
-      });
-    }
-
-    if (needsB.length > 0) {
-      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/needs/consent`, {
-        needIds: needsB.map((n: { id: string }) => n.id),
-      });
-    }
-
-    // Poll common ground endpoint until commonGround.length > 0
-    let commonGroundComplete = false;
-    const cgDeadline = Date.now() + 30000; // 30s timeout
-    let cgAttempts = 0;
-
-    while (Date.now() < cgDeadline && !commonGroundComplete) {
-      cgAttempts++;
-      const cgResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground`);
-      const cgData = await cgResponse.json();
-
-      if (cgData.data?.commonGround && cgData.data.commonGround.length > 0) {
-        commonGroundComplete = true;
-      } else {
-        await harness.userAPage.waitForTimeout(2000);
-      }
-    }
-
-    if (!commonGroundComplete) {
-      throw new Error('Common ground analysis did not complete within 30s');
-    }
-
-    // Reload both pages to show common ground UI
+    // Reload both pages to show needs reveal UI
     await Promise.all([
       harness.userAPage.reload(),
       harness.userBPage.reload(),
@@ -440,11 +393,12 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     await handleMoodCheck(harness.userAPage);
     await handleMoodCheck(harness.userBPage);
 
-    // Verify "Shared Needs Discovered" text visible
-    await expect(harness.userAPage.getByText(/Shared Needs Discovered/i)).toBeVisible({ timeout: 10000 });
-    await expect(harness.userBPage.getByText(/Shared Needs Discovered/i)).toBeVisible({ timeout: 10000 });
+    await expect(harness.userAPage.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
+    await expect(harness.userBPage.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
+    await expectNeedsComparisonFromApi(apiA, API_BASE_URL, harness.sessionId, 'User A');
+    await expectNeedsComparisonFromApi(apiB, API_BASE_URL, harness.sessionId, 'User B');
 
-    // Screenshot common ground state
+    // Screenshot needs reveal state
     await expect(harness.userAPage).toHaveScreenshot('full-flow-05-common-ground-user-a.png', {
       maxDiffPixels: 500,
     });
@@ -455,45 +409,16 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     // ==========================================
     // === STAGE 3 → STAGE 4 TRANSITION ===
     // ==========================================
-    // CRITICAL: Both users must confirm all common ground items AND call stages/advance
-    // to advance from Stage 3 to Stage 4. Without this, proposeStrategy returns 400
-    // "Cannot propose strategy: you are in stage 3, but stage 4 is required".
+    // CRITICAL: Both users must notice the side-by-side reveal and confirm
+    // the needs reveal. The backend creates Stage 4 after both validations.
 
-    // Get common ground IDs for both users (use apiA since it's a shared vessel)
-    const finalCgResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground`);
-    const finalCgData = await finalCgResponse.json();
-    const commonGroundItems = finalCgData.data?.commonGround || [];
-    const commonGroundIds = commonGroundItems.map((cg: { id: string }) => cg.id);
+    await confirmSideBySideRevealAndValidation(harness.userAPage, harness.config.userB.name);
+    await confirmSideBySideRevealAndValidation(harness.userBPage, harness.config.userA.name);
 
-    if (commonGroundIds.length > 0) {
-      // Both users confirm all common ground items
-      await Promise.all([
-        apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground/confirm`, {
-          commonGroundIds,
-        }),
-        apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/common-ground/confirm`, {
-          commonGroundIds,
-        }),
-      ]);
-    }
-
-    // Allow stage confirmation to process
-    await harness.userAPage.waitForTimeout(1000);
-
-    // Both users advance from Stage 3 to Stage 4
-    const advanceResponseA = await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
-    const advanceDataA = await advanceResponseA.json();
-
-    // If User A is blocked (partner not ready), advance User B first
-    if (!advanceDataA.data?.advanced && advanceDataA.data?.blockedReason === 'PARTNER_NOT_READY') {
-      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
-      await apiA.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
-    } else {
-      await apiB.post(`${API_BASE_URL}/api/sessions/${harness.sessionId}/stages/advance`);
-    }
-
-    // Allow stage advancement to propagate
-    await harness.userAPage.waitForTimeout(1000);
+    await Promise.all([
+      waitForStage(apiA, API_BASE_URL, harness.sessionId, 4, 'User A', 30000),
+      waitForStage(apiB, API_BASE_URL, harness.sessionId, 4, 'User B', 30000),
+    ]);
 
     // ==========================================
     // === STAGE 4: STRATEGIES & AGREEMENT ===
@@ -651,7 +576,7 @@ test.describe('Full Partner Journey: Stages 0-4', () => {
     // - Both users completed Stage 0 (compact signing)
     // - Both users completed Stage 1 (witnessing + feel-heard)
     // - Both users completed Stage 2 (empathy drafting + sharing + reconciler)
-    // - Both users completed Stage 3 (needs extraction + common ground)
+    // - Both users completed Stage 3 (needs extraction + side-by-side validation)
     // - Both users completed Stage 4 (strategies + ranking + agreement)
     // - Session marked complete (sessionComplete: true)
   });

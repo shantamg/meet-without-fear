@@ -7,6 +7,61 @@
 import { Page, Browser, BrowserContext, devices, expect } from '@playwright/test';
 import { getE2EHeaders } from './auth';
 
+interface ApiResponseLike {
+  ok(): boolean;
+  status(): number;
+  json(): Promise<unknown>;
+  text(): Promise<string>;
+}
+
+interface E2EApiClient {
+  get(url: string): Promise<ApiResponseLike>;
+  post(url: string, data?: object): Promise<ApiResponseLike>;
+}
+
+interface NeedDTO {
+  id: string;
+  need: string;
+}
+
+interface ProgressResponseDTO {
+  data?: {
+    myProgress?: {
+      stage?: number;
+      status?: string;
+      gatesSatisfied?: Record<string, unknown> | null;
+    };
+  };
+}
+
+interface NeedsResponseDTO {
+  data?: {
+    needs?: NeedDTO[];
+  };
+}
+
+interface NeedsComparisonResponseDTO {
+  data?: {
+    myNeeds?: NeedDTO[];
+    partnerNeeds?: NeedDTO[];
+    myValidated?: boolean;
+    partnerValidated?: boolean;
+    canAdvance?: boolean;
+    analysisComplete?: boolean;
+  };
+}
+
+async function expectApiResponseOk(response: ApiResponseLike, label: string): Promise<void> {
+  if (!response.ok()) {
+    throw new Error(`${label} failed: ${response.status()} ${await response.text()}`);
+  }
+}
+
+async function readJson<T>(response: ApiResponseLike, label: string): Promise<T> {
+  await expectApiResponseOk(response, label);
+  return await response.json() as T;
+}
+
 /**
  * Wait for AI response to complete streaming.
  * Checks for text pattern visibility and waits for typing indicator to disappear.
@@ -393,4 +448,181 @@ export async function navigateBackToChat(page: Page, timeout = 10000): Promise<v
   // Wait for URL to match session chat pattern (not /share)
   await page.waitForURL(/\/session\/[^/]+$/, { timeout });
   await page.waitForLoadState('domcontentloaded');
+}
+
+/**
+ * Fetch identified needs and assert that Stage 3 produced a non-empty summary.
+ */
+export async function expectNeedsSummaryFromApi(
+  api: E2EApiClient,
+  apiBaseUrl: string,
+  sessionId: string,
+  label: string
+): Promise<NeedDTO[]> {
+  const response = await api.get(`${apiBaseUrl}/api/sessions/${sessionId}/needs`);
+  const data = await readJson<NeedsResponseDTO>(response, `${label} needs summary`);
+  const needs = data.data?.needs ?? [];
+  expect(needs.length, `${label} should have at least one identified need`).toBeGreaterThan(0);
+  return needs;
+}
+
+/**
+ * Confirm needs through the visible Stage 3 summary drawer.
+ * The production flow asks users to confirm their own needs first, then make
+ * the separate share/consent choice before reveal.
+ */
+export async function confirmNeedsSummaryAndConsent(
+  page: Page,
+  api: E2EApiClient,
+  apiBaseUrl: string,
+  sessionId: string,
+  label: string,
+  timeout = 30000
+): Promise<void> {
+  await expect(page.getByTestId('needs-review-button')).toBeVisible({ timeout });
+  await page.getByTestId('needs-review-button').click();
+
+  const drawer = page.getByTestId('needs-drawer');
+  await expect(drawer).toBeVisible({ timeout });
+  await expect(drawer.getByText('Your Identified Needs')).toBeVisible({ timeout });
+  await expect(drawer.getByText(/Review and confirm/i)).toBeVisible({ timeout });
+  await expect(drawer.locator('[data-testid^="needs-drawer-need-"]').first()).toBeVisible({ timeout });
+
+  await drawer.getByTestId('needs-drawer-confirm').click();
+
+  await waitForProgressGate(api, apiBaseUrl, sessionId, 'needsConfirmed', label, timeout);
+
+  await expect(page.getByTestId('needs-review-button')).toBeVisible({ timeout });
+  await page.getByTestId('needs-review-button').click();
+  await expect(drawer).toBeVisible({ timeout });
+  await expect(drawer.getByText('Share my needs')).toBeVisible({ timeout });
+  await drawer.getByTestId('needs-drawer-confirm').click();
+
+  await waitForProgressGate(api, apiBaseUrl, sessionId, 'needsShared', label, timeout);
+}
+
+/**
+ * Wait until both needs lists are available for the side-by-side reveal.
+ */
+export async function waitForNeedsReveal(
+  api: E2EApiClient,
+  apiBaseUrl: string,
+  sessionId: string,
+  label: string,
+  timeout = 30000
+): Promise<void> {
+  const deadline = Date.now() + timeout;
+  let lastMyCount = 0;
+  let lastPartnerCount = 0;
+
+  while (Date.now() < deadline) {
+    const response = await api.get(`${apiBaseUrl}/api/sessions/${sessionId}/needs/comparison`);
+    const data = await readJson<NeedsComparisonResponseDTO>(response, `${label} needs reveal`);
+    lastMyCount = data.data?.myNeeds?.length ?? 0;
+    lastPartnerCount = data.data?.partnerNeeds?.length ?? 0;
+
+    if (lastMyCount > 0 && lastPartnerCount > 0) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+
+  throw new Error(`${label} needs reveal did not complete within ${timeout}ms (last counts: my=${lastMyCount}, partner=${lastPartnerCount})`);
+}
+
+/**
+ * Assert the side-by-side needs reveal and the noticing/validation step, then
+ * validate the needs reveal through the UI. After both partners run this helper,
+ * Stage 4 should be created by the backend transition.
+ */
+export async function confirmSideBySideRevealAndValidation(
+  page: Page,
+  partnerName: string,
+  timeout = 30000
+): Promise<void> {
+  await expect(page.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout });
+  await page.getByTestId('common-ground-confirm-button').click();
+
+  const drawer = page.getByTestId('needs-drawer');
+  await expect(drawer).toBeVisible({ timeout });
+  await expect(drawer.getByText('Review Needs Together')).toBeVisible({ timeout });
+  await expect(drawer.getByText(/Look at both lists together/i)).toBeVisible({ timeout });
+  await expect(drawer.getByText('You')).toBeVisible({ timeout });
+  await expect(drawer.getByText(partnerName)).toBeVisible({ timeout });
+  await expect(drawer.getByTestId('needs-drawer-side-by-side')).toBeVisible({ timeout });
+
+  await drawer.getByTestId('needs-drawer-confirm-cg').click();
+}
+
+/**
+ * Assert both needs-comparison API halves are present after the side-by-side reveal.
+ */
+export async function expectNeedsComparisonFromApi(
+  api: E2EApiClient,
+  apiBaseUrl: string,
+  sessionId: string,
+  label: string
+): Promise<void> {
+  const response = await api.get(`${apiBaseUrl}/api/sessions/${sessionId}/needs/comparison`);
+  const data = await readJson<NeedsComparisonResponseDTO>(response, `${label} needs comparison`);
+
+  expect(data.data?.myNeeds?.length ?? 0, `${label} comparison should include my needs`).toBeGreaterThan(0);
+  expect(data.data?.partnerNeeds?.length ?? 0, `${label} comparison should include partner needs`).toBeGreaterThan(0);
+}
+
+/**
+ * Wait for the current user's latest progress to reach the expected stage.
+ */
+export async function waitForStage(
+  api: E2EApiClient,
+  apiBaseUrl: string,
+  sessionId: string,
+  expectedStage: number,
+  label: string,
+  timeout = 30000
+): Promise<void> {
+  const deadline = Date.now() + timeout;
+  let lastStage: number | undefined;
+  let lastStatus: string | undefined;
+
+  while (Date.now() < deadline) {
+    const response = await api.get(`${apiBaseUrl}/api/sessions/${sessionId}/progress`);
+    const data = await readJson<ProgressResponseDTO>(response, `${label} progress`);
+    lastStage = data.data?.myProgress?.stage;
+    lastStatus = data.data?.myProgress?.status;
+
+    if (lastStage === expectedStage) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  throw new Error(`${label} did not reach stage ${expectedStage} within ${timeout}ms (last: stage ${lastStage}, status ${lastStatus})`);
+}
+
+async function waitForProgressGate(
+  api: E2EApiClient,
+  apiBaseUrl: string,
+  sessionId: string,
+  gate: string,
+  label: string,
+  timeout: number
+): Promise<void> {
+  const deadline = Date.now() + timeout;
+
+  while (Date.now() < deadline) {
+    const response = await api.get(`${apiBaseUrl}/api/sessions/${sessionId}/progress`);
+    const data = await readJson<ProgressResponseDTO>(response, `${label} progress`);
+    const gates = data.data?.myProgress?.gatesSatisfied ?? {};
+
+    if (gates[gate] === true) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  throw new Error(`${label} progress gate '${gate}' was not satisfied within ${timeout}ms`);
 }

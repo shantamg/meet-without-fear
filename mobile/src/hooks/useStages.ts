@@ -39,6 +39,7 @@ import {
   GetNeedsComparisonResponse,
   ConfirmCommonGroundRequest,
   ConfirmCommonGroundResponse,
+  ValidateNeedsResponse,
   AddNeedRequest,
   AddNeedResponse,
   ConsentShareNeedsResponse,
@@ -1581,6 +1582,38 @@ export function useConfirmCommonGround(
     },
     onSuccess: (_, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Validate both revealed needs lists.
+ */
+export function useValidateNeeds(
+  options?: Omit<
+    UseMutationOptions<
+      ValidateNeedsResponse,
+      ApiClientError,
+      { sessionId: string; validated: boolean }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, validated }) => {
+      return post<ValidateNeedsResponse>(
+        `/sessions/${sessionId}/needs/validate`,
+        { validated }
+      );
+    },
+    onSuccess: (_, { sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });

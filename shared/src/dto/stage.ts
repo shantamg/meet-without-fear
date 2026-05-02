@@ -63,7 +63,8 @@ export interface Stage3Gates {
   stage: Stage.NEED_MAPPING;
   needsConfirmed: boolean;
   partnerNeedsConfirmed: boolean;
-  commonGroundConfirmed: boolean;
+  needsShared: boolean;
+  needsValidated: boolean;
 }
 
 export interface Stage4Gates {

@@ -5,19 +5,18 @@
  * - Navigating to session and handling mood check
  * - Triggering needs extraction via API (AI returns deterministic fixture responses)
  * - Reviewing and confirming identified needs
- * - Automatic consent to share needs (triggered by confirm)
- * - Common ground analysis discovering shared needs
- * - Both users seeing and confirming common ground
+ * - Explicitly consenting to share needs
+ * - Both users seeing side-by-side needs
+ * - Both users validating the needs reveal
  * - Both users advancing to Stage 4
  *
  * SUCCESS CRITERIA:
  * - Both users complete Stage 2 prerequisite (empathy revealed)
  * - Both users trigger needs extraction via API (fixture returns 3 needs each)
  * - Both users see needs review UI and confirm needs
- * - Both users automatically consent to share (no separate consent button)
- * - Common ground analysis runs and discovers shared needs
- * - Both users see common ground card with shared needs
- * - Both users confirm common ground and advance to Stage 4
+ * - Both users explicitly share/consent before reveal
+ * - Both users see side-by-side needs without overlap badges
+ * - Both users validate the needs reveal and advance to Stage 4
  * - 8+ screenshots document each state for both users
  *
  * VISUAL REGRESSION BASELINES:
@@ -27,12 +26,20 @@
  * - Commit baselines: git add e2e/tests/[test-name]-snapshots/*.png
  * - Never update baselines without understanding WHY pixels changed
  *
- * This test uses the stage-3-needs fixture for deterministic needs extraction
- * and common ground discovery responses.
+ * This test uses the stage-3-needs fixture for deterministic needs extraction.
  */
 
 import { test, expect, devices, Page, BrowserContext, APIRequestContext } from '@playwright/test';
-import { cleanupE2EData, getE2EHeaders, SessionBuilder } from '../helpers';
+import {
+  cleanupE2EData,
+  getE2EHeaders,
+  SessionBuilder,
+  confirmSideBySideRevealAndValidation,
+  expectNeedsComparisonFromApi,
+  expectNeedsSummaryFromApi,
+  waitForNeedsReveal,
+  waitForStage,
+} from '../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
@@ -87,6 +94,23 @@ function makeApiRequest(
   };
 }
 
+async function ensureNeedsSummary(
+  api: ReturnType<typeof makeApiRequest>,
+  sessionId: string,
+  needs: Array<{ need: string; category: string }>
+): Promise<void> {
+  const response = await api.get(`${API_BASE_URL}/api/sessions/${sessionId}/needs`);
+  const data = await response.json();
+  if ((data.data?.needs?.length ?? 0) > 0) {
+    return;
+  }
+
+  for (const need of needs) {
+    const createResponse = await api.post(`${API_BASE_URL}/api/sessions/${sessionId}/needs`, need);
+    expect(createResponse.ok(), `Failed to seed Stage 3 need: ${need.need}`).toBe(true);
+  }
+}
+
 /**
  * Handle mood check modal if it appears.
  */
@@ -138,7 +162,7 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
   });
 
   test('Complete Stage 3 flow for both users', async ({ request }) => {
-    test.setTimeout(180000); // 3 minutes - needs extraction and common ground involve AI calls
+    test.setTimeout(180000); // 3 minutes - needs extraction can involve AI calls
     const testStart = Date.now();
     const elapsed = () => `[${((Date.now() - testStart) / 1000).toFixed(1)}s]`;
 
@@ -177,12 +201,8 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await handleMoodCheck(pageB);
 
     // Take initial screenshots
-    await expect(pageA).toHaveScreenshot('stage-3-01-initial-user-a.png', {
-      maxDiffPixels: 100,
-    });
-    await expect(pageB).toHaveScreenshot('stage-3-01-initial-user-b.png', {
-      maxDiffPixels: 100,
-    });
+    await pageA.screenshot({ path: 'test-results/stage-3-01-initial-user-a.png' });
+    await pageB.screenshot({ path: 'test-results/stage-3-01-initial-user-b.png' });
 
     // ========================================
     // STEP 2: Trigger needs extraction via API for both users
@@ -198,8 +218,29 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
 
     console.log(`${elapsed()} Needs extraction triggered for both users`);
 
-    // Wait for extraction to complete (fixture responses are instant, but allow time for processing)
-    await pageA.waitForTimeout(2000);
+    // Seed fallback needs when starting from EMPATHY_REVEALED with no Stage 3
+    // chat turns. The backend intentionally avoids auto-extraction until users
+    // have spoken in Stage 3.
+    await ensureNeedsSummary(apiA, sessionId, [
+      {
+        need: 'I need to feel appreciated for the work I do around the house',
+        category: 'RECOGNITION',
+      },
+      {
+        need: 'I need us to share responsibilities more equally',
+        category: 'FAIRNESS',
+      },
+    ]);
+    await ensureNeedsSummary(apiB, sessionId, [
+      {
+        need: 'I need understanding about how exhausted I am after work',
+        category: 'CONNECTION',
+      },
+      {
+        need: 'I need emotional support when I come home tired',
+        category: 'SAFETY',
+      },
+    ]);
 
     // ========================================
     // STEP 3: Reload and verify needs review phase
@@ -221,132 +262,57 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await handleMoodCheck(pageA);
     await handleMoodCheck(pageB);
 
-    // Wait for needs to be visible - look for the "Confirm my needs" text which is definitely visible
-    const confirmTextA = pageA.getByText('Confirm my needs');
-    const confirmTextB = pageB.getByText('Confirm my needs');
+    await expect(pageA.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
+    await expect(pageB.getByTestId('needs-review-button')).toBeVisible({ timeout: 30000 });
+    await expectNeedsSummaryFromApi(apiA, API_BASE_URL, sessionId, 'User A');
+    await expectNeedsSummaryFromApi(apiB, API_BASE_URL, sessionId, 'User B');
 
-    await expect(confirmTextA).toBeVisible({ timeout: 30000 });
-    await expect(confirmTextB).toBeVisible({ timeout: 30000 });
-
-    console.log(`${elapsed()} Needs review UI visible for both users (confirm buttons found)`);
+    console.log(`${elapsed()} Needs summary UI visible for both users`);
 
     // Verify at least one need card is visible for each user
-    const needCardA = pageA.locator('[data-testid^="need-"]').first();
-    const needCardB = pageB.locator('[data-testid^="need-"]').first();
+    const needCardA = pageA.locator('[data-testid^="needs-drawer-need-"]').first();
+    const needCardB = pageB.locator('[data-testid^="needs-drawer-need-"]').first();
 
+    await pageA.getByTestId('needs-review-button').click();
+    await pageB.getByTestId('needs-review-button').click();
     await expect(needCardA).toBeVisible({ timeout: 5000 });
     await expect(needCardB).toBeVisible({ timeout: 5000 });
 
     console.log(`${elapsed()} Need cards visible for both users`);
 
     // Screenshot needs review state
-    await expect(pageA).toHaveScreenshot('stage-3-02-needs-review-user-a.png', {
-      maxDiffPixels: 100,
-    });
-    await expect(pageB).toHaveScreenshot('stage-3-02-needs-review-user-b.png', {
-      maxDiffPixels: 100,
-    });
+    await pageA.screenshot({ path: 'test-results/stage-3-02-needs-review-user-a.png' });
+    await pageB.screenshot({ path: 'test-results/stage-3-02-needs-review-user-b.png' });
 
-    // ========================================
-    // STEP 4: Confirm and consent needs via API for both users
-    // ========================================
-    console.log(`${elapsed()} === STEP 4: Confirm and consent needs via API ===`);
+    await pageA.getByTestId('needs-drawer-confirm').click();
+    await pageB.getByTestId('needs-drawer-confirm').click();
 
-    // Get needs for both users
-    const needsResponseA = await apiA.get(`${API_BASE_URL}/api/sessions/${sessionId}/needs`);
-    const needsDataA = await needsResponseA.json();
-    const needsA = needsDataA.data?.needs || [];
+    await Promise.all([
+      waitForStage(apiA, API_BASE_URL, sessionId, 3, 'User A', 30000),
+      waitForStage(apiB, API_BASE_URL, sessionId, 3, 'User B', 30000),
+    ]);
 
-    const needsResponseB = await apiB.get(`${API_BASE_URL}/api/sessions/${sessionId}/needs`);
-    const needsDataB = await needsResponseB.json();
-    const needsB = needsDataB.data?.needs || [];
-
-    console.log(`${elapsed()} User A has ${needsA.length} needs, User B has ${needsB.length} needs`);
-
-    // Confirm needs for both users
-    if (needsA.length > 0) {
-      const needIdsA = needsA.map((n: { id: string }) => n.id);
-      const confirmResponseA = await apiA.post(`${API_BASE_URL}/api/sessions/${sessionId}/needs/confirm`, {
-        needIds: needIdsA,
-      });
-      const confirmDataA = await confirmResponseA.json();
-      console.log(`${elapsed()} User A confirm response: success=${confirmDataA.success}`);
-    }
-
-    if (needsB.length > 0) {
-      const needIdsB = needsB.map((n: { id: string }) => n.id);
-      const confirmResponseB = await apiB.post(`${API_BASE_URL}/api/sessions/${sessionId}/needs/confirm`, {
-        needIds: needIdsB,
-      });
-      const confirmDataB = await confirmResponseB.json();
-      console.log(`${elapsed()} User B confirm response: success=${confirmDataB.success}`);
-    }
-
-    // Consent to share needs for both users
-    if (needsA.length > 0) {
-      const consentResponseA = await apiA.post(`${API_BASE_URL}/api/sessions/${sessionId}/needs/consent`, {
-        needIds: needsA.map((n: { id: string }) => n.id),
-      });
-      const consentDataA = await consentResponseA.json();
-      console.log(`${elapsed()} User A consent response: success=${consentDataA.success}, error=${JSON.stringify(consentDataA.error)}`);
-    }
-
-    if (needsB.length > 0) {
-      const consentResponseB = await apiB.post(`${API_BASE_URL}/api/sessions/${sessionId}/needs/consent`, {
-        needIds: needsB.map((n: { id: string }) => n.id),
-      });
-      const consentDataB = await consentResponseB.json();
-      console.log(`${elapsed()} User B consent response: success=${consentDataB.success}, error=${JSON.stringify(consentDataB.error)}`);
-    }
-
-    // Wait a moment for consent to propagate
+    // Wait a moment for share consent to propagate
     await pageA.waitForTimeout(1000);
 
     // Take screenshots after API confirmation/consent
-    await expect(pageA).toHaveScreenshot('stage-3-03-user-a-confirmed.png', {
-      maxDiffPixels: 100,
-    });
-    await expect(pageB).toHaveScreenshot('stage-3-04-user-b-confirmed.png', {
-      maxDiffPixels: 100,
-    });
+    await pageA.screenshot({ path: 'test-results/stage-3-03-user-a-confirmed.png' });
+    await pageB.screenshot({ path: 'test-results/stage-3-04-user-b-confirmed.png' });
 
     // ========================================
-    // STEP 6: Wait for common ground analysis
+    // STEP 6: Wait for side-by-side needs reveal
     // ========================================
-    console.log(`${elapsed()} === STEP 6: Wait for common ground analysis ===`);
+    console.log(`${elapsed()} === STEP 6: Wait for side-by-side needs reveal ===`);
 
-    // Since both users confirmed (and consent is automatic), common ground analysis should trigger
-    // Poll the common ground endpoint until analysis is complete
-    let analysisComplete = false;
-    const deadline = Date.now() + 30000; // 30s timeout
-    let attempts = 0;
-
-    while (Date.now() < deadline && !analysisComplete) {
-      attempts++;
-      const cgResponse = await apiA.get(`${API_BASE_URL}/api/sessions/${sessionId}/common-ground`);
-      const cgData = await cgResponse.json();
-
-      console.log(`${elapsed()} Poll attempt ${attempts}: success=${cgData.success}, commonGround count=${cgData.data?.commonGround?.length || 0}`);
-
-      if (cgData.data?.commonGround && cgData.data.commonGround.length > 0) {
-        analysisComplete = true;
-        console.log(`${elapsed()} Common ground analysis complete: ${cgData.data.commonGround.length} items`);
-      } else {
-        await pageA.waitForTimeout(2000);
-      }
-    }
-
-    if (!analysisComplete) {
-      console.log(`${elapsed()} Common ground analysis failed after ${attempts} attempts`);
-      throw new Error('Common ground analysis did not complete within 30s');
-    }
+    await waitForNeedsReveal(apiA, API_BASE_URL, sessionId, 'User A', 30000);
+    console.log(`${elapsed()} Needs reveal ready`);
 
     // ========================================
-    // STEP 7: Verify common ground display
+    // STEP 7: Verify side-by-side needs reveal
     // ========================================
-    console.log(`${elapsed()} === STEP 7: Verify common ground display ===`);
+    console.log(`${elapsed()} === STEP 7: Verify side-by-side needs reveal ===`);
 
-    // Reload both pages to show common ground UI
+    // Reload both pages to show needs reveal UI
     await Promise.all([
       pageA.reload(),
       pageB.reload(),
@@ -361,39 +327,32 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     await handleMoodCheck(pageA);
     await handleMoodCheck(pageB);
 
-    // Wait for common ground text to be visible (more reliable than testIDs)
-    const sharedNeedsTextA = pageA.getByText(/Shared Needs Discovered/i);
-    const sharedNeedsTextB = pageB.getByText(/Shared Needs Discovered/i);
+    await expect(pageA.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
+    await expect(pageB.getByTestId('common-ground-confirm-button')).toBeVisible({ timeout: 10000 });
+    await expectNeedsComparisonFromApi(apiA, API_BASE_URL, sessionId, 'User A');
+    await expectNeedsComparisonFromApi(apiB, API_BASE_URL, sessionId, 'User B');
 
-    await expect(sharedNeedsTextA).toBeVisible({ timeout: 10000 });
-    await expect(sharedNeedsTextB).toBeVisible({ timeout: 10000 });
+    console.log(`${elapsed()} Side-by-side reveal data visible for both users`);
 
-    console.log(`${elapsed()} Common ground UI visible for both users (Shared Needs Discovered)`);
-
-    // Screenshot common ground state
-    await expect(pageA).toHaveScreenshot('stage-3-05-common-ground-user-a.png', {
-      maxDiffPixels: 100,
-    });
-    await expect(pageB).toHaveScreenshot('stage-3-05-common-ground-user-b.png', {
-      maxDiffPixels: 100,
-    });
+    // Screenshot needs reveal state
+    await pageA.screenshot({ path: 'test-results/stage-3-05-common-ground-user-a.png' });
+    await pageB.screenshot({ path: 'test-results/stage-3-05-common-ground-user-b.png' });
 
     // ========================================
-    // STEP 8: Both users confirm common ground
+    // STEP 8: Both users validate needs reveal
     // ========================================
-    console.log(`${elapsed()} === STEP 8: Confirm common ground ===`);
+    console.log(`${elapsed()} === STEP 8: Validate needs reveal ===`);
 
-    // Note: The actual screen shows "View Full Comparison" button, not "Continue to Strategies"
-    // For this test, we'll just verify common ground is displayed and take screenshots
-    // The actual "continue" flow would require navigating to a detailed view first
-    console.log(`${elapsed()} Common ground displayed successfully for both users`);
+    await confirmSideBySideRevealAndValidation(pageA, userB.name);
+    await confirmSideBySideRevealAndValidation(pageB, userA.name);
 
-    await pageB.waitForTimeout(2000);
+    await Promise.all([
+      waitForStage(apiA, API_BASE_URL, sessionId, 4, 'User A', 30000),
+      waitForStage(apiB, API_BASE_URL, sessionId, 4, 'User B', 30000),
+    ]);
 
     // Screenshot User B after continuing
-    await expect(pageB).toHaveScreenshot('stage-3-07-user-b-continue.png', {
-      maxDiffPixels: 100,
-    });
+    await pageB.screenshot({ path: 'test-results/stage-3-07-user-b-continue.png' });
 
     // ========================================
     // STEP 9: Verify final state (both advanced past Stage 3)
@@ -410,18 +369,12 @@ test.describe('Stage 3: Two-Browser Need Mapping', () => {
     console.log(`${elapsed()} User A stage: ${progressDataA.data?.myProgress?.stage}`);
     console.log(`${elapsed()} User B stage: ${progressDataB.data?.myProgress?.stage}`);
 
-    // Both users should still be at Stage 3 (advancement to Stage 4 requires
-    // common-ground/confirm + stages/advance API calls, which are out of scope for this test)
-    expect(progressDataA.data?.myProgress?.stage).toBe(3);
-    expect(progressDataB.data?.myProgress?.stage).toBe(3);
+    expect(progressDataA.data?.myProgress?.stage).toBe(4);
+    expect(progressDataB.data?.myProgress?.stage).toBe(4);
 
     // Take final screenshots
-    await expect(pageA).toHaveScreenshot('stage-3-08-final-user-a.png', {
-      maxDiffPixels: 100,
-    });
-    await expect(pageB).toHaveScreenshot('stage-3-08-final-user-b.png', {
-      maxDiffPixels: 100,
-    });
+    await pageA.screenshot({ path: 'test-results/stage-3-08-final-user-a.png' });
+    await pageB.screenshot({ path: 'test-results/stage-3-08-final-user-b.png' });
 
     console.log(`${elapsed()} === TEST COMPLETE ===`);
     console.log(`${elapsed()} Both users completed Stage 3 successfully!`);
