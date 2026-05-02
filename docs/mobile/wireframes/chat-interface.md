@@ -2,7 +2,7 @@
 title: Chat Interface
 sidebar_position: 3
 description: The primary conversation interface where users interact with the AI.
-updated: 2026-04-26
+updated: 2026-05-02
 status: living
 ---
 # Chat Interface
@@ -99,7 +99,10 @@ flowchart TB
     end
 ```
 
-During the invite drafting phase, the bottom panel shows the drafted invite, an AI-proposed neutral 3-5 word topic frame, and an optional steering input. The share action and "sent it" continuation stay disabled until the topic frame is confirmed, so the invited partner sees the same topic anchor before accepting.
+The invite drafting phase uses a two-step bottom panel:
+
+1. **Topic confirmation** — The panel first shows only the AI-proposed neutral 3-5 word topic frame with an optional steering input and a confirm button. The invitation message and share controls are hidden.
+2. **Invitation sharing** — Once the topic is confirmed, the panel transitions to show the drafted invite message, the confirmed topic, the share button, a refine option, and the "sent it" continuation.
 
 ### Stage 1: The Witness Chat
 
