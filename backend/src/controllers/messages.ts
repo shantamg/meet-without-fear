@@ -1884,14 +1884,23 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
     // Save invitation message (during initial crafting or refinement)
     if ((isInvitationPhase || isRefiningInvitation) && metadata.invitationMessage) {
-      await prisma.invitation.updateMany({
-        where: { sessionId, invitedById: user.id },
-        data: {
-          invitationMessage: metadata.invitationMessage,
-          // Don't reset messageConfirmed during refinement - user may have already confirmed
-          ...(isInvitationPhase ? { messageConfirmed: false } : {}),
-        },
-      });
+      await prisma.$transaction([
+        prisma.invitation.updateMany({
+          where: { sessionId, invitedById: user.id },
+          data: {
+            invitationMessage: metadata.invitationMessage,
+            // Don't reset messageConfirmed during refinement - user may have already confirmed
+            ...(isInvitationPhase ? { messageConfirmed: false } : {}),
+          },
+        }),
+        prisma.session.update({
+          where: { id: sessionId },
+          data: {
+            topicFrame: null,
+            topicFrameConfirmedAt: null,
+          },
+        }),
+      ]);
       logger.info(`[sendMessageStream:${requestId}] Saved invitation message: "${metadata.invitationMessage}"`);
     }
 
@@ -2052,4 +2061,3 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     }
   }
 }
-

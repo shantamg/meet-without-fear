@@ -2881,13 +2881,14 @@ export function UnifiedSessionScreen({
 
       {/* Refine Invitation Drawer - opened from Activity Menu Sent tab */}
       <RefineInvitationDrawer
-	        visible={showInvitationRefine}
-	        invitationMessage={invitationMessage || ''}
-	        invitationUrl={invitationUrl}
-	        topicFrame={topicFrame}
-	        partnerName={partnerName}
+        visible={showInvitationRefine}
+        invitationMessage={invitationMessage || ''}
+        invitationUrl={invitationUrl}
+        topicFrame={topicFrame}
+        partnerName={partnerName}
         senderName={user?.name || user?.firstName || undefined}
         isRefining={isGenerating}
+        shareDisabled={!topicFrameConfirmed}
         onSendRefinement={(text) => {
           sendMessage(`Refine invitation: ${text}`);
         }}

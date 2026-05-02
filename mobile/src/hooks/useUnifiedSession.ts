@@ -22,7 +22,7 @@ import {
   useFetchInitialMessage,
 } from './useMessages';
 import { useStreamingMessage, StreamMetadata } from './useStreamingMessage';
-import { stageKeys } from './queryKeys';
+import { sessionKeys, stageKeys } from './queryKeys';
 import {
   useSignCompact,
   useAdvanceStage,
@@ -348,6 +348,10 @@ export function useUnifiedSession(sessionId: string | undefined) {
       if (metadata.invitationMessage !== undefined && metadata.invitationMessage !== null) {
         console.log(`[useUnifiedSession] [TIMING] Setting liveInvitationMessage at ${Date.now()}`);
         setLiveInvitationMessage(metadata.invitationMessage);
+        if (sessionId) {
+          queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+          queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
+        }
         console.log(`[useUnifiedSession] [TIMING] setLiveInvitationMessage called at ${Date.now()}`);
       }
       // Capture AI-proposed empathy statement (Stage 2)

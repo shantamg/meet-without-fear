@@ -555,6 +555,16 @@ export async function acceptInvitation(req: Request, res: Response): Promise<voi
       return;
     }
 
+    if (
+      invitation.session.status !== 'INVITED' ||
+      !invitation.messageConfirmed ||
+      !invitation.session.topicFrame ||
+      !invitation.session.topicFrameConfirmedAt
+    ) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invitation is not ready to accept', 400);
+      return;
+    }
+
     // Accept invitation, activate session, create stage progress + vessel atomically
     await prisma.$transaction(async (tx) => {
       // Join the relationship
