@@ -1,9 +1,13 @@
 /**
  * Topic Frame Controller
  *
- * Handles the topic frame lifecycle:
- * - POST /sessions/:id/topic-frame/generate - AI-generate a topic frame from Stage 1 conversation
- * - POST /sessions/:id/topic-frame/confirm - Confirm (or edit) the topic frame
+ * Handles the topic frame lifecycle during Stage 0 (invite drafting):
+ * - POST /sessions/:id/topic-frame/generate - AI-generate a topic frame from the invitation draft
+ * - POST /sessions/:id/topic-frame/confirm  - User steers; AI moderates and persists the final frame
+ *
+ * The user cannot directly set the topic frame text. They can provide a steering
+ * direction, but the AI always has final say on the 3-5 word framing to guard
+ * against inappropriate or blaming language.
  */
 
 import { Request, Response } from 'express';
@@ -15,10 +19,12 @@ import { isSessionCreator } from '../utils/session';
 import { getSonnetResponse, BrainActivityCallType } from '../lib/bedrock';
 
 /**
- * Generate a proposed topic frame from Stage 1 conversation.
+ * Generate a proposed topic frame from the Stage 0 invitation draft.
  * POST /sessions/:id/topic-frame/generate
  *
- * Uses the user's Stage 1 messages to AI-generate a neutral 3-5 word topic frame.
+ * Called during Stage 0, before the user shares the invite link. Uses the
+ * invitation message the user has drafted to AI-generate a neutral 3-5 word
+ * topic frame.
  */
 export async function generateTopicFrame(req: Request, res: Response): Promise<void> {
   try {
@@ -58,37 +64,30 @@ export async function generateTopicFrame(req: Request, res: Response): Promise<v
       return;
     }
 
-    // Fetch Stage 1 conversation for context
-    const stage1Messages = await prisma.message.findMany({
+    // Fetch the invitation draft for context (Stage 0 — user has been drafting their invite)
+    const invitationRecord = await prisma.invitation.findFirst({
       where: {
         sessionId,
-        stage: 1,
-        OR: [
-          { senderId: user.id, forUserId: null },
-          { forUserId: user.id },
-        ],
+        invitedById: user.id,
       },
-      orderBy: { timestamp: 'asc' },
-      take: 20,
-      select: { role: true, content: true },
+      orderBy: { createdAt: 'desc' },
+      select: { invitationMessage: true },
     });
 
-    if (stage1Messages.length === 0) {
-      errorResponse(res, 'VALIDATION_ERROR', 'No Stage 1 conversation found', 400);
+    if (!invitationRecord?.invitationMessage) {
+      errorResponse(res, 'VALIDATION_ERROR', 'No invitation message found — draft the invitation first', 400);
       return;
     }
-
-    // Build conversation summary for the AI
-    const conversationText = stage1Messages
-      .map((m) => `${m.role === 'USER' ? 'User' : 'AI'}: ${m.content}`)
-      .join('\n');
 
     const turnId = `${sessionId}-${user.id}-topic-frame-generate`;
 
     const proposed = await getSonnetResponse({
       systemPrompt: TOPIC_FRAME_SYSTEM_PROMPT,
       messages: [
-        { role: 'user', content: `Here is the Stage 1 conversation:\n\n${conversationText}\n\nGenerate a neutral topic frame (3-5 words).` },
+        {
+          role: 'user',
+          content: `The user is drafting an invitation for their partner to join a conflict resolution session. Here is the invitation message they have written:\n\n"${invitationRecord.invitationMessage}"\n\nGenerate a neutral topic frame (3-5 words) that captures what this conflict is about.`,
+        },
       ],
       maxTokens: 50,
       sessionId,
@@ -112,10 +111,12 @@ export async function generateTopicFrame(req: Request, res: Response): Promise<v
 }
 
 /**
- * Confirm (or edit) the topic frame.
+ * AI-moderate and confirm the topic frame.
  * POST /sessions/:id/topic-frame/confirm
  *
- * Persists the confirmed topic frame on the Session record.
+ * The user can provide an optional steering direction. The AI always has final
+ * say on the 3-5 word framing — the user's steer is guidance only. Persists the
+ * AI-generated frame on the Session record.
  */
 export async function confirmTopicFrame(req: Request, res: Response): Promise<void> {
   try {
@@ -134,7 +135,7 @@ export async function confirmTopicFrame(req: Request, res: Response): Promise<vo
       return;
     }
 
-    const { topicFrame } = parseResult.data;
+    const { steer } = parseResult.data;
 
     // Only the session creator can confirm the topic frame
     const isCreator = await isSessionCreator(sessionId, user.id);
@@ -143,14 +144,73 @@ export async function confirmTopicFrame(req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Persist on the session
+    // Fetch session and invitation for AI context
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        relationship: { members: { some: { userId: user.id } } },
+      },
+      include: {
+        invitations: {
+          where: { invitedById: user.id },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { invitationMessage: true },
+        },
+      },
+    });
+
+    if (!session) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+
+    // Build context for AI moderation
+    const contextParts: string[] = [];
+    const invitationMessage = session.invitations[0]?.invitationMessage;
+    if (invitationMessage) {
+      contextParts.push(`Invitation message: "${invitationMessage}"`);
+    }
+    if (session.topicFrame) {
+      contextParts.push(`Previously proposed topic frame: "${session.topicFrame}"`);
+    }
+    if (steer) {
+      contextParts.push(`The user wants to steer the framing toward: "${steer}"`);
+    }
+
+    const turnId = `${sessionId}-${user.id}-topic-frame-confirm`;
+
+    // AI moderates the final frame — user's steer is guidance only
+    const aiGenerated = await getSonnetResponse({
+      systemPrompt: TOPIC_FRAME_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `${contextParts.join('\n\n')}\n\nGenerate the final neutral topic frame (3-5 words). You have final say on the framing — guard against inappropriate or blaming language.`,
+        },
+      ],
+      maxTokens: 50,
+      sessionId,
+      turnId,
+      operation: 'topic-frame-confirm',
+      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
+    });
+
+    const finalTopicFrame = aiGenerated?.trim().replace(/^["']|["']$/g, '') || null;
+
+    if (!finalTopicFrame) {
+      errorResponse(res, 'INTERNAL_ERROR', 'Failed to generate topic frame', 500);
+      return;
+    }
+
+    // Persist the AI-generated frame (not the user's steer text)
     const now = new Date();
     const updated = await prisma.session.update({
       where: { id: sessionId },
-      data: { topicFrame },
+      data: { topicFrame: finalTopicFrame },
     });
 
-    logger.info(`[confirmTopicFrame] Topic frame confirmed for session ${sessionId}: "${topicFrame}"`);
+    logger.info(`[confirmTopicFrame] Topic frame confirmed for session ${sessionId}: "${finalTopicFrame}"`);
 
     successResponse(res, {
       topicFrame: updated.topicFrame,
@@ -168,7 +228,7 @@ export async function confirmTopicFrame(req: Request, res: Response): Promise<vo
 
 const TOPIC_FRAME_SYSTEM_PROMPT = `You are generating a neutral topic frame for a conflict resolution session.
 
-Based on the user's Stage 1 conversation (where they shared what's been going on), produce a SHORT, NEUTRAL phrase (3-5 words) that describes the conflict topic. This will be shown to the other person when they receive the invitation, so they know what conflict they've been invited to engage with.
+Based on the user's invitation message (written during Stage 0 invite drafting), produce a SHORT, NEUTRAL phrase (3-5 words) that describes the conflict topic. This will be shown to the other person when they receive the invitation, so they know what conflict they've been invited to engage with.
 
 RULES:
 - 3-5 words only. No more.

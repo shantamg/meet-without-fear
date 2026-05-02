@@ -25,7 +25,7 @@ export {
   type FeelHeardRequestInput,
   type FeelHeardResponseInput,
 
-  // Topic Frame (post-Stage 1)
+  // Topic Frame (Stage 0 — drafted during invite)
   confirmTopicFrameRequestSchema,
   confirmTopicFrameResponseSchema,
   type ConfirmTopicFrameRequestInput,

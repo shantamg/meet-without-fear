@@ -216,7 +216,6 @@ interface ConfirmFeelHeardResponse {
   confirmedAt: string | null;
   canAdvance: boolean;
   partnerCompleted: boolean;
-  proposedTopicFrame: string | null; // AI-generated 3-5 word neutral topic frame for the invite
 }
 ```
 
