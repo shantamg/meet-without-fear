@@ -91,11 +91,15 @@ flowchart TB
             Message[Brief warm opening with typewriter effect]
         end
 
-        subgraph Actions0[Action Button]
-            Ready[Ready / Let's go]
+        subgraph Actions0[Stage 0 Actions]
+            Draft[Invitation draft]
+            Topic[AI topic frame confirmation]
+            Share[Share invitation]
         end
     end
 ```
+
+During the invite drafting phase, the bottom panel shows the drafted invite, an AI-proposed neutral 3-5 word topic frame, and an optional steering input. The share action and "sent it" continuation stay disabled until the topic frame is confirmed, so the invited partner sees the same topic anchor before accepting.
 
 ### Stage 1: The Witness Chat
 

@@ -23,6 +23,8 @@ The Vessel Architecture is realized in two Prisma tables plus a synthesis-state 
 | Shared Vessel | `SharedVessel` (linked 1:1 to `Session`) | SQL | Both users + AI |
 | AI Synthesis | `StageProgress.isSynthesisDirty` / `synthesisLastUpdated` + regenerated on demand | Ephemeral (no dedicated table) | AI only |
 
+`Session.topicFrame` stores the AI-generated Stage 0 invite topic anchor, and `Session.topicFrameConfirmedAt` marks when the inviter finalized that anchor before sharing the invite.
+
 ## Related subsystems
 
 The full Prisma schema also covers subsystems that aren't strictly part of the vessel model but share the same database:

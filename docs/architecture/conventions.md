@@ -55,6 +55,7 @@ status: living
 - Enum keys: `CONSTANT_CASE` - e.g., `SessionStatus.ACTIVE`, `Stage.WITNESS`. See Naming Patterns > Enums for value conventions.
 - Zod schema *constants* use a `xxxSchema` suffix with camelCase: `alignmentSchema`, `recordBarometerRequestSchema`, `runReconcilerRequestSchema`. Reusable validator fragments (e.g. `intensityRating` in `shared/src/validation/utils`) are camelCase without the `Schema` suffix because they're reused as building blocks, not full request/response schemas.
 - Zod-inferred request/response types often use the `Input` suffix (e.g. `RecordBarometerRequestInput = z.infer<typeof recordBarometerRequestSchema>`), but some contracts omit it and use the bare `Request`/`Response` name (e.g. `RunReconcilerRequest`, `RunReconcilerResponse`, `ReconcilerStatusResponse`). Either is acceptable; match neighbors.
+- When a backend response field represents a finalized lifecycle point, prefer a nullable timestamp alongside the value rather than overloading string presence. Example: `topicFrame` can be proposed text, while `topicFrameConfirmedAt` marks the final invite-ready state.
 
 ## Code Style
 
