@@ -490,5 +490,10 @@ Two-browser tests simulate both users simultaneously in separate browser context
 - Helper functions: `completeStage0ForBothUsers()`, `completeUserAWitnessing()`, `shareEmpathy()`
 - Used by two-browser tests and reconciler tests to avoid duplicating setup code
 
+**Stage 2 validation coverage:**
+- `two-browser-stage-2.spec.ts` exercises the current multi-user Stage 2 exchange, including the "Not quite yet" validation branch and Feedback Coach handoff.
+- `two-browser-reconciler-offer-sharing-refinement.spec.ts` covers the asymmetric reconciler `OFFER_SHARING` path, the Activity Drawer/share-topic flow, context delivery to the guesser, revision, and final validation screenshots.
+- `e2e/helpers/test-utils.ts` treats the Activity Drawer as the canonical share surface; older `/share` navigation is no longer part of the current app flow.
+
 **Fixture Operations Registry:**
 Each fixture can define `operations` for non-streaming AI responses (reconciler analysis, share suggestions). The registry maps operation names to fixture response objects.

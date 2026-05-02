@@ -29,7 +29,7 @@ The full Prisma schema also covers subsystems that aren't strictly part of the v
 
 - **Inner Work**: `InnerWorkSession`, `InnerWorkMessage`, `MeditationSession`, `MeditationStats`, `MeditationFavorite`, `GratitudeEntry`.
 - **Fact-Ledger / memory**: `User.globalFacts`, `UserVessel.notableFacts`, session-level embeddings, `UserMemory` for cross-session AI context.
-- **Reconciler**: `ReconcilerResult`, `ReconcilerShareOffer` (alignment scores, gap summaries, share-suggestion state).
+- **Reconciler + Stage 2 feedback**: `ReconcilerResult`, `ReconcilerShareOffer` (alignment scores, gap summaries, share-suggestion state), plus `ValidationFeedbackDraft` for Feedback Coach drafts before validation feedback is sent.
 - **Needs + people catalogs**: `Need` (19 core human needs), `NeedScore`, `Person`, `PersonMention`.
 
 ## Dual-Layer Data Strategy

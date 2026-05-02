@@ -105,7 +105,7 @@ status: living
 **Stage Abstraction:**
 - Purpose: Encapsulates all logic for a conversation stage (0=ONBOARDING, 1=WITNESS, 2=PERSPECTIVE_STRETCH, 3=NEED_MAPPING, 4=STRATEGIC_REPAIR)
 - Examples: `backend/src/services/stage-prompts.ts`, `backend/src/services/needs-prompts.ts` (Stage 3-4 prompt generation: needs check-in, baseline assessment, common ground, strategy generation, strategy ranking), `mobile/src/hooks/useStages.ts`
-- Pattern: Each stage has UI (screen component), controllers (route handlers), services (business logic), mutations (cache updates), validation gates
+- Pattern: Each stage has UI (screen component), controllers (route handlers), services (business logic), mutations (cache updates), validation gates. Stage 2 also includes Feedback Coach draft/refine endpoints and targeted `VALIDATION_FEEDBACK` messages for the "Not quite yet" validation path.
 
 **Service Orchestrator (AI Flow):**
 - Purpose: Routes user messages through intent detection → context assembly → LLM prompt building → response generation
@@ -152,7 +152,7 @@ status: living
 - Health check: `GET /api/slack/health` reports workspace load status and Slack configuration
 
 **Chat Unified Screen (Mobile):**
-- Location: `mobile/src/screens/UnifiedSessionScreen.tsx` (2722 lines, with sub-components extracted to `mobile/src/screens/session/`)
+- Location: `mobile/src/screens/UnifiedSessionScreen.tsx` (with Stage 2 drawers/modals extracted into components such as `AccuracyFeedbackDrawer`, `ViewEmpathyStatementDrawer`, and `GuidedDraftChatModal`)
 - Triggers: User taps session in home screen
 - Responsibilities: Main chat interface; orchestrates hooks via `useUnifiedSession` (which delegates to `useEmpathyActions`, `useNeedsActions`, `useStrategyActions`, `useSessionEventHandler`); renders chat UI and stage panels
 
