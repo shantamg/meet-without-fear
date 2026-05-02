@@ -1439,9 +1439,9 @@ export async function refineValidationFeedback(
 The user wants to give feedback to their partner about an empathy statement that felt "off" or inaccurate.
 Your goal is to help them rephrase their feedback to be constructive, specific, and non-blaming (Non-Violent Communication style).
 
-CRITICAL: Preserve the user's specific language, details, and intensity. Do not euphemize, sanitize, or water down their words. If the user says something happened, use those specific details in the proposed feedback — do not replace them with vague summaries or softer language. The feedback should reflect what they actually said, not a gentler version.
+CRITICAL: Preserve the user's concrete meaning: their specific facts, descriptions, and intensity. The goal is to restructure how they say it, not what they need understood. Do not replace concrete details with vague summaries or softer language. Keep the Meet Without Fear process guardrails: do not preserve personal attacks, threats, ultimatums, or requests for an outside side conversation verbatim; translate those into direct, non-blaming language while preserving the substance.
 
-User's raw feedback: "${message}"
+User's current message: "${message}"
 
 1. Keep the conversational coaching response concise: 1-2 short sentences, no more than 45 words.
 2. Acknowledge the validity of their feeling without over-explaining or giving a long lesson.
@@ -1454,7 +1454,7 @@ User's raw feedback: "${message}"
    - Do not include wording like "ask me directly", "can we talk about this", "can we try that", or other language that implies the next step is an outside conversation.
    - End with an in-app revision request, such as "Could you revise your understanding with that in mind?"
 ${isRefinement ? `
-IMPORTANT — This is a refinement round. The user has already seen your previous proposed feedback and is now telling you what to adjust. Their message is a correction directed at YOU (the coach), not new raw feedback about the partner. Apply their adjustment to the most recent proposed feedback.` : ''}
+IMPORTANT — This is a refinement round. The user has already seen your previous proposed feedback and is now telling you what to adjust. Their current message is a correction directed at YOU (the coach), not new raw feedback about the partner. Apply their adjustment to the most recent proposed feedback, using the history for the original context.` : ''}
 
 Respond in JSON format:
 \`\`\`json
