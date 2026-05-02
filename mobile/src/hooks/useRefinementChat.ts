@@ -283,19 +283,35 @@ export function useValidationFeedbackCoachChat(
     partnerStatementRef.current = partnerEmpathyStatement;
     setIsFinalized(false);
 
-    const initialMessages: RefinementMessage[] = [{
-      id: `feedback-initial-${Date.now()}`,
+    const initialMessages: RefinementMessage[] = [];
+    const trimmedPartnerStatement = partnerEmpathyStatement.trim();
+    const openedAt = Date.now();
+
+    if (trimmedPartnerStatement) {
+      initialMessages.push({
+        id: `feedback-source-${openedAt}`,
+        sessionId,
+        role: MessageRole.AI,
+        content: `This is the statement you're responding to:\n\n"${trimmedPartnerStatement}"`,
+        timestamp: new Date().toISOString(),
+        senderId: null,
+        stage: 2,
+      });
+    }
+
+    initialMessages.push({
+      id: `feedback-initial-${openedAt}`,
       sessionId,
       role: MessageRole.AI,
-      content: `Thanks for naming what felt off. I'll help you turn that into feedback ${partnerEmpathyStatement ? 'that responds to the statement you received' : 'your partner can understand'} without making it harsher than it needs to be.`,
+      content: `I'll help turn your note into feedback you can send. You can send the draft as-is, or tell me what to adjust.`,
       timestamp: new Date().toISOString(),
       senderId: null,
       stage: 2,
-    }];
+    });
 
     if (roughFeedback.trim()) {
       initialMessages.push({
-        id: `feedback-rough-${Date.now()}`,
+        id: `feedback-rough-${openedAt}`,
         sessionId,
         role: MessageRole.USER,
         content: roughFeedback.trim(),
