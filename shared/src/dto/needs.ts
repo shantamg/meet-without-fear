@@ -113,6 +113,57 @@ export interface ValidateNeedsResponse {
 }
 
 // ============================================================================
+// Legacy Common Ground Compatibility
+// ============================================================================
+
+/**
+ * @deprecated Common ground is being removed in the Stage 3 redesign.
+ * Kept as a type-only compatibility shim while downstream clients migrate.
+ */
+export interface CommonGroundDTO {
+  id: string;
+  need: string;
+  category: NeedCategory;
+  description: string;
+  confirmedByMe: boolean;
+  confirmedByPartner: boolean;
+  confirmedAt: string | null;
+}
+
+/**
+ * @deprecated Common ground is being removed in the Stage 3 redesign.
+ * Kept as a type-only compatibility shim while downstream clients migrate.
+ */
+export interface GetCommonGroundResponse {
+  commonGround: CommonGroundDTO[];
+  analysisComplete: boolean;
+  bothConfirmed: boolean;
+  noOverlap?: boolean;
+}
+
+/**
+ * @deprecated Common ground is being removed in the Stage 3 redesign.
+ * Kept as a type-only compatibility shim while downstream clients migrate.
+ */
+export interface ConfirmCommonGroundRequest {
+  confirmations: {
+    commonGroundId: string;
+    confirmed: boolean;
+  }[];
+}
+
+/**
+ * @deprecated Common ground is being removed in the Stage 3 redesign.
+ * Kept as a type-only compatibility shim while downstream clients migrate.
+ */
+export interface ConfirmCommonGroundResponse {
+  updated: CommonGroundDTO[];
+  allConfirmedByMe: boolean;
+  allConfirmedByBoth: boolean;
+  canAdvance: boolean;
+}
+
+// ============================================================================
 // Needs Comparison (Side-by-Side Reveal)
 // ============================================================================
 
