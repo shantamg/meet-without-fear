@@ -126,7 +126,7 @@ router.post('/sessions/:id/invitation/confirm', requireAuth, requireSessionAcces
 
 /**
  * @route POST /api/v1/sessions/:id/topic-frame/generate
- * @description AI-generate a topic frame from user 1's Stage 1 conversation
+ * @description AI-generate a topic frame from user 1's Stage 0 invitation draft
  * @access Private - requires authentication and session access (creator only)
  */
 router.post('/sessions/:id/topic-frame/generate', requireAuth, requireSessionAccess, asyncHandler(generateTopicFrame));

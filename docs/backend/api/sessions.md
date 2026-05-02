@@ -191,7 +191,7 @@ The frontend doesn't reconstruct session state from `GET /sessions/:id` alone. U
 | `GET`  | `/api/v1/sessions/:id/invitation` | Get the current draft invitation message (inviter only) |
 | `PUT`  | `/api/v1/sessions/:id/invitation/message` | Replace the draft invitation message |
 | `POST` | `/api/v1/sessions/:id/invitation/confirm` | Confirm the invitation message; transitions session `CREATED → INVITED` |
-| `POST` | `/api/v1/sessions/:id/topic-frame/generate` | AI-generate a neutral 3-5 word topic frame from user 1's Stage 1 conversation (creator only) |
+| `POST` | `/api/v1/sessions/:id/topic-frame/generate` | AI-generate a neutral 3-5 word topic frame from user 1's Stage 0 invitation draft (creator only) |
 | `POST` | `/api/v1/sessions/:id/topic-frame/confirm` | Confirm (or edit) the session topic frame; persists `Session.topicFrame` (creator only) |
 | `GET`  | `/api/v1/sessions/:id/inner-thoughts` | Fetch the linked Inner Thoughts entry (if any) |
 
