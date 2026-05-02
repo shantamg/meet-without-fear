@@ -39,6 +39,8 @@ export interface RefineInvitationDrawerProps {
   senderName?: string;
   /** Whether a refinement is in progress */
   isRefining?: boolean;
+  /** Whether sharing should be disabled until prerequisite gates are complete */
+  shareDisabled?: boolean;
   /** Callback when user sends a refinement request */
   onSendRefinement?: (message: string) => void;
   /** Callback when share is successful */
@@ -55,6 +57,7 @@ export function RefineInvitationDrawer({
   partnerName,
   senderName,
   isRefining: isRefiningProp = false,
+  shareDisabled = false,
   onSendRefinement,
   onShareSuccess,
   onClose,
@@ -213,12 +216,13 @@ export function RefineInvitationDrawer({
                     <Text style={styles.refineButtonText}>Refine invitation</Text>
                   </TouchableOpacity>
                   <View style={styles.shareButtonWrapper}>
-	                    <InvitationShareButton
-	                      invitationMessage={invitationMessage}
-	                      invitationUrl={invitationUrl}
-	                      topicFrame={topicFrame}
-	                      partnerName={partnerName}
+                    <InvitationShareButton
+                      invitationMessage={invitationMessage}
+                      invitationUrl={invitationUrl}
+                      topicFrame={topicFrame}
+                      partnerName={partnerName}
                       senderName={senderName}
+                      disabled={shareDisabled}
                       onShareSuccess={onShareSuccess}
                       testID="refine-invitation-share"
                     />

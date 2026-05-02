@@ -239,11 +239,15 @@ describe('Invitations API', () => {
         id: 'inv-123',
         invitedById: 'user-1',
         status: 'PENDING',
+        messageConfirmed: true,
         expiresAt: new Date(Date.now() + 86400000),
         sessionId: 'session-1',
         session: {
           id: 'session-1',
           relationshipId: 'rel-1',
+          status: 'INVITED',
+          topicFrame: 'Tuesday pickup disagreement',
+          topicFrameConfirmedAt: new Date(),
         },
         invitedBy: { id: 'user-1', name: 'Inviter' },
       };
@@ -290,6 +294,47 @@ describe('Invitations API', () => {
 
       // Verify relationship join
       expect(prisma.relationshipMember.create).toHaveBeenCalled();
+    });
+
+    it('rejects invitations before the message and topic frame are finalized', async () => {
+      const mockInvitation = {
+        id: 'inv-123',
+        invitedById: 'user-1',
+        status: 'PENDING',
+        messageConfirmed: false,
+        expiresAt: new Date(Date.now() + 86400000),
+        sessionId: 'session-1',
+        session: {
+          id: 'session-1',
+          relationshipId: 'rel-1',
+          status: 'CREATED',
+          topicFrame: null,
+          topicFrameConfirmedAt: null,
+        },
+        invitedBy: { id: 'user-1', name: 'Inviter' },
+      };
+
+      (prisma.invitation.findUnique as jest.Mock).mockResolvedValue(mockInvitation);
+
+      const req = createMockRequest({
+        user: { id: 'user-2', email: 'accepter@example.com', name: 'Accepter' },
+        params: { id: 'inv-123' },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      await acceptInvitation(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(400);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'VALIDATION_ERROR',
+            message: 'Invitation is not ready to accept',
+          }),
+        })
+      );
+      expect(prisma.relationshipMember.create).not.toHaveBeenCalled();
     });
 
     it('rejects expired invitation with 410', async () => {

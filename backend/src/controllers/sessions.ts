@@ -842,17 +842,28 @@ export async function updateInvitationMessage(req: Request, res: Response): Prom
       return;
     }
 
-    // Update invitation message
-    const updatedInvitation = await prisma.invitation.update({
-      where: { id: invitation.id },
-      data: { invitationMessage: message },
-    });
+    // Update invitation message and clear any topic frame derived from the old draft.
+    const [updatedInvitation] = await prisma.$transaction([
+      prisma.invitation.update({
+        where: { id: invitation.id },
+        data: { invitationMessage: message },
+      }),
+      prisma.session.update({
+        where: { id: sessionId },
+        data: {
+          topicFrame: null,
+          topicFrameConfirmedAt: null,
+        },
+      }),
+    ]);
 
     successResponse(res, {
       invitation: {
         id: updatedInvitation.id,
         invitationMessage: updatedInvitation.invitationMessage,
         messageConfirmed: updatedInvitation.messageConfirmed,
+        topicFrame: null,
+        topicFrameConfirmedAt: null,
       },
     });
   } catch (error) {
