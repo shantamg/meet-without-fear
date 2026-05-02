@@ -302,25 +302,25 @@ function normalizeTopicFrame(raw: string | null | undefined): string | null {
   if (!raw) return null;
 
   // The response may contain thinking/critique lines followed by the final topic
-  // on the last line. Try each line from the end until we find a valid 3-5 word frame.
+  // on the last line. Only accept that final line so we do not accidentally
+  // persist a candidate that the model considered and rejected earlier.
   const lines = raw.trim().split('\n').filter((l) => l.trim());
+  const finalLine = lines[lines.length - 1];
+  if (!finalLine) return null;
 
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const candidate = lines[i]
-      .trim()
-      .replace(/^["']|["']$/g, '')
-      .replace(/^[-•*]\s*/, '') // strip leading bullet
-      .replace(/\s+/g, ' ')
-      .trim();
+  const candidate = finalLine
+    .trim()
+    .replace(/^[-•*]\s*/, '') // strip leading bullet
+    .replace(/^(?:final\s+(?:topic|choice|frame)|topic\s+frame|topic)\s*:\s*/i, '')
+    .replace(/^["']|["']$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-    if (!candidate) continue;
-    if (/[.!?;:]/.test(candidate)) continue;
+  if (!candidate) return null;
+  if (/[.!?;:]/.test(candidate)) return null;
 
-    const words = candidate.split(' ').filter(Boolean);
-    if (words.length < 3 || words.length > 5) continue;
+  const words = candidate.split(' ').filter(Boolean);
+  if (words.length < 3 || words.length > 5) return null;
 
-    return candidate;
-  }
-
-  return null;
+  return candidate;
 }
