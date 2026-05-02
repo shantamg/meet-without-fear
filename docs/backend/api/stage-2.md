@@ -211,8 +211,8 @@ Besides the Phase-1 / Phase-2 core above, the routes file exposes these controll
 | `POST` | `/api/v1/sessions/:id/empathy/skip-refinement` | Accept the current gap as a "willing-to-accept" difference and advance without further refinement; updates `skippedRefinement`, `willingToAccept`, `skipReason` on the caller's StageProgress |
 | `GET`  | `/api/v1/sessions/:id/empathy/share-suggestion` | Asymmetric reconciler: fetch a suggestion to help the caller close an empathy gap for the partner |
 | `POST` | `/api/v1/sessions/:id/empathy/share-suggestion/respond` | Accept or decline a share suggestion |
-| `POST` | `/api/v1/sessions/:id/empathy/validation-feedback/draft` | Draft feedback via the "Feedback Coach" AI flow |
-| `POST` | `/api/v1/sessions/:id/empathy/validation-feedback/refine` | Iterate on feedback-coach output |
+| `POST` | `/api/v1/sessions/:id/empathy/feedback/draft` | Draft feedback via the "Feedback Coach" AI flow |
+| `POST` | `/api/v1/sessions/:id/empathy/feedback/refine` | Iterate on feedback-coach output |
 
 ---
 

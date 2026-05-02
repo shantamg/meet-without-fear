@@ -10,6 +10,9 @@
  * - GET /sessions/:id/empathy/status - Get empathy exchange status
  * - POST /sessions/:id/empathy/refine - Refinement conversation (when NEEDS_WORK or REFINING)
  * - POST /sessions/:id/empathy/resubmit - Resubmit revised empathy statement
+ * - POST /sessions/:id/empathy/skip-refinement - Skip refinement / acceptance check
+ * - POST /sessions/:id/empathy/feedback/draft - Save validation feedback draft
+ * - POST /sessions/:id/empathy/feedback/refine - Refine validation feedback (Feedback Coach)
  *
  * NEW: Share suggestion flow (asymmetric reconciler)
  * - GET /sessions/:id/empathy/share-suggestion - Get share suggestion for current user
@@ -30,6 +33,9 @@ import {
   resubmitEmpathy,
   getShareSuggestion,
   respondToShareSuggestion,
+  skipRefinement,
+  saveValidationFeedbackDraft,
+  refineValidationFeedback,
 } from '../controllers/stage2';
 
 const router = Router();
@@ -96,6 +102,34 @@ router.post(
   requireAuth,
   requireSessionAccess,
   asyncHandler(resubmitEmpathy)
+);
+
+// ============================================================================
+// Validation Feedback / Feedback Coach Flow
+// ============================================================================
+
+// Skip refinement (accept the difference or decline)
+router.post(
+  '/sessions/:id/empathy/skip-refinement',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(skipRefinement)
+);
+
+// Save validation feedback draft
+router.post(
+  '/sessions/:id/empathy/feedback/draft',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(saveValidationFeedbackDraft)
+);
+
+// Refine validation feedback via Feedback Coach AI
+router.post(
+  '/sessions/:id/empathy/feedback/refine',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(refineValidationFeedback)
 );
 
 // ============================================================================
