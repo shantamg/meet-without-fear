@@ -27,6 +27,7 @@ import {
   getEmpathyData,
   getWitnessingContent,
   analyzeEmpathyGap,
+  checkTopicAlignment,
 } from './analysis';
 import { checkAttempts, hasContextAlreadyBeenShared, markResultHandledAlreadyShared } from './circuit-breaker';
 import { generateShareSuggestion } from './sharing';
@@ -153,7 +154,7 @@ export async function runReconcilerForDirection(
   subjectId: string
 ): Promise<{
   result: ReconcilerResult | null;
-  empathyStatus: 'READY' | 'AWAITING_SHARING';
+  empathyStatus: 'READY' | 'AWAITING_SHARING' | 'TOPIC_MISMATCH';
   shareOffer: {
     suggestedContent: string;
     reason: string;
@@ -223,6 +224,54 @@ export async function runReconcilerForDirection(
     throw new Error('Subject has no Stage 1 content');
   }
   logger.debug('Found subject witnessing content', { themes: witnessingContent.themes.length, chars: witnessingContent.userMessages.length });
+
+  // ============================================================================
+  // TOPIC ALIGNMENT GATE
+  // Check that guesser and subject are discussing the same topic before
+  // running gap analysis. Prevents nonsensical share offers when topics diverge.
+  // ============================================================================
+  const topicAlignment = await checkTopicAlignment(
+    empathyData.statement,
+    witnessingContent.userMessages,
+    sessionId,
+    guesserId
+  );
+
+  if (
+    topicAlignment.alignment === 'different_topic' &&
+    topicAlignment.confidence >= 75
+  ) {
+    logger.warn('Topic mismatch detected — blocking reconciler share path', {
+      sessionId,
+      guesserId,
+      subjectId,
+      alignment: topicAlignment.alignment,
+      confidence: topicAlignment.confidence,
+      guesserTopic: topicAlignment.guesserTopic,
+      subjectTopic: topicAlignment.subjectTopic,
+      rationale: topicAlignment.rationale,
+    });
+
+    // Transition empathy status to TOPIC_MISMATCH
+    await prisma.$transaction(async (tx) => {
+      const attempt = await tx.empathyAttempt.findFirst({
+        where: { sessionId, sourceUserId: guesserId },
+      });
+      if (attempt) {
+        transition(attempt.status as EmpathyStatus, 'TOPIC_MISMATCH_DETECTED');
+      }
+      await tx.empathyAttempt.updateMany({
+        where: { sessionId, sourceUserId: guesserId },
+        data: { status: 'TOPIC_MISMATCH', statusVersion: { increment: 1 } },
+      });
+    });
+
+    return {
+      result: null,
+      empathyStatus: 'TOPIC_MISMATCH',
+      shareOffer: null,
+    };
+  }
 
   // Run the analysis
   const result = await analyzeEmpathyGap({

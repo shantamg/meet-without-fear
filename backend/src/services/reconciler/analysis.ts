@@ -194,6 +194,95 @@ async function extractThemes(content: string, sessionId: string, userId?: string
 }
 
 // ============================================================================
+// Topic Alignment Check
+// ============================================================================
+
+export type TopicAlignment = 'same_topic' | 'related_but_drifted' | 'different_topic' | 'insufficient_signal';
+
+export interface TopicAlignmentResult {
+  alignment: TopicAlignment;
+  confidence: number;
+  guesserTopic: string;
+  subjectTopic: string;
+  rationale: string;
+}
+
+/**
+ * Check whether the guesser's empathy attempt and the subject's Stage 1
+ * witnessing content are about the same topic. Uses a fast Haiku call.
+ *
+ * Policy:
+ * - high-confidence `different_topic` → hard stop (no share offer)
+ * - `related_but_drifted` → soft stop (logged, future UX warning)
+ * - `insufficient_signal` → fail open (continue normal flow)
+ */
+export async function checkTopicAlignment(
+  empathyStatement: string,
+  witnessingContent: string,
+  sessionId: string,
+  guesserId: string
+): Promise<TopicAlignmentResult> {
+  const turnId = `${sessionId}-${guesserId}-topic-alignment-${Date.now()}`;
+  const result = await getHaikuJson<TopicAlignmentResult>({
+    systemPrompt: `You are a topic-alignment classifier for an empathy exchange app.
+
+Compare the GUESSER's empathy statement (what they think their partner is feeling) against the SUBJECT's actual witnessing content (what the partner actually shared in Stage 1).
+
+Determine whether they are discussing the same underlying situation/topic.
+
+Return JSON:
+{
+  "alignment": "same_topic" | "related_but_drifted" | "different_topic" | "insufficient_signal",
+  "confidence": <0-100>,
+  "guesserTopic": "<1-sentence summary of what the guesser thinks the situation is>",
+  "subjectTopic": "<1-sentence summary of what the subject actually discussed>",
+  "rationale": "<brief explanation>"
+}
+
+Guidelines:
+- "same_topic": Both clearly discuss the same situation, relationship, or event, even if emotional accuracy varies.
+- "related_but_drifted": Overlapping context (same people, same relationship) but the specific situations or concerns are substantially different.
+- "different_topic": Completely unrelated situations — different people, different contexts, different events. The guesser appears to be guessing about something entirely different from what the subject shared.
+- "insufficient_signal": Not enough content to determine alignment (e.g., very short or vague statements).
+
+Focus ONLY on topic/situation alignment, NOT emotional accuracy. Two people can discuss the same topic but disagree on feelings — that is "same_topic".`,
+    messages: [
+      {
+        role: 'user',
+        content: `GUESSER'S EMPATHY STATEMENT:\n${empathyStatement}\n\nSUBJECT'S WITNESSING CONTENT:\n${witnessingContent}`,
+      },
+    ],
+    maxTokens: 512,
+    sessionId,
+    turnId,
+    operation: 'topic-alignment-check',
+    callType: BrainActivityCallType.TOPIC_ALIGNMENT,
+  });
+
+  if (!result) {
+    logger.warn('Topic alignment check returned null, failing open', { sessionId, guesserId });
+    return {
+      alignment: 'insufficient_signal',
+      confidence: 0,
+      guesserTopic: 'unknown',
+      subjectTopic: 'unknown',
+      rationale: 'AI classification failed — failing open',
+    };
+  }
+
+  logger.info('Topic alignment result', {
+    sessionId,
+    guesserId,
+    alignment: result.alignment,
+    confidence: result.confidence,
+    guesserTopic: result.guesserTopic,
+    subjectTopic: result.subjectTopic,
+  });
+
+  return result;
+}
+
+// ============================================================================
 // Abstract Guidance
 // ============================================================================
 

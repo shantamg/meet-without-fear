@@ -17,6 +17,7 @@
  *   REFINING → AWAITING_SHARING (re-analysis after resubmit shows gaps)
  *   READY → REVEALED (both users ready, mutual reveal)
  *   REVEALED → VALIDATED (recipient validates accuracy)
+ *   HELD → TOPIC_MISMATCH (topic alignment gate detected different topics)
  */
 
 import { EmpathyStatus } from '@prisma/client';
@@ -31,7 +32,8 @@ export type EmpathyEvent =
   | 'DECLINE_SHARING'
   | 'RESUBMIT_WITH_GAPS'
   | 'MUTUAL_REVEAL'
-  | 'VALIDATE';
+  | 'VALIDATE'
+  | 'TOPIC_MISMATCH_DETECTED';
 
 /**
  * Transition table: maps (currentStatus, event) → newStatus
@@ -41,6 +43,7 @@ const TRANSITIONS: Record<string, EmpathyStatus | undefined> = {
   [`${EmpathyStatus.HELD}:START_ANALYSIS`]: EmpathyStatus.ANALYZING,
   [`${EmpathyStatus.HELD}:GAPS_DETECTED`]: EmpathyStatus.AWAITING_SHARING,
   [`${EmpathyStatus.HELD}:MARK_READY`]: EmpathyStatus.READY,
+  [`${EmpathyStatus.HELD}:TOPIC_MISMATCH_DETECTED`]: EmpathyStatus.TOPIC_MISMATCH,
 
   // From ANALYZING
   [`${EmpathyStatus.ANALYZING}:GAPS_DETECTED`]: EmpathyStatus.AWAITING_SHARING,

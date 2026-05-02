@@ -34,6 +34,8 @@ export {
 // Analysis
 export {
   runReconciler,
+  checkTopicAlignment,
+  type TopicAlignmentResult,
 } from './analysis';
 
 // Sharing

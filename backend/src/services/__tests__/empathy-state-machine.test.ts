@@ -21,6 +21,10 @@ describe('empathy-state-machine', () => {
       expect(transition(EmpathyStatus.HELD, 'MARK_READY')).toBe(EmpathyStatus.READY);
     });
 
+    it('HELD → TOPIC_MISMATCH on TOPIC_MISMATCH_DETECTED', () => {
+      expect(transition(EmpathyStatus.HELD, 'TOPIC_MISMATCH_DETECTED')).toBe(EmpathyStatus.TOPIC_MISMATCH);
+    });
+
     // ===== ANALYZING transitions =====
     it('ANALYZING → AWAITING_SHARING on GAPS_DETECTED', () => {
       expect(transition(EmpathyStatus.ANALYZING, 'GAPS_DETECTED')).toBe(EmpathyStatus.AWAITING_SHARING);
@@ -93,6 +97,7 @@ describe('empathy-state-machine', () => {
         'START_ANALYSIS', 'GAPS_DETECTED', 'NO_SIGNIFICANT_GAPS',
         'MARK_READY', 'CONTEXT_SHARED', 'DECLINE_SHARING',
         'RESUBMIT_WITH_GAPS', 'MUTUAL_REVEAL', 'VALIDATE',
+        'TOPIC_MISMATCH_DETECTED',
       ];
       for (const event of events) {
         expect(() => transition(EmpathyStatus.VALIDATED, event)).toThrow(
@@ -126,7 +131,8 @@ describe('empathy-state-machine', () => {
       expect(events).toContain('START_ANALYSIS');
       expect(events).toContain('GAPS_DETECTED');
       expect(events).toContain('MARK_READY');
-      expect(events).toHaveLength(3);
+      expect(events).toContain('TOPIC_MISMATCH_DETECTED');
+      expect(events).toHaveLength(4);
     });
 
     it('returns empty for VALIDATED (terminal)', () => {

@@ -745,6 +745,7 @@ enum EmpathyStatus {
   READY // Reconciler complete, waiting for partner to also complete Stage 2 before revealing
   REVEALED // Recipient can now see statement
   VALIDATED // Recipient has validated accuracy
+  TOPIC_MISMATCH // Guesser's empathy attempt is about a different topic than subject's Stage 1
 }
 
 model EmpathyValidation {
@@ -1449,6 +1450,7 @@ enum BrainActivityCallType {
   GLOBAL_MEMORY_CONSOLIDATION
   DISTILLATION
   CROSS_SESSION_THEME
+  TOPIC_ALIGNMENT
 }
 
 enum ActivityType {

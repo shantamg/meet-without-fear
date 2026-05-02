@@ -3,7 +3,7 @@ title: "Stage 2: Perspective Stretch - Empathy Exchange Flow"
 sidebar_position: 6
 description: This document describes the empathy exchange flow in Stage 2, including the reconciler system that analyzes empathy accuracy and manages the sharing of addit...
 created: 2026-03-11
-updated: 2026-04-28
+updated: 2026-05-02
 status: living
 ---
 # Stage 2: Perspective Stretch - Empathy Exchange Flow
@@ -28,6 +28,7 @@ stateDiagram-v2
 
     HELD --> READY: Reconciler finds minor/no gaps (direct)
     HELD --> AWAITING_SHARING: Reconciler finds significant gaps (direct)
+    HELD --> TOPIC_MISMATCH: Topic alignment gate detects different topics
 
     AWAITING_SHARING --> REFINING: Subject shares context
     REFINING --> READY: Guesser revises empathy (re-analyzed, circuit breaker forces READY)
@@ -40,11 +41,13 @@ stateDiagram-v2
     REVEALED --> VALIDATED: Subject validates empathy as accurate
     REVEALED --> REVEALED: Subject says empathy is inaccurate (validated=false; status stays REVEALED)
 
+    TOPIC_MISMATCH --> [*]: Users must re-anchor topics
+
     note right of HELD
         The ANALYZING state exists in empathy-state-machine.ts
         but is never triggered by the reconciler code.
         The reconciler transitions directly from HELD
-        to READY or AWAITING_SHARING.
+        to READY, AWAITING_SHARING, or TOPIC_MISMATCH.
     end note
 
     note right of REVEALED
@@ -90,7 +93,7 @@ The reconciler runs when one user confirms "feel heard" (completing Stage 1) and
 
 > **Implementation Note:** The reconciler has been refactored into a modular `backend/src/services/reconciler/` directory:
 > - `state.ts` — Empathy status transitions, reveal logic. Contains `runReconcilerForDirection()` (asymmetric) and `checkAndRevealBothIfReady()` (serializable transaction for mutual reveal).
-> - `analysis.ts` — Core AI gap analysis (`analyzeEmpathyGap()`), theme extraction, witnessing content retrieval.
+> - `analysis.ts` — Core AI gap analysis (`analyzeEmpathyGap()`), topic alignment check (`checkTopicAlignment()`), theme extraction, witnessing content retrieval.
 > - `sharing.ts` — Share suggestion generation, refinement, and response handling.
 > - `circuit-breaker.ts` — Attempt counting to prevent infinite refinement loops (max 3 per direction).
 > - `index.ts` — Barrel re-exports.
@@ -113,7 +116,11 @@ flowchart TB
 
     A --> B{Partner has HELD<br/>empathy attempt?}
     B -->|No| C[No action needed]
-    B -->|Yes| D[Run Reconciler Analysis]
+    B -->|Yes| TA[Topic Alignment Check<br/>Haiku classifier]
+
+    TA --> TAR{Topics aligned?}
+    TAR -->|different_topic<br/>high confidence| TM[Status → TOPIC_MISMATCH<br/>No share offer created]
+    TAR -->|same_topic /<br/>insufficient_signal| D[Run Reconciler Analysis]
 
     D --> E{Analyze gaps in<br/>partner's empathy attempt}
 
@@ -394,10 +401,11 @@ Only one panel shows at a time, in this priority order:
   consentRecordId: string | null; // FK to ConsentRecord (consent to share)
   content: string;            // The empathy statement
   status: 'HELD' | 'ANALYZING' | 'AWAITING_SHARING' | 'REFINING' |
-          'READY' | 'REVEALED' | 'VALIDATED' | 'NEEDS_WORK';
+          'READY' | 'REVEALED' | 'VALIDATED' | 'NEEDS_WORK' | 'TOPIC_MISMATCH';
   // READY = reconciler complete, waiting for partner to also complete Stage 2
   // ANALYZING exists in empathy-state-machine.ts but is never set by the reconciler code
   // NEEDS_WORK exists for legacy compatibility but is never set by current code
+  // TOPIC_MISMATCH = guesser's empathy is about a different topic than subject's Stage 1
   statusVersion: number;      // Incremented on every status change for event ordering
   sharedAt: Date;             // When initially shared
   revealedAt: Date | null;    // When revealed to subject (after mutual reveal)
@@ -551,6 +559,8 @@ This shows:
 ### Check Reconciler Logs
 Look for these key log messages (now using Winston structured logger — search JSON logs in production):
 - `Running asymmetric reconciliation` - Start of analysis (in `reconciler/state.ts`)
+- `Topic alignment result` (in `reconciler/analysis.ts`) — Topic check done; fields: `alignment`, `confidence`, `guesserTopic`, `subjectTopic`
+- `Topic mismatch detected — blocking reconciler share path` (in `reconciler/state.ts`) — High-confidence different_topic blocked the share path
 - `AI analysis complete` (in `reconciler/analysis.ts`) — AI analysis done; fields: `alignmentScore`, `gapSeverity`, `action`
 - `Reconciler outcome` (in `reconciler/state.ts`) — state transition committed; fields: `severity`, `action`, `empathyStatus`
 - `Share suggestion generated` - Suggestion created (in `reconciler/sharing.ts`)

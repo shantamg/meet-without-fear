@@ -25,6 +25,8 @@ export const EmpathyStatus = {
   REVEALED: 'REVEALED',
   /** Recipient has validated accuracy */
   VALIDATED: 'VALIDATED',
+  /** Guesser's empathy attempt is about a different topic than subject's Stage 1 */
+  TOPIC_MISMATCH: 'TOPIC_MISMATCH',
 } as const;
 
 export type EmpathyStatus = (typeof EmpathyStatus)[keyof typeof EmpathyStatus];

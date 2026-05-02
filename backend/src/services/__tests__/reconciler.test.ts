@@ -1378,5 +1378,153 @@ describe('Reconciler Service', () => {
         runReconcilerForDirection(sessionId, guesserId, subjectId)
       ).rejects.toThrow('Guesser has not submitted empathy statement');
     });
+
+    // ========================================================================
+    // Topic Alignment Gate
+    // ========================================================================
+
+    describe('topic alignment gate', () => {
+      it('blocks share path when high-confidence different_topic detected (production regression)', async () => {
+        // Production failure shape: one side discusses preschool/intoxication,
+        // the other discusses app/project scope
+        const { getHaikuJson } = require('../../lib/bedrock');
+        (getHaikuJson as jest.Mock).mockResolvedValue({
+          alignment: 'different_topic',
+          confidence: 92,
+          guesserTopic: 'App collaboration and project scope decisions',
+          subjectTopic: 'Preschool safety concern involving alleged intoxication of a caregiver',
+          rationale: 'Completely unrelated situations — different people, different contexts.',
+        });
+
+        // Mock empathy data: guesser guessed about app/project
+        (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({
+          id: 'attempt-1',
+          sessionId,
+          sourceUserId: guesserId,
+          content: 'I think they feel overwhelmed by the project scope and want more say in feature decisions.',
+          sharedAt: new Date(),
+          status: 'HELD',
+        });
+
+        // Mock witnessing: subject discussed preschool/intoxication
+        (prisma.message.findMany as jest.Mock).mockResolvedValue([
+          {
+            content: 'I walked in and could tell something was wrong. The teacher seemed impaired, and the kids were unsupervised.',
+            extractedEmotions: ['fear', 'anger', 'protectiveness'],
+          },
+        ]);
+
+        const result = await runReconcilerForDirection(sessionId, guesserId, subjectId);
+
+        // Should NOT proceed to gap analysis or share offers
+        expect(result.empathyStatus).toBe('TOPIC_MISMATCH');
+        expect(result.result).toBeNull();
+        expect(result.shareOffer).toBeNull();
+
+        // Should set empathy status to TOPIC_MISMATCH in DB
+        expect(prisma.empathyAttempt.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ status: 'TOPIC_MISMATCH' }),
+          })
+        );
+
+        // Should NOT call the reconciler analysis AI
+        const { getSonnetResponse } = require('../../lib/bedrock');
+        expect(getSonnetResponse).not.toHaveBeenCalled();
+      });
+
+      it('allows same-topic through to normal gap analysis', async () => {
+        const { getHaikuJson, getSonnetResponse } = require('../../lib/bedrock');
+        (getHaikuJson as jest.Mock).mockResolvedValue({
+          alignment: 'same_topic',
+          confidence: 95,
+          guesserTopic: 'Relationship communication difficulties',
+          subjectTopic: 'Feeling unheard in the relationship',
+          rationale: 'Both discuss the same relationship dynamic.',
+        });
+
+        (getSonnetResponse as jest.Mock).mockResolvedValue(
+          JSON.stringify({
+            alignment: { score: 85, summary: 'Good', correctlyIdentified: ['frustration'] },
+            gaps: { severity: 'minor', summary: 'Minor', missedFeelings: [], misattributions: [], mostImportantGap: null },
+            recommendation: { action: 'PROCEED', rationale: 'OK', sharingWouldHelp: false, suggestedShareFocus: null },
+          })
+        );
+
+        const result = await runReconcilerForDirection(sessionId, guesserId, subjectId);
+
+        expect(result.empathyStatus).toBe('READY');
+        expect(result.result).not.toBeNull();
+        // Sonnet was called for gap analysis
+        expect(getSonnetResponse).toHaveBeenCalled();
+      });
+
+      it('fails open when topic alignment returns insufficient_signal', async () => {
+        const { getHaikuJson, getSonnetResponse } = require('../../lib/bedrock');
+        (getHaikuJson as jest.Mock).mockResolvedValue({
+          alignment: 'insufficient_signal',
+          confidence: 20,
+          guesserTopic: 'unclear',
+          subjectTopic: 'unclear',
+          rationale: 'Content too short to determine.',
+        });
+
+        (getSonnetResponse as jest.Mock).mockResolvedValue(
+          JSON.stringify({
+            alignment: { score: 80, summary: 'Good', correctlyIdentified: [] },
+            gaps: { severity: 'minor', summary: 'Minor', missedFeelings: [], misattributions: [], mostImportantGap: null },
+            recommendation: { action: 'PROCEED', rationale: 'OK', sharingWouldHelp: false, suggestedShareFocus: null },
+          })
+        );
+
+        const result = await runReconcilerForDirection(sessionId, guesserId, subjectId);
+
+        // Should proceed to normal analysis (fail open)
+        expect(result.empathyStatus).toBe('READY');
+        expect(result.result).not.toBeNull();
+        expect(getSonnetResponse).toHaveBeenCalled();
+      });
+
+      it('fails open when different_topic has low confidence', async () => {
+        const { getHaikuJson, getSonnetResponse } = require('../../lib/bedrock');
+        (getHaikuJson as jest.Mock).mockResolvedValue({
+          alignment: 'different_topic',
+          confidence: 50,
+          guesserTopic: 'Possibly work-related stress',
+          subjectTopic: 'Possibly family conflict',
+          rationale: 'Ambiguous — could be related.',
+        });
+
+        (getSonnetResponse as jest.Mock).mockResolvedValue(
+          JSON.stringify({
+            alignment: { score: 70, summary: 'Moderate', correctlyIdentified: [] },
+            gaps: { severity: 'minor', summary: 'Minor', missedFeelings: [], misattributions: [], mostImportantGap: null },
+            recommendation: { action: 'PROCEED', rationale: 'OK', sharingWouldHelp: false, suggestedShareFocus: null },
+          })
+        );
+
+        const result = await runReconcilerForDirection(sessionId, guesserId, subjectId);
+
+        // Low confidence → fail open
+        expect(result.empathyStatus).toBe('READY');
+        expect(result.result).not.toBeNull();
+      });
+    });
+  });
+
+  // ==========================================================================
+  // Topic Mismatch State Transition
+  // ==========================================================================
+
+  describe('TOPIC_MISMATCH state transition', () => {
+    it('transitions from HELD to TOPIC_MISMATCH on TOPIC_MISMATCH_DETECTED', () => {
+      expect(transition(EmpathyStatus.HELD, 'TOPIC_MISMATCH_DETECTED')).toBe(EmpathyStatus.TOPIC_MISMATCH);
+    });
+
+    it('throws on invalid TOPIC_MISMATCH_DETECTED from READY', () => {
+      expect(() => transition(EmpathyStatus.READY, 'TOPIC_MISMATCH_DETECTED')).toThrow(
+        'Invalid empathy state transition'
+      );
+    });
   });
 });
