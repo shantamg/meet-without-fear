@@ -2,56 +2,23 @@
  * Stage 3 Controller
  *
  * Handles the What Matters stage endpoints:
- * - GET /sessions/:id/needs - Get AI-synthesized needs
+ * - GET /sessions/:id/needs - Get identified needs (simple read)
+ * - POST /sessions/:id/needs/capture - Capture needs from an AI summary card
  * - POST /sessions/:id/needs/confirm - Confirm needs
  * - POST /sessions/:id/needs/consent - Consent to share needs
- * - GET /sessions/:id/common-ground - Get common ground analysis
+ * - POST /sessions/:id/needs/validate - Validate revealed needs
+ * - POST /sessions/:id/needs - Add custom need
+ * - GET /sessions/:id/needs/comparison - Side-by-side needs comparison
  */
 
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import {
-  extractNeedsFromConversation,
-  findCommonGround,
-  isExtractionRunning,
-  acquireExtractionLock,
-  releaseExtractionLock,
-} from '../services/needs';
 import { confirmNeedsRequestSchema, ConsentContentType, NeedCategory } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
-
-// ============================================================================
-// Common Ground Analysis Lock (in-memory idempotency guard)
-// ============================================================================
-
-/**
- * Track in-progress common ground analyses to prevent concurrent AI calls.
- * Key: sessionId, Value: timestamp when analysis started.
- */
-const commonGroundLocks = new Map<string, number>();
-const COMMON_GROUND_LOCK_TIMEOUT_MS = 120_000; // 2 minutes max
-
-function isCommonGroundAnalysisRunning(sessionId: string): boolean {
-  const startedAt = commonGroundLocks.get(sessionId);
-  if (!startedAt) return false;
-  if (Date.now() - startedAt > COMMON_GROUND_LOCK_TIMEOUT_MS) {
-    commonGroundLocks.delete(sessionId);
-    return false;
-  }
-  return true;
-}
-
-function setCommonGroundLock(sessionId: string): void {
-  commonGroundLocks.set(sessionId, Date.now());
-}
-
-function clearCommonGroundLock(sessionId: string): void {
-  commonGroundLocks.delete(sessionId);
-}
 
 // ============================================================================
 // Helpers
@@ -123,7 +90,7 @@ async function hasPartnerValidatedNeeds(
   });
 
   const gates = partnerProgress?.gatesSatisfied as Record<string, unknown> | null;
-  return gates?.commonGroundConfirmed === true || gates?.needsValidated === true;
+  return gates?.needsValidated === true;
 }
 
 function isNeedCategory(value: unknown): value is NeedCategory {
@@ -135,7 +102,7 @@ function isNeedCategory(value: unknown): value is NeedCategory {
 // ============================================================================
 
 /**
- * Get AI-synthesized needs for the current user
+ * Get identified needs for the current user (simple read, no auto-extraction)
  * GET /sessions/:id/needs
  */
 export async function getNeeds(req: Request, res: Response): Promise<void> {
@@ -199,54 +166,12 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
     const userVessel = await getOrCreateUserVessel(sessionId, user.id);
 
     // Get existing needs for this user
-    let needs = await prisma.identifiedNeed.findMany({
+    const needs = await prisma.identifiedNeed.findMany({
       where: {
         vesselId: userVessel.id,
       },
       orderBy: { createdAt: 'asc' },
     });
-
-    // If no needs exist, trigger AI extraction (with idempotency guard)
-    if (needs.length === 0) {
-      // Only auto-extract after the user has engaged in Stage 3 chat.
-      // Prevents needs from appearing before any conversation in Stage 3.
-      const stage3UserMessageCount = await prisma.message.count({
-        where: { sessionId, stage: 3, senderId: user.id, role: 'USER' },
-      });
-      if (stage3UserMessageCount === 0) {
-        successResponse(res, { needs: [], extracting: false, synthesizedAt: null });
-        return;
-      }
-
-      if (isExtractionRunning(sessionId, user.id)) {
-        // Another request is already extracting - return loading state
-        successResponse(res, {
-          needs: [],
-          extracting: true,
-          synthesizedAt: null,
-        });
-        return;
-      }
-
-      acquireExtractionLock(sessionId, user.id);
-      try {
-        needs = await extractNeedsFromConversation(sessionId, user.id);
-
-        // Notify the client that needs extraction is complete
-        if (needs.length > 0) {
-          try {
-            await publishSessionEvent(sessionId, 'session.needs_extracted' as any, {
-              userId: user.id,
-              needsCount: needs.length,
-            });
-          } catch (err) {
-            logger.error('[getNeeds] Failed to publish needs extraction event:', err);
-          }
-        }
-      } finally {
-        releaseExtractionLock(sessionId, user.id);
-      }
-    }
 
     successResponse(res, {
       needs: needs.map((n) => ({
@@ -260,7 +185,7 @@ export async function getNeeds(req: Request, res: Response): Promise<void> {
         createdAt: n.createdAt.toISOString(),
       })),
       extracting: false,
-      synthesizedAt: needs[0]?.createdAt.toISOString() ?? new Date().toISOString(),
+      synthesizedAt: needs[0]?.createdAt.toISOString() ?? null,
     });
   } catch (error) {
     logger.error('[getNeeds] Error:', error);
@@ -909,179 +834,6 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
 }
 
 /**
- * Get common ground analysis between partners
- * GET /sessions/:id/common-ground
- */
-export async function getCommonGround(
-  req: Request,
-  res: Response
-): Promise<void> {
-  try {
-    const user = req.user;
-    if (!user) {
-      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
-      return;
-    }
-
-    const { id: sessionId } = req.params;
-
-    // Check session exists and user has access
-    const session = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        relationship: {
-          members: {
-            some: { userId: user.id },
-          },
-        },
-      },
-      include: {
-        relationship: {
-          include: {
-            members: true,
-          },
-        },
-      },
-    });
-
-    if (!session) {
-      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
-      return;
-    }
-
-    // Return empty data for non-active sessions (allows parallel fetching without errors)
-    if (session.status !== 'ACTIVE') {
-      successResponse(res, {
-        commonGround: [],
-        analysisComplete: false,
-        bothConfirmed: false,
-      });
-      return;
-    }
-
-    // Get user's current stage progress
-    const progress = await prisma.stageProgress.findFirst({
-      where: {
-        sessionId,
-        userId: user.id,
-      },
-      orderBy: { stage: 'desc' },
-    });
-
-    // If not in stage 3 yet, return empty data instead of error
-    const currentStage = progress?.stage ?? 0;
-    if (currentStage < 3) {
-      successResponse(res, {
-        commonGround: [],
-        analysisComplete: false,
-        bothConfirmed: false,
-      });
-      return;
-    }
-
-    // Get partner ID
-    const partnerId = await getPartnerUserId(sessionId, user.id);
-    if (!partnerId) {
-      errorResponse(res, 'INTERNAL_ERROR', 'Could not find partner', 500);
-      return;
-    }
-
-    // Check if both partners have shared their needs
-    const userGates = progress?.gatesSatisfied as Record<string, unknown> | null;
-    const userShared = userGates?.needsShared === true;
-
-    const partnerShared = await hasPartnerSharedNeeds(sessionId, user.id);
-
-    // If either hasn't shared, return waiting state
-    if (!userShared || !partnerShared) {
-      successResponse(res, {
-        commonGround: [],
-        analysisComplete: false,
-        bothConfirmed: false,
-        waitingFor: !userShared ? 'self' : 'partner',
-      });
-      return;
-    }
-
-    // Get or create shared vessel
-    let sharedVessel = await prisma.sharedVessel.findUnique({
-      where: { sessionId },
-    });
-
-    if (!sharedVessel) {
-      sharedVessel = await prisma.sharedVessel.create({
-        data: { sessionId },
-      });
-    }
-
-    // Get existing common ground
-    let commonGround = await prisma.commonGround.findMany({
-      where: { sharedVesselId: sharedVessel.id },
-      orderBy: { id: 'asc' },
-    });
-
-    // If no common ground exists, trigger AI analysis (with lock to prevent duplicates)
-    let analysisRan = false;
-    if (commonGround.length === 0) {
-      if (!isCommonGroundAnalysisRunning(sessionId)) {
-        setCommonGroundLock(sessionId);
-        try {
-          commonGround = await findCommonGround(sessionId, user.id, partnerId);
-          analysisRan = true;
-        } finally {
-          clearCommonGroundLock(sessionId);
-        }
-      }
-      // If lock was held, re-check DB (another request may have just finished)
-      if (!analysisRan) {
-        commonGround = await prisma.commonGround.findMany({
-          where: { sharedVesselId: sharedVessel.id },
-          orderBy: { id: 'asc' },
-        });
-      }
-    }
-
-    // Handle zero common ground (AI found no overlap)
-    if (commonGround.length === 0 && analysisRan) {
-      successResponse(res, {
-        commonGround: [],
-        analysisComplete: true,
-        bothConfirmed: false,
-        noOverlap: true,
-      });
-      return;
-    }
-
-    // Determine which user is "A" and which is "B" (based on order of members)
-    const members = session.relationship.members;
-    const userIsA = members[0]?.userId === user.id;
-
-    // Determine if both have confirmed all common ground
-    const allConfirmed = commonGround.every(
-      (cg) => cg.confirmedByA && cg.confirmedByB
-    );
-
-    successResponse(res, {
-      commonGround: commonGround.map((cg) => ({
-        id: cg.id,
-        category: cg.category,
-        need: cg.need,
-        description: cg.need, // Alias for compatibility
-        confirmedByMe: userIsA ? cg.confirmedByA : cg.confirmedByB,
-        confirmedByPartner: userIsA ? cg.confirmedByB : cg.confirmedByA,
-        confirmedAt: cg.confirmedAt?.toISOString() ?? null,
-      })),
-      analysisComplete: true,
-      bothConfirmed: allConfirmed,
-      noOverlap: false,
-    });
-  } catch (error) {
-    logger.error('[getCommonGround] Error:', error);
-    errorResponse(res, 'INTERNAL_ERROR', 'Failed to get common ground', 500);
-  }
-}
-
-/**
  * Add custom need
  * POST /sessions/:id/needs
  */
@@ -1182,263 +934,7 @@ export async function addCustomNeed(req: Request, res: Response): Promise<void> 
 }
 
 /**
- * Confirm common ground
- * POST /sessions/:id/common-ground/confirm
- */
-export async function confirmCommonGround(
-  req: Request,
-  res: Response
-): Promise<void> {
-  try {
-    const user = req.user;
-    if (!user) {
-      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
-      return;
-    }
-
-    const { id: sessionId } = req.params;
-    // Accept both 'commonGroundIds' (legacy) and 'confirmations' (current mobile DTO)
-    const { commonGroundIds, confirmations } = req.body as {
-      commonGroundIds?: string[];
-      confirmations?: { commonGroundId: string; confirmed: boolean }[];
-    };
-
-    // Normalize: extract IDs from confirmations if commonGroundIds not provided
-    const resolvedIds: string[] = commonGroundIds && Array.isArray(commonGroundIds) && commonGroundIds.length > 0
-      ? commonGroundIds
-      : Array.isArray(confirmations)
-        ? confirmations.filter((c) => c.confirmed).map((c) => c.commonGroundId)
-        : [];
-
-    // Check session exists and user has access
-    const session = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        relationship: {
-          members: {
-            some: { userId: user.id },
-          },
-        },
-      },
-      include: {
-        relationship: {
-          include: {
-            members: {
-              orderBy: { joinedAt: 'asc' },
-            },
-          },
-        },
-      },
-    });
-
-    if (!session) {
-      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
-      return;
-    }
-
-    // Check session is active
-    if (session.status !== 'ACTIVE') {
-      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
-      return;
-    }
-
-    // Get user's current stage progress
-    const progress = await prisma.stageProgress.findFirst({
-      where: {
-        sessionId,
-        userId: user.id,
-      },
-      orderBy: { stage: 'desc' },
-    });
-
-    // Check user is in stage 3
-    const currentStage = progress?.stage ?? 0;
-    if (currentStage !== 3) {
-      errorResponse(
-        res,
-        'VALIDATION_ERROR',
-        `Cannot confirm common ground: you are in stage ${currentStage}, but stage 3 is required`,
-        400
-      );
-      return;
-    }
-
-    // Get shared vessel
-    const sharedVessel = await prisma.sharedVessel.findUnique({
-      where: { sessionId },
-    });
-
-    if (!sharedVessel) {
-      errorResponse(res, 'NOT_FOUND', 'Shared vessel not found', 404);
-      return;
-    }
-
-    // Check for noOverlap case: no CommonGround records exist for this session
-    const existingCommonGround = await prisma.commonGround.findMany({
-      where: { sharedVesselId: sharedVessel.id },
-    });
-
-    const isNoOverlap = existingCommonGround.length === 0;
-
-    // If no IDs provided and this is NOT a noOverlap case, reject
-    if (resolvedIds.length === 0 && !isNoOverlap) {
-      errorResponse(
-        res,
-        'VALIDATION_ERROR',
-        'commonGroundIds array is required when common ground exists',
-        400
-      );
-      return;
-    }
-
-    // Determine if user is A or B
-    const members = session.relationship.members;
-    const userIsA = members[0]?.userId === user.id;
-
-    const now = new Date();
-
-    if (isNoOverlap) {
-      logger.info('[confirmCommonGround] noOverlap case confirmed for session', sessionId);
-
-      const gatesSatisfied = {
-        ...(progress?.gatesSatisfied as Record<string, unknown> || {}),
-        commonGroundConfirmed: true,
-        confirmedAt: now.toISOString(),
-        needsValidated: true,
-        needsValidatedAt: now.toISOString(),
-        noOverlap: true,
-      } satisfies Prisma.InputJsonValue;
-
-      await prisma.stageProgress.update({
-        where: {
-          sessionId_userId_stage: {
-            sessionId,
-            userId: user.id,
-            stage: 3,
-          },
-        },
-        data: {
-          gatesSatisfied,
-          status: 'GATE_PENDING',
-          completedAt: null,
-        },
-      });
-
-      const partnerValidated = await hasPartnerValidatedNeeds(sessionId, user.id);
-      const partnerId = await getPartnerUserId(sessionId, user.id);
-      if (partnerId) {
-        await notifyPartner(sessionId, partnerId, 'partner.common_ground_confirmed', {
-          stage: 3,
-          confirmedBy: user.id,
-          allConfirmedByBoth: partnerValidated,
-          noOverlap: true,
-        });
-      }
-
-      successResponse(res, {
-        confirmed: true,
-        confirmedAt: now.toISOString(),
-        allConfirmedByMe: true,
-        allConfirmedByBoth: partnerValidated,
-        canAdvance: partnerValidated,
-        noOverlap: true,
-      });
-      return;
-    }
-
-    // Normal case: update confirmation status for each common ground
-    for (const cgId of resolvedIds) {
-      const cg = await prisma.commonGround.findUnique({
-        where: { id: cgId },
-      });
-
-      if (!cg || cg.sharedVesselId !== sharedVessel.id) {
-        continue; // Skip invalid IDs
-      }
-
-      // Update confirmation based on user's slot
-      const updateData: Prisma.CommonGroundUpdateInput = userIsA
-        ? { confirmedByA: true }
-        : { confirmedByB: true };
-
-      // If both have now confirmed, set confirmedAt
-      const willBothConfirm = userIsA
-        ? cg.confirmedByB
-        : cg.confirmedByA;
-
-      if (willBothConfirm) {
-        updateData.confirmedAt = now;
-      }
-
-      await prisma.commonGround.update({
-        where: { id: cgId },
-        data: updateData,
-      });
-    }
-
-    // Get all common ground to check if all are confirmed
-    const allCommonGround = await prisma.commonGround.findMany({
-      where: { sharedVesselId: sharedVessel.id },
-    });
-
-    const allConfirmedByMe = allCommonGround.every((cg) =>
-      userIsA ? cg.confirmedByA : cg.confirmedByB
-    );
-
-    const allConfirmedByBoth = allCommonGround.every(
-      (cg) => cg.confirmedByA && cg.confirmedByB
-    );
-
-    // Update stage progress if all confirmed by me
-    if (allConfirmedByMe) {
-      const gatesSatisfied = {
-        ...(progress?.gatesSatisfied as Record<string, unknown> || {}),
-        commonGroundConfirmed: true,
-        confirmedAt: now.toISOString(),
-        commonGroundFoundAt: now.toISOString(),
-      } satisfies Prisma.InputJsonValue;
-
-      await prisma.stageProgress.update({
-        where: {
-          sessionId_userId_stage: {
-            sessionId,
-            userId: user.id,
-            stage: 3,
-          },
-        },
-        data: {
-          gatesSatisfied,
-          status: 'GATE_PENDING',
-          completedAt: null,
-        },
-      });
-    }
-
-    // Notify partner
-    const partnerId = await getPartnerUserId(sessionId, user.id);
-    if (partnerId) {
-      await notifyPartner(sessionId, partnerId, 'partner.common_ground_confirmed', {
-        stage: 3,
-        confirmedBy: user.id,
-        allConfirmedByBoth,
-      });
-    }
-
-    successResponse(res, {
-      confirmed: true,
-      confirmedAt: now.toISOString(),
-      allConfirmedByMe,
-      allConfirmedByBoth,
-      canAdvance: allConfirmedByBoth,
-    });
-  } catch (error) {
-    logger.error('[confirmCommonGround] Error:', error);
-    errorResponse(res, 'INTERNAL_ERROR', 'Failed to confirm common ground', 500);
-  }
-}
-
-/**
- * Get needs comparison (side-by-side view of both users' needs + common ground)
+ * Get needs comparison (side-by-side view of both users' needs)
  * GET /sessions/:id/needs/comparison
  *
  * Only available after both users have shared their needs.

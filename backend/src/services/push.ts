@@ -56,17 +56,9 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'Needs shared',
     body: 'Your partner shared their identified needs.',
   },
-  'session.common_ground_ready': {
-    title: 'Common ground ready',
-    body: 'Both of you have shared your needs. Common ground analysis is available.',
-  },
   'partner.ranking_submitted': {
     title: 'Ranking submitted',
     body: 'Your partner submitted their strategy rankings.',
-  },
-  'partner.common_ground_confirmed': {
-    title: 'Common ground confirmed',
-    body: 'Your partner confirmed the common ground.',
   },
   'partner.ready_to_rank': {
     title: 'Ready to rank',
