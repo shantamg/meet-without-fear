@@ -3,6 +3,7 @@ title: Sessions API
 sidebar_position: 2
 description: Session creation, listing, and lifecycle management.
 slug: /backend/api/sessions
+updated: "2026-05-03"
 ---
 # Sessions API
 
@@ -110,7 +111,7 @@ curl -X POST /api/v1/sessions \
 
 ### Session lifecycle
 
-`CREATED → INVITED → ACTIVE → ARCHIVED | ABANDONED`. There are no pause/resume states. `CREATED` flips to `INVITED` once the inviter confirms the invitation message; `INVITED` flips to `ACTIVE` when the partner accepts.
+`CREATED → INVITED → ACTIVE → (PAUSED) → ARCHIVED | ABANDONED`. `CREATED` flips to `INVITED` once the inviter confirms the invitation message; `INVITED` flips to `ACTIVE` when the partner accepts. Either participant can pause an active session (`POST /sessions/:id/pause`), which moves it to `PAUSED`; `POST /sessions/:id/resume` returns it to `ACTIVE`.
 
 > **Background AI**: After the inviter confirms the invitation message (`POST /sessions/:id/invitation/confirm`), the HTTP response returns immediately and the backend fires an AI transition message generation + Ably session-event publish asynchronously (fire-and-forget).
 
@@ -199,7 +200,32 @@ The frontend doesn't reconstruct session state from `GET /sessions/:id` alone. U
 
 ### Pause / Resume
 
-Not implemented. Sessions cannot be paused. For cooling-off, users can stop messaging — all state persists, and the session remains in `ACTIVE` until archived, abandoned, or resolved.
+```
+POST /api/v1/sessions/:id/pause
+POST /api/v1/sessions/:id/resume
+```
+
+Either participant can pause an `ACTIVE` session (e.g., for a cooling-off period). The session moves to `PAUSED` status and the partner receives a real-time `session.paused` event. All state is preserved. `POST /sessions/:id/resume` returns the session to `ACTIVE` and emits a `session.resumed` event.
+
+**Pause response:**
+```typescript
+interface PauseResponse {
+  paused: boolean;
+  pausedAt: string; // ISO timestamp
+  status: "PAUSED";
+}
+```
+
+**Resume response:**
+```typescript
+interface ResumeResponse {
+  resumed: boolean;
+  resumedAt: string; // ISO timestamp
+  status: "ACTIVE";
+}
+```
+
+Errors: `SESSION_NOT_ACTIVE` (400) if session is not `ACTIVE` when pausing; `VALIDATION_ERROR` (400) if session is not `PAUSED` when resuming.
 
 ---
 

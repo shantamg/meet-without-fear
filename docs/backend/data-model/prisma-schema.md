@@ -3,6 +3,7 @@ title: Prisma Schema
 sidebar_position: 1
 description: Core Vessel Architecture tables plus pointers to the rest of the Prisma schema (Inner Work, reconciler, memory, needs/people, telemetry).
 slug: /backend/data-model/prisma-schema
+updated: "2026-05-03"
 ---
 # Prisma Schema
 
@@ -509,19 +510,21 @@ model Message {
   sessionId String
   sender    User?       @relation(fields: [senderId], references: [id])
   senderId  String?     // null for AI messages
+  forUserId String?     // Which user the AI was responding to (data isolation)
   role      MessageRole
   content   String      @db.Text
   stage     Int
   timestamp DateTime    @default(now())
 
-  // Embedding for semantic search
-  embedding Unsupported("vector(1536)")?
+  // NOTE: Message-level embedding removed per fact-ledger architecture.
+  // Session-level contentEmbedding on UserVessel is used instead.
 
   // Extracted memory references
-  extractedNeeds String[]
+  extractedNeeds    String[]
   extractedEmotions String[]
 
   @@index([sessionId, timestamp])
+  @@index([sessionId, forUserId, role])
 }
 
 ## Stage 2: Empathy Attempts
@@ -673,11 +676,16 @@ enum MessageRole {
   USER
   AI
   SYSTEM
-  VALIDATION_FEEDBACK
+  EMPATHY_STATEMENT      // User's shared empathy statement (shown in chat history)
+  EMPATHY_REVEAL_INTRO   // AI intro message when revealing partner's empathy to user
+  SHARED_CONTEXT         // Context shared by subject to help guesser refine empathy
+  VALIDATION_FEEDBACK    // Constructive feedback after subject marks empathy as not quite
+  SHARE_SUGGESTION       // Suggested content for subject to share (reconciler)
+  EMPATHY_VALIDATION_PROMPT // AI prompt asking user to validate partner's understanding
 }
 ```
 
-`VALIDATION_FEEDBACK` is a targeted partner-visible chat message created when a Stage 2 validator sends Feedback Coach-approved feedback with `validated=false`.
+`VALIDATION_FEEDBACK` is a targeted partner-visible chat message created when a Stage 2 validator sends Feedback Coach-approved feedback with `validated=false`. The other non-`USER`/`AI`/`SYSTEM` roles represent structured AI-generated messages used in specific stage flows (empathy exchange, reconciler suggestions).
 
 ## Global Library (Stage 4 Suggestions)
 
