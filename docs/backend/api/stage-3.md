@@ -33,8 +33,9 @@ GET /api/v1/sessions/:id/needs
 ```typescript
 interface GetNeedsResponse {
   needs: IdentifiedNeedDTO[];
-  synthesizedAt: string;
-  isDirty: boolean;  // True if content changed since synthesis
+  extracting: boolean;         // Always false — extraction is not triggered on-demand
+  synthesizedAt: string | null; // null when no needs exist
+  isDirty: boolean;
 }
 
 interface IdentifiedNeedDTO {
@@ -88,20 +89,18 @@ enum NeedCategory {
         "aiConfidence": 0.72
       }
     ],
+    "extracting": false,
     "synthesizedAt": "2024-01-16T18:00:00Z",
     "isDirty": false
   }
 }
 ```
 
-### Synthesis Trigger
+### Behavior
 
-`GET /needs` runs extraction only when **no needs exist yet** for the caller AND the caller has sent at least one Stage-3 `USER` message (the caller has to engage before the AI will synthesize).
+`GET /needs` is a direct read — it returns the stored `IdentifiedNeed` rows for the caller without triggering AI extraction. Needs are created via the capture flow, not on-demand. `extracting` is always `false`; `synthesizedAt` is `null` when no needs exist.
 
-- First call with zero Stage-3 messages: returns `{ needs: [], extracting: false }`; the UI prompts the user to reflect.
-- First call after the user has messaged: returns `{ needs: [], extracting: true }` on a cache miss while AI extraction runs; subsequent polls return the synthesized list.
-- Subsequent calls once needs exist: returns the stored `IdentifiedNeed` rows without re-extracting.
-`isDirty` and explicit re-synthesis are not currently triggers — extraction runs once and is not re-run from this endpoint. Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response includes both `need` and `description` fields carrying the same string (`description` is a compatibility alias).
+Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response includes both `need` and `description` fields carrying the same string (`description` is a compatibility alias).
 
 ---
 
