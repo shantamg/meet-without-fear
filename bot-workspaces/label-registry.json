@@ -192,12 +192,6 @@
       "entry_stage": "summarize",
       "trigger": "label",
       "model": "sonnet"
-    },
-    "bot:mwf-session": {
-      "workspace": "mwf-session/",
-      "entry_stage": "0-onboarding",
-      "trigger": "manual",
-      "effort": "max"
     }
   }
 }

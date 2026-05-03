@@ -24,7 +24,7 @@ Operational infrastructure for Meet Without Fear.
 
 | Service | Purpose |
 |---|---|
-| `slam-bot-socket.service` | Socket Mode listener for real-time Slack events. Routes incoming messages by channel: DMs and `#slam-paws`/`#agentic-devs`/`#bugs-and-requests`/`#most-important-thing` go to the `slack-triage` workspace; `#mwf-sessions` messages go to the `mwf-session` workspace (or, when `MWF_BACKEND_URL` is set, forward directly to the backend Bedrock pipeline). Also handles `@slam_paws test <scenario>` commands from any channel — spawns `run-and-publish.sh` in the background, replies in-thread with 👀 / ✅ / ❌ and a dashboard URL. |
+| `slam-bot-socket.service` | Socket Mode listener for real-time Slack events. Routes incoming messages by channel: DMs and `#slam-paws`/`#agentic-devs`/`#bugs-and-requests`/`#most-important-thing` go to the `slack-triage` workspace. Also handles `@slam_paws test <scenario>` commands from any channel — spawns `run-and-publish.sh` in the background, replies in-thread with 👀 / ✅ / ❌ and a dashboard URL. |
 | `slam-bot-state-scanner.service` | GitHub state scanner daemon (`github-state-scanner.sh` loop). Hardened with `MemoryMax=256M` and `TasksMax=64` to prevent runaway resource use. |
 
 ### Cron jobs
@@ -42,7 +42,7 @@ The crontab (installed by `deploy.sh`) covers roughly the following categories. 
 | every 5 min | `check-socket-mode.sh` | Restart socket listener if Slack disconnects |
 | every 10 min | `pipeline-monitor.sh` | Watch PR / workflow state |
 | every 30 min | `thread-tracker.sh` | Reconcile Slack threads with GitHub activity |
-| daily | `sync-labels.sh`, `bot-health-check.sh`, `api-budget-summary.sh --post`, `api-budget-summary.sh --alert`, `prune-journal.sh`, `prune-claude-projects.sh`, `sweep-mwf-sessions.sh` | Housekeeping + daily health + budget digest (post to `#bot-ops` + over-budget alert) + session retention |
+| daily | `sync-labels.sh`, `bot-health-check.sh`, `api-budget-summary.sh --post`, `api-budget-summary.sh --alert`, `prune-journal.sh`, `prune-claude-projects.sh` | Housekeeping + daily health + budget digest (post to `#bot-ops` + over-budget alert) |
 | twice daily (08:00 / 20:00) | `sync-staging.sh` | Merge `main` → `bot/staging`; PR accumulated bot work back to `main` |
 | scheduled | `workspace-dispatcher.sh` variants | `bug-fix`, `health-check`, `docs-audit`, `security-audit`, `stale-sweeper`, `pr-reviewer`, `daily-strategy` runs |
 | on-demand only | `run-and-publish.sh` | E2E test runs published to dashboard — triggered via `@slam_paws test <scenario>` in Slack or manually via SSH. No scheduled cron (see `scripts/ec2-bot/crontab.txt`). |
@@ -54,22 +54,13 @@ Local operator scripts live at `scripts/ec2-bot/`:
 | `provision.sh` | One-shot AWS provisioning (security group, EIP, instance, SSH config entry) |
 | `setup.sh` | First-time bootstrap of a fresh instance (Node, gh, claude, directories) |
 | `deploy.sh` | Symlink scripts, install systemd units + crontab + logrotate |
-| `configure-slack.sh` | Write Slack tokens + channel IDs (`SLAM_BOT_CHANNEL_ID` for `#slam-paws`, `AGENTIC_DEVS_CHANNEL_ID` for `#agentic-devs`, `BUGS_AND_REQUESTS_CHANNEL_ID` for `#bugs-and-requests`, `MOST_IMPORTANT_THING_CHANNEL_ID` for `#most-important-thing`, `DAILY_SUMMARY_CHANNEL_ID` for `#daily-summary`, `MWF_SESSIONS_CHANNEL_ID` for `#mwf-sessions`) to `/opt/slam-bot/.env` and start the socket service |
+| `configure-slack.sh` | Write Slack tokens + channel IDs (`SLAM_BOT_CHANNEL_ID` for `#slam-paws`, `AGENTIC_DEVS_CHANNEL_ID` for `#agentic-devs`, `BUGS_AND_REQUESTS_CHANNEL_ID` for `#bugs-and-requests`, `MOST_IMPORTANT_THING_CHANNEL_ID` for `#most-important-thing`, `DAILY_SUMMARY_CHANNEL_ID` for `#daily-summary`) to `/opt/slam-bot/.env` and start the socket service |
 | `configure-mixpanel.sh` | Write Mixpanel service-account credentials |
 | `configure-db.sh` | Create/rotate `slam_bot_readonly` role on the Render Postgres |
 | `run-and-publish.sh` | Wrap a Playwright e2e run and publish results (screenshots, transcript, metadata) to the test dashboard. Called by the `@slam_paws test` Slack handler or manually via SSH. |
 | `save-snapshot.sh` | Save a named DB + app-state snapshot so test runs can branch from a known point. |
 | `restore-snapshot.sh` | Restore a previously saved snapshot by ID (used with `--starting-snapshot-id` in `run-and-publish.sh`). |
 | `write-test-result.ts` | Upload test artifacts (screenshots → Vercel Blob) and PATCH the run row in Vercel Postgres. Called by `run-and-publish.sh` after Playwright exits. |
-
-### Session data directories
-
-The bot maintains session state on disk at `~/meet-without-fear/`:
-
-| Directory | Purpose |
-|---|---|
-| `data/mwf-sessions/` | MWF session data, one subdirectory per session ID |
-| `data/mwf-users/` | Per-user profile data (name, previous sessions, etc.) |
 
 ### Channel routing
 
@@ -83,9 +74,6 @@ The socket listener routes messages by channel config. Each monitored channel ma
 | `#bugs-and-requests` | `slack-triage` | `bugs-and-requests-reply` |
 | `#most-important-thing` | `slack-triage` | `most-important-thing-reply` |
 | `#daily-summary` | `slack-triage` | `daily-summary-reply` |
-| `#mwf-sessions` | `mwf-session` | `mwf-session-reply` |
-
-For `#mwf-sessions`, when `MWF_BACKEND_URL` is set the listener POSTs directly to the backend Bedrock pipeline instead of spawning a Claude Code agent.
 
 ### Runbook: repo disappearance
 

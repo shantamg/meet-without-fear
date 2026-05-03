@@ -130,6 +130,52 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('what truly matters');
     });
 
+    it('Stage 3 prompt includes CONFIRMING mode', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(3, context));
+
+      expect(prompt).toContain('CONFIRMING');
+      expect(prompt).toContain('summary');
+      expect(prompt).toContain('FOUR MODES');
+    });
+
+    it('Stage 3 prompt includes post-reveal phase guidance', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(3, context));
+
+      expect(prompt).toContain('POST-REVEAL PHASES');
+      expect(prompt).toContain('NOTICING');
+      expect(prompt).toContain('FOLLOWING UP');
+      expect(prompt).toContain('EMOTIONAL PROCESSING');
+      expect(prompt).toContain('VALIDITY');
+    });
+
+    it('Stage 3 FORBIDDEN list prevents identifying overlap between needs lists', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(3, context));
+
+      expect(prompt).toContain('common ground');
+      expect(prompt).toContain('overlap');
+      expect(prompt).toContain('That insight belongs to the users');
+    });
+
+    it('Stage 3 prompt does not contain hardcoded user-facing opening phrase', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(3, context));
+
+      // The old hardcoded opening should be gone
+      expect(prompt).not.toContain('When you step back and look at all of this');
+    });
+
+    it('Stage 3 prompt preserves existing REDIRECTING, SUGGESTING, DEEPENING modes', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(3, context));
+
+      expect(prompt).toContain('REDIRECTING');
+      expect(prompt).toContain('SUGGESTING');
+      expect(prompt).toContain('DEEPENING');
+    });
+
     it('returns Stage 4 prompt for stage 4', () => {
       const context = createContext();
       const prompt = fullPrompt(buildStagePrompt(4, context));

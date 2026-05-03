@@ -268,10 +268,10 @@ export function UnifiedSessionScreen({
     handleShareEmpathy,
     handleResubmitEmpathy,
     handleValidatePartnerEmpathy,
-    handleSkipRefinement,
     handleConfirmAllNeeds,
     handleConsentToShareNeeds,
     handleConfirmCommonGround,
+    handleNeedsNotValidYet,
     handleRequestMoreStrategies,
     handleMarkReadyToRank,
     handleSubmitRankings,
@@ -827,8 +827,13 @@ export function UnifiedSessionScreen({
   const [needsDrawerMode, setNeedsDrawerMode] = useState<NeedsDrawerMode>('needs');
   const { data: needsComparisonData } = useNeedsComparison(
     sessionId,
-    showNeedsDrawer && (needsDrawerMode === 'comparison' || needsDrawerMode === 'common-ground'),
+    allNeedsConfirmed && (
+      showNeedsDrawer ||
+      myProgress?.stage === Stage.NEED_MAPPING
+    ),
   );
+  const shouldUseRevealedNeeds =
+    needsDrawerMode !== 'needs' && (needsComparisonData?.myNeeds?.length ?? 0) > 0;
 
   // Local latches to prevent panel flashing during server refetches.
   // Once user completes an action, the latch stays true even if server data temporarily reverts.
@@ -1032,12 +1037,12 @@ export function UnifiedSessionScreen({
     hasRespondedToShareOfferLocal: completedActions.has('responded-to-share-offer'),
     allNeedsConfirmed,
     needsAvailable: (needs?.length ?? 0) > 0,
-    needsShared: allNeedsConfirmed, // Sharing happens immediately after confirmation
+    needsShared: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true,
     hasConfirmedNeedsLocal: completedActions.has('confirmed-needs'),
     commonGroundCount: commonGround?.length ?? 0,
-    commonGroundAvailable: (commonGround?.length ?? 0) > 0 && (commonGroundData?.analysisComplete ?? false),
-    commonGroundNoOverlap: commonGroundData?.noOverlap ?? false,
-    commonGroundAllConfirmedByMe: commonGround?.length > 0 && commonGround.every((cg) => cg.confirmedByMe),
+    commonGroundAvailable: (needsComparisonData?.myNeeds?.length ?? 0) > 0 && (needsComparisonData?.partnerNeeds?.length ?? 0) > 0,
+    commonGroundNoOverlap: false,
+    commonGroundAllConfirmedByMe: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsValidated === true,
     commonGroundAllConfirmedByBoth: commonGroundComplete,
     hasConfirmedCommonGroundLocal: completedActions.has('confirmed-common-ground'),
     strategyPhase,
@@ -2248,7 +2253,7 @@ export function UnifiedSessionScreen({
               {commonGroundData?.noOverlap ? (
                 <>
                   <Text style={styles.noOverlapText}>
-                    No obvious common ground identified. That's completely normal.
+                    Your needs look different right now. That's enough to choose a respectful next step.
                   </Text>
                   <TouchableOpacity
                     style={styles.commonGroundButton}
@@ -2275,7 +2280,7 @@ export function UnifiedSessionScreen({
                   testID="common-ground-confirm-button"
                 >
                   <Text style={styles.commonGroundButtonText}>
-                    Confirm common ground
+                    Review needs together
                   </Text>
                 </TouchableOpacity>
               )}
@@ -2682,12 +2687,6 @@ export function UnifiedSessionScreen({
             sendMessage(refined);
             setShowEmpathyDrawer(false);
           }}
-          onAcceptWithoutRevising={() => {
-            handleSkipRefinement(true);
-          }}
-          onDeclineAcceptance={(reason) => {
-            handleSkipRefinement(false, reason);
-          }}
           onClose={() => setShowEmpathyDrawer(false)}
         />
       )}
@@ -2781,7 +2780,7 @@ export function UnifiedSessionScreen({
         visible={showNeedsDrawer}
         onClose={() => setShowNeedsDrawer(false)}
         mode={needsDrawerMode}
-        needs={(needs ?? []).map((n) => ({
+        needs={(shouldUseRevealedNeeds ? (needsComparisonData?.myNeeds ?? []) : (needs ?? [])).map((n) => ({
           id: n.id,
           category: n.category || n.need,
           need: n.need,
@@ -2791,11 +2790,19 @@ export function UnifiedSessionScreen({
           sendMessage('I would like to adjust my identified needs');
         }}
         onConfirmNeeds={() => {
-          handleConfirmAllNeeds(() => {
-            markCompleted('confirmed-needs');
-            setShowNeedsDrawer(false);
-          });
+          if (allNeedsConfirmed) {
+            handleConsentToShareNeeds(() => {
+              markCompleted('confirmed-needs');
+              setShowNeedsDrawer(false);
+            });
+          } else {
+            handleConfirmAllNeeds(() => {
+              setShowNeedsDrawer(false);
+            });
+          }
         }}
+        confirmNeedsLabel={allNeedsConfirmed ? 'Share my needs' : 'Confirm my needs'}
+        confirmingNeedsLabel={allNeedsConfirmed ? 'Sharing...' : 'Confirming...'}
         isConfirming={isConfirmingNeeds}
         commonGround={(commonGround ?? []).map((cg) => ({
           id: cg.id,
@@ -2809,8 +2816,10 @@ export function UnifiedSessionScreen({
           markCompleted('confirmed-common-ground');
           handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
         }}
-        onViewComparison={() => {
-          setNeedsDrawerMode('comparison');
+        onNeedsNotValidYet={() => {
+          handleNeedsNotValidYet(() => {
+            resetCompleted('confirmed-common-ground');
+          });
         }}
         onBackToCommonGround={() => {
           setNeedsDrawerMode('common-ground');
@@ -3111,7 +3120,7 @@ const useStyles = () =>
       color: t.colors.brandBlue,
     },
 
-    // Common Ground Confirmation Panel (Stage 3)
+    // Needs Validation Panel (Stage 3)
     commonGroundContainer: {
       paddingHorizontal: t.spacing.lg,
       paddingVertical: t.spacing.md,

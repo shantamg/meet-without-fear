@@ -191,12 +191,6 @@ sequenceDiagram
 > `generateShareSuggestion()`, `respondToShareSuggestion()`, `generatePostShareContinuation()`, and
 > `generateContextReceivedReflection()`. The module includes delivery status tracking and fallback messages for AI failures.
 
-### Slack Gentle Interrupt
-
-When the subject shares context and `refinementFinalizeHandler` delivers it to the guesser, an async Slack DM notification is sent to the guesser (if they are a Slack user) via `notifyGuesserOfShareViaSlack()` in `slack-reconciler-notify.ts`.
-
-This is fire-and-forget: it runs non-blocking (`catch` logs the error) so a Slack outage cannot affect the mobile delivery path. Mobile users receive no Slack notification — the in-app Ably event is the only signal for them.
-
 ## User Experience: Both Users' Perspective
 
 ### User A (Guesser) Flow

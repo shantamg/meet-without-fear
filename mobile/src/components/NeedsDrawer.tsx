@@ -5,8 +5,8 @@
  * that previously took over the chat FlatList. Three modes:
  *
  * - `needs`: Review own needs with adjust/confirm actions
- * - `common-ground`: Review common ground with confirm action
- * - `comparison`: Side-by-side view of both users' needs + common ground
+ * - `common-ground`: Reveal both partners' needs side by side for validation
+ * - `comparison`: Side-by-side view of both users' needs
  */
 
 import React, { useRef, useCallback, useEffect, useState } from 'react';
@@ -55,11 +55,14 @@ export interface NeedsDrawerProps {
   needs?: NeedItem[];
   onAdjustNeeds?: () => void;
   onConfirmNeeds?: () => void;
+  confirmNeedsLabel?: string;
+  confirmingNeedsLabel?: string;
   isConfirming?: boolean;
-  // Common Ground mode
+  // Validation reveal mode
   commonGround?: CommonGroundItem[];
   noOverlap?: boolean;
   onConfirmCommonGround?: () => void;
+  onNeedsNotValidYet?: () => void;
   onViewComparison?: () => void;
   // Comparison mode
   partnerNeeds?: NeedItem[];
@@ -88,10 +91,12 @@ export function NeedsDrawer({
   needs = [],
   onAdjustNeeds,
   onConfirmNeeds,
-  commonGround = [],
+  confirmNeedsLabel = 'Confirm my needs',
+  confirmingNeedsLabel = 'Sharing...',
   noOverlap = false,
   isConfirming = false,
   onConfirmCommonGround,
+  onNeedsNotValidYet,
   onViewComparison,
   partnerNeeds = [],
   partnerName = 'Partner',
@@ -273,7 +278,7 @@ export function NeedsDrawer({
               testID={`${testID}-confirm`}
             >
               <Text style={styles.primaryButtonText}>
-                {isConfirming ? 'Sharing...' : 'Confirm my needs'}
+                {isConfirming ? confirmingNeedsLabel : confirmNeedsLabel}
               </Text>
             </TouchableOpacity>
           )}
@@ -286,28 +291,21 @@ export function NeedsDrawer({
     <>
       {noOverlap ? (
         <Text style={styles.noOverlapText}>
-          No obvious common ground identified. That's completely normal — you
-          can still move forward productively.
+          Your needs look different right now. That's enough to start choosing
+          next steps that respect both of you.
         </Text>
       ) : (
         <>
           <Text style={styles.sectionSubtitle}>
-            Shared needs discovered between you and {partnerName}.
+            Look at both lists together, then validate that this is accurate
+            enough to use for the next step.
           </Text>
 
-          {commonGround.map((cg) => (
-            <View key={cg.id} style={styles.commonGroundItem}>
-              <View style={styles.commonGroundBadge}>
-                <Text style={styles.commonGroundBadgeText}>Shared</Text>
-              </View>
-              <Text style={styles.commonGroundCategory}>{cg.category}</Text>
-              <Text style={styles.commonGroundNeed}>{cg.need}</Text>
-            </View>
-          ))}
+          {renderSideBySideNeeds()}
 
-          {commonGround.length === 0 && (
+          {needs.length === 0 && partnerNeeds.length === 0 && (
             <Text style={styles.emptyText}>
-              Common ground analysis is not yet complete.
+              Needs reveal is not ready yet.
             </Text>
           )}
         </>
@@ -334,19 +332,31 @@ export function NeedsDrawer({
         </View>
       ) : null;
     }
-    const hasButtons = onViewComparison || onConfirmCommonGround;
+    const hasButtons = onViewComparison || onConfirmCommonGround || onNeedsNotValidYet;
     if (!hasButtons) return null;
     return (
       <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
         <View style={styles.buttonRow}>
-          {onViewComparison && (
+          {onNeedsNotValidYet ? (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                onNeedsNotValidYet();
+                closeDrawer();
+              }}
+              activeOpacity={0.7}
+              testID={`${testID}-not-valid-yet`}
+            >
+              <Text style={styles.secondaryButtonText}>Not valid yet</Text>
+            </TouchableOpacity>
+          ) : onViewComparison && (
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={onViewComparison}
               activeOpacity={0.7}
               testID={`${testID}-view-comparison`}
             >
-              <Text style={styles.secondaryButtonText}>Compare</Text>
+              <Text style={styles.secondaryButtonText}>Review lists</Text>
             </TouchableOpacity>
           )}
           {onConfirmCommonGround && (
@@ -359,7 +369,7 @@ export function NeedsDrawer({
               activeOpacity={0.7}
               testID={`${testID}-confirm-cg`}
             >
-              <Text style={styles.primaryButtonText}>Confirm</Text>
+              <Text style={styles.primaryButtonText}>Validate needs</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -367,89 +377,46 @@ export function NeedsDrawer({
     );
   };
 
-  const renderComparisonMode = () => {
-    // Identify common ground need IDs for highlighting
-    const commonGroundNeeds = new Set(commonGround.map((cg) => cg.need.toLowerCase()));
-
+  const renderSideBySideNeeds = () => {
     return (
-      <>
-        <Text style={styles.sectionSubtitle}>
-          Side-by-side view of both your needs.
-        </Text>
-
-        <View style={styles.comparisonContainer}>
-          {/* My needs column */}
-          <View style={styles.comparisonColumn}>
-            <Text style={styles.columnHeader}>Your needs</Text>
-            {needs.map((need) => {
-              const isCommon = commonGroundNeeds.has(need.need.toLowerCase());
-              return (
-                <View
-                  key={need.id}
-                  style={[
-                    styles.comparisonCard,
-                    isCommon && styles.comparisonCardCommon,
-                  ]}
-                >
-                  <Text style={styles.comparisonCategory}>{need.category}</Text>
-                  <Text style={styles.comparisonNeed}>{need.need}</Text>
-                  {isCommon && (
-                    <View style={styles.commonBadgeSmall}>
-                      <Text style={styles.commonBadgeSmallText}>Common</Text>
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-            {needs.length === 0 && (
-              <Text style={styles.emptyColumnText}>No needs yet</Text>
-            )}
-          </View>
-
-          {/* Partner needs column */}
-          <View style={styles.comparisonColumn}>
-            <Text style={styles.columnHeader}>{partnerName}'s needs</Text>
-            {partnerNeeds.map((need) => {
-              const isCommon = commonGroundNeeds.has(need.need.toLowerCase());
-              return (
-                <View
-                  key={need.id}
-                  style={[
-                    styles.comparisonCard,
-                    isCommon && styles.comparisonCardCommon,
-                  ]}
-                >
-                  <Text style={styles.comparisonCategory}>{need.category}</Text>
-                  <Text style={styles.comparisonNeed}>{need.need}</Text>
-                  {isCommon && (
-                    <View style={styles.commonBadgeSmall}>
-                      <Text style={styles.commonBadgeSmallText}>Common</Text>
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-            {partnerNeeds.length === 0 && (
-              <Text style={styles.emptyColumnText}>No needs yet</Text>
-            )}
-          </View>
+      <View style={styles.comparisonContainer} testID={`${testID}-side-by-side`}>
+        <View style={styles.comparisonColumn}>
+          <Text style={styles.columnHeader}>You</Text>
+          {needs.map((need) => (
+            <View key={need.id} style={styles.comparisonCard}>
+              <Text style={styles.comparisonCategory}>{need.category}</Text>
+              <Text style={styles.comparisonNeed}>{need.need}</Text>
+            </View>
+          ))}
+          {needs.length === 0 && (
+            <Text style={styles.emptyColumnText}>Waiting for your needs</Text>
+          )}
         </View>
 
-        {/* Common ground summary */}
-        {commonGround.length > 0 && (
-          <View style={styles.commonGroundSummary}>
-            <Text style={styles.commonGroundSummaryTitle}>
-              {commonGround.length} shared {commonGround.length === 1 ? 'need' : 'needs'}
-            </Text>
-            <Text style={styles.commonGroundSummaryText}>
-              When we see our shared needs, we remember we're on the same team.
-            </Text>
-          </View>
-        )}
-
-      </>
+        <View style={styles.comparisonColumn}>
+          <Text style={styles.columnHeader}>{partnerName}</Text>
+          {partnerNeeds.map((need) => (
+            <View key={need.id} style={[styles.comparisonCard, styles.partnerComparisonCard]}>
+              <Text style={styles.comparisonCategory}>{need.category}</Text>
+              <Text style={styles.comparisonNeed}>{need.need}</Text>
+            </View>
+          ))}
+          {partnerNeeds.length === 0 && (
+            <Text style={styles.emptyColumnText}>Waiting for {partnerName}</Text>
+          )}
+        </View>
+      </View>
     );
   };
+
+  const renderComparisonMode = () => (
+    <>
+      <Text style={styles.sectionSubtitle}>
+        Review both needs lists side by side.
+      </Text>
+      {renderSideBySideNeeds()}
+    </>
+  );
 
   const renderComparisonButtons = () => {
     if (!onBackToCommonGround) return null;
@@ -461,7 +428,7 @@ export function NeedsDrawer({
           activeOpacity={0.7}
           testID={`${testID}-back-to-cg`}
         >
-          <Text style={styles.secondaryButtonText}>Back to Common Ground</Text>
+          <Text style={styles.secondaryButtonText}>Back to validation</Text>
         </TouchableOpacity>
       </View>
     );
@@ -476,8 +443,8 @@ export function NeedsDrawer({
     mode === 'needs'
       ? 'Your Needs'
       : mode === 'common-ground'
-        ? 'Common Ground'
-        : 'Needs Comparison';
+        ? 'Review Needs Together'
+        : 'Needs Side by Side';
 
   return (
     <View
@@ -665,44 +632,6 @@ const styles = StyleSheet.create({
     flex: undefined,
   },
 
-  // Common ground items
-  commonGroundItem: {
-    backgroundColor: 'rgba(167, 243, 208, 0.15)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(110, 231, 183, 0.4)',
-    padding: 16,
-    marginBottom: 12,
-    marginHorizontal: 16,
-    position: 'relative',
-  },
-  commonGroundBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: colors.success,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  commonGroundBadgeText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  commonGroundCategory: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.success,
-    marginBottom: 4,
-  },
-  commonGroundNeed: {
-    fontSize: 16,
-    color: colors.textPrimary,
-    lineHeight: 22,
-  },
   noOverlapText: {
     fontSize: 15,
     color: colors.textSecondary,
@@ -739,10 +668,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     position: 'relative',
   },
-  comparisonCardCommon: {
-    backgroundColor: 'rgba(167, 243, 208, 0.2)',
-    borderWidth: 2,
-    borderColor: 'rgba(110, 231, 183, 0.5)',
+  partnerComparisonCard: {
+    backgroundColor: 'rgba(251, 191, 36, 0.12)',
+    borderColor: 'rgba(251, 191, 36, 0.3)',
   },
   comparisonCategory: {
     fontSize: 11,
@@ -755,21 +683,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     lineHeight: 18,
   },
-  commonBadgeSmall: {
-    marginTop: 4,
-    alignSelf: 'flex-start',
-    backgroundColor: colors.success,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 3,
-  },
-  commonBadgeSmallText: {
-    color: 'white',
-    fontSize: 9,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
   emptyColumnText: {
     fontSize: 13,
     color: colors.textMuted,
@@ -778,28 +691,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
 
-  // Common ground summary
-  commonGroundSummary: {
-    backgroundColor: 'rgba(167, 243, 208, 0.1)',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 16,
-    marginHorizontal: 16,
-    alignItems: 'center',
-  },
-  commonGroundSummaryTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.success,
-    marginBottom: 4,
-  },
-  commonGroundSummaryText: {
-    fontSize: 14,
-    fontStyle: 'italic',
-    color: colors.textPrimary,
-    lineHeight: 20,
-    textAlign: 'center',
-  },
 });
 
 export default NeedsDrawer;

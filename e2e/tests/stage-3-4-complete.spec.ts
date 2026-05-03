@@ -13,7 +13,16 @@
  */
 
 import { test, expect, devices, BrowserContext, Page, APIRequestContext } from '@playwright/test';
-import { cleanupE2EData, getE2EHeaders, SessionBuilder, navigateToShareFromSession } from '../helpers';
+import {
+  cleanupE2EData,
+  getE2EHeaders,
+  SessionBuilder,
+  navigateToShareFromSession,
+  expectNeedsComparisonFromApi,
+  expectNeedsSummaryFromApi,
+  waitForNeedsReveal,
+  waitForStage,
+} from '../helpers';
 
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:8082';
@@ -256,6 +265,10 @@ test.describe('Stage 3-4 Complete Flow', () => {
     // Confirm needs via API
     const needsA = needsDataA.data?.needs || [];
     const needsB = needsDataB.data?.needs || [];
+    expect(needsA.length, 'User A needs summary should not be empty').toBeGreaterThan(0);
+    expect(needsB.length, 'User B needs summary should not be empty').toBeGreaterThan(0);
+    await expectNeedsSummaryFromApi(apiA, API_BASE_URL, sessionId, 'User A');
+    await expectNeedsSummaryFromApi(apiB, API_BASE_URL, sessionId, 'User B');
 
     if (needsA.length > 0) {
       const needIdsA = needsA.map((n: { id: string }) => n.id);
@@ -295,60 +308,30 @@ test.describe('Stage 3-4 Complete Flow', () => {
       console.log(`${elapsed()} User B consented to share: ${consentDataB.data?.consented}`);
     }
 
-    // Get common ground (this triggers AI analysis if both have shared)
-    console.log(`${elapsed()} Fetching common ground...`);
-    const cgResponseA = await apiA.get(`${API_BASE_URL}/api/sessions/${sessionId}/common-ground`);
-    const cgDataA = await cgResponseA.json();
-    console.log(`${elapsed()} Common ground: ${cgDataA.data?.commonGround?.length || 0} items`);
+    console.log(`${elapsed()} Waiting for needs reveal...`);
+    await waitForNeedsReveal(apiA, API_BASE_URL, sessionId, 'User A', 30000);
+    await expectNeedsComparisonFromApi(apiA, API_BASE_URL, sessionId, 'User A');
+    await expectNeedsComparisonFromApi(apiB, API_BASE_URL, sessionId, 'User B');
 
-    // Confirm common ground for both users
-    const commonGround = cgDataA.data?.commonGround || [];
-    if (commonGround.length > 0) {
-      const cgIds = commonGround.map((cg: { id: string }) => cg.id);
+    console.log(`${elapsed()} User A validating needs reveal...`);
+    const validateA = await apiA.post(`${API_BASE_URL}/api/sessions/${sessionId}/needs/validate`, {
+      validated: true,
+    });
+    const validateDataA = await validateA.json();
+    console.log(`${elapsed()} User A validated needs: ${validateDataA.data?.validated}`);
 
-      console.log(`${elapsed()} User A confirming common ground...`);
-      const cgConfirmA = await apiA.post(`${API_BASE_URL}/api/sessions/${sessionId}/common-ground/confirm`, {
-        commonGroundIds: cgIds,
-      });
-      const cgConfirmDataA = await cgConfirmA.json();
-      console.log(`${elapsed()} User A confirmed common ground: ${cgConfirmDataA.data?.allConfirmedByMe}`);
+    console.log(`${elapsed()} User B validating needs reveal...`);
+    const validateB = await apiB.post(`${API_BASE_URL}/api/sessions/${sessionId}/needs/validate`, {
+      validated: true,
+    });
+    const validateDataB = await validateB.json();
+    console.log(`${elapsed()} User B validated needs: ${validateDataB.data?.validated}`);
 
-      console.log(`${elapsed()} User B confirming common ground...`);
-      const cgConfirmB = await apiB.post(`${API_BASE_URL}/api/sessions/${sessionId}/common-ground/confirm`, {
-        commonGroundIds: cgIds,
-      });
-      const cgConfirmDataB = await cgConfirmB.json();
-      console.log(`${elapsed()} User B confirmed common ground: ${cgConfirmDataB.data?.allConfirmedByBoth}`);
-    }
-
-    // Advance both users to Stage 4
-    // Stage progression: Both need to reach Stage 4 IN_PROGRESS
-    // First advance moves from completed stages, second ensures Stage 4
-    console.log(`${elapsed()} Advancing users to Stage 4...`);
-
-    // User A advances
-    let advanceA = await apiA.post(`${API_BASE_URL}/api/sessions/${sessionId}/stages/advance`);
-    let advanceDataA = await advanceA.json();
-    console.log(`${elapsed()} User A first advance: ${advanceDataA.data?.newStage}`);
-
-    // If not at Stage 4, advance again
-    if (advanceDataA.data?.newStage !== 4) {
-      advanceA = await apiA.post(`${API_BASE_URL}/api/sessions/${sessionId}/stages/advance`);
-      advanceDataA = await advanceA.json();
-      console.log(`${elapsed()} User A second advance: ${advanceDataA.data?.newStage}`);
-    }
-
-    // User B advances
-    let advanceB = await apiB.post(`${API_BASE_URL}/api/sessions/${sessionId}/stages/advance`);
-    let advanceDataB = await advanceB.json();
-    console.log(`${elapsed()} User B first advance: ${advanceDataB.data?.newStage}`);
-
-    // If not at Stage 4, advance again
-    if (advanceDataB.data?.newStage !== 4) {
-      advanceB = await apiB.post(`${API_BASE_URL}/api/sessions/${sessionId}/stages/advance`);
-      advanceDataB = await advanceB.json();
-      console.log(`${elapsed()} User B second advance: ${advanceDataB.data?.newStage}`);
-    }
+    await Promise.all([
+      waitForStage(apiA, API_BASE_URL, sessionId, 4, 'User A', 30000),
+      waitForStage(apiB, API_BASE_URL, sessionId, 4, 'User B', 30000),
+    ]);
+    console.log(`${elapsed()} Both users advanced to Stage 4`);
 
     // Reload pages to reflect new state
     await Promise.all([

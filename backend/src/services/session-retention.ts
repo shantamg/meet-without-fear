@@ -2,7 +2,7 @@
  * Session Retention
  *
  * Enforces the two-tier session decay policy for MWF conflict-resolution
- * sessions, regardless of origin (mobile or Slack):
+ * sessions:
  *
  *   - `ACTIVE` / `WAITING` sessions with no activity for 90 days → `ARCHIVED`.
  *     Users can still read their own history (session row + related rows
@@ -10,16 +10,10 @@
  *   - `ARCHIVED` sessions that have sat for another 90 days (180 days total)
  *     → hard-deleted, cascading to messages / vessels / stage progress.
  *
- * `INVITED` sessions are handled separately by the opportunistic 7-day
- * sweep in `slack-session-service` (see `findSessionByThread` et al). That
- * sweep runs inline on session lookup, so dead invites are reclaimed as
- * part of normal traffic.
- *
  * This module is the business logic only. Scheduling is intentionally left
  * out — run it however the deploy environment prefers (a CLI wrapper in
  * `scripts/sweep-session-retention.ts`, a Render cron, a GitHub Actions
- * schedule, or the existing EC2 cron host that already runs the file-based
- * workspace sweeper).
+ * schedule, or the existing EC2 cron host.
  */
 
 import { prisma } from '../lib/prisma';
@@ -86,7 +80,7 @@ export async function enforceSessionRetention(
   // ----- Hard-delete phase -----
   // Sessions that were ARCHIVED long enough ago that the soft-retention
   // window is up. Cascade via the Session FKs deletes messages, vessels,
-  // stage progress, slack-threads, etc. in the same transaction.
+  // stage progress, etc. in the same transaction.
   const deleteResult = await prisma.session.deleteMany({
     where: {
       status: 'ARCHIVED',

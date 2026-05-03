@@ -6,18 +6,17 @@
  * Features:
  * - Native drawer with gesture support (swipe to close)
  * - Sessions organized into sections (Needs Attention / In Progress / Completed)
- * - Swipe-to-archive on session cards
+ * - Swipe-to-delete and long-press to delete on session cards
  * - New session button in header
  * - Closes on session selection
  */
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   SectionList,
-  RefreshControl,
   ActivityIndicator,
   Animated,
   Alert,
@@ -27,11 +26,11 @@ import {
 import { Drawer } from 'react-native-drawer-layout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { X, Plus, Archive } from 'lucide-react-native';
+import { X, Plus, Trash2 } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 
 import { useSessionDrawer } from '../../hooks/useSessionDrawer';
-import { useSessions, useArchiveSession } from '../../hooks/useSessions';
+import { useSessions, useDeleteSession } from '../../hooks/useSessions';
 import { SessionCard } from '../SessionCard';
 import { createStyles } from '../../theme/styled';
 import { colors } from '../../theme';
@@ -59,14 +58,22 @@ interface SessionSection {
 function ConversationsList({ onClose }: { onClose: () => void }) {
   const styles = useStyles();
   const router = useRouter();
-  const { data, isLoading, refetch, isRefetching } = useSessions();
-  const archiveSession = useArchiveSession();
+  const { isOpen } = useSessionDrawer();
+  const { data, isLoading, refetch } = useSessions();
+
+  // Auto-refresh sessions when the drawer opens
+  useEffect(() => {
+    if (isOpen) {
+      refetch();
+    }
+  }, [isOpen, refetch]);
+  const deleteSession = useDeleteSession();
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
 
-  // Animation refs for optimistic archive
+  // Animation refs for optimistic delete
   const animationRefs = useRef<Record<string, { opacity: Animated.Value; height: Animated.Value }>>({});
   const layoutHeightsRef = useRef<Record<string, number>>({});
-  const [archivingSessions, setArchivingSessions] = useState<Set<string>>(new Set());
+  const [deletingSessions, setDeletingSessions] = useState<Set<string>>(new Set());
 
   const getAnimationValues = (sessionId: string) => {
     if (!animationRefs.current[sessionId]) {
@@ -118,18 +125,23 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
     router.push('/session/new');
   }, [onClose, router]);
 
-  const handleArchive = useCallback(
+  const handleDelete = useCallback(
     (session: SessionSummaryDTO) => {
       swipeableRefs.current.get(session.id)?.close();
 
       const partnerName = session.partner.name || 'this person';
-      Alert.alert('Archive Session', `Move this session with ${partnerName} to your archive?`, [
+      const isActive = ['ACTIVE', 'WAITING', 'PAUSED'].includes(session.status);
+      const message = isActive
+        ? `This will end your session with ${partnerName} and remove it from your list. They will be notified.`
+        : `Remove this conversation with ${partnerName} from your list?`;
+
+      Alert.alert('Delete Conversation', message, [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Archive',
-          style: 'default',
+          text: 'Delete',
+          style: 'destructive',
           onPress: () => {
-            setArchivingSessions((prev) => new Set(prev).add(session.id));
+            setDeletingSessions((prev) => new Set(prev).add(session.id));
             const animationValues = getAnimationValues(session.id);
             const measuredHeight = layoutHeightsRef.current[session.id] || 80;
             animationValues.height.setValue(measuredHeight);
@@ -147,15 +159,15 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
               }),
             ]).start(async () => {
               try {
-                await archiveSession.mutateAsync({ sessionId: session.id });
+                await deleteSession.mutateAsync({ sessionId: session.id });
                 delete animationRefs.current[session.id];
                 delete layoutHeightsRef.current[session.id];
               } catch {
                 animationValues.opacity.setValue(1);
                 animationValues.height.setValue(measuredHeight);
-                Alert.alert('Error', 'Failed to archive session.');
+                Alert.alert('Error', 'Failed to delete conversation.');
               } finally {
-                setArchivingSessions((prev) => {
+                setDeletingSessions((prev) => {
                   const newSet = new Set(prev);
                   newSet.delete(session.id);
                   return newSet;
@@ -166,7 +178,7 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
         },
       ]);
     },
-    [archiveSession]
+    [deleteSession]
   );
 
   const renderRightActions = useCallback(
@@ -183,21 +195,21 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
 
       return (
         <TouchableOpacity
-          style={styles.archiveAction}
-          onPress={() => handleArchive(session)}
+          style={styles.deleteAction}
+          onPress={() => handleDelete(session)}
         >
           <Animated.View style={{ transform: [{ scale }] }}>
-            <Archive color="#FFFFFF" size={20} />
+            <Trash2 color="#FFFFFF" size={20} />
           </Animated.View>
         </TouchableOpacity>
       );
     },
-    [handleArchive, styles]
+    [handleDelete, styles]
   );
 
   const renderItem = useCallback(
     ({ item }: { item: SessionSummaryDTO }) => {
-      const isArchiving = archivingSessions.has(item.id);
+      const isDeleting = deletingSessions.has(item.id);
       const animationValues = getAnimationValues(item.id);
 
       return (
@@ -209,7 +221,7 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
           style={[
             {
               opacity: animationValues.opacity,
-              ...(isArchiving ? { height: animationValues.height, overflow: 'hidden' } : {}),
+              ...(isDeleting ? { height: animationValues.height, overflow: 'hidden' } : {}),
             },
           ]}
         >
@@ -224,7 +236,9 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
           >
             <TouchableOpacity
               onPress={() => handleSessionPress(item.id)}
-              disabled={isArchiving}
+              onLongPress={() => handleDelete(item)}
+              delayLongPress={500}
+              disabled={isDeleting}
             >
               <SessionCard session={item} noMargin />
             </TouchableOpacity>
@@ -232,7 +246,7 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
         </Animated.View>
       );
     },
-    [archivingSessions, handleSessionPress, renderRightActions]
+    [deletingSessions, handleSessionPress, handleDelete, renderRightActions]
   );
 
   const renderSectionHeader = useCallback(
@@ -271,7 +285,6 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
       renderSectionHeader={renderSectionHeader}
       keyExtractor={(item) => item.id}
       contentContainerStyle={styles.listContent}
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       stickySectionHeadersEnabled={false}
     />
@@ -433,8 +446,8 @@ const useStyles = () =>
       fontWeight: '600',
       color: '#FFFFFF',
     },
-    archiveAction: {
-      backgroundColor: t.colors.textMuted,
+    deleteAction: {
+      backgroundColor: '#E53935',
       justifyContent: 'center',
       alignItems: 'center',
       width: 70,

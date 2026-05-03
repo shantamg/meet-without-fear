@@ -35,8 +35,6 @@
     { "code": "backend/src/services/stage-prompts*.ts",  "label": "backend/src/services/stage-prompts", "docs": ["docs/backend/prompts/index.md"] },
     { "code": "backend/src/controllers/emotions.ts", "label": "backend/src/controllers/emotions.ts", "docs": ["docs/backend/api/emotional-barometer.md", "docs/product/mechanisms/emotional-barometer.md"] },
     { "code": "backend/src/routes/emotions.ts",      "label": "backend/src/routes/emotions.ts",      "docs": ["docs/backend/api/emotional-barometer.md", "docs/product/mechanisms/emotional-barometer.md"] },
-    { "code": "backend/src/controllers/slack-session.ts", "label": "backend/src/controllers/slack-session.ts", "docs": ["docs/backend/api/index.md", "docs/architecture/backend-overview.md"] },
-    { "code": "backend/src/services/slack-*.ts",         "label": "backend/src/services/slack",    "docs": ["docs/backend/api/index.md", "docs/architecture/backend-overview.md"] },
     { "code": "backend/src/services/**",                 "label": "backend/src/services",          "docs": ["docs/backend/index.md"] },
     { "code": "backend/src/lib/bedrock.ts",              "label": "backend/src/lib/bedrock",       "docs": ["docs/architecture/integrations.md", "docs/backend/prompting-architecture.md"] },
     { "code": "backend/src/lib/prisma.ts",               "label": "backend/src/lib/prisma",        "docs": ["docs/architecture/backend-overview.md"] },
