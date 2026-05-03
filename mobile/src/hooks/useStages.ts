@@ -129,7 +129,7 @@ export function useEmpathyStatus(
       return get<EmpathyExchangeStatusResponse>(`/sessions/${sessionId}/empathy/status`);
     },
     enabled: !!sessionId,
-    staleTime: 5_000,
+    staleTime: 15_000, // Ably events push updates; no need to refetch aggressively
     ...options,
   });
 }
@@ -151,7 +151,7 @@ export function useShareOffer(
       return get<GetShareSuggestionResponse>(`/sessions/${sessionId}/reconciler/share-offer`);
     },
     enabled: !!sessionId,
-    staleTime: 0, // Always check for fresh offer
+    staleTime: 15_000, // Ably events push updates via setQueryData; no need to refetch aggressively
     ...options,
   });
 }

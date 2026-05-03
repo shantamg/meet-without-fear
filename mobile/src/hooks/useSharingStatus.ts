@@ -83,11 +83,15 @@ export interface SharingStatusData {
 // Hook
 // ============================================================================
 
-export function useSharingStatus(sessionId: string | undefined): SharingStatusData {
-  // Compose existing hooks
-  const empathyStatusQuery = useEmpathyStatus(sessionId);
-  const shareOfferQuery = useShareOffer(sessionId);
-  const partnerEmpathyQuery = usePartnerEmpathy(sessionId);
+export function useSharingStatus(
+  sessionId: string | undefined,
+  options?: { enabled?: boolean },
+): SharingStatusData {
+  const enabled = options?.enabled ?? true;
+  // Compose existing hooks — gate by enabled to prevent network storm when not in Stage 2
+  const empathyStatusQuery = useEmpathyStatus(sessionId, { enabled });
+  const shareOfferQuery = useShareOffer(sessionId, { enabled });
+  const partnerEmpathyQuery = usePartnerEmpathy(sessionId, { enabled });
 
   const empathyStatus = empathyStatusQuery.data;
   const shareOfferData = shareOfferQuery.data;

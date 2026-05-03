@@ -46,7 +46,7 @@ import { RefineInvitationDrawer } from '../components/RefineInvitationDrawer';
 import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
-import { useGenerateTopicFrame, useConfirmTopicFrame } from '../hooks/useSessions';
+import { useSessionState, useGenerateTopicFrame, useConfirmTopicFrame } from '../hooks/useSessions';
 import { useValidationFeedbackCoachChat } from '../hooks/useRefinementChat';
 import { useChatUIState } from '../hooks/useChatUIState';
 import { createInvitationLink } from '../hooks/useInvitation';
@@ -169,8 +169,14 @@ export function UnifiedSessionScreen({
   const { showError } = useToast();
   const topicFrameRequestedRef = useRef(false);
 
-  // Sharing status for header button
-  const sharingStatus = useSharingStatus(sessionId);
+  // Determine stage early to gate Stage 2 queries (prevents network error storm)
+  // React Query deduplicates this with the same call inside useUnifiedSession
+  const { data: earlyStateData } = useSessionState(sessionId);
+  const earlyStage = earlyStateData?.progress?.myProgress?.stage ?? Stage.ONBOARDING;
+  const isStage2OrLater = earlyStage >= Stage.PERSPECTIVE_STRETCH;
+
+  // Sharing status for header button — gated by stage
+  const sharingStatus = useSharingStatus(sessionId, { enabled: isStage2OrLater });
   // Server-side pending actions for badge count (replaces client-side computation)
   const pendingActionsQuery = usePendingActions(sessionId);
 

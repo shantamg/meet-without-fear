@@ -261,10 +261,12 @@ export function useUnifiedSession(sessionId: string | undefined) {
     { enabled: !!sessionId }
   );
 
-  // Stage 2: Empathy - always fetch to avoid waterfall
-  // API returns null/empty when not in stage 2+, and React Query caches efficiently
-  const { data: empathyDraftData } = useEmpathyDraft(sessionId);
-  const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId);
+  // Stage 2: Empathy - only fetch when user reaches Stage 2+
+  // Gating prevents a network error storm: multiple queries with aggressive staleTime
+  // all firing simultaneously on stage load, each retrying on failure.
+  const isStage2OrLater = !!sessionId && currentStage >= Stage.PERSPECTIVE_STRETCH;
+  const { data: empathyDraftData } = useEmpathyDraft(sessionId, { enabled: isStage2OrLater });
+  const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId, { enabled: isStage2OrLater });
   const partnerEmpathy = partnerEmpathyData?.attempt ?? null;
 
   // Stage 3: Needs - always fetch to avoid waterfall
@@ -284,9 +286,9 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const { data: revealData } = useStrategiesReveal(sessionId);
   const { data: agreementsData } = useAgreements(sessionId);
 
-  // Empathy Reconciler Data
-  const { data: empathyStatusData } = useEmpathyStatus(sessionId);
-  const { data: shareOfferData } = useShareOffer(sessionId);
+  // Empathy Reconciler Data - gated by stage to prevent unnecessary requests
+  const { data: empathyStatusData } = useEmpathyStatus(sessionId, { enabled: isStage2OrLater });
+  const { data: shareOfferData } = useShareOffer(sessionId, { enabled: isStage2OrLater });
   const { mutate: respondToShareOffer } = useRespondToShareOffer();
 
   // -------------------------------------------------------------------------
