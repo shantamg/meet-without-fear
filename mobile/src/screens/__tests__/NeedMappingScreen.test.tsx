@@ -4,7 +4,6 @@
  * Tests for Stage 3 Need Mapping screen covering:
  * - Exploration phase (chat with AI)
  * - Review phase (show identified needs)
- * - Common ground discovery
  * - Confirmation flow
  * - Waiting for partner
  */
@@ -12,7 +11,7 @@
 import React from 'react';
 import { screen } from '@testing-library/react-native';
 import { render } from '../../utils/test-utils';
-import { Stage, StageStatus, NeedCategory, MessageRole, CommonGroundDTO } from '@meet-without-fear/shared';
+import { Stage, StageStatus, NeedCategory, MessageRole } from '@meet-without-fear/shared';
 
 // Import after mocks
 import { NeedMappingScreen } from '../NeedMappingScreen';
@@ -96,40 +95,6 @@ const mockNeedsUnconfirmed = [
   },
 ];
 
-// Confirmed needs (for common ground phase)
-const mockNeedsConfirmed = [
-  {
-    id: 'need-1',
-    need: 'Security',
-    category: NeedCategory.SAFETY,
-    description: 'A need to feel safe and stable in the relationship',
-    evidence: ['I felt unsafe when...'],
-    confirmed: true,
-    aiConfidence: 0.85,
-  },
-  {
-    id: 'need-2',
-    need: 'Connection',
-    category: NeedCategory.CONNECTION,
-    description: 'A need to feel close and emotionally connected',
-    evidence: ['I miss feeling close...'],
-    confirmed: true,
-    aiConfidence: 0.9,
-  },
-];
-
-const mockCommonGround: CommonGroundDTO[] = [
-  {
-    id: 'cg-1',
-    need: 'Security',
-    category: NeedCategory.SAFETY,
-    description: 'Both want to feel safe with each other',
-    confirmedByMe: false,
-    confirmedByPartner: false,
-    confirmedAt: null,
-  },
-];
-
 const mockMessages = [
   {
     id: 'msg-1',
@@ -152,11 +117,6 @@ let mockNeedsData: { needs: NeedsType; synthesizedAt: string; isDirty: boolean }
   synthesizedAt: '',
   isDirty: false,
 };
-let mockCommonGroundData: {
-  commonGround: CommonGroundDTO[];
-  analysisComplete: boolean;
-  bothConfirmed: boolean;
-} = { commonGround: [], analysisComplete: false, bothConfirmed: false };
 let mockMessagesData = { messages: mockMessages };
 let mockProgressData: {
   myProgress: { stage: Stage; status: StageStatus };
@@ -214,14 +174,6 @@ jest.mock('../../hooks/useStages', () => ({
     mutate: jest.fn(),
     isPending: false,
   }),
-  useCommonGround: () => ({
-    data: mockCommonGroundData,
-    isLoading: false,
-  }),
-  useConfirmCommonGround: () => ({
-    mutate: jest.fn(),
-    isPending: false,
-  }),
 }));
 
 describe('NeedMappingScreen', () => {
@@ -229,7 +181,6 @@ describe('NeedMappingScreen', () => {
     jest.clearAllMocks();
     // Reset to defaults - exploration phase (no needs yet)
     mockNeedsData = { needs: [], synthesizedAt: '', isDirty: false };
-    mockCommonGroundData = { commonGround: [], analysisComplete: false, bothConfirmed: false };
     mockMessagesData = { messages: mockMessages };
     mockProgressData = {
       myProgress: { stage: Stage.NEED_MAPPING, status: StageStatus.IN_PROGRESS },
@@ -294,39 +245,6 @@ describe('NeedMappingScreen', () => {
       render(<NeedMappingScreen />);
       const confirmButton = screen.getByText(/confirm/i);
       expect(confirmButton).toBeTruthy();
-    });
-  });
-
-  describe('Common Ground Discovery (needs confirmed, common ground found)', () => {
-    beforeEach(() => {
-      // Needs must be confirmed for common ground phase
-      mockNeedsData = {
-        needs: mockNeedsConfirmed,
-        synthesizedAt: new Date().toISOString(),
-        isDirty: false,
-      };
-      mockCommonGroundData = {
-        commonGround: mockCommonGround,
-        analysisComplete: true,
-        bothConfirmed: false,
-      };
-    });
-
-    it('shows common ground when found', () => {
-      render(<NeedMappingScreen />);
-      // Use getAllByText since "Shared Needs" appears in both title and content
-      const sharedNeedsElements = screen.getAllByText(/shared needs/i);
-      expect(sharedNeedsElements.length).toBeGreaterThan(0);
-    });
-
-    it('shows shared need details', () => {
-      render(<NeedMappingScreen />);
-      expect(screen.getAllByText(/both want to feel safe/i).length).toBeGreaterThan(0);
-    });
-
-    it('shows continue button', () => {
-      render(<NeedMappingScreen />);
-      expect(screen.getByText(/continue/i)).toBeTruthy();
     });
   });
 

@@ -1,11 +1,9 @@
 /**
  * NeedsDrawer Component
  *
- * Bottom-sheet drawer for Stage 3 Need Mapping. Replaces inline cards
- * that previously took over the chat FlatList. Three modes:
+ * Bottom-sheet drawer for Stage 3 Need Mapping. Two modes:
  *
  * - `needs`: Review own needs with adjust/confirm actions
- * - `common-ground`: Reveal both partners' needs side by side for validation
  * - `comparison`: Side-by-side view of both users' needs
  */
 
@@ -30,21 +28,13 @@ import { NeedCard } from './NeedCard';
 // Types
 // ============================================================================
 
-export type NeedsDrawerMode = 'needs' | 'common-ground' | 'comparison';
+export type NeedsDrawerMode = 'needs' | 'comparison';
 
 interface NeedItem {
   id: string;
   category: string;
   need: string;
   confirmed: boolean;
-}
-
-interface CommonGroundItem {
-  id: string;
-  category: string;
-  need: string;
-  confirmedByMe: boolean;
-  confirmedByPartner: boolean;
 }
 
 export interface NeedsDrawerProps {
@@ -58,16 +48,9 @@ export interface NeedsDrawerProps {
   confirmNeedsLabel?: string;
   confirmingNeedsLabel?: string;
   isConfirming?: boolean;
-  // Validation reveal mode
-  commonGround?: CommonGroundItem[];
-  noOverlap?: boolean;
-  onConfirmCommonGround?: () => void;
-  onNeedsNotValidYet?: () => void;
-  onViewComparison?: () => void;
   // Comparison mode
   partnerNeeds?: NeedItem[];
   partnerName?: string;
-  onBackToCommonGround?: () => void;
   testID?: string;
 }
 
@@ -93,14 +76,9 @@ export function NeedsDrawer({
   onConfirmNeeds,
   confirmNeedsLabel = 'Confirm my needs',
   confirmingNeedsLabel = 'Sharing...',
-  noOverlap = false,
   isConfirming = false,
-  onConfirmCommonGround,
-  onNeedsNotValidYet,
-  onViewComparison,
   partnerNeeds = [],
   partnerName = 'Partner',
-  onBackToCommonGround,
   testID = 'needs-drawer',
 }: NeedsDrawerProps) {
   const insets = useSafeAreaInsets();
@@ -237,7 +215,6 @@ export function NeedsDrawer({
         <NeedCard
           key={need.id}
           need={{ category: need.category, description: need.need }}
-          isShared={need.confirmed}
           testID={`${testID}-need-${need.id}`}
         />
       ))}
@@ -287,96 +264,6 @@ export function NeedsDrawer({
     );
   };
 
-  const renderCommonGroundMode = () => (
-    <>
-      {noOverlap ? (
-        <Text style={styles.noOverlapText}>
-          Your needs look different right now. That's enough to start choosing
-          next steps that respect both of you.
-        </Text>
-      ) : (
-        <>
-          <Text style={styles.sectionSubtitle}>
-            Look at both lists together, then validate that this is accurate
-            enough to use for the next step.
-          </Text>
-
-          {renderSideBySideNeeds()}
-
-          {needs.length === 0 && partnerNeeds.length === 0 && (
-            <Text style={styles.emptyText}>
-              Needs reveal is not ready yet.
-            </Text>
-          )}
-        </>
-      )}
-
-    </>
-  );
-
-  const renderCommonGroundButtons = () => {
-    if (noOverlap) {
-      return onConfirmCommonGround ? (
-        <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
-          <TouchableOpacity
-            style={[styles.primaryButton, styles.fullWidthButton]}
-            onPress={() => {
-              onConfirmCommonGround();
-              closeDrawer();
-            }}
-            activeOpacity={0.7}
-            testID={`${testID}-no-overlap-continue`}
-          >
-            <Text style={styles.primaryButtonText}>Continue to Strategies</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null;
-    }
-    const hasButtons = onViewComparison || onConfirmCommonGround || onNeedsNotValidYet;
-    if (!hasButtons) return null;
-    return (
-      <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
-        <View style={styles.buttonRow}>
-          {onNeedsNotValidYet ? (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => {
-                onNeedsNotValidYet();
-                closeDrawer();
-              }}
-              activeOpacity={0.7}
-              testID={`${testID}-not-valid-yet`}
-            >
-              <Text style={styles.secondaryButtonText}>Not valid yet</Text>
-            </TouchableOpacity>
-          ) : onViewComparison && (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={onViewComparison}
-              activeOpacity={0.7}
-              testID={`${testID}-view-comparison`}
-            >
-              <Text style={styles.secondaryButtonText}>Review lists</Text>
-            </TouchableOpacity>
-          )}
-          {onConfirmCommonGround && (
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => {
-                onConfirmCommonGround();
-                closeDrawer();
-              }}
-              activeOpacity={0.7}
-              testID={`${testID}-confirm-cg`}
-            >
-              <Text style={styles.primaryButtonText}>Validate needs</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    );
-  };
-
   const renderSideBySideNeeds = () => {
     return (
       <View style={styles.comparisonContainer} testID={`${testID}-side-by-side`}>
@@ -418,33 +305,13 @@ export function NeedsDrawer({
     </>
   );
 
-  const renderComparisonButtons = () => {
-    if (!onBackToCommonGround) return null;
-    return (
-      <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
-        <TouchableOpacity
-          style={[styles.secondaryButton, styles.fullWidthButton]}
-          onPress={onBackToCommonGround}
-          activeOpacity={0.7}
-          testID={`${testID}-back-to-cg`}
-        >
-          <Text style={styles.secondaryButtonText}>Back to validation</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
 
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
   if (!visible) return null;
 
-  const headerText =
-    mode === 'needs'
-      ? 'Your Needs'
-      : mode === 'common-ground'
-        ? 'Review Needs Together'
-        : 'Needs Side by Side';
+  const headerText = mode === 'needs' ? 'Your Needs' : 'Needs Side by Side';
 
   return (
     <View
@@ -500,14 +367,11 @@ export function NeedsDrawer({
             showsVerticalScrollIndicator
           >
             {mode === 'needs' && renderNeedsMode()}
-            {mode === 'common-ground' && renderCommonGroundMode()}
             {mode === 'comparison' && renderComparisonMode()}
           </ScrollView>
 
           {/* Fixed footer buttons */}
           {mode === 'needs' && renderNeedsButtons()}
-          {mode === 'common-ground' && renderCommonGroundButtons()}
-          {mode === 'comparison' && renderComparisonButtons()}
         </View>
       </Animated.View>
     </View>
@@ -630,15 +494,6 @@ const styles = StyleSheet.create({
   },
   fullWidthButton: {
     flex: undefined,
-  },
-
-  noOverlapText: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingVertical: 16,
-    marginHorizontal: 16,
   },
 
   // Comparison view

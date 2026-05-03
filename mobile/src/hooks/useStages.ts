@@ -35,10 +35,7 @@ import {
   ConfirmNeedsRequest,
   NeedAdjustment,
   ConfirmNeedsResponse,
-  GetCommonGroundResponse,
   GetNeedsComparisonResponse,
-  ConfirmCommonGroundRequest,
-  ConfirmCommonGroundResponse,
   ValidateNeedsResponse,
   AddNeedRequest,
   AddNeedResponse,
@@ -1496,7 +1493,6 @@ export function useConsentShareNeeds(
     },
     onSuccess: (_, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-      queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
     },
     ...options,
@@ -1504,42 +1500,9 @@ export function useConsentShareNeeds(
 }
 
 /**
- * Get common ground (shared needs between both users).
+ * Get needs comparison (side-by-side view of both users' needs).
  *
- * Query is gated by allNeedsConfirmed and needsShared to prevent
- * racing with the needs confirmation flow. Common ground analysis
- * only runs server-side after both users share needs, so querying
- * before that returns empty results and wastes network.
- */
-export function useCommonGround(
-  sessionId: string | undefined,
-  conditions?: {
-    allNeedsConfirmed?: boolean;
-    needsShared?: boolean;
-  },
-  options?: Omit<
-    UseQueryOptions<GetCommonGroundResponse, ApiClientError>,
-    'queryKey' | 'queryFn'
-  >
-) {
-  const allNeedsConfirmed = conditions?.allNeedsConfirmed ?? true;
-
-  return useQuery({
-    queryKey: stageKeys.commonGround(sessionId || ''),
-    queryFn: async () => {
-      if (!sessionId) throw new Error('Session ID is required');
-      return get<GetCommonGroundResponse>(`/sessions/${sessionId}/common-ground`);
-    },
-    enabled: !!sessionId && allNeedsConfirmed,
-    staleTime: 0,
-    ...options,
-  });
-}
-
-/**
- * Get needs comparison (side-by-side view of both users' needs + common ground).
- *
- * Only available after both users have shared their needs (common ground phase).
+ * Only available after both users have shared their needs.
  */
 export function useNeedsComparison(
   sessionId: string | undefined,
@@ -1555,38 +1518,6 @@ export function useNeedsComparison(
     },
     enabled: !!sessionId && enabled,
     staleTime: 0,
-  });
-}
-
-/**
- * Confirm common ground items.
- */
-export function useConfirmCommonGround(
-  options?: Omit<
-    UseMutationOptions<
-      ConfirmCommonGroundResponse,
-      ApiClientError,
-      { sessionId: string; confirmations: ConfirmCommonGroundRequest['confirmations'] }
-    >,
-    'mutationFn'
-  >
-) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ sessionId, confirmations }) => {
-      return post<ConfirmCommonGroundResponse>(
-        `/sessions/${sessionId}/common-ground/confirm`,
-        { confirmations }
-      );
-    },
-    onSuccess: (_, { sessionId }) => {
-      queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
-      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-      queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
-      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-    },
-    ...options,
   });
 }
 
@@ -1613,7 +1544,7 @@ export function useValidateNeeds(
       );
     },
     onSuccess: (_, { sessionId }) => {
-      queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.detail(sessionId) });
       queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });

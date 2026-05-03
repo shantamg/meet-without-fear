@@ -3,14 +3,13 @@
  *
  * Stage 3 - Need Mapping
  * AI helps users identify their underlying needs from the conversation,
- * then both partners confirm their needs and discover common ground.
+ * then users confirm their needs before moving to strategies.
  *
  * Phases:
  * - Exploration: Chat with AI to explore needs
  * - Review: View and confirm identified needs
- * - Comparison: Side-by-side view of both partners' needs
- * - Common Ground: Discover shared needs with partner
  * - Waiting: Wait for partner to complete their needs
+ * - Complete: Redirect to next stage
  */
 
 import { View, ScrollView, StyleSheet, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
@@ -26,66 +25,17 @@ import {
   useNeeds,
   useConfirmNeeds,
   useConsentShareNeeds,
-  useCommonGround,
-  useConfirmCommonGround,
 } from '../hooks/useStages';
 import { ChatInterface } from '../components/ChatInterface';
 import { NeedsSection } from '../components/NeedsSection';
-import { CommonGroundCard } from '../components/CommonGroundCard';
 import { WaitingRoom } from '../components/WaitingRoom';
-import { Stage, IdentifiedNeedDTO, CommonGroundDTO } from '@meet-without-fear/shared';
-
-// ============================================================================
-// Soft, Calming Color Palette for Need Mapping
-// ============================================================================
-
-const needMappingColors = {
-  // Soft blues and teals for need categories
-  softBlue: 'rgba(125, 179, 213, 0.2)',
-  softBlueBorder: 'rgba(125, 179, 213, 0.4)',
-  softTeal: 'rgba(94, 186, 183, 0.2)',
-  softTealBorder: 'rgba(94, 186, 183, 0.4)',
-
-  // Gentle greens for common ground
-  gentleGreen: 'rgba(134, 197, 166, 0.2)',
-  gentleGreenBorder: 'rgba(134, 197, 166, 0.5)',
-  gentleGreenText: '#6B9E7F',
-
-  // Warm neutrals for backgrounds
-  warmNeutral: 'rgba(209, 199, 186, 0.1)',
-  warmNeutralBorder: 'rgba(209, 199, 186, 0.3)',
-
-  // Partner's needs (soft coral/peach)
-  softCoral: 'rgba(224, 166, 147, 0.2)',
-  softCoralBorder: 'rgba(224, 166, 147, 0.4)',
-
-  // Shared needs highlight
-  sharedHighlight: 'rgba(134, 197, 166, 0.3)',
-  sharedConnector: 'rgba(134, 197, 166, 0.6)',
-};
-
-// ============================================================================
-// Transformation Examples (for display)
-// ============================================================================
-
-interface NeedTransformation {
-  original: string;
-  transformed: string;
-  needCategory: string;
-}
-
-const transformationExamples: NeedTransformation[] = [
-  { original: '"You never listen"', transformed: 'Need: To be heard', needCategory: 'Understanding' },
-  { original: '"You\'re always busy"', transformed: 'Need: Quality time', needCategory: 'Connection' },
-  { original: '"You don\'t care"', transformed: 'Need: To feel valued', needCategory: 'Appreciation' },
-  { original: '"You\'re so controlling"', transformed: 'Need: Autonomy', needCategory: 'Independence' },
-];
+import { Stage, IdentifiedNeedDTO } from '@meet-without-fear/shared';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type NeedMappingPhase = 'exploration' | 'review' | 'common_ground' | 'waiting' | 'complete';
+type NeedMappingPhase = 'exploration' | 'review' | 'waiting' | 'complete';
 
 // ============================================================================
 // Helper Functions
@@ -97,8 +47,6 @@ type NeedMappingPhase = 'exploration' | 'review' | 'common_ground' | 'waiting' |
 function determinePhase(
   needs: IdentifiedNeedDTO[] | undefined,
   allNeedsConfirmed: boolean,
-  commonGround: CommonGroundDTO[] | undefined,
-  commonGroundComplete: boolean
 ): NeedMappingPhase {
   // No needs synthesized yet - still in exploration
   if (!needs || needs.length === 0) {
@@ -110,16 +58,8 @@ function determinePhase(
     return 'review';
   }
 
-  // Needs confirmed, checking common ground
-  if (commonGround && commonGround.length > 0) {
-    if (commonGroundComplete) {
-      return 'complete';
-    }
-    return 'common_ground';
-  }
-
-  // Needs confirmed, waiting for common ground analysis or partner
-  return 'waiting';
+  // Needs confirmed - complete (AI handles transition conversationally)
+  return 'complete';
 }
 
 /**
@@ -132,383 +72,6 @@ function transformNeedsForDisplay(needs: IdentifiedNeedDTO[]) {
     description: need.description,
   }));
 }
-
-/**
- * Transform CommonGroundDTO to CommonGroundCard format.
- */
-function transformCommonGroundForDisplay(commonGround: CommonGroundDTO[]) {
-  return commonGround.map((cg) => ({
-    category: cg.need,
-    description: cg.description,
-  }));
-}
-
-
-// ============================================================================
-// Sub-Components
-// ============================================================================
-
-/**
- * TransformationCard - Shows how accusations become needs language
- */
-function TransformationCard({ transformation }: { transformation: NeedTransformation }) {
-  return (
-    <View style={subStyles.transformationCard}>
-      <View style={subStyles.transformationRow}>
-        <View style={subStyles.originalBox}>
-          <Text style={subStyles.originalLabel}>What we say:</Text>
-          <Text style={subStyles.originalText}>{transformation.original}</Text>
-        </View>
-        <View style={subStyles.arrowContainer}>
-          <Text style={subStyles.arrow}>{'->'}</Text>
-        </View>
-        <View style={subStyles.transformedBox}>
-          <Text style={subStyles.transformedLabel}>What we need:</Text>
-          <Text style={subStyles.transformedText}>{transformation.transformed}</Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-/**
- * TransformationDisplay - Shows the reframing concept
- */
-function TransformationDisplay() {
-  return (
-    <View style={subStyles.transformationSection}>
-      <Text style={subStyles.transformationTitle}>Understanding the Transformation</Text>
-      <Text style={subStyles.transformationSubtitle}>
-        Behind every complaint is an unmet need
-      </Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={subStyles.transformationScroll}
-      >
-        {transformationExamples.map((t, index) => (
-          <TransformationCard key={index} transformation={t} />
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
-/**
- * NeedCardSoft - A softer styled need card for the side-by-side view
- */
-function NeedCardSoft({
-  need,
-  isShared,
-  variant,
-}: {
-  need: { category: string; description: string };
-  isShared: boolean;
-  variant: 'user' | 'partner';
-}) {
-  const cardStyle = [
-    subStyles.needCardSoft,
-    variant === 'user' ? subStyles.userNeedCard : subStyles.partnerNeedCard,
-    isShared && subStyles.sharedNeedCard,
-  ];
-
-  return (
-    <View style={cardStyle}>
-      <Text style={subStyles.needCardCategory}>{need.category}</Text>
-      <Text style={subStyles.needCardDescription}>{need.description}</Text>
-      {isShared && (
-        <View style={subStyles.sharedIndicator}>
-          <Text style={subStyles.sharedIndicatorText}>Shared</Text>
-        </View>
-      )}
-    </View>
-  );
-}
-
-/**
- * SideBySideNeedsView - Shows user and partner needs side by side
- */
-function SideBySideNeedsView({
-  userNeeds,
-  partnerNeeds,
-  partnerName,
-}: {
-  userNeeds: { id: string; category: string; description: string }[];
-  partnerNeeds: { id: string; category: string; description: string }[];
-  partnerName: string;
-}) {
-  // Find shared need categories
-  const sharedCategories = new Set<string>();
-  const userCategories = new Set(userNeeds.map((n) => n.category.toLowerCase()));
-  partnerNeeds.forEach((n) => {
-    if (userCategories.has(n.category.toLowerCase())) {
-      sharedCategories.add(n.category.toLowerCase());
-    }
-  });
-
-  const isShared = (category: string) => sharedCategories.has(category.toLowerCase());
-
-  return (
-    <View style={subStyles.sideBySideContainer}>
-      {/* Insight Banner for shared needs */}
-      {sharedCategories.size > 0 && (
-        <View style={subStyles.insightBanner}>
-          <Text style={subStyles.insightBannerText}>
-            You share {sharedCategories.size} common need{sharedCategories.size > 1 ? 's' : ''}
-          </Text>
-          <Text style={subStyles.insightBannerSubtext}>
-            This is the foundation for understanding each other
-          </Text>
-        </View>
-      )}
-
-      <View style={subStyles.columnsContainer}>
-        {/* Your Needs Column */}
-        <View style={subStyles.needsColumn}>
-          <View style={subStyles.columnHeader}>
-            <Text style={subStyles.columnTitle}>Your Needs</Text>
-          </View>
-          {userNeeds.map((need) => (
-            <NeedCardSoft
-              key={need.id}
-              need={need}
-              isShared={isShared(need.category)}
-              variant="user"
-            />
-          ))}
-        </View>
-
-        {/* Connector Line */}
-        <View style={subStyles.connectorColumn}>
-          {sharedCategories.size > 0 && (
-            <View style={subStyles.connectorLine} />
-          )}
-        </View>
-
-        {/* Partner's Needs Column */}
-        <View style={subStyles.needsColumn}>
-          <View style={subStyles.columnHeaderPartner}>
-            <Text style={subStyles.columnTitle}>{partnerName}'s Needs</Text>
-          </View>
-          {partnerNeeds.map((need) => (
-            <NeedCardSoft
-              key={need.id}
-              need={need}
-              isShared={isShared(need.category)}
-              variant="partner"
-            />
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-}
-
-/**
- * Styles for sub-components
- */
-const subStyles = StyleSheet.create({
-  // Transformation styles
-  transformationSection: {
-    marginBottom: 24,
-    paddingVertical: 16,
-    backgroundColor: needMappingColors.warmNeutral,
-    borderRadius: 12,
-    marginHorizontal: -16,
-    paddingHorizontal: 16,
-  },
-  transformationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  transformationSubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 16,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  transformationScroll: {
-    paddingHorizontal: 8,
-  },
-  transformationCard: {
-    backgroundColor: needMappingColors.softTeal,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: needMappingColors.softTealBorder,
-    padding: 12,
-    marginRight: 12,
-    width: 280,
-  },
-  transformationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  originalBox: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    borderRadius: 8,
-    padding: 8,
-  },
-  originalLabel: {
-    fontSize: 10,
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  originalText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-  },
-  arrowContainer: {
-    paddingHorizontal: 8,
-  },
-  arrow: {
-    fontSize: 18,
-    color: needMappingColors.gentleGreenText,
-    fontWeight: '600',
-  },
-  transformedBox: {
-    flex: 1,
-    backgroundColor: needMappingColors.gentleGreen,
-    borderRadius: 8,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: needMappingColors.gentleGreenBorder,
-  },
-  transformedLabel: {
-    fontSize: 10,
-    color: needMappingColors.gentleGreenText,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  transformedText: {
-    fontSize: 13,
-    color: colors.textPrimary,
-    fontWeight: '600',
-  },
-
-  // Side-by-side styles
-  sideBySideContainer: {
-    marginBottom: 24,
-  },
-  insightBanner: {
-    backgroundColor: needMappingColors.gentleGreen,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: needMappingColors.gentleGreenBorder,
-    padding: 16,
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  insightBannerText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  insightBannerSubtext: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  columnsContainer: {
-    flexDirection: 'row',
-  },
-  needsColumn: {
-    flex: 1,
-  },
-  connectorColumn: {
-    width: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 44,
-  },
-  connectorLine: {
-    width: 2,
-    flex: 1,
-    backgroundColor: needMappingColors.sharedConnector,
-    borderRadius: 1,
-  },
-  columnHeader: {
-    backgroundColor: needMappingColors.softBlue,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
-    marginRight: 4,
-    borderWidth: 1,
-    borderColor: needMappingColors.softBlueBorder,
-  },
-  columnHeaderPartner: {
-    backgroundColor: needMappingColors.softCoral,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
-    marginLeft: 4,
-    borderWidth: 1,
-    borderColor: needMappingColors.softCoralBorder,
-  },
-  columnTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    textAlign: 'center',
-  },
-
-  // Soft need card styles
-  needCardSoft: {
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    position: 'relative',
-  },
-  userNeedCard: {
-    backgroundColor: needMappingColors.softBlue,
-    borderColor: needMappingColors.softBlueBorder,
-    marginRight: 4,
-  },
-  partnerNeedCard: {
-    backgroundColor: needMappingColors.softCoral,
-    borderColor: needMappingColors.softCoralBorder,
-    marginLeft: 4,
-  },
-  sharedNeedCard: {
-    backgroundColor: needMappingColors.sharedHighlight,
-    borderColor: needMappingColors.gentleGreenBorder,
-    borderWidth: 2,
-  },
-  needCardCategory: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  needCardDescription: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    lineHeight: 16,
-  },
-  sharedIndicator: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: needMappingColors.gentleGreenText,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  sharedIndicatorText: {
-    color: 'white',
-    fontSize: 9,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-});
 
 // ============================================================================
 // Component
@@ -534,10 +97,6 @@ export function NeedMappingScreen() {
   const { mutate: confirmNeeds, isPending: isConfirming } = useConfirmNeeds();
   const { mutate: consentShareNeeds } = useConsentShareNeeds();
 
-  // Common ground data
-  const { data: commonGroundData } = useCommonGround(sessionId);
-  const { mutate: confirmCommonGround, isPending: isConfirmingCommonGround } = useConfirmCommonGround();
-
   // Local state for adjustment mode
   const [adjustmentMode, setAdjustmentMode] = useState(false);
 
@@ -545,16 +104,14 @@ export function NeedMappingScreen() {
   const session = sessionData?.session;
   const messages = messagesData?.messages ?? [];
   const needs = needsData?.needs ?? [];
-  const commonGround = commonGroundData?.commonGround ?? [];
   const myProgress = progressData?.myProgress;
   const partnerProgress = progressData?.partnerProgress;
 
   // Check if all needs are confirmed
   const allNeedsConfirmed = needs.length > 0 && needs.every((n) => n.confirmed);
-  const commonGroundComplete = commonGroundData?.bothConfirmed ?? false;
 
   // Determine current phase
-  const phase = determinePhase(needs, allNeedsConfirmed, commonGround, commonGroundComplete);
+  const phase = determinePhase(needs, allNeedsConfirmed);
 
   // Loading state
   const isLoading = loadingSession || loadingProgress || loadingMessages || loadingNeeds;
@@ -591,26 +148,6 @@ export function NeedMappingScreen() {
       }
     );
   }, [sessionId, needs, confirmNeeds, consentShareNeeds]);
-
-  // Handle confirming common ground
-  const handleConfirmCommonGround = useCallback(() => {
-    if (!sessionId) return;
-
-    const confirmations = commonGround.map((cg) => ({
-      commonGroundId: cg.id,
-      confirmed: true,
-    }));
-
-    confirmCommonGround(
-      { sessionId, confirmations },
-      {
-        onSuccess: () => {
-          // Navigate to session detail which will route to next stage
-          router.replace(`/session/${sessionId}`);
-        },
-      }
-    );
-  }, [sessionId, commonGround, confirmCommonGround, router]);
 
   // Handle adjustment request
   const handleAdjustNeeds = useCallback(() => {
@@ -713,7 +250,6 @@ export function NeedMappingScreen() {
   // Phase: Review - show identified needs for confirmation
   if (phase === 'review' || adjustmentMode) {
     const displayNeeds = transformNeedsForDisplay(needs);
-    const confirmedNeedIds = needs.filter((n) => n.confirmed).map((n) => n.id);
 
     return (
       <>
@@ -725,7 +261,7 @@ export function NeedMappingScreen() {
         />
         <SafeAreaView style={styles.container} edges={['bottom']} testID="need-mapping-review">
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.headerSoft}>
+            <View style={styles.header}>
               <Text style={styles.title}>Your Identified Needs</Text>
               <Text style={styles.subtitle}>
                 Review the needs identified from your conversation
@@ -733,140 +269,43 @@ export function NeedMappingScreen() {
             </View>
 
             <View style={styles.content}>
-              {/* Transformation Display - shows how reframing works */}
-              <TransformationDisplay />
-
               <NeedsSection
                 title="What you need most"
                 needs={displayNeeds}
-                sharedNeeds={confirmedNeedIds}
                 testID="needs-section"
               />
 
-              <View style={styles.confirmationSoft} testID="needs-confirm-question">
+              <View style={styles.confirmation} testID="needs-confirm-question">
                 <Text style={styles.confirmQuestion}>
                   Does this capture what you need?
                 </Text>
 
                 <TouchableOpacity
-                  style={styles.adjustButtonSoft}
+                  style={styles.adjustButton}
                   onPress={handleAdjustNeeds}
                   disabled={isConfirming}
                   testID="adjust-needs-button"
                   accessibilityRole="button"
                   accessibilityLabel="Adjust needs"
                 >
-                  <Text style={styles.adjustTextSoft}>I want to adjust these</Text>
+                  <Text style={styles.adjustText}>I want to adjust these</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.confirmButtonSoft, isConfirming && styles.disabledButton]}
+                  style={[styles.confirmButton, isConfirming && styles.disabledButton]}
                   onPress={handleConfirmNeeds}
                   disabled={isConfirming}
                   testID="confirm-needs-button"
                   accessibilityRole="button"
                   accessibilityLabel="Confirm my needs"
                 >
-                  <Text style={styles.confirmTextSoft}>
+                  <Text style={styles.confirmText}>
                     {isConfirming ? 'Confirming...' : 'Yes, confirm my needs'}
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
           </ScrollView>
-        </SafeAreaView>
-      </>
-    );
-  }
-
-  // Phase: Common Ground - show shared needs with partner using side-by-side view
-  if (phase === 'common_ground') {
-    const displayNeeds = transformNeedsForDisplay(needs);
-    const displayCommonGround = transformCommonGroundForDisplay(commonGround);
-
-    // Create partner needs representation from common ground
-    // In the common ground phase, we show shared needs on partner's side
-    // to create the "insight moment" of shared humanity
-    const partnerDisplayNeeds = commonGround.map((cg) => ({
-      id: `partner-${cg.id}`,
-      category: cg.need,
-      description: cg.description,
-    }));
-
-    const partnerName = session?.partner?.nickname ?? session?.partner?.name ?? 'Partner';
-
-    return (
-      <>
-        <Stack.Screen
-          options={{
-            title: 'Common Ground',
-            headerBackTitle: 'Session',
-          }}
-        />
-        <SafeAreaView style={styles.container} edges={['bottom']} testID="need-mapping-common-ground">
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.headerSoft}>
-              <Text style={styles.title}>Common Ground Discovered</Text>
-              <Text style={styles.subtitle}>
-                You and {partnerName} share some common needs
-              </Text>
-            </View>
-
-            <View style={styles.content}>
-              {/* Side-by-side needs comparison - the insight moment */}
-              <SideBySideNeedsView
-                userNeeds={displayNeeds}
-                partnerNeeds={partnerDisplayNeeds}
-                partnerName={partnerName}
-              />
-
-              {/* Common ground summary with insight */}
-              <CommonGroundCard
-                sharedNeeds={displayCommonGround}
-                insight="When we see our shared needs, we remember we're on the same team."
-                testID="common-ground-card"
-              />
-
-              <View style={styles.confirmationSoft}>
-                <Text style={styles.confirmQuestion}>
-                  Ready to build on this foundation?
-                </Text>
-
-                <TouchableOpacity
-                  style={[styles.confirmButtonSoft, isConfirmingCommonGround && styles.disabledButton]}
-                  onPress={handleConfirmCommonGround}
-                  disabled={isConfirmingCommonGround}
-                  testID="continue-to-strategies-button"
-                  accessibilityRole="button"
-                  accessibilityLabel="Continue to strategies"
-                >
-                  <Text style={styles.confirmTextSoft}>
-                    {isConfirmingCommonGround ? 'Confirming...' : 'Continue to Strategies'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </>
-    );
-  }
-
-  // Phase: Waiting - waiting for partner
-  if (phase === 'waiting') {
-    return (
-      <>
-        <Stack.Screen
-          options={{
-            title: 'Waiting',
-            headerBackTitle: 'Session',
-          }}
-        />
-        <SafeAreaView style={styles.container} edges={['bottom']} testID="need-mapping-waiting">
-          <WaitingRoom
-            message="Waiting for your partner to confirm their needs so we can discover common ground"
-            partnerName={session?.partner?.nickname ?? session?.partner?.name ?? undefined}
-          />
         </SafeAreaView>
       </>
     );
@@ -967,51 +406,6 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
-  },
-
-  // ============================================================================
-  // Soft-themed styles for calming experience
-  // ============================================================================
-
-  headerSoft: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: needMappingColors.warmNeutralBorder,
-    backgroundColor: needMappingColors.warmNeutral,
-  },
-  confirmationSoft: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: needMappingColors.warmNeutral,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: needMappingColors.warmNeutralBorder,
-  },
-  adjustButtonSoft: {
-    padding: 14,
-    borderWidth: 1,
-    borderColor: needMappingColors.softTealBorder,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 8,
-    backgroundColor: needMappingColors.softTeal,
-  },
-  adjustTextSoft: {
-    color: colors.textPrimary,
-    fontSize: 14,
-  },
-  confirmButtonSoft: {
-    padding: 14,
-    backgroundColor: needMappingColors.gentleGreen,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: needMappingColors.gentleGreenBorder,
-  },
-  confirmTextSoft: {
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '600',
   },
 });
 

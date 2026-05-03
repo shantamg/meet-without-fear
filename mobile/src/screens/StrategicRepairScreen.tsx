@@ -39,7 +39,6 @@ import {
   useAgreements,
   useConfirmAgreement,
   useResolveSession,
-  useCommonGround,
   useCreateAgreement,
 } from '../hooks/useStages';
 import { useSession } from '../hooks/useSessions';
@@ -57,47 +56,9 @@ interface Strategy {
   isUserContributed?: boolean;
 }
 
-interface CommonGroundItem {
-  id: string;
-  need: string;
-  category: string;
-  description: string;
-}
-
 // ============================================================================
 // Sub-Components
 // ============================================================================
-
-/**
- * Common Ground Foundation Card
- * Displays shared needs from Stage 3 to provide context for strategy selection.
- */
-function CommonGroundFoundation({
-  commonGround,
-}: {
-  commonGround: CommonGroundItem[];
-}) {
-  if (commonGround.length === 0) return null;
-
-  return (
-    <View style={subStyles.commonGroundContainer}>
-      <Text style={subStyles.commonGroundTitle}>Common Ground Foundation</Text>
-      <Text style={subStyles.commonGroundSubtitle}>
-        These shared needs guide our strategy search
-      </Text>
-      <View style={subStyles.commonGroundList}>
-        {commonGround.map((item) => (
-          <View key={item.id} style={subStyles.commonGroundItem}>
-            <Text style={subStyles.commonGroundNeed}>{item.need}</Text>
-            <Text style={subStyles.commonGroundDescription}>
-              {item.description}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
 
 /**
  * User Strategy Input Component
@@ -429,9 +390,6 @@ export function StrategicRepairScreen() {
   const { data: sessionData } = useSession(sessionId);
   const session = sessionData?.session;
 
-  // Common ground data from Stage 3
-  const { data: commonGroundData } = useCommonGround(sessionId);
-
   // Strategy data and mutations
   const { data: strategyData, isLoading: isLoadingStrategies } =
     useStrategies(sessionId);
@@ -459,16 +417,6 @@ export function StrategicRepairScreen() {
     id: s.id,
     description: s.description,
     duration: s.duration || undefined,
-  }));
-
-  // Transform common ground for display
-  const commonGround: CommonGroundItem[] = (
-    commonGroundData?.commonGround || []
-  ).map((cg) => ({
-    id: cg.id,
-    need: cg.need,
-    category: cg.category,
-    description: cg.description,
   }));
 
   // Handle loading state
@@ -569,9 +517,6 @@ export function StrategicRepairScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <ScrollView style={styles.scrollContainer}>
-          {/* Common Ground Foundation */}
-          <CommonGroundFoundation commonGround={commonGround} />
-
           {/* User Strategy Input */}
           <View style={styles.userInputSection}>
             <UserStrategyInput
@@ -749,46 +694,6 @@ const styles = StyleSheet.create({
 // ============================================================================
 
 const subStyles = StyleSheet.create({
-  // Common Ground Foundation
-  commonGroundContainer: {
-    padding: 16,
-    backgroundColor: 'rgba(16, 163, 127, 0.1)',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  commonGroundTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.accent,
-    marginBottom: 4,
-  },
-  commonGroundSubtitle: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginBottom: 12,
-  },
-  commonGroundList: {
-    gap: 8,
-  },
-  commonGroundItem: {
-    padding: 12,
-    backgroundColor: colors.bgSecondary,
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: colors.accent,
-  },
-  commonGroundNeed: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  commonGroundDescription: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 18,
-  },
-
   // User Strategy Input
   addIdeaButton: {
     padding: 14,

@@ -58,7 +58,6 @@ export { ViewEmpathyStatementDrawer } from './ViewEmpathyStatementDrawer';
 // Stage 3 components - Need Mapping
 export { NeedCard } from './NeedCard';
 export { NeedsSection } from './NeedsSection';
-export { CommonGroundCard } from './CommonGroundCard';
 
 // Stage 4 components - Strategic Repair
 export { StrategyCard } from './StrategyCard';

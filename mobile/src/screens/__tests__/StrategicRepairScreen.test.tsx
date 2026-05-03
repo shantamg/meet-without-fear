@@ -157,10 +157,6 @@ jest.mock('../../hooks/useStages', () => ({
   useResolveSession: () => ({
     mutate: mockResolveSession,
   }),
-  useCommonGround: () => ({
-    data: { commonGround: [] },
-    isLoading: false,
-  }),
   useProposeStrategy: () => ({
     mutate: mockProposeStrategy,
     isPending: false,
