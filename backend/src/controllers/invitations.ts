@@ -86,7 +86,7 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
         stageProgress: true, // Get all stage progress records
         // Include empathy attempts to show correct Stage 2 status
         empathyAttempts: {
-          select: { sourceUserId: true },
+          select: { sourceUserId: true, status: true },
         },
         // Include user vessels for read state tracking
         userVessels: {
@@ -158,9 +158,38 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
       const selfActionNeeded: string[] = [];
       const partnerActionNeeded: string[] = [];
 
-      // If user is behind partner or has incomplete status, they need action
-      if (myProgress.status === 'IN_PROGRESS' || myProgress.status === 'NOT_STARTED') {
+      // If user hasn't started, they need action
+      if (myProgress.status === 'NOT_STARTED') {
         selfActionNeeded.push('complete_stage');
+      }
+
+      // If user is in progress, check Stage 2 sub-state to avoid showing
+      // "Ready for you" when user is actually waiting on partner/system
+      if (myProgress.status === 'IN_PROGRESS') {
+        const empathyData = (session as { empathyAttempts?: Array<{ sourceUserId: string | null; status: string }> }).empathyAttempts || [];
+        if (myProgress.stage === Stage.PERSPECTIVE_STRETCH && empathyData.length > 0) {
+          const userEmpathy = empathyData.find(
+            (a) => a.sourceUserId === user.id
+          );
+          const partnerEmpathy = empathyData.find(
+            (a) => a.sourceUserId !== user.id
+          );
+
+          const userNeedsToRefine =
+            userEmpathy?.status === 'REFINING' || userEmpathy?.status === 'NEEDS_WORK';
+          const userNeedsToValidate = partnerEmpathy?.status === 'REVEALED';
+          const userNeedsToRespondToShare = partnerEmpathy?.status === 'AWAITING_SHARING';
+
+          if (userNeedsToRefine || userNeedsToValidate || userNeedsToRespondToShare) {
+            selfActionNeeded.push('complete_stage');
+          } else if (!userEmpathy) {
+            // User hasn't sent empathy yet — they still have work to do
+            selfActionNeeded.push('complete_stage');
+          }
+          // Otherwise: user is waiting on partner/system — no selfActionNeeded
+        } else {
+          selfActionNeeded.push('complete_stage');
+        }
       }
 
       // If partner is behind or has incomplete status

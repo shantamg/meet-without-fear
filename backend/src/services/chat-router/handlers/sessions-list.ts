@@ -40,7 +40,7 @@ export const sessionsListHandler: IntentHandler = {
         stageProgress: true,
         // Include empathy attempts to show correct Stage 2 status
         empathyAttempts: {
-          select: { sourceUserId: true },
+          select: { sourceUserId: true, status: true },
         },
         // Include user vessels for read state tracking
         userVessels: {
