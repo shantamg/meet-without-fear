@@ -28,8 +28,8 @@ status: living
 - Purpose: REST API serving mobile client; message routing; session management; AI orchestration
 - Location: `backend/src/`
 - Contains: Route handlers, controllers, services, middleware, database logic, LLM integrations
-- Depends on: Prisma ORM, Bedrock LLM, Ably realtime, Slack Web API (`@slack/web-api`), shared DTOs/contracts
-- Used by: Mobile client via HTTP; Ably realtime subscriptions; EC2 socket listener (Slack ingress)
+- Depends on: Prisma ORM, Bedrock LLM, Ably realtime, shared DTOs/contracts
+- Used by: Mobile client via HTTP; Ably realtime subscriptions
 
 **Mobile Frontend (React Native + Expo):**
 - Purpose: User-facing chat interface; session management UI; inner work tools; invitations
@@ -145,12 +145,6 @@ status: living
 - Location: `backend/src/routes/index.ts`
 - Triggers: Server startup; mounts all feature routes (chat, invitations, stages, etc.)
 - Responsibilities: Centralizes route mounting; documents mount order and dependencies
-
-**Slack Ingress (Backend):**
-- Location: `backend/src/routes/slack.ts`, `backend/src/controllers/slack-session.ts`
-- Triggers: EC2 socket listener POSTs Slack messages to `/api/slack/mwf-session`
-- Responsibilities: Shared-secret validation; delegates to the same Bedrock pipeline (context assembly → stage prompts → Sonnet response) used by mobile; posts replies back to Slack DMs via `@slack/web-api`
-- Health check: `GET /api/slack/health` reports workspace load status and Slack configuration
 
 **Chat Unified Screen (Mobile):**
 - Location: `mobile/src/screens/UnifiedSessionScreen.tsx` (with Stage 2 drawers/modals extracted into components such as `AccuracyFeedbackDrawer`, `ViewEmpathyStatementDrawer`, and `GuidedDraftChatModal`)
