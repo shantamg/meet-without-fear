@@ -173,6 +173,10 @@ export function UnifiedSessionScreen({
 
   // Real-time presence tracking
 
+  // Invitee Stage 0 topic-ack flag — local UI state.
+  // Declared early so it can flow into useUnifiedSession (which uses it to
+  // defer the Stage 0/1 initial AI message fetch for the invitee).
+  const [inviteeAckDone, setInviteeAckDone] = useState(false);
 
   const {
     // Loading
@@ -286,7 +290,11 @@ export function UnifiedSessionScreen({
 
     // Session viewed tracking
     markSessionViewed,
-  } = useUnifiedSession(sessionId);
+
+    // Stage advancement (used by invitee topic-ack Ready button)
+    advanceStage,
+    triggerInitialMessage,
+  } = useUnifiedSession(sessionId, { inviteeTopicAcked: inviteeAckDone });
 
   // AI message handler for fire-and-forget pattern
   const { addAIMessage, handleAIMessageError } = useAIMessageHandler();
@@ -769,6 +777,8 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   const [invitationPanelDismissed, setInvitationPanelDismissed] = useState(false);
 
+  // (inviteeAckDone is declared above, before useUnifiedSession.)
+
   // Tooltip shown after "Later" — points at the book icon to teach the user
   // they can share later from the activity drawer. Session-local only.
   const [showShareLaterTooltip, setShowShareLaterTooltip] = useState(false);
@@ -949,6 +959,17 @@ export function UnifiedSessionScreen({
   // The optimistic updates in mutation hooks (onMutate) ensure panels hide immediately.
   // No latch refs needed - if API fails, onError rolls back the cache and panel reappears.
   const isInviter = invitation?.isInviter ?? true;
+  // Invitee Stage 0 topic-ack screen is active when:
+  //   - user is the invitee
+  //   - compact has been signed (welcome step is done)
+  //   - they haven't tapped the topic-ack Ready button yet
+  //   - no chat messages exist yet (so this never triggers on later opens)
+  const inviteeTopicAckPending =
+    !isInviter &&
+    !!compactData?.mySigned &&
+    !inviteeAckDone &&
+    messages.length === 0 &&
+    !!topicFrame;
   const {
     waitingStatus,
     shouldShowWaitingBanner,
@@ -982,6 +1003,7 @@ export function UnifiedSessionScreen({
     topicFrameProposed: topicFrame ?? null,
     topicProposalDismissed,
     isConfirmingTopicFrame,
+    inviteeTopicAckPending,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt: milestones?.feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -1689,6 +1711,27 @@ export function UnifiedSessionScreen({
     return <CompactChatItem testID="inline-compact" isFirstSession={isFirstSession} />;
   }, [isFirstSession]);
 
+  // Invitee Stage 0 topic-acknowledgement message body.
+  // Rendered in the message area (not in the bottom bar) per spec:
+  // intro line + topic frame with breathing room + closing line.
+  const inviteeTopicAckEmptyStateElement = useMemo(() => {
+    return (
+      <View style={styles.inviteeTopicAckBody} testID="invitee-topic-ack-body">
+        <Text style={styles.inviteeTopicAckText}>
+          {`Before we begin, this is what ${partnerName || 'your partner'} would like to work through with you:`}
+        </Text>
+        <View style={styles.inviteeTopicAckFrameWrap}>
+          <Text style={styles.inviteeTopicAckFrame} testID="invitee-topic-text">
+            {topicFrame ?? ''}
+          </Text>
+        </View>
+        <Text style={styles.inviteeTopicAckText}>
+          {"This is how things look from their side right now. You don't need to agree with it, respond to it, or do anything with it yet. Instead, I'd like to know what is happening from your point of view."}
+        </Text>
+      </View>
+    );
+  }, [styles, partnerName, topicFrame]);
+
   // -------------------------------------------------------------------------
   // Render Overlays
   // -------------------------------------------------------------------------
@@ -1934,9 +1977,26 @@ export function UnifiedSessionScreen({
             }}
             isPending={isSigningCompact}
             isFirstSession={isFirstSession}
-            inviteeTopic={!isInviter && topicFrameConfirmed ? topicFrame : undefined}
-            partnerName={partnerName}
             testID="compact-agreement-bar"
+          />
+        );
+
+      case 'invitee-topic-ack':
+        return (
+          <CompactAgreementBar
+            onSign={() => {
+              // Mark ack done so the topic-ack panel hides and the input
+              // un-hides. Trigger the Stage 0/1 initial AI message and
+              // advance to Stage 1 server-side (idempotent — server already
+              // auto-advanced this user when both sides signed).
+              setInviteeAckDone(true);
+              triggerInitialMessage();
+              if (sessionId) advanceStage({ sessionId });
+            }}
+            isPending={false}
+            isFirstSession={true}
+            buttonLabel="Ready"
+            testID="invitee-topic-ack-bar"
           />
         );
 
@@ -2418,9 +2478,15 @@ export function UnifiedSessionScreen({
           onContextSharedPress={() => {
             setShowActivityMenu(true);
           }}
-          // Show compact as custom empty state during onboarding when not signed
+          // Show compact as custom empty state during onboarding when not signed.
+          // For the invitee on Stage 0 topic-ack, show the topic-ack body
+          // instead (renders inside the messages area, with a Ready bar below).
           customEmptyState={
-            isInOnboardingUnsigned ? compactEmptyStateElement : undefined
+            isInOnboardingUnsigned
+              ? compactEmptyStateElement
+              : aboveInputPanel === 'invitee-topic-ack'
+                ? inviteeTopicAckEmptyStateElement
+                : undefined
           }
           renderAboveInput={aboveInputPanel ? renderAboveInput : undefined}
           renderBelowChat={(inlineCards.length > 0 || memorySuggestion) ? () => (
@@ -3096,6 +3162,32 @@ const useStyles = () =>
       fontWeight: '600' as const,
     },
 
+    inviteeTopicAckBody: {
+      paddingHorizontal: t.spacing.lg,
+      paddingTop: t.spacing.lg,
+      paddingBottom: t.spacing.md,
+    },
+    inviteeTopicAckText: {
+      fontSize: t.typography.fontSize.md,
+      lineHeight: 22,
+      color: t.colors.textPrimary,
+    },
+    inviteeTopicAckFrameWrap: {
+      paddingVertical: t.spacing.xl,
+      paddingHorizontal: t.spacing.md,
+      marginVertical: t.spacing.lg,
+      borderRadius: t.radius.md,
+      backgroundColor: t.colors.bgSecondary,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+    },
+    inviteeTopicAckFrame: {
+      fontSize: t.typography.fontSize.lg,
+      color: t.colors.textPrimary,
+      fontWeight: '600' as const,
+      lineHeight: 28,
+      textAlign: 'center' as const,
+    },
     topicProposalContainer: {
       marginHorizontal: t.spacing.lg,
       marginTop: t.spacing.sm,

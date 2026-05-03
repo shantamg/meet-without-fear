@@ -196,7 +196,15 @@ const initialState: UnifiedSessionState = {
 // Main Hook
 // ============================================================================
 
-export function useUnifiedSession(sessionId: string | undefined) {
+export function useUnifiedSession(
+  sessionId: string | undefined,
+  options?: { inviteeTopicAcked?: boolean }
+) {
+  // Whether the invitee has tapped "Ready" on the Stage 0 topic-ack screen.
+  // While false, we defer all auto-fetches of the initial Stage 0/1 AI message
+  // for the invitee so they don't see chat content before acknowledging the
+  // inviter's topic frame.
+  const inviteeTopicAcked = options?.inviteeTopicAcked ?? true;
   // Local state management
   const [state, dispatch] = useReducer(sessionReducer, initialState);
   const lastActivityTime = useRef<number>(Date.now());
@@ -562,6 +570,12 @@ export function useUnifiedSession(sessionId: string | undefined) {
     // Skip if still loading or during onboarding with unsigned compact
     const isOnboardingUnsigned = currentStage === Stage.ONBOARDING && !compactData?.mySigned;
 
+    // Defer initial-message fetch for the invitee while they are on the
+    // Stage 0 topic-acknowledgement screen. The screen flips
+    // `inviteeTopicAcked` to true once they tap Ready.
+    const isInviteeAwaitingTopicAck =
+      invitation && invitation.isInviter === false && !inviteeTopicAcked;
+
     if (
       !sessionId ||
       loadingSession ||
@@ -569,7 +583,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
       loadingCompact ||
       hasFetchedInitialMessage.current ||
       isFetchingInitialMessage ||
-      isOnboardingUnsigned
+      isOnboardingUnsigned ||
+      isInviteeAwaitingTopicAck
     ) {
       return;
     }
@@ -592,6 +607,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
     fetchInitialMessage,
     currentStage,
     compactData?.mySigned,
+    invitation,
+    inviteeTopicAcked,
   ]);
 
   // -------------------------------------------------------------------------
@@ -821,10 +838,18 @@ export function useUnifiedSession(sessionId: string | undefined) {
         { sessionId },
         {
           onSuccess: () => {
-            // Fetch initial message if none exist
+            // Fetch initial message if none exist. Skipped for the invitee
+            // while they're awaiting the Stage 0 topic-ack screen — they
+            // should see the inviter's topic before any AI message arrives.
             const messagesPages = messagesData?.pages;
             const hasMessages = messagesPages && messagesPages.some(page => page.messages.length > 0);
-            if (!hasMessages && !hasFetchedInitialMessage.current) {
+            const isInviteeAwaitingTopicAck =
+              invitation && invitation.isInviter === false && !inviteeTopicAcked;
+            if (
+              !isInviteeAwaitingTopicAck &&
+              !hasMessages &&
+              !hasFetchedInitialMessage.current
+            ) {
               hasFetchedInitialMessage.current = true;
               fetchInitialMessage({ sessionId });
             }
@@ -834,7 +859,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
         }
       );
     },
-    [sessionId, signCompact, messagesData?.pages, fetchInitialMessage]
+    [sessionId, signCompact, messagesData?.pages, fetchInitialMessage, invitation, inviteeTopicAcked]
   );
 
   const handleConfirmInvitationMessage = useCallback(
@@ -1201,6 +1226,16 @@ export function useUnifiedSession(sessionId: string | undefined) {
     handleCreateAgreementFromOverlap,
     handleResolveSession,
     handleRespondToShareOffer,
+
+    // Stage advancement (used e.g. by invitee topic-ack Ready button)
+    advanceStage,
+    // Manual initial-message trigger (for callers using deferInitialMessage)
+    triggerInitialMessage: () => {
+      if (!sessionId) return;
+      if (hasFetchedInitialMessage.current) return;
+      hasFetchedInitialMessage.current = true;
+      fetchInitialMessage({ sessionId });
+    },
 
     // Utility actions
     showCooling: (show: boolean) =>

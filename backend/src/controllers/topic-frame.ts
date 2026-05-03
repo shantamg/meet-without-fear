@@ -75,6 +75,23 @@ export async function confirmTopicFrame(req: Request, res: Response): Promise<vo
       logger.info(`[confirmTopicFrame] Topic frame confirmed for session ${sessionId}: "${updated.topicFrame}"`);
     }
 
+    // Make the invitation immediately acceptable. Mark the invitation row
+    // messageConfirmed and flip session.status to INVITED so the partner can
+    // join via the link as soon as the topic is locked — without waiting for
+    // the inviter to close the share modal. Stage advancement (Stage 0→1) and
+    // the AI transition message remain gated to confirmInvitationMessage,
+    // which the inviter triggers when they close the modal.
+    if (updated.status === 'CREATED') {
+      await prisma.session.update({
+        where: { id: sessionId },
+        data: { status: 'INVITED' },
+      });
+    }
+    await prisma.invitation.updateMany({
+      where: { sessionId, messageConfirmed: false },
+      data: { messageConfirmed: true, messageConfirmedAt: now },
+    });
+
     successResponse(res, {
       topicFrame: updated.topicFrame,
       confirmedAt: now.toISOString(),
