@@ -89,6 +89,9 @@ export async function refineInvitationMessage(req: Request, res: Response): Prom
             `Current invitation message: "${invitation.invitationMessage}"`,
             historyText ? `Recent refinement chat:\n${historyText}` : null,
             `The user wants to adjust the invitation with this feedback: "${message}"`,
+            session.topicFrame
+              ? 'Keep the invitation about the confirmed topic frame. If the feedback would shift the invitation to a different topic, preserve the confirmed topic and adjust only tone, clarity, length, or warmth.'
+              : null,
             'Generate the next proposed invitation message. Output ONLY the invitation text, no quotes or labels.',
           ].filter(Boolean).join('\n\n'),
         },
@@ -132,6 +135,9 @@ Goals for the invitation:
 - Do NOT include links, signatures, names, or formatting.
 
 Honor the user's steering feedback while keeping the invitation safe and inviting.
+If a topic frame is provided, treat it as the canonical subject of the invitation.
+Do not rewrite the invitation toward a different conflict topic; preserve the
+confirmed topic and adjust only tone, clarity, length, warmth, or directness.
 
 OUTPUT FORMAT:
 Output ONLY the invitation message text. No quotes, no labels, no preamble, no explanation.`;

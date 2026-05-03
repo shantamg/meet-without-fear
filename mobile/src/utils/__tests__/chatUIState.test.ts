@@ -112,6 +112,22 @@ describe('Above Input Panel Priority', () => {
     expect(result.aboveInputPanel).not.toBe('invitation');
   });
 
+  it('does not show invitation panel once the invitation is confirmed', () => {
+    const inputs = createInputs({
+      myStage: Stage.WITNESS,
+      compactMySigned: true,
+      myProgress: { stage: Stage.WITNESS },
+      isInviter: true,
+      hasInvitationMessage: true,
+      invitationConfirmed: true,
+      showFeelHeardConfirmation: true,
+      feelHeardConfirmedAt: null,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.aboveInputPanel).toBe('feel-heard');
+  });
+
   it('shows feel-heard panel in Stage 1 when confirmation offered', () => {
     const inputs = createInputs({
       myStage: Stage.WITNESS,

@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState, Keyboard, Platform, TextInput, Share } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState, Keyboard, Platform, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -35,7 +35,6 @@ import { SessionCompletionScreen } from '../components/SessionCompletionScreen';
 // CuriosityCompactOverlay removed - now using inline approach
 import { CompactChatItem } from '../components/CompactChatItem';
 import { CompactAgreementBar } from '../components/CompactAgreementBar';
-import { InvitationShareButton } from '../components/InvitationShareButton';
 import { ViewEmpathyStatementDrawer } from '../components/ViewEmpathyStatementDrawer';
 import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 // SegmentedControl removed - tabs are now integrated in SessionChatHeader
@@ -968,7 +967,6 @@ export function UnifiedSessionScreen({
   type CompletedAction =
     | 'shared-empathy'
     | 'confirmed-invitation'
-    | 'dismissed-invitation-panel'
     | 'responded-to-share-offer'
     | 'confirmed-needs'
     | 'validated-needs'
@@ -1138,8 +1136,6 @@ export function UnifiedSessionScreen({
     invitationConfirmed: invitationConfirmed || isConfirmingInvitation || completedActions.has('confirmed-invitation'),
     // isConfirmingInvitation: mutation is in flight
     isConfirmingInvitation,
-    // Local latch: user dismissed the panel (Later or post-share)
-    invitationPanelDismissed: completedActions.has('dismissed-invitation-panel'),
     showFeelHeardConfirmation,
     feelHeardConfirmedAt: milestones?.feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -2291,70 +2287,37 @@ export function UnifiedSessionScreen({
                 <Text style={styles.invitationTopicChipText} numberOfLines={2}>{topicFrame}</Text>
               </View>
 
-              {!invitationConfirmed ? (
-                <>
-                  <Text style={styles.invitationStepHeading}>
-                    Here's what I'd use as an invitation. Let me know if you want me to change it.
-                  </Text>
-                  <Text style={styles.invitationDraftMessage}>
-                    "{invitationMessage}"
-                  </Text>
-                  <View style={styles.invitationActionsRow}>
-                    <TouchableOpacity
-                      style={[styles.invitationActionButton, styles.invitationActionSecondary]}
-                      onPress={openInvitationRefineChat}
-                      testID="invitation-refine-button"
-                      disabled={isConfirmingInvitation}
-                    >
-                      <Text style={styles.invitationActionSecondaryText}>Refine</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.invitationActionButton,
-                        styles.invitationActionPrimary,
-                        isConfirmingInvitation && styles.invitationActionDisabled,
-                      ]}
-                      onPress={() => {
-                        markCompleted('confirmed-invitation');
-                        handleConfirmInvitationMessage(invitationMessage!);
-                      }}
-                      disabled={isConfirmingInvitation}
-                      testID="invitation-use-button"
-                    >
-                      <Text style={styles.invitationActionPrimaryText}>Use</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.invitationDraftMessage}>
-                    "{invitationMessage}"
-                  </Text>
-                  <InvitationShareButton
-                    invitationMessage={invitationMessage!}
-                    invitationUrl={invitationUrl}
-                    topicFrame={topicFrame}
-                    partnerName={partnerName}
-                    senderName={user?.name || user?.firstName || user?.email?.split('@')[0] || undefined}
-                    onShareSuccess={() => {
-                      // The system share sheet returns "sharedAction" even when
-                      // the user cancels (especially on web), so we cannot treat
-                      // this as a confirmed send. Just record the intent for
-                      // analytics; do NOT auto-dismiss the panel — they can
-                      // re-share or hit Later when they're done.
-                      trackInvitationSent(sessionId, 'share_sheet');
-                    }}
-                    testID="invitation-share-button"
-                  />
-                  <TouchableOpacity
-                    style={styles.invitationLaterButton}
-                    onPress={() => markCompleted('dismissed-invitation-panel')}
-                    testID="invitation-later-button"
-                  >
-                    <Text style={styles.invitationLaterButtonText}>Later</Text>
-                  </TouchableOpacity>
-                </>
-              )}
+              <Text style={styles.invitationStepHeading}>
+                Here's what I'd use as an invitation. Let me know if you want me to change it.
+              </Text>
+              <Text style={styles.invitationDraftMessage}>
+                "{invitationMessage}"
+              </Text>
+              <View style={styles.invitationActionsRow}>
+                <TouchableOpacity
+                  style={[styles.invitationActionButton, styles.invitationActionSecondary]}
+                  onPress={openInvitationRefineChat}
+                  testID="invitation-refine-button"
+                  disabled={isConfirmingInvitation}
+                >
+                  <Text style={styles.invitationActionSecondaryText}>Refine</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.invitationActionButton,
+                    styles.invitationActionPrimary,
+                    isConfirmingInvitation && styles.invitationActionDisabled,
+                  ]}
+                  onPress={() => {
+                    markCompleted('confirmed-invitation');
+                    handleConfirmInvitationMessage(invitationMessage!);
+                  }}
+                  disabled={isConfirmingInvitation}
+                  testID="invitation-use-button"
+                >
+                  <Text style={styles.invitationActionPrimaryText}>Use</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </Animated.View>
         );
@@ -2908,10 +2871,11 @@ export function UnifiedSessionScreen({
         finalActionLabel="Use this invitation"
         finalActionLatestOnly
         onSendMessage={sendInvitationRefinementMessage}
-        onFinalize={() => {
-          if (!invitationMessage) return;
+        onFinalize={(content) => {
+          const selectedInvitation = content.trim();
+          if (!selectedInvitation) return;
           markCompleted('confirmed-invitation');
-          handleConfirmInvitationMessage(invitationMessage);
+          handleConfirmInvitationMessage(selectedInvitation);
           setShowInvitationRefineChat(false);
         }}
         onClose={() => setShowInvitationRefineChat(false)}
@@ -3216,45 +3180,6 @@ const useStyles = () =>
       color: t.colors.accent,
       fontSize: t.typography.fontSize.md,
       fontWeight: '600' as const,
-    },
-    invitationLaterButton: {
-      marginTop: t.spacing.sm,
-      marginHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.sm,
-      alignItems: 'center' as const,
-    },
-    invitationLaterButtonText: {
-      fontSize: t.typography.fontSize.md,
-      color: t.colors.textSecondary,
-      fontWeight: '600' as const,
-    },
-    refineInvitationButton: {
-      marginTop: t.spacing.sm,
-      marginHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.sm,
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: t.colors.accent,
-      borderRadius: t.radius.md,
-    },
-    refineInvitationButtonText: {
-      fontSize: t.typography.fontSize.md,
-      color: t.colors.accent,
-      fontWeight: '600' as const,
-    },
-    continueButton: {
-      marginTop: t.spacing.sm,
-      marginHorizontal: t.spacing.lg,
-      paddingVertical: t.spacing.sm,
-      alignItems: 'center',
-    },
-    continueButtonDisabled: {
-      opacity: 0.5,
-    },
-    continueButtonText: {
-      fontSize: t.typography.fontSize.md,
-      color: t.colors.textSecondary,
-      textDecorationLine: 'underline',
     },
     topicFrameContainer: {
       marginHorizontal: t.spacing.lg,

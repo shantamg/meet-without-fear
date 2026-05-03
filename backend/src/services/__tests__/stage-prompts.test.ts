@@ -241,7 +241,8 @@ describe('Stage Prompts Service', () => {
 
       // Should contain transition injection
       expect(prompt).toContain('TRANSITION:');
-      expect(prompt).toContain('just sent their invitation');
+      expect(prompt).toContain('just finalized the invitation message');
+      expect(prompt).toContain("we don't actually know whether they shared it yet");
       expect(prompt).toContain('Partner');
       // Should also contain the regular Stage 1 prompt (not replaced)
       expect(prompt).toContain('listen to Test User');
