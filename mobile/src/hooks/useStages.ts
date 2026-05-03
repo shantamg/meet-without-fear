@@ -129,7 +129,7 @@ export function useEmpathyStatus(
       return get<EmpathyExchangeStatusResponse>(`/sessions/${sessionId}/empathy/status`);
     },
     enabled: !!sessionId,
-    staleTime: 5_000,
+    staleTime: 30_000, // Ably events deliver status updates in real-time via setQueryData
     ...options,
   });
 }
@@ -151,7 +151,7 @@ export function useShareOffer(
       return get<GetShareSuggestionResponse>(`/sessions/${sessionId}/reconciler/share-offer`);
     },
     enabled: !!sessionId,
-    staleTime: 0, // Always check for fresh offer
+    staleTime: 30_000, // Ably events deliver share offer updates in real-time
     ...options,
   });
 }
