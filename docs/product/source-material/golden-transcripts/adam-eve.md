@@ -1,10 +1,10 @@
 # Adam & Eve Golden Reference Transcript
 
-Source: Slack `#bugs-and-requests` thread `1777295397.336399`. Raw Slack download is stored beside this file under `raw/`.
+Source: Slack `#bugs-and-requests` thread `1777295397.336399` (Stage 0 revised via `#most-important-thing` thread `1777736711.403079`, 2026-05-03). Raw Slack download is stored beside this file under `raw/`.
 
 Meet Without Fear — Reference FlowAdam & Eve | Full Parallel Transcript
 
-## STAGE 0 — ONBOARDING
+## STAGE 0 — ONBOARDING & INVITATION
 
 ### ADAM’S TRACK
 
@@ -12,9 +12,27 @@ Meet Without Fear — Reference FlowAdam & Eve | Full Parallel Transcript
 
 **Adam:** Ready
 
+**MWF:** Before we begin, let’s put together a short message for Eve so she knows what this is about. The goal is to share the topic — not the details yet. I’ll get the details from both of you later. Tell me what’s going on, and we’ll shape it together. You can edit it as much as you need. I’ll only send it once you’ve approved it.
+
+**Adam:** I’ve been feeling like nothing I do is ever enough. Like she’s always looking for something more and I can’t figure out what it is. It’s been going on for a while and I’m scared it means something bad.
+
+**MWF:** What’s the specific thing that’s been bothering you most — if you had to name it in one sentence?
+
+**Adam:** Eve keeps pushing for more — more experiences, more change — and I don’t know how to give her that. And I think she might leave because of it.
+
+**MWF:** Thank you, Adam. Here’s what I’d share with Eve: "Adam believes Eve wants more from their life than he knows how to give her, and he’s scared that gap is becoming a problem." Does that feel right?
+
+**Adam:** Yes. That’s it.
+
+**MWF:** Got it. Here’s the message Eve will receive: "I’d like to talk through something that’s been on my mind between us. I’m using a tool that helps both people feel heard before anything gets worked out. Would you be open to it?" Use the button below to send that to Eve however works best for you — text, WhatsApp, email, whatever feels natural. The link to MWF will be included. Once she opens it, she’ll see what you just approved before anything else begins.
+
 ### EVE’S TRACK
 
 **MWF:** I am here to help you work through conflict — step by step. You’ll start by sharing what you believe is happening, privately. I won’t share anything you’ve said unless you explicitly approve it.
+
+**Eve:** Ready
+
+**MWF:** Before we begin, Adam wanted you to know something. This is what he shared — in his words, from his perspective: "Adam believes Eve wants more from their life than he knows how to give her, and he’s scared that gap is becoming a problem." This is how things look from his side right now. You don’t need to agree with it, respond to it, or do anything with it yet. Your perspective is what matters next — and that’s where we’re going. Ready?
 
 **Eve:** Ready
 
