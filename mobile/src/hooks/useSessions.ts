@@ -515,6 +515,72 @@ export function useRefineTopicFrame(
   });
 }
 
+interface RefineInvitationMessageResponse {
+  response: string;
+  invitationMessage: string;
+}
+
+/**
+ * Refine the invitation message via guided drafting chat (no commit).
+ */
+export function useRefineInvitationMessage(
+  options?: Omit<
+    UseMutationOptions<
+      RefineInvitationMessageResponse,
+      ApiClientError,
+      {
+        sessionId: string;
+        message: string;
+        history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+      }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  const { onSuccess, ...restOptions } = options ?? {};
+
+  return useMutation({
+    mutationFn: async ({ sessionId, message, history }) => {
+      return post<RefineInvitationMessageResponse>(
+        `/sessions/${sessionId}/invitation/refine`,
+        history ? { message, history } : { message }
+      );
+    },
+    onSuccess: (data, variables, onMutateResult, context) => {
+      const { sessionId } = variables;
+      queryClient.setQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId),
+        (old) => {
+          if (!old?.invitation) return old;
+          return {
+            ...old,
+            invitation: {
+              ...old.invitation,
+              invitationMessage: data.invitationMessage,
+            },
+          };
+        }
+      );
+      queryClient.setQueryData<SessionInvitationResponse>(
+        sessionKeys.sessionInvitation(sessionId),
+        (old) => {
+          if (!old?.invitation) return old;
+          return {
+            ...old,
+            invitation: {
+              ...old.invitation,
+              invitationMessage: data.invitationMessage,
+            },
+          };
+        }
+      );
+      onSuccess?.(data, variables, onMutateResult, context);
+    },
+    ...restOptions,
+  });
+}
+
 /**
  * Confirm the AI topic frame, optionally steering the AI toward a different neutral framing.
  */

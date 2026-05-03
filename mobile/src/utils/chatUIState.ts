@@ -64,6 +64,8 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   hasInvitationMessage: boolean;
   invitationConfirmed: boolean;
   isConfirmingInvitation: boolean;
+  // Local latch: user dismissed the invitation panel via "Later" or after sharing
+  invitationPanelDismissed: boolean;
 
   // Stage 1: Feel heard
   showFeelHeardConfirmation: boolean;
@@ -192,15 +194,17 @@ function computeShowInvitationPanel(inputs: ChatUIStateInputs): boolean {
   const {
     isInviter,
     hasInvitationMessage,
-    invitationConfirmed,
-    isConfirmingInvitation,
+    invitationPanelDismissed,
   } = inputs;
 
+  // Panel covers two phases:
+  // 1. Message not confirmed — show "Use / Refine" UI to confirm the message text
+  // 2. Message confirmed but not dismissed — show "Invite / Later" share UI
+  // The user dismisses via "Later" or after sharing.
   return !!(
     isInviter &&
     hasInvitationMessage &&
-    !invitationConfirmed &&
-    !isConfirmingInvitation
+    !invitationPanelDismissed
   );
 }
 
@@ -619,6 +623,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     hasInvitationMessage: false,
     invitationConfirmed: false,
     isConfirmingInvitation: false,
+    invitationPanelDismissed: false,
     showFeelHeardConfirmation: false,
     feelHeardConfirmedAt: undefined,
     isConfirmingFeelHeard: false,

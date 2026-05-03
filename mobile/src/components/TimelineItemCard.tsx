@@ -37,7 +37,7 @@ export interface TimelineItemCardProps {
   onOpenRefinement?: (offerId: string, suggestion: string) => void;
   onShareAsIs?: (offerId: string) => void;
   onOpenEmpathyDetail?: (attemptId: string, content: string) => void;
-  onOpenInvitationRefine?: () => void;
+  onShareInvitation?: () => void;
   onViewInChat?: () => void;
   testID?: string;
 }
@@ -70,7 +70,7 @@ function getTypeLabel(type: string, direction: string): string {
     case 'context':
       return direction === 'sent' ? 'Context shared' : 'Context for you';
     case 'invitation':
-      return 'Invitation sent';
+      return 'Invitation ready';
     case 'share_offer':
       return 'Sharing suggestion';
     default:
@@ -101,7 +101,7 @@ export function TimelineItemCard({
   onOpenRefinement,
   onShareAsIs,
   onOpenEmpathyDetail,
-  onOpenInvitationRefine,
+  onShareInvitation,
   onViewInChat,
   testID,
 }: TimelineItemCardProps) {
@@ -117,13 +117,13 @@ export function TimelineItemCard({
   // Determine if card is tappable (empathy sent → detail, invitation → refine)
   const isTappable =
     (item.type === 'empathy' && item.direction === 'sent' && !!onOpenEmpathyDetail) ||
-    (item.type === 'invitation' && !!onOpenInvitationRefine);
+    (item.type === 'invitation' && !!onShareInvitation);
 
   const handleCardPress = () => {
     if (item.type === 'empathy' && item.direction === 'sent' && onOpenEmpathyDetail) {
       onOpenEmpathyDetail(item.attemptId || item.id, item.content);
-    } else if (item.type === 'invitation' && onOpenInvitationRefine) {
-      onOpenInvitationRefine();
+    } else if (item.type === 'invitation' && onShareInvitation) {
+      onShareInvitation();
     }
   };
 

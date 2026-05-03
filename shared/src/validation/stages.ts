@@ -30,10 +30,14 @@ export {
   confirmTopicFrameResponseSchema,
   refineTopicFrameRequestSchema,
   refineTopicFrameResponseSchema,
+  refineInvitationMessageRequestSchema,
+  refineInvitationMessageResponseSchema,
   type ConfirmTopicFrameRequestInput,
   type ConfirmTopicFrameResponseInput,
   type RefineTopicFrameRequestInput,
   type RefineTopicFrameResponseInput,
+  type RefineInvitationMessageRequestInput,
+  type RefineInvitationMessageResponseInput,
 
   // Stage 2: Perspective Stretch / Empathy
   saveEmpathyDraftRequestSchema,

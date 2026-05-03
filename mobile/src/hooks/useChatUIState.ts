@@ -64,6 +64,7 @@ export interface UseChatUIStateProps {
   hasInvitationMessage: boolean;
   invitationConfirmed: boolean;
   isConfirmingInvitation: boolean;
+  invitationPanelDismissed: boolean;
 
   // Stage 1: Feel heard
   showFeelHeardConfirmation: boolean;
@@ -175,6 +176,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasInvitationMessage,
     invitationConfirmed,
     isConfirmingInvitation,
+    invitationPanelDismissed,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -243,6 +245,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasInvitationMessage,
     invitationConfirmed,
     isConfirmingInvitation,
+    invitationPanelDismissed,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -299,6 +302,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasInvitationMessage,
     invitationConfirmed,
     isConfirmingInvitation,
+    invitationPanelDismissed,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,

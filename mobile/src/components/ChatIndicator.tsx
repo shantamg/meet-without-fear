@@ -79,7 +79,7 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
   const getIndicatorText = (): string => {
     switch (type) {
       case 'invitation-sent':
-        return 'Invitation Sent';
+        return 'Invitation Ready';
       case 'invitation-accepted':
         return 'Accepted Invitation';
       case 'session-start':

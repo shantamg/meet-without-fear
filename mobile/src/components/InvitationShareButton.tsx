@@ -6,7 +6,7 @@
  * invitation message and triggers the share sheet on tap.
  */
 
-import { View, Text, TouchableOpacity, Share, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Share, StyleSheet, Platform } from 'react-native';
 import { Share2 } from 'lucide-react-native';
 import { colors } from '../theme';
 
@@ -47,11 +47,23 @@ export function InvitationShareButton({
       const topicLine = topicFrame ? `Topic: ${topicFrame}\n\n` : '';
       const shareMessage = `${senderDisplay} would like to invite you to Meet Without Fear\n\n${topicLine}${invitationUrl}\n\n${invitationMessage}`;
 
-      const result = await Share.share({
-        message: shareMessage,
-        title: partnerName ? `Invitation for ${partnerName}` : 'Join me on Meet Without Fear',
-        url: invitationUrl,
-      });
+      // On web, navigator.share usually drops `text` when `url` is set
+      // (Chrome) or concatenates them awkwardly. To get the full message +
+      // link in the shared payload everywhere, fold everything into `message`
+      // and skip `url` on web. Native platforms keep both fields populated so
+      // the OS share sheet can render them properly.
+      const result = await Share.share(
+        Platform.OS === 'web'
+          ? {
+              message: shareMessage,
+              title: partnerName ? `Invitation for ${partnerName}` : 'Join me on Meet Without Fear',
+            }
+          : {
+              message: shareMessage,
+              title: partnerName ? `Invitation for ${partnerName}` : 'Join me on Meet Without Fear',
+              url: invitationUrl,
+            }
+      );
 
       if (result.action === Share.sharedAction) {
         onShareSuccess?.();

@@ -44,7 +44,6 @@ export { CuriosityCompact } from './CuriosityCompact';
 export { CuriosityCompactOverlay } from './CuriosityCompactOverlay';
 export { WaitingRoom } from './WaitingRoom';
 export { InvitationShareButton } from './InvitationShareButton';
-export { RefineInvitationDrawer } from './RefineInvitationDrawer';
 
 // Stage 1 components
 export { FeelHeardConfirmation } from './FeelHeardConfirmation';

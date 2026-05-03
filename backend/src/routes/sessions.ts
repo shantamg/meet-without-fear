@@ -31,6 +31,7 @@ import {
   getUnreadSessionCount,
 } from '../controllers/sessions';
 import { generateTopicFrame, refineTopicFrame, confirmTopicFrame } from '../controllers/topic-frame';
+import { refineInvitationMessage } from '../controllers/invitation-refine';
 import { getSessionState } from '../controllers/session-state';
 import { getLinkedInnerThoughts } from '../controllers/inner-work';
 import { getTimeline } from '../controllers/timeline';
@@ -123,6 +124,13 @@ router.put('/sessions/:id/invitation/message', requireAuth, requireSessionAccess
  * @access Private - requires authentication and session access
  */
 router.post('/sessions/:id/invitation/confirm', requireAuth, requireSessionAccess, asyncHandler(confirmInvitationMessage));
+
+/**
+ * @route POST /api/v1/sessions/:id/invitation/refine
+ * @description Refine the invitation message via guided drafting chat (no commit)
+ * @access Private - requires authentication and session access (creator only)
+ */
+router.post('/sessions/:id/invitation/refine', requireAuth, requireSessionAccess, asyncHandler(refineInvitationMessage));
 
 /**
  * @route POST /api/v1/sessions/:id/topic-frame/generate

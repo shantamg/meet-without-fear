@@ -45,7 +45,7 @@ export interface ActivityDrawerProps {
   onOpenRefinement?: (offerId: string, suggestion: string) => void;
   onShareAsIs?: (offerId: string) => void;
   onOpenEmpathyDetail?: (attemptId: string, content: string) => void;
-  onOpenInvitationRefine?: () => void;
+  onShareInvitation?: () => void;
   invitationMessage?: string;
   invitationTimestamp?: string;
   sessionStatus?: string;
@@ -223,7 +223,7 @@ export function ActivityDrawer({
   onOpenRefinement,
   onShareAsIs,
   onOpenEmpathyDetail,
-  onOpenInvitationRefine,
+  onShareInvitation,
   invitationMessage,
   invitationTimestamp,
   sessionStatus,
@@ -435,11 +435,11 @@ export function ActivityDrawer({
         onOpenRefinement={onOpenRefinement}
         onShareAsIs={onShareAsIs}
         onOpenEmpathyDetail={onOpenEmpathyDetail}
-        onOpenInvitationRefine={onOpenInvitationRefine}
+        onShareInvitation={onShareInvitation}
         testID={`${testID}-item-${item.id}`}
       />
     ),
-    [onOpenRefinement, onShareAsIs, onOpenEmpathyDetail, onOpenInvitationRefine, testID],
+    [onOpenRefinement, onShareAsIs, onOpenEmpathyDetail, onShareInvitation, testID],
   );
 
   const keyExtractor = useCallback((item: TimelineItem) => item.id, []);
@@ -527,7 +527,7 @@ export function ActivityDrawer({
                         onOpenRefinement={onOpenRefinement}
                         onShareAsIs={onShareAsIs}
                         onOpenEmpathyDetail={onOpenEmpathyDetail}
-                        onOpenInvitationRefine={onOpenInvitationRefine}
+                        onShareInvitation={onShareInvitation}
                         testID={`${testID}-attention-${item.id}`}
                       />
                     ))}

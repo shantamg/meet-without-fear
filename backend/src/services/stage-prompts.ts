@@ -916,9 +916,21 @@ function buildTransitionInjection(toStage: number, fromStage: number | undefined
   const userName = context.userName || 'The user';
   const partnerName = context.partnerName || 'their partner';
 
-  // Stage 0 → Stage 1: Invitation sent, shift to witnessing
+  // Stage 0 → Stage 1: Invitation finalized, shift to witnessing.
+  // We do NOT actually know whether the user shared the invitation — the share
+  // sheet may have been opened and dismissed. Acknowledge that the invitation
+  // is ready and reassure them that ${partnerName} can join whenever, and we
+  // can use the time meanwhile to start exploring.
   if (toStage === 1 && (fromStage === 0 || fromStage === undefined)) {
-    return `TRANSITION: ${userName} just sent their invitation to ${partnerName}. Briefly acknowledge the courage of that step (1-2 sentences), then shift into deep listening.\n\n`;
+    return `TRANSITION: ${userName} just finalized the invitation message for ${partnerName} — but we don't actually know whether they shared it yet. They can share it whenever they're ready, and ${partnerName} can join when they're ready.
+
+CRITICAL RULES for this opening:
+- Do NOT say "sent", "took courage", "took guts", "that was brave", "thank you for sending", or any variant that congratulates them for sending. We don't know if they shared it.
+- Do NOT thank them. Do NOT praise them.
+- One short opening line that simply says the invitation is ready and ${partnerName} can join whenever they get to it — and that in the meantime, ${userName} can start telling you what's going on so they're not just waiting.
+- Then ask one open, curious question to begin witnessing what's happening from ${userName}'s side.
+
+Keep the whole opening to about 2 sentences plus the question. Warm, grounded, no ceremony.\n\n`;
   }
 
   // Stage 1 → Stage 2: Feel heard confirmed, shift to perspective stretch

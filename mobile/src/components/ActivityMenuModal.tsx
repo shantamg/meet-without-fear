@@ -41,7 +41,7 @@ export interface ActivityMenuModalProps {
   onRefresh?: () => void;
   invitationMessage?: string;
   invitationTimestamp?: string;
-  onOpenInvitationRefine?: () => void;
+  onShareInvitation?: () => void;
   initialTab?: 'sent' | 'received';
   onOpenEmpathyDetail?: (attemptId: string, content: string) => void;
   sessionStatus?: string;
@@ -63,7 +63,7 @@ export function ActivityMenuModal({
   onRefresh,
   invitationMessage,
   invitationTimestamp,
-  onOpenInvitationRefine,
+  onShareInvitation,
   initialTab,
   onOpenEmpathyDetail,
   sessionStatus,
@@ -220,12 +220,12 @@ export function ActivityMenuModal({
   }, [pendingActionsQuery, onRefresh]);
 
   const handleSentItemPress = useCallback((item: SentItem) => {
-    if (item.type === 'invitation' && onOpenInvitationRefine) {
-      onOpenInvitationRefine();
+    if (item.type === 'invitation' && onShareInvitation) {
+      onShareInvitation();
     } else if (item.type === 'empathy' && onOpenEmpathyDetail) {
       onOpenEmpathyDetail(item.id, item.content);
     }
-  }, [onOpenInvitationRefine, onOpenEmpathyDetail]);
+  }, [onShareInvitation, onOpenEmpathyDetail]);
 
   const insets = useSafeAreaInsets();
 

@@ -83,13 +83,13 @@ export function PersonDetailScreen({ personId }: PersonDetailScreenProps) {
         <View style={styles.pendingCard} testID="pending-invitation-card">
           <View style={styles.pendingHeader}>
             <Clock color={colors.warning} size={24} />
-            <Text style={styles.pendingTitle}>Invitation Sent</Text>
+            <Text style={styles.pendingTitle}>Invitation Ready</Text>
           </View>
           <Text style={styles.pendingMessage}>
-            Waiting for {person.name} to respond
+            Share it with {person.name} when you're ready
           </Text>
           <Text style={styles.pendingTime}>
-            Sent {formatTimeSince(pendingInvitation.sentAt)}
+            Drafted {formatTimeSince(pendingInvitation.sentAt)}
           </Text>
           <TouchableOpacity
             style={[
