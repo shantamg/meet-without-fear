@@ -39,8 +39,13 @@ source "$LIB_DIR/gh-budget.sh"
 gh_budget_setup
 
 # ── Resource check gate (#557) ──
+# Owner DMs (dm-reply) bypass the gate: when the user DMs the bot it's usually
+# *because* something looks funny, so we always answer even if the box is
+# saturated. Reserves implicit headroom for live debugging.
 QUEUE_DIR="$BOT_QUEUE_DIR"
-if ! "$SCRIPT_DIR/check-resources.sh" > /dev/null 2>&1; then
+if [ "$COMMAND_SLUG" = "dm-reply" ]; then
+  echo "[$(date)] BYPASS resource gate for $COMMAND_SLUG (owner DM)" >> "$LOGFILE"
+elif ! "$SCRIPT_DIR/check-resources.sh" > /dev/null 2>&1; then
   RESOURCE_MSG=$("$SCRIPT_DIR/check-resources.sh" 2>&1 || true)
   echo "[$(date)] QUEUED $COMMAND_SLUG — $RESOURCE_MSG" >> "$LOGFILE"
   create_queue_entry "$QUEUE_DIR" > /dev/null
