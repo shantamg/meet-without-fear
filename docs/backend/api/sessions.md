@@ -225,7 +225,7 @@ interface ResumeResponse {
 }
 ```
 
-Errors: `SESSION_NOT_ACTIVE` (400) if session is not in the required state before transition.
+Errors: `SESSION_NOT_ACTIVE` (400) if session is not `ACTIVE` when pausing; `VALIDATION_ERROR` (400) if session is not `PAUSED` when resuming.
 
 ---
 
