@@ -43,8 +43,7 @@
 # ── Process queue (drain queued agent requests every minute) ────────────────
 * * * * * /opt/slam-bot/scripts/process-queue.sh >> /var/log/slam-bot/cron.log 2>&1
 
-# ── Log pruning + session retention ──────────────────────────────────────────
-0 3 * * * /opt/slam-bot/scripts/sweep-mwf-sessions.sh >> /var/log/slam-bot/cron.log 2>&1
+# ── Log pruning ──────────────────────────────────────────────────────────────
 0 4 * * * /opt/slam-bot/scripts/prune-journal.sh >> /var/log/slam-bot/cron.log 2>&1
 5 4 * * * /opt/slam-bot/scripts/prune-claude-projects.sh >> /var/log/slam-bot/cron.log 2>&1
 

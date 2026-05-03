@@ -16,7 +16,6 @@ datasource db {
 model User {
   id                      String    @id @default(cuid())
   clerkId                 String?   @unique // Clerk authentication user ID
-  slackUserId             String?   @unique // Slack user ID for Slack-originated sessions
   email                   String    @unique
   name                    String? // Full name (computed from firstName + lastName)
   firstName               String?
@@ -106,28 +105,6 @@ model RelationshipMember {
 }
 
 // ============================================================================
-// Slack Thread Mapping
-// ============================================================================
-
-/// Maps a Slack DM channel+thread to a (session, user) pair. Each MWF session
-/// involves two users, each with their own private DM thread. This replaces
-/// the file-based `thread-index.json` used by the Claude-agent workspace.
-model SessionSlackThread {
-  id        String   @id @default(cuid())
-  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId String
-  userId    String // the Slack-user's DB User.id (for cross-referencing messages/vessels)
-  channelId String // Slack DM channel id
-  threadTs  String // top-level thread timestamp
-  createdAt DateTime @default(now())
-
-  @@unique([channelId, threadTs])
-  @@unique([sessionId, userId])
-  @@index([sessionId])
-  @@index([channelId])
-}
-
-// ============================================================================
 // Session
 // ============================================================================
 
@@ -145,10 +122,6 @@ model Session {
   // Proposed by AI from user 1's Stage 0 invitation draft, finalized before invite is shared
   topicFrame            String?
   topicFrameConfirmedAt DateTime?
-
-  // Slack origin (null for mobile-originated sessions)
-  slackJoinCode String?              @unique // 6-char code for partner to pair via lobby
-  slackThreads  SessionSlackThread[]
 
   // Related entities
   messages                  Message[]
