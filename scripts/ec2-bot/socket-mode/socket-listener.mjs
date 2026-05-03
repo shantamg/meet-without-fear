@@ -25,7 +25,6 @@
  *   SLAM_BOT_CHANNEL_ID — Channel ID for the #slam-paws channel
  *   BUGS_AND_REQUESTS_CHANNEL_ID — Channel ID for the #bugs-and-requests channel
  *   MOST_IMPORTANT_THING_CHANNEL_ID — Channel ID for the #most-important-thing channel
- *   MWF_SESSIONS_CHANNEL_ID — Channel ID for the #mwf-sessions channel
  */
 
 import { SocketModeClient } from '@slack/socket-mode';
@@ -48,13 +47,6 @@ const AGENTIC_DEVS_CHANNEL = process.env.AGENTIC_DEVS_CHANNEL_ID;
 const BUGS_AND_REQUESTS_CHANNEL = process.env.BUGS_AND_REQUESTS_CHANNEL_ID;
 const MOST_IMPORTANT_THING_CHANNEL = process.env.MOST_IMPORTANT_THING_CHANNEL_ID;
 const DAILY_SUMMARY_CHANNEL = process.env.DAILY_SUMMARY_CHANNEL_ID;
-const MWF_SESSIONS_CHANNEL = process.env.MWF_SESSIONS_CHANNEL_ID;
-
-// Backend endpoint that owns MWF sessions (Bedrock engine, same as mobile).
-// When set, mwf-session messages are POSTed here instead of spawned into a
-// Claude Code agent. Falls back to the legacy agent path when unset.
-const MWF_BACKEND_URL = process.env.MWF_BACKEND_URL;
-const MWF_INGRESS_SECRET = process.env.SLACK_INGRESS_SECRET;
 
 if (!APP_TOKEN || !BOT_TOKEN || !BOT_USER_ID) {
   console.error('Missing required env vars: SLACK_APP_TOKEN, SLACK_BOT_TOKEN, SLAM_BOT_USER_ID');
@@ -188,17 +180,6 @@ if (DAILY_SUMMARY_CHANNEL) {
     channelName: '#daily-summary',
     commandSlug: 'daily-summary-reply',
     workspace: 'slack-triage',
-    contextCount: 10,
-  };
-}
-
-// #mwf-sessions channel — MWF test session threads
-if (MWF_SESSIONS_CHANNEL) {
-  CHANNEL_CONFIG[MWF_SESSIONS_CHANNEL] = {
-    logName: 'check-mwf-sessions',
-    channelName: '#mwf-sessions',
-    commandSlug: 'mwf-session-reply',
-    workspace: 'mwf-session',
     contextCount: 10,
   };
 }
@@ -409,22 +390,6 @@ async function buildPrompt(channel, config, msgEvent) {
     parts.push('');
   }
 
-  // MWF session routing: pass thread context for session/state lookup
-  if (config.workspace === 'mwf-session') {
-    const threadTs = msgEvent.thread_ts || msgEvent.ts;
-    const entryStage = isThreadReply ? 'route' : '0-onboarding';
-    parts.push('## MWF Session Routing\n');
-    parts.push(`Entry Stage: \`${entryStage}\``);
-    parts.push(`Workspace: mwf-session`);
-    parts.push(`Channel ID: ${channel}`);
-    parts.push(`Thread TS: ${threadTs}`);
-    parts.push(`Thread Key: ${channel}:${threadTs}`);
-    if (msgEvent.user) {
-      parts.push(`User ID: ${msgEvent.user}`);
-    }
-    parts.push('');
-  }
-
   // Message to handle
   parts.push('## Message to handle\n');
   parts.push(formatMessage(msgEvent));
@@ -513,13 +478,6 @@ function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey
     PROVENANCE_MESSAGE: provenance.message || '',
   };
 
-  // MWF session thread context for state file lookup
-  if (config.workspace === 'mwf-session' && tKey) {
-    env.MWF_THREAD_TS = threadTs;
-    env.MWF_CHANNEL = channel;
-    env.MWF_ENTRY_STAGE = threadTs === ts ? '0-onboarding' : 'route';
-  }
-
   const child = spawn(
     join(SCRIPTS_DIR, 'run-claude.sh'),
     args,
@@ -601,87 +559,6 @@ async function drainThreadQueue(tKey) {
   };
 
   dispatchAgent(channel, ts, config, promptContent, provenance, tKey);
-}
-
-// ---------------------------------------------------------------------------
-// MWF backend forwarding — Bedrock engine owns MWF sessions, not Claude agents
-// ---------------------------------------------------------------------------
-
-/**
- * POST the incoming Slack event to the backend MWF endpoint with retries.
- * The backend replies asynchronously (200 immediately, posts the real reply
- * via Slack Web API). We still manage reactions here so the existing
- * 👀/✅/❌ flow keeps working.
- *
- * Retry policy: up to 2 retries with exponential-ish backoff (500ms, 2s).
- * Covers brief Render deploy windows (~30–60s of 5xx) without looking like
- * silent bot failure to the user. A single attempt that returns 4xx (e.g.
- * 401 from a secret mismatch) is NOT retried — that's configuration, not
- * transient outage.
- */
-const MWF_FORWARD_RETRY_DELAYS_MS = [500, 2000];
-
-async function forwardToMwfBackend(event, { isLobby }) {
-  if (!MWF_BACKEND_URL) return { ok: false, reason: 'no_backend_url' };
-
-  const body = JSON.stringify({
-    channel: event.channel,
-    user: event.user,
-    text: event.text || '',
-    thread_ts: event.thread_ts,
-    ts: event.ts,
-    team: event.team,
-    isLobby,
-  });
-
-  const headers = { 'content-type': 'application/json' };
-  if (MWF_INGRESS_SECRET) headers['x-slack-ingress-secret'] = MWF_INGRESS_SECRET;
-
-  const maxAttempts = MWF_FORWARD_RETRY_DELAYS_MS.length + 1;
-  let lastReason = 'unknown';
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const res = await fetch(MWF_BACKEND_URL, { method: 'POST', headers, body });
-      if (res.ok) return { ok: true };
-
-      const txt = await res.text().catch(() => '');
-      lastReason = `http_${res.status}`;
-      logMain(`MWF backend ${res.status} (attempt ${attempt}/${maxAttempts}): ${txt.slice(0, 200)}`);
-
-      // 4xx is a config/logic problem — don't retry, fail fast.
-      if (res.status >= 400 && res.status < 500) return { ok: false, reason: lastReason };
-    } catch (err) {
-      lastReason = 'network_error';
-      logMain(`MWF backend POST failed (attempt ${attempt}/${maxAttempts}): ${err.message}`);
-    }
-
-    const nextDelay = MWF_FORWARD_RETRY_DELAYS_MS[attempt - 1];
-    if (nextDelay !== undefined) {
-      await new Promise((resolve) => setTimeout(resolve, nextDelay));
-    }
-  }
-
-  return { ok: false, reason: lastReason };
-}
-
-/**
- * Surface a human-readable message to the user when we fully gave up
- * forwarding. Better UX than a silent ❌ reaction — most users won't
- * understand what the red-cross emoji means when their message didn't seem
- * to go anywhere.
- */
-async function postMwfForwardFallback(event) {
-  const threadTs = event.thread_ts || event.ts;
-  try {
-    await slack.chat.postMessage({
-      channel: event.channel,
-      thread_ts: threadTs,
-      text: "_I couldn't reach my model just now — please resend your message and I'll pick it up._",
-    });
-  } catch (err) {
-    logMain(`MWF fallback DM failed: ${err.message}`);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -836,29 +713,6 @@ async function handleMessageEvent(event) {
   }
 
   logMain(`Claimed message ${ts} in ${config.logName} from user=${user}`);
-
-  // MWF sessions run on the backend Bedrock engine, not Claude agents. Forward
-  // the event and short-circuit the agent dispatch path. The backend will
-  // manage reactions (✅/❌) and post the reply itself.
-  if (config.workspace === 'mwf-session' && MWF_BACKEND_URL) {
-    const isLobby = channel === MWF_SESSIONS_CHANNEL;
-    await addReaction(channel, ts, 'eyes');
-    const result = await forwardToMwfBackend(event, { isLobby });
-    if (!result.ok) {
-      await removeReaction(channel, ts, 'eyes');
-      await addReaction(channel, ts, 'x');
-      // Human-readable fallback so users understand the bot had a hiccup
-      // instead of just seeing a silent ❌. Only post if the failure was
-      // transient — for config failures (4xx) a DM would just confuse them.
-      if (result.reason && !result.reason.startsWith('http_4')) {
-        await postMwfForwardFallback(event);
-      }
-    }
-    try {
-      writeFileSync(HEARTBEAT_FILE, new Date().toISOString());
-    } catch { /* ignore */ }
-    return;
-  }
 
   // Thread-aware queuing: if an agent is already working on this thread,
   // queue this message instead of dispatching immediately.

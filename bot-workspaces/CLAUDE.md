@@ -10,7 +10,6 @@ Route each bot job to its workspace and entry stage. The workspace `CLAUDE.md` (
 | `slam-paws-reply` | `slack-triage/` | `1-fetch-and-classify` |
 | `bugs-and-requests-reply` | `slack-triage/` | `1-fetch-and-classify` |
 | `most-important-thing-reply` | `slack-triage/` | `1-fetch-and-classify` |
-| `mwf-session-reply` | `mwf-session/` | `route` |
 | `respond-github` | `github-respond/` | `respond` |
 | `review-pr` | `github-respond/` | `review` |
 | `fix-bugs` | `bug-fix/` | `01-select` |
@@ -40,7 +39,6 @@ Route each bot job to its workspace and entry stage. The workspace `CLAUDE.md` (
 | `review-impl` | `pr-reviewer/` | `review-impl` |
 | `verify` | `verify/` | `01-check` |
 | `release-summary` | `release-summary/` | `summarize` |
-| `mwf-session` | `mwf-session/` | `0-onboarding` |
 | `daily-strategy` | `daily-strategy/` | `1-gather` |
 
 ## What NOT to Load (root level)
