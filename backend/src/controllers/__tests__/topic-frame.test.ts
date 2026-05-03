@@ -7,6 +7,9 @@ jest.mock('../../lib/prisma', () => ({
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    invitation: {
+      updateMany: jest.fn(),
+    },
   },
 }));
 
@@ -37,6 +40,7 @@ describe('confirmTopicFrame', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (isSessionCreator as jest.Mock).mockResolvedValue(true);
+    (prisma.invitation.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
   });
 
   it('flips topicFrameConfirmedAt and returns the topic frame', async () => {
