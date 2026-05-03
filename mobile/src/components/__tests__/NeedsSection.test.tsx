@@ -21,19 +21,6 @@ describe('NeedsSection', () => {
     expect(screen.getByText('Autonomy')).toBeTruthy();
   });
 
-  it('marks shared needs correctly', () => {
-    render(
-      <NeedsSection
-        title="Needs"
-        needs={mockNeeds}
-        sharedNeeds={['1', '3']}
-      />
-    );
-    // Shared needs should have the shared badge
-    const sharedBadges = screen.getAllByText('Shared');
-    expect(sharedBadges).toHaveLength(2);
-  });
-
   it('renders empty section when no needs provided', () => {
     render(<NeedsSection title="Empty Section" needs={[]} />);
     expect(screen.getByText('Empty Section')).toBeTruthy();

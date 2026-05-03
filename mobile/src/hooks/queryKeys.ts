@@ -61,8 +61,6 @@ export const stageKeys = {
   needs: (sessionId: string) => [...stageKeys.all, 'needs', sessionId] as const,
   needsComparison: (sessionId: string) =>
     [...stageKeys.all, 'needs', 'comparison', sessionId] as const,
-  commonGround: (sessionId: string) =>
-    [...stageKeys.all, 'commonGround', sessionId] as const,
 
   // Stage 4: Strategies
   strategies: (sessionId: string) =>

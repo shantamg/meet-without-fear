@@ -1,7 +1,7 @@
 /**
  * NeedsSection Component
  *
- * Displays a titled section of needs with optional shared needs highlighting.
+ * Displays a titled section of needs.
  * Used in Stage 3 Need Mapping for organizing and displaying needs.
  */
 
@@ -22,7 +22,6 @@ interface Need {
 interface NeedsSectionProps {
   title: string;
   needs: Need[];
-  sharedNeeds?: string[]; // IDs of shared needs
   onNeedPress?: (needId: string) => void;
   style?: ViewStyle;
   testID?: string;
@@ -35,7 +34,6 @@ interface NeedsSectionProps {
 export function NeedsSection({
   title,
   needs,
-  sharedNeeds = [],
   onNeedPress,
   style,
   testID,
@@ -47,7 +45,6 @@ export function NeedsSection({
         <NeedCard
           key={need.id}
           need={need}
-          isShared={sharedNeeds.includes(need.id)}
           onPress={onNeedPress ? () => onNeedPress(need.id) : undefined}
           testID={`need-${need.id}`}
         />

@@ -25,7 +25,7 @@ import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
 import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
 import { ShareTopicPanel } from '../components/ShareTopicPanel';
-// NeedsSection and CommonGroundCard removed - now used inside NeedsDrawer
+// NeedsSection removed - needs review/reveal now lives inside NeedsDrawer
 import { StrategyPool } from '../components/StrategyPool';
 import { StrategyRanking } from '../components/StrategyRanking';
 import { OverlapReveal } from '../components/OverlapReveal';
@@ -69,7 +69,6 @@ import {
   trackSessionResolved,
   trackStageStarted,
   trackStageCompleted,
-  trackCommonGroundFound,
 } from '../services/analytics';
 
 // ============================================================================
@@ -584,25 +583,20 @@ export function UnifiedSessionScreen({
       }
 
       if (eventName === 'partner.needs_shared') {
-        // Partner consented to share their needs for common ground discovery
+        // Partner consented to share their needs
         console.log('[UnifiedSessionScreen] Partner shared needs');
-        queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
       if (eventName === 'session.common_ground_ready') {
-        // Common ground analysis complete (both users shared needs)
         console.log('[UnifiedSessionScreen] Common ground ready');
-        queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
 
       if (eventName === 'partner.common_ground_confirmed') {
-        // Partner confirmed common ground items
         console.log('[UnifiedSessionScreen] Partner confirmed common ground');
-        queryClient.invalidateQueries({ queryKey: stageKeys.commonGround(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
@@ -715,12 +709,6 @@ export function UnifiedSessionScreen({
     lastTrackedStageRef.current = currentStage;
   }, [currentStage, sessionId]);
 
-  // Track common ground when found (commonGround is an array of shared needs)
-  useEffect(() => {
-    if (commonGround && commonGround.length > 0) {
-      trackCommonGroundFound(sessionId, commonGround.length);
-    }
-  }, [commonGround?.length, sessionId]);
 
   // Wrapped sendMessage with tracking
   // Cache-First Architecture: Ghost dots are now derived from last message role
@@ -842,7 +830,7 @@ export function UnifiedSessionScreen({
     | 'confirmed-invitation'
     | 'responded-to-share-offer'
     | 'confirmed-needs'
-    | 'confirmed-common-ground'
+    | 'validated-needs'
     | 'validated-empathy';
 
   const [completedActions, setCompletedActions] = useState<Set<CompletedAction>>(new Set());
@@ -1044,7 +1032,7 @@ export function UnifiedSessionScreen({
     commonGroundNoOverlap: false,
     commonGroundAllConfirmedByMe: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsValidated === true,
     commonGroundAllConfirmedByBoth: commonGroundComplete,
-    hasConfirmedCommonGroundLocal: completedActions.has('confirmed-common-ground'),
+    hasConfirmedCommonGroundLocal: completedActions.has('validated-needs'),
     strategyPhase,
     overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
     agreements: agreements?.map(a => ({
@@ -1122,9 +1110,6 @@ export function UnifiedSessionScreen({
 
   // Animation for the needs review panel slide-up
   const needsReviewAnim = useRef(new Animated.Value(0)).current;
-
-  // Animation for the common ground confirmation panel slide-up
-  const commonGroundAnim = useRef(new Animated.Value(0)).current;
 
   // Animation for the waiting banner slide-up
   const waitingBannerAnim = useRef(new Animated.Value(0)).current;
@@ -1246,15 +1231,6 @@ export function UnifiedSessionScreen({
     }).start();
   }, [readyToShowNeedsReview, needsReviewAnim]);
 
-  // Animate common ground confirmation panel - synced with mount condition
-  useEffect(() => {
-    Animated.spring(commonGroundAnim, {
-      toValue: readyToShowCommonGround ? 1 : 0,
-      useNativeDriver: false,
-      tension: 40,
-      friction: 9,
-    }).start();
-  }, [readyToShowCommonGround, commonGroundAnim]);
 
   // Animate waiting banner - uses readyToShowWaitingBanner (Stable Mounting pattern)
   useEffect(() => {
@@ -1520,7 +1496,7 @@ export function UnifiedSessionScreen({
 
         // Note: needs-summary and common-ground-preview cases removed.
         // These are now shown in the NeedsDrawer bottom sheet, opened via
-        // the above-input buttons (needs-review, common-ground-confirm).
+        // the above-input buttons (needs-review, needs-reveal-validation).
 
         case 'strategy-pool-preview': {
           const stratCount = card.props.strategyCount as number;
@@ -2230,17 +2206,17 @@ export function UnifiedSessionScreen({
           </Animated.View>
         );
 
-      case 'common-ground-confirm':
+      case 'needs-reveal-validation':
         return (
           <Animated.View
             style={{
-              opacity: commonGroundAnim,
-              maxHeight: commonGroundAnim.interpolate({
+              opacity: needsReviewAnim,
+              maxHeight: needsReviewAnim.interpolate({
                 inputRange: [0, 1],
                 outputRange: [0, 100],
               }),
               transform: [{
-                translateY: commonGroundAnim.interpolate({
+                translateY: needsReviewAnim.interpolate({
                   inputRange: [0, 1],
                   outputRange: [20, 0],
                 }),
@@ -2249,41 +2225,20 @@ export function UnifiedSessionScreen({
             }}
             pointerEvents="auto"
           >
-            <View style={styles.commonGroundContainer}>
-              {commonGroundData?.noOverlap ? (
-                <>
-                  <Text style={styles.noOverlapText}>
-                    Your needs look different right now. That's enough to choose a respectful next step.
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.commonGroundButton}
-                    onPress={() => {
-                      setNeedsDrawerMode('common-ground');
-                      setShowNeedsDrawer(true);
-                    }}
-                    activeOpacity={0.7}
-                    testID="no-overlap-continue-button"
-                  >
-                    <Text style={styles.commonGroundButtonText}>
-                      Continue to Strategies
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <TouchableOpacity
-                  style={styles.commonGroundButton}
-                  onPress={() => {
-                    setNeedsDrawerMode('common-ground');
-                    setShowNeedsDrawer(true);
-                  }}
-                  activeOpacity={0.7}
-                  testID="common-ground-confirm-button"
-                >
-                  <Text style={styles.commonGroundButtonText}>
-                    Review needs together
-                  </Text>
-                </TouchableOpacity>
-              )}
+            <View style={styles.needsReviewContainer}>
+              <TouchableOpacity
+                style={styles.needsReviewButton}
+                onPress={() => {
+                  setNeedsDrawerMode('comparison');
+                  setShowNeedsDrawer(true);
+                }}
+                activeOpacity={0.7}
+                testID="needs-reveal-validate-button"
+              >
+                <Text style={styles.needsReviewButtonText}>
+                  Review needs together
+                </Text>
+              </TouchableOpacity>
             </View>
           </Animated.View>
         );
@@ -2317,7 +2272,6 @@ export function UnifiedSessionScreen({
     invitationUrl,
     partnerName,
     shareOfferData,
-    commonGroundData?.noOverlap,
     waitingStatus,
     user?.name,
     user?.firstName,
@@ -2327,13 +2281,13 @@ export function UnifiedSessionScreen({
     shareSuggestionAnim,
     invitationPanelAnim,
     needsReviewAnim,
-    commonGroundAnim,
     waitingBannerAnim,
     handleSignCompact,
     handleConfirmFeelHeard,
     handleConfirmInvitationMessage,
     handleConfirmAllNeeds,
     handleConfirmCommonGround,
+    handleNeedsNotValidYet,
     markCompleted,
     onStageComplete,
     openOverlay,
@@ -2775,7 +2729,7 @@ export function UnifiedSessionScreen({
         />
       )}
 
-      {/* Needs Drawer - bottom sheet for Stage 3 needs/common-ground/comparison */}
+      {/* Needs Drawer - bottom sheet for Stage 3 needs/comparison */}
       <NeedsDrawer
         visible={showNeedsDrawer}
         onClose={() => setShowNeedsDrawer(false)}
@@ -2804,32 +2758,21 @@ export function UnifiedSessionScreen({
         confirmNeedsLabel={allNeedsConfirmed ? 'Share my needs' : 'Confirm my needs'}
         confirmingNeedsLabel={allNeedsConfirmed ? 'Sharing...' : 'Confirming...'}
         isConfirming={isConfirmingNeeds}
-        commonGround={(commonGround ?? []).map((cg) => ({
-          id: cg.id,
-          category: cg.category || cg.need,
-          need: cg.need,
-          confirmedByMe: cg.confirmedByMe,
-          confirmedByPartner: cg.confirmedByPartner,
-        }))}
-        noOverlap={commonGroundData?.noOverlap ?? false}
-        onConfirmCommonGround={() => {
-          markCompleted('confirmed-common-ground');
-          handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
-        }}
-        onNeedsNotValidYet={() => {
-          handleNeedsNotValidYet(() => {
-            resetCompleted('confirmed-common-ground');
-          });
-        }}
-        onBackToCommonGround={() => {
-          setNeedsDrawerMode('common-ground');
-        }}
         partnerNeeds={(needsComparisonData?.partnerNeeds ?? []).map((n) => ({
           id: n.id,
           category: String(n.category) || n.need,
           need: n.need,
           confirmed: n.confirmed,
         }))}
+        onValidateNeeds={() => {
+          markCompleted('validated-needs');
+          handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
+        }}
+        onNeedsNotValidYet={() => {
+          handleNeedsNotValidYet(() => {
+            setShowNeedsDrawer(false);
+          });
+        }}
         partnerName={partnerName}
         testID="needs-drawer"
       />

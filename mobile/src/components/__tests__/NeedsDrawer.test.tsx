@@ -13,83 +13,74 @@ describe('NeedsDrawer', () => {
     { id: 'partner-need-2', category: 'Care', need: 'Gentler timing', confirmed: true },
   ];
 
-  it('reveals both needs lists side by side for validation', () => {
+  it('renders needs mode with identified needs', () => {
     render(
       <NeedsDrawer
         visible
         onClose={jest.fn()}
-        mode="common-ground"
+        mode="needs"
         needs={needs}
-        partnerNeeds={partnerNeeds}
-        partnerName="Darryl"
-        onConfirmCommonGround={jest.fn()}
       />
     );
 
-    expect(screen.getByText('Review Needs Together')).toBeTruthy();
+    expect(screen.getByText('Your Needs')).toBeTruthy();
+    expect(screen.getByText('Being heard')).toBeTruthy();
+    expect(screen.getByText('Reliability')).toBeTruthy();
+  });
+
+  it('renders comparison mode with both partners needs side by side', () => {
+    render(
+      <NeedsDrawer
+        visible
+        onClose={jest.fn()}
+        mode="comparison"
+        needs={needs}
+        partnerNeeds={partnerNeeds}
+        partnerName="Darryl"
+      />
+    );
+
+    expect(screen.getByText('Needs Side by Side')).toBeTruthy();
     expect(screen.getByText('You')).toBeTruthy();
     expect(screen.getByText('Darryl')).toBeTruthy();
     expect(screen.getByText('Being heard')).toBeTruthy();
     expect(screen.getByText('Room to choose')).toBeTruthy();
-    expect(screen.getByText('Validate needs')).toBeTruthy();
+    expect(screen.getByText('Review both needs lists side by side. What do you notice?')).toBeTruthy();
   });
 
-  it('does not show common-ground badge or copy in the validation reveal', () => {
-    render(
-      <NeedsDrawer
-        visible
-        onClose={jest.fn()}
-        mode="common-ground"
-        needs={needs}
-        partnerNeeds={partnerNeeds}
-        partnerName="Darryl"
-        onConfirmCommonGround={jest.fn()}
-      />
-    );
-
-    expect(screen.queryByText('Common Ground')).toBeNull();
-    expect(screen.queryByText('Shared')).toBeNull();
-    expect(screen.queryByText('Common')).toBeNull();
-  });
-
-  it('validates the needs reveal through the existing confirmation handler', () => {
-    const onConfirmCommonGround = jest.fn();
-
-    render(
-      <NeedsDrawer
-        visible
-        onClose={jest.fn()}
-        mode="common-ground"
-        needs={needs}
-        partnerNeeds={partnerNeeds}
-        partnerName="Darryl"
-        onConfirmCommonGround={onConfirmCommonGround}
-      />
-    );
-
-    fireEvent.press(screen.getByText('Validate needs'));
-
-    expect(onConfirmCommonGround).toHaveBeenCalledTimes(1);
-  });
-
-  it('lets the user mark the reveal as not valid yet', () => {
+  it('validates the side-by-side needs reveal from comparison mode', () => {
+    const onValidateNeeds = jest.fn();
     const onNeedsNotValidYet = jest.fn();
 
     render(
       <NeedsDrawer
         visible
         onClose={jest.fn()}
-        mode="common-ground"
+        mode="comparison"
         needs={needs}
         partnerNeeds={partnerNeeds}
-        partnerName="Darryl"
-        onConfirmCommonGround={jest.fn()}
+        onValidateNeeds={onValidateNeeds}
         onNeedsNotValidYet={onNeedsNotValidYet}
       />
     );
 
-    fireEvent.press(screen.getByText('Not valid yet'));
+    fireEvent.press(screen.getByTestId('needs-drawer-validate-needs'));
+    expect(onValidateNeeds).toHaveBeenCalledTimes(1);
 
+    fireEvent.press(screen.getByTestId('needs-drawer-not-valid-yet'));
     expect(onNeedsNotValidYet).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not render when not visible', () => {
+    render(
+      <NeedsDrawer
+        visible={false}
+        onClose={jest.fn()}
+        mode="needs"
+        needs={needs}
+      />
+    );
+
+    expect(screen.queryByText('Your Needs')).toBeNull();
   });
 });

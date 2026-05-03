@@ -126,8 +126,6 @@ export {
   useConfirmNeeds,
   useAddNeed,
   useConsentShareNeeds,
-  useCommonGround,
-  useConfirmCommonGround,
   // Stage 4: Strategies
   useStrategies,
   useProposeStrategy,

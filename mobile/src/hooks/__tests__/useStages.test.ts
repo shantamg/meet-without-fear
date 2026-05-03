@@ -22,8 +22,6 @@ import {
   useConfirmNeeds,
   useAddNeed,
   useConsentShareNeeds,
-  useCommonGround,
-  useConfirmCommonGround,
   useStrategies,
   useProposeStrategy,
   useSubmitRankings,
@@ -577,59 +575,6 @@ describe('useStages', () => {
       });
     });
 
-    describe('useCommonGround hook', () => {
-      it('fetches common ground between partners', async () => {
-        mockGet.mockResolvedValueOnce({
-          commonGround: [
-            {
-              id: 'common-1',
-              category: NeedCategory.RECOGNITION,
-              description: 'We both need respect',
-              confirmedByMe: true,
-              confirmedByPartner: false,
-              confirmedAt: null,
-            },
-          ],
-          analysisComplete: true,
-          bothConfirmed: false,
-        });
-
-        const { result } = renderHook(() => useCommonGround(sessionId), {
-          wrapper: createWrapper(),
-        });
-
-        await waitFor(() => {
-          expect(result.current.isSuccess).toBe(true);
-        });
-
-        expect(result.current.data?.commonGround).toHaveLength(1);
-        expect(result.current.data?.commonGround[0].confirmedByMe).toBe(true);
-      });
-    });
-
-    describe('useConfirmCommonGround hook', () => {
-      it('confirms common ground items', async () => {
-        mockPost.mockResolvedValueOnce({
-          confirmed: true,
-          canProgress: true,
-        });
-
-        const { result } = renderHook(() => useConfirmCommonGround(), {
-          wrapper: createWrapper(),
-        });
-
-        await act(async () => {
-          await result.current.mutateAsync({
-            sessionId,
-            confirmations: [{ commonGroundId: 'common-1', confirmed: true }],
-          });
-        });
-
-        expect(mockPost).toHaveBeenCalledWith(`/sessions/${sessionId}/common-ground/confirm`, {
-          confirmations: [{ commonGroundId: 'common-1', confirmed: true }],
-        });
-      });
-    });
   });
 
   describe('Stage 4: Strategic Repair', () => {
@@ -914,7 +859,6 @@ describe('useStages', () => {
         sessionId,
       ]);
       expect(stageKeys.needs(sessionId)).toEqual(['stages', 'needs', sessionId]);
-      expect(stageKeys.commonGround(sessionId)).toEqual(['stages', 'commonGround', sessionId]);
       expect(stageKeys.strategies(sessionId)).toEqual(['stages', 'strategies', sessionId]);
       expect(stageKeys.strategiesReveal(sessionId)).toEqual([
         'stages',

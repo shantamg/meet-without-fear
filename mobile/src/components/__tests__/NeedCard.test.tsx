@@ -18,16 +18,6 @@ describe('NeedCard', () => {
     expect(screen.getByText('A need for safety and stability')).toBeTruthy();
   });
 
-  it('shows shared badge when isShared is true', () => {
-    render(<NeedCard need={defaultNeed} isShared />);
-    expect(screen.getByText('Shared')).toBeTruthy();
-  });
-
-  it('does not show shared badge when isShared is false', () => {
-    render(<NeedCard need={defaultNeed} isShared={false} />);
-    expect(screen.queryByText('Shared')).toBeNull();
-  });
-
   it('calls onPress when pressed', () => {
     const onPress = jest.fn();
     render(<NeedCard need={defaultNeed} onPress={onPress} />);
