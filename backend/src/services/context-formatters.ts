@@ -174,10 +174,19 @@ export function formatContextForPrompt(
       const userNeeds = bundle.sessionSummary.userNeeds?.length
         ? bundle.sessionSummary.userNeeds.join('; ')
         : 'Not yet named';
-      const partnerNeeds = bundle.sessionSummary.partnerNeeds?.length
-        ? bundle.sessionSummary.partnerNeeds.join('; ')
-        : 'Not yet named';
-      parts.push(`Needs: User → ${userNeeds}. Partner → ${partnerNeeds}.`);
+      // Only reveal partner needs when the consent gate has been satisfied.
+      // Without this guard the AI sees the summarizer's "partnerNeeds" (which
+      // may just be the user's empathy *guesses*) and presents them as if the
+      // partner actually said them — a critical consent violation (issue #312).
+      const partnerNeedsShared = bundle.stageContext?.gatesSatisfied?.needsShared === true;
+      if (partnerNeedsShared) {
+        const partnerNeeds = bundle.sessionSummary.partnerNeeds?.length
+          ? bundle.sessionSummary.partnerNeeds.join('; ')
+          : 'Not yet named';
+        parts.push(`Needs: User → ${userNeeds}. Partner → ${partnerNeeds}.`);
+      } else {
+        parts.push(`Needs: User → ${userNeeds}.`);
+      }
     }
 
     if (bundle.sessionSummary.openQuestions?.length || bundle.sessionSummary.userStatedGoals?.length) {

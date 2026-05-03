@@ -139,15 +139,25 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('FOUR MODES');
     });
 
-    it('Stage 3 prompt includes post-reveal phase guidance', () => {
+    it('Stage 3 prompt includes post-reveal phase guidance only when needsShared gate is satisfied', () => {
+      // Without needsShared gate — POST-REVEAL should NOT appear
       const context = createContext();
-      const prompt = fullPrompt(buildStagePrompt(3, context));
+      const promptWithout = fullPrompt(buildStagePrompt(3, context));
+      expect(promptWithout).not.toContain('POST-REVEAL PHASES');
 
-      expect(prompt).toContain('POST-REVEAL PHASES');
-      expect(prompt).toContain('NOTICING');
-      expect(prompt).toContain('FOLLOWING UP');
-      expect(prompt).toContain('EMOTIONAL PROCESSING');
-      expect(prompt).toContain('VALIDITY');
+      // With needsShared gate — POST-REVEAL should appear
+      const contextWithGate = createContext({
+        contextBundle: {
+          ...mockContextBundle,
+          stageContext: { stage: 3, gatesSatisfied: { needsShared: true } },
+        },
+      });
+      const promptWith = fullPrompt(buildStagePrompt(3, contextWithGate));
+      expect(promptWith).toContain('POST-REVEAL PHASES');
+      expect(promptWith).toContain('NOTICING');
+      expect(promptWith).toContain('FOLLOWING UP');
+      expect(promptWith).toContain('EMOTIONAL PROCESSING');
+      expect(promptWith).toContain('VALIDITY');
     });
 
     it('Stage 3 FORBIDDEN list prevents identifying overlap between needs lists', () => {
