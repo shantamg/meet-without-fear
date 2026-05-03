@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { NeedsDrawer } from '../NeedsDrawer';
 
 describe('NeedsDrawer', () => {
@@ -45,6 +45,30 @@ describe('NeedsDrawer', () => {
     expect(screen.getByText('Darryl')).toBeTruthy();
     expect(screen.getByText('Being heard')).toBeTruthy();
     expect(screen.getByText('Room to choose')).toBeTruthy();
+    expect(screen.getByText('Review both needs lists side by side. What do you notice?')).toBeTruthy();
+  });
+
+  it('validates the side-by-side needs reveal from comparison mode', () => {
+    const onValidateNeeds = jest.fn();
+    const onNeedsNotValidYet = jest.fn();
+
+    render(
+      <NeedsDrawer
+        visible
+        onClose={jest.fn()}
+        mode="comparison"
+        needs={needs}
+        partnerNeeds={partnerNeeds}
+        onValidateNeeds={onValidateNeeds}
+        onNeedsNotValidYet={onNeedsNotValidYet}
+      />
+    );
+
+    fireEvent.press(screen.getByTestId('needs-drawer-validate-needs'));
+    expect(onValidateNeeds).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(screen.getByTestId('needs-drawer-not-valid-yet'));
+    expect(onNeedsNotValidYet).toHaveBeenCalledTimes(1);
   });
 
   it('does not render when not visible', () => {

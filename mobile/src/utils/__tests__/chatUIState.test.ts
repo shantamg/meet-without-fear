@@ -644,11 +644,11 @@ describe('Needs Review Panel Visibility', () => {
 });
 
 // ============================================================================
-// Stage 3: Common Ground Panel Tests
+// Stage 3: Needs Reveal Validation Panel Tests
 // ============================================================================
 
-describe('Common Ground Panel Visibility', () => {
-  it('shows when common ground is available in Stage 3', () => {
+describe('Needs Reveal Validation Panel Visibility', () => {
+  it('shows when the side-by-side needs reveal is available in Stage 3', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -661,7 +661,7 @@ describe('Common Ground Panel Visibility', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.panels.showCommonGroundPanel).toBe(true);
-    expect(result.aboveInputPanel).toBe('common-ground-confirm');
+    expect(result.aboveInputPanel).toBe('needs-reveal-validation');
   });
 
   it('does not show when not in Stage 3', () => {
@@ -724,7 +724,7 @@ describe('Common Ground Panel Visibility', () => {
     expect(result.panels.showCommonGroundPanel).toBe(false);
   });
 
-  it('does not show when no common ground available', () => {
+  it('does not show when the needs reveal is unavailable', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -739,7 +739,7 @@ describe('Common Ground Panel Visibility', () => {
     expect(result.panels.showCommonGroundPanel).toBe(false);
   });
 
-  it('shows when noOverlap is true even without common ground items', () => {
+  it('shows for the legacy noOverlap compatibility state', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -753,10 +753,10 @@ describe('Common Ground Panel Visibility', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.panels.showCommonGroundPanel).toBe(true);
-    expect(result.aboveInputPanel).toBe('common-ground-confirm');
+    expect(result.aboveInputPanel).toBe('needs-reveal-validation');
   });
 
-  it('needs-review takes priority over common-ground-confirm', () => {
+  it('needs-review takes priority over needs-reveal-validation', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,

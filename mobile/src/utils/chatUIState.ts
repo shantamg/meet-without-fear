@@ -33,7 +33,7 @@ export type AboveInputPanel =
   | 'feel-heard' // Feel heard confirmation panel
   | 'share-suggestion' // Share suggestion from reconciler (Subject side)
   | 'needs-review' // Needs review panel (Stage 3: confirm identified needs)
-  | 'common-ground-confirm' // Common ground confirmation panel (Stage 3: confirm shared needs)
+  | 'needs-reveal-validation' // Needs reveal validation panel (Stage 3)
   | 'waiting-banner' // General waiting banner
   | 'compact-agreement-bar' // Compact agreement bar during onboarding
   | null;
@@ -93,12 +93,14 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   needsShared: boolean; // User has consented to share needs
   hasConfirmedNeedsLocal: boolean; // Local latch to prevent panel flash after confirming
 
-  // Stage 3: Common Ground
-  commonGroundAvailable: boolean; // Common ground analysis is complete and available
-  commonGroundNoOverlap: boolean; // AI analysis found no shared needs between users
-  commonGroundAllConfirmedByMe: boolean; // Current user confirmed all common ground items
-  commonGroundAllConfirmedByBoth: boolean; // Both users confirmed all common ground items
-  hasConfirmedCommonGroundLocal: boolean; // Local latch to prevent panel flash after confirming
+  // Stage 3: Needs reveal validation. These field names are kept as
+  // compatibility shims for existing call sites; values come from the
+  // side-by-side needs reveal, not AI-authored common-ground analysis.
+  commonGroundAvailable: boolean;
+  commonGroundNoOverlap: boolean;
+  commonGroundAllConfirmedByMe: boolean;
+  commonGroundAllConfirmedByBoth: boolean;
+  hasConfirmedCommonGroundLocal: boolean;
 }
 
 /**
@@ -153,7 +155,7 @@ export interface ChatUIState {
  * 4. Share Suggestion Panel - Subject must respond to share suggestion
  * 5. Empathy Statement Panel - User's empathy statement to review
  * 6. Needs Review Panel - Stage 3: Review and confirm identified needs
- * 7. Common Ground Panel - Stage 3: Confirm common ground items
+ * 7. Needs Reveal Validation Panel - Stage 3: validate both needs lists
  * 8. Waiting Banner - Any waiting status
  */
 
@@ -331,12 +333,11 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
 }
 
 /**
- * Determines if common ground confirmation panel should show.
- * Shows when common ground is available but not yet confirmed by the current user.
- * Also shows when noOverlap is true (no shared needs found) — panel text changes
- * to "Continue to Strategies" in the UI layer.
+ * Determines if the needs reveal validation panel should show.
+ * Shows when both needs lists are available but not yet validated by the
+ * current user.
  */
-function computeShowCommonGroundPanel(inputs: ChatUIStateInputs): boolean {
+function computeShowNeedsRevealValidationPanel(inputs: ChatUIStateInputs): boolean {
   const {
     myStage,
     commonGroundAvailable,
@@ -366,12 +367,12 @@ function computeShowCommonGroundPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  // Show panel when no overlap detected (user can "Continue to Strategies")
+  // Legacy no-overlap state is treated as validation-ready for compatibility.
   if (commonGroundNoOverlap) {
     return true;
   }
 
-  // Must have common ground available
+  // Must have both revealed needs lists available
   return commonGroundAvailable;
 }
 
@@ -420,9 +421,9 @@ function computeAboveInputPanel(
     return 'needs-review';
   }
 
-  // Priority 7: Common ground confirmation panel (Stage 3)
+  // Priority 7: Needs reveal validation panel (Stage 3)
   if (panels.showCommonGroundPanel) {
-    return 'common-ground-confirm';
+    return 'needs-reveal-validation';
   }
 
   // Priority 8: Waiting banner
@@ -542,7 +543,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const showFeelHeardPanel = computeShowFeelHeardPanel(inputs);
   const showShareSuggestionPanel = computeShowShareSuggestionPanel(inputs);
   const showNeedsReviewPanel = computeShowNeedsReviewPanel(inputs);
-  const showCommonGroundPanel = computeShowCommonGroundPanel(inputs);
+  const showCommonGroundPanel = computeShowNeedsRevealValidationPanel(inputs);
   const showWaitingBanner = computeShouldShowWaitingBanner(waitingStatus);
   const showCompactAgreementBar = isInOnboardingUnsigned;
 
@@ -637,7 +638,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     needsShared: false,
     hasConfirmedNeedsLocal: false,
 
-    // Stage 3: Common Ground
+    // Stage 3: Needs reveal validation
     commonGroundAvailable: false,
     commonGroundNoOverlap: false,
     commonGroundAllConfirmedByMe: false,

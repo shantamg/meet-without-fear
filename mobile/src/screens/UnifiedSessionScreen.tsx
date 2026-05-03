@@ -25,7 +25,7 @@ import { SessionEntryMoodCheck } from '../components/SessionEntryMoodCheck';
 import { AccuracyFeedbackDrawer } from '../components/AccuracyFeedbackDrawer';
 import { ShareTopicDrawer } from '../components/ShareTopicDrawer';
 import { ShareTopicPanel } from '../components/ShareTopicPanel';
-// NeedsSection and CommonGroundCard removed - now used inside NeedsDrawer
+// NeedsSection removed - needs review/reveal now lives inside NeedsDrawer
 import { StrategyPool } from '../components/StrategyPool';
 import { StrategyRanking } from '../components/StrategyRanking';
 import { OverlapReveal } from '../components/OverlapReveal';
@@ -830,6 +830,7 @@ export function UnifiedSessionScreen({
     | 'confirmed-invitation'
     | 'responded-to-share-offer'
     | 'confirmed-needs'
+    | 'validated-needs'
     | 'validated-empathy';
 
   const [completedActions, setCompletedActions] = useState<Set<CompletedAction>>(new Set());
@@ -1031,7 +1032,7 @@ export function UnifiedSessionScreen({
     commonGroundNoOverlap: false,
     commonGroundAllConfirmedByMe: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsValidated === true,
     commonGroundAllConfirmedByBoth: commonGroundComplete,
-    hasConfirmedCommonGroundLocal: false,
+    hasConfirmedCommonGroundLocal: completedActions.has('validated-needs'),
     strategyPhase,
     overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
     agreements: agreements?.map(a => ({
@@ -1495,7 +1496,7 @@ export function UnifiedSessionScreen({
 
         // Note: needs-summary and common-ground-preview cases removed.
         // These are now shown in the NeedsDrawer bottom sheet, opened via
-        // the above-input buttons (needs-review, common-ground-confirm).
+        // the above-input buttons (needs-review, needs-reveal-validation).
 
         case 'strategy-pool-preview': {
           const stratCount = card.props.strategyCount as number;
@@ -2205,6 +2206,43 @@ export function UnifiedSessionScreen({
           </Animated.View>
         );
 
+      case 'needs-reveal-validation':
+        return (
+          <Animated.View
+            style={{
+              opacity: needsReviewAnim,
+              maxHeight: needsReviewAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 100],
+              }),
+              transform: [{
+                translateY: needsReviewAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+              overflow: 'hidden',
+            }}
+            pointerEvents="auto"
+          >
+            <View style={styles.needsReviewContainer}>
+              <TouchableOpacity
+                style={styles.needsReviewButton}
+                onPress={() => {
+                  setNeedsDrawerMode('comparison');
+                  setShowNeedsDrawer(true);
+                }}
+                activeOpacity={0.7}
+                testID="needs-reveal-validate-button"
+              >
+                <Text style={styles.needsReviewButtonText}>
+                  Review needs together
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        );
+
       case 'waiting-banner':
         return (
           <WaitingBanner
@@ -2249,6 +2287,7 @@ export function UnifiedSessionScreen({
     handleConfirmInvitationMessage,
     handleConfirmAllNeeds,
     handleConfirmCommonGround,
+    handleNeedsNotValidYet,
     markCompleted,
     onStageComplete,
     openOverlay,
@@ -2725,6 +2764,15 @@ export function UnifiedSessionScreen({
           need: n.need,
           confirmed: n.confirmed,
         }))}
+        onValidateNeeds={() => {
+          markCompleted('validated-needs');
+          handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
+        }}
+        onNeedsNotValidYet={() => {
+          handleNeedsNotValidYet(() => {
+            setShowNeedsDrawer(false);
+          });
+        }}
         partnerName={partnerName}
         testID="needs-drawer"
       />

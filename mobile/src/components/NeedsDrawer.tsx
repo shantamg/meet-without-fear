@@ -51,6 +51,8 @@ export interface NeedsDrawerProps {
   // Comparison mode
   partnerNeeds?: NeedItem[];
   partnerName?: string;
+  onValidateNeeds?: () => void;
+  onNeedsNotValidYet?: () => void;
   testID?: string;
 }
 
@@ -79,6 +81,8 @@ export function NeedsDrawer({
   isConfirming = false,
   partnerNeeds = [],
   partnerName = 'Partner',
+  onValidateNeeds,
+  onNeedsNotValidYet,
   testID = 'needs-drawer',
 }: NeedsDrawerProps) {
   const insets = useSafeAreaInsets();
@@ -299,12 +303,48 @@ export function NeedsDrawer({
   const renderComparisonMode = () => (
     <>
       <Text style={styles.sectionSubtitle}>
-        Review both needs lists side by side.
+        Review both needs lists side by side. What do you notice?
       </Text>
       {renderSideBySideNeeds()}
     </>
   );
 
+  const renderComparisonButtons = () => {
+    const hasButtons = onValidateNeeds || onNeedsNotValidYet;
+    if (!hasButtons) return null;
+    return (
+      <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
+        <View style={styles.buttonRow}>
+          {onNeedsNotValidYet && (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                onNeedsNotValidYet();
+                closeDrawer();
+              }}
+              activeOpacity={0.7}
+              testID={`${testID}-not-valid-yet`}
+            >
+              <Text style={styles.secondaryButtonText}>Not valid yet</Text>
+            </TouchableOpacity>
+          )}
+          {onValidateNeeds && (
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => {
+                onValidateNeeds();
+                closeDrawer();
+              }}
+              activeOpacity={0.7}
+              testID={`${testID}-validate-needs`}
+            >
+              <Text style={styles.primaryButtonText}>Validate needs</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   // -------------------------------------------------------------------------
   // Render
@@ -372,6 +412,7 @@ export function NeedsDrawer({
 
           {/* Fixed footer buttons */}
           {mode === 'needs' && renderNeedsButtons()}
+          {mode === 'comparison' && renderComparisonButtons()}
         </View>
       </Animated.View>
     </View>
