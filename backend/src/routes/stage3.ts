@@ -2,12 +2,11 @@
  * Stage 3 Routes
  *
  * Routes for the What Matters stage of the Meet Without Fear process.
- * - GET /sessions/:id/needs - Get AI-synthesized needs
+ * - GET /sessions/:id/needs - Get identified needs
  * - POST /sessions/:id/needs/capture - Capture needs from an AI summary card
  * - POST /sessions/:id/needs/confirm - Confirm needs
  * - POST /sessions/:id/needs/consent - Consent to share needs
- * - POST /sessions/:id/needs/validate - Validate revealed needs/common ground
- * - GET /sessions/:id/common-ground - Get common ground analysis
+ * - POST /sessions/:id/needs/validate - Validate revealed needs
  */
 
 import { Router } from 'express';
@@ -19,15 +18,13 @@ import {
   confirmNeeds,
   consentToShareNeeds,
   validateNeeds,
-  getCommonGround,
   addCustomNeed,
-  confirmCommonGround,
   getNeedsComparison,
 } from '../controllers/stage3';
 
 const router = Router();
 
-// Get AI-synthesized needs for the user
+// Get identified needs for the user
 router.get(
   '/sessions/:id/needs',
   requireAuth,
@@ -59,7 +56,7 @@ router.post(
   asyncHandler(consentToShareNeeds)
 );
 
-// Validate revealed needs/common ground
+// Validate revealed needs
 router.post(
   '/sessions/:id/needs/validate',
   requireAuth,
@@ -67,15 +64,7 @@ router.post(
   asyncHandler(validateNeeds)
 );
 
-// Get common ground analysis
-router.get(
-  '/sessions/:id/common-ground',
-  requireAuth,
-  requireSessionAccess,
-  asyncHandler(getCommonGround)
-);
-
-// Get needs comparison (side-by-side view of both users' needs + common ground)
+// Get needs comparison (side-by-side view of both users' needs)
 router.get(
   '/sessions/:id/needs/comparison',
   requireAuth,
@@ -97,14 +86,6 @@ router.post(
   requireAuth,
   requireSessionAccess,
   asyncHandler(addCustomNeed)
-);
-
-// Confirm common ground
-router.post(
-  '/sessions/:id/common-ground/confirm',
-  requireAuth,
-  requireSessionAccess,
-  asyncHandler(confirmCommonGround)
 );
 
 export default router;

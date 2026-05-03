@@ -511,7 +511,7 @@ const STAGE_GATES: Record<number, string[]> = {
   0: ['compactSigned'],
   1: ['feelHeardConfirmed'],
   2: ['empathyValidated'],
-  3: ['needsConfirmed', 'needsShared', 'commonGroundConfirmed'],
+  3: ['needsConfirmed', 'needsShared', 'needsValidated'],
   4: ['rankingSubmitted', 'agreementCreated'],
 };
 

@@ -149,48 +149,5 @@ Does this capture what you'd like to express to them?
       response: 'Household chores disagreement',
     },
 
-    // Needs extraction operation - returns 3 deterministic needs
-    'extract-needs': {
-      response: {
-        needs: [
-          {
-            category: 'CONNECTION',
-            need: 'To feel emotionally connected and understood',
-            evidence: ['I just want to feel like we are on the same team'],
-            aiConfidence: 0.85,
-          },
-          {
-            category: 'RECOGNITION',
-            need: 'To have efforts acknowledged and appreciated',
-            evidence: ['It feels like nothing I do is ever enough'],
-            aiConfidence: 0.78,
-          },
-          {
-            category: 'SAFETY',
-            need: 'To feel safe expressing feelings without conflict',
-            evidence: ['I am afraid to bring things up because it always turns into a fight'],
-            aiConfidence: 0.82,
-          },
-        ],
-      },
-    },
-
-    // Common ground operation - returns 2 common ground items
-    'common-ground': {
-      response: {
-        commonGround: [
-          {
-            category: 'CONNECTION',
-            need: 'Both partners value emotional connection and want to feel like a team',
-            insight: 'While expressed differently, both seek the same underlying closeness',
-          },
-          {
-            category: 'SAFETY',
-            need: 'Both need to feel safe being vulnerable in conversations',
-            insight: 'The fear of conflict is shared - both want discussions to feel constructive',
-          },
-        ],
-      },
-    },
   },
 };

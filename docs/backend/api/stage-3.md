@@ -1,27 +1,29 @@
 ---
 title: "Stage 3 API: What Matters"
 sidebar_position: 10
-description: Endpoints for identifying needs, confirming them, and discovering common ground.
+description: Endpoints for identifying needs, confirming them, and validating revealed needs with a partner.
 slug: /backend/api/stage-3
+updated: "2026-05-03"
 ---
 # Stage 3 API: What Matters
 
-Endpoints for identifying needs, confirming them, and discovering common ground.
+Endpoints for identifying needs, confirming them, and validating revealed needs with a partner.
 
 ## Overview
 
-Stage 3 transforms complaints and emotions into universal human needs, then identifies where both parties' needs overlap.
+Stage 3 helps each user articulate what matters to them in needs language, then both partners validate the side-by-side needs reveal before advancing.
 
 Key concepts:
-- **Need synthesis**: AI extracts needs from Stage 1-2 content
-- **Need confirmation**: User validates extracted needs
-- **Common ground**: Needs shared by both parties
+- **Need articulation**: Each user chats with AI and names their own needs
+- **Need confirmation**: User confirms the needs language before anything is shared
+- **Needs consent**: User explicitly consents before confirmed needs are revealed
+- **Needs reveal validation**: Both partners review the side-by-side reveal and validate it before Stage 4
 
 ---
 
-## Get Synthesized Needs
+## Get Captured Needs
 
-Get AI-synthesized needs for the current user based on their Stage 1-2 content.
+Get the current user's captured needs.
 
 ```
 GET /api/v1/sessions/:id/needs
@@ -32,8 +34,9 @@ GET /api/v1/sessions/:id/needs
 ```typescript
 interface GetNeedsResponse {
   needs: IdentifiedNeedDTO[];
-  synthesizedAt: string;
-  isDirty: boolean;  // True if content changed since synthesis
+  extracting: boolean;         // Always false — extraction is not triggered on-demand
+  synthesizedAt: string | null; // null when no needs exist
+  isDirty: boolean;
 }
 
 interface IdentifiedNeedDTO {
@@ -87,28 +90,24 @@ enum NeedCategory {
         "aiConfidence": 0.72
       }
     ],
+    "extracting": false,
     "synthesizedAt": "2024-01-16T18:00:00Z",
     "isDirty": false
   }
 }
 ```
 
-### Synthesis Trigger
+### Behavior
 
-`GET /needs` runs extraction only when **no needs exist yet** for the caller AND the caller has sent at least one Stage-3 `USER` message (the caller has to engage before the AI will synthesize).
+`GET /needs` is a direct read — it returns the stored `IdentifiedNeed` rows for the caller without triggering AI extraction. Needs are created only through explicit capture or user add/edit actions after Stage 3 conversation. `extracting` is always `false`; `synthesizedAt` is `null` when no needs exist.
 
-- First call with zero Stage-3 messages: returns `{ needs: [], extracting: false }`; the UI prompts the user to reflect.
-- First call after the user has messaged: returns `{ needs: [], extracting: true }` on a cache miss while AI extraction runs; subsequent polls return the synthesized list.
-- Subsequent calls once needs exist: returns the stored `IdentifiedNeed` rows without re-extracting.
-- Concurrency: an in-memory `extractionLocks` map prevents duplicate AI calls for the same `(sessionId, userId)` while extraction is in flight.
-
-`isDirty` and explicit re-synthesis are not currently triggers — extraction runs once and is not re-run from this endpoint. Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response includes both `need` and `description` fields carrying the same string (`description` is a compatibility alias).
+Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response includes both `need` and `description` fields carrying the same string (`description` is a compatibility alias).
 
 ---
 
 ## Confirm Needs
 
-Confirm or adjust AI-synthesized needs.
+Confirm or adjust captured needs.
 
 ```
 POST /api/v1/sessions/:id/needs/confirm
@@ -134,7 +133,7 @@ interface NeedConfirmation {
 interface ConfirmNeedsResponse {
   updated: IdentifiedNeedDTO[];
   allConfirmed: boolean;
-  canProceedToCommonGround: boolean; // true when at least one confirmed AND consent flow ready
+  canProceedToConsent: boolean; // true when at least one confirmed AND consent flow ready
 }
 ```
 
@@ -208,143 +207,67 @@ interface ConsentShareNeedsResponse {
   consented: boolean;
   sharedAt: string;
   waitingForPartner: boolean;
-
-  // If partner already consented, common ground analysis begins
-  commonGroundReady: boolean;
+  needsRevealReady: boolean;
 }
 ```
 
 ### Side Effects
 
-1. Selected needs transformed and added to SharedVessel
-2. Partner notified
-3. If both consented, common ground analysis triggered
-4. Creates `ConsentRecord` rows with `targetType = IDENTIFIED_NEED`, links ConsentedContent
+1. Creates `ConsentRecord` rows with `targetType = IDENTIFIED_NEED`
+2. Sets the caller's `needsShared` gate
+3. Notifies clients when both users have consented and the side-by-side reveal is ready
 
-Validation: needIds must reference confirmed needs; at least 1. Consenting sets the caller's `needsShared` gate and moves the caller's Stage-3 status to `GATE_PENDING`. The partner-side check `partnerProgress.gatesSatisfied.needsShared === true` (surfaced via the `hasPartnerSharedNeeds` helper) is what unblocks common-ground analysis.
+Validation: needIds must reference confirmed needs; at least 1. Consenting sets the caller's `needsShared` gate and moves the caller's Stage-3 status to `GATE_PENDING`. The partner-side check `partnerProgress.gatesSatisfied.needsShared === true` (surfaced via the `hasPartnerSharedNeeds` helper) is what unblocks the needs-validation step.
 
 ---
 
 ## Compare Needs (Side-by-Side)
 
-Before common-ground analysis runs, the app can render a side-by-side comparison of each user's confirmed/shared needs:
+After both partners share needs, the app can render a side-by-side comparison of each user's confirmed/shared needs:
 
 ```
 GET /api/v1/sessions/:id/needs/comparison
 ```
 
-Returns each partner's needs grouped for display; useful when the partner has shared but common-ground analysis hasn't completed yet.
+Returns each partner's needs grouped for display; useful before the validation step completes.
 
 ---
 
-## Get Common Ground
+## Validate Needs
 
-Get identified common ground between both parties.
-
-```
-GET /api/v1/sessions/:id/common-ground
-```
-
-### Response
-
-```typescript
-interface GetCommonGroundResponse {
-  commonGround: CommonGroundDTO[];
-  analysisComplete: boolean;
-  bothConfirmed: boolean;
-}
-
-interface CommonGroundDTO {
-  id: string;
-  need: string;
-  category: NeedCategory;
-  description: string;        // How this need manifests for both
-  confirmedByMe: boolean;
-  confirmedByPartner: boolean;
-  confirmedAt: string | null;
-}
-```
-
-### Example Response
-
-```json
-{
-  "success": true,
-  "data": {
-    "commonGround": [
-      {
-        "id": "cg_001",
-        "need": "Safety",
-        "category": "SAFETY",
-        "description": "Both of you need to feel secure in the relationship and know it will last",
-        "confirmedByMe": true,
-        "confirmedByPartner": false,
-        "confirmedAt": null
-      },
-      {
-        "id": "cg_002",
-        "need": "Connection",
-        "category": "CONNECTION",
-        "description": "Both of you want to feel close and connected to each other",
-        "confirmedByMe": false,
-        "confirmedByPartner": false,
-        "confirmedAt": null
-      }
-    ],
-    "analysisComplete": true,
-    "bothConfirmed": false
-  }
-}
-```
-
-### Analysis Logic
-
-Common ground is identified when:
-- Both users share needs in the same category
-- Deeper analysis finds connected needs (e.g., "recognition" and "appreciation")
-- AI detects underlying shared needs beneath surface differences
-
-### "No Overlap" fast-path
-
-When AI analysis finds zero common ground items, the response includes `noOverlap: true`. In that case the Stage-3 gate auto-completes without requiring `/common-ground/confirm` — users can advance directly to Stage 4. The controller updates Stage-3 status to `COMPLETED` and skips the confirm step.
-
-Concurrency: a `commonGroundLocks` map prevents duplicate analysis calls for the same session while AI analysis is in flight (polling clients will see `analysisComplete: false` until the run finishes).
-
-Validation: commonGround array size 1-5; description 1-200 chars. Only needs with active consent participate.
-
----
-
-## Confirm Common Ground
-
-Confirm common ground items.
+Confirm that you have reviewed your partner's revealed needs. Both partners must validate before advancing to Stage 4.
 
 ```
-POST /api/v1/sessions/:id/common-ground/confirm
+POST /api/v1/sessions/:id/needs/validate
 ```
 
 ### Request Body
 
 ```typescript
-interface ConfirmCommonGroundRequest {
-  confirmations: {
-    commonGroundId: string;
-    confirmed: boolean;
-  }[];
+interface ValidateNeedsRequest {
+  validated: boolean;  // Defaults to true if omitted
 }
 ```
 
 ### Response
 
 ```typescript
-interface ConfirmCommonGroundResponse {
-  updated: CommonGroundDTO[];
-  allConfirmedByMe: boolean;
-  allConfirmedByBoth: boolean;
-  canAdvance: boolean;
+interface ValidateNeedsResponse {
+  validated: boolean;
+  validatedAt: string | null;
+  partnerValidated: boolean;
+  canAdvance: boolean;  // true when both partners have validated
 }
 ```
 
-Validation: confirmations must reference items in current commonGround list; setting allConfirmedByMe true sets gate `commonGroundConfirmed` when partner also confirms.
+### Side Effects
+
+When both partners validate (`canAdvance === true`):
+1. Both partners' Stage-3 status transitions to `COMPLETED`
+2. Both partners' Stage-4 progress records are created (`IN_PROGRESS`)
+3. A transition message is published to both users
+
+Pre-conditions: both partners must have consented to share needs (`needsShared` gate) before calling this endpoint. The `hasPartnerSharedNeeds` check is enforced server-side.
 
 ---
 
@@ -356,9 +279,9 @@ To advance from Stage 3 to Stage 4:
 |------|-------------|
 | `needsConfirmed` | Caller confirmed at least one need |
 | `needsShared` | Caller consented to share confirmed needs |
-| `commonGroundConfirmed` | Both confirmed at least one common-ground item (**or** AI reported no overlap — auto-completes) |
+| `needsValidated` | Caller called `POST /needs/validate` (both partners must satisfy this gate to advance) |
 
-The partner-side check reads `partnerProgress.gatesSatisfied.needsShared`; there is no standalone `partnerNeedsConfirmed` gate. Stage-3 status transitions: `IN_PROGRESS → GATE_PENDING` (after sharing needs) → `COMPLETED` (either via mutual common-ground confirm or the no-overlap fast-path).
+The partner-side check reads `partnerProgress.gatesSatisfied.needsShared`; there is no standalone `partnerNeedsConfirmed` gate. Stage-3 status transitions: `IN_PROGRESS → GATE_PENDING` (after sharing needs) → `COMPLETED` (when both partners have validated).
 
 ---
 
@@ -366,22 +289,20 @@ The partner-side check reads `partnerProgress.gatesSatisfied.needsShared`; there
 
 ```mermaid
 flowchart TD
-    Enter[Enter Stage 3] --> Synthesize[AI synthesizes needs]
-    Synthesize --> Present[Present needs to user]
-    Present --> Confirm{Confirm needs?}
+    Enter[Enter Stage 3] --> Explore[User articulates needs with AI]
+    Explore --> Capture[Capture suggested needs language]
+    Capture --> Confirm{User confirms needs?}
     Confirm -->|Adjust| Refine[User adjusts]
-    Refine --> Present
+    Refine --> Capture
     Confirm -->|Yes| Consent[Consent to share]
-    Consent --> Wait{Partner ready?}
+    Consent --> Wait{Partner shared?}
     Wait -->|No| WaitState[Waiting]
-    Wait -->|Yes| Analyze[Analyze common ground]
-    Analyze --> ShowCommon[Show common ground]
-    ShowCommon --> ConfirmCG{Confirm common ground?}
-    ConfirmCG -->|No| Discuss[Chat to explore]
-    Discuss --> ShowCommon
-    ConfirmCG -->|Yes| BothConfirmed{Both confirmed?}
-    BothConfirmed -->|No| WaitPartner[Wait for partner]
-    BothConfirmed -->|Yes| Advance[Advance to Stage 4]
+    Wait -->|Yes| ShowNeeds[View partner needs side-by-side]
+    ShowNeeds --> Notice[AI asks: What do you notice?]
+    Notice --> Validate[Validate revealed needs]
+    Validate --> BothValidated{Both validated?}
+    BothValidated -->|No| WaitPartner[Wait for partner]
+    BothValidated -->|Yes| Advance[Advance to Stage 4]
 ```
 
 ---
@@ -394,7 +315,7 @@ In Stage 3, the API enforces these retrieval rules:
 |---------|-----------|
 | User's identified needs | Partner's raw events |
 | Shared Vessel (consented needs) | Non-consented partner needs |
-| Common ground candidates | Partner's UserVessel |
+| Partner's revealed needs (after both consent) | Partner's UserVessel |
 
 Vector search is scoped to needs only (not raw events).
 
@@ -405,7 +326,6 @@ See [Retrieval Contracts: Stage 3](../state-machine/retrieval-contracts.md#stage
 ## Related Documentation
 
 - [Stage 3: What Matters](../../stages/stage-3-what-matters.md)
-- [Need Extraction Prompt](../prompts/need-extraction.md)
 - [Universal Needs Framework](../../stages/stage-3-what-matters.md#universal-needs-framework)
 
 ---
