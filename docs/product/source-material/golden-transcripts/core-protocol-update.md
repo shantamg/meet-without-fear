@@ -42,7 +42,7 @@ User 2 receives the same welcome as User 1:
 
 "I am here to help you work through conflict — step by step. You'll start by sharing what you believe is happening, privately. I won't share anything you've said unless you explicitly approve it."
 
-User 2 taps "Ready" to acknowledge.
+User 2 types a response to acknowledge.
 
 MWF then says:
 
