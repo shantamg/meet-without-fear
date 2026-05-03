@@ -30,7 +30,7 @@ Meet Without Fear — Reference FlowAdam & Eve | Full Parallel Transcript
 
 **MWF:** I am here to help you work through conflict — step by step. You’ll start by sharing what you believe is happening, privately. I won’t share anything you’ve said unless you explicitly approve it.
 
-**Eve:** Ready
+**Eve:** Ok
 
 **MWF:** Before we begin, Adam wanted you to know something. This is what he shared — in his words, from his perspective: "Adam believes Eve wants more from their life than he knows how to give her, and he’s scared that gap is becoming a problem." This is how things look from his side right now. You don’t need to agree with it, respond to it, or do anything with it yet. Your perspective is what matters next — and that’s where we’re going. Ready?
 
