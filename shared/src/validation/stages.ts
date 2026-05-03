@@ -28,8 +28,12 @@ export {
   // Topic Frame (Stage 0 — drafted during invite)
   confirmTopicFrameRequestSchema,
   confirmTopicFrameResponseSchema,
+  refineTopicFrameRequestSchema,
+  refineTopicFrameResponseSchema,
   type ConfirmTopicFrameRequestInput,
   type ConfirmTopicFrameResponseInput,
+  type RefineTopicFrameRequestInput,
+  type RefineTopicFrameResponseInput,
 
   // Stage 2: Perspective Stretch / Empathy
   saveEmpathyDraftRequestSchema,

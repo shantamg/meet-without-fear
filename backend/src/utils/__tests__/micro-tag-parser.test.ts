@@ -46,19 +46,43 @@ I hear you. That sounds really difficult.`;
       expect(result.offerReadyToShare).toBe(true);
     });
 
-    it('extracts draft block as invitationMessage', () => {
-      const raw = `<thinking>Mode:Invitation</thinking>
+    it('extracts <draft> as topicFrame for Stage 0 callers', () => {
+      const raw = `<thinking>Mode:ONBOARDING</thinking>
 
 <draft>
-I've been thinking about us and would love to have a real conversation. Join me?
+Mealtime poking
 </draft>
 
-Here's a draft invitation for you to review.`;
+How does that framing land?`;
 
       const result = parseMicroTagResponse(raw);
 
-      expect(result.draft).toContain("I've been thinking about us");
-      expect(result.response).toBe("Here's a draft invitation for you to review.");
+      expect(result.topicFrame).toBe('Mealtime poking');
+      expect(result.draft).toBe('Mealtime poking');
+      expect(result.response).toBe('How does that framing land?');
+      expect(result.response).not.toContain('<draft>');
+    });
+
+    it('topicFrame is null when no <draft> tag is present', () => {
+      const raw = `<thinking>Mode:ONBOARDING</thinking>What's been going on?`;
+      const result = parseMicroTagResponse(raw);
+      expect(result.topicFrame).toBeNull();
+      expect(result.draft).toBeNull();
+    });
+
+    it('extracts draft block content (used for empathy in stage 2)', () => {
+      const raw = `<thinking>Mode:Empathy</thinking>
+
+<draft>
+You feel unseen when I get distracted at meals.
+</draft>
+
+Here's a draft for you to review.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.draft).toContain('You feel unseen');
+      expect(result.response).toBe("Here's a draft for you to review.");
       expect(result.response).not.toContain('<draft>');
     });
 

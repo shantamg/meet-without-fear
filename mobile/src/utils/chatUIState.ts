@@ -28,6 +28,7 @@ import { getWaitingStatusConfig, WaitingStatusConfig } from '../config/waitingSt
  * Only ONE panel can be shown at a time - this defines priority.
  */
 export type AboveInputPanel =
+  | 'topic-proposal' // AI-proposed topic awaiting Use/Refine (Stage 0, inviter)
   | 'invitation' // Invitation share panel for inviters
   | 'empathy-statement' // Empathy statement review panel
   | 'feel-heard' // Feel heard confirmation panel
@@ -59,11 +60,19 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   myProgress: { stage: Stage } | undefined;
 
   // Invitation phase
-  // Cache-First: invitationConfirmed is derived from cache (invitation.messageConfirmed)
-  // Optimistic update in useConfirmInvitationMessage.onMutate ensures immediate feedback
-  hasInvitationMessage: boolean;
-  invitationConfirmed: boolean;
+  // The invitation panel opens once the topic frame has been confirmed and
+  // the user hasn't dismissed it. Stage 0→1 advancement is chained to topic
+  // confirmation in the screen, so `invitationConfirmed` no longer gates UI.
+  hasTopicConfirmed: boolean;
+  invitationPanelDismissed: boolean;
   isConfirmingInvitation: boolean;
+
+  // Stage 0: AI-proposed topic awaiting user decision (Use / Refine).
+  // The topic-proposal panel appears for the inviter when the AI has emitted
+  // a topic frame inline via <draft> but the user has not yet confirmed it.
+  topicFrameProposed: string | null;
+  topicProposalDismissed: boolean;
+  isConfirmingTopicFrame: boolean;
 
   // Stage 1: Feel heard
   showFeelHeardConfirmation: boolean;
@@ -125,6 +134,7 @@ export interface ChatUIState {
 
   // Specific panel visibility (for debugging/testing)
   panels: {
+    showTopicProposalPanel: boolean;
     showInvitationPanel: boolean;
     showEmpathyPanel: boolean;
     showFeelHeardPanel: boolean;
@@ -185,21 +195,47 @@ function computeIsInOnboardingUnsigned(inputs: ChatUIStateInputs): boolean {
 }
 
 /**
+ * Determines if the topic-proposal panel should show.
+ * Shows for the inviter when the AI has proposed a topic but the user has
+ * neither confirmed it nor dismissed the panel ("Refine" hint).
+ */
+function computeShowTopicProposalPanel(inputs: ChatUIStateInputs): boolean {
+  const {
+    isInviter,
+    topicFrameProposed,
+    hasTopicConfirmed,
+    topicProposalDismissed,
+    isConfirmingTopicFrame,
+  } = inputs;
+
+  return !!(
+    isInviter &&
+    topicFrameProposed &&
+    !hasTopicConfirmed &&
+    !topicProposalDismissed &&
+    !isConfirmingTopicFrame
+  );
+}
+
+/**
  * Determines if invitation panel should show.
  * Cache-First: invitationConfirmed is derived from cache (set optimistically in onMutate)
  */
 function computeShowInvitationPanel(inputs: ChatUIStateInputs): boolean {
   const {
     isInviter,
-    hasInvitationMessage,
-    invitationConfirmed,
+    hasTopicConfirmed,
+    invitationPanelDismissed,
     isConfirmingInvitation,
   } = inputs;
 
+  // The invitation panel opens once the inviter has confirmed the topic
+  // frame. The user can dismiss it ("Later"); subsequent re-sharing lives
+  // in the Activity Drawer.
   return !!(
     isInviter &&
-    hasInvitationMessage &&
-    !invitationConfirmed &&
+    hasTopicConfirmed &&
+    !invitationPanelDismissed &&
     !isConfirmingInvitation
   );
 }
@@ -396,6 +432,11 @@ function computeAboveInputPanel(
     return 'compact-agreement-bar';
   }
 
+  // Priority 2a: Topic proposal panel (Stage 0, before topic confirmation)
+  if (panels.showTopicProposalPanel) {
+    return 'topic-proposal';
+  }
+
   // Priority 2: Invitation panel (after signing, before sending invite)
   if (panels.showInvitationPanel) {
     return 'invitation';
@@ -538,6 +579,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const isInOnboardingUnsigned = computeIsInOnboardingUnsigned(inputs);
 
   // Step 3: Compute individual panel visibility
+  const showTopicProposalPanel = computeShowTopicProposalPanel(inputs);
   const showInvitationPanel = computeShowInvitationPanel(inputs);
   const showEmpathyPanel = computeShowEmpathyPanel(inputs);
   const showFeelHeardPanel = computeShowFeelHeardPanel(inputs);
@@ -548,6 +590,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const showCompactAgreementBar = isInOnboardingUnsigned;
 
   const panels = {
+    showTopicProposalPanel,
     showInvitationPanel,
     showEmpathyPanel,
     showFeelHeardPanel,
@@ -616,9 +659,12 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     isTypewriterAnimating: false,
     compactMySigned: undefined,
     myProgress: undefined,
-    hasInvitationMessage: false,
-    invitationConfirmed: false,
+    hasTopicConfirmed: false,
+    invitationPanelDismissed: false,
     isConfirmingInvitation: false,
+    topicFrameProposed: null,
+    topicProposalDismissed: false,
+    isConfirmingTopicFrame: false,
     showFeelHeardConfirmation: false,
     feelHeardConfirmedAt: undefined,
     isConfirmingFeelHeard: false,

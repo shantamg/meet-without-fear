@@ -178,7 +178,7 @@ export function generateSessionStatusSummary(
       }
 
       return {
-        userStatus: 'Invitation sent',
+        userStatus: 'Invitation ready',
         partnerStatus: `${name} hasn't joined yet`,
       };
     }

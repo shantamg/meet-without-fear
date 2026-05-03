@@ -1,4 +1,4 @@
-import { buildStagePrompt, buildStagePromptString, PromptContext, PromptBlocks, BuildStagePromptOptions, buildInnerWorkPrompt, InsightContext } from '../stage-prompts';
+import { buildStagePrompt, buildStagePromptString, buildInitialMessagePrompt, PromptContext, PromptBlocks, BuildStagePromptOptions, buildInnerWorkPrompt, InsightContext } from '../stage-prompts';
 import type { ContextBundle } from '../context-assembler';
 import type { MemoryIntentResult } from '../memory-intent';
 
@@ -184,49 +184,35 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('experiment');
     });
 
-    it('returns invitation prompt for stage 0 with isInvitationPhase', () => {
+    it('returns topic-articulation prompt for stage 0 with isInvitationPhase', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };
       const prompt = fullPrompt(buildStagePrompt(0, context, options));
 
-      expect(prompt).toContain('invitation');
+      // Stage 0 is now about articulating the topic, not drafting an invitation
+      expect(prompt).toContain('topic');
       expect(prompt).toContain('Partner');
     });
 
-    it('invitation prompt includes MOVE FAST directive', () => {
+    it('stage 0 prompt instructs the AI to emit a topic via <draft> tags', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };
       const prompt = fullPrompt(buildStagePrompt(0, context, options));
 
-      expect(prompt).toContain('MOVE FAST');
-      expect(prompt).toContain('turn 2 or 3');
+      // Stage 0 emits the TOPIC (not an invitation message) inline as <draft>
+      expect(prompt).toContain('<draft>');
+      // Must never bring back the invitation-message concept
+      expect(prompt).not.toContain('invitationMessage');
     });
 
-    it('invitation prompt adds PACING nudge at turn 2', () => {
-      const context = createContext({ turnCount: 2 });
+    it('stage 0 prompt documents the <draft> protocol constraints (≤ 20 words, neutral)', () => {
+      const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };
       const prompt = fullPrompt(buildStagePrompt(0, context, options));
 
-      expect(prompt).toContain('PACING');
-      expect(prompt).not.toContain('DRAFT NOW');
-    });
-
-    it('invitation prompt adds DRAFT NOW directive at turn 3+', () => {
-      const context = createContext({ turnCount: 3 });
-      const options: BuildStagePromptOptions = { isInvitationPhase: true };
-      const prompt = fullPrompt(buildStagePrompt(0, context, options));
-
-      expect(prompt).toContain('DRAFT NOW');
-      expect(prompt).toContain('Do not ask another question');
-    });
-
-    it('invitation prompt skips turn-based urgency when refining', () => {
-      const context = createContext({ turnCount: 5 });
-      const options: BuildStagePromptOptions = { isRefiningInvitation: true };
-      const prompt = fullPrompt(buildStagePrompt(0, context, options));
-
-      expect(prompt).not.toContain('DRAFT NOW');
-      expect(prompt).not.toContain('PACING');
+      expect(prompt).toMatch(/20 words/);
+      expect(prompt.toLowerCase()).toContain('neutral');
+      expect(prompt.toLowerCase()).toContain('blame');
     });
   });
 
@@ -241,7 +227,8 @@ describe('Stage Prompts Service', () => {
 
       // Should contain transition injection
       expect(prompt).toContain('TRANSITION:');
-      expect(prompt).toContain('just sent their invitation');
+      expect(prompt).toContain('just finalized the invitation message');
+      expect(prompt).toContain("we don't actually know whether they shared it yet");
       expect(prompt).toContain('Partner');
       // Should also contain the regular Stage 1 prompt (not replaced)
       expect(prompt).toContain('listen to Test User');
@@ -614,11 +601,12 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toMatch(/ReadyShare.*Y.*N/s);
     });
 
-    it('Stage 0 protocol includes draft tag instruction', () => {
+    it('Stage 0 protocol instructs the AI to emit a topic via <draft> tags', () => {
       const context = createContext();
       const options: BuildStagePromptOptions = { isInvitationPhase: true };
       const prompt = fullPrompt(buildStagePrompt(0, context, options));
 
+      // Stage 0 now emits the proposed TOPIC inline as <draft> (not an invitation message).
       expect(prompt).toContain('<draft>');
     });
 
@@ -875,6 +863,32 @@ describe('Stage Prompts Service', () => {
         { surface: 'slack' }
       );
       expect(blocks.dynamicBlock).not.toContain('OPERATIONAL NUDGE');
+    });
+  });
+
+  describe('buildInitialMessagePrompt — Stage 0 opening', () => {
+    it('Stage 0 invitation-phase opener references the partner name and topic-not-details framing', () => {
+      const prompt = buildInitialMessagePrompt(
+        0,
+        { userName: 'Alice', partnerName: 'Bob' },
+        true
+      );
+
+      expect(prompt).toContain('Bob');
+      expect(prompt).toContain('topic');
+      expect(prompt.toLowerCase()).toContain('not the details');
+      // Must not bring back the invitation-message concept
+      expect(prompt).not.toContain('invitationMessage');
+    });
+
+    it('falls back to "your partner" when no partner name is provided', () => {
+      const prompt = buildInitialMessagePrompt(
+        0,
+        { userName: 'Alice' },
+        true
+      );
+
+      expect(prompt).toContain('your partner');
     });
   });
 });

@@ -798,7 +798,6 @@ export function useOptimisticMessage() {
 
 interface InitialMessageResponse {
   message: MessageDTO;
-  invitationMessage?: string | null;
 }
 
 /**
@@ -876,11 +875,6 @@ export function useFetchInitialMessage(
         messageKeys.infinite(sessionId),
         updateInfiniteCache
       );
-
-      // If an invitation message was returned, invalidate invitation queries
-      if (data.invitationMessage) {
-        queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
-      }
 
       console.log('[useFetchInitialMessage] Cache updated for session:', sessionId);
     },

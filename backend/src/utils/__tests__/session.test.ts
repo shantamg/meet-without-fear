@@ -46,7 +46,7 @@ describe('generateSessionStatusSummary', () => {
         makeProgress(Stage.ONBOARDING, StageStatus.NOT_STARTED),
         'Alex'
       );
-      expect(result.userStatus).toBe('Invitation sent');
+      expect(result.userStatus).toBe('Invitation ready');
       expect(result.partnerStatus).toBe("Alex hasn't joined yet");
     });
 

@@ -50,9 +50,9 @@ interface CompleteEvent {
 export interface StreamMetadata {
   offerFeelHeardCheck?: boolean;
   offerReadyToShare?: boolean;
-  invitationMessage?: string | null;
   proposedEmpathyStatement?: string | null;
   proposedStrategies?: string[];
+  topicFrame?: string | null;
   analysis?: string;
 }
 
@@ -340,17 +340,6 @@ export function useStreamingMessage(
         );
       }
 
-      // Update invitation cache
-      if (metadata.invitationMessage) {
-        queryClient.setQueryData(
-          sessionKeys.sessionInvitation(sessionId),
-          (old: Record<string, unknown> | undefined) => ({
-            ...old,
-            invitationMessage: metadata.invitationMessage,
-          })
-        );
-      }
-
       // NOTE: We intentionally do NOT invalidate queries here.
       // Invalidating sessionKeys.state or other queries during streaming causes race conditions:
       // - Optimistic updates (e.g., invitation.messageConfirmedAt) get overwritten
@@ -563,8 +552,7 @@ export function useStreamingMessage(
 
           try {
             const data = JSON.parse(event.data) as MetadataEvent;
-            console.log(`[useStreamingMessage] [TIMING] metadata event received at ${Date.now()}, has invitationMessage:`,
-              !!data.metadata?.invitationMessage);
+            console.log(`[useStreamingMessage] [TIMING] metadata event received at ${Date.now()}`);
 
             // Handle metadata for UI panels immediately
             if (data.metadata) {
@@ -596,8 +584,7 @@ export function useStreamingMessage(
 
           try {
             const data = JSON.parse(event.data) as TextCompleteEvent;
-            console.log(`[useStreamingMessage] [TIMING] text_complete parsed, has invitationMessage:`,
-              !!data.metadata?.invitationMessage);
+            console.log(`[useStreamingMessage] [TIMING] text_complete parsed`);
 
             // Update cache with final content
             const finalAIMessage: MessageDTO = {

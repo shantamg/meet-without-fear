@@ -23,7 +23,7 @@ import {
   getMessagesQuerySchema,
   MessageRole,
 } from '@meet-without-fear/shared';
-import { notifyPartner, publishSessionEvent, notifySessionMembers, publishMessageAIResponse, publishMessageError } from '../services/realtime';
+import { notifyPartner, publishSessionEvent, notifySessionMembers, publishMessageAIResponse, publishMessageError, publishTopicFrameUpdated } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { embedSessionContent } from '../services/embedding';
@@ -938,7 +938,6 @@ export async function getInitialMessage(
 
     // Get AI response
     let responseContent: string;
-    let extractedInvitationMessage: string | null = null;
     try {
       // AWS Bedrock requires conversations to start with a user message
       const aiResponse = await getSonnetResponse({
@@ -955,11 +954,6 @@ export async function getInitialMessage(
         // Parse the semantic tag response (micro-tag format)
         const parsed = parseMicroTagResponse(aiResponse);
         responseContent = parsed.response.trim() || getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
-
-        // Draft is used for invitation message in stage 0
-        if (isInvitationPhase && parsed.draft) {
-          extractedInvitationMessage = parsed.draft;
-        }
       } else {
         // Fallback if AI unavailable
         responseContent = getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
@@ -967,18 +961,6 @@ export async function getInitialMessage(
     } catch (error) {
       logger.error('[getInitialMessage] AI response error:', error);
       responseContent = getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
-    }
-
-    // If an invitation message was extracted, update the invitation
-    if (isInvitationPhase && extractedInvitationMessage) {
-      logger.info(`[getInitialMessage] Extracted invitation draft from initial message: "${extractedInvitationMessage}"`);
-      await prisma.invitation.updateMany({
-        where: { sessionId, invitedById: user.id },
-        data: {
-          invitationMessage: extractedInvitationMessage,
-          messageConfirmed: false
-        },
-      });
     }
 
     // Save the AI message (trim whitespace that Claude sometimes adds)
@@ -1001,20 +983,6 @@ export async function getInitialMessage(
 
     logger.info(`[getInitialMessage] Generated initial message for session ${sessionId}, stage ${currentStage}`);
 
-    // Audit log the initial message
-    /* auditLog('RESPONSE', 'Initial welcome message generated', {
-      turnId,
-      sessionId,
-      userId: user.id,
-      stage: currentStage,
-      userName,
-      partnerName,
-      isInvitee,
-      responseText: responseContent,
-      messageId: aiMessage.id,
-      invitationMessage: extractedInvitationMessage,
-    }); */
-
     successResponse(res, {
       message: {
         id: aiMessage.id,
@@ -1025,7 +993,6 @@ export async function getInitialMessage(
         stage: aiMessage.stage,
         timestamp: aiMessage.timestamp.toISOString(),
       },
-      invitationMessage: extractedInvitationMessage,
     });
   } catch (error) {
     logger.error('[getInitialMessage] Error:', error);
@@ -1247,20 +1214,6 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     const userName = user.name || 'there';
     const isInvitationPhase = session.status === 'CREATED';
 
-    // Detect invitation refinement request (e.g., "Refine invitation: make it warmer")
-    const isRefiningInvitation = content.toLowerCase().startsWith('refine invitation:');
-    let currentInvitationMessage: string | null = null;
-
-    if (isRefiningInvitation) {
-      // Fetch current invitation message for context
-      const invitation = await prisma.invitation.findFirst({
-        where: { sessionId, invitedById: user.id },
-        select: { invitationMessage: true },
-      });
-      currentInvitationMessage = invitation?.invitationMessage ?? null;
-      logger.info(`[sendMessageStream:${requestId}] Refining invitation, current: "${currentInvitationMessage}"`);
-    }
-
     // Create intent for context assembly - use 'light' depth to load notable facts
     const streamingIntent: MemoryIntentResult = {
       intent: 'stage_enforcement',
@@ -1403,13 +1356,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       contextBundle,
       sharedContentHistory,
       milestoneContext,
-      invitationMessage: currentInvitationMessage,
       reconcilerGapContext,
       previousEmpathyContent,
       sharedContextFromPartner: stage2BSharedContext || undefined,
       empathyDraft: empathyDraftContent || undefined,
       isRefiningEmpathy: isRefiningEmpathy || undefined,
-    }, { isInvitationPhase, isRefiningInvitation });
+    }, { isInvitationPhase });
 
     // Prompt already includes semantic tag format instructions via buildResponseProtocol()
     // No tool use instruction needed - we parse <thinking>, <draft>, <dispatch> tags instead
@@ -1705,13 +1657,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
       // Use draftContent captured during streaming (more reliable than re-parsing)
       const draft = draftContent || parsed.draft;
-      if (draft) {
-        // Draft is used for invitation (stage 0 or refinement) or empathy statement (stage 2)
-        if (isInvitationPhase || isRefiningInvitation || currentStage === 0) {
-          metadata.invitationMessage = draft;
-        } else if (currentStage === 2) {
-          metadata.proposedEmpathyStatement = draft;
-        }
+      if (draft && currentStage === 2) {
+        // Draft is used for empathy statement (stage 2).
+        metadata.proposedEmpathyStatement = draft;
+      } else if (draft && (currentStage === 0 || isInvitationPhase)) {
+        // Stage 0: <draft> contains the proposed topic frame.
+        metadata.topicFrame = draft.trim();
       }
 
       logger.info(`[sendMessageStream:${requestId}] Parsed metadata:`, {
@@ -1869,26 +1820,23 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       });
     }
 
-    // Save invitation message (during initial crafting or refinement)
-    if ((isInvitationPhase || isRefiningInvitation) && metadata.invitationMessage) {
-      await prisma.$transaction([
-        prisma.invitation.updateMany({
-          where: { sessionId, invitedById: user.id },
-          data: {
-            invitationMessage: metadata.invitationMessage,
-            // Don't reset messageConfirmed during refinement - user may have already confirmed
-            ...(isInvitationPhase ? { messageConfirmed: false } : {}),
-          },
-        }),
-        prisma.session.update({
-          where: { id: sessionId },
-          data: {
-            topicFrame: null,
-            topicFrameConfirmedAt: null,
-          },
-        }),
-      ]);
-      logger.info(`[sendMessageStream:${requestId}] Saved invitation message: "${metadata.invitationMessage}"`);
+    // Save topic frame (Stage 0 / invitation phase) - only if not already confirmed
+    if ((currentStage === 0 || isInvitationPhase) && metadata.topicFrame) {
+      try {
+        const newTopicFrame = metadata.topicFrame.trim();
+        if (newTopicFrame && !session.topicFrameConfirmedAt && newTopicFrame !== session.topicFrame) {
+          await prisma.session.update({
+            where: { id: sessionId },
+            data: { topicFrame: newTopicFrame },
+          });
+          logger.info(`[sendMessageStream:${requestId}] Stage 0: Persisted topic frame "${newTopicFrame}"`);
+          publishTopicFrameUpdated(sessionId, newTopicFrame, false).catch((err) =>
+            logger.warn(`[sendMessageStream:${requestId}] Failed to publish topic_frame_updated:`, err)
+          );
+        }
+      } catch (err) {
+        logger.error(`[sendMessageStream:${requestId}] Failed to persist topic frame:`, err);
+      }
     }
 
     // Save empathy draft (Stage 2 or Stage 2B)

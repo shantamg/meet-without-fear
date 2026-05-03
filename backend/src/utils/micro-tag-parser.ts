@@ -16,8 +16,11 @@ export interface ParsedMicroTagResponse {
   response: string;
   /** The raw thinking block content (for logging) */
   thinking: string;
-  /** Optional draft content (for invitation/empathy statements) */
+  /** Optional draft content (for empathy or topic frame).
+   *  Stage 0 uses this as the topic frame; Stage 2 uses it as the empathy draft. */
   draft: string | null;
+  /** Convenience alias of `draft` for Stage 0 callers. Mirrors `draft`. */
+  topicFrame: string | null;
   /** Optional dispatch tag for off-ramping */
   dispatchTag: string | null;
   /** Extracted from thinking: FeelHeardCheck:Y */
@@ -76,18 +79,18 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     }
   }
 
-  // 4. Compatibility fallback: JSON output
+  // 4. Compatibility fallback: JSON output (legacy stages may emit empathy as JSON)
   if (!thinking && !draft && responseText.startsWith('{')) {
     try {
       const parsed = extractJsonFromResponse(responseText) as Record<string, unknown>;
       const response = typeof parsed.response === 'string' ? parsed.response : responseText;
-      const invitation = typeof parsed.invitationMessage === 'string' ? parsed.invitationMessage : null;
       const empathy = typeof parsed.proposedEmpathyStatement === 'string' ? parsed.proposedEmpathyStatement : null;
       responseText = response;
       return {
         response: responseText,
         thinking: '',
-        draft: invitation || empathy,
+        draft: empathy,
+        topicFrame: empathy,
         dispatchTag: null,
         offerFeelHeardCheck,
         offerReadyToShare,
@@ -102,6 +105,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     response: responseText,
     thinking,
     draft,
+    topicFrame: draft,
     dispatchTag,
     offerFeelHeardCheck,
     offerReadyToShare,

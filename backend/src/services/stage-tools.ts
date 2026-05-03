@@ -11,7 +11,6 @@ import type { Tool } from '@aws-sdk/client-bedrock-runtime';
  * Session state tool for delivering stage metadata via Tool Use.
  *
  * Claude calls this tool at the end of each response to provide:
- * - Stage 0: invitationMessage
  * - Stage 1: offerFeelHeardCheck
  * - Stage 2: offerReadyToShare, proposedEmpathyStatement
  * - All stages: analysis (optional, for status dashboard)
@@ -22,7 +21,6 @@ export const SESSION_STATE_TOOL: Tool = {
   toolSpec: {
     name: 'update_session_state',
     description: `Report session state after your response. Only include fields relevant to the current stage:
-- Stage 0 (Invitation): Set invitationMessage when you have a draft ready
 - Stage 1 (Witnessing): Set offerFeelHeardCheck=true when the user seems fully heard
 - Stage 2 (Empathy Building): Set offerReadyToShare=true and proposedEmpathyStatement when ready
 
@@ -47,11 +45,6 @@ NOTE: All reasoning goes in the <analysis> block before your text, NOT in this t
             description:
               'Stage 2 only: The empathy statement draft in first person from the partner\'s perspective.',
           },
-          invitationMessage: {
-            type: 'string',
-            description:
-              'Stage 0 only: The invitation message draft for the partner.',
-          },
         },
         additionalProperties: false,
       },
@@ -71,8 +64,9 @@ export interface SessionStateToolInput {
   offerFeelHeardCheck?: boolean;
   offerReadyToShare?: boolean;
   proposedEmpathyStatement?: string;
-  invitationMessage?: string;
   proposedStrategies?: string[];
+  /** Stage 0: AI's proposed topic frame extracted from <draft> tag */
+  topicFrame?: string;
 }
 
 /**
@@ -91,9 +85,6 @@ export function parseSessionStateToolInput(
       : false,
     proposedEmpathyStatement: typeof input.proposedEmpathyStatement === 'string'
       ? input.proposedEmpathyStatement
-      : undefined,
-    invitationMessage: typeof input.invitationMessage === 'string'
-      ? input.invitationMessage
       : undefined,
   };
 }

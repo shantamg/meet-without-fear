@@ -29,7 +29,7 @@ function IndicatorRendererImpl({
   const getIndicatorText = (): string => {
     switch (item.indicatorType) {
       case IndicatorType.INVITATION_SENT:
-        return 'Invitation Sent';
+        return 'Invitation Ready';
       case IndicatorType.INVITATION_ACCEPTED:
         return 'Accepted Invitation';
       case IndicatorType.STAGE_TRANSITION:
