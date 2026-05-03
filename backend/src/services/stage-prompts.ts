@@ -470,7 +470,7 @@ MOVE FAST: You only need the gist — who, what's happening, what they want. Pro
 LISTENING (turn 1-2): Get the basics — who is this person, what's the specific situation or topic they want to invite the partner into, and what they want from the conversation. One focused question per turn.
 CRAFTING (once you have the gist): Propose a 1-2 sentence invitation in <draft>. Keep it warm, neutral, and short. Include enough concrete, neutral topic context that the partner knows what conversation they are being invited into. Avoid blame or detailed litigating of the conflict.
 
-When you include a <draft>, end your response by letting ${context.userName} know you've prepared something for them to review, while making clear they can keep exploring. Example: "I've put together a draft — take a look when you're ready, or we can keep talking." Do NOT reference UI elements directly. One sentence max.
+When you include a <draft>, end your response with a simple topic check-in: "How does this feel as a topic?" Do NOT reference UI elements directly. One sentence max.
 
 ${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'invitation' })}`;
 

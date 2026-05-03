@@ -64,7 +64,14 @@ export interface ChatValidationCardItem {
   attemptId: string;
 }
 
-export type ChatListItem = ChatMessage | ChatIndicatorItem | ChatValidationCardItem | CustomEmptyStateItem;
+export interface ChatCustomCardItem {
+  type: 'custom-card';
+  id: string;
+  timestamp: string;
+  render: () => React.ReactNode;
+}
+
+export type ChatListItem = ChatMessage | ChatIndicatorItem | ChatValidationCardItem | ChatCustomCardItem | CustomEmptyStateItem;
 
 function isIndicator(item: ChatListItem): item is ChatIndicatorItem {
   return 'type' in item && item.type === 'indicator';
@@ -72,6 +79,10 @@ function isIndicator(item: ChatListItem): item is ChatIndicatorItem {
 
 function isValidationCard(item: ChatListItem): item is ChatValidationCardItem {
   return 'type' in item && item.type === 'validation-card';
+}
+
+function isCustomCard(item: ChatListItem): item is ChatCustomCardItem {
+  return 'type' in item && item.type === 'custom-card';
 }
 
 function isCustomEmptyState(item: ChatListItem): item is CustomEmptyStateItem {
@@ -113,6 +124,8 @@ interface ChatInterfaceProps {
   renderAboveInput?: () => React.ReactNode;
   /** Render content above the emotion slider / input area (e.g., inline cards) */
   renderBelowChat?: () => React.ReactNode;
+  /** Render card-shaped content in the chronological chat stream */
+  customCards?: ChatCustomCardItem[];
   /** Render extra content below a message bubble (e.g., draft cards in refinement chat) */
   renderMessageExtra?: (message: ChatMessage) => React.ReactNode;
   onLoadMore?: () => void;
@@ -172,6 +185,7 @@ export function ChatInterface({
   compactEmotionSlider = false,
   renderAboveInput,
   renderBelowChat,
+  customCards,
   renderMessageExtra,
   onLoadMore,
   hasMore = false,
@@ -227,7 +241,7 @@ export function ChatInterface({
   // STABLE SORT: Ensure order never flip-flops if timestamps are identical
   const listItems = useMemo((): ChatListItem[] => {
     // 1. Combine messages, indicators, and validation cards
-    const items: ChatListItem[] = [...messages, ...indicators, ...(validationCards || [])];
+    const items: ChatListItem[] = [...messages, ...indicators, ...(validationCards || []), ...(customCards || [])];
 
     // 2. Sort Newest First (standard chat sort)
     items.sort((a, b) => {
@@ -251,6 +265,12 @@ export function ChatInterface({
       if (aIsValidation && !bIsValidation) return -1; // validation card appears after/below message
       if (bIsValidation && !aIsValidation) return 1;
 
+      // Custom cards should appear below the prompt/message that introduced them.
+      const aIsCustomCard = isCustomCard(a);
+      const bIsCustomCard = isCustomCard(b);
+      if (aIsCustomCard && !bIsCustomCard) return -1;
+      if (bIsCustomCard && !aIsCustomCard) return 1;
+
       // Fallback: ID comparison for stability
       return b.id.localeCompare(a.id);
     });
@@ -272,7 +292,7 @@ export function ChatInterface({
     }
 
     return items;
-  }, [messages, indicators, validationCards, customEmptyState, lastSeenChatItemId]);
+  }, [messages, indicators, validationCards, customCards, customEmptyState, lastSeenChatItemId]);
 
   const scrollMetricsRef = useRef({
     offset: 0,
@@ -403,7 +423,7 @@ export function ChatInterface({
       const item = listItems[i];
       if (isIndicator(item)) continue;
       if (isValidationCard(item)) continue;
-      if (isCustomEmptyState(item)) continue;
+      if (isCustomEmptyState(item) || isCustomCard(item)) continue;
       const message = item as ChatMessage;
       if (message.role === MessageRole.USER) continue;
       if (message.id.startsWith('optimistic-')) continue;
@@ -416,7 +436,7 @@ export function ChatInterface({
       let hasUserResponseAfter = false;
       for (let j = i - 1; j >= 0; j--) {
         const laterItem = listItems[j];
-        if (isIndicator(laterItem) || isValidationCard(laterItem) || isCustomEmptyState(laterItem)) continue;
+        if (isIndicator(laterItem) || isValidationCard(laterItem) || isCustomEmptyState(laterItem) || isCustomCard(laterItem)) continue;
         if ((laterItem as ChatMessage).role === MessageRole.USER) {
           hasUserResponseAfter = true;
           break;
@@ -477,8 +497,13 @@ export function ChatInterface({
       );
     }
 
-    // 4. Render Messages
-    // At this point, item must be a ChatMessage (we've already handled indicators, validation cards, and custom empty state)
+    // 4. Render Custom Cards
+    if (isCustomCard(item)) {
+      return <>{item.render()}</>;
+    }
+
+    // 5. Render Messages
+    // At this point, item must be a ChatMessage (we've already handled indicators, validation cards, custom cards, and custom empty state)
     const message = item as ChatMessage;
     
     const isInSnapshot = mountSnapshotIdsRef.current.has(message.id);

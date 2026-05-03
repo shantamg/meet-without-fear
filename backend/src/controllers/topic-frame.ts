@@ -3,7 +3,8 @@
  *
  * Handles the topic frame lifecycle during Stage 0 (invite drafting):
  * - POST /sessions/:id/topic-frame/generate - AI-generate a topic frame from the invitation draft
- * - POST /sessions/:id/topic-frame/confirm  - User steers; AI moderates and persists the final frame
+ * - POST /sessions/:id/topic-frame/refine   - User chats to revise the proposed frame without confirming
+ * - POST /sessions/:id/topic-frame/confirm  - User confirms the current frame
  *
  * The user cannot directly set the topic frame text. They can provide a steering
  * direction, but the AI always has final say on the 3-5 word framing to guard
@@ -13,7 +14,7 @@
 import { Request, Response } from 'express';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { confirmTopicFrameRequestSchema } from '@meet-without-fear/shared';
+import { confirmTopicFrameRequestSchema, refineTopicFrameRequestSchema } from '@meet-without-fear/shared';
 import { successResponse, errorResponse } from '../utils/response';
 import { isSessionCreator } from '../utils/session';
 import { getSonnetResponse, BrainActivityCallType } from '../lib/bedrock';
@@ -90,10 +91,10 @@ export async function generateTopicFrame(req: Request, res: Response): Promise<v
       messages: [
         {
           role: 'user',
-          content: `The user is drafting an invitation for their partner to join a conflict resolution session. Here is the invitation message they have written:\n\n"${invitationRecord.invitationMessage}"\n\nGenerate a neutral topic frame (3-5 words) that captures what this conflict is about. Think through several candidates, critique them, then output your final choice on the last line.`,
+          content: `The user is drafting an invitation for their partner to join a conflict resolution session. Here is the invitation message they have written:\n\n"${invitationRecord.invitationMessage}"\n\nGenerate one neutral topic frame that captures what this conflict is about. Output ONLY the topic frame text.`,
         },
       ],
-      maxTokens: 300,
+      maxTokens: 80,
       sessionId,
       turnId,
       operation: 'topic-frame-generate',
@@ -206,10 +207,10 @@ export async function confirmTopicFrame(req: Request, res: Response): Promise<vo
         messages: [
           {
             role: 'user',
-            content: `${contextParts.join('\n\n')}\n\nGenerate the final neutral topic frame (3-5 words). Think through several candidates, critique them, then output your final choice on the last line. You have final say on the framing — guard against inappropriate or blaming language.`,
+            content: `${contextParts.join('\n\n')}\n\nGenerate the final neutral topic frame. Output ONLY the topic frame text. You have final say on the framing — guard against inappropriate or blaming language.`,
           },
         ],
-        maxTokens: 300,
+        maxTokens: 80,
         sessionId,
         turnId,
         operation: 'topic-frame-confirm',
@@ -249,6 +250,109 @@ export async function confirmTopicFrame(req: Request, res: Response): Promise<vo
   }
 }
 
+/**
+ * Refine the proposed topic frame without confirming it.
+ * POST /sessions/:id/topic-frame/refine
+ */
+export async function refineTopicFrame(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const sessionId = req.params.id;
+    const parseResult = refineTopicFrameRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.issues);
+      return;
+    }
+
+    const isCreator = await isSessionCreator(sessionId, user.id);
+    if (!isCreator) {
+      errorResponse(res, 'FORBIDDEN', 'Only the session creator can refine a topic frame', 403);
+      return;
+    }
+
+    const session = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        relationship: { members: { some: { userId: user.id } } },
+      },
+      include: {
+        invitations: {
+          where: { invitedById: user.id },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { invitationMessage: true },
+        },
+      },
+    });
+
+    if (!session) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+
+    const invitationMessage = session.invitations[0]?.invitationMessage;
+    if (!invitationMessage) {
+      errorResponse(res, 'VALIDATION_ERROR', 'No invitation message found — draft the invitation first', 400);
+      return;
+    }
+
+    const { message, history } = parseResult.data;
+    const historyText = (history ?? [])
+      .map((item) => `${item.role === 'user' ? 'User' : 'Coach'}: ${item.content}`)
+      .join('\n');
+
+    const turnId = `${sessionId}-${user.id}-topic-frame-refine`;
+    const aiGenerated = await getSonnetResponse({
+      systemPrompt: TOPIC_FRAME_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            `Invitation message: "${invitationMessage}"`,
+            session.topicFrame ? `Current proposed topic frame: "${session.topicFrame}"` : null,
+            historyText ? `Recent topic refinement chat:\n${historyText}` : null,
+            `The user wants to adjust the topic direction with this message: "${message}"`,
+            'Generate the next neutral topic frame proposal. Output ONLY the topic frame text. You have final say on the framing — guard against inappropriate or blaming language.',
+          ].filter(Boolean).join('\n\n'),
+        },
+      ],
+      maxTokens: 80,
+      sessionId,
+      turnId,
+      operation: 'topic-frame-refine',
+      callType: BrainActivityCallType.ORCHESTRATED_RESPONSE,
+    });
+
+    const topicFrame = normalizeTopicFrame(aiGenerated);
+    if (!topicFrame) {
+      logger.warn(`[refineTopicFrame] Invalid topic frame from AI for session ${sessionId}: "${aiGenerated}"`);
+      errorResponse(res, 'INTERNAL_ERROR', 'Failed to refine topic frame', 500);
+      return;
+    }
+
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        topicFrame,
+        topicFrameConfirmedAt: null,
+      },
+    });
+
+    successResponse(res, {
+      response: "I'd try this framing.",
+      topicFrame,
+    });
+  } catch (error) {
+    logger.error('[refineTopicFrame] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to refine topic frame', 500);
+  }
+}
+
 // ============================================================================
 // Prompt
 // ============================================================================
@@ -256,14 +360,6 @@ export async function confirmTopicFrame(req: Request, res: Response): Promise<vo
 const TOPIC_FRAME_SYSTEM_PROMPT = `You are generating a neutral topic frame for a conflict resolution session.
 
 Based on the user's invitation message (written during Stage 0 invite drafting), produce a SHORT, NEUTRAL phrase (3-5 words) that describes the conflict topic. This will be shown to the other person when they receive the invitation, so they know what conflict they've been invited to engage with.
-
-PROCESS:
-First, think through 3-5 candidate topic frames. For each one, briefly critique it:
-- Is it too clinical or jargon-heavy? (e.g. "Communication frequency expectations" — bad, sounds like a therapy textbook)
-- Is it too vague? (e.g. "Relationship issues" — bad, could mean anything)
-- Is it a thinly disguised restatement of one side? (e.g. "Excessive contact requests" — bad, takes a side)
-- Does it capture the real-world situation in plain language the other person would recognize?
-Then pick the best one, or synthesize a better option from your candidates.
 
 RULES:
 - 3-5 words only for the final topic.
@@ -273,7 +369,7 @@ RULES:
 - Do NOT include names.
 
 OUTPUT FORMAT:
-Write your thinking and candidates first, then on the last line write ONLY the final topic frame text (no quotes, no label, no explanation).
+Write ONLY the final topic frame text. No quotes, no label, no explanation, no candidate list.
 
 GOOD EXAMPLES of final topics:
 - Tuesday pickup disagreement
@@ -298,7 +394,7 @@ BAD EXAMPLES (too blaming):
 - When you lied
 - Your spending habits`;
 
-function normalizeTopicFrame(raw: string | null | undefined): string | null {
+export function normalizeTopicFrame(raw: string | null | undefined): string | null {
   if (!raw) return null;
 
   // The response may contain thinking/critique lines followed by the final topic
@@ -308,11 +404,25 @@ function normalizeTopicFrame(raw: string | null | undefined): string | null {
   const finalLine = lines[lines.length - 1];
   if (!finalLine) return null;
 
-  const candidate = finalLine
+  const candidate = cleanTopicFrameCandidate(finalLine);
+  if (candidate) return candidate;
+
+  const candidateMatches = [...raw.matchAll(/\*{0,2}\s*candidate\s+\d+\s*:\s*["“]([^"”\n]+)["”]/gi)];
+  for (let i = candidateMatches.length - 1; i >= 0; i--) {
+    const fallback = cleanTopicFrameCandidate(candidateMatches[i][1]);
+    if (fallback) return fallback;
+  }
+
+  return null;
+}
+
+function cleanTopicFrameCandidate(raw: string): string | null {
+  const candidate = raw
     .trim()
     .replace(/^[-•*]\s*/, '') // strip leading bullet
-    .replace(/^(?:final\s+(?:topic|choice|frame)|topic\s+frame|topic)\s*:\s*/i, '')
+    .replace(/^(?:final\s+(?:topic\s+frame|topic|choice|frame)|topic\s+frame|topic)\s*:\s*/i, '')
     .replace(/^["']|["']$/g, '')
+    .replace(/[.!?;:]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -320,7 +430,7 @@ function normalizeTopicFrame(raw: string | null | undefined): string | null {
   if (/[.!?;:]/.test(candidate)) return null;
 
   const words = candidate.split(' ').filter(Boolean);
-  if (words.length < 3 || words.length > 5) return null;
+  if (words.length < 2 || words.length > 6) return null;
 
   return candidate;
 }

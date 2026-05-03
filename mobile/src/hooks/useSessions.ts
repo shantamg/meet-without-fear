@@ -171,6 +171,10 @@ export function useCreateSession(
       // Invalidate session list to show new session
       queryClient.invalidateQueries({ queryKey: sessionKeys.lists() });
 
+      if (!data.session) {
+        return;
+      }
+
       // Pre-populate the cache with the new session
       queryClient.setQueryData(sessionKeys.detail(data.session.id), {
         session: data.session,
@@ -383,6 +387,11 @@ interface TopicFrameResponse {
   confirmedAt?: string;
 }
 
+interface RefineTopicFrameResponse {
+  response: string;
+  topicFrame: string;
+}
+
 /**
  * Generate an AI-proposed topic frame from the current Stage 0 invitation draft.
  */
@@ -433,6 +442,69 @@ export function useGenerateTopicFrame(
               topicFrameConfirmedAt: data.alreadyConfirmed
                 ? (data.confirmedAt ?? old.invitation.topicFrameConfirmedAt ?? new Date().toISOString())
                 : null,
+            },
+          };
+        }
+      );
+      onSuccess?.(data, variables, onMutateResult, context);
+    },
+    ...restOptions,
+  });
+}
+
+/**
+ * Refine the proposed topic frame without confirming it.
+ */
+export function useRefineTopicFrame(
+  options?: Omit<
+    UseMutationOptions<
+      RefineTopicFrameResponse,
+      ApiClientError,
+      {
+        sessionId: string;
+        message: string;
+        history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+      }
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+  const { onSuccess, ...restOptions } = options ?? {};
+
+  return useMutation({
+    mutationFn: async ({ sessionId, message, history }) => {
+      return post<RefineTopicFrameResponse>(
+        `/sessions/${sessionId}/topic-frame/refine`,
+        history ? { message, history } : { message }
+      );
+    },
+    onSuccess: (data, variables, onMutateResult, context) => {
+      const { sessionId } = variables;
+      queryClient.setQueryData<SessionStateResponse>(
+        sessionKeys.state(sessionId),
+        (old) => {
+          if (!old?.invitation) return old;
+          return {
+            ...old,
+            invitation: {
+              ...old.invitation,
+              topicFrame: data.topicFrame,
+              topicFrameConfirmedAt: null,
+            },
+          };
+        }
+      );
+      queryClient.setQueryData<SessionInvitationResponse>(
+        sessionKeys.sessionInvitation(sessionId),
+        (old) => {
+          if (!old?.invitation) return old;
+          return {
+            ...old,
+            invitation: {
+              ...old.invitation,
+              topicFrame: data.topicFrame,
+              topicFrameConfirmedAt: null,
             },
           };
         }

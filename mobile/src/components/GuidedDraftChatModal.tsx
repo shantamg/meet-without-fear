@@ -27,6 +27,7 @@ export interface GuidedDraftChatModalProps {
   proposalTitle: string;
   proposalSubtitle: string;
   finalActionLabel: string;
+  finalActionLatestOnly?: boolean;
   onSendMessage: (content: string) => void;
   onFinalize: (content: string) => void;
   onClose: () => void;
@@ -47,6 +48,7 @@ export function GuidedDraftChatModal({
   proposalTitle,
   proposalSubtitle,
   finalActionLabel,
+  finalActionLatestOnly = false,
   onSendMessage,
   onFinalize,
   onClose,
@@ -56,10 +58,12 @@ export function GuidedDraftChatModal({
   testID = 'guided-draft-chat-modal',
 }: GuidedDraftChatModalProps) {
   const insets = useSafeAreaInsets();
+  const latestProposalMessageId = [...messages].reverse().find((message) => message.proposedContent)?.id ?? null;
 
   const renderMessageExtra = useCallback((message: ChatMessage) => {
     const draftMessage = message as GuidedDraftMessage;
     if (!draftMessage.proposedContent) return null;
+    const showFinalAction = !finalActionLatestOnly || draftMessage.id === latestProposalMessageId;
 
     return (
       <View style={styles.draftCard}>
@@ -68,24 +72,28 @@ export function GuidedDraftChatModal({
           <Text style={styles.draftSubtitle}>{proposalSubtitle}</Text>
         </View>
         <Text style={styles.draftContent}>"{draftMessage.proposedContent}"</Text>
-        <TouchableOpacity
-          style={[styles.finalButton, isFinalizing && styles.finalButtonDisabled]}
-          onPress={() => onFinalize(draftMessage.proposedContent!)}
-          disabled={isFinalizing}
-          testID={finalButtonTestID || `${testID}-final-button`}
-        >
-          {isFinalizing ? (
-            <ActivityIndicator size="small" color={colors.textPrimary} />
-          ) : (
-            <Text style={styles.finalButtonText}>{finalActionLabel}</Text>
-          )}
-        </TouchableOpacity>
+        {showFinalAction ? (
+          <TouchableOpacity
+            style={[styles.finalButton, isFinalizing && styles.finalButtonDisabled]}
+            onPress={() => onFinalize(draftMessage.proposedContent!)}
+            disabled={isFinalizing}
+            testID={finalButtonTestID || `${testID}-final-button`}
+          >
+            {isFinalizing ? (
+              <ActivityIndicator size="small" color={colors.textPrimary} />
+            ) : (
+              <Text style={styles.finalButtonText}>{finalActionLabel}</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
       </View>
     );
   }, [
     finalActionLabel,
+    finalActionLatestOnly,
     isFinalizing,
     finalButtonTestID,
+    latestProposalMessageId,
     onFinalize,
     proposalSubtitle,
     proposalTitle,

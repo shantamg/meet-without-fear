@@ -14,7 +14,12 @@ export default function SessionScreen() {
   const router = useRouter();
 
   const handleNavigateBack = () => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/(auth)/(tabs)');
   };
 
   const handleStageComplete = (stage: Stage) => {

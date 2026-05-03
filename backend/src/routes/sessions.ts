@@ -30,7 +30,7 @@ import {
   markShareTabViewed,
   getUnreadSessionCount,
 } from '../controllers/sessions';
-import { generateTopicFrame, confirmTopicFrame } from '../controllers/topic-frame';
+import { generateTopicFrame, refineTopicFrame, confirmTopicFrame } from '../controllers/topic-frame';
 import { getSessionState } from '../controllers/session-state';
 import { getLinkedInnerThoughts } from '../controllers/inner-work';
 import { getTimeline } from '../controllers/timeline';
@@ -130,6 +130,13 @@ router.post('/sessions/:id/invitation/confirm', requireAuth, requireSessionAcces
  * @access Private - requires authentication and session access (creator only)
  */
 router.post('/sessions/:id/topic-frame/generate', requireAuth, requireSessionAccess, asyncHandler(generateTopicFrame));
+
+/**
+ * @route POST /api/v1/sessions/:id/topic-frame/refine
+ * @description Refine the proposed session topic frame without confirming it
+ * @access Private - requires authentication and session access (creator only)
+ */
+router.post('/sessions/:id/topic-frame/refine', requireAuth, requireSessionAccess, asyncHandler(refineTopicFrame));
 
 /**
  * @route POST /api/v1/sessions/:id/topic-frame/confirm
