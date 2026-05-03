@@ -619,7 +619,7 @@ export async function consentToShareNeeds(
       await notifyPartner(sessionId, partnerId, 'partner.needs_shared', {
         stage: 3,
         sharedBy: user.id,
-        commonGroundReady: partnerShared,
+        needsRevealReady: partnerShared,
       });
     }
 
@@ -635,7 +635,7 @@ export async function consentToShareNeeds(
       consented: true,
       sharedAt: now.toISOString(),
       waitingForPartner: !partnerShared,
-      commonGroundReady: partnerShared,
+      needsRevealReady: partnerShared,
     });
   } catch (error) {
     logger.error('[consentToShareNeeds] Error:', error);

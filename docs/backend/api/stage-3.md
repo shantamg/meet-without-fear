@@ -11,18 +11,19 @@ Endpoints for identifying needs, confirming them, and validating revealed needs 
 
 ## Overview
 
-Stage 3 transforms complaints and emotions into universal human needs, then both partners validate each other's revealed needs before advancing.
+Stage 3 helps each user articulate what matters to them in needs language, then both partners validate the side-by-side needs reveal before advancing.
 
 Key concepts:
-- **Need synthesis**: AI extracts needs from Stage 1-2 content
-- **Need confirmation**: User validates extracted needs
-- **Needs validation**: Both partners confirm they have reviewed each other's revealed needs
+- **Need articulation**: Each user chats with AI and names their own needs
+- **Need confirmation**: User confirms the needs language before anything is shared
+- **Needs consent**: User explicitly consents before confirmed needs are revealed
+- **Needs reveal validation**: Both partners review the side-by-side reveal and validate it before Stage 4
 
 ---
 
-## Get Synthesized Needs
+## Get Captured Needs
 
-Get AI-synthesized needs for the current user based on their Stage 1-2 content.
+Get the current user's captured needs.
 
 ```
 GET /api/v1/sessions/:id/needs
@@ -98,7 +99,7 @@ enum NeedCategory {
 
 ### Behavior
 
-`GET /needs` is a direct read — it returns the stored `IdentifiedNeed` rows for the caller without triggering AI extraction. Needs are created via the capture flow, not on-demand. `extracting` is always `false`; `synthesizedAt` is `null` when no needs exist.
+`GET /needs` is a direct read — it returns the stored `IdentifiedNeed` rows for the caller without triggering AI extraction. Needs are created only through explicit capture or user add/edit actions after Stage 3 conversation. `extracting` is always `false`; `synthesizedAt` is `null` when no needs exist.
 
 Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response includes both `need` and `description` fields carrying the same string (`description` is a compatibility alias).
 
@@ -106,7 +107,7 @@ Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response i
 
 ## Confirm Needs
 
-Confirm or adjust AI-synthesized needs.
+Confirm or adjust captured needs.
 
 ```
 POST /api/v1/sessions/:id/needs/confirm
@@ -206,14 +207,15 @@ interface ConsentShareNeedsResponse {
   consented: boolean;
   sharedAt: string;
   waitingForPartner: boolean;
+  needsRevealReady: boolean;
 }
 ```
 
 ### Side Effects
 
-1. Selected needs transformed and added to SharedVessel
-2. Partner notified
-3. Creates `ConsentRecord` rows with `targetType = IDENTIFIED_NEED`, links ConsentedContent
+1. Creates `ConsentRecord` rows with `targetType = IDENTIFIED_NEED`
+2. Sets the caller's `needsShared` gate
+3. Notifies clients when both users have consented and the side-by-side reveal is ready
 
 Validation: needIds must reference confirmed needs; at least 1. Consenting sets the caller's `needsShared` gate and moves the caller's Stage-3 status to `GATE_PENDING`. The partner-side check `partnerProgress.gatesSatisfied.needsShared === true` (surfaced via the `hasPartnerSharedNeeds` helper) is what unblocks the needs-validation step.
 
@@ -287,16 +289,17 @@ The partner-side check reads `partnerProgress.gatesSatisfied.needsShared`; there
 
 ```mermaid
 flowchart TD
-    Enter[Enter Stage 3] --> Synthesize[AI synthesizes needs]
-    Synthesize --> Present[Present needs to user]
-    Present --> Confirm{Confirm needs?}
+    Enter[Enter Stage 3] --> Explore[User articulates needs with AI]
+    Explore --> Capture[Capture suggested needs language]
+    Capture --> Confirm{User confirms needs?}
     Confirm -->|Adjust| Refine[User adjusts]
-    Refine --> Present
+    Refine --> Capture
     Confirm -->|Yes| Consent[Consent to share]
     Consent --> Wait{Partner shared?}
     Wait -->|No| WaitState[Waiting]
     Wait -->|Yes| ShowNeeds[View partner needs side-by-side]
-    ShowNeeds --> Validate[Validate revealed needs]
+    ShowNeeds --> Notice[AI asks: What do you notice?]
+    Notice --> Validate[Validate revealed needs]
     Validate --> BothValidated{Both validated?}
     BothValidated -->|No| WaitPartner[Wait for partner]
     BothValidated -->|Yes| Advance[Advance to Stage 4]
@@ -323,7 +326,6 @@ See [Retrieval Contracts: Stage 3](../state-machine/retrieval-contracts.md#stage
 ## Related Documentation
 
 - [Stage 3: What Matters](../../stages/stage-3-what-matters.md)
-- [Need Extraction Prompt](../prompts/need-extraction.md)
 - [Universal Needs Framework](../../stages/stage-3-what-matters.md#universal-needs-framework)
 
 ---

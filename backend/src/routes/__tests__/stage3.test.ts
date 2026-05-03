@@ -685,7 +685,7 @@ describe('Stage 3 API', () => {
           data: expect.objectContaining({
             consented: true,
             waitingForPartner: false,
-            commonGroundReady: true,
+            needsRevealReady: true,
           }),
         })
       );
