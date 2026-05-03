@@ -495,11 +495,19 @@ function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey
     args = [...sessionArgs, config.commandSlug, '', promptFile, ts];
   }
 
+  // Extract thread_ts from tKey so run-claude.sh can pass it to the queue.
+  // Without this, queued thread replies have no thread_ts and the
+  // process-queue cancellation check uses conversations.history (which
+  // doesn't return threaded replies), falsely concluding the message was
+  // deleted and cancelling the job (#562 follow-up).
+  const threadTs = tKey ? (tKey.split(':')[1] || '') : '';
+
   const env = {
     ...process.env,
     SLAM_BOT: '1',
     PRIORITY: 'high',
     CHANNEL: channel,
+    THREAD_TS: threadTs,
     PROVENANCE_CHANNEL: provenance.channel || '',
     PROVENANCE_REQUESTER: provenance.requester || '',
     PROVENANCE_MESSAGE: provenance.message || '',
@@ -507,7 +515,6 @@ function dispatchAgent(channel, ts, config, promptContent, provenance = {}, tKey
 
   // MWF session thread context for state file lookup
   if (config.workspace === 'mwf-session' && tKey) {
-    const threadTs = tKey.split(':')[1] || '';
     env.MWF_THREAD_TS = threadTs;
     env.MWF_CHANNEL = channel;
     env.MWF_ENTRY_STAGE = threadTs === ts ? '0-onboarding' : 'route';
