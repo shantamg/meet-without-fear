@@ -1671,7 +1671,7 @@ export class StateFactory {
       userBEmpathyShared: new Date(baseTime - 150000),
       empathyValidated: new Date(baseTime - 120000),
       needsIdentified: new Date(baseTime - 60000),
-      commonGroundConfirmed: new Date(baseTime - 30000),
+      needsValidated: new Date(baseTime - 30000),
       stage3Completed: now,
     };
 
@@ -1742,8 +1742,8 @@ export class StateFactory {
         gatesSatisfied: {
           needsIdentified: true,
           needsIdentifiedAt: timestamps.needsIdentified.toISOString(),
-          commonGroundConfirmed: true,
-          commonGroundConfirmedAt: timestamps.commonGroundConfirmed.toISOString(),
+          needsValidated: true,
+          needsValidatedAt: timestamps.needsValidated.toISOString(),
         },
       },
     });
@@ -1860,8 +1860,8 @@ export class StateFactory {
         gatesSatisfied: {
           needsIdentified: true,
           needsIdentifiedAt: timestamps.needsIdentified.toISOString(),
-          commonGroundConfirmed: true,
-          commonGroundConfirmedAt: timestamps.commonGroundConfirmed.toISOString(),
+          needsValidated: true,
+          needsValidatedAt: timestamps.needsValidated.toISOString(),
         },
       },
     });
@@ -1923,31 +1923,6 @@ export class StateFactory {
       ],
     });
 
-    // ========================================
-    // COMMON GROUND
-    // ========================================
-
-    // Create common ground entries (shared needs)
-    await tx.commonGround.createMany({
-      data: [
-        {
-          sharedVesselId: sharedVessel.id,
-          need: 'Mutual Recognition',
-          category: 'RECOGNITION',
-          confirmedByA: true,
-          confirmedByB: true,
-          confirmedAt: timestamps.commonGroundConfirmed,
-        },
-        {
-          sharedVesselId: sharedVessel.id,
-          need: 'Collaborative Partnership',
-          category: 'FAIRNESS',
-          confirmedByA: true,
-          confirmedByB: true,
-          confirmedAt: timestamps.commonGroundConfirmed,
-        },
-      ],
-    });
   }
 
   /**
@@ -1976,7 +1951,7 @@ export class StateFactory {
     const timestamps = {
       empathyValidated: new Date(baseTime - 300000),
       needsIdentified: new Date(baseTime - 240000),
-      commonGroundConfirmed: new Date(baseTime - 180000),
+      needsValidated: new Date(baseTime - 180000),
       stage3Completed: new Date(baseTime - 150000),
       strategiesCollected: new Date(baseTime - 120000),
       strategiesRanked: new Date(baseTime - 90000),
@@ -2051,7 +2026,7 @@ export class StateFactory {
         completedAt: timestamps.stage3Completed,
         gatesSatisfied: {
           needsIdentified: true,
-          commonGroundConfirmed: true,
+          needsValidated: true,
         },
       },
     });
@@ -2127,7 +2102,7 @@ export class StateFactory {
         completedAt: timestamps.stage3Completed,
         gatesSatisfied: {
           needsIdentified: true,
-          commonGroundConfirmed: true,
+          needsValidated: true,
         },
       },
     });
@@ -2191,28 +2166,6 @@ export class StateFactory {
           aiConfidence: 0.95,
           confirmed: true,
           createdAt: timestamps.needsIdentified,
-        },
-      ],
-    });
-
-    // Common ground
-    await tx.commonGround.createMany({
-      data: [
-        {
-          sharedVesselId: sharedVessel.id,
-          need: 'Mutual Recognition',
-          category: 'RECOGNITION',
-          confirmedByA: true,
-          confirmedByB: true,
-          confirmedAt: timestamps.commonGroundConfirmed,
-        },
-        {
-          sharedVesselId: sharedVessel.id,
-          need: 'Collaborative Partnership',
-          category: 'FAIRNESS',
-          confirmedByA: true,
-          confirmedByB: true,
-          confirmedAt: timestamps.commonGroundConfirmed,
         },
       ],
     });

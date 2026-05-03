@@ -89,9 +89,7 @@ export type SessionEventType =
   | 'empathy.status_updated' // Reconciler completed, empathy statuses changed
   // Stage 3: Need Mapping events
   | 'partner.needs_confirmed' // Partner confirmed their identified needs
-  | 'partner.needs_shared' // Partner consented to share needs for common ground
-  | 'session.common_ground_ready' // Common ground analysis complete (both shared)
-  | 'partner.common_ground_confirmed' // Partner confirmed common ground items
+  | 'partner.needs_shared' // Partner consented to share needs
   // Stage 4: Strategic Repair events
   | 'partner.ranking_submitted'
   | 'partner.ready_to_rank'

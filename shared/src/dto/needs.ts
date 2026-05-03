@@ -79,6 +79,7 @@ export interface ConsentShareNeedsResponse {
   consented: boolean;
   sharedAt: string;
   waitingForPartner: boolean;
+  needsRevealReady?: boolean;
 }
 
 // ============================================================================
