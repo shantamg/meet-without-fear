@@ -30,6 +30,7 @@ import { getWaitingStatusConfig, WaitingStatusConfig } from '../config/waitingSt
 export type AboveInputPanel =
   | 'topic-proposal' // AI-proposed topic awaiting Use/Refine (Stage 0, inviter)
   | 'invitation' // Invitation share panel for inviters
+  | 'invitee-topic-ack' // Invitee Stage 0 topic-acknowledgement Ready bar
   | 'empathy-statement' // Empathy statement review panel
   | 'feel-heard' // Feel heard confirmation panel
   | 'share-suggestion' // Share suggestion from reconciler (Subject side)
@@ -66,6 +67,11 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   hasTopicConfirmed: boolean;
   invitationPanelDismissed: boolean;
   isConfirmingInvitation: boolean;
+
+  // Invitee Stage 0: topic-acknowledgement step. When true, the invitee has
+  // signed the compact and is on the topic-ack screen (showing the inviter's
+  // confirmed topicFrame with a Ready bar). Hides chat input.
+  inviteeTopicAckPending: boolean;
 
   // Stage 0: AI-proposed topic awaiting user decision (Use / Refine).
   // The topic-proposal panel appears for the inviter when the AI has emitted
@@ -136,6 +142,7 @@ export interface ChatUIState {
   panels: {
     showTopicProposalPanel: boolean;
     showInvitationPanel: boolean;
+    showInviteeTopicAckPanel: boolean;
     showEmpathyPanel: boolean;
     showFeelHeardPanel: boolean;
     showShareSuggestionPanel: boolean;
@@ -442,6 +449,11 @@ function computeAboveInputPanel(
     return 'invitation';
   }
 
+  // Priority 2b: Invitee topic acknowledgement (Stage 0, after compact signed)
+  if (panels.showInviteeTopicAckPanel) {
+    return 'invitee-topic-ack';
+  }
+
   // Priority 3: Feel heard panel (Stage 1)
   if (panels.showFeelHeardPanel) {
     return 'feel-heard';
@@ -522,6 +534,11 @@ function computeShouldHideInput(
     return true;
   }
 
+  // Invitee Stage 0 topic acknowledgement: hide input until they tap Ready
+  if (aboveInputPanel === 'invitee-topic-ack') {
+    return true;
+  }
+
   // Note: hasUnviewedSharedContext no longer hides input.
   // The notification popup already surfaces the shared context to the user,
   // so requiring them to also open the Activity menu is unnecessary friction.
@@ -581,6 +598,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   // Step 3: Compute individual panel visibility
   const showTopicProposalPanel = computeShowTopicProposalPanel(inputs);
   const showInvitationPanel = computeShowInvitationPanel(inputs);
+  const showInviteeTopicAckPanel = !inputs.isInviter && inputs.inviteeTopicAckPending;
   const showEmpathyPanel = computeShowEmpathyPanel(inputs);
   const showFeelHeardPanel = computeShowFeelHeardPanel(inputs);
   const showShareSuggestionPanel = computeShowShareSuggestionPanel(inputs);
@@ -592,6 +610,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const panels = {
     showTopicProposalPanel,
     showInvitationPanel,
+    showInviteeTopicAckPanel,
     showEmpathyPanel,
     showFeelHeardPanel,
     showShareSuggestionPanel,
@@ -665,6 +684,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     topicFrameProposed: null,
     topicProposalDismissed: false,
     isConfirmingTopicFrame: false,
+    inviteeTopicAckPending: false,
     showFeelHeardConfirmation: false,
     feelHeardConfirmedAt: undefined,
     isConfirmingFeelHeard: false,

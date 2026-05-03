@@ -832,18 +832,27 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
       return;
     }
 
-    // Already confirmed
+    // Idempotent short-circuit: only return early if Stage 0 is already
+    // marked completed for this user. messageConfirmed alone is no longer
+    // sufficient because confirmTopicFrame now flips it eagerly so the
+    // partner can accept the link before the inviter closes the share modal.
     if (invitation.messageConfirmed) {
-      successResponse(res, {
-        confirmed: true,
-        invitation: {
-          id: invitation.id,
-          messageConfirmed: true,
-          messageConfirmedAt: invitation.messageConfirmedAt?.toISOString() ?? null,
-          topicFrame: session.topicFrame ?? null,
-        },
+      const stage0 = await prisma.stageProgress.findFirst({
+        where: { sessionId, userId: user.id, stage: 0 },
+        select: { status: true },
       });
-      return;
+      if (stage0?.status === 'COMPLETED') {
+        successResponse(res, {
+          confirmed: true,
+          invitation: {
+            id: invitation.id,
+            messageConfirmed: true,
+            messageConfirmedAt: invitation.messageConfirmedAt?.toISOString() ?? null,
+            topicFrame: session.topicFrame ?? null,
+          },
+        });
+        return;
+      }
     }
 
     if (!session.topicFrame || !session.topicFrameConfirmedAt) {

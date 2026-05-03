@@ -71,6 +71,9 @@ export interface UseChatUIStateProps {
   topicProposalDismissed: boolean;
   isConfirmingTopicFrame: boolean;
 
+  // Invitee Stage 0 topic acknowledgement (between sign-compact and Stage 1 chat)
+  inviteeTopicAckPending: boolean;
+
   // Stage 1: Feel heard
   showFeelHeardConfirmation: boolean;
   feelHeardConfirmedAt: string | null | undefined;
@@ -184,6 +187,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     topicFrameProposed,
     topicProposalDismissed,
     isConfirmingTopicFrame,
+    inviteeTopicAckPending,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -255,6 +259,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     topicFrameProposed,
     topicProposalDismissed,
     isConfirmingTopicFrame,
+    inviteeTopicAckPending,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -314,6 +319,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     topicFrameProposed,
     topicProposalDismissed,
     isConfirmingTopicFrame,
+    inviteeTopicAckPending,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,

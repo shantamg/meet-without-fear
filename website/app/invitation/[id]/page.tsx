@@ -508,7 +508,7 @@ function SuccessState() {
           Your account has been created and linked to this session. Open the app to get started.
         </p>
         <a
-          href="https://app.meetwithoutfear.com/"
+          href={process.env.NEXT_PUBLIC_APP_URL || "https://app.meetwithoutfear.com/"}
           className="inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-accent/90 transition-all"
         >
           Open Meet Without Fear
