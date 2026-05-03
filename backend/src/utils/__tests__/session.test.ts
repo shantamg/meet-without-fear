@@ -7,6 +7,7 @@
 
 import {
   generateSessionStatusSummary,
+  mapSessionToSummary,
 } from '../session';
 import {
   SessionStatus,
@@ -308,5 +309,129 @@ describe('generateSessionStatusSummary', () => {
       );
       expect(result.partnerStatus).toBe('Partner will join when ready');
     });
+  });
+});
+
+describe('mapSessionToSummary - Stage 2 selfActionNeeded', () => {
+  const USER_ID = 'user-1';
+  const PARTNER_ID = 'user-2';
+
+  function makeSession(overrides: {
+    empathyAttempts?: Array<{ sourceUserId: string | null; status?: string }>;
+    myStage?: number;
+    myStatus?: string;
+  } = {}) {
+    return {
+      id: 'session-1',
+      relationshipId: 'rel-1',
+      status: 'ACTIVE',
+      createdAt: new Date('2024-01-01'),
+      updatedAt: new Date('2024-01-02'),
+      relationship: {
+        members: [
+          { userId: USER_ID, nickname: null, user: { id: USER_ID, name: 'User', firstName: 'User' } },
+          { userId: PARTNER_ID, nickname: null, user: { id: PARTNER_ID, name: 'Partner', firstName: 'Partner' } },
+        ],
+      },
+      stageProgress: [
+        {
+          userId: USER_ID,
+          stage: overrides.myStage ?? Stage.PERSPECTIVE_STRETCH,
+          status: overrides.myStatus ?? 'IN_PROGRESS',
+          startedAt: new Date('2024-01-01'),
+          completedAt: null,
+        },
+        {
+          userId: PARTNER_ID,
+          stage: Stage.PERSPECTIVE_STRETCH,
+          status: 'IN_PROGRESS',
+          startedAt: new Date('2024-01-01'),
+          completedAt: null,
+        },
+      ],
+      empathyAttempts: overrides.empathyAttempts ?? [],
+      userVessels: [],
+    };
+  }
+
+  it('shows selfActionNeeded when user has not sent empathy yet', () => {
+    const session = makeSession({ empathyAttempts: [] });
+    const result = mapSessionToSummary(session, USER_ID);
+    expect(result.selfActionNeeded).toContain('continue_stage');
+  });
+
+  it('shows selfActionNeeded when user empathy is REFINING', () => {
+    const session = makeSession({
+      empathyAttempts: [
+        { sourceUserId: USER_ID, status: 'REFINING' },
+        { sourceUserId: PARTNER_ID, status: 'HELD' },
+      ],
+    });
+    const result = mapSessionToSummary(session, USER_ID);
+    expect(result.selfActionNeeded).toContain('continue_stage');
+  });
+
+  it('shows selfActionNeeded when partner empathy is REVEALED (needs validation)', () => {
+    const session = makeSession({
+      empathyAttempts: [
+        { sourceUserId: USER_ID, status: 'READY' },
+        { sourceUserId: PARTNER_ID, status: 'REVEALED' },
+      ],
+    });
+    const result = mapSessionToSummary(session, USER_ID);
+    expect(result.selfActionNeeded).toContain('continue_stage');
+  });
+
+  it('shows selfActionNeeded when partner empathy is AWAITING_SHARING', () => {
+    const session = makeSession({
+      empathyAttempts: [
+        { sourceUserId: USER_ID, status: 'READY' },
+        { sourceUserId: PARTNER_ID, status: 'AWAITING_SHARING' },
+      ],
+    });
+    const result = mapSessionToSummary(session, USER_ID);
+    expect(result.selfActionNeeded).toContain('continue_stage');
+  });
+
+  it('does NOT show selfActionNeeded when user empathy is READY and partner is still working', () => {
+    const session = makeSession({
+      empathyAttempts: [
+        { sourceUserId: USER_ID, status: 'READY' },
+        { sourceUserId: PARTNER_ID, status: 'REFINING' },
+      ],
+    });
+    const result = mapSessionToSummary(session, USER_ID);
+    expect(result.selfActionNeeded).not.toContain('continue_stage');
+  });
+
+  it('does NOT show selfActionNeeded when user empathy is READY and partner is HELD', () => {
+    const session = makeSession({
+      empathyAttempts: [
+        { sourceUserId: USER_ID, status: 'READY' },
+        { sourceUserId: PARTNER_ID, status: 'HELD' },
+      ],
+    });
+    const result = mapSessionToSummary(session, USER_ID);
+    expect(result.selfActionNeeded).not.toContain('continue_stage');
+  });
+
+  it('does NOT show selfActionNeeded when user empathy is VALIDATED and partner is ANALYZING', () => {
+    const session = makeSession({
+      empathyAttempts: [
+        { sourceUserId: USER_ID, status: 'VALIDATED' },
+        { sourceUserId: PARTNER_ID, status: 'ANALYZING' },
+      ],
+    });
+    const result = mapSessionToSummary(session, USER_ID);
+    expect(result.selfActionNeeded).not.toContain('continue_stage');
+  });
+
+  it('still shows selfActionNeeded for non-Stage-2 IN_PROGRESS', () => {
+    const session = makeSession({
+      myStage: Stage.WITNESS,
+      empathyAttempts: [],
+    });
+    const result = mapSessionToSummary(session, USER_ID);
+    expect(result.selfActionNeeded).toContain('continue_stage');
   });
 });

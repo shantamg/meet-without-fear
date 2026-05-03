@@ -61,7 +61,7 @@ export const sessionSwitchHandler: IntentHandler = {
           userVessels: true,
           // Include empathy attempts to show correct Stage 2 status
           empathyAttempts: {
-            select: { sourceUserId: true },
+            select: { sourceUserId: true, status: true },
           },
         },
       });
@@ -92,7 +92,7 @@ export const sessionSwitchHandler: IntentHandler = {
           userVessels: true,
           // Include empathy attempts to show correct Stage 2 status
           empathyAttempts: {
-            select: { sourceUserId: true },
+            select: { sourceUserId: true, status: true },
           },
         },
       });
