@@ -9,7 +9,6 @@
  * - POST /sessions/:id/resolve - Resolve session
  * - POST /sessions/:id/stages/advance - Advance to next stage
  * - GET /sessions/:id/invitation - Get invitation details
- * - PUT /sessions/:id/invitation/message - Update invitation message
  * - POST /sessions/:id/invitation/confirm - Confirm invitation message
  */
 
@@ -773,7 +772,6 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
       invitation: {
         id: invitation.id,
         name: invitation.name,
-        invitationMessage: invitation.invitationMessage,
         messageConfirmed: invitation.messageConfirmed,
         messageConfirmedAt: invitation.messageConfirmedAt?.toISOString() ?? null,
         acceptedAt: invitation.acceptedAt?.toISOString() ?? null,
@@ -791,98 +789,6 @@ export async function getInvitation(req: Request, res: Response): Promise<void> 
 }
 
 /**
- * Update invitation message
- * PUT /sessions/:id/invitation/message
- */
-export async function updateInvitationMessage(req: Request, res: Response): Promise<void> {
-  try {
-    const user = req.user;
-    if (!user) {
-      errorResponse(res, ErrorCode.UNAUTHORIZED, 'Authentication required', 401);
-      return;
-    }
-
-    const sessionId = req.params.id;
-    const { message } = req.body;
-
-    if (!message || typeof message !== 'string') {
-      errorResponse(res, ErrorCode.VALIDATION_ERROR, 'Message is required', 400);
-      return;
-    }
-
-    // Limit message length
-    if (message.length > 500) {
-      errorResponse(res, ErrorCode.VALIDATION_ERROR, 'Message too long (max 500 characters)', 400);
-      return;
-    }
-
-    // Get session with invitation
-    const session = await prisma.session.findFirst({
-      where: {
-        id: sessionId,
-        relationship: {
-          members: {
-            some: { userId: user.id },
-          },
-        },
-      },
-      include: {
-        invitations: {
-          where: { invitedById: user.id },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-      },
-    });
-
-    if (!session) {
-      errorResponse(res, ErrorCode.NOT_FOUND, 'Session not found', 404);
-      return;
-    }
-
-    const invitation = session.invitations[0];
-    if (!invitation) {
-      errorResponse(res, ErrorCode.NOT_FOUND, 'Invitation not found', 404);
-      return;
-    }
-
-    // Check invitation hasn't been confirmed yet
-    if (invitation.messageConfirmed) {
-      errorResponse(res, ErrorCode.VALIDATION_ERROR, 'Invitation message already confirmed', 400);
-      return;
-    }
-
-    // Update invitation message and clear any topic frame derived from the old draft.
-    const [updatedInvitation] = await prisma.$transaction([
-      prisma.invitation.update({
-        where: { id: invitation.id },
-        data: { invitationMessage: message },
-      }),
-      prisma.session.update({
-        where: { id: sessionId },
-        data: {
-          topicFrame: null,
-          topicFrameConfirmedAt: null,
-        },
-      }),
-    ]);
-
-    successResponse(res, {
-      invitation: {
-        id: updatedInvitation.id,
-        invitationMessage: updatedInvitation.invitationMessage,
-        messageConfirmed: updatedInvitation.messageConfirmed,
-        topicFrame: null,
-        topicFrameConfirmedAt: null,
-      },
-    });
-  } catch (error) {
-    logger.error('[updateInvitationMessage] Error:', error);
-    errorResponse(res, ErrorCode.INTERNAL_ERROR, 'Failed to update invitation message', 500);
-  }
-}
-
-/**
  * Confirm invitation message (ready to share)
  * POST /sessions/:id/invitation/confirm
  */
@@ -895,7 +801,6 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
     }
 
     const sessionId = req.params.id;
-    const { message } = req.body;
 
     // Get session with invitation
     const session = await prisma.session.findFirst({
@@ -933,7 +838,6 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
         confirmed: true,
         invitation: {
           id: invitation.id,
-          invitationMessage: invitation.invitationMessage,
           messageConfirmed: true,
           messageConfirmedAt: invitation.messageConfirmedAt?.toISOString() ?? null,
           topicFrame: session.topicFrame ?? null,
@@ -950,11 +854,11 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
     // Advance user from Stage 0 to Stage 1 (Witness)
     const now = new Date();
 
-    // Confirm (and optionally update message)
+    // Confirm — only flip the messageConfirmed flag/timestamp.
+    // The invitation message column is no longer used by application code.
     const updatedInvitation = await prisma.invitation.update({
       where: { id: invitation.id },
       data: {
-        invitationMessage: message || invitation.invitationMessage,
         messageConfirmed: true,
         messageConfirmedAt: now,
       },
@@ -1075,7 +979,6 @@ export async function confirmInvitationMessage(req: Request, res: Response): Pro
       confirmed: true,
       invitation: {
         id: updatedInvitation.id,
-        invitationMessage: updatedInvitation.invitationMessage,
         messageConfirmed: updatedInvitation.messageConfirmed,
         messageConfirmedAt: updatedInvitation.messageConfirmedAt?.toISOString() ?? null,
         topicFrame: session.topicFrame,

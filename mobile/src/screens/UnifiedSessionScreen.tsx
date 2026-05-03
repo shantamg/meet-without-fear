@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // useRouter removed - share navigation replaced by ActivityDrawer
 import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion, ConfirmAgreementResponse, MAX_AGREEMENTS, EmpathyStatus } from '@meet-without-fear/shared';
 
-import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem, ChatCustomCardItem } from '../components/ChatInterface';
+import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
 import { FeelHeardConfirmation } from '../components/FeelHeardConfirmation';
 import { BreathingExercise } from '../components/BreathingExercise';
@@ -41,13 +41,14 @@ import { MemorySuggestionCard } from '../components/MemorySuggestionCard';
 import { ActivityDrawer } from '../components/ActivityDrawer';
 import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
-import { GuidedDraftChatModal, GuidedDraftMessage } from '../components/GuidedDraftChatModal';
+import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
-import { useGenerateTopicFrame, useRefineTopicFrame, useConfirmTopicFrame, useRefineInvitationMessage } from '../hooks/useSessions';
+import { useConfirmTopicFrame } from '../hooks/useSessions';
 import { useValidationFeedbackCoachChat } from '../hooks/useRefinementChat';
 import { useChatUIState } from '../hooks/useChatUIState';
 import { createInvitationLink } from '../hooks/useInvitation';
+import { buildInvitationShareText } from '../utils/invitationShareText';
 import { useAuth, useUpdateMood } from '../hooks/useAuth';
 import { useRealtime, useUserSessionUpdates } from '../hooks/useRealtime';
 import { stageKeys, messageKeys, sessionKeys, notificationKeys } from '../hooks/queryKeys';
@@ -164,7 +165,6 @@ export function UnifiedSessionScreen({
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
   const { showError } = useToast();
-  const topicFrameRequestedRef = useRef(false);
 
   // Sharing status for header button
   const sharingStatus = useSharingStatus(sessionId);
@@ -210,10 +210,8 @@ export function UnifiedSessionScreen({
 
     // Invitation phase
     isInvitationPhase,
-    invitationMessage,
     invitationConfirmed,
     invitation,
-    setLiveInvitationMessage,
 
     // Stage-specific data
     compactData,
@@ -650,6 +648,13 @@ export function UnifiedSessionScreen({
       // Add AI message to the cache - this automatically hides ghost dots
       // because ChatInterface derives showTypingIndicator from last message role
       addAIMessage(sessionId, payload.message);
+      // During Stage 0 invitation phase, the AI may emit a <draft> inline that
+      // the backend extracts and persists to Session.topicFrame. Refresh
+      // session state so the new topic flows into the proposal panel.
+      if (isInvitationPhase && !topicFrameConfirmed) {
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
+      }
       // Handle additional metadata from payload (same as HTTP onSuccess handler)
       // NOTE: We set state immediately here, but UI elements check !isTypewriterAnimating
       // before showing, so they will slide up AFTER the message finishes typewriter animating
@@ -663,10 +668,6 @@ export function UnifiedSessionScreen({
       // Only set to true - once AI recommends ready-to-share, keep it sticky
       if (payload.offerReadyToShare === true) {
         setAiRecommendsReadyToShare(true);
-      }
-      // Capture live invitation message from AI (for refinement flow)
-      if (payload.invitationMessage !== undefined) {
-        setLiveInvitationMessage(payload.invitationMessage);
       }
       // Capture AI-proposed empathy statement (Stage 2)
       // Save to database immediately so it persists across reloads
@@ -732,8 +733,6 @@ export function UnifiedSessionScreen({
   // Activity Menu Modal
   // -------------------------------------------------------------------------
   const [showActivityMenu, setShowActivityMenu] = useState(false);
-  const [showTopicFrameRefine, setShowTopicFrameRefine] = useState(false);
-  const [topicFrameRefineMessages, setTopicFrameRefineMessages] = useState<GuidedDraftMessage[]>([]);
   const topicFrame = invitation && 'topicFrame' in invitation
     ? (invitation.topicFrame as string | null)
     : null;
@@ -742,193 +741,39 @@ export function UnifiedSessionScreen({
     'topicFrameConfirmedAt' in invitation &&
     (invitation.topicFrameConfirmedAt as string | null)
   );
-  const { mutate: generateTopicFrame, isPending: isGeneratingTopicFrame } = useGenerateTopicFrame({
-    onError: (error) => {
-      console.error('[UnifiedSessionScreen] Failed to generate topic frame:', error);
-      showError('Topic not ready', 'Please try preparing the topic again.');
-    },
-  });
-  const { mutate: refineTopicFrame, isPending: isRefiningTopicFrame } = useRefineTopicFrame({
-    onSuccess: (data) => {
-      const aiMsg: GuidedDraftMessage = {
-        id: `topic-frame-ai-${Date.now()}`,
-        sessionId,
-        role: MessageRole.AI,
-        content: data.response,
-        timestamp: new Date().toISOString(),
-        senderId: null,
-        stage: 0,
-        proposedContent: data.topicFrame,
-      };
-      setTopicFrameRefineMessages((prev) => [...prev, aiMsg]);
-    },
-    onError: (error) => {
-      console.error('[UnifiedSessionScreen] Failed to refine topic frame:', error);
-      const errorMsg: GuidedDraftMessage = {
-        id: `topic-frame-error-${Date.now()}`,
-        sessionId,
-        role: MessageRole.SYSTEM,
-        content: 'Sorry, I had trouble adjusting the topic. Please try again.',
-        timestamp: new Date().toISOString(),
-        senderId: null,
-        stage: 0,
-      };
-      setTopicFrameRefineMessages((prev) => [...prev, errorMsg]);
-    },
-  });
+
+  // "Refine" hint: when the user taps Refine, hide the topic-proposal panel
+  // for the current proposed value. As soon as the AI emits a new <draft>
+  // (topicFrame changes), the latch resets and the panel reappears.
+  const topicProposalDismissed = false;
+
   const { mutate: confirmTopicFrame, isPending: isConfirmingTopicFrame } = useConfirmTopicFrame({
     onError: (error) => {
       console.error('[UnifiedSessionScreen] Failed to confirm topic frame:', error);
       showError('Topic not confirmed', 'Please try confirming the topic again.');
     },
     onSuccess: () => {
-      setShowTopicFrameRefine(false);
+      // Topic confirmation only flips topicFrameConfirmedAt. Stage 0→1 advances
+      // when the user closes the share modal (X), so the chat doesn't start
+      // running while the modal is up.
     },
   });
-
-  useEffect(() => {
-    if (!sessionId || !isInvitationPhase || !invitation?.invitationMessage || topicFrame || topicFrameRequestedRef.current) {
-      return;
-    }
-
-    topicFrameRequestedRef.current = true;
-    generateTopicFrame({ sessionId });
-  }, [sessionId, isInvitationPhase, invitation?.invitationMessage, topicFrame, generateTopicFrame]);
 
   const handleConfirmTopicFrame = useCallback(() => {
     if (!sessionId || isConfirmingTopicFrame) return;
-
     confirmTopicFrame({ sessionId });
   }, [sessionId, isConfirmingTopicFrame, confirmTopicFrame]);
 
-  const openTopicFrameRefinement = useCallback(() => {
-    if (!topicFrame) return;
-
-    setTopicFrameRefineMessages([{
-      id: `topic-frame-initial-${Date.now()}`,
-      sessionId,
-      role: MessageRole.AI,
-      content: "Here's the topic I'd use. Tell me what feels off, or what direction you want it to move toward.",
-      timestamp: new Date().toISOString(),
-      senderId: null,
-      stage: 0,
-      proposedContent: topicFrame,
-    }]);
-    setShowTopicFrameRefine(true);
-  }, [sessionId, topicFrame]);
-
   // -------------------------------------------------------------------------
-  // Invitation Message Refinement (guided drafting chat)
+  // Invitation panel dismissal (allows the user to defer sharing).
   // -------------------------------------------------------------------------
-  const [showInvitationRefineChat, setShowInvitationRefineChat] = useState(false);
-  const [invitationRefineMessages, setInvitationRefineMessages] = useState<GuidedDraftMessage[]>([]);
+  const [invitationPanelDismissed, setInvitationPanelDismissed] = useState(false);
 
-  const { mutate: refineInvitationMutate, isPending: isRefiningInvitationMessage } = useRefineInvitationMessage({
-    onSuccess: (data) => {
-      const aiMsg: GuidedDraftMessage = {
-        id: `invitation-refine-ai-${Date.now()}`,
-        sessionId,
-        role: MessageRole.AI,
-        content: data.response,
-        timestamp: new Date().toISOString(),
-        senderId: null,
-        stage: 0,
-        proposedContent: data.invitationMessage,
-      };
-      setInvitationRefineMessages((prev) => [...prev, aiMsg]);
-    },
-    onError: (error) => {
-      console.error('[UnifiedSessionScreen] Failed to refine invitation:', error);
-      const errorMsg: GuidedDraftMessage = {
-        id: `invitation-refine-error-${Date.now()}`,
-        sessionId,
-        role: MessageRole.SYSTEM,
-        content: 'Sorry, I had trouble adjusting the invitation. Please try again.',
-        timestamp: new Date().toISOString(),
-        senderId: null,
-        stage: 0,
-      };
-      setInvitationRefineMessages((prev) => [...prev, errorMsg]);
-    },
-  });
-
-  const openInvitationRefineChat = useCallback(() => {
-    if (!invitationMessage) return;
-    setInvitationRefineMessages([{
-      id: `invitation-refine-initial-${Date.now()}`,
-      sessionId,
-      role: MessageRole.AI,
-      content: "Here's the invitation I'd send. Tell me what feels off, or how you'd like it to change.",
-      timestamp: new Date().toISOString(),
-      senderId: null,
-      stage: 0,
-      proposedContent: invitationMessage,
-    }]);
-    setShowInvitationRefineChat(true);
-  }, [sessionId, invitationMessage]);
-
-  const sendInvitationRefinementMessage = useCallback((content: string) => {
-    if (!sessionId) return;
-    const trimmed = content.trim();
-    if (!trimmed) return;
-
-    const previousMessages = invitationRefineMessages;
-    const userMsg: GuidedDraftMessage = {
-      id: `invitation-refine-user-${Date.now()}`,
-      sessionId,
-      role: MessageRole.USER,
-      content: trimmed,
-      timestamp: new Date().toISOString(),
-      senderId: 'me',
-      stage: 0,
-    };
-
-    setInvitationRefineMessages((prev) => [...prev, userMsg]);
-    refineInvitationMutate({
-      sessionId,
-      message: trimmed,
-      history: previousMessages
-        .filter((m) => m.role === MessageRole.USER || m.role === MessageRole.AI)
-        .map((m) => ({
-          role: m.role === MessageRole.USER ? 'user' as const : 'assistant' as const,
-          content: m.proposedContent
-            ? `${m.content}\n\nProposed invitation: ${m.proposedContent}`
-            : m.content,
-        })),
-    });
-  }, [refineInvitationMutate, sessionId, invitationRefineMessages]);
-
-  const sendTopicFrameRefinementMessage = useCallback((content: string) => {
-    if (!sessionId) return;
-
-    const trimmed = content.trim();
-    if (!trimmed) return;
-
-    const previousMessages = topicFrameRefineMessages;
-    const userMsg: GuidedDraftMessage = {
-      id: `topic-frame-user-${Date.now()}`,
-      sessionId,
-      role: MessageRole.USER,
-      content: trimmed,
-      timestamp: new Date().toISOString(),
-      senderId: 'me',
-      stage: 0,
-    };
-
-    setTopicFrameRefineMessages((prev) => [...prev, userMsg]);
-    refineTopicFrame({
-      sessionId,
-      message: trimmed,
-      history: previousMessages
-        .filter((message) => message.role === MessageRole.USER || message.role === MessageRole.AI)
-        .map((message) => ({
-          role: message.role === MessageRole.USER ? 'user' as const : 'assistant' as const,
-          content: message.proposedContent
-            ? `${message.content}\n\nProposed topic: ${message.proposedContent}`
-            : message.content,
-        })),
-    });
-  }, [refineTopicFrame, sessionId, topicFrameRefineMessages]);
+  // Tooltip shown after "Later" — points at the book icon to teach the user
+  // they can share later from the activity drawer. Session-local only.
+  const [showShareLaterTooltip, setShowShareLaterTooltip] = useState(false);
+  const [shareLaterTooltipShownThisSession, setShareLaterTooltipShownThisSession] =
+    useState(false);
 
   // Refinement Modal
   const [refinementOfferId, setRefinementOfferId] = useState<string | null>(null);
@@ -1128,14 +973,15 @@ export function UnifiedSessionScreen({
     myProgress,
     partnerProgress,
     compactMySigned: compactData?.mySigned,
-    hasInvitationMessage: !!invitationMessage,
-    // Cache-First: invitationConfirmed is derived from cache (invitation.messageConfirmed)
-    // The optimistic update in useConfirmInvitationMessage.onMutate sets this immediately.
-    // Local latch (completedActions 'confirmed-invitation') prevents panel flash when background refetch
-    // returns stale data during race conditions with AI response events.
-    invitationConfirmed: invitationConfirmed || isConfirmingInvitation || completedActions.has('confirmed-invitation'),
+    hasTopicConfirmed: topicFrameConfirmed,
+    // Local dismissal latch — the panel hides as soon as the user taps
+    // "Later" (or after a successful share, if the screen wants to stash it).
+    invitationPanelDismissed,
     // isConfirmingInvitation: mutation is in flight
     isConfirmingInvitation,
+    topicFrameProposed: topicFrame ?? null,
+    topicProposalDismissed,
+    isConfirmingTopicFrame,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt: milestones?.feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -1288,12 +1134,6 @@ export function UnifiedSessionScreen({
   const readyToShowNeedsReview = shouldShowNeedsReview;
   const readyToShowCommonGround = shouldShowCommonGround;
   const readyToShowWaitingBanner = shouldShowWaitingBanner;
-
-  // Debug logging for invitation panel timing
-  useEffect(() => {
-    console.log(`[UnifiedSessionScreen] [TIMING] invitationMessage changed at ${Date.now()}:`,
-      invitationMessage ? `"${invitationMessage.substring(0, 30)}..."` : 'null');
-  }, [invitationMessage]);
 
   useEffect(() => {
     console.log(`[UnifiedSessionScreen] [TIMING] shouldShowInvitationPanel changed at ${Date.now()}:`, shouldShowInvitationPanel);
@@ -1766,87 +1606,6 @@ export function UnifiedSessionScreen({
     ]
   );
 
-  const showTopicFrameCard = isInvitationPhase && !!invitationMessage && !topicFrameConfirmed;
-
-  const renderTopicFrameCard = useCallback((): React.ReactNode => (
-    <View style={styles.topicFrameContainer} testID="topic-frame-card">
-      <Text style={styles.topicFrameLabel}>Topic</Text>
-      {isGeneratingTopicFrame ? (
-        <View style={styles.topicFrameLoading}>
-          <ActivityIndicator size="small" color={styles.accentColor.color} />
-          <Text style={styles.topicFrameStatus}>Preparing topic...</Text>
-        </View>
-      ) : topicFrame ? (
-        <>
-          <Text style={styles.topicFrameText}>{topicFrame}</Text>
-          <View style={styles.topicFrameActions}>
-            <TouchableOpacity
-              style={[
-                styles.topicFrameButton,
-                styles.topicFrameSecondaryButton,
-                isConfirmingTopicFrame && styles.topicFrameButtonDisabled,
-              ]}
-              onPress={openTopicFrameRefinement}
-              disabled={isConfirmingTopicFrame}
-              testID="topic-frame-steer-toggle"
-            >
-              <Text style={styles.topicFrameSecondaryButtonText}>Something else</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.topicFrameButton,
-                styles.topicFramePrimaryButton,
-                isConfirmingTopicFrame && styles.topicFrameButtonDisabled,
-              ]}
-              onPress={handleConfirmTopicFrame}
-              disabled={isConfirmingTopicFrame}
-              testID="topic-frame-confirm-button"
-            >
-              {isConfirmingTopicFrame ? (
-                <ActivityIndicator size="small" color={styles.topicFrameButtonText.color} />
-              ) : (
-                <Text style={styles.topicFrameButtonText}>Confirm</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </>
-      ) : (
-        <TouchableOpacity
-          style={[styles.topicFrameButton, styles.topicFramePrimaryButton]}
-          onPress={() => {
-            topicFrameRequestedRef.current = true;
-            generateTopicFrame({ sessionId });
-          }}
-          testID="topic-frame-generate-button"
-        >
-          <Text style={styles.topicFrameButtonText}>Prepare topic</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  ), [
-    generateTopicFrame,
-    handleConfirmTopicFrame,
-    isConfirmingTopicFrame,
-    isGeneratingTopicFrame,
-    openTopicFrameRefinement,
-    sessionId,
-    styles,
-    topicFrame,
-  ]);
-
-  const topicFrameCards = useMemo((): ChatCustomCardItem[] => {
-    if (!showTopicFrameCard) {
-      return [];
-    }
-
-    return [{
-      type: 'custom-card',
-      id: 'topic-frame-card',
-      timestamp: displayMessages[displayMessages.length - 1]?.timestamp ?? new Date(0).toISOString(),
-      render: renderTopicFrameCard,
-    }];
-  }, [displayMessages, renderTopicFrameCard, showTopicFrameCard]);
-
   // -------------------------------------------------------------------------
   // Invitation URL for sharing (must be before early returns)
   // -------------------------------------------------------------------------
@@ -1856,6 +1615,37 @@ export function UnifiedSessionScreen({
     }
     return '';
   }, [invitation?.id]);
+
+  const partnerAccepted = !!invitation?.acceptedAt;
+
+  // Shared share-invitation handler used by both the InvitationReadyModal and
+  // the ActivityDrawer's "Share invitation" button.
+  const handleShareInvitation = useCallback(async (): Promise<boolean> => {
+    if (!invitationUrl) return false;
+    try {
+      const shareMessage = buildInvitationShareText(invitationUrl);
+      const result = await Share.share(
+        Platform.OS === 'web'
+          ? {
+              message: shareMessage,
+              title: partnerName ? `Invitation for ${partnerName}` : 'Join me on Meet Without Fear',
+            }
+          : {
+              message: shareMessage,
+              title: partnerName ? `Invitation for ${partnerName}` : 'Join me on Meet Without Fear',
+              url: invitationUrl,
+            }
+      );
+      if (result.action === Share.sharedAction) {
+        trackInvitationSent(sessionId, 'share_sheet');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('[UnifiedSessionScreen] Share invitation error:', e);
+      return false;
+    }
+  }, [invitationUrl, partnerName, sessionId]);
 
   // -------------------------------------------------------------------------
   // Onboarding State (derived from useChatUIState above)
@@ -2144,8 +1934,38 @@ export function UnifiedSessionScreen({
             }}
             isPending={isSigningCompact}
             isFirstSession={isFirstSession}
+            inviteeTopic={!isInviter && topicFrameConfirmed ? topicFrame : undefined}
+            partnerName={partnerName}
             testID="compact-agreement-bar"
           />
+        );
+
+      case 'topic-proposal':
+        if (!topicFrame) return undefined;
+        return (
+          <View style={styles.topicProposalContainer} testID="topic-proposal-panel">
+            <Text style={styles.topicProposalLabel}>Proposed topic</Text>
+            <Text style={styles.topicProposalText}>{topicFrame}</Text>
+            <Text style={styles.topicProposalHint}>To change it, just tell me below.</Text>
+            <View style={styles.topicProposalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.topicProposalButton,
+                  styles.topicProposalPrimaryButton,
+                  isConfirmingTopicFrame && styles.topicProposalButtonDisabled,
+                ]}
+                onPress={handleConfirmTopicFrame}
+                disabled={isConfirmingTopicFrame}
+                testID="topic-proposal-use-button"
+              >
+                {isConfirmingTopicFrame ? (
+                  <ActivityIndicator size="small" color={styles.topicProposalPrimaryButtonText.color} />
+                ) : (
+                  <Text style={styles.topicProposalPrimaryButtonText}>Use this topic</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         );
 
       case 'feel-heard':
@@ -2248,79 +2068,9 @@ export function UnifiedSessionScreen({
         );
 
       case 'invitation':
-        if (!topicFrameConfirmed) {
-          return undefined;
-        }
-
-        return (
-          <Animated.View
-            style={{
-              // 1. Animate Opacity — fade out when keyboard collapses panel
-              opacity: Animated.multiply(invitationPanelAnim, invitationKeyboardCollapseAnim),
-
-              // 2. Animate Height (Slide in effect)
-              // Multiply by keyboard collapse anim so the panel shrinks to 0 when keyboard is visible
-              maxHeight: Animated.multiply(
-                invitationPanelAnim.interpolate({
-                  inputRange: [0, 1],
-	                  outputRange: [0, 600],
-                }),
-                invitationKeyboardCollapseAnim,
-              ),
-
-              // 3. Optional: Add a slight slide-up transform for visual flair
-              transform: [{
-                translateY: invitationPanelAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0],
-                }),
-              }],
-
-              // 4. Clip content while closed so padding doesn't leak space
-              overflow: 'hidden',
-            }}
-            pointerEvents="auto"
-          >
-            <View style={styles.invitationDraftContainer} testID="invitation-draft-panel">
-              <View style={styles.invitationTopicChip}>
-                <Text style={styles.invitationTopicChipLabel}>Topic</Text>
-                <Text style={styles.invitationTopicChipText} numberOfLines={2}>{topicFrame}</Text>
-              </View>
-
-              <Text style={styles.invitationStepHeading}>
-                Here's what I'd use as an invitation. Let me know if you want me to change it.
-              </Text>
-              <Text style={styles.invitationDraftMessage}>
-                "{invitationMessage}"
-              </Text>
-              <View style={styles.invitationActionsRow}>
-                <TouchableOpacity
-                  style={[styles.invitationActionButton, styles.invitationActionSecondary]}
-                  onPress={openInvitationRefineChat}
-                  testID="invitation-refine-button"
-                  disabled={isConfirmingInvitation}
-                >
-                  <Text style={styles.invitationActionSecondaryText}>Refine</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.invitationActionButton,
-                    styles.invitationActionPrimary,
-                    isConfirmingInvitation && styles.invitationActionDisabled,
-                  ]}
-                  onPress={() => {
-                    markCompleted('confirmed-invitation');
-                    handleConfirmInvitationMessage(invitationMessage!);
-                  }}
-                  disabled={isConfirmingInvitation}
-                  testID="invitation-use-button"
-                >
-                  <Text style={styles.invitationActionPrimaryText}>Use</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Animated.View>
-        );
+        // The invitation step is now rendered as a centered modal (see
+        // <InvitationReadyModal /> below). No inline panel above the input.
+        return undefined;
 
       case 'needs-review':
         return (
@@ -2414,16 +2164,14 @@ export function UnifiedSessionScreen({
     aboveInputPanel,
     sessionId,
     invitation?.isInviter,
+    isInviter,
     isSigningCompact,
     isFirstSession,
     isTypewriterAnimating,
     isConfirmingFeelHeard,
     isSharingEmpathy,
     isRefiningEmpathy,
-    invitationConfirmed,
     isConfirmingInvitation,
-    openInvitationRefineChat,
-    invitationMessage,
     invitationUrl,
     topicFrame,
     topicFrameConfirmed,
@@ -2441,7 +2189,8 @@ export function UnifiedSessionScreen({
     waitingBannerAnim,
     handleSignCompact,
     handleConfirmFeelHeard,
-    handleConfirmInvitationMessage,
+    handleConfirmTopicFrame,
+    isConfirmingTopicFrame,
     handleConfirmAllNeeds,
     handleConfirmCommonGround,
     handleNeedsNotValidYet,
@@ -2605,11 +2354,21 @@ export function UnifiedSessionScreen({
         onBackPress={onNavigateBack}
         onBriefStatusPress={
           session?.status === SessionStatus.INVITED && invitation?.isInviter
-            ? () => setShowActivityMenu(true)
+            ? () => {
+                setShowShareLaterTooltip(false);
+                setShowActivityMenu(true);
+              }
             : undefined
         }
         hasNewActivity={!isInOnboardingUnsigned ? (pendingActionsQuery.data?.actions?.length ?? 0) > 0 : false}
-        onMenuPress={!isInOnboardingUnsigned ? () => setShowActivityMenu(true) : undefined}
+        onMenuPress={
+          !isInOnboardingUnsigned
+            ? () => {
+                setShowShareLaterTooltip(false);
+                setShowActivityMenu(true);
+              }
+            : undefined
+        }
         stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
         testID="session-chat-header"
       />
@@ -2664,7 +2423,6 @@ export function UnifiedSessionScreen({
             isInOnboardingUnsigned ? compactEmptyStateElement : undefined
           }
           renderAboveInput={aboveInputPanel ? renderAboveInput : undefined}
-          customCards={topicFrameCards}
           renderBelowChat={(inlineCards.length > 0 || memorySuggestion) ? () => (
             <>
               {inlineCards.map((card) => renderInlineCard(card))}
@@ -2858,54 +2616,6 @@ export function UnifiedSessionScreen({
         testID="validation-feedback-coach"
       />
 
-      <GuidedDraftChatModal
-        visible={showInvitationRefineChat}
-        title="Refining Invitation"
-        sessionKey={`invitation-refine-${sessionId}`}
-        messages={invitationRefineMessages}
-        isLoading={isRefiningInvitationMessage}
-        isFinalizing={isConfirmingInvitation}
-        partnerName={partnerName}
-        proposalTitle="Invitation"
-        proposalSubtitle="This is what your partner will see"
-        finalActionLabel="Use this invitation"
-        finalActionLatestOnly
-        onSendMessage={sendInvitationRefinementMessage}
-        onFinalize={(content) => {
-          const selectedInvitation = content.trim();
-          if (!selectedInvitation) return;
-          markCompleted('confirmed-invitation');
-          handleConfirmInvitationMessage(selectedInvitation);
-          setShowInvitationRefineChat(false);
-        }}
-        onClose={() => setShowInvitationRefineChat(false)}
-        emptyStateTitle="Refine the invitation"
-        emptyStateMessage="Tell me what to change — tone, length, what to focus on."
-        finalButtonTestID="invitation-refinement-confirm-button"
-        testID="invitation-refinement-modal"
-      />
-
-      <GuidedDraftChatModal
-        visible={showTopicFrameRefine}
-        title="Refining Topic"
-        sessionKey={`topic-frame-${sessionId}`}
-        messages={topicFrameRefineMessages}
-        isLoading={isRefiningTopicFrame}
-        isFinalizing={isConfirmingTopicFrame}
-        partnerName={partnerName}
-        proposalTitle="Topic"
-        proposalSubtitle="This is what the invitation will be framed around"
-        finalActionLabel="Confirm Topic"
-        finalActionLatestOnly
-        onSendMessage={sendTopicFrameRefinementMessage}
-        onFinalize={handleConfirmTopicFrame}
-        onClose={() => setShowTopicFrameRefine(false)}
-        emptyStateTitle="Refine the topic"
-        emptyStateMessage="Tell me what direction the topic should move toward."
-        finalButtonTestID="topic-frame-refinement-confirm-button"
-        testID="topic-frame-refinement-modal"
-      />
-
       {/* ShareTopicDrawer - Phase 1 of two-phase share flow */}
       {shareOfferData?.hasSuggestion && shareOfferData.suggestion &&
        (shareOfferData.suggestion.action === 'OFFER_OPTIONAL' ||
@@ -2983,6 +2693,101 @@ export function UnifiedSessionScreen({
         testID="needs-drawer"
       />
 
+      {/* Invitation Ready Modal — replaces the inline 'invitation' panel.
+          Opens automatically when the topic is confirmed and the user has not
+          yet shared or dismissed; "Later" then surfaces an onboarding tooltip
+          pointing at the book icon. */}
+      <Modal
+        visible={
+          shouldShowInvitationPanel &&
+          !!topicFrame &&
+          !!invitationUrl &&
+          !partnerAccepted
+        }
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setInvitationPanelDismissed(true);
+          handleConfirmInvitationMessage();
+          if (!shareLaterTooltipShownThisSession) {
+            setShowShareLaterTooltip(true);
+            setShareLaterTooltipShownThisSession(true);
+          }
+        }}
+      >
+        <View style={styles.invitationModalBackdrop}>
+          <View
+            style={styles.invitationModalCard}
+            testID="invitation-ready-modal"
+          >
+            <TouchableOpacity
+              style={styles.invitationModalCloseButton}
+              onPress={() => {
+                setInvitationPanelDismissed(true);
+                handleConfirmInvitationMessage();
+                if (!shareLaterTooltipShownThisSession) {
+                  setShowShareLaterTooltip(true);
+                  setShareLaterTooltipShownThisSession(true);
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              testID="invitation-modal-close-button"
+              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+            >
+              <Text style={styles.invitationModalCloseText}>×</Text>
+            </TouchableOpacity>
+            <Text style={styles.invitationModalText}>
+              {`Ready to invite ${partnerName || 'your partner'}? They will see the topic we set once they join and you two can work separately at first.`}
+            </Text>
+            <View style={styles.invitationModalActionsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.invitationModalButton,
+                  styles.invitationModalButtonPrimary,
+                ]}
+                onPress={() => {
+                  void handleShareInvitation();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Share invitation"
+                testID="invitation-modal-share-button"
+              >
+                <Text style={styles.invitationModalButtonPrimaryText}>Share</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Share-Later Tooltip — onboarding overlay pointing at the book icon
+          in the top-right of the header. Shown once per session after Later. */}
+      {showShareLaterTooltip && (
+        <View
+          style={styles.shareLaterTooltipOverlay}
+          pointerEvents="box-none"
+          testID="share-later-tooltip-overlay"
+        >
+          <View
+            style={styles.shareLaterTooltipBubble}
+            testID="share-later-tooltip"
+          >
+            <Text style={styles.shareLaterTooltipText}>
+              You can share later from here ☝️
+            </Text>
+            <TouchableOpacity
+              style={styles.shareLaterTooltipButton}
+              onPress={() => setShowShareLaterTooltip(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Got it"
+              testID="share-later-tooltip-got-it"
+            >
+              <Text style={styles.shareLaterTooltipButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* Activity Drawer - bottom sheet with timeline items */}
       <ActivityDrawer
         visible={showActivityMenu}
@@ -3003,34 +2808,16 @@ export function UnifiedSessionScreen({
           setShowActivityMenu(false);
           setShowEmpathyDrawer(true);
         }}
-        invitationMessage={isInviter ? (invitationMessage || undefined) : undefined}
+        topicFrame={isInviter && topicFrameConfirmed ? (topicFrame || undefined) : undefined}
         invitationTimestamp={isInviter ? (invitation?.messageConfirmedAt || undefined) : undefined}
-        onShareInvitation={isInviter && invitationMessage ? async () => {
-          try {
-            const senderDisplay = user?.name || user?.firstName || user?.email?.split('@')[0] || 'Someone';
-            const topicLine = topicFrame ? `Topic: ${topicFrame}\n\n` : '';
-            const shareMessage = `${senderDisplay} would like to invite you to Meet Without Fear\n\n${topicLine}${invitationUrl}\n\n${invitationMessage}`;
-            const result = await Share.share(
-              Platform.OS === 'web'
-                ? {
-                    message: shareMessage,
-                    title: partnerName ? `Invitation for ${partnerName}` : 'Join me on Meet Without Fear',
-                  }
-                : {
-                    message: shareMessage,
-                    title: partnerName ? `Invitation for ${partnerName}` : 'Join me on Meet Without Fear',
-                    url: invitationUrl,
-                  }
-            );
-            if (result.action === Share.sharedAction) {
-              // Tracked but not treated as a confirmed delivery (cancel is
-              // indistinguishable from share on web).
-              trackInvitationSent(sessionId, 'share_sheet');
-            }
-          } catch (e) {
-            console.error('[UnifiedSessionScreen] Share invitation error:', e);
-          }
-        } : undefined}
+        partnerAccepted={partnerAccepted}
+        onShareInvitation={
+          isInviter && invitationUrl && !partnerAccepted
+            ? () => {
+                handleShareInvitation();
+              }
+            : undefined
+        }
         partnerEmpathyValidated={isEmpathyValidated || (partnerEmpathyData?.validated ?? false)}
         testID="activity-drawer"
       />
@@ -3181,7 +2968,135 @@ const useStyles = () =>
       fontSize: t.typography.fontSize.md,
       fontWeight: '600' as const,
     },
-    topicFrameContainer: {
+
+    // Invitation Ready Modal (replaces inline 'invitation' panel)
+    invitationModalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.55)',
+      justifyContent: 'center' as const,
+      alignItems: 'center' as const,
+      paddingHorizontal: t.spacing.lg,
+    },
+    invitationModalCard: {
+      width: '100%' as const,
+      maxWidth: 420,
+      backgroundColor: t.colors.bgSecondary,
+      borderRadius: t.radius.lg,
+      padding: t.spacing.lg,
+      paddingTop: t.spacing.xl + t.spacing.lg,
+    },
+    invitationModalCloseButton: {
+      position: 'absolute' as const,
+      top: 10,
+      right: 10,
+      width: 36,
+      height: 36,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      zIndex: 1,
+    },
+    invitationModalCloseText: {
+      color: t.colors.textPrimary,
+      fontSize: 24,
+      lineHeight: 24,
+      fontWeight: '400' as const,
+    },
+    invitationModalText: {
+      fontSize: t.typography.fontSize.md,
+      color: t.colors.textPrimary,
+      lineHeight: 22,
+      marginBottom: t.spacing.lg,
+    },
+    invitationModalActionsRow: {
+      flexDirection: 'row' as const,
+      gap: t.spacing.sm,
+    },
+    invitationModalButton: {
+      flex: 1,
+      minHeight: 44,
+      borderRadius: t.radius.md,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      paddingHorizontal: t.spacing.md,
+    },
+    invitationModalButtonPrimary: {
+      backgroundColor: t.colors.accent,
+    },
+    invitationModalButtonSecondary: {
+      backgroundColor: 'transparent' as const,
+      borderWidth: 1,
+      borderColor: t.colors.accent,
+    },
+    invitationModalButtonPrimaryText: {
+      color: t.colors.textOnAccent,
+      fontSize: t.typography.fontSize.md,
+      fontWeight: '600' as const,
+    },
+    invitationModalButtonSecondaryText: {
+      color: t.colors.accent,
+      fontSize: t.typography.fontSize.md,
+      fontWeight: '600' as const,
+    },
+
+    // Share-Later Tooltip
+    shareLaterTooltipOverlay: {
+      position: 'absolute' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 200,
+    },
+    shareLaterTooltipBubble: {
+      position: 'absolute' as const,
+      top: 49,
+      right: 12,
+      maxWidth: 240,
+      backgroundColor: t.colors.bgSecondary,
+      borderRadius: t.radius.md,
+      paddingHorizontal: t.spacing.md,
+      paddingVertical: t.spacing.sm,
+      shadowColor: '#000',
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 8,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+    },
+    shareLaterTooltipTail: {
+      position: 'absolute' as const,
+      top: -8,
+      right: 16,
+      width: 0,
+      height: 0,
+      borderLeftWidth: 8,
+      borderRightWidth: 8,
+      borderBottomWidth: 8,
+      borderLeftColor: 'transparent' as const,
+      borderRightColor: 'transparent' as const,
+      borderBottomColor: t.colors.bgSecondary,
+    },
+    shareLaterTooltipText: {
+      fontSize: t.typography.fontSize.sm,
+      color: t.colors.textPrimary,
+      lineHeight: 20,
+      marginBottom: t.spacing.sm,
+    },
+    shareLaterTooltipButton: {
+      alignSelf: 'flex-end' as const,
+      paddingHorizontal: t.spacing.md,
+      paddingVertical: t.spacing.xs,
+      borderRadius: t.radius.sm,
+      backgroundColor: t.colors.accent,
+    },
+    shareLaterTooltipButtonText: {
+      color: t.colors.textOnAccent,
+      fontSize: t.typography.fontSize.sm,
+      fontWeight: '600' as const,
+    },
+
+    topicProposalContainer: {
       marginHorizontal: t.spacing.lg,
       marginTop: t.spacing.sm,
       marginBottom: t.spacing.xs,
@@ -3193,34 +3108,30 @@ const useStyles = () =>
       borderColor: t.colors.border,
       backgroundColor: t.colors.bgPrimary,
     },
-    topicFrameLabel: {
+    topicProposalLabel: {
       fontSize: t.typography.fontSize.sm,
       color: t.colors.textSecondary,
       fontWeight: '600' as const,
       marginBottom: t.spacing.sm,
     },
-    topicFrameText: {
+    topicProposalText: {
       fontSize: t.typography.fontSize.lg,
       color: t.colors.textPrimary,
       fontWeight: '600' as const,
       lineHeight: 30,
-      marginBottom: t.spacing.lg,
+      marginBottom: t.spacing.sm,
     },
-    topicFrameLoading: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: t.spacing.sm,
-    },
-    topicFrameStatus: {
-      color: t.colors.textSecondary,
+    topicProposalHint: {
       fontSize: t.typography.fontSize.sm,
+      color: t.colors.textSecondary,
+      marginBottom: t.spacing.md,
     },
-    topicFrameActions: {
+    topicProposalActions: {
       flexDirection: 'row',
       gap: t.spacing.sm,
       marginTop: t.spacing.md,
     },
-    topicFrameButton: {
+    topicProposalButton: {
       flex: 1,
       minHeight: 40,
       borderRadius: t.radius.md,
@@ -3228,23 +3139,23 @@ const useStyles = () =>
       justifyContent: 'center',
       paddingHorizontal: t.spacing.md,
     },
-    topicFramePrimaryButton: {
+    topicProposalPrimaryButton: {
       backgroundColor: t.colors.accent,
     },
-    topicFrameSecondaryButton: {
+    topicProposalSecondaryButton: {
       backgroundColor: t.colors.bgSecondary,
       borderWidth: 1,
       borderColor: t.colors.border,
     },
-    topicFrameButtonDisabled: {
+    topicProposalButtonDisabled: {
       opacity: 0.6,
     },
-    topicFrameButtonText: {
+    topicProposalPrimaryButtonText: {
       color: t.colors.textOnAccent,
       fontSize: t.typography.fontSize.md,
       fontWeight: '600' as const,
     },
-    topicFrameSecondaryButtonText: {
+    topicProposalSecondaryButtonText: {
       color: t.colors.textPrimary,
       fontSize: t.typography.fontSize.md,
       fontWeight: '600' as const,

@@ -12,7 +12,7 @@ import { getOrchestratedResponse, type FullAIContext } from '../ai';
 import { getPartnerUserId } from '../../utils/session';
 import { embedSessionContent } from '../embedding';
 import { updateSessionSummary, getSessionSummary } from '../conversation-summarizer';
-import { publishUserEvent } from '../realtime';
+import { publishUserEvent, publishTopicFrameUpdated } from '../realtime';
 import { updateContext } from '../../lib/request-context';
 
 export interface SessionMessageInput {
@@ -43,12 +43,12 @@ export interface SessionMessageResult {
   };
   /** Stage 1: AI determined user may be ready for feel-heard confirmation */
   offerFeelHeardCheck?: boolean;
-  /** Stage 0: Proposed invitation message from AI */
-  invitationMessage?: string | null;
   /** Stage 2: AI determined user is ready to share their empathy attempt */
   offerReadyToShare?: boolean;
   /** Stage 2: AI's proposed empathy statement summarizing user's understanding of partner */
   proposedEmpathyStatement?: string | null;
+  /** Stage 0: AI's proposed topic frame (persisted on the session) */
+  topicFrame?: string | null;
   // NOTE: Memory suggestions are handled by ai-orchestrator and broadcast via publishSessionEvent
 }
 
@@ -303,6 +303,31 @@ export async function processSessionMessage(
   // NOTE: Memory detection is handled by ai-orchestrator.ts, not here.
   // The orchestrator runs detection + validation synchronously before generating the response.
 
+  // Stage 0: If AI emitted a <draft> with a proposed topic frame, persist it to the session
+  // (only when topic is not yet confirmed — never overwrite a confirmed topic).
+  if (
+    orchestratorResult.topicFrame &&
+    (currentStage === 0 || isInvitationPhase) &&
+    !session.topicFrameConfirmedAt
+  ) {
+    try {
+      const newTopicFrame = orchestratorResult.topicFrame.trim();
+      if (newTopicFrame && newTopicFrame !== session.topicFrame) {
+        await prisma.session.update({
+          where: { id: sessionId },
+          data: { topicFrame: newTopicFrame },
+        });
+        logger.info(`[SessionProcessor] Stage 0: Persisted topic frame "${newTopicFrame}" for session ${sessionId}`);
+        // Notify clients of topic frame update (fire-and-forget)
+        publishTopicFrameUpdated(sessionId, newTopicFrame, false).catch((err) =>
+          logger.warn('[SessionProcessor] Failed to publish topic_frame_updated:', err)
+        );
+      }
+    } catch (err) {
+      logger.error('[SessionProcessor] Failed to persist topic frame:', err);
+    }
+  }
+
   // Stage 2: If AI is offering ready-to-share, auto-save the empathy draft
   // Save with readyToShare: false so user sees low-profile confirmation prompt first
   // User must explicitly confirm to see the full preview card
@@ -365,8 +390,8 @@ export async function processSessionMessage(
       timestamp: aiMessage.timestamp.toISOString(),
     },
     offerFeelHeardCheck: orchestratorResult.offerFeelHeardCheck,
-    invitationMessage: orchestratorResult.invitationMessage,
     offerReadyToShare: orchestratorResult.offerReadyToShare,
     proposedEmpathyStatement: orchestratorResult.proposedEmpathyStatement,
+    topicFrame: orchestratorResult.topicFrame ?? null,
   };
 }

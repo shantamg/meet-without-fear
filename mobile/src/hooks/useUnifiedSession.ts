@@ -206,10 +206,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Toast for error feedback
   const { showError } = useToast();
 
-  // Track live invitation message from AI responses (for refinement flow)
-  // This captures the proposed message before it's saved to database
-  const [liveInvitationMessage, setLiveInvitationMessage] = useState<string | null>(null);
-
   // Track AI-proposed empathy statement (Stage 2)
   // This captures the proposed statement when AI determines user is ready to share
   const [liveProposedEmpathyStatement, setLiveProposedEmpathyStatement] = useState<string | null>(null);
@@ -332,16 +328,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
       if (metadata.offerReadyToShare === true) {
         setAiRecommendsReadyToShare(true);
       }
-      // Capture live invitation message from AI (for refinement flow)
-      if (metadata.invitationMessage !== undefined && metadata.invitationMessage !== null) {
-        console.log(`[useUnifiedSession] [TIMING] Setting liveInvitationMessage at ${Date.now()}`);
-        setLiveInvitationMessage(metadata.invitationMessage);
-        if (sessionId) {
-          queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
-        }
-        console.log(`[useUnifiedSession] [TIMING] setLiveInvitationMessage called at ${Date.now()}`);
-      }
       // Capture AI-proposed empathy statement (Stage 2)
       // Save to database immediately so it persists across reloads
       if (sessionId && metadata.proposedEmpathyStatement !== undefined && metadata.proposedEmpathyStatement !== null) {
@@ -353,9 +339,15 @@ export function useUnifiedSession(sessionId: string | undefined) {
       if (sessionId && metadata.proposedStrategies && metadata.proposedStrategies.length > 0) {
         queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
       }
+      // Stage 0: AI emitted a <draft> topic — backend persisted Session.topicFrame.
+      // Refresh session state so the topic-proposal panel picks it up.
+      if (sessionId && metadata.topicFrame) {
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
+      }
     },
     [sessionId, saveDraft, setStreamTriggeredFeelHeard, setAiRecommendsReadyToShare,
-     setLiveInvitationMessage, setLiveProposedEmpathyStatement, queryClient]
+     setLiveProposedEmpathyStatement, queryClient]
   );
 
   const handleStreamError = useCallback(
@@ -472,8 +464,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const invitation = invitationData?.invitation;
   const isInvitationPhase =
     session?.status === 'CREATED' && !invitation?.messageConfirmed;
-  // Use live invitation message from AI response if available, fallback to database record
-  const invitationMessage = liveInvitationMessage ?? invitation?.invitationMessage ?? null;
   const invitationConfirmed = invitation?.messageConfirmed ?? false;
   const myProgress = progressData?.myProgress;
   const partnerProgress = progressData?.partnerProgress;
@@ -848,10 +838,10 @@ export function useUnifiedSession(sessionId: string | undefined) {
   );
 
   const handleConfirmInvitationMessage = useCallback(
-    (message?: string, onSuccess?: () => void) => {
+    (onSuccess?: () => void) => {
       if (!sessionId) return;
       confirmInvitationMessage(
-        { sessionId, message },
+        { sessionId },
         { onSuccess }
       );
     },
@@ -1144,10 +1134,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
     // Invitation phase
     isInvitationPhase,
-    invitationMessage,
     invitationConfirmed,
     invitation,
-    setLiveInvitationMessage,
 
     // Stage-specific data
     compactData,

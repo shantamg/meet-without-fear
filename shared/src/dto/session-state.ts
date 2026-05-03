@@ -9,7 +9,6 @@
  */
 
 import { SessionStatus, StageStatus } from '../enums';
-import { InvitationDTO } from './session';
 import { CompactStatusResponse } from './stage';
 import { MessageDTO } from './message';
 
@@ -82,7 +81,6 @@ export interface SessionStateResponse {
     status: string;
     createdAt: string;
     expiresAt: string;
-    invitationMessage?: string | null;
     messageConfirmed?: boolean;
     messageConfirmedAt?: string | null;
     topicFrame?: string | null;

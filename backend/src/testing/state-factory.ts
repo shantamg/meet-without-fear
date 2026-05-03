@@ -206,7 +206,6 @@ export class StateFactory {
           expiresAt,
           messageConfirmed: targetStage !== TargetStage.CREATED,
           messageConfirmedAt: targetStage !== TargetStage.CREATED ? new Date() : null,
-          invitationMessage: 'Test invitation message for E2E testing.',
         },
       });
 

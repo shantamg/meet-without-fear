@@ -52,9 +52,6 @@ export interface SendMessageResponse {
   /** Stage 2: AI determined user may be ready to share empathy attempt */
   offerReadyToShare?: boolean;
 
-  /** Stage 0: Proposed invitation message from AI */
-  invitationMessage?: string | null;
-
   /** Stage 2: Proposed empathy statement summarizing user's understanding of partner */
   proposedEmpathyStatement?: string | null;
 

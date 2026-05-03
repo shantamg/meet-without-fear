@@ -107,27 +107,6 @@ export const confirmTopicFrameResponseSchema = z.object({
 export type ConfirmTopicFrameResponseInput = z.infer<typeof confirmTopicFrameResponseSchema>;
 
 // ============================================================================
-// Invitation Message Refinement (Stage 0 — drafting/refining the invite text)
-// ============================================================================
-
-export const refineInvitationMessageRequestSchema = z.object({
-  message: z.string().min(1, 'Message required').max(500, 'Message too long'),
-  history: z.array(z.object({
-    role: z.enum(['user', 'assistant']),
-    content: z.string().min(1).max(2000),
-  })).max(10).optional(),
-});
-
-export type RefineInvitationMessageRequestInput = z.infer<typeof refineInvitationMessageRequestSchema>;
-
-export const refineInvitationMessageResponseSchema = z.object({
-  response: z.string(),
-  invitationMessage: z.string(),
-});
-
-export type RefineInvitationMessageResponseInput = z.infer<typeof refineInvitationMessageResponseSchema>;
-
-// ============================================================================
 // Stage 2: Perspective Stretch / Empathy
 // ============================================================================
 

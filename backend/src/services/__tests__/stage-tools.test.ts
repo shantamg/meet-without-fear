@@ -27,7 +27,6 @@ describe('SESSION_STATE_TOOL', () => {
     expect(properties.offerFeelHeardCheck).toBeDefined();
     expect(properties.offerReadyToShare).toBeDefined();
     expect(properties.proposedEmpathyStatement).toBeDefined();
-    expect(properties.invitationMessage).toBeDefined();
     // Note: analysis is no longer in the tool - it's now in the <analysis> XML block
   });
 });
@@ -38,7 +37,6 @@ describe('parseSessionStateToolInput', () => {
       offerFeelHeardCheck: true,
       offerReadyToShare: false,
       proposedEmpathyStatement: 'I feel overwhelmed...',
-      invitationMessage: 'Can we talk?',
     };
 
     const result = parseSessionStateToolInput(input);
@@ -46,7 +44,6 @@ describe('parseSessionStateToolInput', () => {
     expect(result.offerFeelHeardCheck).toBe(true);
     expect(result.offerReadyToShare).toBe(false);
     expect(result.proposedEmpathyStatement).toBe('I feel overwhelmed...');
-    expect(result.invitationMessage).toBe('Can we talk?');
   });
 
   it('should default boolean fields to false when missing', () => {
@@ -60,7 +57,6 @@ describe('parseSessionStateToolInput', () => {
     const result = parseSessionStateToolInput({});
 
     expect(result.proposedEmpathyStatement).toBeUndefined();
-    expect(result.invitationMessage).toBeUndefined();
   });
 
   it('should handle wrong types gracefully', () => {

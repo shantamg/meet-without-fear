@@ -250,8 +250,6 @@ export interface MessageAIResponsePayload extends RealtimeEventBase {
   message: MessageDTO;
   /** Stage 1: AI recommends showing feel-heard confirmation */
   offerFeelHeardCheck?: boolean;
-  /** Stage 0: Proposed invitation message from AI */
-  invitationMessage?: string | null;
   /** Stage 2: AI recommends showing ready-to-share confirmation */
   offerReadyToShare?: boolean;
   /** Stage 2: Proposed empathy statement */

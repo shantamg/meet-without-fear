@@ -8,6 +8,7 @@
 
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Share2 } from 'lucide-react-native';
 import { colors } from '@/theme';
 
 // ============================================================================
@@ -138,18 +139,27 @@ export function TimelineItemCard({
     item.actionType === 'view' &&
     !!onViewInChat;
 
+  const isInvitationTile = item.type === 'invitation';
+
   const cardContent = (
     <>
       {/* Header row: type label + timestamp */}
       <View style={styles.header}>
-        <Text style={styles.typeLabel}>{typeLabel}</Text>
+        <Text style={styles.typeLabel}>{isInvitationTile ? 'Invitation' : typeLabel}</Text>
         <Text style={styles.timestamp}>{relativeTime}</Text>
       </View>
 
       {/* Content */}
-      <Text style={styles.content}>
-        {item.content}
-      </Text>
+      {isInvitationTile ? (
+        <View style={styles.invitationRow}>
+          <Share2 color={colors.textPrimary} size={20} />
+          <Text style={styles.invitationTapText}>Tap to share</Text>
+        </View>
+      ) : (
+        <Text style={styles.content}>
+          {item.content}
+        </Text>
+      )}
 
       {/* Delivery status */}
       {statusText !== '' && (
@@ -208,7 +218,11 @@ export function TimelineItemCard({
         style={[styles.card, bubbleStyle]}
         onPress={handleCardPress}
         accessibilityRole="button"
-        accessibilityLabel={`${typeLabel}: ${item.content.substring(0, 80)}`}
+        accessibilityLabel={
+          isInvitationTile
+            ? 'Invitation. Tap to share.'
+            : `${typeLabel}: ${item.content.substring(0, 80)}`
+        }
         testID={resolvedTestID}
       >
         {cardContent}
@@ -327,6 +341,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: colors.brandBlue,
+  },
+  invitationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  invitationTapText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: colors.textPrimary,
   },
 });
 

@@ -128,8 +128,6 @@ export interface InvitationDTO {
   status: InvitationStatus;
   createdAt: string;
   expiresAt: string;
-  /** The crafted invitation message */
-  invitationMessage?: string | null;
   /** Whether the user has confirmed the invitation message */
   messageConfirmed?: boolean;
   /** When the user confirmed the invitation message (for chat indicator positioning) */

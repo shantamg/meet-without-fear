@@ -2,25 +2,20 @@
  * InvitationShareButton Component
  *
  * A compact share button that appears above the chat input when
- * the user has confirmed an invitation message. Displays the
- * invitation message and triggers the share sheet on tap.
+ * the user is ready to share an invitation. Triggers the OS share
+ * sheet with a hardcoded canonical body + the invitation URL.
  */
 
 import { View, Text, TouchableOpacity, Share, StyleSheet, Platform } from 'react-native';
 import { Share2 } from 'lucide-react-native';
 import { colors } from '../theme';
+import { buildInvitationShareText } from '../utils/invitationShareText';
 
 interface InvitationShareButtonProps {
-  /** The invitation message to share */
-  invitationMessage: string;
   /** The invitation URL to share */
   invitationUrl: string;
-  /** AI-finalized neutral topic frame */
-  topicFrame?: string | null;
-  /** Partner's name for the share dialog */
+  /** Partner's name for the share dialog title */
   partnerName?: string;
-  /** The sender's name (user inviting) */
-  senderName?: string;
   /** Whether the button is disabled */
   disabled?: boolean;
   /** Callback when share is successful */
@@ -30,11 +25,8 @@ interface InvitationShareButtonProps {
 }
 
 export function InvitationShareButton({
-  invitationMessage,
   invitationUrl,
-  topicFrame,
   partnerName,
-  senderName,
   disabled = false,
   onShareSuccess,
   testID,
@@ -43,9 +35,7 @@ export function InvitationShareButton({
     if (disabled) return;
 
     try {
-      const senderDisplay = senderName || 'Someone';
-      const topicLine = topicFrame ? `Topic: ${topicFrame}\n\n` : '';
-      const shareMessage = `${senderDisplay} would like to invite you to Meet Without Fear\n\n${topicLine}${invitationUrl}\n\n${invitationMessage}`;
+      const shareMessage = buildInvitationShareText(invitationUrl);
 
       // On web, navigator.share usually drops `text` when `url` is set
       // (Chrome) or concatenates them awkwardly. To get the full message +

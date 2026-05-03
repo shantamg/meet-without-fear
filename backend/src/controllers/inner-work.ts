@@ -284,8 +284,8 @@ async function fetchLinkedPartnerSessionContext(
       waitingStatus = `Waiting for ${partnerName} to share their empathy statement`;
     }
 
-    // Get session topic from invitation
-    const sessionTopic = session.invitations[0]?.invitationMessage || undefined;
+    // Use the confirmed topic frame as the session's topic context.
+    const sessionTopic = session.topicFrame || undefined;
 
     return {
       partnerName,

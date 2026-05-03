@@ -59,11 +59,17 @@ export interface UseChatUIStateProps {
   compactMySigned: boolean | undefined;
 
   // Invitation phase
-  // Cache-First: invitationConfirmed is derived from cache (invitation.messageConfirmed)
-  // Optimistic update in useConfirmInvitationMessage.onMutate ensures immediate feedback
-  hasInvitationMessage: boolean;
-  invitationConfirmed: boolean;
+  // The invitation panel opens when the topic frame is confirmed and the
+  // user has not dismissed it. Stage 0→1 advancement is chained off topic
+  // confirmation; the invitation panel is purely a share affordance.
+  hasTopicConfirmed: boolean;
+  invitationPanelDismissed: boolean;
   isConfirmingInvitation: boolean;
+
+  // Stage 0: Topic proposal panel
+  topicFrameProposed: string | null;
+  topicProposalDismissed: boolean;
+  isConfirmingTopicFrame: boolean;
 
   // Stage 1: Feel heard
   showFeelHeardConfirmation: boolean;
@@ -172,9 +178,12 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     myProgress,
     partnerProgress,
     compactMySigned,
-    hasInvitationMessage,
-    invitationConfirmed,
+    hasTopicConfirmed,
+    invitationPanelDismissed,
     isConfirmingInvitation,
+    topicFrameProposed,
+    topicProposalDismissed,
+    isConfirmingTopicFrame,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -240,9 +249,12 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     isTypewriterAnimating,
     compactMySigned,
     myProgress,
-    hasInvitationMessage,
-    invitationConfirmed,
+    hasTopicConfirmed,
+    invitationPanelDismissed,
     isConfirmingInvitation,
+    topicFrameProposed,
+    topicProposalDismissed,
+    isConfirmingTopicFrame,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -296,9 +308,12 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     isTypewriterAnimating,
     compactMySigned,
     myProgress,
-    hasInvitationMessage,
-    invitationConfirmed,
+    hasTopicConfirmed,
+    invitationPanelDismissed,
     isConfirmingInvitation,
+    topicFrameProposed,
+    topicProposalDismissed,
+    isConfirmingTopicFrame,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,

@@ -83,14 +83,14 @@ describe('Above Input Panel Priority', () => {
     expect(result.aboveInputPanel).toBe('compact-agreement-bar');
   });
 
-  it('shows invitation panel for inviter with unconfirmed message', () => {
+  it('shows invitation panel for inviter once topic is confirmed', () => {
     const inputs = createInputs({
       myStage: Stage.WITNESS,
       compactMySigned: true,
       myProgress: { stage: Stage.WITNESS },
       isInviter: true,
-      hasInvitationMessage: true,
-      invitationConfirmed: false,
+      hasTopicConfirmed: true,
+      invitationPanelDismissed: false,
       isConfirmingInvitation: false,
     });
 
@@ -104,22 +104,22 @@ describe('Above Input Panel Priority', () => {
       compactMySigned: true,
       myProgress: { stage: Stage.WITNESS },
       isInviter: false,
-      hasInvitationMessage: true,
-      invitationConfirmed: false,
+      hasTopicConfirmed: true,
+      invitationPanelDismissed: false,
     });
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).not.toBe('invitation');
   });
 
-  it('does not show invitation panel once the invitation is confirmed', () => {
+  it('does not show invitation panel once the user dismisses it', () => {
     const inputs = createInputs({
       myStage: Stage.WITNESS,
       compactMySigned: true,
       myProgress: { stage: Stage.WITNESS },
       isInviter: true,
-      hasInvitationMessage: true,
-      invitationConfirmed: true,
+      hasTopicConfirmed: true,
+      invitationPanelDismissed: true,
       showFeelHeardConfirmation: true,
       feelHeardConfirmedAt: null,
     });
@@ -214,8 +214,8 @@ describe('Above Input Panel Priority', () => {
       compactMySigned: true,
       myProgress: { stage: Stage.WITNESS },
       isInviter: true,
-      hasInvitationMessage: true,
-      invitationConfirmed: false,
+      hasTopicConfirmed: true,
+      invitationPanelDismissed: false,
       showFeelHeardConfirmation: true,
       feelHeardConfirmedAt: null,
     });

@@ -27,6 +27,29 @@ Sentry.init({
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
+// Web: kill the default browser focus ring on every focusable element.
+// RN Web maps TextInput/Pressable/etc. to <input>/<textarea>/<div> which
+// inherit the user agent's blue outline on :focus. We don't use focus rings
+// anywhere in the app's design.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const STYLE_ID = 'mwf-no-focus-outline';
+  if (!document.getElementById(STYLE_ID)) {
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `
+      *:focus, *:focus-visible {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+      input, textarea, [contenteditable] {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
 /**
  * Component to hide splash screen once ready
  */

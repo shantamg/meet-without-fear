@@ -46,8 +46,10 @@ export interface ActivityDrawerProps {
   onShareAsIs?: (offerId: string) => void;
   onOpenEmpathyDetail?: (attemptId: string, content: string) => void;
   onShareInvitation?: () => void;
-  invitationMessage?: string;
+  topicFrame?: string;
   invitationTimestamp?: string;
+  /** True when the partner has accepted the invitation. Hides the Share button. */
+  partnerAccepted?: boolean;
   sessionStatus?: string;
   partnerEmpathyValidated?: boolean;
   testID?: string;
@@ -71,22 +73,13 @@ const SNAP_DOWN_THRESHOLD = 100; // px dragged down to dismiss
  */
 function buildSentItems(
   sharingStatus: ReturnType<typeof useSharingStatus>,
-  invitationMessage?: string,
-  invitationTimestamp?: string,
   partnerName?: string,
 ): TimelineItem[] {
   const items: TimelineItem[] = [];
 
-  // Invitation — only show after user confirms it was sent (has timestamp)
-  if (invitationMessage && invitationTimestamp) {
-    items.push({
-      id: 'invitation',
-      type: 'invitation',
-      direction: 'sent',
-      content: invitationMessage,
-      timestamp: invitationTimestamp || new Date().toISOString(),
-    });
-  }
+  // Note: The synthesized invitation tile has been removed. The topic and
+  // share-invitation affordance now live in the dedicated topic block at
+  // the top of the drawer (see render below).
 
   // My empathy attempt
   if (sharingStatus.myAttempt) {
@@ -224,8 +217,9 @@ export function ActivityDrawer({
   onShareAsIs,
   onOpenEmpathyDetail,
   onShareInvitation,
-  invitationMessage,
-  invitationTimestamp,
+  topicFrame,
+  invitationTimestamp: _invitationTimestamp,
+  partnerAccepted = false,
   sessionStatus,
   partnerEmpathyValidated,
   testID = 'activity-drawer',
@@ -259,12 +253,7 @@ export function ActivityDrawer({
   // Build timeline items
   // -------------------------------------------------------------------------
   const allItems = useMemo<TimelineItem[]>(() => {
-    const sent = buildSentItems(
-      sharingStatus,
-      invitationMessage,
-      invitationTimestamp,
-      partnerName,
-    );
+    const sent = buildSentItems(sharingStatus, partnerName);
     const received = buildReceivedItems(
       sharingStatus,
       pendingActions,
@@ -280,12 +269,16 @@ export function ActivityDrawer({
   }, [
     sharingStatus,
     pendingActions,
-    invitationMessage,
-    invitationTimestamp,
     partnerName,
     isSessionActive,
     partnerEmpathyValidated,
   ]);
+
+  // Topic block visibility: only the inviter passes a topicFrame, so any time
+  // topicFrame is set we render the dedicated block. Share button hides once
+  // the partner has accepted.
+  const showTopicBlock = !!topicFrame;
+  const showShareButton = showTopicBlock && !partnerAccepted && !!onShareInvitation;
 
   // Split into attention items (actionRequired) and history items
   const attentionItems = useMemo(
@@ -513,34 +506,61 @@ export function ActivityDrawer({
             contentContainerStyle={[styles.listContent, { paddingBottom: 32 + insets.bottom }]}
             showsVerticalScrollIndicator={false}
             ListHeaderComponent={
-              attentionItems.length > 0 ? (
-                <>
-                  <Text style={styles.sectionHeader} accessibilityRole="header">
-                    Ready for you
-                  </Text>
-                  <View style={styles.attentionSection}>
-                    {attentionItems.map((item) => (
-                      <TimelineItemCard
-                        key={item.id}
-                        item={item}
-                        centered
-                        onOpenRefinement={onOpenRefinement}
-                        onShareAsIs={onShareAsIs}
-                        onOpenEmpathyDetail={onOpenEmpathyDetail}
-                        onShareInvitation={onShareInvitation}
-                        testID={`${testID}-attention-${item.id}`}
-                      />
-                    ))}
+              <>
+                {showTopicBlock && (
+                  <View
+                    style={styles.topicBlock}
+                    testID={`${testID}-topic-block`}
+                  >
+                    <Text style={styles.topicLabel} accessibilityRole="header">
+                      TOPIC
+                    </Text>
+                    <Text style={styles.topicText}>{topicFrame}</Text>
+                    {showShareButton && (
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.topicShareButton,
+                          pressed && styles.topicShareButtonPressed,
+                        ]}
+                        onPress={onShareInvitation}
+                        accessibilityRole="button"
+                        accessibilityLabel="Share invitation"
+                        testID={`${testID}-topic-share-button`}
+                      >
+                        <Text style={styles.topicShareButtonText}>Share invitation</Text>
+                      </Pressable>
+                    )}
                   </View>
+                )}
+                {attentionItems.length > 0 ? (
+                  <>
+                    <Text style={styles.sectionHeader} accessibilityRole="header">
+                      Ready for you
+                    </Text>
+                    <View style={styles.attentionSection}>
+                      {attentionItems.map((item) => (
+                        <TimelineItemCard
+                          key={item.id}
+                          item={item}
+                          centered
+                          onOpenRefinement={onOpenRefinement}
+                          onShareAsIs={onShareAsIs}
+                          onOpenEmpathyDetail={onOpenEmpathyDetail}
+                          onShareInvitation={onShareInvitation}
+                          testID={`${testID}-attention-${item.id}`}
+                        />
+                      ))}
+                    </View>
+                    <Text style={styles.sectionHeader} accessibilityRole="header">
+                      History
+                    </Text>
+                  </>
+                ) : (
                   <Text style={styles.sectionHeader} accessibilityRole="header">
                     History
                   </Text>
-                </>
-              ) : (
-                <Text style={styles.sectionHeader} accessibilityRole="header">
-                  History
-                </Text>
-              )
+                )}
+              </>
             }
             ListEmptyComponent={
               <Text style={styles.emptyText}>
@@ -609,6 +629,40 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 32,
+  },
+  topicBlock: {
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  topicLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    letterSpacing: 1.2,
+    marginBottom: 6,
+  },
+  topicText: {
+    fontSize: 15,
+    color: colors.textPrimary,
+    lineHeight: 20,
+  },
+  topicShareButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: 'transparent',
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  topicShareButtonPressed: {
+    opacity: 0.6,
+  },
+  topicShareButtonText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
   },
   emptyText: {
     fontSize: 14,
