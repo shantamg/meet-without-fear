@@ -181,6 +181,7 @@ export function UnifiedSessionScreen({
   const {
     // Loading
     isLoading,
+    accessDenied,
     isFetchingInitialMessage,
 
     // Session context
@@ -2267,6 +2268,22 @@ export function UnifiedSessionScreen({
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={styles.accentColor.color} />
         <Text style={styles.loadingText}>Loading session...</Text>
+      </View>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Access Denied — user is not a member of this session's relationship
+  // -------------------------------------------------------------------------
+  if (accessDenied) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.loadingText}>You don't have access to this session.</Text>
+        {onNavigateBack && (
+          <TouchableOpacity onPress={onNavigateBack} style={{ marginTop: 16 }}>
+            <Text style={[styles.loadingText, { textDecorationLine: 'underline' }]}>Go back</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }

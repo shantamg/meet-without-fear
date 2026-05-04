@@ -237,7 +237,17 @@ export function useUnifiedSession(
   // Consolidated Session State (reduces initial requests from ~5 to 1)
   // Returns session, progress, messages, invitation, and compact in one request
   // -------------------------------------------------------------------------
-  const { data: stateData, isLoading: loadingState } = useSessionState(sessionId);
+  const { data: stateData, isLoading: loadingState, error: stateError } = useSessionState(sessionId, {
+    retry: (failureCount, error) => {
+      // Don't retry 403s — user simply doesn't have access
+      if (error instanceof ApiClientError && error.status === 403) return false;
+      return failureCount < 3;
+    },
+  });
+
+  // If the /state endpoint returns 403, the user has no access to this session.
+  // Disable all child queries to prevent hundreds of redundant 403s from polling.
+  const accessDenied = stateError instanceof ApiClientError && stateError.status === 403;
 
   // Extract core data from consolidated state
   const sessionData = stateData ? { session: stateData.session } : undefined;
@@ -262,17 +272,18 @@ export function useUnifiedSession(
     isFetchingNextPage,
   } = useInfiniteMessages(
     { sessionId: sessionId!, limit: 25 },
-    { enabled: !!sessionId }
+    { enabled: !!sessionId && !accessDenied }
   );
 
   // Stage 2: Empathy - always fetch to avoid waterfall
   // API returns null/empty when not in stage 2+, and React Query caches efficiently
-  const { data: empathyDraftData } = useEmpathyDraft(sessionId);
-  const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId);
+  const disableChildQueries = accessDenied ? { enabled: false as const } : undefined;
+  const { data: empathyDraftData } = useEmpathyDraft(sessionId, disableChildQueries);
+  const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId, disableChildQueries);
   const partnerEmpathy = partnerEmpathyData?.attempt ?? null;
 
   // Stage 3: Needs - always fetch to avoid waterfall
-  const { data: needsData } = useNeeds(sessionId);
+  const { data: needsData } = useNeeds(sessionId, disableChildQueries);
 
   // Derive needs state for gating common ground query
   const needsForGating = needsData?.needs ?? [];
@@ -280,17 +291,17 @@ export function useUnifiedSession(
 
   const { data: needsComparisonData } = useNeedsComparison(
     sessionId,
-    allNeedsConfirmedForGating
+    allNeedsConfirmedForGating && !accessDenied
   );
 
   // Stage 4: Strategies - always fetch to avoid waterfall
-  const { data: strategyData } = useStrategies(sessionId);
-  const { data: revealData } = useStrategiesReveal(sessionId);
-  const { data: agreementsData } = useAgreements(sessionId);
+  const { data: strategyData } = useStrategies(sessionId, disableChildQueries);
+  const { data: revealData } = useStrategiesReveal(sessionId, disableChildQueries);
+  const { data: agreementsData } = useAgreements(sessionId, disableChildQueries);
 
   // Empathy Reconciler Data
-  const { data: empathyStatusData } = useEmpathyStatus(sessionId);
-  const { data: shareOfferData } = useShareOffer(sessionId);
+  const { data: empathyStatusData } = useEmpathyStatus(sessionId, disableChildQueries);
+  const { data: shareOfferData } = useShareOffer(sessionId, disableChildQueries);
   const { mutate: respondToShareOffer } = useRespondToShareOffer();
 
   // -------------------------------------------------------------------------
@@ -1108,6 +1119,7 @@ export function useUnifiedSession(
   return {
     // Loading state
     isLoading: loadingSession || loadingProgress || loadingMessages,
+    accessDenied,
     isFetchingInitialMessage,
 
     // Session context
