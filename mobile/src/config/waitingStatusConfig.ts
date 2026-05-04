@@ -86,6 +86,18 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     bannerSubtext: "Once they share, you'll both be able to reflect on what each other shared.",
   },
 
+  // Stage 2: User has validated partner's empathy; partner still needs to validate user's empathy.
+  'partner-validating-empathy': {
+    showBanner: true,
+    hideInput: true,
+    showInnerThoughts: true,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: true,
+    bannerText: (p) => `${p} is reviewing what you shared.`,
+    bannerSubtext: "Once they respond, you'll both be ready for the next step.",
+  },
+
   // Stage 2: System review is running; block input until the next action is known.
   'reconciler-analyzing': {
     showBanner: true,
@@ -205,6 +217,17 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     showSpinner: false,
     showKeepChattingAction: false,
     bannerText: (p) => `${p} is reviewing common ground.`,
+  },
+
+  // Stage 3: User validated the side-by-side needs reveal; partner still needs to validate.
+  'partner-validating-needs': {
+    showBanner: true,
+    hideInput: true,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
+    bannerText: (p) => `${p} is reviewing the needs you both shared.`,
   },
 
   // Stage 4: Waiting for partner to submit strategy rankings

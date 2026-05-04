@@ -24,6 +24,7 @@
     "dev": "concurrently \"npm run dev:api\" \"sleep 2 && npm run dev:mobile\"",
     "dev:mobile": "npm --workspace mobile run start",
     "dev:mobile:clear": "npm --workspace mobile run start:clear",
+    "dev:mobile:e2e": "npm --workspace mobile run start:e2e",
     "dev:api": "npm run dev:watch --workspace=backend",
     "test": "npm --workspaces run test --if-present",
     "check": "npm --workspaces run check --if-present",

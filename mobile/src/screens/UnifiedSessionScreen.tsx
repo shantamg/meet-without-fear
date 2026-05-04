@@ -1207,6 +1207,8 @@ export function UnifiedSessionScreen({
         status: empathyStatusData.myAttempt.status,
         content: empathyStatusData.myAttempt.content,
       } : undefined,
+      myValidation: sharingStatus.myValidation,
+      partnerValidated: sharingStatus.partnerValidated,
       messageCountSinceSharedContext: empathyStatusData.messageCountSinceSharedContext,
     } : undefined,
     empathyDraftData: empathyDraftData ? {
@@ -1337,7 +1339,7 @@ export function UnifiedSessionScreen({
   const readyToShowEmpathy = shouldShowEmpathyPanel;
   const readyToShowFeelHeard = shouldShowFeelHeard;
   const readyToShowShareSuggestion = shouldShowShareSuggestion;
-  const readyToShowNeedsReview = shouldShowNeedsReview || shouldShowNeedsShare;
+  const readyToShowNeedsReview = shouldShowNeedsReview || shouldShowNeedsShare || shouldShowCommonGround;
   const readyToShowCommonGround = shouldShowCommonGround;
   const readyToShowWaitingBanner = shouldShowWaitingBanner;
 
@@ -1823,6 +1825,14 @@ export function UnifiedSessionScreen({
   const handleShareInvitation = useCallback(async (): Promise<boolean> => {
     if (!invitationUrl) return false;
     try {
+      if (process.env.EXPO_PUBLIC_E2E_MODE === 'true') {
+        console.log('[UnifiedSessionScreen] E2E mode: treating invitation as shared', {
+          sessionId,
+          invitationUrl,
+        });
+        return true;
+      }
+
       const shareMessage = buildInvitationShareText(invitationUrl);
       const result = await Share.share(
         Platform.OS === 'web'
@@ -2760,8 +2770,7 @@ export function UnifiedSessionScreen({
           hideInput={
             // Use derived hideInput logic from useChatUIState
             // Never hide when empathy review panel is showing (user still needs to interact)
-            // Never hide when needs/common ground panels are showing (Stage 3 interaction)
-            !shouldShowEmpathyPanel && !shouldShowNeedsReview && !shouldShowCommonGround && derivedShouldHideInput
+            !shouldShowEmpathyPanel && derivedShouldHideInput
           }
           validationCards={validationCards}
           onValidateAccurate={handleValidationAccurate}
@@ -3056,8 +3065,12 @@ export function UnifiedSessionScreen({
                   styles.invitationModalButton,
                   styles.invitationModalButtonPrimary,
                 ]}
-                onPress={() => {
-                  void handleShareInvitation();
+                onPress={async () => {
+                  const didShare = await handleShareInvitation();
+                  if (didShare) {
+                    setInvitationPanelDismissed(true);
+                    handleConfirmInvitationMessage();
+                  }
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Share invitation"

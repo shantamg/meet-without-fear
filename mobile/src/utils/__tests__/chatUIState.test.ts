@@ -344,6 +344,31 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(true);
   });
 
+  it('hides input after validating no-overlap revealed needs while partner has not', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      allNeedsConfirmed: true,
+      needsShared: true,
+      needsRevealReady: true,
+      needs: { allConfirmed: true, shared: true, revealReady: true },
+      commonGroundAvailable: true,
+      commonGroundCount: 0,
+      commonGround: {
+        count: 0,
+        allConfirmedByMe: true,
+        allConfirmedByBoth: false,
+      },
+      commonGroundAllConfirmedByMe: true,
+      commonGroundAllConfirmedByBoth: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.waitingStatus).toBe('partner-validating-needs');
+    expect(result.shouldHideInput).toBe(true);
+  });
+
   it('shows input during normal conversation', () => {
     const inputs = createInputs({
       myStage: Stage.WITNESS,
