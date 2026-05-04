@@ -42,6 +42,7 @@ import { ActivityDrawer } from '../components/ActivityDrawer';
 import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
+import { TypewriterText } from '../components/TypewriterText';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { useConfirmTopicFrame } from '../hooks/useSessions';
@@ -159,6 +160,69 @@ function timestampBeforeChatStart(timestamp?: string | null): string {
   if (!Number.isFinite(time)) return timestamp;
 
   return new Date(time - 2000).toISOString();
+}
+
+function InviteeTopicIntroCard({
+  partnerName,
+  topicFrame,
+}: {
+  partnerName: string;
+  topicFrame: string;
+}) {
+  const styles = useStyles();
+  const [showTopic, setShowTopic] = useState(false);
+  const [showOutro, setShowOutro] = useState(false);
+  const topicOpacity = useRef(new Animated.Value(0)).current;
+  const introCompletedRef = useRef(false);
+  const topicCompletedRef = useRef(false);
+
+  const introText = `Before we begin, this is what ${partnerName || 'your partner'} would like to work through with you:`;
+  const outroText = "This is how things look from their side right now. You don't need to agree with it, respond to it, or do anything with it yet. Instead, I'd like to know what is happening from your point of view.";
+
+  const handleIntroComplete = useCallback(() => {
+    if (introCompletedRef.current) return;
+    introCompletedRef.current = true;
+    setShowTopic(true);
+
+    Animated.timing(topicOpacity, {
+      toValue: 1,
+      duration: 350,
+      useNativeDriver: true,
+    }).start(() => {
+      if (topicCompletedRef.current) return;
+      topicCompletedRef.current = true;
+      setShowOutro(true);
+    });
+  }, [topicOpacity]);
+
+  return (
+    <View style={styles.inviteeTopicAckBody} testID="invitee-topic-ack-body">
+      <TypewriterText
+        text={introText}
+        style={styles.inviteeTopicAckText}
+        wordDelay={45}
+        fadeDuration={120}
+        onComplete={handleIntroComplete}
+      />
+
+      {showTopic ? (
+        <Animated.View style={[styles.inviteeTopicAckFrameWrap, { opacity: topicOpacity }]}>
+          <Text style={styles.inviteeTopicAckFrame} testID="invitee-topic-text">
+            {topicFrame}
+          </Text>
+        </Animated.View>
+      ) : null}
+
+      {showOutro ? (
+        <TypewriterText
+          text={outroText}
+          style={styles.inviteeTopicAckText}
+          wordDelay={45}
+          fadeDuration={120}
+        />
+      ) : null}
+    </View>
+  );
 }
 
 // ============================================================================
@@ -1689,27 +1753,6 @@ export function UnifiedSessionScreen({
     return <CompactChatItem testID="inline-compact" isFirstSession={isFirstSession} />;
   }, [isFirstSession]);
 
-  // Invitee Stage 0 topic-acknowledgement message body.
-  // Rendered in the message area (not in the bottom bar) per spec:
-  // intro line + topic frame with breathing room + closing line.
-  const inviteeTopicAckEmptyStateElement = useMemo(() => {
-    return (
-      <View style={styles.inviteeTopicAckBody} testID="invitee-topic-ack-body">
-        <Text style={styles.inviteeTopicAckText}>
-          {`Before we begin, this is what ${partnerName || 'your partner'} would like to work through with you:`}
-        </Text>
-        <View style={styles.inviteeTopicAckFrameWrap}>
-          <Text style={styles.inviteeTopicAckFrame} testID="invitee-topic-text">
-            {topicFrame ?? ''}
-          </Text>
-        </View>
-        <Text style={styles.inviteeTopicAckText}>
-          {"This is how things look from their side right now. You don't need to agree with it, respond to it, or do anything with it yet. Instead, I'd like to know what is happening from your point of view."}
-        </Text>
-      </View>
-    );
-  }, [styles, partnerName, topicFrame]);
-
   const inviteeOpeningCards = useMemo((): ChatCustomCardItem[] => {
     if (isInviter || !compactData?.mySigned || !topicFrame) return [];
 
@@ -1719,16 +1762,21 @@ export function UnifiedSessionScreen({
       timestamp: timestampBeforeChatStart(
         compactData.mySignedAt || invitation?.acceptedAt || session?.createdAt
       ),
-      render: () => inviteeTopicAckEmptyStateElement,
+      render: () => (
+        <InviteeTopicIntroCard
+          partnerName={partnerName || 'your partner'}
+          topicFrame={topicFrame}
+        />
+      ),
     }];
   }, [
     isInviter,
     compactData?.mySigned,
     compactData?.mySignedAt,
     topicFrame,
+    partnerName,
     invitation?.acceptedAt,
     session?.createdAt,
-    inviteeTopicAckEmptyStateElement,
   ]);
 
   // -------------------------------------------------------------------------
