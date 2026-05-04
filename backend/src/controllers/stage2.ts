@@ -1664,9 +1664,6 @@ Respond in JSON format:
       messages.push({ id: msg.id, content: msg.content, timestamp: msg.timestamp, forUserId: uid });
     }
 
-    // Use first message as representative for the event payload
-    const message = messages[0];
-
     // 4. Update Stage Progress for both to Stage 3
     // Backfill missing prior stage records (defensive — handles cases where
     // session initialization failed to create StageProgress atomically)
@@ -1735,17 +1732,21 @@ Respond in JSON format:
 
     // 5. Notify Realtime
     // Notify session channel that stage changed
-    if (partnerId && message) {
+    if (partnerId && messages.length > 0) {
       await publishSessionEvent(sessionId, 'partner.stage_completed', {
         previousStage: 2,
         currentStage: 3,
         userId,
         triggeredByUserId: userId,
-        message: {
-          id: message.id,
-          content: message.content,
-          timestamp: message.timestamp
-        }
+        messagesByUserId: Object.fromEntries(messages.map((message) => [
+          message.forUserId,
+          {
+            id: message.id,
+            content: message.content,
+            timestamp: message.timestamp,
+            forUserId: message.forUserId,
+          },
+        ])),
       });
     }
 
