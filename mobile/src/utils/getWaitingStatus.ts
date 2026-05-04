@@ -22,6 +22,7 @@ export type WaitingStatusState =
   | 'empathy-pending' // Stage 2: Waiting for partner to share empathy
   | 'partner-considering-perspective' // Stage 2: Partner felt heard, now building empathy for you (good alignment)
   | 'needs-pending' // Stage 3: Waiting for partner to confirm needs
+  | 'needs-waiting-for-partner' // Stage 3: User shared needs, waiting for partner to share
   | 'common-ground-pending' // Stage 3: Waiting for partner to confirm common ground
   | 'ranking-pending' // Stage 4: Waiting for partner to submit ranking
   | 'partner-signed' // Partner has signed compact (transient)
@@ -76,6 +77,8 @@ export interface WaitingStatusInputs {
   // Stage 3: Needs confirmation state
   needs: {
     allConfirmed: boolean;
+    shared?: boolean;
+    revealReady?: boolean;
   };
 
   // Stage 3: Common ground discovery
@@ -219,8 +222,13 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
 
   // --- Priority 5: Stage 3 (Needs) ---
   // Only show needs-pending when in Stage 3, needs confirmed, and no common ground yet
-  if (myStage === Stage.NEED_MAPPING && needs.allConfirmed && commonGround.count === 0) {
-    return 'needs-pending';
+  if (
+    myStage === Stage.NEED_MAPPING &&
+    needs.shared &&
+    !needs.revealReady &&
+    commonGround.count === 0
+  ) {
+    return 'needs-waiting-for-partner';
   }
 
   // Transition: Partner confirmed needs and common ground discovered
