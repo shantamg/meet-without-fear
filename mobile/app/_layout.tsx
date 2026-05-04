@@ -18,14 +18,72 @@ import { NativeAppBanner } from '@/src/components/NativeAppBanner';
 import { E2EAuthProvider, isE2EMode } from '@/src/providers/E2EAuthProvider';
 import { useOTAUpdate } from '@/src/hooks/useOTAUpdate';
 
+/** Keys that may contain user names / PII — strip from Sentry context. */
+const PII_KEYS = new Set([
+  'name', 'firstName', 'guesser', 'subject',
+  'guesserName', 'subjectName', 'partnerName',
+  'userName', 'userAName', 'userBName',
+]);
+
+function stripPiiFromRecord(data: Record<string, unknown>): void {
+  for (const key of Object.keys(data)) {
+    if (PII_KEYS.has(key)) {
+      delete data[key];
+    }
+  }
+}
+
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? '',
-  tracesSampleRate: 1.0,
+  tracesSampleRate: 0.2,
+  sendDefaultPii: false,
   enabled: !__DEV__,
+  beforeSend(event) {
+    if (event.extra) {
+      stripPiiFromRecord(event.extra as Record<string, unknown>);
+    }
+    if (event.breadcrumbs) {
+      for (const breadcrumb of event.breadcrumbs) {
+        if (breadcrumb.data) {
+          stripPiiFromRecord(breadcrumb.data);
+        }
+      }
+    }
+    return event;
+  },
+  beforeBreadcrumb(breadcrumb) {
+    if (breadcrumb.data) {
+      stripPiiFromRecord(breadcrumb.data);
+    }
+    return breadcrumb;
+  },
 });
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
+
+// Web: kill the default browser focus ring on every focusable element.
+// RN Web maps TextInput/Pressable/etc. to <input>/<textarea>/<div> which
+// inherit the user agent's blue outline on :focus. We don't use focus rings
+// anywhere in the app's design.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const STYLE_ID = 'mwf-no-focus-outline';
+  if (!document.getElementById(STYLE_ID)) {
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `
+      *:focus, *:focus-visible {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+      input, textarea, [contenteditable] {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
 
 /**
  * Component to hide splash screen once ready

@@ -196,7 +196,15 @@ const initialState: UnifiedSessionState = {
 // Main Hook
 // ============================================================================
 
-export function useUnifiedSession(sessionId: string | undefined) {
+export function useUnifiedSession(
+  sessionId: string | undefined,
+  options?: { inviteeTopicAcked?: boolean }
+) {
+  // Whether the invitee has tapped "Ready" on the Stage 0 topic-ack screen.
+  // While false, we defer all auto-fetches of the initial Stage 0/1 AI message
+  // for the invitee so they don't see chat content before acknowledging the
+  // inviter's topic frame.
+  const inviteeTopicAcked = options?.inviteeTopicAcked ?? true;
   // Local state management
   const [state, dispatch] = useReducer(sessionReducer, initialState);
   const lastActivityTime = useRef<number>(Date.now());
@@ -205,10 +213,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
   // Toast for error feedback
   const { showError } = useToast();
-
-  // Track live invitation message from AI responses (for refinement flow)
-  // This captures the proposed message before it's saved to database
-  const [liveInvitationMessage, setLiveInvitationMessage] = useState<string | null>(null);
 
   // Track AI-proposed empathy statement (Stage 2)
   // This captures the proposed statement when AI determines user is ready to share
@@ -233,7 +237,17 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Consolidated Session State (reduces initial requests from ~5 to 1)
   // Returns session, progress, messages, invitation, and compact in one request
   // -------------------------------------------------------------------------
-  const { data: stateData, isLoading: loadingState } = useSessionState(sessionId);
+  const { data: stateData, isLoading: loadingState, error: stateError } = useSessionState(sessionId, {
+    retry: (failureCount, error) => {
+      // Don't retry 403s — user simply doesn't have access
+      if (error instanceof ApiClientError && error.status === 403) return false;
+      return failureCount < 3;
+    },
+  });
+
+  // If the /state endpoint returns 403, the user has no access to this session.
+  // Disable all child queries to prevent hundreds of redundant 403s from polling.
+  const accessDenied = stateError instanceof ApiClientError && stateError.status === 403;
 
   // Extract core data from consolidated state
   const sessionData = stateData ? { session: stateData.session } : undefined;
@@ -258,35 +272,38 @@ export function useUnifiedSession(sessionId: string | undefined) {
     isFetchingNextPage,
   } = useInfiniteMessages(
     { sessionId: sessionId!, limit: 25 },
-    { enabled: !!sessionId }
+    { enabled: !!sessionId && !accessDenied }
   );
 
   // Stage 2: Empathy - always fetch to avoid waterfall
   // API returns null/empty when not in stage 2+, and React Query caches efficiently
-  const { data: empathyDraftData } = useEmpathyDraft(sessionId);
-  const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId);
+  const disableChildQueries = accessDenied ? { enabled: false as const } : undefined;
+  const { data: empathyDraftData } = useEmpathyDraft(sessionId, disableChildQueries);
+  const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId, disableChildQueries);
   const partnerEmpathy = partnerEmpathyData?.attempt ?? null;
 
   // Stage 3: Needs - always fetch to avoid waterfall
-  const { data: needsData } = useNeeds(sessionId);
+  const { data: needsData } = useNeeds(sessionId, disableChildQueries);
 
   // Derive needs state for gating common ground query
   const needsForGating = needsData?.needs ?? [];
   const allNeedsConfirmedForGating = needsForGating.length > 0 && needsForGating.every((n) => n.confirmed);
+  const myNeedsSharedForGating =
+    (progressData?.myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true;
 
   const { data: needsComparisonData } = useNeedsComparison(
     sessionId,
-    allNeedsConfirmedForGating
+    !accessDenied && (allNeedsConfirmedForGating || myNeedsSharedForGating)
   );
 
   // Stage 4: Strategies - always fetch to avoid waterfall
-  const { data: strategyData } = useStrategies(sessionId);
-  const { data: revealData } = useStrategiesReveal(sessionId);
-  const { data: agreementsData } = useAgreements(sessionId);
+  const { data: strategyData } = useStrategies(sessionId, disableChildQueries);
+  const { data: revealData } = useStrategiesReveal(sessionId, disableChildQueries);
+  const { data: agreementsData } = useAgreements(sessionId, disableChildQueries);
 
   // Empathy Reconciler Data
-  const { data: empathyStatusData } = useEmpathyStatus(sessionId);
-  const { data: shareOfferData } = useShareOffer(sessionId);
+  const { data: empathyStatusData } = useEmpathyStatus(sessionId, disableChildQueries);
+  const { data: shareOfferData } = useShareOffer(sessionId, disableChildQueries);
   const { mutate: respondToShareOffer } = useRespondToShareOffer();
 
   // -------------------------------------------------------------------------
@@ -332,16 +349,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
       if (metadata.offerReadyToShare === true) {
         setAiRecommendsReadyToShare(true);
       }
-      // Capture live invitation message from AI (for refinement flow)
-      if (metadata.invitationMessage !== undefined && metadata.invitationMessage !== null) {
-        console.log(`[useUnifiedSession] [TIMING] Setting liveInvitationMessage at ${Date.now()}`);
-        setLiveInvitationMessage(metadata.invitationMessage);
-        if (sessionId) {
-          queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-          queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
-        }
-        console.log(`[useUnifiedSession] [TIMING] setLiveInvitationMessage called at ${Date.now()}`);
-      }
       // Capture AI-proposed empathy statement (Stage 2)
       // Save to database immediately so it persists across reloads
       if (sessionId && metadata.proposedEmpathyStatement !== undefined && metadata.proposedEmpathyStatement !== null) {
@@ -353,9 +360,20 @@ export function useUnifiedSession(sessionId: string | undefined) {
       if (sessionId && metadata.proposedStrategies && metadata.proposedStrategies.length > 0) {
         queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
       }
+      // Stage 0: AI emitted a <draft> topic — backend persisted Session.topicFrame.
+      // Refresh session state so the topic-proposal panel picks it up.
+      if (sessionId && metadata.topicFrame) {
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
+      }
+      if (sessionId && metadata.needsCaptured) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      }
     },
     [sessionId, saveDraft, setStreamTriggeredFeelHeard, setAiRecommendsReadyToShare,
-     setLiveInvitationMessage, setLiveProposedEmpathyStatement, queryClient]
+     setLiveProposedEmpathyStatement, queryClient]
   );
 
   const handleStreamError = useCallback(
@@ -407,7 +425,18 @@ export function useUnifiedSession(sessionId: string | undefined) {
     // with older pages first: [page2, page1, page0].flatMap(p => p.messages)
     const pages = messagesData?.pages;
     if (!pages || pages.length === 0) return [];
-    return [...pages].reverse().flatMap(page => page.messages);
+    const seenIds = new Set<string>();
+    const dedupedMessages = [];
+
+    for (const page of [...pages].reverse()) {
+      for (const message of page.messages) {
+        if (seenIds.has(message.id)) continue;
+        seenIds.add(message.id);
+        dedupedMessages.push(message);
+      }
+    }
+
+    return dedupedMessages;
   }, [messagesData]);
 
   // -------------------------------------------------------------------------
@@ -423,18 +452,23 @@ export function useUnifiedSession(sessionId: string | undefined) {
   // Use undefined as initial state to indicate "not yet loaded" vs null meaning "never viewed"
   const initialLastSeenChatItemIdRef = useRef<string | null | undefined>(undefined);
   const [lastSeenChatItemIdForSeparator, setLastSeenChatItemIdForSeparator] = useState<string | null | undefined>(undefined);
+  const initialLastViewedAtRef = useRef<string | null | undefined>(undefined);
+  const [lastViewedAtForAnimation, setLastViewedAtForAnimation] = useState<string | null | undefined>(undefined);
 
   // Capture initial value when session loads (before marking viewed)
   useEffect(() => {
     if (
       session?.lastSeenChatItemId !== undefined &&
+      session?.lastViewedAt !== undefined &&
       initialLastSeenChatItemIdRef.current === undefined &&
       !hasMarkedViewed.current
     ) {
       initialLastSeenChatItemIdRef.current = session.lastSeenChatItemId;
+      initialLastViewedAtRef.current = session.lastViewedAt;
       setLastSeenChatItemIdForSeparator(session.lastSeenChatItemId);
+      setLastViewedAtForAnimation(session.lastViewedAt);
     }
-  }, [session?.lastSeenChatItemId]);
+  }, [session?.lastSeenChatItemId, session?.lastViewedAt]);
 
   useEffect(() => {
     // Only mark viewed once per session load, when we have messages
@@ -457,7 +491,9 @@ export function useUnifiedSession(sessionId: string | undefined) {
   useEffect(() => {
     hasMarkedViewed.current = false;
     initialLastSeenChatItemIdRef.current = undefined;
+    initialLastViewedAtRef.current = undefined;
     setLastSeenChatItemIdForSeparator(null);
+    setLastViewedAtForAnimation(undefined);
   }, [sessionId]);
 
   // Only show 'Partner' fallback after data has loaded, otherwise show empty string
@@ -472,8 +508,6 @@ export function useUnifiedSession(sessionId: string | undefined) {
   const invitation = invitationData?.invitation;
   const isInvitationPhase =
     session?.status === 'CREATED' && !invitation?.messageConfirmed;
-  // Use live invitation message from AI response if available, fallback to database record
-  const invitationMessage = liveInvitationMessage ?? invitation?.invitationMessage ?? null;
   const invitationConfirmed = invitation?.messageConfirmed ?? false;
   const myProgress = progressData?.myProgress;
   const partnerProgress = progressData?.partnerProgress;
@@ -572,6 +606,12 @@ export function useUnifiedSession(sessionId: string | undefined) {
     // Skip if still loading or during onboarding with unsigned compact
     const isOnboardingUnsigned = currentStage === Stage.ONBOARDING && !compactData?.mySigned;
 
+    // Defer initial-message fetch for the invitee while they are on the
+    // Stage 0 topic-acknowledgement screen. The screen flips
+    // `inviteeTopicAcked` to true once they tap Ready.
+    const isInviteeAwaitingTopicAck =
+      invitation && invitation.isInviter === false && !inviteeTopicAcked;
+
     if (
       !sessionId ||
       loadingSession ||
@@ -579,7 +619,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
       loadingCompact ||
       hasFetchedInitialMessage.current ||
       isFetchingInitialMessage ||
-      isOnboardingUnsigned
+      isOnboardingUnsigned ||
+      isInviteeAwaitingTopicAck
     ) {
       return;
     }
@@ -602,6 +643,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
     fetchInitialMessage,
     currentStage,
     compactData?.mySigned,
+    invitation,
+    inviteeTopicAcked,
   ]);
 
   // -------------------------------------------------------------------------
@@ -831,10 +874,18 @@ export function useUnifiedSession(sessionId: string | undefined) {
         { sessionId },
         {
           onSuccess: () => {
-            // Fetch initial message if none exist
+            // Fetch initial message if none exist. Skipped for the invitee
+            // while they're awaiting the Stage 0 topic-ack screen — they
+            // should see the inviter's topic before any AI message arrives.
             const messagesPages = messagesData?.pages;
             const hasMessages = messagesPages && messagesPages.some(page => page.messages.length > 0);
-            if (!hasMessages && !hasFetchedInitialMessage.current) {
+            const isInviteeAwaitingTopicAck =
+              invitation && invitation.isInviter === false && !inviteeTopicAcked;
+            if (
+              !isInviteeAwaitingTopicAck &&
+              !hasMessages &&
+              !hasFetchedInitialMessage.current
+            ) {
               hasFetchedInitialMessage.current = true;
               fetchInitialMessage({ sessionId });
             }
@@ -844,14 +895,14 @@ export function useUnifiedSession(sessionId: string | undefined) {
         }
       );
     },
-    [sessionId, signCompact, messagesData?.pages, fetchInitialMessage]
+    [sessionId, signCompact, messagesData?.pages, fetchInitialMessage, invitation, inviteeTopicAcked]
   );
 
   const handleConfirmInvitationMessage = useCallback(
-    (message?: string, onSuccess?: () => void) => {
+    (onSuccess?: () => void) => {
       if (!sessionId) return;
       confirmInvitationMessage(
-        { sessionId, message },
+        { sessionId },
         { onSuccess }
       );
     },
@@ -1093,6 +1144,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
   return {
     // Loading state
     isLoading: loadingSession || loadingProgress || loadingMessages,
+    accessDenied,
     isFetchingInitialMessage,
 
     // Session context
@@ -1121,6 +1173,7 @@ export function useUnifiedSession(sessionId: string | undefined) {
     // This is the lastSeenChatItemId from BEFORE the user opened the session
     // It's cleared after markViewed is called so new messages don't show a separator
     lastSeenChatItemIdForSeparator,
+    lastViewedAtForAnimation,
 
     // Pagination for loading older messages
     fetchMoreMessages: fetchNextPage,
@@ -1144,10 +1197,8 @@ export function useUnifiedSession(sessionId: string | undefined) {
 
     // Invitation phase
     isInvitationPhase,
-    invitationMessage,
     invitationConfirmed,
     invitation,
-    setLiveInvitationMessage,
 
     // Stage-specific data
     compactData,
@@ -1213,6 +1264,16 @@ export function useUnifiedSession(sessionId: string | undefined) {
     handleCreateAgreementFromOverlap,
     handleResolveSession,
     handleRespondToShareOffer,
+
+    // Stage advancement (used e.g. by invitee topic-ack Ready button)
+    advanceStage,
+    // Manual initial-message trigger (for callers using deferInitialMessage)
+    triggerInitialMessage: () => {
+      if (!sessionId) return;
+      if (hasFetchedInitialMessage.current) return;
+      hasFetchedInitialMessage.current = true;
+      fetchInitialMessage({ sessionId });
+    },
 
     // Utility actions
     showCooling: (show: boolean) =>

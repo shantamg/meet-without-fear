@@ -118,6 +118,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
           },
         },
         select: {
+          lastViewedAt: true,
           lastSeenChatItemId: true,
         },
       }),
@@ -228,7 +229,6 @@ export async function getSessionState(req: Request, res: Response): Promise<void
           status: invitation.status,
           createdAt: invitation.createdAt.toISOString(),
           expiresAt: invitation.expiresAt.toISOString(),
-          invitationMessage: invitation.invitationMessage,
           messageConfirmed: invitation.messageConfirmed,
           messageConfirmedAt: invitation.messageConfirmedAt?.toISOString() ?? null,
           topicFrame: session.topicFrame ?? null,
@@ -291,6 +291,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
         },
         createdAt: session.createdAt.toISOString(),
         resolvedAt: session.resolvedAt?.toISOString() ?? null,
+        lastViewedAt: userVessel?.lastViewedAt?.toISOString() ?? null,
         lastSeenChatItemId: userVessel?.lastSeenChatItemId ?? null,
       },
 

@@ -82,14 +82,10 @@ export interface OrchestratorContext {
   isFirstTurnInSession?: boolean;
   /** Whether we're in the invitation crafting phase (stage 0, before partner joins) */
   isInvitationPhase?: boolean;
-  /** Whether user is refining their invitation after Stage 1/2 processing */
-  isRefiningInvitation?: boolean;
   /** Whether this is the first turn after advancing to a new stage (stage transition intro) */
   isStageTransition?: boolean;
   /** The stage we just transitioned from (for context gathering) */
   previousStage?: number;
-  /** Current invitation message (for refinement context) */
-  currentInvitationMessage?: string | null;
   /** Current empathy draft (for Stage 2 refinement context) */
   currentEmpathyDraft?: string | null;
   /** Whether the user is actively refining their empathy draft */
@@ -115,10 +111,11 @@ export interface OrchestratorResult {
   offerFeelHeardCheck?: boolean;
   /** For Stage 2: AI determined user is ready to share empathy attempt */
   offerReadyToShare?: boolean;
-  /** For Stage 0: Proposed invitation message */
-  invitationMessage?: string | null;
   /** For Stage 2: Proposed empathy statement summarizing user's understanding */
   proposedEmpathyStatement?: string | null;
+  /** For Stage 0: Proposed topic frame extracted from <draft> tag.
+   *  Persisted to Session.topicFrame when the topic is not yet confirmed. */
+  topicFrame?: string | null;
   /** Sonnet's internal analysis (for background classifier) */
   analysis?: string;
   /** When dispatch is triggered with an initial response, this contains the AI's acknowledgment */
@@ -365,7 +362,6 @@ export async function orchestrateResponse(
       emotionalIntensity: context.emotionalIntensity,
       contextBundle,
       isFirstMessage: context.isFirstTurnInSession,
-      invitationMessage: context.currentInvitationMessage,
       empathyDraft: context.currentEmpathyDraft,
       isRefiningEmpathy: context.isRefiningEmpathy,
       sharedContextFromPartner: context.sharedContextFromPartner,
@@ -378,7 +374,6 @@ export async function orchestrateResponse(
     },
     {
       isInvitationPhase: context.isInvitationPhase,
-      isRefiningInvitation: context.isRefiningInvitation,
       isStageTransition: context.isStageTransition,
       previousStage: context.previousStage,
       isOnboarding: context.isOnboarding,
@@ -494,8 +489,8 @@ export async function orchestrateResponse(
   let usedMock = false;
   let offerFeelHeardCheck = false;
   let offerReadyToShare = false;
-  let invitationMessage: string | null = null;
   let proposedEmpathyStatement: string | null = null;
+  let topicFrame: string | null = null;
   let analysis: string | undefined;
 
   // All stages now use semantic tag format (micro-tags: <thinking>, <draft>, <dispatch>)
@@ -621,7 +616,6 @@ export async function orchestrateResponse(
               usedMock: false,
               offerFeelHeardCheck: false,
               offerReadyToShare: false,
-              invitationMessage: null,
               proposedEmpathyStatement: null,
               analysis: `DISPATCHED: ${parsed.dispatchTag} | Original thinking: ${parsed.thinking}`,
               initialResponse: parsed.response, // Explicit initial response
@@ -644,7 +638,6 @@ export async function orchestrateResponse(
             usedMock: false,
             offerFeelHeardCheck: false,
             offerReadyToShare: false,
-            invitationMessage: null,
             proposedEmpathyStatement: null,
             analysis: `DISPATCHED: ${parsed.dispatchTag} | Original thinking: ${parsed.thinking}`,
             dispatchedResponse,
@@ -660,11 +653,11 @@ export async function orchestrateResponse(
       offerFeelHeardCheck = parsed.offerFeelHeardCheck;
       offerReadyToShare = parsed.offerReadyToShare;
 
-      // Draft is used for both invitation (Stage 0) and empathy (Stage 2)
-      if (context.isInvitationPhase || context.stage === 0) {
-        invitationMessage = parsed.draft;
-      } else if (context.stage === 2) {
+      // Draft is used for empathy (Stage 2) or topic frame (Stage 0).
+      if (context.stage === 2) {
         proposedEmpathyStatement = parsed.draft;
+      } else if (context.stage === 0 || context.isInvitationPhase) {
+        topicFrame = parsed.topicFrame;
       }
 
       analysis = parsed.thinking;
@@ -717,8 +710,8 @@ export async function orchestrateResponse(
     usedMock,
     offerFeelHeardCheck,
     offerReadyToShare,
-    invitationMessage,
     proposedEmpathyStatement,
+    topicFrame,
     analysis,
     modelUsed: routingDecision.model,
     routingDecision,

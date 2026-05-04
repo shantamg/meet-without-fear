@@ -90,6 +90,9 @@ export type SessionEventType =
   // Stage 3: Need Mapping events
   | 'partner.needs_confirmed' // Partner confirmed their identified needs
   | 'partner.needs_shared' // Partner consented to share needs
+  | 'partner.needs_validated' // Partner validated or rejected side-by-side needs
+  | 'session.needs_extracted' // AI extracted candidate needs for one participant
+  | 'session.needs_reveal_ready' // Both participants shared needs; comparison can be revealed
   // Stage 4: Strategic Repair events
   | 'partner.ranking_submitted'
   | 'partner.ready_to_rank'
@@ -250,8 +253,6 @@ export interface MessageAIResponsePayload extends RealtimeEventBase {
   message: MessageDTO;
   /** Stage 1: AI recommends showing feel-heard confirmation */
   offerFeelHeardCheck?: boolean;
-  /** Stage 0: Proposed invitation message from AI */
-  invitationMessage?: string | null;
   /** Stage 2: AI recommends showing ready-to-share confirmation */
   offerReadyToShare?: boolean;
   /** Stage 2: Proposed empathy statement */

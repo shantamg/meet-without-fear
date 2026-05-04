@@ -8,8 +8,7 @@
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
 import { MessageRole } from '@meet-without-fear/shared';
-import { getSonnetResponse, getHaikuJson } from '../../lib/bedrock';
-import { BrainActivityCallType } from '@prisma/client';
+import { getSonnetResponse, getHaikuJson, BrainActivityCallType } from '../../lib/bedrock';
 import { getCurrentUserId } from '../../lib/request-context';
 import {
   buildReconcilerPrompt,
@@ -23,6 +22,11 @@ import type {
 // ============================================================================
 // Types (shared across reconciler modules)
 // ============================================================================
+
+type StageOneMessageForThemes = {
+  content: string;
+  extractedEmotions: string[] | null;
+};
 
 export interface UserInfo {
   id: string;
@@ -153,12 +157,12 @@ export async function getWitnessingContent(
   });
 
   // Combine all messages
-  const userMessages = messages.map((m) => m.content).join('\n\n');
+  const userMessages = messages.map((m: StageOneMessageForThemes) => m.content).join('\n\n');
 
   // Extract unique themes/emotions
   const themes = new Set<string>();
-  messages.forEach((m) => {
-    m.extractedEmotions?.forEach((e) => themes.add(e));
+  messages.forEach((m: StageOneMessageForThemes) => {
+    m.extractedEmotions?.forEach((e: string) => themes.add(e));
   });
 
   // If no extracted emotions, try to extract key themes using AI (quick analysis)

@@ -42,7 +42,7 @@ export function usePendingActions(sessionId: string | undefined) {
     queryFn: () => get<PendingActionsResponse>(`/sessions/${sessionId}/pending-actions`),
     enabled: !!sessionId,
     refetchOnWindowFocus: true,
-    staleTime: 0, // Always refetch - offers become stale instantly upon consumption
+    staleTime: 5_000, // 5s debounce — prevents rapid-fire refetches from multiple Ably invalidations
   });
 }
 

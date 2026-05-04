@@ -8,6 +8,7 @@
 
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Share2 } from 'lucide-react-native';
 import { colors } from '@/theme';
 
 // ============================================================================
@@ -37,7 +38,7 @@ export interface TimelineItemCardProps {
   onOpenRefinement?: (offerId: string, suggestion: string) => void;
   onShareAsIs?: (offerId: string) => void;
   onOpenEmpathyDetail?: (attemptId: string, content: string) => void;
-  onOpenInvitationRefine?: () => void;
+  onShareInvitation?: () => void;
   onViewInChat?: () => void;
   testID?: string;
 }
@@ -70,7 +71,7 @@ function getTypeLabel(type: string, direction: string): string {
     case 'context':
       return direction === 'sent' ? 'Context shared' : 'Context for you';
     case 'invitation':
-      return 'Invitation sent';
+      return 'Invitation ready';
     case 'share_offer':
       return 'Sharing suggestion';
     default:
@@ -101,7 +102,7 @@ export function TimelineItemCard({
   onOpenRefinement,
   onShareAsIs,
   onOpenEmpathyDetail,
-  onOpenInvitationRefine,
+  onShareInvitation,
   onViewInChat,
   testID,
 }: TimelineItemCardProps) {
@@ -117,13 +118,13 @@ export function TimelineItemCard({
   // Determine if card is tappable (empathy sent → detail, invitation → refine)
   const isTappable =
     (item.type === 'empathy' && item.direction === 'sent' && !!onOpenEmpathyDetail) ||
-    (item.type === 'invitation' && !!onOpenInvitationRefine);
+    (item.type === 'invitation' && !!onShareInvitation);
 
   const handleCardPress = () => {
     if (item.type === 'empathy' && item.direction === 'sent' && onOpenEmpathyDetail) {
       onOpenEmpathyDetail(item.attemptId || item.id, item.content);
-    } else if (item.type === 'invitation' && onOpenInvitationRefine) {
-      onOpenInvitationRefine();
+    } else if (item.type === 'invitation' && onShareInvitation) {
+      onShareInvitation();
     }
   };
 
@@ -138,18 +139,27 @@ export function TimelineItemCard({
     item.actionType === 'view' &&
     !!onViewInChat;
 
+  const isInvitationTile = item.type === 'invitation';
+
   const cardContent = (
     <>
       {/* Header row: type label + timestamp */}
       <View style={styles.header}>
-        <Text style={styles.typeLabel}>{typeLabel}</Text>
+        <Text style={styles.typeLabel}>{isInvitationTile ? 'Invitation' : typeLabel}</Text>
         <Text style={styles.timestamp}>{relativeTime}</Text>
       </View>
 
       {/* Content */}
-      <Text style={styles.content}>
-        {item.content}
-      </Text>
+      {isInvitationTile ? (
+        <View style={styles.invitationRow}>
+          <Share2 color={colors.textPrimary} size={20} />
+          <Text style={styles.invitationTapText}>Tap to share</Text>
+        </View>
+      ) : (
+        <Text style={styles.content}>
+          {item.content}
+        </Text>
+      )}
 
       {/* Delivery status */}
       {statusText !== '' && (
@@ -208,7 +218,11 @@ export function TimelineItemCard({
         style={[styles.card, bubbleStyle]}
         onPress={handleCardPress}
         accessibilityRole="button"
-        accessibilityLabel={`${typeLabel}: ${item.content.substring(0, 80)}`}
+        accessibilityLabel={
+          isInvitationTile
+            ? 'Invitation. Tap to share.'
+            : `${typeLabel}: ${item.content.substring(0, 80)}`
+        }
         testID={resolvedTestID}
       >
         {cardContent}
@@ -327,6 +341,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: colors.brandBlue,
+  },
+  invitationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  invitationTapText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: colors.textPrimary,
   },
 });
 
