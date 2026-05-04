@@ -8,7 +8,7 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState, Keyboard, Platform, Share } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // useRouter removed - share navigation replaced by ActivityDrawer
@@ -256,6 +256,7 @@ export function UnifiedSessionScreen({
   onStageComplete,
 }: UnifiedSessionScreenProps) {
   const styles = useStyles();
+  const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
@@ -2886,7 +2887,12 @@ export function UnifiedSessionScreen({
           testID="share-later-tooltip-overlay"
         >
           <View
-            style={styles.shareLaterTooltipBubble}
+            style={[
+              styles.shareLaterTooltipBubble,
+              Platform.OS !== 'web' && {
+                top: insets.top + 56,
+              },
+            ]}
             testID="share-later-tooltip"
           >
             <Text style={styles.shareLaterTooltipText}>
