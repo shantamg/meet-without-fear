@@ -1075,6 +1075,7 @@ export function UnifiedSessionScreen({
     partnerProgress,
     compactMySigned: compactData?.mySigned,
     hasTopicConfirmed: topicFrameConfirmed,
+    invitationConfirmed,
     // Local dismissal latch — the panel hides as soon as the user taps
     // "Later" (or after a successful share, if the screen wants to stash it).
     invitationPanelDismissed,
