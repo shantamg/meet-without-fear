@@ -198,7 +198,7 @@ describe('Auth Middleware', () => {
     });
 
     it('handles concurrent create race (P2002 fallback)', async () => {
-      const { Prisma } = jest.requireActual('@prisma/client');
+      const { PrismaClientKnownRequestError } = jest.requireActual('@prisma/client/runtime/library');
       mockVerifyToken.mockResolvedValue({ sub: 'clerk-race-user' });
       mockGetUser.mockResolvedValue({
         firstName: 'Race',
@@ -210,7 +210,7 @@ describe('Auth Middleware', () => {
       (prisma.user.findUnique as jest.Mock)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(raceUser);
-      const p2002Error = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: '5.0.0' });
+      const p2002Error = new PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: '5.0.0' });
       (prisma.user.create as jest.Mock).mockRejectedValue(p2002Error);
 
       const req = createMockRequest({
@@ -224,6 +224,48 @@ describe('Auth Middleware', () => {
       expect(prisma.user.findUnique).toHaveBeenCalledTimes(2);
       expect(next).toHaveBeenCalled();
       expect(req.user).toEqual(raceUser);
+    });
+
+    it('uses an existing local user when Clerk profile lookup fails', async () => {
+      mockVerifyToken.mockResolvedValue({ sub: 'clerk-user-123' });
+      mockGetUser.mockRejectedValue(new Error('Clerk unavailable'));
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer valid-clerk-token' },
+      });
+      const { res, statusMock } = createMockResponse();
+      const next = jest.fn();
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { clerkId: 'clerk-user-123' },
+      });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(statusMock).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalled();
+      expect(req.user).toEqual(mockUser);
+      expect(req.clerkUserId).toBe('clerk-user-123');
+    });
+
+    it('fails when Clerk profile lookup fails for an unknown user', async () => {
+      const clerkError = new Error('Clerk unavailable');
+      mockVerifyToken.mockResolvedValue({ sub: 'clerk-new-user' });
+      mockGetUser.mockRejectedValue(clerkError);
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+
+      const req = createMockRequest({
+        headers: { authorization: 'Bearer valid-clerk-token' },
+      });
+      const { res } = createMockResponse();
+      const next = jest.fn();
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect(next).toHaveBeenCalledWith(clerkError);
+      expect(req.user).toBeUndefined();
     });
   });
 

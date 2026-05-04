@@ -9,7 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 import { UnauthorizedError, ForbiddenError } from './errors';
 import { prisma } from '../lib/prisma';
 import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
-import { Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { logger } from '../lib/logger';
 
 // ============================================================================
@@ -100,7 +100,7 @@ async function handleE2EAuthBypass(req: Request): Promise<boolean> {
     });
   } catch (error) {
     // Guard against transient unique conflicts (parallel E2E requests)
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+    if (!(error instanceof PrismaClientKnownRequestError) || error.code !== 'P2002') {
       throw error;
     }
 
@@ -200,7 +200,7 @@ async function handleClerkAuth(
       });
     } catch (error) {
       // Concurrent create race: another request inserted first
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
         user = await prisma.user.findUnique({ where: { clerkId: clerkUserId } });
         if (!user) throw error;
       } else {

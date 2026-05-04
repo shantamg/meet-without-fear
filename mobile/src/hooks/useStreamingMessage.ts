@@ -139,6 +139,7 @@ export function useStreamingMessage(
 
   // Ref to track optimistic user message ID for replacement
   const optimisticUserIdRef = useRef<string>('');
+  const activeUserMessageIdRef = useRef<string>('');
 
   // Refs for throttled cache updates (reduces stuttering)
   const lastCacheUpdateRef = useRef<number>(0);
@@ -292,6 +293,78 @@ export function useStreamingMessage(
   );
 
   /**
+   * Remove optimistic/placeholder messages from the cache after a failed stream.
+   */
+  const removeMessagesFromCache = useCallback(
+    (sessionId: string, messageIds: string[], stage?: Stage) => {
+      const ids = new Set(messageIds.filter(Boolean));
+      if (ids.size === 0) return;
+
+      const updateCache = (old: GetMessagesResponse | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          messages: (old.messages || []).filter((message) => !ids.has(message.id)),
+        };
+      };
+
+      const updateInfiniteCache = (
+        old: InfiniteData<GetMessagesResponse> | undefined
+      ): InfiniteData<GetMessagesResponse> | undefined => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            messages: (page.messages || []).filter((message) => !ids.has(message.id)),
+          })),
+        };
+      };
+
+      queryClient.setQueryData<GetMessagesResponse>(
+        messageKeys.list(sessionId),
+        updateCache
+      );
+      queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+        messageKeys.infinite(sessionId),
+        updateInfiniteCache
+      );
+
+      if (stage !== undefined) {
+        queryClient.setQueryData<GetMessagesResponse>(
+          messageKeys.list(sessionId, stage),
+          updateCache
+        );
+        queryClient.setQueryData<InfiniteData<GetMessagesResponse>>(
+          messageKeys.infinite(sessionId, stage),
+          updateInfiniteCache
+        );
+      }
+    },
+    [queryClient]
+  );
+
+  const cleanupFailedStream = useCallback(
+    (sessionId: string, stage?: Stage) => {
+      removeMessagesFromCache(
+        sessionId,
+        [activeUserMessageIdRef.current, optimisticUserIdRef.current, aiMessageIdRef.current],
+        stage
+      );
+
+      activeUserMessageIdRef.current = '';
+      optimisticUserIdRef.current = '';
+      aiMessageIdRef.current = '';
+      accumulatedTextRef.current = '';
+
+      queryClient.invalidateQueries({ queryKey: messageKeys.list(sessionId) });
+      queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
+      queryClient.invalidateQueries({ queryKey: timelineKeys.infinite(sessionId) });
+    },
+    [queryClient, removeMessagesFromCache]
+  );
+
+  /**
    * Handle metadata from the AI response
    */
   const handleMetadata = useCallback(
@@ -378,6 +451,7 @@ export function useStreamingMessage(
       accumulatedTextRef.current = '';
       aiMessageIdRef.current = `streaming-${Date.now()}`;
       optimisticUserIdRef.current = `optimistic-user-${Date.now()}`;
+      activeUserMessageIdRef.current = optimisticUserIdRef.current;
       textCompleteReceivedRef.current = false;
 
       // Create optimistic user message
@@ -441,9 +515,7 @@ export function useStreamingMessage(
             // Close the stuck connection
             eventSourceRef.current.close();
             eventSourceRef.current = null;
-            // Invalidate queries to fetch latest state from server
-            queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
-            queryClient.invalidateQueries({ queryKey: timelineKeys.infinite(sessionId) });
+            cleanupFailedStream(sessionId, currentStage);
             // Transition to idle so typing indicator disappears
             setStatus('idle');
           }
@@ -475,6 +547,7 @@ export function useStreamingMessage(
             const data = JSON.parse(event.data) as UserMessageEvent;
             // Update optimistic message with server timestamp (keep same ID for React key stability)
             if (optimisticUserIdRef.current) {
+              activeUserMessageIdRef.current = optimisticUserIdRef.current;
               updateMessageInCache(sessionId, optimisticUserIdRef.current, {
                 timestamp: data.timestamp,
                 content: data.content, // In case server modified content
@@ -688,6 +761,7 @@ export function useStreamingMessage(
 
           const errorMsg = 'message' in event ? event.message : 'Connection error';
           console.error('[useStreamingMessage] SSE error:', errorMsg);
+          cleanupFailedStream(sessionId, currentStage);
           setErrorMessage(errorMsg);
           setStatus('error');
           onError?.(new Error(errorMsg));
@@ -702,12 +776,13 @@ export function useStreamingMessage(
 
       } catch (error) {
         console.error('[useStreamingMessage] Error:', error);
+        cleanupFailedStream(sessionId, currentStage);
         setErrorMessage((error as Error).message || 'Failed to send message');
         setStatus('error');
         onError?.(error as Error);
       }
     },
-    [addMessageToCache, updateMessageInCache, handleMetadata, queryClient, onComplete, onError]
+    [addMessageToCache, updateMessageInCache, cleanupFailedStream, handleMetadata, queryClient, onComplete, onError]
   );
 
   /**
