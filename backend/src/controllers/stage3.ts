@@ -19,6 +19,7 @@ import { confirmNeedsRequestSchema, ConsentContentType, NeedCategory } from '@me
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
+import { captureProposedNeedsForUser } from '../services/needs';
 
 // ============================================================================
 // Helpers
@@ -269,27 +270,18 @@ export async function captureNeeds(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const userVessel = await getOrCreateUserVessel(sessionId, user.id);
-    const now = new Date();
-
-    const capturedNeeds = [];
-    for (const item of needs) {
-      const evidence = Array.isArray(item.evidence)
-        ? item.evidence.filter((entry): entry is string => typeof entry === 'string')
-        : [];
-
-      const created = await prisma.identifiedNeed.create({
-        data: {
-          vesselId: userVessel.id,
-          need: item.description || item.need!,
-          category: item.category as NeedCategory,
-          evidence,
-          aiConfidence: 0.85,
-          confirmed: false,
-        },
-      });
-      capturedNeeds.push(created);
-    }
+    const { needs: capturedNeeds, capturedAt } = await captureProposedNeedsForUser(
+      sessionId,
+      user.id,
+      needs.map((item) => ({
+        need: item.need!,
+        category: item.category as NeedCategory,
+        description: item.description!,
+        evidence: Array.isArray(item.evidence)
+          ? item.evidence.filter((entry): entry is string => typeof entry === 'string')
+          : [],
+      }))
+    );
 
     successResponse(
       res,
@@ -303,7 +295,7 @@ export async function captureNeeds(req: Request, res: Response): Promise<void> {
           confirmed: n.confirmed,
           aiConfidence: n.aiConfidence,
         })),
-        capturedAt: now.toISOString(),
+        capturedAt: capturedAt.toISOString(),
       },
       201
     );
@@ -805,21 +797,21 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
         transitionMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp, forUserId: uid });
       }
 
-      await publishSessionEvent(sessionId, 'partner.stage_completed', {
-        previousStage: 3,
-        currentStage: 4,
-        userId: user.id,
-        triggeredByUserId: user.id,
-        messagesByUserId: Object.fromEntries(transitionMessages.map((message) => [
-          message.forUserId,
-          {
-            id: message.id,
-            content: message.content,
-            timestamp: message.timestamp,
-            forUserId: message.forUserId,
+      for (const transitionMessage of transitionMessages) {
+        await publishSessionEvent(sessionId, 'partner.stage_completed', {
+          forUserId: transitionMessage.forUserId,
+          previousStage: 3,
+          currentStage: 4,
+          userId: user.id,
+          triggeredByUserId: user.id,
+          message: {
+            id: transitionMessage.id,
+            content: transitionMessage.content,
+            timestamp: transitionMessage.timestamp,
+            forUserId: transitionMessage.forUserId,
           },
-        ])),
-      });
+        });
+      }
     }
 
     successResponse(res, {

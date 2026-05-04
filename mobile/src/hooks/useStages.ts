@@ -1434,7 +1434,9 @@ export function useConfirmNeeds(
     },
     onSuccess: (_, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
     },
     ...options,
   });
@@ -1493,7 +1495,9 @@ export function useConsentShareNeeds(
     },
     onSuccess: (_, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
       queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
     },
     ...options,
   });

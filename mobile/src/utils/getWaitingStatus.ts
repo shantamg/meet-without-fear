@@ -221,7 +221,19 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
   }
 
   // --- Priority 5: Stage 3 (Needs) ---
-  // Only show needs-pending when in Stage 3, needs confirmed, and no common ground yet
+  // User has confirmed their needs locally but has not shared them yet. Hide
+  // freeform input while the review/share controls own the next step.
+  if (
+    myStage === Stage.NEED_MAPPING &&
+    needs.allConfirmed &&
+    !needs.shared &&
+    !needs.revealReady &&
+    commonGround.count === 0
+  ) {
+    return 'needs-pending';
+  }
+
+  // User shared needs; wait for partner before showing the side-by-side reveal.
   if (
     myStage === Stage.NEED_MAPPING &&
     needs.shared &&
