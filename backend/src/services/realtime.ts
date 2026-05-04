@@ -298,13 +298,13 @@ export async function notifySessionMembers(
 
     // Publish to each member's user channel (except the excluded user)
     const memberIds = session.relationship.members
-      .map((m) => m.userId)
-      .filter((id) => id !== excludeUserId);
+      .map((m: { userId: string }) => m.userId)
+      .filter((id: string) => id !== excludeUserId);
 
     logger.info(`[notifySessionMembers] Publishing to ${memberIds.length} members: ${memberIds.join(', ')}`);
 
     await Promise.all(
-      memberIds.map((userId) =>
+      memberIds.map((userId: string) =>
         publishUserEvent(userId, 'session.updated', { sessionId })
       )
     );
