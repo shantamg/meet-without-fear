@@ -59,11 +59,20 @@ export interface UseChatUIStateProps {
   compactMySigned: boolean | undefined;
 
   // Invitation phase
-  // Cache-First: invitationConfirmed is derived from cache (invitation.messageConfirmed)
-  // Optimistic update in useConfirmInvitationMessage.onMutate ensures immediate feedback
-  hasInvitationMessage: boolean;
+  // The invitation panel opens when the topic frame is confirmed and the
+  // invitation has not been confirmed/sent yet.
+  hasTopicConfirmed: boolean;
   invitationConfirmed: boolean;
+  invitationPanelDismissed: boolean;
   isConfirmingInvitation: boolean;
+
+  // Stage 0: Topic proposal panel
+  topicFrameProposed: string | null;
+  topicProposalDismissed: boolean;
+  isConfirmingTopicFrame: boolean;
+
+  // Invitee Stage 0 topic acknowledgement (between sign-compact and Stage 1 chat)
+  inviteeTopicAckPending: boolean;
 
   // Stage 1: Feel heard
   showFeelHeardConfirmation: boolean;
@@ -97,6 +106,7 @@ export interface UseChatUIStateProps {
   allNeedsConfirmed: boolean;
   needsAvailable: boolean;
   needsShared: boolean;
+  needsRevealReady: boolean;
   hasConfirmedNeedsLocal: boolean;
   commonGroundCount: number;
   commonGroundAvailable: boolean;
@@ -172,9 +182,14 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     myProgress,
     partnerProgress,
     compactMySigned,
-    hasInvitationMessage,
+    hasTopicConfirmed,
     invitationConfirmed,
+    invitationPanelDismissed,
     isConfirmingInvitation,
+    topicFrameProposed,
+    topicProposalDismissed,
+    isConfirmingTopicFrame,
+    inviteeTopicAckPending,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -188,6 +203,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     allNeedsConfirmed,
     needsAvailable,
     needsShared,
+    needsRevealReady,
     hasConfirmedNeedsLocal,
     commonGroundCount,
     commonGroundAvailable,
@@ -222,7 +238,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     shareOffer: shareOfferData ? {
       hasSuggestion: shareOfferData.hasSuggestion,
     } : undefined,
-    needs: { allConfirmed: allNeedsConfirmed },
+    needs: { allConfirmed: allNeedsConfirmed, shared: needsShared, revealReady: needsRevealReady },
     commonGround: {
       count: commonGroundCount,
       allConfirmedByMe: commonGroundAllConfirmedByMe,
@@ -240,9 +256,14 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     isTypewriterAnimating,
     compactMySigned,
     myProgress,
-    hasInvitationMessage,
+    hasTopicConfirmed,
     invitationConfirmed,
+    invitationPanelDismissed,
     isConfirmingInvitation,
+    topicFrameProposed,
+    topicProposalDismissed,
+    isConfirmingTopicFrame,
+    inviteeTopicAckPending,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,
@@ -260,6 +281,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     needsAvailable,
     allNeedsConfirmed,
     needsShared,
+    needsRevealReady,
     hasConfirmedNeedsLocal,
 
     // Stage 3: Common Ground
@@ -279,6 +301,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     allNeedsConfirmed,
     needsAvailable,
     needsShared,
+    needsRevealReady,
     hasConfirmedNeedsLocal,
     commonGroundCount,
     commonGroundAvailable,
@@ -296,9 +319,14 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     isTypewriterAnimating,
     compactMySigned,
     myProgress,
-    hasInvitationMessage,
+    hasTopicConfirmed,
     invitationConfirmed,
+    invitationPanelDismissed,
     isConfirmingInvitation,
+    topicFrameProposed,
+    topicProposalDismissed,
+    isConfirmingTopicFrame,
+    inviteeTopicAckPending,
     showFeelHeardConfirmation,
     feelHeardConfirmedAt,
     isConfirmingFeelHeard,

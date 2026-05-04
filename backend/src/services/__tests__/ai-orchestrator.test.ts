@@ -246,16 +246,6 @@ describe('AI Orchestrator', () => {
       expect(result.offerReadyToShare).toBe(true);
     });
 
-    it('extracts draft as invitation for stage 0', async () => {
-      mockGetModelCompletion.mockResolvedValue(MICRO_TAG_RESPONSE_WITH_DRAFT);
-
-      const result = await orchestrateResponse(
-        buildContext({ stage: 0, isInvitationPhase: true })
-      );
-
-      expect(result.invitationMessage).toContain('Bob, I want you to know');
-    });
-
     it('extracts draft as empathy statement for stage 2', async () => {
       mockGetModelCompletion.mockResolvedValue(MICRO_TAG_RESPONSE_WITH_DRAFT);
 
@@ -264,13 +254,39 @@ describe('AI Orchestrator', () => {
       expect(result.proposedEmpathyStatement).toContain('Bob, I want you to know');
     });
 
-    it('does not assign draft to invitation for non-invitation stages', async () => {
+    it('does not assign draft to empathy for non-stage-2 stages', async () => {
       mockGetModelCompletion.mockResolvedValue(MICRO_TAG_RESPONSE_WITH_DRAFT);
 
       const result = await orchestrateResponse(buildContext({ stage: 1 }));
 
-      expect(result.invitationMessage).toBeNull();
       expect(result.proposedEmpathyStatement).toBeNull();
+    });
+
+    it('extracts <draft> as topicFrame for Stage 0', async () => {
+      const stage0Response = `<thinking>
+Mode: ONBOARDING
+</thinking>
+
+<draft>
+Mealtime poking
+</draft>
+
+Take a look at that framing when you're ready.`;
+      mockGetModelCompletion.mockResolvedValue(stage0Response);
+
+      const result = await orchestrateResponse(buildContext({ stage: 0, isInvitationPhase: true }));
+
+      expect(result.topicFrame).toBe('Mealtime poking');
+      // Stage 0 must NOT populate the empathy field
+      expect(result.proposedEmpathyStatement).toBeNull();
+    });
+
+    it('topicFrame is null for non-Stage-0 stages even when <draft> present', async () => {
+      mockGetModelCompletion.mockResolvedValue(MICRO_TAG_RESPONSE_WITH_DRAFT);
+
+      const result = await orchestrateResponse(buildContext({ stage: 2 }));
+
+      expect(result.topicFrame).toBeFalsy();
     });
 
     it('includes routing decision metadata', async () => {

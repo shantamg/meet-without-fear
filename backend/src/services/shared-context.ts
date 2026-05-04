@@ -55,7 +55,7 @@ export async function getMilestoneContext(
     // Invitation Sent (for inviter)
     if (isInviter && invitation.messageConfirmedAt) {
       milestones.push({
-        label: 'Invitation sent',
+        label: 'Invitation ready',
         timestamp: invitation.messageConfirmedAt,
       });
     }

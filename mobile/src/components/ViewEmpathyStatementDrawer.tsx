@@ -181,15 +181,17 @@ export function ViewEmpathyStatementDrawer({
             ) : (
               <View style={styles.footer}>
                 <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={styles.refineButton}
-                    onPress={() => setIsRefining(true)}
-                    testID="refine-empathy-button"
-                    activeOpacity={0.8}
-                  >
-                    <MessageCircle color={colors.textSecondary} size={20} />
-                    <Text style={styles.refineButtonText}>Refine further</Text>
-                  </TouchableOpacity>
+                  {onSendRefinement && (
+                    <TouchableOpacity
+                      style={styles.refineButton}
+                      onPress={() => setIsRefining(true)}
+                      testID="refine-empathy-button"
+                      activeOpacity={0.8}
+                    >
+                      <MessageCircle color={colors.textSecondary} size={20} />
+                      <Text style={styles.refineButtonText}>Refine further</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={styles.shareButton}
                     onPress={onShare}

@@ -20,9 +20,14 @@ export function getWebsiteUrl(): string {
     return process.env.APP_URL;
   }
 
-  // Use environment-aware defaults
-  const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-  return isDevelopment ? 'http://localhost:3001' : 'https://meetwithoutfear.com';
+  // Only fall back to localhost when we explicitly know we're in development.
+  // Any other case (production, test, or unset NODE_ENV) must use the
+  // production URL so a missing env var can never leak localhost links to users.
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:3001';
+  }
+
+  return 'https://meetwithoutfear.com';
 }
 
 /**

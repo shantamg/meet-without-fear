@@ -74,7 +74,7 @@ export async function deleteAccountWithNotifications(
     sessionsAbandoned++;
 
     // Notify partner that the session has been abandoned
-    const partner = session.relationship.members.find((m) => m.userId !== userId);
+    const partner = session.relationship.members.find((m: { userId: string }) => m.userId !== userId);
     if (partner) {
       try {
         await publishSessionEvent(session.id, 'session.abandoned', {

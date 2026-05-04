@@ -28,11 +28,14 @@ import { getWaitingStatusConfig, WaitingStatusConfig } from '../config/waitingSt
  * Only ONE panel can be shown at a time - this defines priority.
  */
 export type AboveInputPanel =
+  | 'topic-proposal' // AI-proposed topic awaiting Use/Refine (Stage 0, inviter)
   | 'invitation' // Invitation share panel for inviters
+  | 'invitee-topic-ack' // Invitee Stage 0 topic-acknowledgement Ready bar
   | 'empathy-statement' // Empathy statement review panel
   | 'feel-heard' // Feel heard confirmation panel
   | 'share-suggestion' // Share suggestion from reconciler (Subject side)
   | 'needs-review' // Needs review panel (Stage 3: confirm identified needs)
+  | 'needs-share' // Needs share panel (Stage 3: consent to reveal own confirmed needs)
   | 'needs-reveal-validation' // Needs reveal validation panel (Stage 3)
   | 'waiting-banner' // General waiting banner
   | 'compact-agreement-bar' // Compact agreement bar during onboarding
@@ -59,11 +62,24 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   myProgress: { stage: Stage } | undefined;
 
   // Invitation phase
-  // Cache-First: invitationConfirmed is derived from cache (invitation.messageConfirmed)
-  // Optimistic update in useConfirmInvitationMessage.onMutate ensures immediate feedback
-  hasInvitationMessage: boolean;
+  // The invitation panel opens once the topic frame has been confirmed and
+  // the invitation has not been confirmed/sent yet.
+  hasTopicConfirmed: boolean;
   invitationConfirmed: boolean;
+  invitationPanelDismissed: boolean;
   isConfirmingInvitation: boolean;
+
+  // Invitee Stage 0: topic-acknowledgement step. When true, the invitee has
+  // signed the compact and is on the topic-ack screen (showing the inviter's
+  // confirmed topicFrame with a Ready bar). Hides chat input.
+  inviteeTopicAckPending: boolean;
+
+  // Stage 0: AI-proposed topic awaiting user decision (Use / Refine).
+  // The topic-proposal panel appears for the inviter when the AI has emitted
+  // a topic frame inline via <draft> but the user has not yet confirmed it.
+  topicFrameProposed: string | null;
+  topicProposalDismissed: boolean;
+  isConfirmingTopicFrame: boolean;
 
   // Stage 1: Feel heard
   showFeelHeardConfirmation: boolean;
@@ -91,6 +107,7 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   needsAvailable: boolean; // Needs have been extracted and are available for review
   allNeedsConfirmed: boolean; // All identified needs confirmed by user
   needsShared: boolean; // User has consented to share needs
+  needsRevealReady: boolean; // Both users have shared and comparison can be shown
   hasConfirmedNeedsLocal: boolean; // Local latch to prevent panel flash after confirming
 
   // Stage 3: Needs reveal validation. These field names are kept as
@@ -125,11 +142,14 @@ export interface ChatUIState {
 
   // Specific panel visibility (for debugging/testing)
   panels: {
+    showTopicProposalPanel: boolean;
     showInvitationPanel: boolean;
+    showInviteeTopicAckPanel: boolean;
     showEmpathyPanel: boolean;
     showFeelHeardPanel: boolean;
     showShareSuggestionPanel: boolean;
     showNeedsReviewPanel: boolean;
+    showNeedsSharePanel: boolean;
     showCommonGroundPanel: boolean;
     showWaitingBanner: boolean;
     showCompactAgreementBar: boolean;
@@ -185,21 +205,48 @@ function computeIsInOnboardingUnsigned(inputs: ChatUIStateInputs): boolean {
 }
 
 /**
+ * Determines if the topic-proposal panel should show.
+ * Shows for the inviter when the AI has proposed a topic but the user has
+ * neither confirmed it nor dismissed the panel ("Refine" hint).
+ */
+function computeShowTopicProposalPanel(inputs: ChatUIStateInputs): boolean {
+  const {
+    isInviter,
+    topicFrameProposed,
+    hasTopicConfirmed,
+    topicProposalDismissed,
+    isConfirmingTopicFrame,
+  } = inputs;
+
+  return !!(
+    isInviter &&
+    topicFrameProposed &&
+    !hasTopicConfirmed &&
+    !topicProposalDismissed &&
+    !isConfirmingTopicFrame
+  );
+}
+
+/**
  * Determines if invitation panel should show.
  * Cache-First: invitationConfirmed is derived from cache (set optimistically in onMutate)
  */
 function computeShowInvitationPanel(inputs: ChatUIStateInputs): boolean {
   const {
     isInviter,
-    hasInvitationMessage,
+    hasTopicConfirmed,
     invitationConfirmed,
+    invitationPanelDismissed,
     isConfirmingInvitation,
   } = inputs;
 
+  // The invitation panel should not reserve the above-input slot after the
+  // invitation is confirmed; otherwise it blocks later panels like feel-heard.
   return !!(
     isInviter &&
-    hasInvitationMessage &&
+    hasTopicConfirmed &&
     !invitationConfirmed &&
+    !invitationPanelDismissed &&
     !isConfirmingInvitation
   );
 }
@@ -305,7 +352,6 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
     needsAvailable,
     allNeedsConfirmed,
     needsShared,
-    hasConfirmedNeedsLocal,
     sessionStatus,
   } = inputs;
 
@@ -318,18 +364,33 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  // Local latch: once the user shares, hide panel immediately.
-  if (hasConfirmedNeedsLocal && needsShared) {
-    return false;
-  }
-
   // Already shared - reveal/waiting state owns the next step.
-  if (needsShared) {
+  if (needsShared || allNeedsConfirmed) {
     return false;
   }
 
   // Must have needs to show
   return needsAvailable;
+}
+
+function computeShowNeedsSharePanel(inputs: ChatUIStateInputs): boolean {
+  const {
+    myStage,
+    needsAvailable,
+    allNeedsConfirmed,
+    needsShared,
+    needsRevealReady,
+    hasConfirmedNeedsLocal,
+    sessionStatus,
+  } = inputs;
+
+  if (sessionStatus === SessionStatus.RESOLVED) return false;
+
+  const currentStage = myStage ?? Stage.ONBOARDING;
+  if (currentStage !== Stage.NEED_MAPPING) return false;
+  if (!needsAvailable || !allNeedsConfirmed) return false;
+  if (needsShared || needsRevealReady || hasConfirmedNeedsLocal) return false;
+  return true;
 }
 
 /**
@@ -341,6 +402,7 @@ function computeShowNeedsRevealValidationPanel(inputs: ChatUIStateInputs): boole
   const {
     myStage,
     commonGroundAvailable,
+    needsRevealReady,
     commonGroundNoOverlap,
     commonGroundAllConfirmedByMe,
     commonGroundAllConfirmedByBoth,
@@ -365,6 +427,10 @@ function computeShowNeedsRevealValidationPanel(inputs: ChatUIStateInputs): boole
   // Already confirmed by both or by me - no need to show
   if (commonGroundAllConfirmedByBoth || commonGroundAllConfirmedByMe) {
     return false;
+  }
+
+  if (needsRevealReady) {
+    return true;
   }
 
   // Legacy no-overlap state is treated as validation-ready for compatibility.
@@ -396,9 +462,19 @@ function computeAboveInputPanel(
     return 'compact-agreement-bar';
   }
 
+  // Priority 2a: Topic proposal panel (Stage 0, before topic confirmation)
+  if (panels.showTopicProposalPanel) {
+    return 'topic-proposal';
+  }
+
   // Priority 2: Invitation panel (after signing, before sending invite)
   if (panels.showInvitationPanel) {
     return 'invitation';
+  }
+
+  // Priority 2b: Invitee topic acknowledgement (Stage 0, after compact signed)
+  if (panels.showInviteeTopicAckPanel) {
+    return 'invitee-topic-ack';
   }
 
   // Priority 3: Feel heard panel (Stage 1)
@@ -421,12 +497,17 @@ function computeAboveInputPanel(
     return 'needs-review';
   }
 
-  // Priority 7: Needs reveal validation panel (Stage 3)
+  // Priority 7: Needs share panel (Stage 3)
+  if (panels.showNeedsSharePanel) {
+    return 'needs-share';
+  }
+
+  // Priority 8: Needs reveal validation panel (Stage 3)
   if (panels.showCommonGroundPanel) {
     return 'needs-reveal-validation';
   }
 
-  // Priority 8: Waiting banner
+  // Priority 9: Waiting banner
   if (panels.showWaitingBanner) {
     return 'waiting-banner';
   }
@@ -481,6 +562,19 @@ function computeShouldHideInput(
     return true;
   }
 
+  // Invitee Stage 0 topic acknowledgement: hide input until they tap Ready
+  if (aboveInputPanel === 'invitee-topic-ack') {
+    return true;
+  }
+
+  if (
+    aboveInputPanel === 'needs-review' ||
+    aboveInputPanel === 'needs-share' ||
+    aboveInputPanel === 'needs-reveal-validation'
+  ) {
+    return true;
+  }
+
   // Note: hasUnviewedSharedContext no longer hides input.
   // The notification popup already surfaces the shared context to the user,
   // so requiring them to also open the Activity menu is unnecessary friction.
@@ -496,6 +590,15 @@ function computeShouldHideInput(
     inputs.empathyDraft === undefined &&
     inputs.empathyStatus === undefined &&
     !hasShareSuggestion
+  ) {
+    return true;
+  }
+
+  if (
+    currentStage === Stage.NEED_MAPPING &&
+    inputs.needsShared &&
+    !inputs.needsRevealReady &&
+    !inputs.commonGroundAvailable
   ) {
     return true;
   }
@@ -538,21 +641,27 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const isInOnboardingUnsigned = computeIsInOnboardingUnsigned(inputs);
 
   // Step 3: Compute individual panel visibility
+  const showTopicProposalPanel = computeShowTopicProposalPanel(inputs);
   const showInvitationPanel = computeShowInvitationPanel(inputs);
+  const showInviteeTopicAckPanel = !inputs.isInviter && inputs.inviteeTopicAckPending;
   const showEmpathyPanel = computeShowEmpathyPanel(inputs);
   const showFeelHeardPanel = computeShowFeelHeardPanel(inputs);
   const showShareSuggestionPanel = computeShowShareSuggestionPanel(inputs);
   const showNeedsReviewPanel = computeShowNeedsReviewPanel(inputs);
+  const showNeedsSharePanel = computeShowNeedsSharePanel(inputs);
   const showCommonGroundPanel = computeShowNeedsRevealValidationPanel(inputs);
   const showWaitingBanner = computeShouldShowWaitingBanner(waitingStatus);
   const showCompactAgreementBar = isInOnboardingUnsigned;
 
   const panels = {
+    showTopicProposalPanel,
     showInvitationPanel,
+    showInviteeTopicAckPanel,
     showEmpathyPanel,
     showFeelHeardPanel,
     showShareSuggestionPanel,
     showNeedsReviewPanel,
+    showNeedsSharePanel,
     showCommonGroundPanel,
     showWaitingBanner,
     showCompactAgreementBar,
@@ -616,9 +725,14 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     isTypewriterAnimating: false,
     compactMySigned: undefined,
     myProgress: undefined,
-    hasInvitationMessage: false,
+    hasTopicConfirmed: false,
     invitationConfirmed: false,
+    invitationPanelDismissed: false,
     isConfirmingInvitation: false,
+    topicFrameProposed: null,
+    topicProposalDismissed: false,
+    isConfirmingTopicFrame: false,
+    inviteeTopicAckPending: false,
     showFeelHeardConfirmation: false,
     feelHeardConfirmedAt: undefined,
     isConfirmingFeelHeard: false,
@@ -636,6 +750,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     needsAvailable: false,
     allNeedsConfirmed: false,
     needsShared: false,
+    needsRevealReady: false,
     hasConfirmedNeedsLocal: false,
 
     // Stage 3: Needs reveal validation

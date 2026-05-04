@@ -1,0 +1,1 @@
+ALTER TABLE "UserVessel" ADD COLUMN "archivedAt" TIMESTAMP(3);

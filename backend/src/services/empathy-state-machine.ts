@@ -20,7 +20,7 @@
  *   REVEALED → REFINING (recipient sends validation feedback)
  */
 
-import { EmpathyStatus } from '@prisma/client';
+import { EmpathyStatus } from '@meet-without-fear/shared';
 
 /** Events that trigger empathy status transitions */
 export type EmpathyEvent =

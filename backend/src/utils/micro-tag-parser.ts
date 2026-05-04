@@ -16,8 +16,11 @@ export interface ParsedMicroTagResponse {
   response: string;
   /** The raw thinking block content (for logging) */
   thinking: string;
-  /** Optional draft content (for invitation/empathy statements) */
+  /** Optional draft content (for empathy or topic frame).
+   *  Stage 0 uses this as the topic frame; Stage 2 uses it as the empathy draft. */
   draft: string | null;
+  /** Convenience alias of `draft` for Stage 0 callers. Mirrors `draft`. */
+  topicFrame: string | null;
   /** Optional dispatch tag for off-ramping */
   dispatchTag: string | null;
   /** Extracted from thinking: FeelHeardCheck:Y */
@@ -26,6 +29,13 @@ export interface ParsedMicroTagResponse {
   offerReadyToShare: boolean;
   /** Extracted from thinking: ProposedStrategy lines (Stage 4) */
   proposedStrategies: string[];
+  /** Extracted from Stage 3 <needs> JSON block or ProposedNeed lines */
+  proposedNeeds: Array<{
+    need: string;
+    category: string;
+    description: string;
+    evidence: string[];
+  }>;
 }
 
 /**
@@ -37,6 +47,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
   const thinkingMatch = rawResponse.match(/<thinking>([\s\S]*?)<\/thinking>/i);
   const draftMatch = rawResponse.match(/<draft>([\s\S]*?)<\/draft>/i);
   const dispatchMatch = rawResponse.match(/<dispatch>([\s\S]*?)<\/dispatch>/i);
+  const needsMatch = rawResponse.match(/<needs>([\s\S]*?)<\/needs>/i);
 
   const thinking = thinkingMatch?.[1]?.trim() ?? '';
   const draft = draftMatch?.[1]?.trim() ?? null;
@@ -47,6 +58,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
     .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
     .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '')
+    .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
     .trim();
 
   // If everything landed inside tags, leave response empty and let the caller
@@ -76,22 +88,58 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     }
   }
 
-  // 4. Compatibility fallback: JSON output
+  const proposedNeeds: ParsedMicroTagResponse['proposedNeeds'] = [];
+  if (needsMatch?.[1]) {
+    try {
+      const parsedNeeds = JSON.parse(needsMatch[1].trim()) as unknown;
+      if (Array.isArray(parsedNeeds)) {
+        for (const item of parsedNeeds) {
+          if (!item || typeof item !== 'object') continue;
+          const record = item as Record<string, unknown>;
+          const need = typeof record.need === 'string' ? record.need.trim() : '';
+          const category = typeof record.category === 'string' ? record.category.trim() : '';
+          const description = typeof record.description === 'string' ? record.description.trim() : need;
+          const evidence = Array.isArray(record.evidence)
+            ? record.evidence.filter((entry): entry is string => typeof entry === 'string')
+            : [];
+          if (need && category && description) {
+            proposedNeeds.push({ need, category, description, evidence });
+          }
+        }
+      }
+    } catch (error) {
+      logger.warn('[micro-tag-parser] Failed to parse <needs> block', { error });
+    }
+  }
+
+  const needRegex = /ProposedNeed:\s*([^|]+)\|([^|]+)\|(.+)/gi;
+  let needMatch: RegExpExecArray | null;
+  while ((needMatch = needRegex.exec(thinking)) !== null) {
+    const need = needMatch[1].trim();
+    const category = needMatch[2].trim();
+    const description = needMatch[3].trim();
+    if (need && category && description) {
+      proposedNeeds.push({ need, category, description, evidence: [] });
+    }
+  }
+
+  // 4. Compatibility fallback: JSON output (legacy stages may emit empathy as JSON)
   if (!thinking && !draft && responseText.startsWith('{')) {
     try {
       const parsed = extractJsonFromResponse(responseText) as Record<string, unknown>;
       const response = typeof parsed.response === 'string' ? parsed.response : responseText;
-      const invitation = typeof parsed.invitationMessage === 'string' ? parsed.invitationMessage : null;
       const empathy = typeof parsed.proposedEmpathyStatement === 'string' ? parsed.proposedEmpathyStatement : null;
       responseText = response;
       return {
         response: responseText,
         thinking: '',
-        draft: invitation || empathy,
+        draft: empathy,
+        topicFrame: empathy,
         dispatchTag: null,
         offerFeelHeardCheck,
         offerReadyToShare,
         proposedStrategies,
+        proposedNeeds,
       };
     } catch {
       // Fall through to raw responseText
@@ -102,9 +150,11 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     response: responseText,
     thinking,
     draft,
+    topicFrame: draft,
     dispatchTag,
     offerFeelHeardCheck,
     offerReadyToShare,
     proposedStrategies,
+    proposedNeeds,
   };
 }

@@ -343,6 +343,59 @@ describe('Stage 2 API', () => {
         })
       );
     });
+
+    it('treats duplicate consent for an existing empathy attempt as idempotent success', async () => {
+      const req = mockRequest({
+        body: { consent: true },
+      });
+      const res = mockResponse();
+      const sharedAt = new Date('2026-05-04T07:03:30.502Z');
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 2,
+        status: 'IN_PROGRESS',
+      });
+      (prisma.empathyDraft.findUnique as jest.Mock).mockResolvedValue({
+        id: 'draft-1',
+        content: 'Ready content',
+        readyToShare: true,
+      });
+      (prisma.empathyAttempt.findFirst as jest.Mock)
+        .mockResolvedValueOnce({
+          id: 'attempt-1',
+          content: 'Ready content',
+          sharedAt,
+          status: 'HELD',
+        })
+        .mockResolvedValueOnce(null);
+      (prisma.message.findFirst as jest.Mock).mockResolvedValue({
+        id: 'message-1',
+        content: 'Ready content',
+        timestamp: sharedAt,
+        stage: 2,
+      });
+
+      await consentToShare(req, res);
+
+      expect(prisma.consentRecord.create).not.toHaveBeenCalled();
+      expect(prisma.empathyAttempt.create).not.toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            consented: true,
+            consentedAt: sharedAt.toISOString(),
+            status: 'HELD',
+            empathyMessage: expect.objectContaining({
+              id: 'message-1',
+              content: 'Ready content',
+            }),
+          }),
+        })
+      );
+    });
   });
 
   describe('GET /sessions/:id/empathy/partner (getPartnerEmpathy)', () => {

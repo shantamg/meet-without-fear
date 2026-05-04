@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requireAuth } from '../middleware/auth';
 import {
   listMemories,
   createMemory,
@@ -13,6 +14,9 @@ import {
 } from '../controllers/memories';
 
 const router = Router();
+
+// All memories routes require authentication
+router.use(requireAuth);
 
 // GET /memories - List all user memories
 router.get('/', listMemories);
