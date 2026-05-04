@@ -52,6 +52,10 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'Needs confirmed',
     body: 'Your partner has confirmed their identified needs.',
   },
+  'partner.needs_validated': {
+    title: 'Needs validated',
+    body: 'Your partner validated the revealed needs.',
+  },
   'partner.needs_shared': {
     title: 'Needs shared',
     body: 'Your partner shared their identified needs.',
@@ -95,6 +99,10 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
   'session.joined': {
     title: 'Partner joined',
     body: 'Your partner has joined the session.',
+  },
+  'session.needs_reveal_ready': {
+    title: 'Ready to reveal',
+    body: 'Both partners are ready. Time to share your needs side by side.',
   },
   'invitation.declined': {
     title: 'Invitation declined',

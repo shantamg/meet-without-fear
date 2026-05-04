@@ -625,7 +625,7 @@ export async function consentToShareNeeds(
 
     // If both have shared, notify clients that the side-by-side reveal is ready.
     if (partnerShared && partnerId) {
-      await publishSessionEvent(sessionId, 'session.needs_reveal_ready' as any, {
+      await publishSessionEvent(sessionId, 'session.needs_reveal_ready', {
         stage: 3,
         needsRevealReady: true,
       });
@@ -745,7 +745,7 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
     const partnerValidated = await hasPartnerValidatedNeeds(sessionId, user.id);
     const partnerId = await getPartnerUserId(sessionId, user.id);
     if (partnerId) {
-      await notifyPartner(sessionId, partnerId, 'partner.needs_validated' as any, {
+      await notifyPartner(sessionId, partnerId, 'partner.needs_validated', {
         stage: 3,
         validatedBy: user.id,
         validated,

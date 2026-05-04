@@ -90,6 +90,8 @@ export type SessionEventType =
   // Stage 3: Need Mapping events
   | 'partner.needs_confirmed' // Partner confirmed their identified needs
   | 'partner.needs_shared' // Partner consented to share needs
+  | 'partner.needs_validated' // Partner validated the revealed needs lists
+  | 'session.needs_reveal_ready' // Both partners consented, side-by-side reveal is ready
   // Stage 4: Strategic Repair events
   | 'partner.ranking_submitted'
   | 'partner.ready_to_rank'
