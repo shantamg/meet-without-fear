@@ -143,15 +143,9 @@ describe('Auth Middleware', () => {
       expect(next).not.toHaveBeenCalled();
     });
 
-    it('authenticates existing user with valid Clerk token (find + update)', async () => {
+    it('authenticates existing user with valid Clerk token (fast path — DB only, no Clerk API call)', async () => {
       mockVerifyToken.mockResolvedValue({ sub: 'clerk-user-123' });
-      mockGetUser.mockResolvedValue({
-        firstName: 'Test',
-        lastName: 'User',
-        emailAddresses: [{ emailAddress: 'test@example.com' }],
-      });
       (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
-      (prisma.user.update as jest.Mock).mockResolvedValue(mockUser);
 
       const req = createMockRequest({
         headers: { authorization: 'Bearer valid-clerk-token' },
@@ -164,10 +158,9 @@ describe('Auth Middleware', () => {
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { clerkId: 'clerk-user-123' },
       });
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { clerkId: 'clerk-user-123' },
-        data: { email: 'test@example.com', name: 'Test User', firstName: 'Test', lastName: 'User' },
-      });
+      // Fast path: no Clerk API call or DB update for existing users
+      expect(mockGetUser).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
       expect(prisma.user.create).not.toHaveBeenCalled();
       expect(next).toHaveBeenCalled();
       expect(req.user).toEqual(mockUser);
