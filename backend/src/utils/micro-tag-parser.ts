@@ -134,6 +134,17 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     }
   }
 
+  const needRegex = /ProposedNeed:\s*([^|]+)\|([^|]+)\|(.+)/gi;
+  let needMatch: RegExpExecArray | null;
+  while ((needMatch = needRegex.exec(thinking)) !== null) {
+    const need = needMatch[1].trim();
+    const category = needMatch[2].trim();
+    const description = needMatch[3].trim();
+    if (need && isNeedCategory(category) && description) {
+      proposedNeeds.push({ need, category, description, evidence: [] });
+    }
+  }
+
   // 4. Compatibility fallback: JSON output (legacy stages may emit empathy as JSON)
   if (!thinking && !draft && responseText.startsWith('{')) {
     try {

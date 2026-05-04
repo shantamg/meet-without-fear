@@ -91,7 +91,7 @@ export type SessionEventType =
   | 'session.needs_extracted' // Current user's structured needs were captured
   | 'partner.needs_confirmed' // Partner confirmed their identified needs
   | 'partner.needs_shared' // Partner consented to share needs
-  | 'partner.needs_validated' // Partner validated the revealed needs
+  | 'partner.needs_validated' // Partner validated or rejected side-by-side needs
   | 'session.needs_reveal_ready' // Both users consented; side-by-side needs reveal is ready
   | 'session.common_ground_ready' // Legacy alias for side-by-side needs reveal readiness
   | 'partner.common_ground_confirmed' // Legacy alias for needs validation

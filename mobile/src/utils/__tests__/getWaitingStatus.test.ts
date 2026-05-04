@@ -253,14 +253,14 @@ describe('Priority 4: Stage 2 (Empathy)', () => {
 // ============================================================================
 
 describe('Priority 5: Stage 3 (Needs)', () => {
-  it('returns needs-pending when all needs confirmed but no common ground yet', () => {
+  it('returns needs-waiting-for-partner when needs are shared but reveal is not ready yet', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.NEED_MAPPING,
-      needs: { allConfirmed: true },
+      needs: { allConfirmed: true, shared: true, revealReady: false },
       commonGround: { count: 0 },
     });
 
-    expect(computeWaitingStatus(inputs)).toBe('needs-pending');
+    expect(computeWaitingStatus(inputs)).toBe('needs-waiting-for-partner');
   });
 
   it('does not return needs-pending when in Stage 2 (stage gate)', () => {

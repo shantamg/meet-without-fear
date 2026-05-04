@@ -54,6 +54,7 @@ export interface StreamMetadata {
   proposedEmpathyStatement?: string | null;
   proposedStrategies?: string[];
   proposedNeeds?: CapturedNeedInput[];
+  needsCaptured?: boolean;
   topicFrame?: string | null;
   analysis?: string;
 }
@@ -364,6 +365,23 @@ export function useStreamingMessage(
       queryClient.invalidateQueries({ queryKey: timelineKeys.infinite(sessionId) });
     },
     [queryClient, removeMessagesFromCache]
+  );
+
+  const invalidateAfterSuccessfulStream = useCallback(
+    (sessionId: string, stage?: Stage) => {
+      queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
+      queryClient.invalidateQueries({ queryKey: timelineKeys.infinite(sessionId) });
+      if (stage === Stage.PERSPECTIVE_STRETCH) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+      }
+      if (stage === Stage.NEED_MAPPING) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      }
+    },
+    [queryClient]
   );
 
   /**
@@ -693,6 +711,9 @@ export function useStreamingMessage(
             if (currentStage === Stage.PERSPECTIVE_STRETCH) {
               queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
             }
+            if (currentStage === Stage.NEED_MAPPING) {
+              invalidateAfterSuccessfulStream(sessionId, currentStage);
+            }
 
             // Mark streaming as complete - cursor stops immediately
             textCompleteReceivedRef.current = true;
@@ -708,6 +729,10 @@ export function useStreamingMessage(
         // The streaming UI has already stopped via text_complete
         es.addEventListener('complete', (event) => {
           // Clear any pending throttled update (in case text_complete wasn't received)
+          if (fallbackTimerRef.current) {
+            clearTimeout(fallbackTimerRef.current);
+            fallbackTimerRef.current = null;
+          }
           if (pendingUpdateRef.current) {
             clearTimeout(pendingUpdateRef.current);
             pendingUpdateRef.current = null;
@@ -737,6 +762,9 @@ export function useStreamingMessage(
                 // Refresh empathy status (fallback path)
                 if (currentStage === Stage.PERSPECTIVE_STRETCH) {
                   queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+                }
+                if (currentStage === Stage.NEED_MAPPING) {
+                  invalidateAfterSuccessfulStream(sessionId, currentStage);
                 }
 
                 setStatus('complete');
@@ -791,7 +819,7 @@ export function useStreamingMessage(
         onError?.(error as Error);
       }
     },
-    [addMessageToCache, updateMessageInCache, cleanupFailedStream, handleMetadata, queryClient, onComplete, onError]
+    [addMessageToCache, updateMessageInCache, cleanupFailedStream, handleMetadata, invalidateAfterSuccessfulStream, queryClient, onComplete, onError]
   );
 
   /**

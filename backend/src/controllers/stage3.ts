@@ -617,7 +617,7 @@ export async function consentToShareNeeds(
 
     // If both have shared, notify clients that the side-by-side reveal is ready.
     if (partnerShared && partnerId) {
-      await publishSessionEvent(sessionId, 'session.needs_reveal_ready' as any, {
+      await publishSessionEvent(sessionId, 'session.needs_reveal_ready', {
         stage: 3,
         needsRevealReady: true,
       });
@@ -737,7 +737,7 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
     const partnerValidated = await hasPartnerValidatedNeeds(sessionId, user.id);
     const partnerId = await getPartnerUserId(sessionId, user.id);
     if (partnerId) {
-      await notifyPartner(sessionId, partnerId, 'partner.needs_validated' as any, {
+      await notifyPartner(sessionId, partnerId, 'partner.needs_validated', {
         stage: 3,
         validatedBy: user.id,
         validated,
@@ -1029,14 +1029,25 @@ export async function getNeedsComparison(
 
     const [myNeeds, partnerNeeds] = await Promise.all([
       prisma.identifiedNeed.findMany({
-        where: { vesselId: myVessel.id },
+        where: { vesselId: myVessel.id, confirmed: true },
         orderBy: { createdAt: 'asc' },
       }),
       prisma.identifiedNeed.findMany({
-        where: { vesselId: partnerVessel.id },
+        where: { vesselId: partnerVessel.id, confirmed: true },
         orderBy: { createdAt: 'asc' },
       }),
     ]);
+
+    if (myNeeds.length === 0 || partnerNeeds.length === 0) {
+      successResponse(res, {
+        myNeeds: [],
+        partnerNeeds: [],
+        commonGround: [],
+        analysisComplete: false,
+        noOverlap: false,
+      });
+      return;
+    }
 
     const partnerProgress = await prisma.stageProgress.findUnique({
       where: {

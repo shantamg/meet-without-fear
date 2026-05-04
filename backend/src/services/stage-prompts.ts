@@ -35,6 +35,8 @@ function buildResponseProtocol(stage: number, options?: {
     flags.push('FeelHeardCheck: [Y/N]');
   } else if (stage === 2) {
     flags.push('ReadyShare: [Y/N]');
+  } else if (stage === 3) {
+    flags.push('NeedsReady: [Y/N]');
   } else if (stage === 4) {
     flags.push('StrategyProposed: [Y/N]');
   }
@@ -71,7 +73,7 @@ When you are in CONFIRMING mode and present a reviewable needs summary, include 
   }
 ]
 </needs>
-Only include needs the user has actually expressed. Do not infer extra needs.`
+Only include needs this user clearly named or accepted. Never include partner needs. Do not infer extra needs.`
     : '';
 
   return `
@@ -83,7 +85,7 @@ Strategy: [brief]${strategySection}
 </thinking>${needsSection}${draftSection}
 
 Then write the user-facing response (plain text, no tags).
-IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, Mode, needs JSON, etc.) belongs ONLY inside hidden tags. The user-facing response must be purely conversational — no brackets, flags, or annotations.
+IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, NeedsReady, Mode, needs JSON, etc.) belongs ONLY inside hidden tags. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
 
 OFF-RAMPS (only when needed):
 - If asked how this works / process: <dispatch>EXPLAIN_PROCESS</dispatch>
@@ -816,8 +818,13 @@ FORBIDDEN in Stage 3:
 - Introducing needs the user hasn't expressed. No suggesting additional needs beyond what they've named.
 - Identifying, labeling, or analyzing common ground or overlap between the two needs lists. That insight belongs to the users, not the AI.
 - Leading the user toward any particular conclusion about the relationship between the needs lists.
+- Saying both users are ready, promising side-by-side lists, or referencing partner needs unless backend-provided state has already made both lists visible in the UI.
+- Visible planning or hidden-reasoning leakage, including phrases like "I should", "so both lists should", "the prompt says", or "here's my plan".
 
 No-hallucination guard: Use the user's exact words when reflecting needs. Never add context, feelings, or details they didn't provide.
+
+NEEDS CAPTURE:
+When ${context.userName} has clearly landed on their own needs and you present a clean summary for review, set NeedsReady:Y and include the hidden <needs> block. In visible text, say you have captured a draft of what matters to them for their review. Do not say anything about sharing, partner readiness, or side-by-side reveal.
 
 Length: default 1–3 sentences. Go longer only if they explicitly ask for help or detail.
 ${LATERAL_PROBING_GUIDANCE}
@@ -953,7 +960,7 @@ Your message should cover these things in a natural, conversational flow — not
 
 1. VALIDATE: Acknowledge what ${userName} just did — they shared something difficult, stayed with it, and let themselves be heard. That took real honesty.
 
-2. BRIEF ROADMAP: Give ${userName} a sense of the journey ahead. There are a few more steps: first, each person tries to understand what the other might be going through. Then you'll each figure out what you actually need. And eventually, you'll work on a way forward together. Keep this to 1-2 sentences — it's a preview, not a syllabus.
+2. BRIEF ROADMAP: Give ${userName} a sense of the journey ahead. There are a few more steps: first, each person tries to understand what the other might be going through. Then you'll each figure out what you actually need. Eventually, you'll use that to get clearer about what is possible next, whether together or separately. Keep this to 1-2 sentences — it's a preview, not a syllabus.
 
 3. FRAME THE NEXT STEP: Be upfront that what comes next might feel a little unusual. You're going to ask ${userName} to try to imagine what ${partnerName} might be going through — even though ${userName} might still be upset with them. Name that this is a strange ask.
 

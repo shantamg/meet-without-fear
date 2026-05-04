@@ -116,7 +116,7 @@ const STAGE_FRIENDLY_NAMES: Record<number, string> = {
   [Stage.WITNESS]: 'Your Story',
   [Stage.PERSPECTIVE_STRETCH]: 'Walking in Their Shoes',
   [Stage.NEED_MAPPING]: 'What Matters Most',
-  [Stage.STRATEGIC_REPAIR]: 'Moving Forward Together',
+  [Stage.STRATEGIC_REPAIR]: 'What Comes Next',
   [Stage.INFORMED_EMPATHY]: 'Deeper Understanding',
 };
 
@@ -585,8 +585,15 @@ export function UnifiedSessionScreen({
         }
         // Transition messages are private per user. Only insert if explicitly
         // addressed to us; otherwise refetch the filtered message list.
-        if (canInsertRealtimeMessageForCurrentUser(data.message as any, user?.id)) {
-          const message = data.message as { id: string; content: string; timestamp: string; forUserId?: string };
+        const messagesByUserId = data.messagesByUserId as Record<string, { id: string; content: string; timestamp: string; forUserId?: string }> | undefined;
+        const addressedMessage = user?.id && messagesByUserId ? messagesByUserId[user.id] : undefined;
+        const legacyMessage = data.message as { id: string; content: string; timestamp: string; forUserId?: string } | undefined;
+        const message = canInsertRealtimeMessageForCurrentUser(addressedMessage as any, user?.id)
+          ? addressedMessage
+          : canInsertRealtimeMessageForCurrentUser(legacyMessage as any, user?.id)
+            ? legacyMessage
+            : undefined;
+        if (message) {
           const newMessage = {
             id: message.id,
             content: message.content,
@@ -595,7 +602,7 @@ export function UnifiedSessionScreen({
             role: 'AI' as const,
             sessionId,
             senderId: null,
-            forUserId: message.forUserId,
+            forUserId: message.forUserId ?? user?.id,
           };
           queryClient.setQueryData(messageKeys.infinite(sessionId), (old: any) => {
             if (!old || old.pages.length === 0) {
@@ -777,8 +784,13 @@ export function UnifiedSessionScreen({
         refreshStage3RealtimeState();
       }
 
-      if (eventName === 'session.common_ground_ready' || eventName === 'session.needs_reveal_ready') {
+      if (eventName === 'session.needs_reveal_ready') {
         console.log('[UnifiedSessionScreen] Needs reveal ready');
+        refreshStage3RealtimeState();
+      }
+
+      if (eventName === 'session.common_ground_ready') {
+        console.log('[UnifiedSessionScreen] Common ground ready');
         refreshStage3RealtimeState();
       }
 
@@ -1159,6 +1171,7 @@ export function UnifiedSessionScreen({
       showFeelHeardPanel: shouldShowFeelHeard,
       showShareSuggestionPanel: shouldShowShareSuggestion,
       showNeedsReviewPanel: shouldShowNeedsReview,
+      showNeedsSharePanel: shouldShowNeedsShare,
       showCommonGroundPanel: shouldShowCommonGround,
     },
   } = useChatUIState({
@@ -1211,6 +1224,7 @@ export function UnifiedSessionScreen({
     allNeedsConfirmed,
     needsAvailable: (needs?.length ?? 0) > 0,
     needsShared: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true,
+    needsRevealReady: (needsComparisonData?.myNeeds?.length ?? 0) > 0 && (needsComparisonData?.partnerNeeds?.length ?? 0) > 0,
     hasConfirmedNeedsLocal: completedActions.has('confirmed-needs'),
     commonGroundCount: commonGround?.length ?? 0,
     commonGroundAvailable: (needsComparisonData?.myNeeds?.length ?? 0) > 0 && (needsComparisonData?.partnerNeeds?.length ?? 0) > 0,
@@ -1323,7 +1337,7 @@ export function UnifiedSessionScreen({
   const readyToShowEmpathy = shouldShowEmpathyPanel;
   const readyToShowFeelHeard = shouldShowFeelHeard;
   const readyToShowShareSuggestion = shouldShowShareSuggestion;
-  const readyToShowNeedsReview = shouldShowNeedsReview;
+  const readyToShowNeedsReview = shouldShowNeedsReview || shouldShowNeedsShare;
   const readyToShowCommonGround = shouldShowCommonGround;
   const readyToShowWaitingBanner = shouldShowWaitingBanner;
 
@@ -2340,6 +2354,7 @@ export function UnifiedSessionScreen({
               <TouchableOpacity
                 style={styles.needsReviewButton}
                 onPress={() => {
+                  setShowActivityMenu(false);
                   setNeedsDrawerMode('needs');
                   setShowNeedsDrawer(true);
                 }}
@@ -2348,6 +2363,44 @@ export function UnifiedSessionScreen({
               >
                 <Text style={styles.needsReviewButtonText}>
                   Review and confirm your needs
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        );
+
+      case 'needs-share':
+        return (
+          <Animated.View
+            style={{
+              opacity: needsReviewAnim,
+              maxHeight: needsReviewAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 100],
+              }),
+              transform: [{
+                translateY: needsReviewAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+              overflow: 'hidden',
+            }}
+            pointerEvents="auto"
+          >
+            <View style={styles.needsReviewContainer}>
+              <TouchableOpacity
+                style={styles.needsReviewButton}
+                onPress={() => {
+                  setShowActivityMenu(false);
+                  setNeedsDrawerMode('needs');
+                  setShowNeedsDrawer(true);
+                }}
+                activeOpacity={0.7}
+                testID="needs-share-button"
+              >
+                <Text style={styles.needsReviewButtonText}>
+                  Share my needs
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2377,6 +2430,7 @@ export function UnifiedSessionScreen({
               <TouchableOpacity
                 style={styles.needsReviewButton}
                 onPress={() => {
+                  setShowActivityMenu(false);
                   setNeedsDrawerMode('comparison');
                   setShowNeedsDrawer(true);
                 }}
@@ -2812,15 +2866,6 @@ export function UnifiedSessionScreen({
               // 3. When API responds, replace optimistic with real message + AI response
               handleShareEmpathy(statementToShare);
             }
-          }}
-          onSendRefinement={(message) => {
-            const refined =
-              message.trim().toLowerCase().startsWith('refine empathy draft')
-                ? message
-                : `Refine empathy draft: ${message}`;
-            // Prefix to make intent clear to the AI/prompt that this is a draft update
-            sendMessage(refined);
-            setShowEmpathyDrawer(false);
           }}
           onClose={() => setShowEmpathyDrawer(false)}
         />
