@@ -62,8 +62,8 @@ export function ShareTopicDrawer({
 
   // Action-specific suffix text
   const actionSuffix = action === 'OFFER_SHARING'
-    ? 'you share more about:'
-    : 'you might consider sharing about:';
+    ? 'sharing more about this:'
+    : 'sharing a little more about this:';
 
   const handleDecline = () => {
     // Show confirmation dialog before declining
@@ -123,8 +123,8 @@ export function ShareTopicDrawer({
 
             {/* Intro text */}
             <Text style={styles.intro}>
-              We reviewed what {partnerName} is imagining you are feeling,
-              noted some of the things you have talked about, and suggest that{' '}
+              There may be context that would help {partnerName} understand
+              this more accurately. You can choose whether you want help{' '}
               <Text style={[styles.actionText, { color: actionTextColor }]}>
                 {actionSuffix}
               </Text>

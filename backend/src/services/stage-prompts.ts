@@ -1911,6 +1911,8 @@ IMPORTANT PRINCIPLES:
 - Never suggest sharing sensitive information the person didn't already express
 - The suggested share focus should reference content ${context.subjectName} already shared in witnessing
 - Don't create new interpretations - only reference what was actually said
+- Phrase the suggested share focus as subject-owned context, not as what ${context.guesserName} thinks or has already understood
+- Do not frame the share focus as departure, rejection, or a permanent break unless ${context.subjectName} explicitly said that
 - Err on the side of OFFER_OPTIONAL rather than OFFER_SHARING - let people choose
 - If the gap is about context/history that wasn't shared, acknowledge that honestly`;
 }

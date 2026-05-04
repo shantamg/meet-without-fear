@@ -442,6 +442,8 @@ Generate a brief, specific suggestion for what ${subject.name} could share to he
 IMPORTANT GUIDELINES for the suggestion:
 - Never start with confrontational phrases like "Look," or "Listen,"
 - Focus on sharing ${subject.name}'s experience, not making claims about ${guesser.name}'s behavior
+- Do not say or imply what ${guesser.name} thinks, believes, or has already understood
+- Do not escalate ambiguity into permanent rupture, departure, rejection, or leaving unless ${subject.name} explicitly said that
 - Use "I" statements, never "you" accusations
 - Keep the tone warm and vulnerable, not defensive or aggressive
 

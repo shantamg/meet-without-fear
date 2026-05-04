@@ -86,6 +86,8 @@ export interface UseChatUIStateProps {
     hasNewSharedContext?: boolean;
     hasUnviewedSharedContext?: boolean;
     myAttempt?: { status?: string; content?: string };
+    myValidation?: { validated?: boolean };
+    partnerValidated?: boolean;
     messageCountSinceSharedContext?: number;
   } | undefined;
   empathyDraftData: {
@@ -231,6 +233,8 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
       hasNewSharedContext: empathyStatusData.hasNewSharedContext,
       myAttemptStatus: empathyStatusData.myAttempt?.status,
     } : undefined,
+    myValidation: empathyStatusData?.myValidation,
+    partnerValidated: empathyStatusData?.partnerValidated,
     empathyDraft: empathyDraftData ? {
       alreadyConsented: empathyDraftData.alreadyConsented,
     } : undefined,
