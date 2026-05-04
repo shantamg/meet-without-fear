@@ -40,6 +40,8 @@ export interface SessionStateResponse {
     };
     createdAt: string;
     resolvedAt: string | null;
+    // When the user last viewed this session (for cross-device animation/read boundaries)
+    lastViewedAt: string | null;
     // ID of last chat item seen (for "new messages" line placement)
     lastSeenChatItemId: string | null;
   };

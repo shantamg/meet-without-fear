@@ -935,7 +935,7 @@ export function useMarkSessionViewed(sessionId: string | undefined) {
       queryClient.invalidateQueries({ queryKey: sessionKeys.unreadCount() });
       // Update session state directly instead of invalidating to avoid race conditions
       // with other mutations (like confirmInvitation) that use optimistic updates.
-      // Only update lastSeenChatItemId which is what markViewed actually changes.
+      // Keep read state in sync for unread badges and animation boundaries.
       queryClient.setQueryData<SessionStateResponse>(
         sessionKeys.state(sessionId || ''),
         (old) => {
@@ -944,6 +944,7 @@ export function useMarkSessionViewed(sessionId: string | undefined) {
             ...old,
             session: {
               ...old.session,
+              lastViewedAt: data.lastViewedAt,
               lastSeenChatItemId: data.lastSeenChatItemId,
             },
           };
