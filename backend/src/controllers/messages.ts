@@ -1533,7 +1533,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     }, { isInvitationPhase });
 
     // Prompt already includes semantic tag format instructions via buildResponseProtocol()
-    // No tool use instruction needed - we parse <thinking>, <draft>, <dispatch> tags instead
+    // No tool use instruction needed - we parse <thinking>, <draft>, <dispatch>, and <needs> tags instead
 
     // Format context bundle and inject into last user message (includes notable facts)
     const formattedContext = formatContextForPrompt(contextBundle, {
@@ -1588,11 +1588,11 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     let streamError: Error | null = null;
 
     // Tag trap state - Claude outputs <thinking>...</thinking> first, which we hide
-    // After thinking, there may be <draft>...</draft> or <dispatch>...</dispatch> that we also hide
+    // After thinking, there may be <draft>, <dispatch>, or <needs> tags that we also hide
     let isInsideThinking = true;
-    let isTrappingTags = false; // After thinking, buffer to check for <draft>/<dispatch>
+    let isTrappingTags = false; // After thinking, buffer to check for hidden semantic tags
     let thinkingBuffer = '';
-    let tagTrapBuffer = ''; // Buffer for checking draft/dispatch tags after thinking
+    let tagTrapBuffer = ''; // Buffer for checking semantic tags after thinking
     let thinkingContent = ''; // Store hidden thinking for logging
     let draftContent = ''; // Store draft content for metadata
     let dispatchTagContent = ''; // Store dispatch tag content for handling
@@ -1717,7 +1717,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
               thinkingBuffer = '';
             }
           }
-          // PHASE 2: TAG TRAP - Buffer to catch <draft> and <dispatch> before streaming
+          // PHASE 2: TAG TRAP - Buffer to catch hidden semantic tags before streaming
           // The draft tag typically comes right after </thinking>, before response text
           else if (isTrappingTags) {
             tagTrapBuffer += event.text;
@@ -1731,8 +1731,9 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             const hasNeedsEnd = tagTrapBuffer.includes('</needs>');
 
             // Check for partial tag starts at the end of buffer
-            // Matches: <, <d, <dr, </, </d, etc. - anything that could become <draft>, </draft>, <dispatch>, </dispatch>
-            const hasPotentialTagStart = /<\/?d[a-z]*$/i.test(tagTrapBuffer);
+            // Matches: <d..., <n..., </d..., </n..., etc. - anything that could become
+            // <draft>, </draft>, <dispatch>, </dispatch>, <needs>, or </needs>.
+            const hasPotentialTagStart = /<\/?(d|n)[a-z]*$/i.test(tagTrapBuffer);
 
             // If we see opening tags, wait for closing tags
             const waitingForDraft = hasDraftStart && !hasDraftEnd;
@@ -1751,7 +1752,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // Exit conditions:
             // - Not waiting for any tags to complete
             // - Have substantial response content (>50 chars that doesn't start with <)
-            // - No partial tag at the end that might become <draft> or <dispatch>
+            // - No partial tag at the end that might become a hidden semantic tag
             // OR buffer is too big (safety limit)
             const hasResponseContent = trimmedStripped.length > 50 && !trimmedStripped.startsWith('<');
             const safeToExit = !waitingForDraft && !waitingForDispatch && !waitingForNeeds && hasResponseContent && !hasPotentialTagStart;
@@ -1771,7 +1772,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             const hasUnclosedDispatch = combined.includes('<dispatch>') && !combined.includes('</dispatch>');
             const hasUnclosedDraft = combined.includes('<draft>') && !combined.includes('</draft>');
             const hasUnclosedNeeds = combined.includes('<needs>') && !combined.includes('</needs>');
-            const hasPotentialTagStart = /<\/?d[a-z]*$/i.test(combined);
+            const hasPotentialTagStart = /<\/?(d|n)[a-z]*$/i.test(combined);
 
             if (hasUnclosedDispatch || hasUnclosedDraft || hasUnclosedNeeds || hasPotentialTagStart) {
               // Buffer and wait for closing tag
