@@ -111,9 +111,7 @@ export function errorHandler(
 ): void {
   // Log error for debugging (in production, use proper logging)
   if (process.env.NODE_ENV !== 'test') {
-    logger.error('[Error]', {
-      name: err.name,
-      message: err.message,
+    logger.error(`[${err.name}] ${err.message}`, {
       stack: err.stack,
       path: req.path,
       method: req.method,

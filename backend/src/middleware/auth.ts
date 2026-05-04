@@ -186,8 +186,22 @@ async function handleClerkAuth(
     }
 
     // Slow path: new user — fetch details from Clerk to populate initial record.
-    const { clerkClient } = await import('@clerk/express');
-    const clerkUser = await clerkClient.users.getUser(clerkUserId);
+    let clerkUser;
+    try {
+      const { clerkClient } = await import('@clerk/express');
+      clerkUser = await clerkClient.users.getUser(clerkUserId);
+    } catch (clerkError) {
+      // Clerk API may fail due to rate-limiting (429) under burst traffic.
+      // Another concurrent request may have already created the user — retry DB lookup.
+      const retryUser = await prisma.user.findUnique({ where: { clerkId: clerkUserId } });
+      if (retryUser) {
+        req.user = retryUser;
+        req.clerkUserId = clerkUserId;
+        next();
+        return;
+      }
+      throw clerkError;
+    }
 
     const email = clerkUser.emailAddresses[0]?.emailAddress || `${clerkUserId}@pending.clerk`;
     const firstName = clerkUser.firstName || null;
