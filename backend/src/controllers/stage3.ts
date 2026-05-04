@@ -790,7 +790,7 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
       const transitionContent =
         'You have both checked the needs lists and marked them valid. Now move to strategies that can honor what each of you needs.';
 
-      const transitionMessages: Array<{ id: string; content: string; timestamp: Date }> = [];
+      const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
       for (const uid of [user.id, partnerId]) {
         const message = await prisma.message.create({
           data: {
@@ -802,22 +802,23 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
             stage: 4,
           },
         });
-        transitionMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp });
+        transitionMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp, forUserId: uid });
       }
 
-      const firstMessage = transitionMessages[0];
       await publishSessionEvent(sessionId, 'partner.stage_completed', {
         previousStage: 3,
         currentStage: 4,
         userId: user.id,
         triggeredByUserId: user.id,
-        message: firstMessage
-          ? {
-              id: firstMessage.id,
-              content: firstMessage.content,
-              timestamp: firstMessage.timestamp,
-            }
-          : undefined,
+        messagesByUserId: Object.fromEntries(transitionMessages.map((message) => [
+          message.forUserId,
+          {
+            id: message.id,
+            content: message.content,
+            timestamp: message.timestamp,
+            forUserId: message.forUserId,
+          },
+        ])),
       });
     }
 
@@ -1036,14 +1037,25 @@ export async function getNeedsComparison(
 
     const [myNeeds, partnerNeeds] = await Promise.all([
       prisma.identifiedNeed.findMany({
-        where: { vesselId: myVessel.id },
+        where: { vesselId: myVessel.id, confirmed: true },
         orderBy: { createdAt: 'asc' },
       }),
       prisma.identifiedNeed.findMany({
-        where: { vesselId: partnerVessel.id },
+        where: { vesselId: partnerVessel.id, confirmed: true },
         orderBy: { createdAt: 'asc' },
       }),
     ]);
+
+    if (myNeeds.length === 0 || partnerNeeds.length === 0) {
+      successResponse(res, {
+        myNeeds: [],
+        partnerNeeds: [],
+        commonGround: [],
+        analysisComplete: false,
+        noOverlap: false,
+      });
+      return;
+    }
 
     const partnerProgress = await prisma.stageProgress.findUnique({
       where: {

@@ -1165,6 +1165,12 @@ Your job is to CRAFT a feelings-focused message that ${userName} would say direc
    - 1-3 sentences maximum
    - Address the most important gap in understanding
 
+6. PRESERVES ACCOUNTABILITY AND SAFETY
+   - If anger, temper, volatility, escalation, or loss of control is part of the conflict, never imply ${userName} cannot control themselves
+   - Do not ask ${partnerName} to accept unsafe behavior or minimize harm
+   - It is okay to name defensiveness or anger, but pair it with ownership (for example: "my anger is still mine to handle")
+   - Recognition needs must never override ${partnerName}'s need for safety or boundaries
+
 IMPORTANT GUIDELINES:
 - Never start with confrontational phrases like "Look," or "Listen,"
 - Never include accusations or blame
