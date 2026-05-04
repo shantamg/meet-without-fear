@@ -105,6 +105,42 @@ Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response i
 
 ---
 
+## Capture Needs from AI Summary
+
+Bulk-create needs from an AI-generated summary card. This is the primary way needs are created in Stage 3 — the AI surfaces a summary card mid-conversation, and the client calls this endpoint to persist the proposed needs for user review.
+
+```
+POST /api/v1/sessions/:id/needs/capture
+```
+
+### Request Body
+
+```typescript
+interface CaptureNeedsRequest {
+  needs: Array<{
+    need: string;          // Short label (e.g. "To feel heard")
+    category: NeedCategory;
+    description: string;   // Full sentence description
+    evidence?: string[];   // Supporting quotes from conversation
+  }>;
+}
+```
+
+### Response
+
+Returns `201 Created`:
+
+```typescript
+interface CaptureNeedsResponse {
+  needs: IdentifiedNeedDTO[];
+  capturedAt: string; // ISO timestamp
+}
+```
+
+Validation: `needs` array required and non-empty; each item must have `need`, `description`, and a valid `category`. Captured needs are created with `confirmed: false` (user must confirm via `POST /needs/confirm` before consenting to share).
+
+---
+
 ## Confirm Needs
 
 Confirm or adjust captured needs.
@@ -228,6 +264,8 @@ After both partners share needs, the app can render a side-by-side comparison of
 ```
 GET /api/v1/sessions/:id/needs/comparison
 ```
+
+> **Alias**: `GET /api/v1/sessions/:id/needs/reveal` routes to the same handler for clients using the Stage 3 capture/consent/reveal/validation vocabulary.
 
 Returns each partner's needs grouped for display; useful before the validation step completes.
 

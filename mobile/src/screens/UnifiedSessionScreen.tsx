@@ -58,6 +58,8 @@ import { useSharingStatus } from '../hooks/useSharingStatus';
 import { usePendingActions } from '../hooks/usePendingActions';
 import { useNeedsComparison } from '../hooks/useStages';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
+import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
+import { getStage2RealtimeInvalidationQueryKeys, getStage3RealtimeInvalidationQueryKeys } from '../utils/realtimeInvalidation';
 import { useToast } from '../contexts/ToastContext';
 import { createStyles } from '../theme/styled';
 import { WaitingBanner } from '../components/WaitingBanner';
@@ -246,6 +248,51 @@ function InviteeTopicIntroCard({
   );
 }
 
+function NeedsIdentifiedChatCard({
+  needs,
+  confirmed,
+  onReview,
+}: {
+  needs: Array<{ id: string; need: string; category: string }>;
+  confirmed: boolean;
+  onReview: () => void;
+}) {
+  const styles = useStyles();
+  const visibleNeeds = needs.slice(0, 3);
+  const extraCount = Math.max(0, needs.length - visibleNeeds.length);
+
+  return (
+    <TouchableOpacity
+      style={styles.needsSummaryCard}
+      onPress={onReview}
+      activeOpacity={0.8}
+      testID="needs-identified-chat-card"
+    >
+      <View style={styles.needsSummaryHeader}>
+        <Text style={styles.needsSummaryEyebrow}>WHAT MATTERS</Text>
+        <Text style={styles.needsSummaryStatus}>
+          {confirmed ? 'Confirmed' : 'Ready to review'}
+        </Text>
+      </View>
+      <Text style={styles.needsSummaryTitle}>Your needs so far</Text>
+      <View style={styles.needsSummaryList}>
+        {visibleNeeds.map((need) => (
+          <View key={need.id} style={styles.needsSummaryRow}>
+            <Text style={styles.needsSummaryCategory}>{need.category}</Text>
+            <Text style={styles.needsSummaryText}>{need.need}</Text>
+          </View>
+        ))}
+        {extraCount > 0 ? (
+          <Text style={styles.needsSummaryMore}>+{extraCount} more</Text>
+        ) : null}
+      </View>
+      <Text style={styles.needsSummaryAction}>
+        {confirmed ? 'Open review' : 'Review and confirm'}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -389,6 +436,24 @@ export function UnifiedSessionScreen({
   // AI message handler for fire-and-forget pattern
   const { addAIMessage, handleAIMessageError } = useAIMessageHandler();
 
+  const refreshStage2RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
+    for (const queryKey of getStage2RealtimeInvalidationQueryKeys(sessionId)) {
+      queryClient.invalidateQueries({ queryKey });
+    }
+    if (options?.refetchMessages) {
+      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+    }
+  }, [queryClient, sessionId]);
+
+  const refreshStage3RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
+    for (const queryKey of getStage3RealtimeInvalidationQueryKeys(sessionId)) {
+      queryClient.invalidateQueries({ queryKey });
+    }
+    if (options?.refetchMessages) {
+      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+    }
+  }, [queryClient, sessionId]);
+
   // User-level events (memory suggestions are now sent to specific user, not session)
   useUserSessionUpdates({
     disableRefetch: true,
@@ -408,6 +473,11 @@ export function UnifiedSessionScreen({
     onSessionEvent: (event, data) => {
       console.log('[UnifiedSessionScreen] Received realtime event:', event);
 
+      if (!isRealtimePayloadAddressedToCurrentUser(data, user?.id)) {
+        console.log('[UnifiedSessionScreen] Dropping event addressed to another user:', event);
+        return;
+      }
+
       // Skip events triggered by self to prevent race conditions with optimistic updates.
       // Exception: events explicitly addressed TO us (forUserId === user.id) are always
       // processed, since system-generated events like reconciler results may be triggered
@@ -424,8 +494,7 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Share suggestion received, updating cache');
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
-        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
+        refreshStage2RealtimeState();
       }
 
       if (event === 'empathy.context_shared' && data.forUserId === user?.id) {
@@ -433,12 +502,29 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Context shared, updating cache');
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
-        // Refetch messages so new SHARED_CONTEXT message appears
-        queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
-        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
+        refreshStage2RealtimeState({ refetchMessages: true });
         // Mark session as viewed so partner sees "seen" status
         markSessionViewed({});
+      }
+
+      if (event === 'empathy.status_updated' && data.forUserId === user?.id) {
+        console.log('[UnifiedSessionScreen] Empathy status updated, syncing cache');
+        const incomingVersion = data.statusVersion as number | undefined;
+        const cached = queryClient.getQueryData<any>(stageKeys.empathyStatus(sessionId));
+        const cachedVersion = cached?.statusVersion as number | undefined;
+        const shouldUpdate = incomingVersion === undefined ||
+          cachedVersion === undefined ||
+          incomingVersion > cachedVersion;
+        if (shouldUpdate) {
+          if (data.empathyStatus) {
+            queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
+          } else {
+            queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+          }
+        } else {
+          console.log('[UnifiedSessionScreen] Rejecting stale addressed empathy.status_updated event (version:', data.statusVersion, ')');
+        }
+        refreshStage2RealtimeState();
       }
 
       if (event === 'partner.session_viewed' && data.empathyStatuses && user?.id) {
@@ -462,6 +548,9 @@ export function UnifiedSessionScreen({
       // Notification events - invalidate pending actions for activity menu badges
       if (event === 'notification.pending_action' && data.forUserId === user?.id) {
         console.log('[UnifiedSessionScreen] Pending action notification, refreshing badges');
+        if (data.actionType === 'context_received') {
+          refreshStage2RealtimeState({ refetchMessages: true });
+        }
         queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
         queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
       }
@@ -469,9 +558,7 @@ export function UnifiedSessionScreen({
       // Empathy resubmitted - partner refined their understanding
       if (event === 'empathy.resubmitted' && data.forUserId === user?.id) {
         console.log('[UnifiedSessionScreen] Partner resubmitted empathy');
-        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
+        refreshStage2RealtimeState({ refetchMessages: true });
       }
 
       if (event === 'partner.stage_completed') {
@@ -480,10 +567,32 @@ export function UnifiedSessionScreen({
         if (data.empathyStatus) {
           queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         }
+        // Update sessionKeys.state with new stage from event
+        if (data.currentStage !== undefined) {
+          queryClient.setQueryData(sessionKeys.state(sessionId), (old: any) => {
+            if (!old) return old;
+            return {
+              ...old,
+              progress: old.progress ? {
+                ...old.progress,
+                partnerProgress: old.progress.partnerProgress ? {
+                  ...old.progress.partnerProgress,
+                  stage: data.currentStage,
+                } : old.progress.partnerProgress,
+              } : old.progress,
+            };
+          });
+        }
+        // Transition messages are private per user. Only insert if explicitly
+        // addressed to us; otherwise refetch the filtered message list.
         const messagesByUserId = data.messagesByUserId as Record<string, { id: string; content: string; timestamp: string; forUserId?: string }> | undefined;
         const addressedMessage = user?.id && messagesByUserId ? messagesByUserId[user.id] : undefined;
         const legacyMessage = data.message as { id: string; content: string; timestamp: string; forUserId?: string } | undefined;
-        const message = addressedMessage || (legacyMessage?.forUserId === user?.id ? legacyMessage : undefined);
+        const message = canInsertRealtimeMessageForCurrentUser(addressedMessage as any, user?.id)
+          ? addressedMessage
+          : canInsertRealtimeMessageForCurrentUser(legacyMessage as any, user?.id)
+            ? legacyMessage
+            : undefined;
         if (message) {
           const newMessage = {
             id: message.id,
@@ -507,11 +616,14 @@ export function UnifiedSessionScreen({
             return { ...old, pages: updatedPages };
           });
         }
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-        queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
+        if (data.currentStage === 3 || data.previousStage === 2) {
+          refreshStage2RealtimeState({ refetchMessages: true });
+          refreshStage3RealtimeState({ refetchMessages: true });
+        } else if (data.currentStage === 4 || data.previousStage === 3) {
+          refreshStage3RealtimeState({ refetchMessages: true });
+        } else {
+          queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
+        }
       }
 
       if (event === 'partner.advanced') {
@@ -587,7 +699,7 @@ export function UnifiedSessionScreen({
         if (data.empathyStatus) {
           queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         }
-        queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+        refreshStage2RealtimeState({ refetchMessages: true });
       }
 
       if (event === 'empathy.revealed' && data.forUserId === user?.id) {
@@ -595,8 +707,7 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Empathy revealed, updating cache');
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         queryClient.refetchQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
-        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
+        refreshStage2RealtimeState();
         // Optimistic cache write for partner empathy so validation card appears immediately
         if (data.empathyContent && data.attemptId) {
           queryClient.setQueryData(stageKeys.partnerEmpathy(sessionId), (old: any) => ({
@@ -645,6 +756,7 @@ export function UnifiedSessionScreen({
         // Guesser received notification that subject shared context - update cache directly
         console.log('[UnifiedSessionScreen] Empathy refining, updating cache');
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
+        refreshStage2RealtimeState();
       }
 
       // -----------------------------------------------------------------------
@@ -657,45 +769,34 @@ export function UnifiedSessionScreen({
       if (eventName === 'session.needs_extracted') {
         // My own needs have been extracted by the backend
         console.log('[UnifiedSessionScreen] Needs extracted, refreshing cache');
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        refreshStage3RealtimeState();
       }
 
       if (eventName === 'partner.needs_confirmed') {
         // Partner confirmed their identified needs
         console.log('[UnifiedSessionScreen] Partner confirmed needs');
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        refreshStage3RealtimeState();
       }
 
       if (eventName === 'partner.needs_shared') {
         // Partner consented to share their needs
         console.log('[UnifiedSessionScreen] Partner shared needs');
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        refreshStage3RealtimeState();
       }
 
       if (eventName === 'session.needs_reveal_ready') {
         console.log('[UnifiedSessionScreen] Needs reveal ready');
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        refreshStage3RealtimeState();
       }
 
       if (eventName === 'session.common_ground_ready') {
         console.log('[UnifiedSessionScreen] Common ground ready');
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        refreshStage3RealtimeState();
       }
 
-      if (eventName === 'partner.common_ground_confirmed') {
-        console.log('[UnifiedSessionScreen] Partner confirmed common ground');
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      if (eventName === 'partner.common_ground_confirmed' || eventName === 'partner.needs_validated') {
+        console.log('[UnifiedSessionScreen] Partner validated needs');
+        refreshStage3RealtimeState();
       }
 
       // -----------------------------------------------------------------------
@@ -747,6 +848,10 @@ export function UnifiedSessionScreen({
     // When AI message is added to cache, last message becomes AI → dots disappear automatically
     onAIResponse: (payload) => {
       console.log('[UnifiedSessionScreen] AI response received via Ably:', payload.message?.id);
+      if (!isRealtimePayloadAddressedToCurrentUser(payload, user?.id)) {
+        console.log('[UnifiedSessionScreen] Dropping AI response addressed to another user:', payload.message?.id);
+        return;
+      }
       // Add AI message to the cache - this automatically hides ghost dots
       // because ChatInterface derives showTypingIndicator from last message role
       addAIMessage(sessionId, payload.message);
@@ -1813,6 +1918,38 @@ export function UnifiedSessionScreen({
     session?.createdAt,
   ]);
 
+  const needsReviewCards = useMemo((): ChatCustomCardItem[] => {
+    if (currentStage !== Stage.NEED_MAPPING) return [];
+    if (!needsData?.synthesizedAt || !needs || needs.length === 0) return [];
+    if ((myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true) return [];
+
+    return [{
+      type: 'custom-card',
+      id: `needs-identified-${needsData.synthesizedAt}`,
+      animate: true,
+      timestamp: needsData.synthesizedAt,
+      render: () => (
+        <NeedsIdentifiedChatCard
+          needs={needs.map((need) => ({
+            id: need.id,
+            need: need.need,
+            category: String(need.category),
+          }))}
+          confirmed={allNeedsConfirmed}
+          onReview={() => {
+            setNeedsDrawerMode('needs');
+            setShowNeedsDrawer(true);
+          }}
+        />
+      ),
+    }];
+  }, [currentStage, needsData?.synthesizedAt, needs, myProgress?.gatesSatisfied, allNeedsConfirmed]);
+
+  const chatCustomCards = useMemo(
+    () => [...inviteeOpeningCards, ...needsReviewCards],
+    [inviteeOpeningCards, needsReviewCards]
+  );
+
   // -------------------------------------------------------------------------
   // Render Overlays
   // -------------------------------------------------------------------------
@@ -2597,7 +2734,7 @@ export function UnifiedSessionScreen({
           onContextSharedPress={() => {
             setShowActivityMenu(true);
           }}
-          customCards={inviteeOpeningCards}
+          customCards={chatCustomCards}
           // Show compact as custom empty state during onboarding when not signed.
           customEmptyState={
             isInOnboardingUnsigned
@@ -3471,6 +3608,70 @@ const useStyles = () =>
       padding: 16,
       backgroundColor: t.colors.bgSecondary,
       borderRadius: 12,
+    },
+    needsSummaryCard: {
+      marginHorizontal: 16,
+      marginVertical: 8,
+      padding: 16,
+      backgroundColor: t.colors.bgSecondary,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+    },
+    needsSummaryHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+    needsSummaryEyebrow: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: t.colors.textSecondary,
+      letterSpacing: 0,
+    },
+    needsSummaryStatus: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: t.colors.brandBlue,
+    },
+    needsSummaryTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: t.colors.textPrimary,
+      marginBottom: 12,
+    },
+    needsSummaryList: {
+      gap: 8,
+    },
+    needsSummaryRow: {
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+      backgroundColor: t.colors.bgPrimary,
+    },
+    needsSummaryCategory: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: t.colors.textSecondary,
+      marginBottom: 3,
+      letterSpacing: 0,
+    },
+    needsSummaryText: {
+      fontSize: 14,
+      lineHeight: 19,
+      color: t.colors.textPrimary,
+    },
+    needsSummaryMore: {
+      fontSize: 13,
+      color: t.colors.textSecondary,
+      marginTop: 2,
+    },
+    needsSummaryAction: {
+      marginTop: 14,
+      fontSize: 14,
+      fontWeight: '700',
+      color: t.colors.brandBlue,
     },
     shareActions: {
       flexDirection: 'row',

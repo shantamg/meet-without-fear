@@ -86,26 +86,25 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     bannerSubtext: "Once they share, you'll both be able to reflect on what each other shared.",
   },
 
-  // Stage 2: Reconciler is analyzing empathy match (brief transient state)
-  // Uses "Keep Chatting" style - no spinner, input enabled
+  // Stage 2: System review is running; block input until the next action is known.
   'reconciler-analyzing': {
     showBanner: true,
-    hideInput: false,
+    hideInput: true,
     showInnerThoughts: false,
     isActionRequired: false,
     showSpinner: false,
-    showKeepChattingAction: true,
+    showKeepChattingAction: false,
     bannerText: () => `Checking how well you captured their perspective...`,
   },
 
-  // Stage 2: Reconciler is re-analyzing revised empathy (same style as first time)
+  // Stage 2: System review is re-checking revised empathy.
   'revision-analyzing': {
     showBanner: true,
-    hideInput: false,
+    hideInput: true,
     showInnerThoughts: false,
     isActionRequired: false,
     showSpinner: false,
-    showKeepChattingAction: true,
+    showKeepChattingAction: false,
     bannerText: () => `Checking your updated understanding...`,
   },
 
@@ -200,7 +199,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
   // Stage 3: Waiting for partner to confirm common ground
   'common-ground-pending': {
     showBanner: true,
-    hideInput: false,
+    hideInput: true,
     showInnerThoughts: false,
     isActionRequired: false,
     showSpinner: false,
