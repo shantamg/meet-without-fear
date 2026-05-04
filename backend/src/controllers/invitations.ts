@@ -64,6 +64,12 @@ export async function listSessions(req: Request, res: Response): Promise<void> {
             some: { userId: user.id },
           },
         },
+        userVessels: {
+          some: {
+            userId: user.id,
+            archivedAt: null,
+          },
+        },
         ...(status && { status: status as 'INVITED' | 'ACTIVE' | 'PAUSED' | 'RESOLVED' | 'ABANDONED' }),
       },
       include: {

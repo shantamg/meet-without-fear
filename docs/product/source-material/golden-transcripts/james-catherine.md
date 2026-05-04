@@ -1,10 +1,30 @@
 # James & Catherine Golden Reference Transcript
 
-Source: Slack `#bugs-and-requests` thread `1777295397.336399`. Raw Slack download is stored beside this file under `raw/`.
+Source: Slack `#bugs-and-requests` thread `1777295397.336399` (Stage 0 revised via `#most-important-thing` thread `1777736711.403079`, 2026-05-03). Raw Slack download is stored beside this file under `raw/`.
 
-Meet Without Fear — James & Catherine | Full Revised Parallel Transcript
+Meet Without Fear — James & Catherine | Full Parallel Transcript
 
-## STAGE 0 — ONBOARDING
+## STAGE 0 — ONBOARDING & INVITATION
+
+### CATHERINE’S TRACK
+
+**MWF:** I am here to help you work through conflict — step by step. You’ll start by sharing what you believe is happening, privately. I won’t share anything you’ve said unless you explicitly approve it.
+
+**Catherine:** Ready.
+
+**MWF:** Before we begin, let’s put together a short message for James so he knows what this is about. The goal is to share the topic — not the details yet. I’ll get the details from both of you later. Tell me what’s going on, and we’ll shape it together. You can edit it as much as you need. I’ll only send it once you’ve approved it.
+
+**Catherine:** I’ve been in this relationship for six years and I don’t think it’s working. There’s a pattern of escalation that I can’t live with anymore. I need to understand if anything can actually change.
+
+**MWF:** When you say escalation — what does that actually look like?
+
+**Catherine:** He yells. Says things that cut deep. Things you can’t take back.
+
+**MWF:** Thank you, Catherine. Here’s what I’d share with James: "Catherine feels the yelling and personal attacks during conflict are overwhelming and destroying their bond." Does that feel right?
+
+**Catherine:** Yes. That’s it.
+
+**MWF:** Got it. Here’s the message James will receive: "I’d like to talk through something that’s been on my mind between us. I’m using a tool that helps both people feel heard before anything gets worked out. Would you be open to it?" Send that to James however works best for you — text, email, whatever feels natural. The link to MWF will be included. Once he opens it, he’ll see what you just approved before anything else begins.
 
 ### JAMES’S TRACK
 
@@ -12,11 +32,9 @@ Meet Without Fear — James & Catherine | Full Revised Parallel Transcript
 
 **James:** Ready. Let’s get this over with.
 
-### CATHERINE’S TRACK
+**MWF:** Before we begin, Catherine wanted you to know something. This is what she shared — in her words, from her perspective: "Catherine feels the yelling and personal attacks during conflict are overwhelming and destroying their bond." This is how things look from her side right now. You don’t need to agree with it, respond to it, or do anything with it yet. Your perspective is what matters next — and that’s where we’re going. Ready?
 
-**MWF:** I am here to help you work through conflict — step by step. You’ll start by sharing what you believe is happening, privately. I won’t share anything you’ve said unless you explicitly approve it.
-
-**Catherine:** Ready.
+**James:** Ready.
 
 ## STAGE 1 — THE WITNESS
 
