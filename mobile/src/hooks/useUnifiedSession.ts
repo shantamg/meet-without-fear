@@ -288,10 +288,12 @@ export function useUnifiedSession(
   // Derive needs state for gating common ground query
   const needsForGating = needsData?.needs ?? [];
   const allNeedsConfirmedForGating = needsForGating.length > 0 && needsForGating.every((n) => n.confirmed);
+  const myNeedsSharedForGating =
+    (progressData?.myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true;
 
   const { data: needsComparisonData } = useNeedsComparison(
     sessionId,
-    allNeedsConfirmedForGating && !accessDenied
+    !accessDenied && (allNeedsConfirmedForGating || myNeedsSharedForGating)
   );
 
   // Stage 4: Strategies - always fetch to avoid waterfall
@@ -363,6 +365,11 @@ export function useUnifiedSession(
       if (sessionId && metadata.topicFrame) {
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
+      }
+      if (sessionId && metadata.needsCaptured) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
     },
     [sessionId, saveDraft, setStreamTriggeredFeelHeard, setAiRecommendsReadyToShare,
