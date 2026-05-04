@@ -98,6 +98,59 @@ Let me explain how this works.`;
       expect(result.dispatchTag).toBe('EXPLAIN_PROCESS');
     });
 
+    it('extracts proposed needs from a hidden needs JSON block', () => {
+      const raw = `<thinking>NeedsReady:Y</thinking>
+
+<needs>
+[
+  {
+    "need": "safety",
+    "category": "SAFETY",
+    "description": "I need steadiness before deciding what comes next.",
+    "evidence": ["I feel scared when things escalate"]
+  },
+  {
+    "need": "recognition",
+    "category": "RECOGNITION",
+    "description": "I need my effort to be seen.",
+    "evidence": []
+  }
+]
+</needs>
+
+I captured a draft of what matters to you for review.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe('I captured a draft of what matters to you for review.');
+      expect(result.response).not.toContain('<needs>');
+      expect(result.proposedNeeds).toEqual([
+        {
+          need: 'safety',
+          category: 'SAFETY',
+          description: 'I need steadiness before deciding what comes next.',
+          evidence: ['I feel scared when things escalate'],
+        },
+        {
+          need: 'recognition',
+          category: 'RECOGNITION',
+          description: 'I need my effort to be seen.',
+          evidence: [],
+        },
+      ]);
+    });
+
+    it('ignores malformed needs JSON and still strips the hidden block', () => {
+      const raw = `<thinking>NeedsReady:Y</thinking>
+<needs>{not valid json</needs>
+Let's keep exploring what matters most.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe("Let's keep exploring what matters most.");
+      expect(result.proposedNeeds).toEqual([]);
+    });
+
     it('handles response with no tags gracefully', () => {
       const raw = 'Just a plain response with no tags.';
       const result = parseMicroTagResponse(raw);

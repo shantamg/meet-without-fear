@@ -65,6 +65,13 @@ export interface SessionStateToolInput {
   offerReadyToShare?: boolean;
   proposedEmpathyStatement?: string;
   proposedStrategies?: string[];
+  proposedNeeds?: Array<{
+    need: string;
+    category: string;
+    description: string;
+    evidence: string[];
+  }>;
+  needsCaptured?: boolean;
   /** Stage 0: AI's proposed topic frame extracted from <draft> tag */
   topicFrame?: string;
 }

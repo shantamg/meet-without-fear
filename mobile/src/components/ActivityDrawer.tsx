@@ -450,7 +450,7 @@ export function ActivityDrawer({
 
   return (
     <View
-      style={[StyleSheet.absoluteFill, { zIndex: 100, elevation: 100 }]}
+      style={[StyleSheet.absoluteFill, { zIndex: 80, elevation: 80 }]}
       pointerEvents="auto"
       testID={testID}
     >
@@ -483,6 +483,16 @@ export function ActivityDrawer({
           <View {...panResponder.panHandlers} style={styles.dragHandleArea}>
             <View style={styles.dragHandle} />
           </View>
+
+          <Pressable
+            style={styles.closeHistoryButton}
+            onPress={closeDrawer}
+            accessibilityRole="button"
+            accessibilityLabel="Close exchange history"
+            testID="activity-drawer-close"
+          >
+            <Text style={styles.closeHistoryText}>Close exchange history</Text>
+          </Pressable>
 
           {/* Header */}
           <Text
@@ -613,6 +623,19 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     paddingHorizontal: 16,
     paddingBottom: 12,
+  },
+  closeHistoryButton: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 8,
+    backgroundColor: colors.bgSecondary,
+  },
+  closeHistoryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
   sectionHeader: {
     fontSize: 11,
