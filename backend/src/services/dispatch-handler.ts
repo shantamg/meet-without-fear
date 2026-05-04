@@ -116,9 +116,14 @@ export async function handleDispatch(
 Is there something specific you'd like to note down?`;
 
     default:
-      // Unknown tags are ignored — the AI's original streamed response is used instead.
-      // This handles cases where the AI freelances dispatch tags (e.g. STAGE_4_REPAIR)
-      // that don't have dedicated handlers.
+      // Sharing/process-related tags the AI freelances (e.g. EXPLAIN_WHAT_WAS_SHARED,
+      // SHOW_SHARING_HISTORY, CLARIFY_SHARE_HISTORY) — route to the process explainer
+      // rather than falling through to an empty response (issue #312).
+      if (/SHAR|PROCESS|EXPLAIN|HISTORY|STAGE/i.test(dispatchTag)) {
+        logger.info(`[Dispatch Handler] Routing process-related tag "${dispatchTag}" to EXPLAIN_PROCESS`);
+        return handleProcessExplanation(context);
+      }
+      // Truly unknown tags are ignored — the AI's original streamed response is used instead.
       logger.warn(`[Dispatch Handler] Unknown tag ignored (using AI response): ${dispatchTag}`);
       return null;
   }

@@ -784,17 +784,6 @@ ${WHAT_MATTERS_APPROACH}
 
 CORE PRINCIPLE: Valid needs don't depend on a specific person acting a specific way. "I need them to stop yelling" is a position. "I need to feel safe" is a need. Help ${context.userName} find the need underneath the position.
 
-POST-REVEAL PHASES (after both partners' needs are visible):
-When ${context.userName} can see both their own needs and their partner's needs:
-
-1. NOTICING: Open with a question that invites ${context.userName} to notice what stands out to them about seeing both lists. The goal is genuine reflection — let them discover whatever they discover. Do not point them toward any particular observation.
-
-2. FOLLOWING UP: Respond to whatever ${context.userName} notices. If they see similarities, sit with that. If they see differences, sit with that. Never lead them toward or away from any particular conclusion. Never label or analyze patterns between the lists — that seeing belongs to them.
-
-3. EMOTIONAL PROCESSING: Seeing the partner's needs can be intense. Recognize emotional shifts. If they're activated, slow down and offer space. Don't rush past feelings to get to the next question. If they need a moment, give it.
-
-4. VALIDITY: Close with a question that helps ${context.userName} genuinely acknowledge that what the other person needs is real and legitimate — without requiring agreement with the other person's behavior or positions. The goal is mutual recognition that both sets of needs matter.
-
 FORBIDDEN in Stage 3:
 - "try this", "experiment with", "what if you", "one thing you could do", "first small step", "moving forward" — solutions belong in Stage 4.
 - Introducing needs the user hasn't expressed. No suggesting additional needs beyond what they've named.
@@ -828,6 +817,30 @@ ${buildResponseProtocol(3)}`;
   if (context.emotionalIntensity >= 8) {
     dynamicParts.push('HIGH USER INTENSITY: The user is very activated/distressed. Slow down. Validate first, reframe gently. Your tone should be calm and grounding, not matching their intensity.');
   }
+
+  // POST-REVEAL: only inject when both partners have shared needs through
+  // the consent flow. Without this gate the AI acts as if the reveal already
+  // happened, leading to unauthorized sharing of partner content (issue #312).
+  const gates = context.contextBundle.stageContext.gatesSatisfied;
+  if (gates?.needsShared === true) {
+    dynamicParts.push(`POST-REVEAL PHASES (both partners' needs are now visible):
+When ${context.userName} can see both their own needs and their partner's needs:
+
+1. NOTICING: Open with a question that invites ${context.userName} to notice what stands out to them about seeing both lists. The goal is genuine reflection — let them discover whatever they discover. Do not point them toward any particular observation.
+
+2. FOLLOWING UP: Respond to whatever ${context.userName} notices. If they see similarities, sit with that. If they see differences, sit with that. Never lead them toward or away from any particular conclusion. Never label or analyze patterns between the lists — that seeing belongs to them.
+
+3. EMOTIONAL PROCESSING: Seeing the partner's needs can be intense. Recognize emotional shifts. If they're activated, slow down and offer space. Don't rush past feelings to get to the next question. If they need a moment, give it.
+
+4. VALIDITY: Close with a question that helps ${context.userName} genuinely acknowledge that what the other person needs is real and legitimate — without requiring agreement with the other person's behavior or positions. The goal is mutual recognition that both sets of needs matter.`);
+  }
+
+  // META-QUESTION HANDLING: when the user asks about the bot's behavior
+  // (e.g. "did you share something?", "what stage are we in?"), answer
+  // directly instead of redirecting. Without this, any mention of the
+  // partner's name in a process question triggers REDIRECTING mode, which
+  // produces a response loop (issue #312).
+  dynamicParts.push(`PROCESS QUESTIONS: If ${context.userName} asks about what you shared, what stage they're in, how this process works, or questions your behavior — answer directly and honestly. These are legitimate process questions, not "framing things in terms of the other person." Do not redirect process questions.`);
 
   dynamicParts.push(`User's emotional intensity: ${context.emotionalIntensity}/10`);
   dynamicParts.push(`Turn: ${context.turnCount}`);

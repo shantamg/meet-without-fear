@@ -1718,14 +1718,37 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
 
       // Guard: empty AI response after parsing + dispatch means the model emitted
       // content entirely inside tags we couldn't route (e.g. an unknown dispatch
-      // tag with no user-facing text). Instead of throwing (which deletes the
-      // user message and shows "Message not sent"), inject a warm fallback so
-      // the conversation continues smoothly.
+      // tag with no user-facing text). Try a contextual dispatch as EXPLAIN_PROCESS
+      // before falling back to a static message (issue #312 — static fallback was
+      // producing response loops).
       if (!accumulatedText.trim()) {
-        const fallback = 'I\'m here with you. Could you tell me more about what you\'re experiencing?';
-        logger.warn(`[sendMessageStream:${requestId}] Empty AI response after tag stripping — using fallback`, {
+        logger.warn(`[sendMessageStream:${requestId}] Empty AI response after tag stripping — attempting contextual fallback`, {
           dispatchTag: dispatchTag ?? null,
         });
+        // Try to generate a context-aware response via the process explainer
+        let fallback: string | null = null;
+        try {
+          const fallbackContext: DispatchContext = {
+            userMessage: content,
+            conversationHistory: history.map((m) => ({
+              role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
+              content: m.content,
+            })),
+            userName,
+            partnerName,
+            sessionId,
+            turnId,
+            currentStage,
+            invitationSent: session.status !== 'CREATED',
+            partnerJoined: session.status === 'ACTIVE',
+          };
+          fallback = await handleDispatch('EXPLAIN_PROCESS', fallbackContext);
+        } catch (err) {
+          logger.error(`[sendMessageStream:${requestId}] Contextual fallback failed`, err);
+        }
+        if (!fallback) {
+          fallback = 'I hear you. Could you say a bit more about what\'s on your mind?';
+        }
         sendSSE(res, { event: 'chunk', data: { text: fallback } });
         accumulatedText = fallback;
       }
