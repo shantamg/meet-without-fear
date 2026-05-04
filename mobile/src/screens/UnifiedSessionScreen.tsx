@@ -163,54 +163,33 @@ function timestampBeforeChatStart(timestamp?: string | null): string {
 }
 
 function InviteeTopicIntroCard({
-  sessionId,
   partnerName,
   topicFrame,
+  skipAnimation,
+  onAnimationComplete,
 }: {
-  sessionId: string;
   partnerName: string;
   topicFrame: string;
+  skipAnimation: boolean;
+  onAnimationComplete?: () => void;
 }) {
   const styles = useStyles();
-  const storageKey = `invitee-topic-intro-played:${sessionId}`;
-  const [hasCheckedPlayback, setHasCheckedPlayback] = useState(false);
-  const [skipAnimation, setSkipAnimation] = useState(false);
-  const [showTopic, setShowTopic] = useState(false);
-  const [showOutro, setShowOutro] = useState(false);
-  const topicOpacity = useRef(new Animated.Value(0)).current;
+  const [showTopic, setShowTopic] = useState(skipAnimation);
+  const [showOutro, setShowOutro] = useState(skipAnimation);
+  const topicOpacity = useRef(new Animated.Value(skipAnimation ? 1 : 0)).current;
   const introCompletedRef = useRef(false);
   const topicCompletedRef = useRef(false);
+  const outroCompletedRef = useRef(false);
 
   const introText = `Before we begin, this is what ${partnerName || 'your partner'} would like to work through with you:`;
   const outroText = "This is how things look from their side right now. You don't need to agree with it, respond to it, or do anything with it yet. Instead, I'd like to know what is happening from your point of view.";
 
   useEffect(() => {
-    let isMounted = true;
-
-    AsyncStorage.getItem(storageKey)
-      .then((value) => {
-        if (!isMounted) return;
-
-        const alreadyPlayed = value === 'true';
-        setSkipAnimation(alreadyPlayed);
-        setShowTopic(alreadyPlayed);
-        setShowOutro(alreadyPlayed);
-        topicOpacity.setValue(alreadyPlayed ? 1 : 0);
-        setHasCheckedPlayback(true);
-
-        if (!alreadyPlayed) {
-          AsyncStorage.setItem(storageKey, 'true').catch(() => {});
-        }
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        setHasCheckedPlayback(true);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [storageKey, topicOpacity]);
+    if (!skipAnimation) return;
+    setShowTopic(true);
+    setShowOutro(true);
+    topicOpacity.setValue(1);
+  }, [skipAnimation, topicOpacity]);
 
   const handleIntroComplete = useCallback(() => {
     if (introCompletedRef.current) return;
@@ -228,9 +207,11 @@ function InviteeTopicIntroCard({
     });
   }, [topicOpacity]);
 
-  if (!hasCheckedPlayback) {
-    return null;
-  }
+  const handleOutroComplete = useCallback(() => {
+    if (outroCompletedRef.current) return;
+    outroCompletedRef.current = true;
+    onAnimationComplete?.();
+  }, [onAnimationComplete]);
 
   return (
     <View style={styles.inviteeTopicAckBody} testID="invitee-topic-ack-body">
@@ -258,6 +239,7 @@ function InviteeTopicIntroCard({
           wordDelay={45}
           fadeDuration={120}
           skipAnimation={skipAnimation}
+          onComplete={handleOutroComplete}
         />
       ) : null}
     </View>
@@ -312,6 +294,7 @@ export function UnifiedSessionScreen({
 
     // Unread tracking
     lastSeenChatItemIdForSeparator,
+    lastViewedAtForAnimation,
 
     // Overlay state
     activeOverlay,
@@ -1798,14 +1781,16 @@ export function UnifiedSessionScreen({
     return [{
       type: 'custom-card',
       id: 'invitee-topic-frame-card',
+      animate: true,
       timestamp: timestampBeforeChatStart(
         compactData.mySignedAt || invitation?.acceptedAt || session?.createdAt
       ),
-      render: () => (
+      render: (options) => (
         <InviteeTopicIntroCard
-          sessionId={sessionId}
           partnerName={partnerName || 'your partner'}
           topicFrame={topicFrame}
+          skipAnimation={options?.skipAnimation ?? true}
+          onAnimationComplete={options?.onAnimationComplete}
         />
       ),
     }];
@@ -2542,6 +2527,7 @@ export function UnifiedSessionScreen({
           // Uses captured value from before session was marked viewed, so new messages
           // arriving while viewing don't trigger a separator
           lastSeenChatItemId={lastSeenChatItemIdForSeparator}
+          lastViewedAt={lastViewedAtForAnimation}
           // Open activity menu when "Context shared" or "Empathy shared" indicator is tapped
           onContextSharedPress={() => {
             setShowActivityMenu(true);

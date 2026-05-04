@@ -434,18 +434,23 @@ export function useUnifiedSession(
   // Use undefined as initial state to indicate "not yet loaded" vs null meaning "never viewed"
   const initialLastSeenChatItemIdRef = useRef<string | null | undefined>(undefined);
   const [lastSeenChatItemIdForSeparator, setLastSeenChatItemIdForSeparator] = useState<string | null | undefined>(undefined);
+  const initialLastViewedAtRef = useRef<string | null | undefined>(undefined);
+  const [lastViewedAtForAnimation, setLastViewedAtForAnimation] = useState<string | null | undefined>(undefined);
 
   // Capture initial value when session loads (before marking viewed)
   useEffect(() => {
     if (
       session?.lastSeenChatItemId !== undefined &&
+      session?.lastViewedAt !== undefined &&
       initialLastSeenChatItemIdRef.current === undefined &&
       !hasMarkedViewed.current
     ) {
       initialLastSeenChatItemIdRef.current = session.lastSeenChatItemId;
+      initialLastViewedAtRef.current = session.lastViewedAt;
       setLastSeenChatItemIdForSeparator(session.lastSeenChatItemId);
+      setLastViewedAtForAnimation(session.lastViewedAt);
     }
-  }, [session?.lastSeenChatItemId]);
+  }, [session?.lastSeenChatItemId, session?.lastViewedAt]);
 
   useEffect(() => {
     // Only mark viewed once per session load, when we have messages
@@ -468,7 +473,9 @@ export function useUnifiedSession(
   useEffect(() => {
     hasMarkedViewed.current = false;
     initialLastSeenChatItemIdRef.current = undefined;
+    initialLastViewedAtRef.current = undefined;
     setLastSeenChatItemIdForSeparator(null);
+    setLastViewedAtForAnimation(undefined);
   }, [sessionId]);
 
   // Only show 'Partner' fallback after data has loaded, otherwise show empty string
@@ -1147,6 +1154,7 @@ export function useUnifiedSession(
     // This is the lastSeenChatItemId from BEFORE the user opened the session
     // It's cleared after markViewed is called so new messages don't show a separator
     lastSeenChatItemIdForSeparator,
+    lastViewedAtForAnimation,
 
     // Pagination for loading older messages
     fetchMoreMessages: fetchNextPage,
