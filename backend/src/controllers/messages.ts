@@ -95,20 +95,27 @@ function getFallbackInitialMessage(
 const STAGE2_ROADMAP_COPY =
   `Here's what comes next: there are a few more steps in this process. First, each of you tries to understand what the other person might be going through. Then you'll each explore what matters most to you, and eventually use that to get clearer about what is possible next, whether together or separately.`;
 
+const DEFAULT_STAGE3_NEEDS_AI_CONFIDENCE = 0.85;
+const PLANNER_LINE_PREFIXES = [
+  'i should',
+  'so both lists should',
+  '— so both lists should',
+  "here's my plan",
+  'the prompt says',
+  'i need to follow',
+  'i need to present',
+  'i need to check the prompt',
+  'i need to use the prompt',
+  'i need to make sure both lists',
+];
+
 function scrubVisibleAIText(text: string): { text: string; scrubbed: boolean } {
   const before = text;
   const cleaned = text
     .split(/\r?\n/)
     .filter((line) => {
       const trimmed = line.trim().toLowerCase();
-      return !(
-        trimmed.startsWith('i should') ||
-        trimmed.startsWith('so both lists should') ||
-        trimmed.startsWith('— so both lists should') ||
-        trimmed.startsWith("here's my plan") ||
-        trimmed.startsWith('the prompt says') ||
-        trimmed.startsWith('i need to ')
-      );
+      return !PLANNER_LINE_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
     })
     .join('\n')
     .replace(/\bI should\b/gi, '')
@@ -119,6 +126,9 @@ function scrubVisibleAIText(text: string): { text: string; scrubbed: boolean } {
 
 function isReadyForStage3RevealText(content: string): boolean {
   const normalized = content.trim().toLowerCase();
+  if (/\bnot\s+ready\b/.test(normalized) || /\b(?:don'?t|do not)\s+(?:want|feel ready)\b/.test(normalized)) {
+    return false;
+  }
   return /\b(i'?m|i am|we are)?\s*ready\b/.test(normalized) &&
     /(list|lists|needs|side by side|reveal|see them|see it|show)/.test(normalized);
 }
@@ -190,43 +200,68 @@ async function persistStage3ProposedNeeds(
   );
   if (validNeeds.length === 0) return false;
 
-  const vessel = await prisma.userVessel.upsert({
-    where: { userId_sessionId: { userId, sessionId } },
-    create: { userId, sessionId },
-    update: {},
-  });
+  let persisted = false;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      persisted = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const vessel = await tx.userVessel.upsert({
+          where: { userId_sessionId: { userId, sessionId } },
+          create: { userId, sessionId },
+          update: {},
+        });
 
-  const existing = await prisma.identifiedNeed.count({ where: { vesselId: vessel.id } });
-  if (existing > 0) return false;
+        const existing = await tx.identifiedNeed.count({ where: { vesselId: vessel.id } });
+        if (existing > 0) return false;
 
-  await prisma.identifiedNeed.createMany({
-    data: validNeeds.map((need) => ({
-      vesselId: vessel.id,
-      need: need.description || need.need,
-      category: need.category as NeedCategory,
-      evidence: need.evidence,
-      aiConfidence: 0.85,
-      confirmed: false,
-    })),
-  });
+        await tx.identifiedNeed.createMany({
+          data: validNeeds.map((need) => ({
+            vesselId: vessel.id,
+            need: need.description || need.need,
+            category: need.category as NeedCategory,
+            evidence: need.evidence,
+            aiConfidence: DEFAULT_STAGE3_NEEDS_AI_CONFIDENCE,
+            confirmed: false,
+          })),
+        });
 
-  const progress = await prisma.stageProgress.findUnique({
-    where: { sessionId_userId_stage: { sessionId, userId, stage: 3 } },
-  });
-  if (progress) {
-    await prisma.stageProgress.update({
-      where: { id: progress.id },
-      data: {
-        gatesSatisfied: {
-          ...((progress.gatesSatisfied as Record<string, unknown> | null) ?? {}),
-          needsCaptured: true,
-          needsCapturedAt: new Date().toISOString(),
-        },
-      },
-    });
+        const progress = await tx.stageProgress.findUnique({
+          where: { sessionId_userId_stage: { sessionId, userId, stage: 3 } },
+        });
+        if (progress) {
+          await tx.stageProgress.update({
+            where: { id: progress.id },
+            data: {
+              gatesSatisfied: {
+                ...((progress.gatesSatisfied as Record<string, unknown> | null) ?? {}),
+                needsCaptured: true,
+                needsCapturedAt: new Date().toISOString(),
+              },
+            },
+          });
+        }
+
+        return true;
+      }, {
+        isolationLevel: 'Serializable',
+      });
+      break;
+    } catch (error) {
+      const isSerializationConflict =
+        error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+      if (!isSerializationConflict || attempt === 2) {
+        throw error;
+      }
+      logger.warn('Retrying Stage 3 needs persistence after serialization conflict', {
+        sessionId,
+        userId,
+        attempt,
+      });
+    }
   }
 
-  await publishSessionEvent(sessionId, 'session.needs_extracted' as any, {
+  if (!persisted) return false;
+
+  await publishSessionEvent(sessionId, 'session.needs_extracted', {
     stage: 3,
     forUserId: userId,
   });

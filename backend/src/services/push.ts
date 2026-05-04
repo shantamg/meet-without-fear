@@ -56,6 +56,10 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'Needs shared',
     body: 'Your partner shared their identified needs.',
   },
+  'partner.needs_validated': {
+    title: 'Needs review updated',
+    body: 'Your partner responded to the needs comparison.',
+  },
   'partner.ranking_submitted': {
     title: 'Ranking submitted',
     body: 'Your partner submitted their strategy rankings.',
