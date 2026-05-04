@@ -7,9 +7,9 @@
 
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
-import { MessageRole } from '@meet-without-fear/shared';
+import { EmpathyStatus, MessageRole } from '@meet-without-fear/shared';
+import type { Prisma } from '@prisma/client';
 import { getSonnetResponse } from '../../lib/bedrock';
-import { EmpathyStatus } from '@prisma/client';
 import { transition } from '../empathy-state-machine';
 import {
   buildShareOfferPrompt,
@@ -23,6 +23,11 @@ import type {
   ReconcilerResult,
   ShareOfferMessage,
 } from '@meet-without-fear/shared';
+
+type ConversationPromptMessage = {
+  role: string;
+  content: string;
+};
 
 import {
   type UserInfo,
@@ -116,9 +121,9 @@ export async function generatePostShareContinuation(
   // Convert to format expected by prompt (reverse to chronological order)
   // Only include USER and AI messages - exclude EMPATHY_STATEMENT, SHARED_CONTEXT, etc.
   const conversationHistory = recentMessages
-    .filter(m => m.role === 'USER' || m.role === 'AI')
+    .filter((m: ConversationPromptMessage) => m.role === 'USER' || m.role === 'AI')
     .reverse()
-    .map(m => ({
+    .map((m: ConversationPromptMessage) => ({
       role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
       content: m.content,
     }));
@@ -129,12 +134,12 @@ export async function generatePostShareContinuation(
   // We don't need full memory/pattern context for post-share continuation
   const minimalContextBundle: ContextBundle = {
     conversationContext: {
-      recentTurns: conversationHistory.map((m) => ({
+      recentTurns: conversationHistory.map((m: { role: 'user' | 'assistant'; content: string }) => ({
         role: m.role,
         content: m.content,
         timestamp: new Date().toISOString(), // Approximate
       })),
-      turnCount: conversationHistory.filter(m => m.role === 'user').length,
+      turnCount: conversationHistory.filter((m: { role: 'user' | 'assistant'; content: string }) => m.role === 'user').length,
       sessionDurationMinutes: 0, // Not critical for this use case
     },
     emotionalThread: {
@@ -166,7 +171,7 @@ export async function generatePostShareContinuation(
   const promptContext: PromptContext = {
     userName: subjectName,
     partnerName,
-    turnCount: conversationHistory.filter(m => m.role === 'user').length,
+    turnCount: conversationHistory.filter((m: { role: 'user' | 'assistant'; content: string }) => m.role === 'user').length,
     emotionalIntensity: 5, // Default moderate
     contextBundle: minimalContextBundle,
     justSharedWithPartner: {
@@ -685,7 +690,7 @@ export async function respondToShareSuggestion(
     logger.info('User declined share offer, marking guesser empathy as READY', { userId });
 
     // Wrap decline DB writes in a transaction for consistency
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Idempotency guard: only update if still in OFFERED/PENDING state
       const updated = await tx.reconcilerShareOffer.updateMany({
         where: {
@@ -806,7 +811,7 @@ export async function respondToShareSuggestion(
   const subjectCurrentStage = subjectProgress?.stage ?? 2;
 
   // Wrap all DB writes in a transaction for atomicity
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const now = new Date();
 
     // Idempotency guard: only update if still in OFFERED/PENDING state
@@ -1159,6 +1164,12 @@ Your job is to CRAFT a feelings-focused message that ${userName} would say direc
 5. IS BRIEF AND FOCUSED
    - 1-3 sentences maximum
    - Address the most important gap in understanding
+
+6. PRESERVES ACCOUNTABILITY AND SAFETY
+   - If anger, temper, volatility, escalation, or loss of control is part of the conflict, never imply ${userName} cannot control themselves
+   - Do not ask ${partnerName} to accept unsafe behavior or minimize harm
+   - It is okay to name defensiveness or anger, but pair it with ownership (for example: "my anger is still mine to handle")
+   - Recognition needs must never override ${partnerName}'s need for safety or boundaries
 
 IMPORTANT GUIDELINES:
 - Never start with confrontational phrases like "Look," or "Listen,"

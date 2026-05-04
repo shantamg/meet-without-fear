@@ -126,7 +126,7 @@ export interface SessionIndicatorData {
 export function deriveIndicators(data: SessionIndicatorData): IndicatorItem[] {
   const items: IndicatorItem[] = [];
 
-  const { isInviter, invitation, compact, milestones, sessionCreatedAt } = data;
+  const { isInviter, invitation, milestones } = data;
 
   // ---------------------------------------------------------------------------
   // Invitation Sent Indicator (for inviters)
@@ -154,23 +154,6 @@ export function deriveIndicators(data: SessionIndicatorData): IndicatorItem[] {
       id: 'invitation-accepted',
       timestamp: invitation.acceptedAt,
     });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Compact Signed Indicator
-  // ---------------------------------------------------------------------------
-  // Shows when the current user has signed the curiosity compact.
-  // Uses mySignedAt from compact cache, with sessionCreatedAt as fallback for older sessions.
-  if (compact?.mySigned) {
-    const compactSignedAt = compact.mySignedAt ?? sessionCreatedAt;
-    if (compactSignedAt) {
-      items.push({
-        type: 'indicator',
-        indicatorType: 'compact-signed',
-        id: 'compact-signed',
-        timestamp: compactSignedAt,
-      });
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -365,4 +348,3 @@ export function isWaitingForAIResponse(messages: CacheMessage[]): boolean {
   // If the last message is from the user, we're waiting for AI
   return lastMessage.role === MessageRole.USER;
 }
-

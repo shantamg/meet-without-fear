@@ -12,8 +12,8 @@
 import { Request, Response } from 'express';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { EmpathyStatus } from '@prisma/client';
 import {
+  EmpathyStatus,
   MessageRole,
   saveEmpathyDraftRequestSchema,
   consentToShareRequestSchema,
@@ -603,6 +603,69 @@ export async function consentToShare(
       return;
     }
 
+    // Get partner ID from session data
+    const partnerId = getPartnerUserIdFromSession(session, user.id);
+
+    const respondWithExistingAttempt = async (existingAttempt: {
+      id: string;
+      content: string;
+      sharedAt: Date;
+      status: EmpathyStatus;
+    }) => {
+      const [partnerAttempt, existingEmpathyMessage] = await Promise.all([
+        partnerId
+          ? prisma.empathyAttempt.findFirst({
+            where: {
+              sessionId,
+              sourceUserId: partnerId,
+            },
+          })
+          : Promise.resolve(null),
+        prisma.message.findFirst({
+          where: {
+            sessionId,
+            senderId: user.id,
+            forUserId: user.id,
+            role: 'EMPATHY_STATEMENT',
+            stage: 2,
+          },
+          orderBy: { timestamp: 'desc' },
+        }),
+      ]);
+
+      successResponse(res, {
+        consented: true,
+        consentedAt: existingAttempt.sharedAt.toISOString(),
+        partnerConsented: !!partnerAttempt,
+        canReveal: !!partnerAttempt && consent,
+        status: existingAttempt.status,
+        empathyMessage: {
+          id: existingEmpathyMessage?.id ?? existingAttempt.id,
+          content: existingEmpathyMessage?.content ?? existingAttempt.content,
+          timestamp: (existingEmpathyMessage?.timestamp ?? existingAttempt.sharedAt).toISOString(),
+          stage: existingEmpathyMessage?.stage ?? 2,
+        },
+        transitionMessage: null,
+      });
+    };
+
+    // Idempotency: if this user already shared an empathy attempt, treat a
+    // retry/double-click as success instead of creating duplicate consent
+    // records and returning a conflict.
+    const existingAttempt = await prisma.empathyAttempt.findFirst({
+      where: {
+        sessionId,
+        sourceUserId: user.id,
+        status: { not: 'REFINING' },
+      },
+      orderBy: { sharedAt: 'desc' },
+    });
+
+    if (existingAttempt) {
+      await respondWithExistingAttempt(existingAttempt);
+      return;
+    }
+
     // Create consent record
     await prisma.consentRecord.create({
       data: {
@@ -633,14 +696,19 @@ export async function consentToShare(
     } catch (err: any) {
       // Unique constraint violation (P2002) — duplicate empathy attempt for this user+session
       if (err?.code === 'P2002') {
+        const concurrentAttempt = await prisma.empathyAttempt.findFirst({
+          where: { sessionId, sourceUserId: user.id },
+          orderBy: { sharedAt: 'desc' },
+        });
+        if (concurrentAttempt) {
+          await respondWithExistingAttempt(concurrentAttempt);
+          return;
+        }
         errorResponse(res, 'CONFLICT', 'Empathy attempt already exists for this session', 409);
         return;
       }
       throw err;
     }
-
-    // Get partner ID from session data
-    const partnerId = getPartnerUserIdFromSession(session, user.id);
 
     // Get partner name for messages
     let partnerName: string | undefined;
@@ -1529,7 +1597,7 @@ async function triggerStage3Transition(sessionId: string, userId: string, partne
       select: { id: true, firstName: true, name: true }
     });
 
-    const userMap = new Map(users.map(u => [u.id, u.firstName || u.name || 'User']));
+    const userMap = new Map(users.map((u: { id: string; firstName: string | null; name: string | null }) => [u.id, u.firstName || u.name || 'User']));
     const nameA = userMap.get(userId) || 'User';
     const nameB = partnerId ? (userMap.get(partnerId) || 'Partner') : 'Partner';
 
@@ -1595,9 +1663,6 @@ Respond in JSON format:
       });
       messages.push({ id: msg.id, content: msg.content, timestamp: msg.timestamp, forUserId: uid });
     }
-
-    // Use first message as representative for the event payload
-    const message = messages[0];
 
     // 4. Update Stage Progress for both to Stage 3
     // Backfill missing prior stage records (defensive — handles cases where
@@ -1667,17 +1732,21 @@ Respond in JSON format:
 
     // 5. Notify Realtime
     // Notify session channel that stage changed
-    if (partnerId && message) {
+    if (partnerId && messages.length > 0) {
       await publishSessionEvent(sessionId, 'partner.stage_completed', {
         previousStage: 2,
         currentStage: 3,
         userId,
         triggeredByUserId: userId,
-        message: {
-          id: message.id,
-          content: message.content,
-          timestamp: message.timestamp
-        }
+        messagesByUserId: Object.fromEntries(messages.map((message) => [
+          message.forUserId,
+          {
+            id: message.id,
+            content: message.content,
+            timestamp: message.timestamp,
+            forUserId: message.forUserId,
+          },
+        ])),
       });
     }
 

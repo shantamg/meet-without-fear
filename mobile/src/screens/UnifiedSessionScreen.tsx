@@ -8,13 +8,13 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Modal, AppState, Keyboard, Platform, Share } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // useRouter removed - share navigation replaced by ActivityDrawer
 import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion, ConfirmAgreementResponse, MAX_AGREEMENTS, EmpathyStatus } from '@meet-without-fear/shared';
 
-import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem } from '../components/ChatInterface';
+import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem, ChatCustomCardItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
 import { FeelHeardConfirmation } from '../components/FeelHeardConfirmation';
 import { BreathingExercise } from '../components/BreathingExercise';
@@ -42,6 +42,7 @@ import { ActivityDrawer } from '../components/ActivityDrawer';
 import { NeedsDrawer, NeedsDrawerMode } from '../components/NeedsDrawer';
 import { RefinementModalScreen } from './RefinementModalScreen';
 import { GuidedDraftChatModal } from '../components/GuidedDraftChatModal';
+import { TypewriterText } from '../components/TypewriterText';
 
 import { useUnifiedSession, InlineChatCard } from '../hooks/useUnifiedSession';
 import { useConfirmTopicFrame } from '../hooks/useSessions';
@@ -113,7 +114,7 @@ const STAGE_FRIENDLY_NAMES: Record<number, string> = {
   [Stage.WITNESS]: 'Your Story',
   [Stage.PERSPECTIVE_STRETCH]: 'Walking in Their Shoes',
   [Stage.NEED_MAPPING]: 'What Matters Most',
-  [Stage.STRATEGIC_REPAIR]: 'Moving Forward Together',
+  [Stage.STRATEGIC_REPAIR]: 'What Comes Next',
   [Stage.INFORMED_EMPATHY]: 'Deeper Understanding',
 };
 
@@ -151,6 +152,100 @@ function deriveChapterMarkers(
   return markers;
 }
 
+function timestampBeforeChatStart(timestamp?: string | null): string {
+  const fallback = new Date(0).toISOString();
+  if (!timestamp) return fallback;
+
+  const time = new Date(timestamp).getTime();
+  if (!Number.isFinite(time)) return timestamp;
+
+  return new Date(time - 2000).toISOString();
+}
+
+function InviteeTopicIntroCard({
+  partnerName,
+  topicFrame,
+  skipAnimation,
+  onAnimationComplete,
+}: {
+  partnerName: string;
+  topicFrame: string;
+  skipAnimation: boolean;
+  onAnimationComplete?: () => void;
+}) {
+  const styles = useStyles();
+  const [showTopic, setShowTopic] = useState(skipAnimation);
+  const [showOutro, setShowOutro] = useState(skipAnimation);
+  const topicOpacity = useRef(new Animated.Value(skipAnimation ? 1 : 0)).current;
+  const introCompletedRef = useRef(false);
+  const topicCompletedRef = useRef(false);
+  const outroCompletedRef = useRef(false);
+
+  const introText = `Before we begin, this is what ${partnerName || 'your partner'} would like to work through with you:`;
+  const outroText = "This is how things look from their side right now. You don't need to agree with it, respond to it, or do anything with it yet. Instead, I'd like to know what is happening from your point of view.";
+
+  useEffect(() => {
+    if (!skipAnimation) return;
+    setShowTopic(true);
+    setShowOutro(true);
+    topicOpacity.setValue(1);
+  }, [skipAnimation, topicOpacity]);
+
+  const handleIntroComplete = useCallback(() => {
+    if (introCompletedRef.current) return;
+    introCompletedRef.current = true;
+    setShowTopic(true);
+
+    Animated.timing(topicOpacity, {
+      toValue: 1,
+      duration: 350,
+      useNativeDriver: true,
+    }).start(() => {
+      if (topicCompletedRef.current) return;
+      topicCompletedRef.current = true;
+      setShowOutro(true);
+    });
+  }, [topicOpacity]);
+
+  const handleOutroComplete = useCallback(() => {
+    if (outroCompletedRef.current) return;
+    outroCompletedRef.current = true;
+    onAnimationComplete?.();
+  }, [onAnimationComplete]);
+
+  return (
+    <View style={styles.inviteeTopicAckBody} testID="invitee-topic-ack-body">
+      <TypewriterText
+        text={introText}
+        style={styles.inviteeTopicAckText}
+        wordDelay={45}
+        fadeDuration={120}
+        skipAnimation={skipAnimation}
+        onComplete={handleIntroComplete}
+      />
+
+      {showTopic ? (
+        <Animated.View style={[styles.inviteeTopicAckFrameWrap, { opacity: topicOpacity }]}>
+          <Text style={styles.inviteeTopicAckFrame} testID="invitee-topic-text">
+            {topicFrame}
+          </Text>
+        </Animated.View>
+      ) : null}
+
+      {showOutro ? (
+        <TypewriterText
+          text={outroText}
+          style={styles.inviteeTopicAckText}
+          wordDelay={45}
+          fadeDuration={120}
+          skipAnimation={skipAnimation}
+          onComplete={handleOutroComplete}
+        />
+      ) : null}
+    </View>
+  );
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -161,6 +256,7 @@ export function UnifiedSessionScreen({
   onStageComplete,
 }: UnifiedSessionScreenProps) {
   const styles = useStyles();
+  const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
   const { mutate: updateMood } = useUpdateMood();
   const queryClient = useQueryClient();
@@ -173,14 +269,10 @@ export function UnifiedSessionScreen({
 
   // Real-time presence tracking
 
-  // Invitee Stage 0 topic-ack flag — local UI state.
-  // Declared early so it can flow into useUnifiedSession (which uses it to
-  // defer the Stage 0/1 initial AI message fetch for the invitee).
-  const [inviteeAckDone, setInviteeAckDone] = useState(false);
-
   const {
     // Loading
     isLoading,
+    accessDenied,
     isFetchingInitialMessage,
 
     // Session context
@@ -204,6 +296,7 @@ export function UnifiedSessionScreen({
 
     // Unread tracking
     lastSeenChatItemIdForSeparator,
+    lastViewedAtForAnimation,
 
     // Overlay state
     activeOverlay,
@@ -291,10 +384,7 @@ export function UnifiedSessionScreen({
     // Session viewed tracking
     markSessionViewed,
 
-    // Stage advancement (used by invitee topic-ack Ready button)
-    advanceStage,
-    triggerInitialMessage,
-  } = useUnifiedSession(sessionId, { inviteeTopicAcked: inviteeAckDone });
+  } = useUnifiedSession(sessionId);
 
   // AI message handler for fire-and-forget pattern
   const { addAIMessage, handleAIMessageError } = useAIMessageHandler();
@@ -390,25 +480,11 @@ export function UnifiedSessionScreen({
         if (data.empathyStatus) {
           queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         }
-        // Update sessionKeys.state with new stage from event
-        if (data.currentStage !== undefined) {
-          queryClient.setQueryData(sessionKeys.state(sessionId), (old: any) => {
-            if (!old) return old;
-            return {
-              ...old,
-              progress: old.progress ? {
-                ...old.progress,
-                partnerProgress: old.progress.partnerProgress ? {
-                  ...old.progress.partnerProgress,
-                  stage: data.currentStage,
-                } : old.progress.partnerProgress,
-              } : old.progress,
-            };
-          });
-        }
-        // Also add transition message to cache if included in event
-        if (data.message) {
-          const message = data.message as { id: string; content: string; timestamp: string };
+        const messagesByUserId = data.messagesByUserId as Record<string, { id: string; content: string; timestamp: string; forUserId?: string }> | undefined;
+        const addressedMessage = user?.id && messagesByUserId ? messagesByUserId[user.id] : undefined;
+        const legacyMessage = data.message as { id: string; content: string; timestamp: string; forUserId?: string } | undefined;
+        const message = addressedMessage || (legacyMessage?.forUserId === user?.id ? legacyMessage : undefined);
+        if (message) {
           const newMessage = {
             id: message.id,
             content: message.content,
@@ -417,6 +493,7 @@ export function UnifiedSessionScreen({
             role: 'AI' as const,
             sessionId,
             senderId: null,
+            forUserId: message.forUserId ?? user?.id,
           };
           queryClient.setQueryData(messageKeys.infinite(sessionId), (old: any) => {
             if (!old || old.pages.length === 0) {
@@ -430,7 +507,11 @@ export function UnifiedSessionScreen({
             return { ...old, pages: updatedPages };
           });
         }
-        queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
       }
 
       if (event === 'partner.advanced') {
@@ -583,13 +664,26 @@ export function UnifiedSessionScreen({
         // Partner confirmed their identified needs
         console.log('[UnifiedSessionScreen] Partner confirmed needs');
         queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
 
       if (eventName === 'partner.needs_shared') {
         // Partner consented to share their needs
         console.log('[UnifiedSessionScreen] Partner shared needs');
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      }
+
+      if (eventName === 'session.needs_reveal_ready') {
+        console.log('[UnifiedSessionScreen] Needs reveal ready');
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
 
       if (eventName === 'session.common_ground_ready') {
@@ -777,8 +871,6 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   const [invitationPanelDismissed, setInvitationPanelDismissed] = useState(false);
 
-  // (inviteeAckDone is declared above, before useUnifiedSession.)
-
   // Tooltip shown after "Later" — points at the book icon to teach the user
   // they can share later from the activity drawer. Session-local only.
   const [showShareLaterTooltip, setShowShareLaterTooltip] = useState(false);
@@ -959,17 +1051,9 @@ export function UnifiedSessionScreen({
   // The optimistic updates in mutation hooks (onMutate) ensure panels hide immediately.
   // No latch refs needed - if API fails, onError rolls back the cache and panel reappears.
   const isInviter = invitation?.isInviter ?? true;
-  // Invitee Stage 0 topic-ack screen is active when:
-  //   - user is the invitee
-  //   - compact has been signed (welcome step is done)
-  //   - they haven't tapped the topic-ack Ready button yet
-  //   - no chat messages exist yet (so this never triggers on later opens)
-  const inviteeTopicAckPending =
-    !isInviter &&
-    !!compactData?.mySigned &&
-    !inviteeAckDone &&
-    messages.length === 0 &&
-    !!topicFrame;
+  // Invitee topic context now renders as a chronological chat card. There is
+  // no second Ready gate after signing the opening agreement.
+  const inviteeTopicAckPending = false;
   const {
     waitingStatus,
     shouldShowWaitingBanner,
@@ -982,6 +1066,7 @@ export function UnifiedSessionScreen({
       showFeelHeardPanel: shouldShowFeelHeard,
       showShareSuggestionPanel: shouldShowShareSuggestion,
       showNeedsReviewPanel: shouldShowNeedsReview,
+      showNeedsSharePanel: shouldShowNeedsShare,
       showCommonGroundPanel: shouldShowCommonGround,
     },
   } = useChatUIState({
@@ -995,6 +1080,7 @@ export function UnifiedSessionScreen({
     partnerProgress,
     compactMySigned: compactData?.mySigned,
     hasTopicConfirmed: topicFrameConfirmed,
+    invitationConfirmed,
     // Local dismissal latch — the panel hides as soon as the user taps
     // "Later" (or after a successful share, if the screen wants to stash it).
     invitationPanelDismissed,
@@ -1033,6 +1119,7 @@ export function UnifiedSessionScreen({
     allNeedsConfirmed,
     needsAvailable: (needs?.length ?? 0) > 0,
     needsShared: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true,
+    needsRevealReady: (needsComparisonData?.myNeeds?.length ?? 0) > 0 && (needsComparisonData?.partnerNeeds?.length ?? 0) > 0,
     hasConfirmedNeedsLocal: completedActions.has('confirmed-needs'),
     commonGroundCount: commonGround?.length ?? 0,
     commonGroundAvailable: (needsComparisonData?.myNeeds?.length ?? 0) > 0 && (needsComparisonData?.partnerNeeds?.length ?? 0) > 0,
@@ -1064,14 +1151,6 @@ export function UnifiedSessionScreen({
   // Latch if mutation is in flight (backup for immediate feedback)
   if (isConfirmingFeelHeard && !hasEverConfirmedFeelHeard.current) {
     hasEverConfirmedFeelHeard.current = true;
-  }
-
-  // Once compact is signed, keep showing the indicator even during re-renders
-  const hasEverSignedCompact = useRef(false);
-
-  // Update ref when compact is signed
-  if (compactData?.mySigned && !hasEverSignedCompact.current) {
-    hasEverSignedCompact.current = true;
   }
 
   // Animation for the invitation panel slide-up
@@ -1153,7 +1232,7 @@ export function UnifiedSessionScreen({
   const readyToShowEmpathy = shouldShowEmpathyPanel;
   const readyToShowFeelHeard = shouldShowFeelHeard;
   const readyToShowShareSuggestion = shouldShowShareSuggestion;
-  const readyToShowNeedsReview = shouldShowNeedsReview;
+  const readyToShowNeedsReview = shouldShowNeedsReview || shouldShowNeedsShare;
   const readyToShowCommonGround = shouldShowCommonGround;
   const readyToShowWaitingBanner = shouldShowWaitingBanner;
 
@@ -1262,17 +1341,11 @@ export function UnifiedSessionScreen({
         messageConfirmedAt: invitation.messageConfirmedAt,
         acceptedAt: invitation.acceptedAt,
       } : undefined,
-      compact: compactData ? {
-        // Use refs as backup to prevent flickering during mutation
-        mySigned: hasEverSignedCompact.current || compactData.mySigned || isSigningCompact,
-        mySignedAt: compactData.mySignedAt ?? (hasEverSignedCompact.current || compactData.mySigned || isSigningCompact ? session?.createdAt : null),
-      } : undefined,
       milestones: {
         // Use ref as backup to prevent flickering during mutation
         feelHeardConfirmedAt: milestones?.feelHeardConfirmedAt ??
           (hasEverConfirmedFeelHeard.current || isConfirmingFeelHeard ? new Date().toISOString() : null),
       },
-      sessionCreatedAt: session?.createdAt,
       mySharedAt: empathyStatusData?.mySharedAt,
     };
 
@@ -1338,7 +1411,7 @@ export function UnifiedSessionScreen({
     allIndicators.push(...chapterIndicators);
 
     return allIndicators;
-  }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
+  }, [isInviter, session?.status, invitation?.messageConfirmedAt, invitation?.acceptedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
 
 
 
@@ -1711,26 +1784,34 @@ export function UnifiedSessionScreen({
     return <CompactChatItem testID="inline-compact" isFirstSession={isFirstSession} />;
   }, [isFirstSession]);
 
-  // Invitee Stage 0 topic-acknowledgement message body.
-  // Rendered in the message area (not in the bottom bar) per spec:
-  // intro line + topic frame with breathing room + closing line.
-  const inviteeTopicAckEmptyStateElement = useMemo(() => {
-    return (
-      <View style={styles.inviteeTopicAckBody} testID="invitee-topic-ack-body">
-        <Text style={styles.inviteeTopicAckText}>
-          {`Before we begin, this is what ${partnerName || 'your partner'} would like to work through with you:`}
-        </Text>
-        <View style={styles.inviteeTopicAckFrameWrap}>
-          <Text style={styles.inviteeTopicAckFrame} testID="invitee-topic-text">
-            {topicFrame ?? ''}
-          </Text>
-        </View>
-        <Text style={styles.inviteeTopicAckText}>
-          {"This is how things look from their side right now. You don't need to agree with it, respond to it, or do anything with it yet. Instead, I'd like to know what is happening from your point of view."}
-        </Text>
-      </View>
-    );
-  }, [styles, partnerName, topicFrame]);
+  const inviteeOpeningCards = useMemo((): ChatCustomCardItem[] => {
+    if (isInviter || !compactData?.mySigned || !topicFrame) return [];
+
+    return [{
+      type: 'custom-card',
+      id: 'invitee-topic-frame-card',
+      animate: true,
+      timestamp: timestampBeforeChatStart(
+        compactData.mySignedAt || invitation?.acceptedAt || session?.createdAt
+      ),
+      render: (options) => (
+        <InviteeTopicIntroCard
+          partnerName={partnerName || 'your partner'}
+          topicFrame={topicFrame}
+          skipAnimation={options?.skipAnimation ?? true}
+          onAnimationComplete={options?.onAnimationComplete}
+        />
+      ),
+    }];
+  }, [
+    isInviter,
+    compactData?.mySigned,
+    compactData?.mySignedAt,
+    topicFrame,
+    partnerName,
+    invitation?.acceptedAt,
+    session?.createdAt,
+  ]);
 
   // -------------------------------------------------------------------------
   // Render Overlays
@@ -1981,25 +2062,6 @@ export function UnifiedSessionScreen({
           />
         );
 
-      case 'invitee-topic-ack':
-        return (
-          <CompactAgreementBar
-            onSign={() => {
-              // Mark ack done so the topic-ack panel hides and the input
-              // un-hides. Trigger the Stage 0/1 initial AI message and
-              // advance to Stage 1 server-side (idempotent — server already
-              // auto-advanced this user when both sides signed).
-              setInviteeAckDone(true);
-              triggerInitialMessage();
-              if (sessionId) advanceStage({ sessionId });
-            }}
-            isPending={false}
-            isFirstSession={true}
-            buttonLabel="Ready"
-            testID="invitee-topic-ack-bar"
-          />
-        );
-
       case 'topic-proposal':
         if (!topicFrame) return undefined;
         return (
@@ -2155,6 +2217,7 @@ export function UnifiedSessionScreen({
               <TouchableOpacity
                 style={styles.needsReviewButton}
                 onPress={() => {
+                  setShowActivityMenu(false);
                   setNeedsDrawerMode('needs');
                   setShowNeedsDrawer(true);
                 }}
@@ -2163,6 +2226,44 @@ export function UnifiedSessionScreen({
               >
                 <Text style={styles.needsReviewButtonText}>
                   Review and confirm your needs
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        );
+
+      case 'needs-share':
+        return (
+          <Animated.View
+            style={{
+              opacity: needsReviewAnim,
+              maxHeight: needsReviewAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 100],
+              }),
+              transform: [{
+                translateY: needsReviewAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+              overflow: 'hidden',
+            }}
+            pointerEvents="auto"
+          >
+            <View style={styles.needsReviewContainer}>
+              <TouchableOpacity
+                style={styles.needsReviewButton}
+                onPress={() => {
+                  setShowActivityMenu(false);
+                  setNeedsDrawerMode('needs');
+                  setShowNeedsDrawer(true);
+                }}
+                activeOpacity={0.7}
+                testID="needs-share-button"
+              >
+                <Text style={styles.needsReviewButtonText}>
+                  Share my needs
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2192,6 +2293,7 @@ export function UnifiedSessionScreen({
               <TouchableOpacity
                 style={styles.needsReviewButton}
                 onPress={() => {
+                  setShowActivityMenu(false);
                   setNeedsDrawerMode('comparison');
                   setShowNeedsDrawer(true);
                 }}
@@ -2267,6 +2369,22 @@ export function UnifiedSessionScreen({
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color={styles.accentColor.color} />
         <Text style={styles.loadingText}>Loading session...</Text>
+      </View>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Access Denied — user is not a member of this session's relationship
+  // -------------------------------------------------------------------------
+  if (accessDenied) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.loadingText}>You don't have access to this session.</Text>
+        {onNavigateBack && (
+          <TouchableOpacity onPress={onNavigateBack} style={{ marginTop: 16 }}>
+            <Text style={[styles.loadingText, { textDecorationLine: 'underline' }]}>Go back</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -2474,19 +2592,17 @@ export function UnifiedSessionScreen({
           // Uses captured value from before session was marked viewed, so new messages
           // arriving while viewing don't trigger a separator
           lastSeenChatItemId={lastSeenChatItemIdForSeparator}
+          lastViewedAt={lastViewedAtForAnimation}
           // Open activity menu when "Context shared" or "Empathy shared" indicator is tapped
           onContextSharedPress={() => {
             setShowActivityMenu(true);
           }}
+          customCards={inviteeOpeningCards}
           // Show compact as custom empty state during onboarding when not signed.
-          // For the invitee on Stage 0 topic-ack, show the topic-ack body
-          // instead (renders inside the messages area, with a Ready bar below).
           customEmptyState={
             isInOnboardingUnsigned
               ? compactEmptyStateElement
-              : aboveInputPanel === 'invitee-topic-ack'
-                ? inviteeTopicAckEmptyStateElement
-                : undefined
+              : undefined
           }
           renderAboveInput={aboveInputPanel ? renderAboveInput : undefined}
           renderBelowChat={(inlineCards.length > 0 || memorySuggestion) ? () => (
@@ -2613,15 +2729,6 @@ export function UnifiedSessionScreen({
               // 3. When API responds, replace optimistic with real message + AI response
               handleShareEmpathy(statementToShare);
             }
-          }}
-          onSendRefinement={(message) => {
-            const refined =
-              message.trim().toLowerCase().startsWith('refine empathy draft')
-                ? message
-                : `Refine empathy draft: ${message}`;
-            // Prefix to make intent clear to the AI/prompt that this is a draft update
-            sendMessage(refined);
-            setShowEmpathyDrawer(false);
           }}
           onClose={() => setShowEmpathyDrawer(false)}
         />
@@ -2835,7 +2942,12 @@ export function UnifiedSessionScreen({
           testID="share-later-tooltip-overlay"
         >
           <View
-            style={styles.shareLaterTooltipBubble}
+            style={[
+              styles.shareLaterTooltipBubble,
+              Platform.OS !== 'web' && {
+                top: insets.top + 56,
+              },
+            ]}
             testID="share-later-tooltip"
           >
             <Text style={styles.shareLaterTooltipText}>
@@ -2874,7 +2986,7 @@ export function UnifiedSessionScreen({
           setShowActivityMenu(false);
           setShowEmpathyDrawer(true);
         }}
-        topicFrame={isInviter && topicFrameConfirmed ? (topicFrame || undefined) : undefined}
+        topicFrame={topicFrameConfirmed ? (topicFrame || undefined) : undefined}
         invitationTimestamp={isInviter ? (invitation?.messageConfirmedAt || undefined) : undefined}
         partnerAccepted={partnerAccepted}
         onShareInvitation={

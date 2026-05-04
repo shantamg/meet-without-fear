@@ -118,6 +118,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
           },
         },
         select: {
+          lastViewedAt: true,
           lastSeenChatItemId: true,
         },
       }),
@@ -290,6 +291,7 @@ export async function getSessionState(req: Request, res: Response): Promise<void
         },
         createdAt: session.createdAt.toISOString(),
         resolvedAt: session.resolvedAt?.toISOString() ?? null,
+        lastViewedAt: userVessel?.lastViewedAt?.toISOString() ?? null,
         lastSeenChatItemId: userVessel?.lastSeenChatItemId ?? null,
       },
 

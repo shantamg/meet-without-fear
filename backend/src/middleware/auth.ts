@@ -9,7 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 import { UnauthorizedError, ForbiddenError } from './errors';
 import { prisma } from '../lib/prisma';
 import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
-import { Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { logger } from '../lib/logger';
 
 // ============================================================================
@@ -100,7 +100,7 @@ async function handleE2EAuthBypass(req: Request): Promise<boolean> {
     });
   } catch (error) {
     // Guard against transient unique conflicts (parallel E2E requests)
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+    if (!(error instanceof PrismaClientKnownRequestError) || error.code !== 'P2002') {
       throw error;
     }
 
@@ -171,7 +171,21 @@ async function handleClerkAuth(
   }
 
   try {
-    // Fetch user details from Clerk to get their real name/email
+    // Fast path: look up existing user from our DB without calling Clerk API.
+    // This eliminates an external HTTP call on every authenticated request,
+    // preventing Clerk rate-limit (429) errors under high request volume.
+    let user = await prisma.user.findUnique({ where: { clerkId: clerkUserId } });
+
+    if (user) {
+      // User exists — use DB record directly. Profile data (name/email) is
+      // synced via Clerk webhooks or on first auth; no need to fetch every time.
+      req.user = user;
+      req.clerkUserId = clerkUserId;
+      next();
+      return;
+    }
+
+    // Slow path: new user — fetch details from Clerk to populate initial record.
     const { clerkClient } = await import('@clerk/express');
     const clerkUser = await clerkClient.users.getUser(clerkUserId);
 
@@ -180,29 +194,17 @@ async function handleClerkAuth(
     const lastName = clerkUser.lastName || null;
     const name = [firstName, lastName].filter(Boolean).join(' ') || null;
 
-    // Find-or-create user by Clerk ID.
-    // Avoids prisma.user.upsert() which uses SELECT FOR UPDATE internally
-    // and deadlocks (40P01) when concurrent requests race on the same user.
-    let user = await prisma.user.findUnique({ where: { clerkId: clerkUserId } });
-
-    if (user) {
-      user = await prisma.user.update({
-        where: { clerkId: clerkUserId },
-        data: { email, name, firstName, lastName },
+    try {
+      user = await prisma.user.create({
+        data: { clerkId: clerkUserId, email, name, firstName, lastName },
       });
-    } else {
-      try {
-        user = await prisma.user.create({
-          data: { clerkId: clerkUserId, email, name, firstName, lastName },
-        });
-      } catch (error) {
-        // Concurrent create race: another request inserted first
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-          user = await prisma.user.findUnique({ where: { clerkId: clerkUserId } });
-          if (!user) throw error;
-        } else {
-          throw error;
-        }
+    } catch (error) {
+      // Concurrent create race: another request inserted first
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+        user = await prisma.user.findUnique({ where: { clerkId: clerkUserId } });
+        if (!user) throw error;
+      } else {
+        throw error;
       }
     }
 
