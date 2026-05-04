@@ -186,8 +186,22 @@ async function handleClerkAuth(
     }
 
     // Slow path: new user — fetch details from Clerk to populate initial record.
-    const { clerkClient } = await import('@clerk/express');
-    const clerkUser = await clerkClient.users.getUser(clerkUserId);
+    let clerkUser;
+    try {
+      const { clerkClient } = await import('@clerk/express');
+      clerkUser = await clerkClient.users.getUser(clerkUserId);
+    } catch (clerkError) {
+      // Clerk API may fail due to rate-limiting (429) under burst traffic.
+      // Another concurrent request may have already created the user — retry DB lookup.
+      const retryUser = await prisma.user.findUnique({ where: { clerkId: clerkUserId } });
+      if (retryUser) {
+        req.user = retryUser;
+        req.clerkUserId = clerkUserId;
+        next();
+        return;
+      }
+      throw clerkError;
+    }
 
     const email = clerkUser.emailAddresses[0]?.emailAddress || `${clerkUserId}@pending.clerk`;
     const firstName = clerkUser.firstName || null;
@@ -311,6 +325,7 @@ export async function requireSessionAccess(
   }
 
   try {
+    // Primary check: user is a member of the session's relationship
     const session = await prisma.session.findFirst({
       where: {
         id: sessionId,
@@ -324,7 +339,33 @@ export async function requireSessionAccess(
       },
     });
 
-    if (!session) {
+    if (session) {
+      next();
+      return;
+    }
+
+    // Fallback: allow access for invitees during the acceptance timing gap.
+    // When an invitee accepts an invitation, the RelationshipMember is created
+    // inside a transaction. Between receiving the sessionId (from invitation
+    // details) and the transaction committing, session endpoint requests fail
+    // with 403. This fallback grants access if a valid invitation exists for
+    // this session and the requesting user is not the inviter.
+    const invitedSession = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        invitations: {
+          some: {
+            invitedById: { not: user.id },
+            OR: [
+              { status: 'PENDING', expiresAt: { gt: new Date() } },
+              { status: 'ACCEPTED' },
+            ],
+          },
+        },
+      },
+    });
+
+    if (!invitedSession) {
       throw new ForbiddenError('Access to this session denied');
     }
 

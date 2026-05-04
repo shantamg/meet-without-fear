@@ -123,8 +123,8 @@ export function ShareTopicDrawer({
 
             {/* Intro text */}
             <Text style={styles.intro}>
-              Our internal reconciler has reviewed what {partnerName} is imagining you are feeling,
-              noted some of the things you have talked about, and has suggested that{' '}
+              We reviewed what {partnerName} is imagining you are feeling,
+              noted some of the things you have talked about, and suggest that{' '}
               <Text style={[styles.actionText, { color: actionTextColor }]}>
                 {actionSuffix}
               </Text>

@@ -284,6 +284,66 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(false);
   });
 
+  it('hides input while empathy review is running', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      empathyStatus: { analyzing: true },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.waitingStatus).toBe('reconciler-analyzing');
+    expect(result.shouldHideInput).toBe(true);
+  });
+
+  it('hides input while revised empathy review is running', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      empathyStatus: { analyzing: true, myAttemptRevisionCount: 1 },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.waitingStatus).toBe('revision-analyzing');
+    expect(result.shouldHideInput).toBe(true);
+  });
+
+  it('hides input while waiting for partner to share Stage 3 needs', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      allNeedsConfirmed: true,
+      needs: { allConfirmed: true },
+      commonGroundCount: 0,
+      commonGround: { count: 0 },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.waitingStatus).toBe('needs-pending');
+    expect(result.shouldHideInput).toBe(true);
+  });
+
+  it('hides input after validating revealed needs while partner has not', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      allNeedsConfirmed: true,
+      needs: { allConfirmed: true },
+      commonGroundCount: 2,
+      commonGround: { count: 2, allConfirmedByMe: true, allConfirmedByBoth: false },
+      commonGroundAllConfirmedByMe: true,
+      commonGroundAllConfirmedByBoth: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.waitingStatus).toBe('common-ground-pending');
+    expect(result.shouldHideInput).toBe(true);
+  });
+
   it('shows input during normal conversation', () => {
     const inputs = createInputs({
       myStage: Stage.WITNESS,
@@ -535,7 +595,7 @@ describe('Waiting Status Integration', () => {
     expect(result.waitingStatus).toBe('witness-pending');
   });
 
-  it('includes Keep Chatting style for reconciler-analyzing (no spinner)', () => {
+  it('blocks input for reconciler-analyzing (no spinner)', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
@@ -546,7 +606,8 @@ describe('Waiting Status Integration', () => {
     const result = computeChatUIState(inputs);
     expect(result.waitingStatus).toBe('reconciler-analyzing');
     expect(result.waitingStatusConfig.showSpinner).toBe(false);
-    expect(result.waitingStatusConfig.showKeepChattingAction).toBe(true);
+    expect(result.waitingStatusConfig.showKeepChattingAction).toBe(false);
+    expect(result.waitingStatusConfig.hideInput).toBe(true);
   });
 });
 

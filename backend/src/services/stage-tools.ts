@@ -6,6 +6,7 @@
  */
 
 import type { Tool } from '@aws-sdk/client-bedrock-runtime';
+import type { CapturedNeedInput } from '@meet-without-fear/shared';
 
 /**
  * Session state tool for delivering stage metadata via Tool Use.
@@ -65,12 +66,7 @@ export interface SessionStateToolInput {
   offerReadyToShare?: boolean;
   proposedEmpathyStatement?: string;
   proposedStrategies?: string[];
-  proposedNeeds?: Array<{
-    need: string;
-    category: string;
-    description: string;
-    evidence: string[];
-  }>;
+  proposedNeeds?: CapturedNeedInput[];
   needsCaptured?: boolean;
   /** Stage 0: AI's proposed topic frame extracted from <draft> tag */
   topicFrame?: string;

@@ -61,13 +61,19 @@ ProposedStrategy: Sunday evening phone call to plan the week ahead`
     : '';
 
   const needsSection = stage === 3
-    ? `\nIf NeedsReady is Y, include a hidden needs block immediately after </thinking>:
+    ? `
+When you are in CONFIRMING mode and present a reviewable needs summary, include a hidden structured payload immediately after </thinking>:
 <needs>
 [
-  {"need":"short label", "category":"SAFETY|CONNECTION|AUTONOMY|RECOGNITION|MEANING|FAIRNESS", "description":"the user's words for this need", "evidence":["brief quote or paraphrase from this user's messages"]}
+  {
+    "need": "short needs label using the user's words",
+    "category": "SAFETY|CONNECTION|AUTONOMY|RECOGNITION|MEANING|FAIRNESS",
+    "description": "specific need statement in the user's words",
+    "evidence": ["short quote or phrase the user actually said"]
+  }
 ]
 </needs>
-Only include needs this user clearly named or accepted. Never include partner needs.`
+Only include needs this user clearly named or accepted. Never include partner needs. Do not infer extra needs.`
     : '';
 
   return `
@@ -76,10 +82,10 @@ OUTPUT FORMAT:
 Mode: [WITNESS|PERSPECTIVE|NEEDS|REPAIR|ONBOARDING|DISPATCH]
 ${flags.join('\n')}
 Strategy: [brief]${strategySection}
-</thinking>${draftSection}${needsSection}
+</thinking>${needsSection}${draftSection}
 
 Then write the user-facing response (plain text, no tags).
-IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, NeedsReady, Mode, etc.) belongs ONLY inside hidden tags. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
+IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, NeedsReady, Mode, needs JSON, etc.) belongs ONLY inside hidden tags. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
 
 OFF-RAMPS (only when needed):
 - If asked how this works / process: <dispatch>EXPLAIN_PROCESS</dispatch>
