@@ -1,19 +1,21 @@
 ---
 title: "Stage 0: Onboarding"
 sidebar_position: 3
-description: Welcome both parties with a brief warm opening and secure acknowledgment before entering the conversation.
+description: Welcome both parties with a brief warm opening, AI-proposed topic frame confirmation, and invitation sharing before entering the conversation.
+updated: 2026-05-04
 ---
 # Stage 0: Onboarding
 
 ## Purpose
 
-Welcome users with a brief, warm opening and secure acknowledgment before entering the conversation.
+Welcome the inviter with a brief, warm opening, collaboratively arrive at a neutral topic frame for the conversation, and coordinate the invitation to the other party — before either user enters the structured conversation stages.
 
 ## AI Goal
 
 - Briefly explain the private chat format
 - Reassure users that nothing is shared without consent
-- Get a simple "Ready" acknowledgment to proceed
+- Propose a neutral 3-5 word topic frame inline (via `<draft>` tag) that captures the situation without blame
+- Guide the inviter to confirm the topic frame and then share the invitation with their partner
 
 ## Opening Message
 
@@ -33,16 +35,33 @@ This message:
 
 ## Flow
 
+The inviter and invitee each have a distinct path through Stage 0.
+
+**Inviter path:**
 ```mermaid
 flowchart TD
-    Entry[User enters system] --> Welcome[AI welcome message]
-    Welcome --> Ready{User taps Ready?}
-    Ready -->|Yes| Acknowledged[Record acknowledgment]
+    Entry[Inviter starts session] --> Welcome[AI welcome message]
+    Welcome --> Convo[Inviter describes situation in chat]
+    Convo --> Propose[AI proposes neutral 3-5 word topic frame inline]
+    Propose --> Confirm{Inviter confirms topic frame?}
+    Confirm -->|Yes| TopicLocked[Topic frame locked; session moves CREATED → INVITED]
+    TopicLocked --> Modal[Invitation modal opens]
+    Modal --> Share[Inviter shares link via iMessage / WhatsApp / etc.]
+    Share --> InviteConfirm[Inviter confirms invitation sent]
+    InviteConfirm --> WaitInvitee[Waiting for invitee to accept]
+    WaitInvitee --> Advance[Both advance to Stage 1]
+```
 
-    Acknowledged --> WaitOther{Other acknowledged?}
-    WaitOther -->|Yes| Advance[Advance to Stage 1]
-    WaitOther -->|No| Wait[Waiting room]
-    Wait --> Notify[Notify when other acknowledges]
+**Invitee path:**
+```mermaid
+flowchart TD
+    Link[Invitee receives link] --> Preview[Preview invitation with topic frame]
+    Preview --> Accept[Invitee accepts invitation]
+    Accept --> Welcome2[AI welcome message for invitee]
+    Welcome2 --> WaitInviter{Inviter ready?}
+    WaitInviter -->|Yes| Advance[Both advance to Stage 1]
+    WaitInviter -->|No| Wait[Waiting room]
+    Wait --> Notify[Notify when inviter is ready]
     Notify --> Advance
 ```
 
@@ -68,7 +87,10 @@ flowchart TB
 
 ## Success Criteria
 
-Both users must acknowledge the opening message.
+- Inviter has confirmed the AI-proposed topic frame (`topicFrameConfirmedAt` set on session)
+- Inviter has confirmed the invitation was sent (`Invitation.messageConfirmed = true`)
+- Invitee has accepted the invitation
+- Both users have acknowledged the opening message in their respective Stage 0 chats
 
 ## Failure Paths
 
@@ -82,6 +104,8 @@ Both users must acknowledge the opening message.
 ## Data Captured
 
 - Acknowledgment timestamp for each user
+- Topic frame text and `topicFrameConfirmedAt` timestamp
+- `Invitation.messageConfirmed` flag and `messageConfirmedAt` timestamp
 - Any concerns raised (for improving onboarding)
 - Invitation/acceptance timing
 

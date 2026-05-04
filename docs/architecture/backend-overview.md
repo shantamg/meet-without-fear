@@ -3,7 +3,7 @@ title: Architecture
 sidebar_position: 2
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-04-27
+updated: 2026-05-04
 status: living
 ---
 # Architecture
@@ -198,7 +198,7 @@ status: living
 - Mobile: Zod schemas in shared contracts; React Hook Form for UI validation
 
 **Authentication:**
-- Backend: Clerk JWT in `Authorization: Bearer` header; middleware extracts + verifies with `verifyToken()` (from @clerk/express). When `E2E_AUTH_BYPASS=true` **and** `NODE_ENV !== 'production'`, the middleware also accepts `x-e2e-user-id` and `x-e2e-user-email` headers and resolves them to a DB user instead of a Clerk session. A startup assertion in `server.ts` prevents the server from starting if `E2E_AUTH_BYPASS=true` is set in a production environment.
+- Backend: Clerk JWT in `Authorization: Bearer` header; middleware extracts + verifies with `verifyToken()` (from @clerk/express). After JWT verification the middleware uses a **two-path user lookup** to avoid Clerk API rate limits (429): it first queries the DB by `clerkId` (fast path — no Clerk API call); only when no DB record exists does it call `clerkClient.users.getUser()` to fetch the profile from Clerk (slow path, first-time users only). When `E2E_AUTH_BYPASS=true` **and** `NODE_ENV !== 'production'`, the middleware also accepts `x-e2e-user-id` and `x-e2e-user-email` headers and resolves them to a DB user instead of a Clerk session. A startup assertion in `server.ts` prevents the server from starting if `E2E_AUTH_BYPASS=true` is set in a production environment.
 - Mobile: Clerk Expo SDK manages tokens; `useAuth()` hook provides `token` for API calls; E2E mode sends the `x-e2e-user-id` / `x-e2e-user-email` headers described above instead of a Clerk token.
 
 **Rate Limiting:**

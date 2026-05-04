@@ -2,7 +2,7 @@
 title: Chat Interface
 sidebar_position: 3
 description: The primary conversation interface where users interact with the AI.
-updated: 2026-05-02
+updated: 2026-05-04
 status: living
 ---
 # Chat Interface
@@ -57,7 +57,7 @@ Characteristics:
 - Subtle background color
 - AI avatar/icon
 - A typing indicator ("ghost dots") appears while the user is waiting for the AI's reply — it's derived from cache state (the last message role is `USER`, meaning the AI hasn't answered yet) and from pending mutations like `isFetchingInitialMessage` / `isConfirmingFeelHeard` / `isSharingEmpathy` / `isConfirmingInvitation`. Dots hide as soon as the first AI chunk arrives via SSE / Ably.
-- **AI error feedback**: when an Ably `onAIError` event arrives (e.g. the backend failed to process the user's message), the optimistic message is rolled back (dots hide automatically) and a toast is shown: *"Something went wrong — Your message could not be processed. Please try again."* This is triggered via `useToast().showError` in `UnifiedSessionScreen`.
+- **AI error feedback**: when the SSE stream emits an error event (`EventSource.addEventListener('error', ...)`), `cleanupFailedStream()` is called — it removes the optimistic message from cache and resets status to idle — then a toast is shown: *"Something went wrong — Your message could not be processed. Please try again."* This is triggered via `useToast().showError` in `UnifiedSessionScreen`. A **15-second fallback timeout** is also active: if streaming stalls and does not complete within 15 seconds, the connection is closed and the same `cleanupFailedStream()` path runs, removing optimistic messages and returning state to idle.
 
 ### User Message
 

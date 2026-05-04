@@ -3,6 +3,7 @@ title: Prisma Schema
 sidebar_position: 1
 description: Core Vessel Architecture tables plus pointers to the rest of the Prisma schema (Inner Work, reconciler, memory, needs/people, telemetry).
 slug: /backend/data-model/prisma-schema
+updated: 2026-05-04
 ---
 # Prisma Schema
 
@@ -125,6 +126,39 @@ enum SessionStatus {
 }
 ```
 
+### Invitation
+
+Tracks the Stage 0 invitation flow — created when the initiating user confirms their message and sends an invite link to their partner.
+
+```prisma
+model Invitation {
+  id                 String           @id @default(cuid())
+  session            Session          @relation(fields: [sessionId], references: [id])
+  sessionId          String
+  invitedBy          User             @relation("InvitedBy", fields: [invitedById], references: [id])
+  invitedById        String
+  name               String?          // Display name for the invited person
+  messageConfirmed   Boolean          @default(false) // User confirmed the invitation message
+  messageConfirmedAt DateTime?        // When the user confirmed the message (for chat indicator positioning)
+  status             InvitationStatus @default(PENDING)
+  createdAt          DateTime         @default(now())
+  expiresAt          DateTime
+  acceptedAt         DateTime?
+  declinedAt         DateTime?
+  declineReason      String?
+
+  @@index([sessionId])
+  @@index([status])
+}
+
+enum InvitationStatus {
+  PENDING   // Sent, awaiting partner action
+  ACCEPTED  // Partner joined the session
+  DECLINED  // Partner explicitly declined
+  EXPIRED   // Partner did not respond before expiresAt
+}
+```
+
 ### Stage Tracking: No Session.currentStage
 
 **Important**: We intentionally do NOT have a `Session.currentStage` field.
@@ -166,14 +200,32 @@ model UserVessel {
   updatedAt DateTime @updatedAt
 
   // Private content
-  events           UserEvent[]
+  events            UserEvent[]
   emotionalReadings EmotionalReading[]
-  identifiedNeeds  IdentifiedNeed[]
-  boundaries       Boundary[]
-  documents        UserDocument[]
+  identifiedNeeds   IdentifiedNeed[]
+  boundaries        Boundary[]
+  documents         UserDocument[]
 
-  // Embedding for semantic search within user's own content
-  embedding        Unsupported("vector(1536)")?
+  // Rolling conversation summary for long sessions
+  // Stores JSON: { text, keyThemes, emotionalJourney, unresolvedTopics }
+  conversationSummary String? @db.Text
+
+  // Session-level content embedding for semantic search
+  // Embeds combined facts + summary; replaces per-message embedding (fact-ledger architecture)
+  contentEmbedding Unsupported("vector(1024)")?
+
+  // === Session Read State ===
+  lastViewedAt         DateTime? // When the user last opened this session's chat (used for unread indicator)
+  lastSeenChatItemId   String?   // ID of the last chat item the user saw (for "new messages" line placement)
+  lastViewedShareTabAt DateTime? // When the user last viewed the Share/Partner tab
+
+  // When this user removed the session from their conversation list (partner may still retain access)
+  archivedAt DateTime?
+
+  // === Notable Facts ===
+  // AI-extracted structured facts (format: [{ category, fact }])
+  // Updated by Haiku after each message; reduces chat history in prompts
+  notableFacts Json?
 
   @@unique([userId, sessionId])
 }
