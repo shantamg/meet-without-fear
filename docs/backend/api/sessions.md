@@ -3,6 +3,7 @@ title: Sessions API
 sidebar_position: 2
 description: Session creation, listing, and lifecycle management.
 slug: /backend/api/sessions
+updated: 2026-05-04
 ---
 # Sessions API
 
@@ -110,9 +111,9 @@ curl -X POST /api/v1/sessions \
 
 ### Session lifecycle
 
-`CREATED → INVITED → ACTIVE → ARCHIVED | ABANDONED`. There are no pause/resume states. `CREATED` flips to `INVITED` once the inviter confirms the invitation message; `INVITED` flips to `ACTIVE` when the partner accepts.
+`CREATED → INVITED → ACTIVE → ARCHIVED | ABANDONED`. There are no pause/resume states. `CREATED` flips to `INVITED` when the inviter confirms the AI-proposed topic frame (`POST /sessions/:id/topic-frame/confirm`); `INVITED` flips to `ACTIVE` when the partner accepts.
 
-> **Background AI**: After the inviter confirms the invitation message (`POST /sessions/:id/invitation/confirm`), the HTTP response returns immediately and the backend fires an AI transition message generation + Ably session-event publish asynchronously (fire-and-forget).
+> **Background AI**: After the inviter confirms the invitation was sent (`POST /sessions/:id/invitation/confirm`), the HTTP response returns immediately and the backend fires an AI transition message generation + Ably session-event publish asynchronously (fire-and-forget).
 
 ---
 
@@ -188,11 +189,9 @@ The frontend doesn't reconstruct session state from `GET /sessions/:id` alone. U
 | `POST` | `/api/v1/sessions/:id/resolve` | Resolve session. Requires at least one `AGREED` agreement exists in the shared vessel; returns `VALIDATION_ERROR` otherwise |
 | `POST` | `/api/v1/sessions/:id/viewed` | Mark the session as viewed (clears unread flags) |
 | `POST` | `/api/v1/sessions/:id/share-tab-viewed` | Mark the Sharing tab as viewed |
-| `GET`  | `/api/v1/sessions/:id/invitation` | Get the current draft invitation message (inviter only) |
-| `PUT`  | `/api/v1/sessions/:id/invitation/message` | Replace the draft invitation message |
-| `POST` | `/api/v1/sessions/:id/invitation/confirm` | Confirm the invitation message; requires a finalized topic frame and transitions session `CREATED → INVITED` |
-| `POST` | `/api/v1/sessions/:id/topic-frame/generate` | AI-generate and store a proposed neutral 3-5 word topic frame from user 1's Stage 0 invitation draft (creator only) |
-| `POST` | `/api/v1/sessions/:id/topic-frame/confirm` | Confirm the proposed frame or steer the AI toward a revised frame; persists `Session.topicFrameConfirmedAt` (creator only) |
+| `GET`  | `/api/v1/sessions/:id/invitation` | Get the current invitation state (inviter only) |
+| `POST` | `/api/v1/sessions/:id/invitation/confirm` | Confirm the invitation was sent; sets `Invitation.messageConfirmed = true` (idempotent) |
+| `POST` | `/api/v1/sessions/:id/topic-frame/confirm` | Lock the AI-proposed topic frame (no body required, idempotent); persists `Session.topicFrameConfirmedAt` and transitions session `CREATED → INVITED` (creator only) |
 | `GET`  | `/api/v1/sessions/:id/inner-thoughts` | Fetch the linked Inner Thoughts entry (if any) |
 
 > **Stage gates** (code: `STAGE_GATES`): Stage 0 requires `compactSigned`; Stage 1 requires `feelHeardConfirmed`; later stages have their own gate keys. `/progress` surfaces which gates the caller and the partner still need to satisfy.

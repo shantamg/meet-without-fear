@@ -3,6 +3,7 @@ title: Invitations API
 sidebar_position: 3
 description: Invitation acceptance and management for session partners.
 slug: /backend/api/invitations
+updated: 2026-05-04
 ---
 # Invitations API
 
@@ -33,6 +34,8 @@ interface InvitationDTO {
   };
   name: string | null;
   status: InvitationStatus;  // PENDING, ACCEPTED, DECLINED, EXPIRED
+  messageConfirmed: boolean;          // true once inviter confirms invitation sent
+  messageConfirmedAt: string | null;  // ISO timestamp of confirmation, or null
   createdAt: string;
   expiresAt: string;
   session: {
@@ -139,9 +142,15 @@ interface AcceptInvitationResponse {
 }
 ```
 
+### Preconditions
+
+Acceptance is only permitted when **both** of the following are true on the session:
+- `topicFrameConfirmedAt` is set (inviter confirmed the AI-proposed topic frame)
+- `Invitation.messageConfirmed = true` (inviter confirmed the invitation was sent)
+
 ### Side Effects
 
-1. Session transitions out of `INVITED` toward `ACTIVE` (sessions are `CREATED` at session creation, move to `INVITED` once the inviter confirms the invitation message, then `ACTIVE` on accept).
+1. Session transitions out of `INVITED` toward `ACTIVE` (sessions are `CREATED` at session creation, move to `INVITED` at topic-frame confirmation, then `ACTIVE` on accept).
 2. Inviter receives push notification + Ably realtime event on their user channel.
 3. The accepter's `StageProgress` row for Stage 0 is created here. The inviter's `StageProgress` row was already created when the session was originally created.
 4. `SharedVessel` was already created at session creation; no new vessel is created on accept.

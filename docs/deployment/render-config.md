@@ -3,6 +3,7 @@ title: Render Configuration
 sidebar_position: 2
 description: Render.com service definitions for Meet Without Fear.
 slug: /deployment/render-config
+updated: 2026-05-04
 ---
 # Render Configuration
 
@@ -23,6 +24,10 @@ services:
     startCommand: cd backend && npx prisma migrate deploy && node dist/backend/src/server.js
     envVars:
       - fromGroup: be-heard-api-env
+      - key: NODE_ENV
+        value: production
+      - key: WEBSITE_URL
+        value: https://meetwithoutfear.com
 ```
 
 ### Key facts from this blueprint
