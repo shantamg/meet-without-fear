@@ -60,6 +60,7 @@ describe('Stage 3 API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (prisma.$transaction as jest.Mock).mockImplementation(async (callback) => callback(prisma));
     (prisma.commonGround.findMany as jest.Mock).mockReset();
   });
 
@@ -277,6 +278,14 @@ describe('Stage 3 API', () => {
       });
       (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue(mockStageProgress);
       (prisma.userVessel.findUnique as jest.Mock).mockResolvedValue({ id: mockVesselId });
+      (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue(mockStageProgress);
+      (prisma.stageProgress.update as jest.Mock).mockResolvedValue({
+        ...mockStageProgress,
+        gatesSatisfied: {
+          needsCaptured: true,
+          needsCapturedAt: new Date().toISOString(),
+        },
+      });
       (prisma.identifiedNeed.create as jest.Mock).mockResolvedValue({
         id: mockNeedId1,
         vesselId: mockVesselId,
@@ -287,6 +296,16 @@ describe('Stage 3 API', () => {
         aiConfidence: 0.85,
         createdAt: new Date(),
       });
+      (prisma.identifiedNeed.findMany as jest.Mock).mockResolvedValue([{
+        id: mockNeedId1,
+        vesselId: mockVesselId,
+        need: 'To feel heard before problem solving',
+        category: 'CONNECTION',
+        evidence: ['I just want you to listen first'],
+        confirmed: false,
+        aiConfidence: 0.85,
+        createdAt: new Date(),
+      }]);
 
       const req = createMockRequest({
         user: mockUser,
@@ -306,6 +325,12 @@ describe('Stage 3 API', () => {
 
       await captureNeeds(req as Request, res as Response);
 
+      expect(prisma.identifiedNeed.deleteMany).toHaveBeenCalledWith({
+        where: {
+          vesselId: mockVesselId,
+          confirmed: false,
+        },
+      });
       expect(prisma.identifiedNeed.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -313,6 +338,17 @@ describe('Stage 3 API', () => {
             need: 'To feel heard before problem solving',
             category: 'CONNECTION',
             confirmed: false,
+          }),
+        })
+      );
+      expect(prisma.stageProgress.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: mockStageProgress.id },
+          data: expect.objectContaining({
+            gatesSatisfied: expect.objectContaining({
+              needsCaptured: true,
+              needsCapturedAt: expect.any(String),
+            }),
           }),
         })
       );
