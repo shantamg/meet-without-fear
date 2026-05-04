@@ -81,7 +81,7 @@ function getFallbackInitialMessage(
   const partner = partnerName || 'them';
 
   if (isInvitee) {
-    return `Hey ${userName}, thanks for accepting ${partner}'s invitation to talk. What's been on your mind about things with ${partner}?`;
+    return `I'd like to hear your side now. What's been happening from your point of view with ${partner}?`;
   }
 
   if (isInvitationPhase) {
@@ -926,7 +926,7 @@ export async function getInitialMessage(
     } else {
       prompt = buildInitialMessagePrompt(
         currentStage,
-        { userName, partnerName, isInvitee, innerThoughtsContext },
+        { userName, partnerName, isInvitee, topicFrame: session.topicFrame, innerThoughtsContext },
         isInvitationPhase
       );
     }

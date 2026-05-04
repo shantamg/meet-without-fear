@@ -23,6 +23,7 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
+import type { PointerEvent as RNPointerEvent } from 'react-native';
 import { Drawer } from 'react-native-drawer-layout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -41,6 +42,8 @@ import { SessionStatus } from '@meet-without-fear/shared';
 // The drawer must not exceed that column, or `react-native-drawer-layout`'s
 // `left: calc(width * -1)` offset pushes it off-screen.
 const WEB_COLUMN_MAX_WIDTH = 480;
+const SWIPE_PRESS_BLOCK_MS = 650;
+const SWIPE_CANCEL_DISTANCE = 8;
 
 // ============================================================================
 // Session Section Types
@@ -69,6 +72,9 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
   }, [isOpen, refetch]);
   const deleteSession = useDeleteSession();
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
+  const swipePressBlockUntilRef = useRef(0);
+  const swipeStartRefs = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const [openSwipeableId, setOpenSwipeableId] = useState<string | null>(null);
 
   // Animation refs for optimistic delete
   const animationRefs = useRef<Record<string, { opacity: Animated.Value; height: Animated.Value }>>({});
@@ -114,11 +120,43 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
 
   const handleSessionPress = useCallback(
     (sessionId: string) => {
+      if (openSwipeableId === sessionId || Date.now() < swipePressBlockUntilRef.current) {
+        swipeableRefs.current.get(sessionId)?.close();
+        setOpenSwipeableId((current) => current === sessionId ? null : current);
+        return;
+      }
+
       onClose();
       router.push(`/session/${sessionId}`);
     },
-    [onClose, router]
+    [onClose, openSwipeableId, router]
   );
+
+  const blockPressAfterSwipe = useCallback((sessionId?: string) => {
+    swipePressBlockUntilRef.current = Date.now() + SWIPE_PRESS_BLOCK_MS;
+    if (sessionId) {
+      setOpenSwipeableId(sessionId);
+    }
+  }, []);
+
+  const handleSwipePointerStart = useCallback((sessionId: string, x: number, y: number) => {
+    swipeStartRefs.current.set(sessionId, { x, y });
+  }, []);
+
+  const handleSwipePointerMove = useCallback((sessionId: string, x: number, y: number) => {
+    const start = swipeStartRefs.current.get(sessionId);
+    if (!start) return;
+
+    const dx = Math.abs(x - start.x);
+    const dy = Math.abs(y - start.y);
+    if (dx > SWIPE_CANCEL_DISTANCE && dx > dy) {
+      blockPressAfterSwipe(sessionId);
+    }
+  }, [blockPressAfterSwipe]);
+
+  const handleSwipePointerEnd = useCallback((sessionId: string) => {
+    swipeStartRefs.current.delete(sessionId);
+  }, []);
 
   const handleNewSession = useCallback(() => {
     onClose();
@@ -135,46 +173,56 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
         ? `This will end your session with ${partnerName} and remove it from your list. They will be notified.`
         : `Remove this conversation with ${partnerName} from your list?`;
 
+      const deleteAfterConfirm = () => {
+        setDeletingSessions((prev) => new Set(prev).add(session.id));
+        const animationValues = getAnimationValues(session.id);
+        const measuredHeight = layoutHeightsRef.current[session.id] || 80;
+        animationValues.height.setValue(measuredHeight);
+
+        Animated.parallel([
+          Animated.timing(animationValues.opacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: false,
+          }),
+          Animated.timing(animationValues.height, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: false,
+          }),
+        ]).start(async () => {
+          try {
+            await deleteSession.mutateAsync({ sessionId: session.id });
+            delete animationRefs.current[session.id];
+            delete layoutHeightsRef.current[session.id];
+          } catch {
+            animationValues.opacity.setValue(1);
+            animationValues.height.setValue(measuredHeight);
+            Alert.alert('Error', 'Failed to delete conversation.');
+          } finally {
+            setDeletingSessions((prev) => {
+              const newSet = new Set(prev);
+              newSet.delete(session.id);
+              return newSet;
+            });
+          }
+        });
+      };
+
+      if (Platform.OS === 'web') {
+        const confirmed = typeof globalThis.confirm === 'function'
+          ? globalThis.confirm(message)
+          : true;
+        if (confirmed) deleteAfterConfirm();
+        return;
+      }
+
       Alert.alert('Delete Conversation', message, [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            setDeletingSessions((prev) => new Set(prev).add(session.id));
-            const animationValues = getAnimationValues(session.id);
-            const measuredHeight = layoutHeightsRef.current[session.id] || 80;
-            animationValues.height.setValue(measuredHeight);
-
-            Animated.parallel([
-              Animated.timing(animationValues.opacity, {
-                toValue: 0,
-                duration: 200,
-                useNativeDriver: false,
-              }),
-              Animated.timing(animationValues.height, {
-                toValue: 0,
-                duration: 300,
-                useNativeDriver: false,
-              }),
-            ]).start(async () => {
-              try {
-                await deleteSession.mutateAsync({ sessionId: session.id });
-                delete animationRefs.current[session.id];
-                delete layoutHeightsRef.current[session.id];
-              } catch {
-                animationValues.opacity.setValue(1);
-                animationValues.height.setValue(measuredHeight);
-                Alert.alert('Error', 'Failed to delete conversation.');
-              } finally {
-                setDeletingSessions((prev) => {
-                  const newSet = new Set(prev);
-                  newSet.delete(session.id);
-                  return newSet;
-                });
-              }
-            });
-          },
+          onPress: deleteAfterConfirm,
         },
       ]);
     },
@@ -210,7 +258,45 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
   const renderItem = useCallback(
     ({ item }: { item: SessionSummaryDTO }) => {
       const isDeleting = deletingSessions.has(item.id);
+      const isSwipeOpen = openSwipeableId === item.id;
       const animationValues = getAnimationValues(item.id);
+
+      if (Platform.OS === 'web') {
+        return (
+          <Animated.View
+            onLayout={(e) => {
+              const h = e.nativeEvent.layout.height;
+              if (h > 0) layoutHeightsRef.current[item.id] = h;
+            }}
+            style={[
+              styles.webSessionRow,
+              {
+                opacity: animationValues.opacity,
+                ...(isDeleting ? { height: animationValues.height, overflow: 'hidden' as const } : {}),
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.webSessionPressArea}
+              onPress={() => handleSessionPress(item.id)}
+              onLongPress={() => handleDelete(item)}
+              delayLongPress={500}
+              disabled={isDeleting}
+            >
+              <SessionCard session={item} noMargin />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.webDeleteButton}
+              onPress={() => handleDelete(item)}
+              disabled={isDeleting}
+              accessibilityRole="button"
+              accessibilityLabel="Delete conversation"
+            >
+              <Trash2 color="#FFFFFF" size={20} />
+            </TouchableOpacity>
+          </Animated.View>
+        );
+      }
 
       return (
         <Animated.View
@@ -224,6 +310,14 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
               ...(isDeleting ? { height: animationValues.height, overflow: 'hidden' } : {}),
             },
           ]}
+          onPointerDownCapture={(e: RNPointerEvent) => {
+            handleSwipePointerStart(item.id, e.nativeEvent.pageX, e.nativeEvent.pageY);
+          }}
+          onPointerMoveCapture={(e: RNPointerEvent) => {
+            handleSwipePointerMove(item.id, e.nativeEvent.pageX, e.nativeEvent.pageY);
+          }}
+          onPointerUpCapture={() => handleSwipePointerEnd(item.id)}
+          onPointerCancelCapture={() => handleSwipePointerEnd(item.id)}
         >
           <Swipeable
             ref={(ref) => {
@@ -233,12 +327,32 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
             renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
             overshootRight={false}
             rightThreshold={40}
+            onSwipeableOpenStartDrag={() => {
+              blockPressAfterSwipe(item.id);
+            }}
+            onSwipeableWillOpen={() => {
+              blockPressAfterSwipe(item.id);
+              for (const [sessionId, ref] of swipeableRefs.current) {
+                if (sessionId !== item.id) ref.close();
+              }
+              setOpenSwipeableId(item.id);
+            }}
+            onSwipeableOpen={() => {
+              blockPressAfterSwipe(item.id);
+              setOpenSwipeableId(item.id);
+            }}
+            onSwipeableWillClose={() => {
+              blockPressAfterSwipe();
+            }}
+            onSwipeableClose={() => {
+              setOpenSwipeableId((current) => current === item.id ? null : current);
+            }}
           >
             <TouchableOpacity
               onPress={() => handleSessionPress(item.id)}
               onLongPress={() => handleDelete(item)}
               delayLongPress={500}
-              disabled={isDeleting}
+              disabled={isDeleting || isSwipeOpen}
             >
               <SessionCard session={item} noMargin />
             </TouchableOpacity>
@@ -246,7 +360,17 @@ function ConversationsList({ onClose }: { onClose: () => void }) {
         </Animated.View>
       );
     },
-    [deletingSessions, handleSessionPress, handleDelete, renderRightActions]
+    [
+      deletingSessions,
+      handleSessionPress,
+      handleDelete,
+      handleSwipePointerEnd,
+      handleSwipePointerMove,
+      handleSwipePointerStart,
+      blockPressAfterSwipe,
+      openSwipeableId,
+      renderRightActions,
+    ]
   );
 
   const renderSectionHeader = useCallback(
@@ -453,5 +577,21 @@ const useStyles = () =>
       width: 70,
       borderTopRightRadius: t.radius.lg,
       borderBottomRightRadius: t.radius.lg,
+    },
+    webSessionRow: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      gap: t.spacing.xs,
+    },
+    webSessionPressArea: {
+      flex: 1,
+      minWidth: 0,
+    },
+    webDeleteButton: {
+      width: 48,
+      borderRadius: t.radius.lg,
+      backgroundColor: '#E53935',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   }));
