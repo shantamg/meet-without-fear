@@ -309,6 +309,7 @@ export async function requireSessionAccess(
   }
 
   try {
+    // Primary check: user is a member of the session's relationship
     const session = await prisma.session.findFirst({
       where: {
         id: sessionId,
@@ -322,7 +323,33 @@ export async function requireSessionAccess(
       },
     });
 
-    if (!session) {
+    if (session) {
+      next();
+      return;
+    }
+
+    // Fallback: allow access for invitees during the acceptance timing gap.
+    // When an invitee accepts an invitation, the RelationshipMember is created
+    // inside a transaction. Between receiving the sessionId (from invitation
+    // details) and the transaction committing, session endpoint requests fail
+    // with 403. This fallback grants access if a valid invitation exists for
+    // this session and the requesting user is not the inviter.
+    const invitedSession = await prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        invitations: {
+          some: {
+            invitedById: { not: user.id },
+            OR: [
+              { status: 'PENDING', expiresAt: { gt: new Date() } },
+              { status: 'ACCEPTED' },
+            ],
+          },
+        },
+      },
+    });
+
+    if (!invitedSession) {
       throw new ForbiddenError('Access to this session denied');
     }
 
