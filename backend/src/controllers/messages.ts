@@ -109,7 +109,7 @@ const PLANNER_LINE_PREFIXES = [
   'i need to make sure both lists',
 ];
 
-function scrubVisibleAIText(text: string): { text: string; scrubbed: boolean } {
+export function scrubVisibleAIText(text: string): { text: string; scrubbed: boolean } {
   const before = text;
   const cleaned = text
     .split(/\r?\n/)
@@ -124,7 +124,7 @@ function scrubVisibleAIText(text: string): { text: string; scrubbed: boolean } {
   return { text: cleaned, scrubbed: cleaned !== before };
 }
 
-function isReadyForStage3RevealText(content: string): boolean {
+export function isReadyForStage3RevealText(content: string): boolean {
   const normalized = content.trim().toLowerCase();
   if (/\bnot\s+ready\b/.test(normalized) || /\b(?:don'?t|do not)\s+(?:want|feel ready)\b/.test(normalized)) {
     return false;
