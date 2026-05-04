@@ -17,6 +17,11 @@ interface CompactAgreementBarProps {
   isPending?: boolean;
   /** Whether this is the first session (affects button label) */
   isFirstSession?: boolean;
+  /**
+   * Optional override for the button label. Used by callers that want a plain
+   * single-button bar (e.g. invitee topic acknowledgement Ready button).
+   */
+  buttonLabel?: string;
   testID?: string;
 }
 
@@ -28,9 +33,12 @@ export function CompactAgreementBar({
   onSign,
   isPending = false,
   isFirstSession = true,
+  buttonLabel,
   testID,
 }: CompactAgreementBarProps) {
   const styles = useStyles();
+
+  const label = buttonLabel ?? (isFirstSession ? 'Ready' : "Let's go");
 
   return (
     <View style={styles.container} testID={testID || 'compact-agreement-bar'}>
@@ -43,7 +51,7 @@ export function CompactAgreementBar({
         testID="compact-sign-button"
       >
         <Text style={styles.readyButtonText}>
-          {isPending ? '...' : isFirstSession ? 'Ready' : "Let's go"}
+          {isPending ? '...' : label}
         </Text>
       </TouchableOpacity>
     </View>

@@ -9,7 +9,6 @@
  */
 
 import { SessionStatus, StageStatus } from '../enums';
-import { InvitationDTO } from './session';
 import { CompactStatusResponse } from './stage';
 import { MessageDTO } from './message';
 
@@ -41,6 +40,8 @@ export interface SessionStateResponse {
     };
     createdAt: string;
     resolvedAt: string | null;
+    // When the user last viewed this session (for cross-device animation/read boundaries)
+    lastViewedAt: string | null;
     // ID of last chat item seen (for "new messages" line placement)
     lastSeenChatItemId: string | null;
   };
@@ -82,7 +83,6 @@ export interface SessionStateResponse {
     status: string;
     createdAt: string;
     expiresAt: string;
-    invitationMessage?: string | null;
     messageConfirmed?: boolean;
     messageConfirmedAt?: string | null;
     topicFrame?: string | null;

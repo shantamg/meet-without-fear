@@ -138,6 +138,39 @@ const TRANSIENT_EVENTS = new Set([
   'presence.away',
 ]);
 
+/**
+ * Publish a Stage 0 topic frame update to the session channel.
+ * Sent whenever the AI proposes (or revises) a topic via <draft>...</draft>
+ * during Stage 0 chat, before the user has confirmed it.
+ */
+export async function publishTopicFrameUpdated(
+  sessionId: string,
+  topicFrame: string,
+  confirmed: boolean
+): Promise<void> {
+  const cbStats = ablyCircuitBreaker.getStats();
+  if (cbStats.state === 'OPEN') {
+    logger.warn(`[Realtime] Ably circuit breaker OPEN - skipping topic_frame_updated for ${sessionId}`);
+    return;
+  }
+  const ably = getAbly();
+  try {
+    const channel = ably.channels.get(REALTIME_CHANNELS.session(sessionId));
+    await channel.publish('session.topic_frame_updated', {
+      sessionId,
+      timestamp: Date.now(),
+      topicFrame,
+      confirmed,
+    });
+    ablyCircuitBreaker.recordSuccess();
+    logger.info(`[Realtime] Published session.topic_frame_updated to session ${sessionId}`);
+  } catch (error) {
+    ablyCircuitBreaker.recordFailure('publishTopicFrameUpdated');
+    logger.error(`[Realtime] Failed to publish session.topic_frame_updated to session ${sessionId}:`, error);
+    // Don't throw - topic frame updates are non-critical
+  }
+}
+
 export async function publishSessionEvent(
   sessionId: string,
   event: SessionEvent | SessionEventType,
@@ -267,13 +300,13 @@ export async function notifySessionMembers(
 
     // Publish to each member's user channel (except the excluded user)
     const memberIds = session.relationship.members
-      .map((m) => m.userId)
-      .filter((id) => id !== excludeUserId);
+      .map((m: { userId: string }) => m.userId)
+      .filter((id: string) => id !== excludeUserId);
 
     logger.info(`[notifySessionMembers] Publishing to ${memberIds.length} members: ${memberIds.join(', ')}`);
 
     await Promise.all(
-      memberIds.map((userId) =>
+      memberIds.map((userId: string) =>
         publishUserEvent(userId, 'session.updated', { sessionId })
       )
     );
@@ -686,7 +719,6 @@ export async function publishMessageAIResponse(
   message: MessageDTO,
   metadata?: {
     offerFeelHeardCheck?: boolean;
-    invitationMessage?: string | null;
     offerReadyToShare?: boolean;
     proposedEmpathyStatement?: string | null;
     expectingMore?: boolean;

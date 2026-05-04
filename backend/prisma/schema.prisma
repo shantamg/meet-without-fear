@@ -359,6 +359,9 @@ model UserVessel {
   // When the user last viewed the Share/Partner tab
   // Used to determine "seen" status for shared content (empathy, context)
   lastViewedShareTabAt DateTime?
+  // When this user removed the session from their own conversation list.
+  // The partner may still retain their own vessel and access.
+  archivedAt           DateTime?
 
   // === Notable Facts ===
   // AI-extracted structured facts about the user's situation, emotions, and circumstances
@@ -1000,7 +1003,6 @@ model Invitation {
   invitedBy          User             @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
   invitedById        String
   name               String? // Display name for the invited person
-  invitationMessage  String?          @db.Text // The crafted invitation message
   messageConfirmed   Boolean          @default(false) // User confirmed the message
   messageConfirmedAt DateTime? // When the user confirmed the message (for chat indicator positioning)
   status             InvitationStatus @default(PENDING)

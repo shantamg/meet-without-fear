@@ -134,7 +134,12 @@ if [ -n "$ERROR_MSG" ]; then
   exit 1
 fi
 
-if echo "$TAIL" | grep -qiE "login|sign in|authenticate|expired|unauthorized|APIError.*401"; then
+# Auth-failure detection: match only distinctive Claude CLI auth-error strings,
+# anchored to line start, in the last 50 lines (real failures abort at the end).
+# Avoids false positives from agent output that merely *mentions* words like
+# "login" or "expired" (e.g. reviewing code with `last_login_at`).
+TAIL_END=$(echo "$TAIL" | tail -50)
+if echo "$TAIL_END" | grep -qE "^(Error: )?(Invalid API key|Please run /login|Please run \`claude login\`|OAuth token (has )?expired|Credentials (file )?(are |is )?invalid|Authentication failed|Not authenticated|API Error: 401)"; then
   curl -s -X POST https://slack.com/api/chat.postMessage \
     -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" \
     -d "{\"channel\":\"$BOT_OPS_CHANNEL_ID\",\"text\":\"🚨 Slam Paws: Claude auth failed running '$COMMAND_SLUG'. SSH in and run 'claude' to re-authenticate.\"}"
@@ -142,7 +147,7 @@ if echo "$TAIL" | grep -qiE "login|sign in|authenticate|expired|unauthorized|API
   exit 1
 fi
 
-if echo "$TAIL" | grep -qiE "gh auth|token.*expired|Bad credentials"; then
+if echo "$TAIL_END" | grep -qE "^(Error: )?(gh auth|Bad credentials|HTTP 401: Bad credentials|GH_TOKEN.*expired)"; then
   curl -s -X POST https://slack.com/api/chat.postMessage \
     -H "Authorization: Bearer $SLACK_BOT_TOKEN" -H "Content-Type: application/json" \
     -d "{\"channel\":\"$BOT_OPS_CHANNEL_ID\",\"text\":\"🚨 Slam Paws: GitHub token expired running '$COMMAND_SLUG'. SSH in and update GH_TOKEN.\"}"

@@ -39,9 +39,9 @@ export interface ActivityMenuModalProps {
   onShareAsIs?: (offerId: string) => void;
   onValidate?: (attemptId: string, rating: 'accurate' | 'partial' | 'inaccurate') => void;
   onRefresh?: () => void;
-  invitationMessage?: string;
+  topicFrame?: string;
   invitationTimestamp?: string;
-  onOpenInvitationRefine?: () => void;
+  onShareInvitation?: () => void;
   initialTab?: 'sent' | 'received';
   onOpenEmpathyDetail?: (attemptId: string, content: string) => void;
   sessionStatus?: string;
@@ -61,9 +61,9 @@ export function ActivityMenuModal({
   onShareAsIs,
   onValidate,
   onRefresh,
-  invitationMessage,
+  topicFrame,
   invitationTimestamp,
-  onOpenInvitationRefine,
+  onShareInvitation,
   initialTab,
   onOpenEmpathyDetail,
   sessionStatus,
@@ -95,13 +95,14 @@ export function ActivityMenuModal({
   const sentItems = useMemo<SentItem[]>(() => {
     const items: SentItem[] = [];
 
-    // Prepend invitation if available
-    if (invitationMessage) {
+    // Prepend invitation if confirmed (timestamp present). The tile shows
+    // a share affordance only — the canonical body is hardcoded at share time.
+    if (invitationTimestamp) {
       items.push({
         id: 'invitation',
         type: 'invitation',
-        content: invitationMessage,
-        timestamp: invitationTimestamp || new Date().toISOString(),
+        content: topicFrame ? `Topic: ${topicFrame}` : '',
+        timestamp: invitationTimestamp,
       });
     }
 
@@ -133,7 +134,7 @@ export function ActivityMenuModal({
     return items.sort((a, b) =>
       new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
-  }, [sharingStatus.myAttempt, sharingStatus.sharedContextHistory, invitationMessage, invitationTimestamp]);
+  }, [sharingStatus.myAttempt, sharingStatus.sharedContextHistory, topicFrame, invitationTimestamp]);
 
   // Build received items from pending actions + sharing status + historical context
   const receivedItems = useMemo<ReceivedItem[]>(() => {
@@ -220,12 +221,12 @@ export function ActivityMenuModal({
   }, [pendingActionsQuery, onRefresh]);
 
   const handleSentItemPress = useCallback((item: SentItem) => {
-    if (item.type === 'invitation' && onOpenInvitationRefine) {
-      onOpenInvitationRefine();
+    if (item.type === 'invitation' && onShareInvitation) {
+      onShareInvitation();
     } else if (item.type === 'empathy' && onOpenEmpathyDetail) {
       onOpenEmpathyDetail(item.id, item.content);
     }
-  }, [onOpenInvitationRefine, onOpenEmpathyDetail]);
+  }, [onShareInvitation, onOpenEmpathyDetail]);
 
   const insets = useSafeAreaInsets();
 
