@@ -8,6 +8,7 @@
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
 import { EmpathyStatus, MessageRole } from '@meet-without-fear/shared';
+import type { Prisma } from '@prisma/client';
 import { publishMessageAIResponse } from '../realtime';
 import { transition } from '../empathy-state-machine';
 import {
@@ -77,7 +78,7 @@ async function markEmpathyReady(
   // Wrap state transition + status update + message creation in a transaction
   // to ensure atomicity — a partial write here could leave the attempt READY
   // without a corresponding alignment message, or vice versa.
-  const savedMessage = await prisma.$transaction(async (tx: typeof prisma) => {
+  const savedMessage = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Validate state transition before updating
     const attempt = await tx.empathyAttempt.findFirst({
       where: { sessionId, sourceUserId: guesserId },
@@ -314,7 +315,7 @@ export async function runReconcilerForDirection(
   // The read (for state-machine validation) and write must be in one transaction
   // to prevent a concurrent caller from seeing stale status.
   logger.info('Updating empathy status to AWAITING_SHARING', { guesserId: guesserInfo.id });
-  await prisma.$transaction(async (tx: typeof prisma) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const attemptForAwait = await tx.empathyAttempt.findFirst({
       where: { sessionId, sourceUserId: guesserId },
     });
@@ -394,7 +395,7 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
   // Use a Serializable transaction to prevent the TOCTOU race where two
   // concurrent callers both read "both READY" and both try to reveal.
   // Serializable isolation ensures the read-check-write is atomic.
-  const revealed = await prisma.$transaction(async (tx: typeof prisma) => {
+  const revealed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Get both empathy attempts for this session
     const attempts = await tx.empathyAttempt.findMany({
       where: { sessionId },

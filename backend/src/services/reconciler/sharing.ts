@@ -8,6 +8,7 @@
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
 import { EmpathyStatus, MessageRole } from '@meet-without-fear/shared';
+import type { Prisma } from '@prisma/client';
 import { getSonnetResponse } from '../../lib/bedrock';
 import { transition } from '../empathy-state-machine';
 import {
@@ -689,7 +690,7 @@ export async function respondToShareSuggestion(
     logger.info('User declined share offer, marking guesser empathy as READY', { userId });
 
     // Wrap decline DB writes in a transaction for consistency
-    await prisma.$transaction(async (tx: typeof prisma) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Idempotency guard: only update if still in OFFERED/PENDING state
       const updated = await tx.reconcilerShareOffer.updateMany({
         where: {
@@ -810,7 +811,7 @@ export async function respondToShareSuggestion(
   const subjectCurrentStage = subjectProgress?.stage ?? 2;
 
   // Wrap all DB writes in a transaction for atomicity
-  await prisma.$transaction(async (tx: typeof prisma) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const now = new Date();
 
     // Idempotency guard: only update if still in OFFERED/PENDING state
