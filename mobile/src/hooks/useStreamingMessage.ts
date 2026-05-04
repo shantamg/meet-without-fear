@@ -15,6 +15,7 @@ import {
   MessageRole,
   GetMessagesResponse,
   Stage,
+  CapturedNeedInput,
 } from '@meet-without-fear/shared';
 import { messageKeys, sessionKeys, stageKeys, timelineKeys } from './queryKeys';
 
@@ -52,6 +53,7 @@ export interface StreamMetadata {
   offerReadyToShare?: boolean;
   proposedEmpathyStatement?: string | null;
   proposedStrategies?: string[];
+  proposedNeeds?: CapturedNeedInput[];
   topicFrame?: string | null;
   analysis?: string;
 }
@@ -413,13 +415,20 @@ export function useStreamingMessage(
         );
       }
 
-      // NOTE: We intentionally do NOT invalidate queries here.
+      if (metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      }
+
+      // NOTE: We intentionally avoid broad invalidation here.
       // Invalidating sessionKeys.state or other queries during streaming causes race conditions:
       // - Optimistic updates (e.g., invitation.messageConfirmedAt) get overwritten
       // - UI elements (indicators, messages) briefly disappear during refetch
       // - The cache-first pattern is violated, causing visual glitches
       //
-      // Instead, all necessary updates are done via setQueryData above.
+      // Instead, most updates are done via setQueryData above. Stage 3 needs are
+      // an exception because the structured card is persisted server-side.
       // If fresh data is needed, the mutation's onSuccess handler should handle it,
       // or the component can trigger a refetch on mount.
 
@@ -704,12 +713,16 @@ export function useStreamingMessage(
             pendingUpdateRef.current = null;
           }
 
-          // If text_complete wasn't received (fallback), handle completion here
-          if (!textCompleteReceivedRef.current) {
-            if (event.data) {
-              try {
-                const data = JSON.parse(event.data) as CompleteEvent;
+          if (event.data) {
+            try {
+              const data = JSON.parse(event.data) as CompleteEvent;
 
+              if (data.metadata) {
+                handleMetadata(sessionId, data.metadata);
+              }
+
+              // If text_complete wasn't received (fallback), handle completion here
+              if (!textCompleteReceivedRef.current) {
                 const finalAIMessage: MessageDTO = {
                   id: aiMessageIdRef.current,
                   sessionId,
@@ -721,10 +734,6 @@ export function useStreamingMessage(
                 };
                 addMessageToCache(sessionId, finalAIMessage, currentStage);
 
-                if (data.metadata) {
-                  handleMetadata(sessionId, data.metadata);
-                }
-
                 // Refresh empathy status (fallback path)
                 if (currentStage === Stage.PERSPECTIVE_STRETCH) {
                   queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
@@ -732,9 +741,9 @@ export function useStreamingMessage(
 
                 setStatus('complete');
                 onComplete?.();
-              } catch (e) {
-                console.error('[useStreamingMessage] Error parsing complete:', e);
               }
+            } catch (e) {
+              console.error('[useStreamingMessage] Error parsing complete:', e);
             }
           }
 

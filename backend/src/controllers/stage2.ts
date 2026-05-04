@@ -1664,9 +1664,6 @@ Respond in JSON format:
       messages.push({ id: msg.id, content: msg.content, timestamp: msg.timestamp, forUserId: uid });
     }
 
-    // Use first message as representative for the event payload
-    const message = messages[0];
-
     // 4. Update Stage Progress for both to Stage 3
     // Backfill missing prior stage records (defensive — handles cases where
     // session initialization failed to create StageProgress atomically)
@@ -1733,19 +1730,29 @@ Respond in JSON format:
       data: { status: 'EXPIRED' },
     });
 
-    // 5. Notify Realtime
-    // Notify session channel that stage changed
-    if (partnerId && message) {
-      await publishSessionEvent(sessionId, 'partner.stage_completed', {
+    // 5. Notify Realtime. Transition messages are private, so publish one
+    // addressed payload per recipient on the session channel.
+    if (partnerId) {
+      for (const recipientMessage of messages) {
+        await publishSessionEvent(sessionId, 'partner.stage_completed', {
+          forUserId: recipientMessage.forUserId,
+          previousStage: 2,
+          currentStage: 3,
+          userId,
+          triggeredByUserId: userId,
+          message: {
+            id: recipientMessage.id,
+            content: recipientMessage.content,
+            timestamp: recipientMessage.timestamp,
+            forUserId: recipientMessage.forUserId,
+          }
+        });
+      }
+      await publishSessionEvent(sessionId, 'stage.progress', {
         previousStage: 2,
-        currentStage: 3,
+        stage: 3,
         userId,
         triggeredByUserId: userId,
-        message: {
-          id: message.id,
-          content: message.content,
-          timestamp: message.timestamp
-        }
       });
     }
 
@@ -2086,10 +2093,10 @@ export async function resubmitEmpathy(
 
 Generate a brief, warm acknowledgment message (2-3 sentences) for ${userName} that:
 1. Acknowledges the effort to refine their understanding
-2. Notes that the internal reconciler (a separate system, not you) will review their updated statement
+2. Notes that we will check whether their updated statement is ready to share
 3. Encourages them that this iterative process helps build deeper understanding
 
-IMPORTANT: You are NOT the reconciler. Reference "the internal reconciler" or "our reconciler" as a separate system that will do the analysis. Do not say "I'm analyzing" or "I'll review" - the reconciler does that work privately.
+Use human process language. Do not mention internal systems or implementation details.
 
 Keep it natural and conversational. Don't be overly effusive.
 
@@ -2116,12 +2123,12 @@ Respond in JSON format:
           const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
           transitionContent = typeof parsed.response === 'string'
             ? parsed.response
-            : `You're showing real understanding here. The reconciler will review your updated perspective shortly.`;
+            : `You're showing real understanding here. We'll check whether your updated perspective is ready to share.`;
         } catch {
-          transitionContent = `You're showing real understanding here. The reconciler will review your updated perspective shortly.`;
+          transitionContent = `You're showing real understanding here. We'll check whether your updated perspective is ready to share.`;
         }
       } else {
-        transitionContent = `You're showing real understanding here. The reconciler will review your updated perspective shortly.`;
+        transitionContent = `You're showing real understanding here. We'll check whether your updated perspective is ready to share.`;
       }
 
       // Save the transition message to the database
@@ -2171,7 +2178,7 @@ Respond in JSON format:
 
     successResponse(res, {
       status: 'ANALYZING',
-      message: 'The reconciler is reviewing your updated understanding...',
+      message: 'We are checking whether your updated understanding is ready to share...',
       empathyMessage: {
         id: newMessage.id,
         content: newMessage.content,

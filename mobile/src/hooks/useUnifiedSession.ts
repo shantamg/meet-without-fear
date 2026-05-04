@@ -358,6 +358,12 @@ export function useUnifiedSession(
       if (sessionId && metadata.proposedStrategies && metadata.proposedStrategies.length > 0) {
         queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
       }
+      // Invalidate needs cache when AI captures reviewable needs (Stage 3)
+      if (sessionId && metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+      }
       // Stage 0: AI emitted a <draft> topic — backend persisted Session.topicFrame.
       // Refresh session state so the topic-proposal panel picks it up.
       if (sessionId && metadata.topicFrame) {

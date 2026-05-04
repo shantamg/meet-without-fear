@@ -58,16 +58,32 @@ ProposedStrategy: 10-minute check-in after dinner each night for one week
 ProposedStrategy: Sunday evening phone call to plan the week ahead`
     : '';
 
+  const needsSection = stage === 3
+    ? `
+When you are in CONFIRMING mode and present a reviewable needs summary, include a hidden structured payload immediately after </thinking>:
+<needs>
+[
+  {
+    "need": "short needs label using the user's words",
+    "category": "SAFETY|CONNECTION|AUTONOMY|RECOGNITION|MEANING|FAIRNESS",
+    "description": "specific need statement in the user's words",
+    "evidence": ["short quote or phrase the user actually said"]
+  }
+]
+</needs>
+Only include needs the user has actually expressed. Do not infer extra needs.`
+    : '';
+
   return `
 OUTPUT FORMAT:
 <thinking>
 Mode: [WITNESS|PERSPECTIVE|NEEDS|REPAIR|ONBOARDING|DISPATCH]
 ${flags.join('\n')}
 Strategy: [brief]${strategySection}
-</thinking>${draftSection}
+</thinking>${needsSection}${draftSection}
 
 Then write the user-facing response (plain text, no tags).
-IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, Mode, etc.) belongs ONLY inside <thinking>. The user-facing response must be purely conversational — no brackets, flags, or annotations.
+IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, Mode, needs JSON, etc.) belongs ONLY inside hidden tags. The user-facing response must be purely conversational — no brackets, flags, or annotations.
 
 OFF-RAMPS (only when needed):
 - If asked how this works / process: <dispatch>EXPLAIN_PROCESS</dispatch>

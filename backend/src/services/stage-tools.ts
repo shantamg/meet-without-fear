@@ -65,6 +65,7 @@ export interface SessionStateToolInput {
   offerReadyToShare?: boolean;
   proposedEmpathyStatement?: string;
   proposedStrategies?: string[];
+  proposedNeeds?: import('@meet-without-fear/shared').CapturedNeedInput[];
   /** Stage 0: AI's proposed topic frame extracted from <draft> tag */
   topicFrame?: string;
 }

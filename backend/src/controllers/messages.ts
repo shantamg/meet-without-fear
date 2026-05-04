@@ -38,6 +38,7 @@ import { handleDispatch, type DispatchContext } from '../services/dispatch-handl
 import { getMilestoneContext, getSharedContentContext } from '../services/shared-context';
 import { CONTEXT_WINDOW, trimConversationHistory } from '../utils/token-budget';
 import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from '../services/llm-telemetry';
+import { captureProposedNeedsForUser } from '../services/needs';
 
 // ============================================================================
 // Helpers
@@ -1426,6 +1427,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     let tagTrapBuffer = ''; // Buffer for checking draft/dispatch tags after thinking
     let thinkingContent = ''; // Store hidden thinking for logging
     let draftContent = ''; // Store draft content for metadata
+    let needsTagContent = ''; // Store structured Stage 3 needs metadata
     let dispatchTagContent = ''; // Store dispatch tag content for handling
     let isDispatchMessage = false; // Track if this is a dispatch response (skip processing)
 
@@ -1463,6 +1465,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           .replace(/<thinking>[\s\S]*/gi, '')                // Unclosed thinking (strip to end)
           .replace(/<\/thinking>/gi, '')                     // Orphaned closing tag
           .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+          .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
           .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
 
         // Trim LEADING whitespace only on the FIRST chunk (after </thinking> tag removal)
@@ -1489,6 +1492,13 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           logger.info(`[sendMessageStream:${requestId}] [HIDDEN DRAFT]:`, draftContent.substring(0, 100) + (draftContent.length > 100 ? '...' : ''));
         }
 
+        // Extract structured Stage 3 needs if present.
+        const needsMatch = buffer.match(/<needs>([\s\S]*?)<\/needs>/i);
+        if (needsMatch) {
+          needsTagContent = needsMatch[1].trim();
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN NEEDS]:`, needsTagContent.substring(0, 160) + (needsTagContent.length > 160 ? '...' : ''));
+        }
+
         // Extract dispatch tag if present - store for handling after streaming
         const dispatchMatch = buffer.match(/<dispatch>([\s\S]*?)<\/dispatch>/i);
         if (dispatchMatch) {
@@ -1500,6 +1510,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         // Do NOT use .trim() - it breaks word spacing between chunks
         return buffer
           .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+          .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
           .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
       };
 
@@ -1544,15 +1555,18 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // Check for complete tags
             const hasDraftStart = tagTrapBuffer.includes('<draft>');
             const hasDraftEnd = tagTrapBuffer.includes('</draft>');
+            const hasNeedsStart = tagTrapBuffer.includes('<needs>');
+            const hasNeedsEnd = tagTrapBuffer.includes('</needs>');
             const hasDispatchStart = tagTrapBuffer.includes('<dispatch>');
             const hasDispatchEnd = tagTrapBuffer.includes('</dispatch>');
 
             // Check for partial tag starts at the end of buffer
             // Matches: <, <d, <dr, </, </d, etc. - anything that could become <draft>, </draft>, <dispatch>, </dispatch>
-            const hasPotentialTagStart = /<\/?d[a-z]*$/i.test(tagTrapBuffer);
+            const hasPotentialTagStart = /<\/?[dn][a-z]*$/i.test(tagTrapBuffer);
 
             // If we see opening tags, wait for closing tags
             const waitingForDraft = hasDraftStart && !hasDraftEnd;
+            const waitingForNeeds = hasNeedsStart && !hasNeedsEnd;
             const waitingForDispatch = hasDispatchStart && !hasDispatchEnd;
 
             // Process buffer and check if we can exit:
@@ -1560,6 +1574,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // 2. Check if remaining content looks like response text (not starting with <)
             const strippedBuffer = tagTrapBuffer
               .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+              .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
               .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
             const trimmedStripped = strippedBuffer.trim();
 
@@ -1569,7 +1584,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // - No partial tag at the end that might become <draft> or <dispatch>
             // OR buffer is too big (safety limit)
             const hasResponseContent = trimmedStripped.length > 50 && !trimmedStripped.startsWith('<');
-            const safeToExit = !waitingForDraft && !waitingForDispatch && hasResponseContent && !hasPotentialTagStart;
+            const safeToExit = !waitingForDraft && !waitingForNeeds && !waitingForDispatch && hasResponseContent && !hasPotentialTagStart;
 
             if (safeToExit || tagTrapBuffer.length > 2000) {
               isTrappingTags = false;
@@ -1585,9 +1600,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // Check if we have unclosed tags that need buffering
             const hasUnclosedDispatch = combined.includes('<dispatch>') && !combined.includes('</dispatch>');
             const hasUnclosedDraft = combined.includes('<draft>') && !combined.includes('</draft>');
-            const hasPotentialTagStart = /<\/?d[a-z]*$/i.test(combined);
+            const hasUnclosedNeeds = combined.includes('<needs>') && !combined.includes('</needs>');
+            const hasPotentialTagStart = /<\/?[dn][a-z]*$/i.test(combined);
 
-            if (hasUnclosedDispatch || hasUnclosedDraft || hasPotentialTagStart) {
+            if (hasUnclosedDispatch || hasUnclosedDraft || hasUnclosedNeeds || hasPotentialTagStart) {
               // Buffer and wait for closing tag
               tagTrapBuffer = combined;
             } else {
@@ -1654,6 +1670,12 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       if (parsed.proposedStrategies.length > 0) {
         metadata.proposedStrategies = parsed.proposedStrategies;
       }
+      const needsParsed = needsTagContent
+        ? parseMicroTagResponse(`<needs>${needsTagContent}</needs>`)
+        : parsed;
+      if (currentStage === 3 && needsParsed.proposedNeeds.length > 0) {
+        metadata.proposedNeeds = needsParsed.proposedNeeds;
+      }
 
       // Use draftContent captured during streaming (more reliable than re-parsing)
       const draft = draftContent || parsed.draft;
@@ -1669,6 +1691,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         offerFeelHeardCheck: metadata.offerFeelHeardCheck,
         offerReadyToShare: metadata.offerReadyToShare,
         hasDraft: !!parsed.draft,
+        proposedNeedsCount: metadata.proposedNeeds?.length ?? 0,
         dispatchTag: dispatchTagContent || parsed.dispatchTag,
       });
 
@@ -1884,6 +1907,21 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
         });
         logger.info(`[sendMessageStream:${requestId}] Created ${newStrategies.length} strategy proposals for user ${user.id}`);
       }
+    }
+
+    // Save proposed needs (Stage 3)
+    if (currentStage === 3 && metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
+      const captured = await captureProposedNeedsForUser(sessionId, user.id, metadata.proposedNeeds);
+      logger.info(`[sendMessageStream:${requestId}] Captured ${captured.needs.length} proposed needs for user ${user.id}`);
+
+      await publishSessionEvent(sessionId, 'session.needs_extracted', {
+        forUserId: user.id,
+        userId: user.id,
+        needsCount: captured.needs.length,
+        capturedAt: captured.capturedAt.toISOString(),
+      }).catch((err) =>
+        logger.warn(`[sendMessageStream:${requestId}] Failed to publish needs_extracted:`, err)
+      );
     }
 
     // =========================================================================
