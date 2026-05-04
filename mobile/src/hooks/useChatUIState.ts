@@ -60,9 +60,9 @@ export interface UseChatUIStateProps {
 
   // Invitation phase
   // The invitation panel opens when the topic frame is confirmed and the
-  // user has not dismissed it. Stage 0→1 advancement is chained off topic
-  // confirmation; the invitation panel is purely a share affordance.
+  // invitation has not been confirmed/sent yet.
   hasTopicConfirmed: boolean;
+  invitationConfirmed: boolean;
   invitationPanelDismissed: boolean;
   isConfirmingInvitation: boolean;
 
@@ -182,6 +182,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     partnerProgress,
     compactMySigned,
     hasTopicConfirmed,
+    invitationConfirmed,
     invitationPanelDismissed,
     isConfirmingInvitation,
     topicFrameProposed,
@@ -254,6 +255,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     compactMySigned,
     myProgress,
     hasTopicConfirmed,
+    invitationConfirmed,
     invitationPanelDismissed,
     isConfirmingInvitation,
     topicFrameProposed,
@@ -314,6 +316,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     compactMySigned,
     myProgress,
     hasTopicConfirmed,
+    invitationConfirmed,
     invitationPanelDismissed,
     isConfirmingInvitation,
     topicFrameProposed,
