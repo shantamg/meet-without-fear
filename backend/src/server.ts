@@ -14,6 +14,9 @@ Sentry.init({
   tracesSampleRate: 1.0,
   enabled: !!process.env.SENTRY_DSN,
   beforeSend(event) {
+    // Drop development environment events to prevent local dev noise in Sentry
+    if (event.environment === 'development') return null;
+
     // Strip PII from extra context (defense-in-depth)
     if (event.extra) {
       for (const key of Object.keys(event.extra)) {
