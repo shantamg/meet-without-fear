@@ -163,13 +163,18 @@ function timestampBeforeChatStart(timestamp?: string | null): string {
 }
 
 function InviteeTopicIntroCard({
+  sessionId,
   partnerName,
   topicFrame,
 }: {
+  sessionId: string;
   partnerName: string;
   topicFrame: string;
 }) {
   const styles = useStyles();
+  const storageKey = `invitee-topic-intro-played:${sessionId}`;
+  const [hasCheckedPlayback, setHasCheckedPlayback] = useState(false);
+  const [skipAnimation, setSkipAnimation] = useState(false);
   const [showTopic, setShowTopic] = useState(false);
   const [showOutro, setShowOutro] = useState(false);
   const topicOpacity = useRef(new Animated.Value(0)).current;
@@ -178,6 +183,34 @@ function InviteeTopicIntroCard({
 
   const introText = `Before we begin, this is what ${partnerName || 'your partner'} would like to work through with you:`;
   const outroText = "This is how things look from their side right now. You don't need to agree with it, respond to it, or do anything with it yet. Instead, I'd like to know what is happening from your point of view.";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    AsyncStorage.getItem(storageKey)
+      .then((value) => {
+        if (!isMounted) return;
+
+        const alreadyPlayed = value === 'true';
+        setSkipAnimation(alreadyPlayed);
+        setShowTopic(alreadyPlayed);
+        setShowOutro(alreadyPlayed);
+        topicOpacity.setValue(alreadyPlayed ? 1 : 0);
+        setHasCheckedPlayback(true);
+
+        if (!alreadyPlayed) {
+          AsyncStorage.setItem(storageKey, 'true').catch(() => {});
+        }
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setHasCheckedPlayback(true);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [storageKey, topicOpacity]);
 
   const handleIntroComplete = useCallback(() => {
     if (introCompletedRef.current) return;
@@ -195,6 +228,10 @@ function InviteeTopicIntroCard({
     });
   }, [topicOpacity]);
 
+  if (!hasCheckedPlayback) {
+    return null;
+  }
+
   return (
     <View style={styles.inviteeTopicAckBody} testID="invitee-topic-ack-body">
       <TypewriterText
@@ -202,6 +239,7 @@ function InviteeTopicIntroCard({
         style={styles.inviteeTopicAckText}
         wordDelay={45}
         fadeDuration={120}
+        skipAnimation={skipAnimation}
         onComplete={handleIntroComplete}
       />
 
@@ -219,6 +257,7 @@ function InviteeTopicIntroCard({
           style={styles.inviteeTopicAckText}
           wordDelay={45}
           fadeDuration={120}
+          skipAnimation={skipAnimation}
         />
       ) : null}
     </View>
@@ -1764,6 +1803,7 @@ export function UnifiedSessionScreen({
       ),
       render: () => (
         <InviteeTopicIntroCard
+          sessionId={sessionId}
           partnerName={partnerName || 'your partner'}
           topicFrame={topicFrame}
         />
