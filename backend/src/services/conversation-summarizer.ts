@@ -13,9 +13,8 @@
 
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { getHaikuJson } from '../lib/bedrock';
+import { getHaikuJson, BrainActivityCallType } from '../lib/bedrock';
 import { estimateTokens } from '../utils/token-budget';
-import { BrainActivityCallType } from '@prisma/client';
 
 // ============================================================================
 // Types
@@ -80,6 +79,21 @@ export interface SummarizationHints {
    */
   partnerStatus?: 'not_joined' | 'in_progress' | 'completed';
 }
+
+type SummaryMessageRecord = {
+  role: string;
+  content: string;
+  timestamp: Date;
+};
+
+type RelationshipMemberWithUser = {
+  userId: string;
+  nickname?: string | null;
+  user: {
+    name: string | null;
+    firstName: string | null;
+  };
+};
 
 // ============================================================================
 // Configuration
@@ -294,7 +308,7 @@ export async function updateSessionSummary(
     // Check if we actually need to summarize
     const existingSummary = vessel.conversationSummary as string | null;
     const totalTokens = session.messages.reduce(
-      (sum, msg) => sum + estimateTokens(msg.content),
+      (sum: number, msg: SummaryMessageRecord) => sum + estimateTokens(msg.content),
       0
     );
     if (!needsSummarization(messageCount, existingSummary ?? undefined, totalTokens)) {
@@ -302,8 +316,8 @@ export async function updateSessionSummary(
     }
 
     // Get user and partner names
-    const currentMember = session.relationship.members.find((m) => m.userId === userId);
-    const partnerMember = session.relationship.members.find((m) => m.userId !== userId);
+    const currentMember = session.relationship.members.find((m: RelationshipMemberWithUser) => m.userId === userId);
+    const partnerMember = session.relationship.members.find((m: RelationshipMemberWithUser) => m.userId !== userId);
     const userName = currentMember?.user.name || currentMember?.user.firstName || 'User';
     const partnerName = partnerMember?.user.name || partnerMember?.nickname || 'Partner';
 
@@ -323,7 +337,7 @@ export async function updateSessionSummary(
 
     // Generate summary
     const summaryResult = await generateConversationSummary(
-      messagesToSummarize.map((m) => ({
+      messagesToSummarize.map((m: SummaryMessageRecord) => ({
         role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
         content: m.content,
         timestamp: m.timestamp,
@@ -723,7 +737,7 @@ export async function updateInnerThoughtsSummary(
 
     // Generate summary
     const summaryResult = await generateInnerThoughtsSummary(
-      messagesToSummarize.map((m) => ({
+      messagesToSummarize.map((m: SummaryMessageRecord) => ({
         role: m.role === 'USER' ? 'user' as const : 'assistant' as const,
         content: m.content,
         timestamp: m.timestamp,

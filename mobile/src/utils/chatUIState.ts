@@ -62,9 +62,9 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
 
   // Invitation phase
   // The invitation panel opens once the topic frame has been confirmed and
-  // the user hasn't dismissed it. Stage 0→1 advancement is chained to topic
-  // confirmation in the screen, so `invitationConfirmed` no longer gates UI.
+  // the invitation has not been confirmed/sent yet.
   hasTopicConfirmed: boolean;
+  invitationConfirmed: boolean;
   invitationPanelDismissed: boolean;
   isConfirmingInvitation: boolean;
 
@@ -232,16 +232,17 @@ function computeShowInvitationPanel(inputs: ChatUIStateInputs): boolean {
   const {
     isInviter,
     hasTopicConfirmed,
+    invitationConfirmed,
     invitationPanelDismissed,
     isConfirmingInvitation,
   } = inputs;
 
-  // The invitation panel opens once the inviter has confirmed the topic
-  // frame. The user can dismiss it ("Later"); subsequent re-sharing lives
-  // in the Activity Drawer.
+  // The invitation panel should not reserve the above-input slot after the
+  // invitation is confirmed; otherwise it blocks later panels like feel-heard.
   return !!(
     isInviter &&
     hasTopicConfirmed &&
+    !invitationConfirmed &&
     !invitationPanelDismissed &&
     !isConfirmingInvitation
   );
@@ -679,6 +680,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     compactMySigned: undefined,
     myProgress: undefined,
     hasTopicConfirmed: false,
+    invitationConfirmed: false,
     invitationPanelDismissed: false,
     isConfirmingInvitation: false,
     topicFrameProposed: null,

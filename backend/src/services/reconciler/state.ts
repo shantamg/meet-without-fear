@@ -7,8 +7,8 @@
 
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../lib/logger';
-import { MessageRole } from '@meet-without-fear/shared';
-import { EmpathyStatus, Prisma } from '@prisma/client';
+import { EmpathyStatus, MessageRole } from '@meet-without-fear/shared';
+import type { Prisma } from '@prisma/client';
 import { publishMessageAIResponse } from '../realtime';
 import { transition } from '../empathy-state-machine';
 import {
@@ -19,6 +19,16 @@ import type {
   ReconcilerResult,
   ReconcilerSummary,
 } from '@meet-without-fear/shared';
+
+type EmpathyAttemptState = {
+  sourceUserId: string | null;
+  status: string;
+};
+
+type ReconcilerResultWithOffer = {
+  recommendedAction: string;
+  shareOffer?: { status: string } | null;
+};
 
 import {
   type UserInfo,
@@ -68,7 +78,7 @@ async function markEmpathyReady(
   // Wrap state transition + status update + message creation in a transaction
   // to ensure atomicity — a partial write here could leave the attempt READY
   // without a corresponding alignment message, or vice versa.
-  const savedMessage = await prisma.$transaction(async (tx) => {
+  const savedMessage = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Validate state transition before updating
     const attempt = await tx.empathyAttempt.findFirst({
       where: { sessionId, sourceUserId: guesserId },
@@ -305,7 +315,7 @@ export async function runReconcilerForDirection(
   // The read (for state-machine validation) and write must be in one transaction
   // to prevent a concurrent caller from seeing stale status.
   logger.info('Updating empathy status to AWAITING_SHARING', { guesserId: guesserInfo.id });
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const attemptForAwait = await tx.empathyAttempt.findFirst({
       where: { sessionId, sourceUserId: guesserId },
     });
@@ -385,7 +395,7 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
   // Use a Serializable transaction to prevent the TOCTOU race where two
   // concurrent callers both read "both READY" and both try to reveal.
   // Serializable isolation ensures the read-check-write is atomic.
-  const revealed = await prisma.$transaction(async (tx) => {
+  const revealed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Get both empathy attempts for this session
     const attempts = await tx.empathyAttempt.findMany({
       where: { sessionId },
@@ -397,9 +407,9 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
     }
 
     // Check if both are in READY status
-    const bothReady = attempts.every((a) => a.status === 'READY');
+    const bothReady = attempts.every((a: EmpathyAttemptState) => a.status === 'READY');
     if (!bothReady) {
-      const statuses = Object.fromEntries(attempts.map((a) => [a.sourceUserId, a.status]));
+      const statuses = Object.fromEntries(attempts.map((a: EmpathyAttemptState) => [a.sourceUserId, a.status]));
       logger.debug('Not both READY yet', { statuses });
       return null;
     }
@@ -429,7 +439,7 @@ export async function checkAndRevealBothIfReady(sessionId: string): Promise<bool
 
     return attempts;
   }, {
-    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    isolationLevel: 'Serializable',
   });
 
   if (!revealed) {
@@ -490,7 +500,7 @@ export async function getReconcilerStatus(sessionId: string): Promise<{
 
   // Count pending share offers (status = OFFERED)
   const pendingShareOffers = results.filter(
-    (r) => r.shareOffer?.status === 'OFFERED'
+    (r: ReconcilerResultWithOffer) => r.shareOffer?.status === 'OFFERED'
   ).length;
 
   // Ready for Stage 3 if:
@@ -501,7 +511,7 @@ export async function getReconcilerStatus(sessionId: string): Promise<{
     results.length === 2 &&
     pendingShareOffers === 0 &&
     results.every(
-      (r) =>
+      (r: ReconcilerResultWithOffer) =>
         r.recommendedAction === 'PROCEED' ||
         !r.shareOffer ||
         r.shareOffer.status === 'ACCEPTED' ||
