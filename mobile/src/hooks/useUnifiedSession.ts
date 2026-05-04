@@ -407,7 +407,18 @@ export function useUnifiedSession(
     // with older pages first: [page2, page1, page0].flatMap(p => p.messages)
     const pages = messagesData?.pages;
     if (!pages || pages.length === 0) return [];
-    return [...pages].reverse().flatMap(page => page.messages);
+    const seenIds = new Set<string>();
+    const dedupedMessages = [];
+
+    for (const page of [...pages].reverse()) {
+      for (const message of page.messages) {
+        if (seenIds.has(message.id)) continue;
+        seenIds.add(message.id);
+        dedupedMessages.push(message);
+      }
+    }
+
+    return dedupedMessages;
   }, [messagesData]);
 
   // -------------------------------------------------------------------------

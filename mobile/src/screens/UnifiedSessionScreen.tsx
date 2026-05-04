@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // useRouter removed - share navigation replaced by ActivityDrawer
 import { Stage, MessageRole, StrategyPhase, SessionStatus, MemorySuggestion, ConfirmAgreementResponse, MAX_AGREEMENTS, EmpathyStatus } from '@meet-without-fear/shared';
 
-import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem } from '../components/ChatInterface';
+import { ChatInterface, ChatMessage, ChatIndicatorItem, ChatValidationCardItem, ChatCustomCardItem } from '../components/ChatInterface';
 import { SessionChatHeader } from '../components/SessionChatHeader';
 import { FeelHeardConfirmation } from '../components/FeelHeardConfirmation';
 import { BreathingExercise } from '../components/BreathingExercise';
@@ -151,6 +151,16 @@ function deriveChapterMarkers(
   return markers;
 }
 
+function timestampBeforeChatStart(timestamp?: string | null): string {
+  const fallback = new Date(0).toISOString();
+  if (!timestamp) return fallback;
+
+  const time = new Date(timestamp).getTime();
+  if (!Number.isFinite(time)) return timestamp;
+
+  return new Date(time - 2000).toISOString();
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -172,11 +182,6 @@ export function UnifiedSessionScreen({
   const pendingActionsQuery = usePendingActions(sessionId);
 
   // Real-time presence tracking
-
-  // Invitee Stage 0 topic-ack flag — local UI state.
-  // Declared early so it can flow into useUnifiedSession (which uses it to
-  // defer the Stage 0/1 initial AI message fetch for the invitee).
-  const [inviteeAckDone, setInviteeAckDone] = useState(false);
 
   const {
     // Loading
@@ -291,10 +296,7 @@ export function UnifiedSessionScreen({
     // Session viewed tracking
     markSessionViewed,
 
-    // Stage advancement (used by invitee topic-ack Ready button)
-    advanceStage,
-    triggerInitialMessage,
-  } = useUnifiedSession(sessionId, { inviteeTopicAcked: inviteeAckDone });
+  } = useUnifiedSession(sessionId);
 
   // AI message handler for fire-and-forget pattern
   const { addAIMessage, handleAIMessageError } = useAIMessageHandler();
@@ -777,8 +779,6 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   const [invitationPanelDismissed, setInvitationPanelDismissed] = useState(false);
 
-  // (inviteeAckDone is declared above, before useUnifiedSession.)
-
   // Tooltip shown after "Later" — points at the book icon to teach the user
   // they can share later from the activity drawer. Session-local only.
   const [showShareLaterTooltip, setShowShareLaterTooltip] = useState(false);
@@ -959,17 +959,9 @@ export function UnifiedSessionScreen({
   // The optimistic updates in mutation hooks (onMutate) ensure panels hide immediately.
   // No latch refs needed - if API fails, onError rolls back the cache and panel reappears.
   const isInviter = invitation?.isInviter ?? true;
-  // Invitee Stage 0 topic-ack screen is active when:
-  //   - user is the invitee
-  //   - compact has been signed (welcome step is done)
-  //   - they haven't tapped the topic-ack Ready button yet
-  //   - no chat messages exist yet (so this never triggers on later opens)
-  const inviteeTopicAckPending =
-    !isInviter &&
-    !!compactData?.mySigned &&
-    !inviteeAckDone &&
-    messages.length === 0 &&
-    !!topicFrame;
+  // Invitee topic context now renders as a chronological chat card. There is
+  // no second Ready gate after signing the opening agreement.
+  const inviteeTopicAckPending = false;
   const {
     waitingStatus,
     shouldShowWaitingBanner,
@@ -1064,14 +1056,6 @@ export function UnifiedSessionScreen({
   // Latch if mutation is in flight (backup for immediate feedback)
   if (isConfirmingFeelHeard && !hasEverConfirmedFeelHeard.current) {
     hasEverConfirmedFeelHeard.current = true;
-  }
-
-  // Once compact is signed, keep showing the indicator even during re-renders
-  const hasEverSignedCompact = useRef(false);
-
-  // Update ref when compact is signed
-  if (compactData?.mySigned && !hasEverSignedCompact.current) {
-    hasEverSignedCompact.current = true;
   }
 
   // Animation for the invitation panel slide-up
@@ -1262,17 +1246,11 @@ export function UnifiedSessionScreen({
         messageConfirmedAt: invitation.messageConfirmedAt,
         acceptedAt: invitation.acceptedAt,
       } : undefined,
-      compact: compactData ? {
-        // Use refs as backup to prevent flickering during mutation
-        mySigned: hasEverSignedCompact.current || compactData.mySigned || isSigningCompact,
-        mySignedAt: compactData.mySignedAt ?? (hasEverSignedCompact.current || compactData.mySigned || isSigningCompact ? session?.createdAt : null),
-      } : undefined,
       milestones: {
         // Use ref as backup to prevent flickering during mutation
         feelHeardConfirmedAt: milestones?.feelHeardConfirmedAt ??
           (hasEverConfirmedFeelHeard.current || isConfirmingFeelHeard ? new Date().toISOString() : null),
       },
-      sessionCreatedAt: session?.createdAt,
       mySharedAt: empathyStatusData?.mySharedAt,
     };
 
@@ -1338,7 +1316,7 @@ export function UnifiedSessionScreen({
     allIndicators.push(...chapterIndicators);
 
     return allIndicators;
-  }, [isInviter, session?.status, session?.createdAt, invitation?.messageConfirmedAt, invitation?.acceptedAt, compactData?.mySigned, compactData?.mySignedAt, isSigningCompact, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
+  }, [isInviter, session?.status, invitation?.messageConfirmedAt, invitation?.acceptedAt, milestones?.feelHeardConfirmedAt, isConfirmingFeelHeard, messages, user?.id, partnerName, empathyStatusData?.mySharedAt, empathyStatusData?.myAttempt?.status, empathyStatusData?.myAttempt?.revealedAt, shareOfferData?.hasSuggestion, shareOfferData?.suggestion, myProgress?.stage]);
 
 
 
@@ -1732,6 +1710,27 @@ export function UnifiedSessionScreen({
     );
   }, [styles, partnerName, topicFrame]);
 
+  const inviteeOpeningCards = useMemo((): ChatCustomCardItem[] => {
+    if (isInviter || !compactData?.mySigned || !topicFrame) return [];
+
+    return [{
+      type: 'custom-card',
+      id: 'invitee-topic-frame-card',
+      timestamp: timestampBeforeChatStart(
+        compactData.mySignedAt || invitation?.acceptedAt || session?.createdAt
+      ),
+      render: () => inviteeTopicAckEmptyStateElement,
+    }];
+  }, [
+    isInviter,
+    compactData?.mySigned,
+    compactData?.mySignedAt,
+    topicFrame,
+    invitation?.acceptedAt,
+    session?.createdAt,
+    inviteeTopicAckEmptyStateElement,
+  ]);
+
   // -------------------------------------------------------------------------
   // Render Overlays
   // -------------------------------------------------------------------------
@@ -1978,25 +1977,6 @@ export function UnifiedSessionScreen({
             isPending={isSigningCompact}
             isFirstSession={isFirstSession}
             testID="compact-agreement-bar"
-          />
-        );
-
-      case 'invitee-topic-ack':
-        return (
-          <CompactAgreementBar
-            onSign={() => {
-              // Mark ack done so the topic-ack panel hides and the input
-              // un-hides. Trigger the Stage 0/1 initial AI message and
-              // advance to Stage 1 server-side (idempotent — server already
-              // auto-advanced this user when both sides signed).
-              setInviteeAckDone(true);
-              triggerInitialMessage();
-              if (sessionId) advanceStage({ sessionId });
-            }}
-            isPending={false}
-            isFirstSession={true}
-            buttonLabel="Ready"
-            testID="invitee-topic-ack-bar"
           />
         );
 
@@ -2478,15 +2458,12 @@ export function UnifiedSessionScreen({
           onContextSharedPress={() => {
             setShowActivityMenu(true);
           }}
+          customCards={inviteeOpeningCards}
           // Show compact as custom empty state during onboarding when not signed.
-          // For the invitee on Stage 0 topic-ack, show the topic-ack body
-          // instead (renders inside the messages area, with a Ready bar below).
           customEmptyState={
             isInOnboardingUnsigned
               ? compactEmptyStateElement
-              : aboveInputPanel === 'invitee-topic-ack'
-                ? inviteeTopicAckEmptyStateElement
-                : undefined
+              : undefined
           }
           renderAboveInput={aboveInputPanel ? renderAboveInput : undefined}
           renderBelowChat={(inlineCards.length > 0 || memorySuggestion) ? () => (
@@ -2874,7 +2851,7 @@ export function UnifiedSessionScreen({
           setShowActivityMenu(false);
           setShowEmpathyDrawer(true);
         }}
-        topicFrame={isInviter && topicFrameConfirmed ? (topicFrame || undefined) : undefined}
+        topicFrame={topicFrameConfirmed ? (topicFrame || undefined) : undefined}
         invitationTimestamp={isInviter ? (invitation?.messageConfirmedAt || undefined) : undefined}
         partnerAccepted={partnerAccepted}
         onShareInvitation={

@@ -109,8 +109,30 @@ export async function deleteSessionForUser(
     where: { sessionId, userId },
   });
   if (userVessel) {
-    await prisma.userVessel.delete({
+    await prisma.userEvent.deleteMany({ where: { vesselId: userVessel.id } });
+    await prisma.emotionalReading.deleteMany({ where: { vesselId: userVessel.id } });
+    await prisma.identifiedNeed.deleteMany({ where: { vesselId: userVessel.id } });
+    await prisma.boundary.deleteMany({ where: { vesselId: userVessel.id } });
+    await prisma.userDocument.deleteMany({ where: { vesselId: userVessel.id } });
+    await prisma.userVessel.update({
       where: { id: userVessel.id },
+      data: {
+        archivedAt: new Date(),
+        conversationSummary: null,
+        notableFacts: undefined,
+        lastViewedAt: null,
+        lastSeenChatItemId: null,
+        lastViewedShareTabAt: null,
+      },
+    });
+    dataRecordsDeleted += 1;
+  } else {
+    await prisma.userVessel.create({
+      data: {
+        sessionId,
+        userId,
+        archivedAt: new Date(),
+      },
     });
     dataRecordsDeleted += 1;
   }

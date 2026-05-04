@@ -890,5 +890,24 @@ describe('Stage Prompts Service', () => {
 
       expect(prompt).toContain('your partner');
     });
+
+    it('invitee opener continues after the topic card instead of greeting again', () => {
+      const prompt = buildInitialMessagePrompt(
+        1,
+        {
+          userName: 'Jason',
+          partnerName: 'Shantam',
+          isInvitee: true,
+          topicFrame: 'Giving each other heads up before stopping by',
+        },
+        false
+      );
+
+      expect(prompt).toContain('TOPIC ALREADY SHOWN ABOVE THIS MESSAGE');
+      expect(prompt).toContain('Giving each other heads up before stopping by');
+      expect(prompt).toContain('Does NOT greet them by name');
+      expect(prompt).toContain('Does NOT say "thanks for accepting"');
+      expect(prompt).not.toContain('Hey Jason, thanks for accepting');
+    });
   });
 });
