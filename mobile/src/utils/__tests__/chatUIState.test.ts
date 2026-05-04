@@ -83,19 +83,37 @@ describe('Above Input Panel Priority', () => {
     expect(result.aboveInputPanel).toBe('compact-agreement-bar');
   });
 
-  it('shows invitation panel for inviter with unconfirmed message', () => {
+  it('shows invitation panel for inviter once topic is confirmed but invitation is not', () => {
     const inputs = createInputs({
       myStage: Stage.WITNESS,
       compactMySigned: true,
       myProgress: { stage: Stage.WITNESS },
       isInviter: true,
-      hasInvitationMessage: true,
+      hasTopicConfirmed: true,
       invitationConfirmed: false,
+      invitationPanelDismissed: false,
       isConfirmingInvitation: false,
     });
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).toBe('invitation');
+  });
+
+  it('does not let a confirmed invitation block feel-heard', () => {
+    const inputs = createInputs({
+      myStage: Stage.WITNESS,
+      compactMySigned: true,
+      myProgress: { stage: Stage.WITNESS },
+      isInviter: true,
+      hasTopicConfirmed: true,
+      invitationConfirmed: true,
+      invitationPanelDismissed: false,
+      showFeelHeardConfirmation: true,
+      feelHeardConfirmedAt: null,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.aboveInputPanel).toBe('feel-heard');
   });
 
   it('does not show invitation panel for invitee', () => {
@@ -104,12 +122,28 @@ describe('Above Input Panel Priority', () => {
       compactMySigned: true,
       myProgress: { stage: Stage.WITNESS },
       isInviter: false,
-      hasInvitationMessage: true,
-      invitationConfirmed: false,
+      hasTopicConfirmed: true,
+      invitationPanelDismissed: false,
     });
 
     const result = computeChatUIState(inputs);
     expect(result.aboveInputPanel).not.toBe('invitation');
+  });
+
+  it('does not show invitation panel once the user dismisses it', () => {
+    const inputs = createInputs({
+      myStage: Stage.WITNESS,
+      compactMySigned: true,
+      myProgress: { stage: Stage.WITNESS },
+      isInviter: true,
+      hasTopicConfirmed: true,
+      invitationPanelDismissed: true,
+      showFeelHeardConfirmation: true,
+      feelHeardConfirmedAt: null,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.aboveInputPanel).toBe('feel-heard');
   });
 
   it('shows feel-heard panel in Stage 1 when confirmation offered', () => {
@@ -198,8 +232,9 @@ describe('Above Input Panel Priority', () => {
       compactMySigned: true,
       myProgress: { stage: Stage.WITNESS },
       isInviter: true,
-      hasInvitationMessage: true,
+      hasTopicConfirmed: true,
       invitationConfirmed: false,
+      invitationPanelDismissed: false,
       showFeelHeardConfirmation: true,
       feelHeardConfirmedAt: null,
     });
@@ -581,7 +616,7 @@ describe('Needs Review Panel Visibility', () => {
     expect(result.panels.showNeedsReviewPanel).toBe(false);
   });
 
-  it('still shows after needs are confirmed so the user can share explicitly', () => {
+  it('shows needs-share after needs are confirmed so the user can share explicitly', () => {
     const inputs = createInputs({
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
@@ -593,8 +628,9 @@ describe('Needs Review Panel Visibility', () => {
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showNeedsReviewPanel).toBe(true);
-    expect(result.aboveInputPanel).toBe('needs-review');
+    expect(result.panels.showNeedsReviewPanel).toBe(false);
+    expect(result.panels.showNeedsSharePanel).toBe(true);
+    expect(result.aboveInputPanel).toBe('needs-share');
   });
 
   it('does not show when needs are already shared', () => {

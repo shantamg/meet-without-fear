@@ -4,6 +4,8 @@ import {
   sendMessage,
   confirmFeelHeard,
   getConversationHistory,
+  scrubVisibleAIText,
+  isReadyForStage3RevealText,
 } from '../../controllers/messages';
 import { prisma } from '../../lib/prisma';
 
@@ -27,6 +29,11 @@ jest.mock('../../services/partner-session-classifier', () => ({
 // Mock bedrock
 jest.mock('../../lib/bedrock', () => ({
   getSonnetResponse: jest.fn().mockResolvedValue('Mock response'),
+  getSonnetStreamingResponse: jest.fn(),
+  BrainActivityCallType: {
+    ORCHESTRATED_RESPONSE: 'ORCHESTRATED_RESPONSE',
+  },
+  isMockLLMEnabled: jest.fn().mockReturnValue(false),
 }));
 
 // Mock brain service
@@ -110,6 +117,46 @@ describe('Messages API (Fire-and-Forget)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('planner text safety helpers', () => {
+    describe('scrubVisibleAIText', () => {
+      it('removes visible planner lines and flags the scrub', () => {
+        const result = scrubVisibleAIText([
+          'I should compare both lists before showing anything.',
+          'That sounds like a need for more steadiness.',
+          "Here's my plan: reveal the comparison.",
+        ].join('\n'));
+
+        expect(result.scrubbed).toBe(true);
+        expect(result.text).toBe('That sounds like a need for more steadiness.');
+      });
+
+      it('preserves normal facilitation that starts with I need to', () => {
+        const text = 'I need to make sure I am capturing this right: you want steadiness before deciding.';
+
+        expect(scrubVisibleAIText(text)).toEqual({
+          text,
+          scrubbed: false,
+        });
+      });
+    });
+
+    describe('isReadyForStage3RevealText', () => {
+      it('detects ready requests that mention needs reveal context', () => {
+        expect(isReadyForStage3RevealText("I'm ready to see the needs lists")).toBe(true);
+        expect(isReadyForStage3RevealText('We are ready for the side by side reveal')).toBe(true);
+      });
+
+      it('does not treat negated ready language as a reveal request', () => {
+        expect(isReadyForStage3RevealText("I'm not ready to see the lists")).toBe(false);
+        expect(isReadyForStage3RevealText("I don't want to show the needs yet")).toBe(false);
+      });
+
+      it('requires reveal context to avoid hijacking generic ready messages', () => {
+        expect(isReadyForStage3RevealText("Yes, I'm ready")).toBe(false);
+      });
+    });
   });
 
   describe('POST /sessions/:id/messages (sendMessage - DEPRECATED)', () => {

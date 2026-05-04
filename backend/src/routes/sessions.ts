@@ -24,13 +24,12 @@ import {
   resolveSession,
   advanceStage,
   getInvitation,
-  updateInvitationMessage,
   confirmInvitationMessage,
   markSessionViewed,
   markShareTabViewed,
   getUnreadSessionCount,
 } from '../controllers/sessions';
-import { generateTopicFrame, confirmTopicFrame } from '../controllers/topic-frame';
+import { confirmTopicFrame } from '../controllers/topic-frame';
 import { getSessionState } from '../controllers/session-state';
 import { getLinkedInnerThoughts } from '../controllers/inner-work';
 import { getTimeline } from '../controllers/timeline';
@@ -111,13 +110,6 @@ router.post('/sessions/:id/stages/advance', requireAuth, requireSessionAccess, a
 router.get('/sessions/:id/invitation', requireAuth, requireSessionAccess, asyncHandler(getInvitation));
 
 /**
- * @route PUT /api/v1/sessions/:id/invitation/message
- * @description Update invitation message
- * @access Private - requires authentication and session access
- */
-router.put('/sessions/:id/invitation/message', requireAuth, requireSessionAccess, asyncHandler(updateInvitationMessage));
-
-/**
  * @route POST /api/v1/sessions/:id/invitation/confirm
  * @description Confirm invitation message (ready to share)
  * @access Private - requires authentication and session access
@@ -125,15 +117,10 @@ router.put('/sessions/:id/invitation/message', requireAuth, requireSessionAccess
 router.post('/sessions/:id/invitation/confirm', requireAuth, requireSessionAccess, asyncHandler(confirmInvitationMessage));
 
 /**
- * @route POST /api/v1/sessions/:id/topic-frame/generate
- * @description AI-generate a topic frame from user 1's Stage 0 invitation draft
- * @access Private - requires authentication and session access (creator only)
- */
-router.post('/sessions/:id/topic-frame/generate', requireAuth, requireSessionAccess, asyncHandler(generateTopicFrame));
-
-/**
  * @route POST /api/v1/sessions/:id/topic-frame/confirm
- * @description Confirm or steer the AI-generated session topic frame
+ * @description Confirm the AI-proposed topic frame currently on the session.
+ *              The frame itself is generated inline by the Stage 0 chat AI as
+ *              <draft>...</draft>; this endpoint only flips the confirmed flag.
  * @access Private - requires authentication and session access (creator only)
  */
 router.post('/sessions/:id/topic-frame/confirm', requireAuth, requireSessionAccess, asyncHandler(confirmTopicFrame));

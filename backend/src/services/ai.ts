@@ -52,14 +52,10 @@ export interface FullAIContext extends WitnessContext {
   isFirstTurnInSession?: boolean;
   /** Whether we're in the invitation crafting phase (stage 0, before partner joins) */
   isInvitationPhase?: boolean;
-  /** Whether user is refining their invitation after Stage 1/2 processing */
-  isRefiningInvitation?: boolean;
   /** Whether this is the first turn after advancing to a new stage (stage transition intro) */
   isStageTransition?: boolean;
   /** The stage we just transitioned from (for context gathering) */
   previousStage?: number;
-  /** Current invitation message (for refinement context) */
-  currentInvitationMessage?: string | null;
   /** Current empathy draft (for refinement in Stage 2) */
   currentEmpathyDraft?: string | null;
   /** Whether the user is actively refining their empathy draft */
@@ -135,10 +131,8 @@ export async function getOrchestratedResponse(
     sessionDurationMinutes: context.sessionDurationMinutes,
     isFirstTurnInSession: context.isFirstTurnInSession,
     isInvitationPhase: context.isInvitationPhase,
-    isRefiningInvitation: context.isRefiningInvitation,
     isStageTransition: context.isStageTransition,
     previousStage: context.previousStage,
-    currentInvitationMessage: context.currentInvitationMessage,
     currentEmpathyDraft: context.currentEmpathyDraft,
     isRefiningEmpathy: context.isRefiningEmpathy,
     sharedContextFromPartner: context.sharedContextFromPartner,

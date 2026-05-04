@@ -82,6 +82,23 @@ export const confirmTopicFrameRequestSchema = z.object({
 
 export type ConfirmTopicFrameRequestInput = z.infer<typeof confirmTopicFrameRequestSchema>;
 
+export const refineTopicFrameRequestSchema = z.object({
+  message: z.string().min(1, 'Message required').max(500, 'Message too long'),
+  history: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string().min(1).max(1000),
+  })).max(10).optional(),
+});
+
+export type RefineTopicFrameRequestInput = z.infer<typeof refineTopicFrameRequestSchema>;
+
+export const refineTopicFrameResponseSchema = z.object({
+  response: z.string(),
+  topicFrame: z.string(),
+});
+
+export type RefineTopicFrameResponseInput = z.infer<typeof refineTopicFrameResponseSchema>;
+
 export const confirmTopicFrameResponseSchema = z.object({
   topicFrame: z.string(),
   confirmedAt: z.string().datetime(),

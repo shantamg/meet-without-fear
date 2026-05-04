@@ -141,13 +141,13 @@ describe('SessionCard', () => {
       const session = createMockSession({
         status: SessionStatus.INVITED,
         statusSummary: {
-          userStatus: 'Invitation sent',
+          userStatus: 'Invitation ready',
           partnerStatus: "Jane hasn't joined yet",
         },
       });
       render(<SessionCard session={session} />);
 
-      expect(screen.getByText('Invitation sent')).toBeTruthy();
+      expect(screen.getByText('Invitation ready')).toBeTruthy();
       expect(screen.getByText("Jane hasn't joined yet")).toBeTruthy();
     });
 

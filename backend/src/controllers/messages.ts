@@ -22,8 +22,9 @@ import {
   feelHeardRequestSchema,
   getMessagesQuerySchema,
   MessageRole,
+  NeedCategory,
 } from '@meet-without-fear/shared';
-import { notifyPartner, publishSessionEvent, notifySessionMembers, publishMessageAIResponse, publishMessageError } from '../services/realtime';
+import { notifyPartner, publishSessionEvent, notifySessionMembers, publishMessageAIResponse, publishMessageError, publishTopicFrameUpdated } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId, isSessionCreator } from '../utils/session';
 import { embedSessionContent } from '../services/embedding';
@@ -81,7 +82,7 @@ function getFallbackInitialMessage(
   const partner = partnerName || 'them';
 
   if (isInvitee) {
-    return `Hey ${userName}, thanks for accepting ${partner}'s invitation to talk. What's been on your mind about things with ${partner}?`;
+    return `I'd like to hear your side now. What's been happening from your point of view with ${partner}?`;
   }
 
   if (isInvitationPhase) {
@@ -89,6 +90,183 @@ function getFallbackInitialMessage(
   }
 
   return `Hey ${userName}, what's on your mind?`;
+}
+
+const STAGE2_ROADMAP_COPY =
+  `Here's what comes next: there are a few more steps in this process. First, each of you tries to understand what the other person might be going through. Then you'll each explore what matters most to you, and eventually use that to get clearer about what is possible next, whether together or separately.`;
+
+const DEFAULT_STAGE3_NEEDS_AI_CONFIDENCE = 0.85;
+const PLANNER_LINE_PREFIXES = [
+  'i should',
+  'so both lists should',
+  '— so both lists should',
+  "here's my plan",
+  'the prompt says',
+  'i need to follow',
+  'i need to present',
+  'i need to check the prompt',
+  'i need to use the prompt',
+  'i need to make sure both lists',
+];
+
+export function scrubVisibleAIText(text: string): { text: string; scrubbed: boolean } {
+  const before = text;
+  const cleaned = text
+    .split(/\r?\n/)
+    .filter((line) => {
+      const trimmed = line.trim().toLowerCase();
+      return !PLANNER_LINE_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
+    })
+    .join('\n')
+    .replace(/\bI should\b/gi, '')
+    .replace(/\bso both lists should be available\b/gi, '');
+
+  return { text: cleaned, scrubbed: cleaned !== before };
+}
+
+export function isReadyForStage3RevealText(content: string): boolean {
+  const normalized = content.trim().toLowerCase();
+  if (/\bnot\s+ready\b/.test(normalized) || /\b(?:don'?t|do not)\s+(?:want|feel ready)\b/.test(normalized)) {
+    return false;
+  }
+  return /\b(i'?m|i am|we are)?\s*ready\b/.test(normalized) &&
+    /(list|lists|needs|side by side|reveal|see them|see it|show)/.test(normalized);
+}
+
+async function getStage3GateResponse(sessionId: string, userId: string): Promise<string | null> {
+  const partnerId = await getPartnerUserId(sessionId, userId);
+  const progress = await prisma.stageProgress.findUnique({
+    where: {
+      sessionId_userId_stage: {
+        sessionId,
+        userId,
+        stage: 3,
+      },
+    },
+  });
+  if (!progress) return null;
+
+  const vessel = await prisma.userVessel.findUnique({
+    where: { userId_sessionId: { userId, sessionId } },
+    include: { identifiedNeeds: { orderBy: { createdAt: 'asc' } } },
+  });
+  const needs = vessel?.identifiedNeeds ?? [];
+  const gates = progress.gatesSatisfied as Record<string, unknown> | null;
+  const ownShared = gates?.needsShared === true;
+  const ownConfirmed = gates?.needsConfirmed === true || (needs.length > 0 && needs.every((need) => need.confirmed));
+
+  if (needs.length === 0) {
+    return "Let's first put words to what matters most for you here. What do you need in order to feel clear, grounded, or able to move forward from this?";
+  }
+
+  if (!ownConfirmed) {
+    return "I've captured a draft of what matters to you. Please review and confirm your needs before we move any further.";
+  }
+
+  if (!ownShared) {
+    return "Your needs are ready for your review. If they still feel right, you can choose to share them for the side-by-side step.";
+  }
+
+  if (!partnerId) {
+    return "Your needs are shared. We'll wait until your partner has shared theirs before showing anything side by side.";
+  }
+
+  const partnerProgress = await prisma.stageProgress.findUnique({
+    where: {
+      sessionId_userId_stage: {
+        sessionId,
+        userId: partnerId,
+        stage: 3,
+      },
+    },
+  });
+  const partnerGates = partnerProgress?.gatesSatisfied as Record<string, unknown> | null;
+  if (partnerGates?.needsShared !== true) {
+    return "Your needs are shared. We'll wait until your partner has shared theirs before showing anything side by side.";
+  }
+
+  return "Both needs lists are ready to review side by side. Take a look at them and notice what stands out before deciding whether they feel accurate.";
+}
+
+async function persistStage3ProposedNeeds(
+  sessionId: string,
+  userId: string,
+  proposedNeeds: Array<{ need: string; category: string; description: string; evidence: string[] }>
+): Promise<boolean> {
+  const validNeeds = proposedNeeds.filter((need) =>
+    need.need &&
+    need.description &&
+    Object.values(NeedCategory).includes(need.category as NeedCategory)
+  );
+  if (validNeeds.length === 0) return false;
+
+  let persisted = false;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      persisted = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const vessel = await tx.userVessel.upsert({
+          where: { userId_sessionId: { userId, sessionId } },
+          create: { userId, sessionId },
+          update: {},
+        });
+
+        const existing = await tx.identifiedNeed.count({ where: { vesselId: vessel.id } });
+        if (existing > 0) return false;
+
+        await tx.identifiedNeed.createMany({
+          data: validNeeds.map((need) => ({
+            vesselId: vessel.id,
+            need: need.description || need.need,
+            category: need.category as NeedCategory,
+            evidence: need.evidence,
+            aiConfidence: DEFAULT_STAGE3_NEEDS_AI_CONFIDENCE,
+            confirmed: false,
+          })),
+        });
+
+        const progress = await tx.stageProgress.findUnique({
+          where: { sessionId_userId_stage: { sessionId, userId, stage: 3 } },
+        });
+        if (progress) {
+          await tx.stageProgress.update({
+            where: { id: progress.id },
+            data: {
+              gatesSatisfied: {
+                ...((progress.gatesSatisfied as Record<string, unknown> | null) ?? {}),
+                needsCaptured: true,
+                needsCapturedAt: new Date().toISOString(),
+              },
+            },
+          });
+        }
+
+        return true;
+      }, {
+        isolationLevel: 'Serializable',
+      });
+      break;
+    } catch (error) {
+      const isSerializationConflict =
+        error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+      if (!isSerializationConflict || attempt === 2) {
+        throw error;
+      }
+      logger.warn('Retrying Stage 3 needs persistence after serialization conflict', {
+        sessionId,
+        userId,
+        attempt,
+      });
+    }
+  }
+
+  if (!persisted) return false;
+
+  await publishSessionEvent(sessionId, 'session.needs_extracted', {
+    stage: 3,
+    forUserId: userId,
+  });
+
+  return true;
 }
 
 // ============================================================================
@@ -444,9 +622,9 @@ export async function confirmFeelHeard(
         if (aiResponse) {
           // Parse the semantic tag response (micro-tag format)
           const parsed = parseMicroTagResponse(aiResponse);
-          transitionContent = parsed.response.trim() || `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\nHere's what comes next: there are a few more steps in this process. First, each of you tries to understand what the other person might be going through. Then you'll each explore what matters most to you, and eventually work on a way forward together.\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
+          transitionContent = parsed.response.trim() || `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
         } else {
-          transitionContent = `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\nHere's what comes next: there are a few more steps in this process. First, each of you tries to understand what the other person might be going through. Then you'll each explore what matters most to you, and eventually work on a way forward together.\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
+          transitionContent = `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
         }
 
         // Save the transition message to the database as Stage 2
@@ -926,7 +1104,7 @@ export async function getInitialMessage(
     } else {
       prompt = buildInitialMessagePrompt(
         currentStage,
-        { userName, partnerName, isInvitee, innerThoughtsContext },
+        { userName, partnerName, isInvitee, topicFrame: session.topicFrame, innerThoughtsContext },
         isInvitationPhase
       );
     }
@@ -938,7 +1116,6 @@ export async function getInitialMessage(
 
     // Get AI response
     let responseContent: string;
-    let extractedInvitationMessage: string | null = null;
     try {
       // AWS Bedrock requires conversations to start with a user message
       const aiResponse = await getSonnetResponse({
@@ -955,11 +1132,6 @@ export async function getInitialMessage(
         // Parse the semantic tag response (micro-tag format)
         const parsed = parseMicroTagResponse(aiResponse);
         responseContent = parsed.response.trim() || getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
-
-        // Draft is used for invitation message in stage 0
-        if (isInvitationPhase && parsed.draft) {
-          extractedInvitationMessage = parsed.draft;
-        }
       } else {
         // Fallback if AI unavailable
         responseContent = getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
@@ -967,18 +1139,6 @@ export async function getInitialMessage(
     } catch (error) {
       logger.error('[getInitialMessage] AI response error:', error);
       responseContent = getFallbackInitialMessage(userName, partnerName, isInvitationPhase, isInvitee);
-    }
-
-    // If an invitation message was extracted, update the invitation
-    if (isInvitationPhase && extractedInvitationMessage) {
-      logger.info(`[getInitialMessage] Extracted invitation draft from initial message: "${extractedInvitationMessage}"`);
-      await prisma.invitation.updateMany({
-        where: { sessionId, invitedById: user.id },
-        data: {
-          invitationMessage: extractedInvitationMessage,
-          messageConfirmed: false
-        },
-      });
     }
 
     // Save the AI message (trim whitespace that Claude sometimes adds)
@@ -1001,20 +1161,6 @@ export async function getInitialMessage(
 
     logger.info(`[getInitialMessage] Generated initial message for session ${sessionId}, stage ${currentStage}`);
 
-    // Audit log the initial message
-    /* auditLog('RESPONSE', 'Initial welcome message generated', {
-      turnId,
-      sessionId,
-      userId: user.id,
-      stage: currentStage,
-      userName,
-      partnerName,
-      isInvitee,
-      responseText: responseContent,
-      messageId: aiMessage.id,
-      invitationMessage: extractedInvitationMessage,
-    }); */
-
     successResponse(res, {
       message: {
         id: aiMessage.id,
@@ -1025,7 +1171,6 @@ export async function getInitialMessage(
         stage: aiMessage.stage,
         timestamp: aiMessage.timestamp.toISOString(),
       },
-      invitationMessage: extractedInvitationMessage,
     });
   } catch (error) {
     logger.error('[getInitialMessage] Error:', error);
@@ -1177,6 +1322,32 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       },
     });
 
+    if (currentStage === 3 && isReadyForStage3RevealText(content)) {
+      const gateResponse = await getStage3GateResponse(sessionId, user.id);
+      if (gateResponse) {
+        const aiMessage = await prisma.message.create({
+          data: {
+            sessionId,
+            senderId: null,
+            forUserId: user.id,
+            role: 'AI',
+            content: gateResponse,
+            stage: 3,
+          },
+        });
+
+        if (!clientDisconnected) {
+          sendSSE(res, { event: 'chunk', data: { text: gateResponse } });
+          sendSSE(res, { event: 'metadata', data: { metadata: {} } });
+          sendSSE(res, { event: 'text_complete', data: { metadata: {} } });
+          sendSSE(res, { event: 'complete', data: { messageId: aiMessage.id, metadata: {} } });
+        }
+        res.end();
+        logger.info(`[sendMessageStream:${requestId}] Stage 3 ready text handled via gate response`);
+        return;
+      }
+    }
+
     // =========================================================================
     // Get conversation history for context (summary-aware)
     // =========================================================================
@@ -1246,20 +1417,6 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     // Build stage prompt with full context assembly (includes notable facts)
     const userName = user.name || 'there';
     const isInvitationPhase = session.status === 'CREATED';
-
-    // Detect invitation refinement request (e.g., "Refine invitation: make it warmer")
-    const isRefiningInvitation = content.toLowerCase().startsWith('refine invitation:');
-    let currentInvitationMessage: string | null = null;
-
-    if (isRefiningInvitation) {
-      // Fetch current invitation message for context
-      const invitation = await prisma.invitation.findFirst({
-        where: { sessionId, invitedById: user.id },
-        select: { invitationMessage: true },
-      });
-      currentInvitationMessage = invitation?.invitationMessage ?? null;
-      logger.info(`[sendMessageStream:${requestId}] Refining invitation, current: "${currentInvitationMessage}"`);
-    }
 
     // Create intent for context assembly - use 'light' depth to load notable facts
     const streamingIntent: MemoryIntentResult = {
@@ -1403,16 +1560,15 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       contextBundle,
       sharedContentHistory,
       milestoneContext,
-      invitationMessage: currentInvitationMessage,
       reconcilerGapContext,
       previousEmpathyContent,
       sharedContextFromPartner: stage2BSharedContext || undefined,
       empathyDraft: empathyDraftContent || undefined,
       isRefiningEmpathy: isRefiningEmpathy || undefined,
-    }, { isInvitationPhase, isRefiningInvitation });
+    }, { isInvitationPhase });
 
     // Prompt already includes semantic tag format instructions via buildResponseProtocol()
-    // No tool use instruction needed - we parse <thinking>, <draft>, <dispatch> tags instead
+    // No tool use instruction needed - we parse <thinking>, <draft>, <dispatch>, and <needs> tags instead
 
     // Format context bundle and inject into last user message (includes notable facts)
     const formattedContext = formatContextForPrompt(contextBundle, {
@@ -1467,14 +1623,15 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
     let streamError: Error | null = null;
 
     // Tag trap state - Claude outputs <thinking>...</thinking> first, which we hide
-    // After thinking, there may be <draft>...</draft> or <dispatch>...</dispatch> that we also hide
+    // After thinking, there may be <draft>, <dispatch>, or <needs> tags that we also hide
     let isInsideThinking = true;
-    let isTrappingTags = false; // After thinking, buffer to check for <draft>/<dispatch>
+    let isTrappingTags = false; // After thinking, buffer to check for hidden semantic tags
     let thinkingBuffer = '';
-    let tagTrapBuffer = ''; // Buffer for checking draft/dispatch tags after thinking
+    let tagTrapBuffer = ''; // Buffer for checking semantic tags after thinking
     let thinkingContent = ''; // Store hidden thinking for logging
     let draftContent = ''; // Store draft content for metadata
     let dispatchTagContent = ''; // Store dispatch tag content for handling
+    let needsTagContent = ''; // Store hidden Stage 3 needs block for parsing
     let isDispatchMessage = false; // Track if this is a dispatch response (skip processing)
 
     try {
@@ -1511,13 +1668,17 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           .replace(/<thinking>[\s\S]*/gi, '')                // Unclosed thinking (strip to end)
           .replace(/<\/thinking>/gi, '')                     // Orphaned closing tag
           .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
-          .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
+          .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '')
+          .replace(/<needs>[\s\S]*?<\/needs>/gi, '');
 
         // Trim LEADING whitespace only on the FIRST chunk (after </thinking> tag removal)
         // This removes newlines at the start without breaking word spacing in subsequent chunks
         if (!firstChunkTime && cleanText.length > 0) {
           cleanText = cleanText.trimStart();
         }
+
+        const scrubbed = scrubVisibleAIText(cleanText);
+        cleanText = scrubbed.text;
 
         if (cleanText.length > 0) {
           if (!firstChunkTime) firstChunkTime = Date.now();
@@ -1544,11 +1705,18 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           logger.info(`[sendMessageStream:${requestId}] [DISPATCH TAG]:`, dispatchTagContent);
         }
 
+        const needsMatch = buffer.match(/<needs>[\s\S]*?<\/needs>/i);
+        if (needsMatch) {
+          needsTagContent = needsMatch[0];
+          logger.info(`[sendMessageStream:${requestId}] [HIDDEN NEEDS BLOCK]`);
+        }
+
         // Return text with all tags stripped
         // Do NOT use .trim() - it breaks word spacing between chunks
         return buffer
           .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
-          .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
+          .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '')
+          .replace(/<needs>[\s\S]*?<\/needs>/gi, '');
       };
 
       for await (const event of streamGenerator) {
@@ -1584,7 +1752,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
               thinkingBuffer = '';
             }
           }
-          // PHASE 2: TAG TRAP - Buffer to catch <draft> and <dispatch> before streaming
+          // PHASE 2: TAG TRAP - Buffer to catch hidden semantic tags before streaming
           // The draft tag typically comes right after </thinking>, before response text
           else if (isTrappingTags) {
             tagTrapBuffer += event.text;
@@ -1594,30 +1762,35 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             const hasDraftEnd = tagTrapBuffer.includes('</draft>');
             const hasDispatchStart = tagTrapBuffer.includes('<dispatch>');
             const hasDispatchEnd = tagTrapBuffer.includes('</dispatch>');
+            const hasNeedsStart = tagTrapBuffer.includes('<needs>');
+            const hasNeedsEnd = tagTrapBuffer.includes('</needs>');
 
             // Check for partial tag starts at the end of buffer
-            // Matches: <, <d, <dr, </, </d, etc. - anything that could become <draft>, </draft>, <dispatch>, </dispatch>
-            const hasPotentialTagStart = /<\/?d[a-z]*$/i.test(tagTrapBuffer);
+            // Matches: <d..., <n..., </d..., </n..., etc. - anything that could become
+            // <draft>, </draft>, <dispatch>, </dispatch>, <needs>, or </needs>.
+            const hasPotentialTagStart = /<\/?(d|n)[a-z]*$/i.test(tagTrapBuffer);
 
             // If we see opening tags, wait for closing tags
             const waitingForDraft = hasDraftStart && !hasDraftEnd;
             const waitingForDispatch = hasDispatchStart && !hasDispatchEnd;
+            const waitingForNeeds = hasNeedsStart && !hasNeedsEnd;
 
             // Process buffer and check if we can exit:
             // 1. Strip any complete tags from buffer
             // 2. Check if remaining content looks like response text (not starting with <)
             const strippedBuffer = tagTrapBuffer
               .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
-              .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '');
+              .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '')
+              .replace(/<needs>[\s\S]*?<\/needs>/gi, '');
             const trimmedStripped = strippedBuffer.trim();
 
             // Exit conditions:
             // - Not waiting for any tags to complete
             // - Have substantial response content (>50 chars that doesn't start with <)
-            // - No partial tag at the end that might become <draft> or <dispatch>
+            // - No partial tag at the end that might become a hidden semantic tag
             // OR buffer is too big (safety limit)
             const hasResponseContent = trimmedStripped.length > 50 && !trimmedStripped.startsWith('<');
-            const safeToExit = !waitingForDraft && !waitingForDispatch && hasResponseContent && !hasPotentialTagStart;
+            const safeToExit = !waitingForDraft && !waitingForDispatch && !waitingForNeeds && hasResponseContent && !hasPotentialTagStart;
 
             if (safeToExit || tagTrapBuffer.length > 2000) {
               isTrappingTags = false;
@@ -1633,9 +1806,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
             // Check if we have unclosed tags that need buffering
             const hasUnclosedDispatch = combined.includes('<dispatch>') && !combined.includes('</dispatch>');
             const hasUnclosedDraft = combined.includes('<draft>') && !combined.includes('</draft>');
-            const hasPotentialTagStart = /<\/?d[a-z]*$/i.test(combined);
+            const hasUnclosedNeeds = combined.includes('<needs>') && !combined.includes('</needs>');
+            const hasPotentialTagStart = /<\/?(d|n)[a-z]*$/i.test(combined);
 
-            if (hasUnclosedDispatch || hasUnclosedDraft || hasPotentialTagStart) {
+            if (hasUnclosedDispatch || hasUnclosedDraft || hasUnclosedNeeds || hasPotentialTagStart) {
               // Buffer and wait for closing tag
               tagTrapBuffer = combined;
             } else {
@@ -1693,7 +1867,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       // The thinking content has flags like FeelHeardCheck:Y, ReadyShare:Y
       // The accumulated text may contain <draft>...</draft> that needs stripping
       // =========================================================================
-      const fullResponse = `<thinking>${thinkingContent}</thinking>\n${accumulatedText}`;
+      const fullResponse = `<thinking>${thinkingContent}</thinking>\n${needsTagContent}\n${accumulatedText}`;
       const parsed = parseMicroTagResponse(fullResponse);
 
       // Extract metadata from parsed response
@@ -1702,16 +1876,18 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       if (parsed.proposedStrategies.length > 0) {
         metadata.proposedStrategies = parsed.proposedStrategies;
       }
+      if (parsed.proposedNeeds.length > 0) {
+        metadata.proposedNeeds = parsed.proposedNeeds;
+      }
 
       // Use draftContent captured during streaming (more reliable than re-parsing)
       const draft = draftContent || parsed.draft;
-      if (draft) {
-        // Draft is used for invitation (stage 0 or refinement) or empathy statement (stage 2)
-        if (isInvitationPhase || isRefiningInvitation || currentStage === 0) {
-          metadata.invitationMessage = draft;
-        } else if (currentStage === 2) {
-          metadata.proposedEmpathyStatement = draft;
-        }
+      if (draft && currentStage === 2) {
+        // Draft is used for empathy statement (stage 2).
+        metadata.proposedEmpathyStatement = draft;
+      } else if (draft && (currentStage === 0 || isInvitationPhase)) {
+        // Stage 0: <draft> contains the proposed topic frame.
+        metadata.topicFrame = draft.trim();
       }
 
       logger.info(`[sendMessageStream:${requestId}] Parsed metadata:`, {
@@ -1722,7 +1898,8 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       });
 
       // Clean accumulated text (strip <draft> and <dispatch> tags if they leaked through)
-      accumulatedText = parsed.response;
+      const scrubbedResponse = scrubVisibleAIText(parsed.response);
+      accumulatedText = scrubbedResponse.text;
 
       // =========================================================================
       // DISPATCH HANDLING: If dispatch tag detected, get and stream dispatched response
@@ -1773,6 +1950,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       if (!accumulatedText.trim()) {
         logger.warn(`[sendMessageStream:${requestId}] Empty AI response after tag stripping — attempting contextual fallback`, {
           dispatchTag: dispatchTag ?? null,
+          scrubbedPlannerText: scrubbedResponse.scrubbed,
         });
         // Try to generate a context-aware response via the process explainer
         let fallback: string | null = null;
@@ -1849,6 +2027,10 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       return;
     }
 
+    if (currentStage === 3 && metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
+      metadata.needsCaptured = await persistStage3ProposedNeeds(sessionId, user.id, metadata.proposedNeeds);
+    }
+
     // =========================================================================
     // Signal that text streaming is complete (before DB saves for faster UX)
     // =========================================================================
@@ -1892,26 +2074,23 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       });
     }
 
-    // Save invitation message (during initial crafting or refinement)
-    if ((isInvitationPhase || isRefiningInvitation) && metadata.invitationMessage) {
-      await prisma.$transaction([
-        prisma.invitation.updateMany({
-          where: { sessionId, invitedById: user.id },
-          data: {
-            invitationMessage: metadata.invitationMessage,
-            // Don't reset messageConfirmed during refinement - user may have already confirmed
-            ...(isInvitationPhase ? { messageConfirmed: false } : {}),
-          },
-        }),
-        prisma.session.update({
-          where: { id: sessionId },
-          data: {
-            topicFrame: null,
-            topicFrameConfirmedAt: null,
-          },
-        }),
-      ]);
-      logger.info(`[sendMessageStream:${requestId}] Saved invitation message: "${metadata.invitationMessage}"`);
+    // Save topic frame (Stage 0 / invitation phase) - only if not already confirmed
+    if ((currentStage === 0 || isInvitationPhase) && metadata.topicFrame) {
+      try {
+        const newTopicFrame = metadata.topicFrame.trim();
+        if (newTopicFrame && !session.topicFrameConfirmedAt && newTopicFrame !== session.topicFrame) {
+          await prisma.session.update({
+            where: { id: sessionId },
+            data: { topicFrame: newTopicFrame },
+          });
+          logger.info(`[sendMessageStream:${requestId}] Stage 0: Persisted topic frame "${newTopicFrame}"`);
+          publishTopicFrameUpdated(sessionId, newTopicFrame, false).catch((err) =>
+            logger.warn(`[sendMessageStream:${requestId}] Failed to publish topic_frame_updated:`, err)
+          );
+        }
+      } catch (err) {
+        logger.error(`[sendMessageStream:${requestId}] Failed to persist topic frame:`, err);
+      }
     }
 
     // Save empathy draft (Stage 2 or Stage 2B)

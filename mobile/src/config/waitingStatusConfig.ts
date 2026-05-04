@@ -179,12 +179,22 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
   // Stage 3: Waiting for partner to confirm their needs
   'needs-pending': {
     showBanner: true,
-    hideInput: false,  // Users can chat while waiting for partner
+    hideInput: true,
     showInnerThoughts: false,
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: false,
     bannerText: (p) => `${p} is exploring what matters to them.`,
+  },
+
+  'needs-waiting-for-partner': {
+    showBanner: true,
+    hideInput: true,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
+    bannerText: (p) => `${p} is deciding what they are ready to share.`,
   },
 
   // Stage 3: Waiting for partner to confirm common ground

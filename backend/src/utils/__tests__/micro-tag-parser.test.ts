@@ -46,19 +46,43 @@ I hear you. That sounds really difficult.`;
       expect(result.offerReadyToShare).toBe(true);
     });
 
-    it('extracts draft block as invitationMessage', () => {
-      const raw = `<thinking>Mode:Invitation</thinking>
+    it('extracts <draft> as topicFrame for Stage 0 callers', () => {
+      const raw = `<thinking>Mode:ONBOARDING</thinking>
 
 <draft>
-I've been thinking about us and would love to have a real conversation. Join me?
+Mealtime poking
 </draft>
 
-Here's a draft invitation for you to review.`;
+How does that framing land?`;
 
       const result = parseMicroTagResponse(raw);
 
-      expect(result.draft).toContain("I've been thinking about us");
-      expect(result.response).toBe("Here's a draft invitation for you to review.");
+      expect(result.topicFrame).toBe('Mealtime poking');
+      expect(result.draft).toBe('Mealtime poking');
+      expect(result.response).toBe('How does that framing land?');
+      expect(result.response).not.toContain('<draft>');
+    });
+
+    it('topicFrame is null when no <draft> tag is present', () => {
+      const raw = `<thinking>Mode:ONBOARDING</thinking>What's been going on?`;
+      const result = parseMicroTagResponse(raw);
+      expect(result.topicFrame).toBeNull();
+      expect(result.draft).toBeNull();
+    });
+
+    it('extracts draft block content (used for empathy in stage 2)', () => {
+      const raw = `<thinking>Mode:Empathy</thinking>
+
+<draft>
+You feel unseen when I get distracted at meals.
+</draft>
+
+Here's a draft for you to review.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.draft).toContain('You feel unseen');
+      expect(result.response).toBe("Here's a draft for you to review.");
       expect(result.response).not.toContain('<draft>');
     });
 
@@ -72,6 +96,59 @@ Let me explain how this works.`;
       const result = parseMicroTagResponse(raw);
 
       expect(result.dispatchTag).toBe('EXPLAIN_PROCESS');
+    });
+
+    it('extracts proposed needs from a hidden needs JSON block', () => {
+      const raw = `<thinking>NeedsReady:Y</thinking>
+
+<needs>
+[
+  {
+    "need": "safety",
+    "category": "SAFETY",
+    "description": "I need steadiness before deciding what comes next.",
+    "evidence": ["I feel scared when things escalate"]
+  },
+  {
+    "need": "recognition",
+    "category": "RECOGNITION",
+    "description": "I need my effort to be seen.",
+    "evidence": []
+  }
+]
+</needs>
+
+I captured a draft of what matters to you for review.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe('I captured a draft of what matters to you for review.');
+      expect(result.response).not.toContain('<needs>');
+      expect(result.proposedNeeds).toEqual([
+        {
+          need: 'safety',
+          category: 'SAFETY',
+          description: 'I need steadiness before deciding what comes next.',
+          evidence: ['I feel scared when things escalate'],
+        },
+        {
+          need: 'recognition',
+          category: 'RECOGNITION',
+          description: 'I need my effort to be seen.',
+          evidence: [],
+        },
+      ]);
+    });
+
+    it('ignores malformed needs JSON and still strips the hidden block', () => {
+      const raw = `<thinking>NeedsReady:Y</thinking>
+<needs>{not valid json</needs>
+Let's keep exploring what matters most.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe("Let's keep exploring what matters most.");
+      expect(result.proposedNeeds).toEqual([]);
     });
 
     it('handles response with no tags gracefully', () => {

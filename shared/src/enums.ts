@@ -57,7 +57,7 @@ export const STAGE_FRIENDLY_NAMES: Record<Stage, string> = {
   [Stage.WITNESS]: 'Your Story',
   [Stage.PERSPECTIVE_STRETCH]: 'Walking in Their Shoes',
   [Stage.NEED_MAPPING]: 'What Matters Most',
-  [Stage.STRATEGIC_REPAIR]: 'Moving Forward Together',
+  [Stage.STRATEGIC_REPAIR]: 'What Comes Next',
   [Stage.INFORMED_EMPATHY]: 'Deeper Understanding',
 };
 

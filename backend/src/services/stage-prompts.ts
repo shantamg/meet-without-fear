@@ -35,6 +35,8 @@ function buildResponseProtocol(stage: number, options?: {
     flags.push('FeelHeardCheck: [Y/N]');
   } else if (stage === 2) {
     flags.push('ReadyShare: [Y/N]');
+  } else if (stage === 3) {
+    flags.push('NeedsReady: [Y/N]');
   } else if (stage === 4) {
     flags.push('StrategyProposed: [Y/N]');
   }
@@ -58,16 +60,26 @@ ProposedStrategy: 10-minute check-in after dinner each night for one week
 ProposedStrategy: Sunday evening phone call to plan the week ahead`
     : '';
 
+  const needsSection = stage === 3
+    ? `\nIf NeedsReady is Y, include a hidden needs block immediately after </thinking>:
+<needs>
+[
+  {"need":"short label", "category":"SAFETY|CONNECTION|AUTONOMY|RECOGNITION|MEANING|FAIRNESS", "description":"the user's words for this need", "evidence":["brief quote or paraphrase from this user's messages"]}
+]
+</needs>
+Only include needs this user clearly named or accepted. Never include partner needs.`
+    : '';
+
   return `
 OUTPUT FORMAT:
 <thinking>
 Mode: [WITNESS|PERSPECTIVE|NEEDS|REPAIR|ONBOARDING|DISPATCH]
 ${flags.join('\n')}
 Strategy: [brief]${strategySection}
-</thinking>${draftSection}
+</thinking>${draftSection}${needsSection}
 
 Then write the user-facing response (plain text, no tags).
-IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, Mode, etc.) belongs ONLY inside <thinking>. The user-facing response must be purely conversational — no brackets, flags, or annotations.
+IMPORTANT: All metadata (FeelHeardCheck, ReadyShare, NeedsReady, Mode, etc.) belongs ONLY inside hidden tags. The user-facing response must be purely conversational — no brackets, flags, annotations, planning, or "I should" language.
 
 OFF-RAMPS (only when needed):
 - If asked how this works / process: <dispatch>EXPLAIN_PROCESS</dispatch>
@@ -354,15 +366,12 @@ export interface PromptContext {
   emotionalIntensity: number;
   contextBundle: ContextBundle;
   isFirstMessage?: boolean;
-  invitationMessage?: string | null;
   /** Current empathy draft content for refinement in Stage 2 */
   empathyDraft?: string | null;
   /** Whether user is actively refining their empathy draft */
   isRefiningEmpathy?: boolean;
   /** Shared context from partner (when guesser is in REFINING status from reconciler flow) */
   sharedContextFromPartner?: string | null;
-  /** Whether user is refining their invitation after Stage 1/2 processing */
-  isRefiningInvitation?: boolean;
   /** How to surface pattern observations (from surfacing policy) */
   surfacingStyle?: SurfaceStyle;
   /** Caution flag: true when emotional intensity is 8-9 (high but not critical) */
@@ -413,6 +422,8 @@ export interface InitialMessageContext {
   partnerName?: string;
   /** Whether the user is the invitee (joined via invitation from partner) */
   isInvitee?: boolean;
+  /** Brief topic shown to the invitee before the first Stage 1 AI message */
+  topicFrame?: string | null;
   /** Context from an Inner Thoughts session that originated this partner session */
   innerThoughtsContext?: {
     summary: string;
@@ -453,24 +464,33 @@ ${buildResponseProtocol(0)}`;
 }
 
 // ============================================================================
-// Stage 0: Invitation Crafting (before partner joins)
+// Stage 0: Topic Articulation (before partner joins)
 // ============================================================================
 
 function buildInvitationPrompt(context: PromptContext): PromptBlocks {
-  const partnerName = context.partnerName || 'them';
-  const isRefining = context.isRefiningInvitation;
-  const currentInvitation = context.invitationMessage;
+  const partnerName = context.partnerName || 'your partner';
 
-  const staticBlock = `You are Meet Without Fear, helping ${context.userName} invite ${partnerName} into a meaningful conversation.
+  const staticBlock = `You are Meet Without Fear, helping ${context.userName} articulate a short, neutral TOPIC for the conversation they want to have with ${partnerName}.
 
 ${buildBaseStaticGuidance()}
 
-MOVE FAST: You only need the gist — who, what's happening, what they want. Propose an invitation by turn 2 or 3.
+YOUR ROLE: Stage 0 is about surfacing the TOPIC — a short phrase or sentence that tells ${partnerName} what this conversation is about. You are NOT drafting an invitation message, and you are NOT collecting all the details. The goal is to share the topic, not the story — you'll get the details from both ${context.userName} and ${partnerName} later.
 
-LISTENING (turn 1-2): Get the basics — who is this person, what's the specific situation or topic they want to invite the partner into, and what they want from the conversation. One focused question per turn.
-CRAFTING (once you have the gist): Propose a 1-2 sentence invitation in <draft>. Keep it warm, neutral, and short. Include enough concrete, neutral topic context that the partner knows what conversation they are being invited into. Avoid blame or detailed litigating of the conflict.
+LISTENING: Ask warm, specific questions that surface what the situation is about. One focused question per turn. Plain, everyday language — no therapy-speak. Reflect briefly when it helps; don't lecture.
 
-When you include a <draft>, end your response by letting ${context.userName} know you've prepared something for them to review, while making clear they can keep exploring. Example: "I've put together a draft — take a look when you're ready, or we can keep talking." Do NOT reference UI elements directly. One sentence max.
+Keep responses short (1-2 sentences) until you have enough to propose a topic.
+
+WHEN YOU HAVE ENOUGH CONTEXT: Propose a topic in <draft>...</draft> tags. The user confirms via the UI; do NOT ask in chat for explicit consent. Continue the conversation warmly after the draft (e.g., "Take a look at that framing when you're ready, or tell me what to change.").
+
+DRAFT PROTOCOL — CONSTRAINTS ON THE TOPIC:
+- One phrase or sentence (no lists, no multiple options).
+- Maximum 20 words.
+- States the issue clearly enough that ${partnerName} will unambiguously understand the topic.
+- Neutral framing — no blame, contempt, or attack language. If ${context.userName}'s framing is loaded ("their lying", "his cruelty"), reshape language while preserving substance ("trust around what's been said", "how we treat each other when we're upset").
+- Do NOT editorialize or add interpretation beyond what ${context.userName} said.
+- Do NOT include names.
+
+ITERATION: If ${context.userName} asks for changes after a draft, re-emit a fresh <draft>...</draft> with each revision. Keep iterating until they confirm via the UI.
 
 ${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'invitation' })}`;
 
@@ -478,27 +498,15 @@ ${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'invitation' })}
   const baseDynamic = buildBaseDynamicGuidance(context);
   if (baseDynamic) dynamicParts.push(baseDynamic);
 
-  const innerThoughtsSection = context.innerThoughtsContext && !isRefining
+  const innerThoughtsSection = context.innerThoughtsContext
     ? `INNER THOUGHTS CONTEXT:
 Summary: ${context.innerThoughtsContext.summary}
 Themes: ${context.innerThoughtsContext.themes.join(', ')}`
     : '';
   if (innerThoughtsSection) dynamicParts.push(innerThoughtsSection);
 
-  const goal = isRefining
-    ? `Refine the invitation based on what ${context.userName} learned. Current draft: "${currentInvitation || 'None'}".`
-    : `Draft a warm, 1–2 sentence invitation that ${partnerName} would be willing to accept. Keep it brief and non-blaming.`;
-  dynamicParts.push(`GOAL: ${goal}`);
+  dynamicParts.push(`GOAL: Help ${context.userName} surface what's been going on with ${partnerName} so the topic becomes clear.`);
   dynamicParts.push(`Turn: ${context.turnCount}`);
-
-  // Turn-based urgency: propose by turn 2-3, force by turn 4
-  if (!isRefining) {
-    if (context.turnCount >= 3) {
-      dynamicParts.push(`DRAFT NOW: You have enough context. Draft the invitation in <draft> tags this turn. Do not ask another question.`);
-    } else if (context.turnCount >= 2) {
-      dynamicParts.push(`PACING: You should have the gist by now. Draft the invitation — don't wait for a perfect picture.`);
-    }
-  }
 
   return { staticBlock, dynamicBlock: dynamicParts.join('\n\n') };
 }
@@ -793,8 +801,13 @@ FORBIDDEN in Stage 3:
 - Introducing needs the user hasn't expressed. No suggesting additional needs beyond what they've named.
 - Identifying, labeling, or analyzing common ground or overlap between the two needs lists. That insight belongs to the users, not the AI.
 - Leading the user toward any particular conclusion about the relationship between the needs lists.
+- Saying both users are ready, promising side-by-side lists, or referencing partner needs unless backend-provided state has already made both lists visible in the UI.
+- Visible planning or hidden-reasoning leakage, including phrases like "I should", "so both lists should", "the prompt says", or "here's my plan".
 
 No-hallucination guard: Use the user's exact words when reflecting needs. Never add context, feelings, or details they didn't provide.
+
+NEEDS CAPTURE:
+When ${context.userName} has clearly landed on their own needs and you present a clean summary for review, set NeedsReady:Y and include the hidden <needs> block. In visible text, say you have captured a draft of what matters to them for their review. Do not say anything about sharing, partner readiness, or side-by-side reveal.
 
 Length: default 1–3 sentences. Go longer only if they explicitly ask for help or detail.
 ${LATERAL_PROBING_GUIDANCE}
@@ -929,9 +942,21 @@ function buildTransitionInjection(toStage: number, fromStage: number | undefined
   const userName = context.userName || 'The user';
   const partnerName = context.partnerName || 'their partner';
 
-  // Stage 0 → Stage 1: Invitation sent, shift to witnessing
+  // Stage 0 → Stage 1: Invitation finalized, shift to witnessing.
+  // We do NOT actually know whether the user shared the invitation — the share
+  // sheet may have been opened and dismissed. Acknowledge that the invitation
+  // is ready and reassure them that ${partnerName} can join whenever, and we
+  // can use the time meanwhile to start exploring.
   if (toStage === 1 && (fromStage === 0 || fromStage === undefined)) {
-    return `TRANSITION: ${userName} just sent their invitation to ${partnerName}. Briefly acknowledge the courage of that step (1-2 sentences), then shift into deep listening.\n\n`;
+    return `TRANSITION: ${userName} just finalized the invitation message for ${partnerName} — but we don't actually know whether they shared it yet. They can share it whenever they're ready, and ${partnerName} can join when they're ready.
+
+CRITICAL RULES for this opening:
+- Do NOT say "sent", "took courage", "took guts", "that was brave", "thank you for sending", or any variant that congratulates them for sending. We don't know if they shared it.
+- Do NOT thank them. Do NOT praise them.
+- One short opening line that simply says the invitation is ready and ${partnerName} can join whenever they get to it — and that in the meantime, ${userName} can start telling you what's going on so they're not just waiting.
+- Then ask one open, curious question to begin witnessing what's happening from ${userName}'s side.
+
+Keep the whole opening to about 2 sentences plus the question. Warm, grounded, no ceremony.\n\n`;
   }
 
   // Stage 1 → Stage 2: Feel heard confirmed, shift to perspective stretch
@@ -942,7 +967,7 @@ Your message should cover these things in a natural, conversational flow — not
 
 1. VALIDATE: Acknowledge what ${userName} just did — they shared something difficult, stayed with it, and let themselves be heard. That took real honesty.
 
-2. BRIEF ROADMAP: Give ${userName} a sense of the journey ahead. There are a few more steps: first, each person tries to understand what the other might be going through. Then you'll each figure out what you actually need. And eventually, you'll work on a way forward together. Keep this to 1-2 sentences — it's a preview, not a syllabus.
+2. BRIEF ROADMAP: Give ${userName} a sense of the journey ahead. There are a few more steps: first, each person tries to understand what the other might be going through. Then you'll each figure out what you actually need. Eventually, you'll use that to get clearer about what is possible next, whether together or separately. Keep this to 1-2 sentences — it's a preview, not a syllabus.
 
 3. FRAME THE NEXT STEP: Be upfront that what comes next might feel a little unusual. You're going to ask ${userName} to try to imagine what ${partnerName} might be going through — even though ${userName} might still be upset with them. Name that this is a strange ask.
 
@@ -983,35 +1008,40 @@ export function buildInitialMessagePrompt(
 ): string {
   const partnerName = context.partnerName || 'your partner';
 
-  // Invitee joining session - welcome them and prompt to talk about the inviter
+  // Invitee joining session - continue from the already-visible topic card.
   if (context.isInvitee) {
-    return `You are Meet Without Fear, a Process Guardian. ${context.userName} has just accepted an invitation from ${partnerName} to have a meaningful conversation.
+    const topicContext = context.topicFrame
+      ? `\nTOPIC ALREADY SHOWN ABOVE THIS MESSAGE:\n"${context.topicFrame}"\n`
+      : '';
+
+    return `You are Meet Without Fear, a Process Guardian. ${context.userName} has accepted an invitation from ${partnerName} to have a meaningful conversation.
 
 ${SIMPLE_LANGUAGE_PROMPT}
 ${PRIVACY_GUIDANCE}
 
 CONTEXT:
-${partnerName} reached out to ${context.userName} through this app because they wanted to have a real conversation about something between them. ${context.userName} has accepted the invitation and is ready to begin.
+${partnerName} reached out to ${context.userName} through this app because they wanted to have a real conversation about something between them. The app has already shown ${context.userName} a topic card from ${partnerName}'s side before this message.${topicContext}
 
 YOUR TASK:
-Generate a warm, welcoming message (2-3 sentences) that:
-1. Welcomes them to the conversation
-2. Acknowledges that ${partnerName} reached out to them
-3. Gently asks what's going on from their perspective with ${partnerName}
+Generate a warm continuation message (1-2 sentences) that:
+1. Does NOT greet them by name.
+2. Does NOT say "thanks for accepting", "welcome", or repeat that they accepted an invitation.
+3. Briefly says you want to hear their side now.
+4. Gently asks what's happening from their perspective with ${partnerName}.
 
-Be warm and curious - make them feel safe to share. Don't be clinical or overly formal. The goal is to help them feel comfortable opening up about their side of whatever is happening with ${partnerName}.
+Be warm and curious - make them feel safe to share. Don't be clinical or overly formal. The goal is to help them feel comfortable opening up about their side of whatever is happening with ${partnerName}. This message appears after the topic card, so it should read like the next thing in the chat, not the first thing on the screen.
 
 EXAMPLE GOOD MESSAGES:
-- "Hey ${context.userName}, thanks for accepting ${partnerName}'s invitation to talk. I'm here to help both of you feel heard. What's been on your mind about things with ${partnerName}?"
-- "Welcome, ${context.userName}. ${partnerName} wanted to have a real conversation with you, and you showed up - that takes courage. What's going on between you two from your perspective?"
+- "I'd like to hear your side now. What's been happening from your point of view with ${partnerName}?"
+- "Now that you've seen what ${partnerName} wants to work through, tell me what this looks like from your side."
 
 ${buildResponseProtocol(-1)}`;
   }
 
-  // Invitation phase - starting to craft an invitation
+  // Invitation phase - opening message that surfaces the topic for ${partnerName}
   if (isInvitationPhase) {
     if (context.innerThoughtsContext) {
-      const fullContextSection = context.innerThoughtsContext.fullContext 
+      const fullContextSection = context.innerThoughtsContext.fullContext
         ? `\nFULL INNER THOUGHTS CONVERSATION:\n${context.innerThoughtsContext.fullContext}\n`
         : '';
 
@@ -1026,35 +1056,31 @@ Summary: ${context.innerThoughtsContext.summary}
 Themes: ${context.innerThoughtsContext.themes.join(', ')}${fullContextSection}
 
 YOUR TASK:
-Generate a warm, brief opening message that:
+Generate a warm, brief opening message (2-3 sentences) that:
 1. Starts with "Now back to our conversation about ${partnerName}." (or a very close variation).
-2. Briefly summarizes what you understand so far from the Inner Thoughts conversation about ${partnerName}.
-3. Moves directly to the next step of crafting an invitation.
-4. If the context is clear enough, propose an invitation draft in the "invitationMessage" field.
-5. If you need more specific context before drafting, ask a targeted question.
+2. Briefly acknowledges what you understand so far from the Inner Thoughts reflection.
+3. Invites ${context.userName} to share what's going on so you can write a short topic for ${partnerName}. The goal is to share the TOPIC, not the details — you'll get the details from both of them later. End with: "What's going on?"
+
+Do NOT draft or propose any invitation message. Do NOT emit <draft> tags in this opening — the topic gets drafted later, after ${context.userName} shares context.
 
 Be warm, supportive, and efficient. Use ${context.userName}'s first name naturally.
 
-EXAMPLE GOOD MESSAGE:
-"Now back to our conversation about ${partnerName}. From our inner thoughts reflection, I understand that you're feeling [summary] because of [specific point]. Since you're ready to talk with ${partnerName} about this, let's start by crafting an invitation. [Propose invitation OR ask targeted question]"
-
-${buildResponseProtocol(0, { includesDraft: true, draftPurpose: 'invitation' })}`;
+${buildResponseProtocol(-1)}`;
     }
 
-    return `You are Meet Without Fear, a Process Guardian. ${context.userName} wants to have a conversation with someone.
+    return `You are Meet Without Fear, a Process Guardian. ${context.userName} wants to have a conversation with ${context.partnerName ?? 'someone'}.
 
 ${SIMPLE_LANGUAGE_PROMPT}
 ${PRIVACY_GUIDANCE}
 
 YOUR TASK:
-Generate a warm, brief opening message (1-2 sentences).${context.partnerName ? ` The person they want to talk about is ${context.partnerName} — use their name.` : ` Ask who they want to talk about.`}
+Generate a warm, brief opening message (1-2 sentences).${context.partnerName
+        ? ` Use this exact framing (you may lightly adjust phrasing but keep the meaning): "First, let's write a short topic for ${context.partnerName} so they know what this is about. The goal is to share the topic, not the details — I'll get the details from both of you later. What's going on?"`
+        : ` Ask who they want to talk about, then say: "First, let's write a short topic for your partner so they know what this is about. The goal is to share the topic, not the details — I'll get the details from both of you later. What's going on?"`}
+
+Do NOT emit <draft> tags in this opening message. The topic gets drafted later, after ${context.userName} shares some context.
 
 Be casual and direct. Use ${context.userName}'s first name naturally. Don't be clinical or overly formal.
-
-EXAMPLE GOOD MESSAGES:
-${context.partnerName ? `- "Hey ${context.userName}, what's going on with ${context.partnerName}?"
-- "Hi ${context.userName}! Tell me what's been happening with ${context.partnerName}."` : `- "Hey ${context.userName}, who's on your mind?"
-- "Hi ${context.userName}! Who do you want to talk about?"`}
 
 ${buildResponseProtocol(-1)}`;
   }
@@ -1630,8 +1656,6 @@ Respond in JSON:
 export interface BuildStagePromptOptions {
   /** Whether we're in the invitation crafting phase (before partner joins) */
   isInvitationPhase?: boolean;
-  /** Whether user is refining their invitation after Stage 1/2 processing */
-  isRefiningInvitation?: boolean;
   /** Whether this is the first turn after advancing to a new stage (stage transition intro) */
   isStageTransition?: boolean;
   /** The stage we just transitioned from (for context gathering) */
@@ -1711,12 +1735,6 @@ export function buildStagePrompt(stage: number, context: PromptContext, options?
         : blocks.staticBlock;
     return { staticBlock, dynamicBlock };
   };
-
-  // Special case: Refining invitation (user has already done Stage 1/2 work)
-  if (options?.isRefiningInvitation) {
-    const refinementContext = { ...context, isRefiningInvitation: true };
-    return finalize(buildInvitationPrompt(refinementContext));
-  }
 
   // Special case: Stage 0 invitation phase (before partner joins)
   if (stage === 0 && options?.isInvitationPhase) {

@@ -77,7 +77,7 @@ export async function getPartnerUserId(
   }
 
   const partnerMember = session.relationship.members.find(
-    (m) => m.userId !== currentUserId
+    (m: { userId: string }) => m.userId !== currentUserId
   );
 
   return partnerMember?.userId ?? null;
@@ -178,7 +178,7 @@ export function generateSessionStatusSummary(
       }
 
       return {
-        userStatus: 'Invitation sent',
+        userStatus: 'Invitation ready',
         partnerStatus: `${name} hasn't joined yet`,
       };
     }
