@@ -493,6 +493,7 @@ describe('Auth Middleware', () => {
       const next = jest.fn();
       await requireSessionAccess(req as Request, res as Response, next);
       expect(next).toHaveBeenCalledWith(expect.any(NotFoundError));
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ message: 'Session not found' }));
     });
 
     it('throws ForbiddenError when session exists but user has no access', async () => {

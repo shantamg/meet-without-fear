@@ -351,7 +351,7 @@ export async function requireSessionAccess(
       select: { id: true },
     });
     if (!exists) {
-      throw new NotFoundError('Session not found');
+      throw new NotFoundError('Session');
     }
 
     // Fallback: allow access for invitees during the acceptance timing gap.
