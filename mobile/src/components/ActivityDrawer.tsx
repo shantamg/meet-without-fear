@@ -237,7 +237,9 @@ export function ActivityDrawer({
   // -------------------------------------------------------------------------
   // Data
   // -------------------------------------------------------------------------
-  const sharingStatus = useSharingStatus(sessionId);
+  const sharingStatus = useSharingStatus(sessionId, {
+    enabled: visible && isSessionActive,
+  });
   const pendingActionsQuery = usePendingActions(sessionId);
   const pendingActions = pendingActionsQuery.data?.actions ?? [];
   const { mutate: markShareTabViewed } = useMarkShareTabViewed(sessionId);

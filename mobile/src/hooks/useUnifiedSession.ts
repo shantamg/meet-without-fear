@@ -275,15 +275,27 @@ export function useUnifiedSession(
     { enabled: !!sessionId && !accessDenied }
   );
 
-  // Stage 2: Empathy - always fetch to avoid waterfall
-  // API returns null/empty when not in stage 2+, and React Query caches efficiently
-  const disableChildQueries = accessDenied ? { enabled: false as const } : undefined;
-  const { data: empathyDraftData } = useEmpathyDraft(sessionId, disableChildQueries);
-  const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId, disableChildQueries);
+  // Stage-gated queries: only fetch data for the user's current stage to avoid
+  // a network request storm on stage load (especially PERSPECTIVE_STRETCH).
+  // Ably events deliver real-time updates via setQueryData, so pre-fetching
+  // future stages is unnecessary.
+  const isStage2Plus = currentStage >= Stage.PERSPECTIVE_STRETCH;
+  const isStage3Plus = currentStage >= Stage.NEED_MAPPING;
+  const isStage4 = currentStage >= Stage.STRATEGIC_REPAIR;
+
+  // Stage 2: Empathy
+  const { data: empathyDraftData } = useEmpathyDraft(sessionId, {
+    enabled: !!sessionId && !accessDenied && isStage2Plus,
+  });
+  const { data: partnerEmpathyData } = usePartnerEmpathy(sessionId, {
+    enabled: !!sessionId && !accessDenied && isStage2Plus,
+  });
   const partnerEmpathy = partnerEmpathyData?.attempt ?? null;
 
-  // Stage 3: Needs - always fetch to avoid waterfall
-  const { data: needsData } = useNeeds(sessionId, disableChildQueries);
+  // Stage 3: Needs
+  const { data: needsData } = useNeeds(sessionId, {
+    enabled: !!sessionId && !accessDenied && isStage3Plus,
+  });
 
   // Derive needs state for gating the side-by-side reveal query.
   const needsForGating = needsData?.needs ?? [];
@@ -296,14 +308,24 @@ export function useUnifiedSession(
     !accessDenied && (allNeedsConfirmedForGating || myNeedsSharedForGating)
   );
 
-  // Stage 4: Strategies - always fetch to avoid waterfall
-  const { data: strategyData } = useStrategies(sessionId, disableChildQueries);
-  const { data: revealData } = useStrategiesReveal(sessionId, disableChildQueries);
-  const { data: agreementsData } = useAgreements(sessionId, disableChildQueries);
+  // Stage 4: Strategies
+  const { data: strategyData } = useStrategies(sessionId, {
+    enabled: !!sessionId && !accessDenied && isStage4,
+  });
+  const { data: revealData } = useStrategiesReveal(sessionId, {
+    enabled: !!sessionId && !accessDenied && isStage4,
+  });
+  const { data: agreementsData } = useAgreements(sessionId, {
+    enabled: !!sessionId && !accessDenied && isStage4,
+  });
 
-  // Empathy Reconciler Data
-  const { data: empathyStatusData } = useEmpathyStatus(sessionId, disableChildQueries);
-  const { data: shareOfferData } = useShareOffer(sessionId, disableChildQueries);
+  // Empathy Reconciler Data — only active during Stage 2
+  const { data: empathyStatusData } = useEmpathyStatus(sessionId, {
+    enabled: !!sessionId && !accessDenied && isStage2Plus,
+  });
+  const { data: shareOfferData } = useShareOffer(sessionId, {
+    enabled: !!sessionId && !accessDenied && currentStage === Stage.PERSPECTIVE_STRETCH,
+  });
   const { mutate: respondToShareOffer } = useRespondToShareOffer();
 
   // -------------------------------------------------------------------------
