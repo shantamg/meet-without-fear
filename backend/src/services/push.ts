@@ -60,6 +60,10 @@ export const PUSH_MESSAGES: Record<SessionEvent, { title: string; body: string }
     title: 'Needs shared',
     body: 'Your partner shared their identified needs.',
   },
+  'session.strategies_updated': {
+    title: 'Ideas updated',
+    body: 'There are new ideas to review.',
+  },
   'partner.ranking_submitted': {
     title: 'Ranking submitted',
     body: 'Your partner submitted their strategy rankings.',

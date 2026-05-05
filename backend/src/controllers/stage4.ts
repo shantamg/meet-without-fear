@@ -160,6 +160,10 @@ export async function getStrategies(req: Request, res: Response): Promise<void> 
         const gates = p.gatesSatisfied as Record<string, unknown> | null;
         return gates?.readyToRank === true;
       });
+    const myProgress = allProgress.find((p) => p.userId === user.id);
+    const partnerProgress = allProgress.find((p) => p.userId !== user.id);
+    const myGates = myProgress?.gatesSatisfied as Record<string, unknown> | null;
+    const partnerGates = partnerProgress?.gatesSatisfied as Record<string, unknown> | null;
 
     const bothRanked = rankings.length >= 2;
 
@@ -179,6 +183,8 @@ export async function getStrategies(req: Request, res: Response): Promise<void> 
       strategies: shuffled,
       phase,
       aiSuggestionsAvailable: false,
+      myReadyToRank: myGates?.readyToRank === true,
+      partnerReadyToRank: partnerGates?.readyToRank === true,
     });
   } catch (error) {
     logger.error('[getStrategies] Error:', error);
@@ -1010,10 +1016,11 @@ export async function markReady(req: Request, res: Response): Promise<void> {
     }
 
     // Update gate
+    const readyAt = new Date().toISOString();
     const gatesSatisfied = {
       ...(progress?.gatesSatisfied as Record<string, unknown> | null || {}),
       readyToRank: true,
-      readyAt: new Date().toISOString(),
+      readyAt,
     } satisfies Prisma.InputJsonValue;
 
     await prisma.stageProgress.update({
@@ -1045,7 +1052,7 @@ export async function markReady(req: Request, res: Response): Promise<void> {
 
     successResponse(res, {
       ready: true,
-      readyAt: new Date().toISOString(),
+      readyAt,
       partnerReady,
       canStartRanking,
     });

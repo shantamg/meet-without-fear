@@ -329,6 +329,17 @@ describe('Priority 5: Stage 3 (Needs)', () => {
 // ============================================================================
 
 describe('Priority 6: Stage 4 (Strategies)', () => {
+  it('returns strategy-readiness-pending when user is ready and partner is not', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.STRATEGIC_REPAIR,
+      strategyPhase: StrategyPhase.COLLECTING,
+      strategyReadiness: { myReadyToRank: true, partnerReadyToRank: false },
+      overlappingStrategies: { count: 0 },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBe('strategy-readiness-pending');
+  });
+
   it('returns ranking-pending when in REVEALING phase with no overlap', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.STRATEGIC_REPAIR,

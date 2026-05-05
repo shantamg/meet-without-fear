@@ -358,7 +358,7 @@ export function useUnifiedSession(
       }
       // Invalidate strategies cache when AI extracts new strategies (Stage 4)
       if (sessionId && metadata.proposedStrategies && metadata.proposedStrategies.length > 0) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
+        queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
       }
       // Invalidate needs cache when AI captures reviewable needs (Stage 3)
       if (sessionId && metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
@@ -550,6 +550,9 @@ export function useUnifiedSession(
   // Strategy phase
   const strategyPhase = strategyData?.phase ?? StrategyPhase.COLLECTING;
   const strategies = useMemo(() => strategyData?.strategies ?? [], [strategyData?.strategies]);
+  const myReadyToRank =
+    strategyData?.myReadyToRank === true ||
+    (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.readyToRank === true;
   const overlappingStrategies = useMemo(() => revealData?.overlap ?? [], [revealData?.overlap]);
   const agreements = useMemo(() => agreementsData?.agreements ?? [], [agreementsData?.agreements]);
 
@@ -702,7 +705,7 @@ export function useUnifiedSession(
     // Stage 4: Strategic Repair cards
     if (currentStage === Stage.STRATEGIC_REPAIR) {
       // Strategy pool preview (hide after session is resolved)
-      if (strategyPhase === StrategyPhase.COLLECTING && session?.status !== SessionStatus.RESOLVED) {
+      if (strategyPhase === StrategyPhase.COLLECTING && !myReadyToRank && session?.status !== SessionStatus.RESOLVED) {
         cards.push({
           id: 'strategy-pool-preview',
           type: 'strategy-pool-preview',
@@ -766,6 +769,7 @@ export function useUnifiedSession(
     commonGroundComplete,
     strategyPhase,
     strategies,
+    myReadyToRank,
     overlappingStrategies,
     agreements,
     partnerName,

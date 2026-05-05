@@ -39,6 +39,7 @@ import { getMilestoneContext, getSharedContentContext } from '../services/shared
 import { CONTEXT_WINDOW, trimConversationHistory } from '../utils/token-budget';
 import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from '../services/llm-telemetry';
 import { captureProposedNeedsForUser } from '../services/needs';
+import { filterNewStrategiesAgainstExisting } from '../utils/strategy-dedupe';
 
 // ============================================================================
 // Helpers
@@ -2050,25 +2051,39 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       // Deduplicate: check existing strategies to avoid duplicates from re-proposals
       const existingStrategies = await prisma.strategyProposal.findMany({
         where: { sessionId, createdByUserId: user.id },
-        select: { description: true },
+        select: { id: true, description: true },
       });
-      const existingDescriptions = new Set(existingStrategies.map((s) => s.description.toLowerCase()));
 
-      const newStrategies = metadata.proposedStrategies.filter(
-        (desc) => !existingDescriptions.has(desc.toLowerCase())
+      const { newStrategies, supersededIds } = filterNewStrategiesAgainstExisting(
+        existingStrategies,
+        metadata.proposedStrategies
       );
 
       if (newStrategies.length > 0) {
-        await prisma.strategyProposal.createMany({
-          data: newStrategies.map((description) => ({
-            sessionId,
-            createdByUserId: user.id,
-            description,
-            needsAddressed: [],
-            source: 'AI_SUGGESTED' as const,
-          })),
+        await prisma.$transaction(async (tx) => {
+          if (supersededIds.length > 0) {
+            await tx.strategyProposal.deleteMany({
+              where: { id: { in: supersededIds } },
+            });
+          }
+          await tx.strategyProposal.createMany({
+            data: newStrategies.map((description) => ({
+              sessionId,
+              createdByUserId: user.id,
+              description,
+              needsAddressed: [],
+              source: 'AI_SUGGESTED' as const,
+            })),
+          });
         });
         logger.info(`[sendMessageStream:${requestId}] Created ${newStrategies.length} strategy proposals for user ${user.id}`);
+
+        await publishSessionEvent(sessionId, 'session.strategies_updated', {
+          stage: 4,
+          updatedBy: user.id,
+          createdCount: newStrategies.length,
+          removedSupersededCount: supersededIds.length,
+        });
       }
     }
 

@@ -281,6 +281,17 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     showKeepChattingAction: false,
   },
 
+  // Stage 4: User is ready to rank, waiting for partner readiness
+  'strategy-readiness-pending': {
+    showBanner: true,
+    hideInput: true,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
+    bannerText: (p) => `${p} is getting ready to rank the ideas.`,
+  },
+
   // Stage 4: All agreements confirmed by me, waiting for partner
   'agreement-pending': {
     showBanner: true,

@@ -33,6 +33,82 @@ interface CompactGates {
   signedAt?: string;
 }
 
+async function acceptPendingInvitationForE2ESession(
+  sessionId: string,
+  userId: string
+): Promise<boolean> {
+  if (process.env.E2E_AUTH_BYPASS !== 'true' || process.env.NODE_ENV === 'production') {
+    return false;
+  }
+
+  const invitation = await prisma.invitation.findFirst({
+    where: {
+      sessionId,
+      status: 'PENDING',
+      session: {
+        status: 'INVITED',
+        topicFrame: { not: null },
+        topicFrameConfirmedAt: { not: null },
+      },
+      NOT: { invitedById: userId },
+      messageConfirmed: true,
+      expiresAt: { gt: new Date() },
+    },
+    include: {
+      session: { select: { relationshipId: true } },
+    },
+  });
+
+  if (!invitation) {
+    return false;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.relationshipMember.upsert({
+      where: {
+        relationshipId_userId: {
+          relationshipId: invitation.session.relationshipId,
+          userId,
+        },
+      },
+      create: {
+        relationshipId: invitation.session.relationshipId,
+        userId,
+      },
+      update: {},
+    });
+
+    await tx.invitation.update({
+      where: { id: invitation.id },
+      data: { status: 'ACCEPTED', acceptedAt: new Date() },
+    });
+
+    await tx.session.update({
+      where: { id: sessionId },
+      data: { status: 'ACTIVE' },
+    });
+
+    await tx.stageProgress.upsert({
+      where: { sessionId_userId_stage: { sessionId, userId, stage: 0 } },
+      create: { sessionId, userId, stage: 0, status: 'IN_PROGRESS' },
+      update: {},
+    });
+
+    await tx.userVessel.upsert({
+      where: { userId_sessionId: { userId, sessionId } },
+      create: { sessionId, userId },
+      update: {},
+    });
+  });
+
+  logger.info('[getSessionState] E2E auto-accepted pending session invitation', {
+    sessionId,
+    userId,
+    invitationId: invitation.id,
+  });
+  return true;
+}
+
 // ============================================================================
 // Main Controller
 // ============================================================================
@@ -126,6 +202,11 @@ export async function getSessionState(req: Request, res: Response): Promise<void
 
     // Check session exists
     if (!sessionWithRelations) {
+      const acceptedForE2E = await acceptPendingInvitationForE2ESession(sessionId, user.id);
+      if (acceptedForE2E) {
+        await getSessionState(req, res);
+        return;
+      }
       errorResponse(res, ErrorCode.NOT_FOUND, 'Session not found', 404);
       return;
     }

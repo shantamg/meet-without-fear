@@ -38,6 +38,8 @@ export interface GetStrategiesResponse {
   strategies: StrategyDTO[];
   aiSuggestionsAvailable: boolean;
   phase: StrategyPhase;
+  myReadyToRank?: boolean;
+  partnerReadyToRank?: boolean;
 }
 
 export interface ProposeStrategyRequest {
@@ -72,6 +74,7 @@ export interface RequestSuggestionsResponse {
 
 export interface MarkReadyResponse {
   ready: boolean;
+  readyAt?: string;
   partnerReady: boolean;
   canStartRanking: boolean;
 }

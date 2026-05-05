@@ -105,6 +105,10 @@ describe('Stage 4 API', () => {
         status: 'IN_PROGRESS',
         gatesSatisfied: {},
       });
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: mockUser.id, stage: 4, gatesSatisfied: { readyToRank: true } },
+        { userId: mockPartnerId, stage: 4, gatesSatisfied: null },
+      ]);
       // Mock returns only the selected fields (as Prisma would with select clause)
       (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
         {
@@ -132,6 +136,8 @@ describe('Stage 4 API', () => {
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
+            myReadyToRank: true,
+            partnerReadyToRank: false,
             strategies: expect.arrayContaining([
               expect.objectContaining({
                 id: expect.any(String),
