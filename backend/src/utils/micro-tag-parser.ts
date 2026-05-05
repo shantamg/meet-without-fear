@@ -67,7 +67,7 @@ function parseNeedsBlock(rawNeeds: string | null): CapturedNeedInput[] {
       const evidence = Array.isArray(candidate.evidence)
         ? candidate.evidence
             .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-            .map(cleanVisibleAIText)
+            .map((entry) => cleanVisibleAIText(entry))
             .filter(Boolean)
         : [];
 

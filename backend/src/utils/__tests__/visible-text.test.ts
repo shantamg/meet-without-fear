@@ -24,4 +24,9 @@ describe('cleanVisibleAIText', () => {
       'I need room to be scared'
     );
   });
+
+  it('preserves boundary whitespace when cleaning streamed chunks', () => {
+    expect(cleanVisibleAIText(' talk ', { preserveBoundaryWhitespace: true })).toBe(' talk ');
+    expect(cleanVisibleAIText(' ', { preserveBoundaryWhitespace: true })).toBe(' ');
+  });
 });
