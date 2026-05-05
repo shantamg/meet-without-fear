@@ -14,8 +14,14 @@ describe('cleanVisibleAIText', () => {
   });
 
   it('preserves intentional inline quotes and emphasis', () => {
-    expect(cleanVisibleAIText('I said "I need room" and I feel *really* stuck.')).toBe(
-      'I said "I need room" and I feel *really* stuck.'
+    expect(cleanVisibleAIText('I said "I need room" and I feel **really** stuck.')).toBe(
+      'I said "I need room" and I feel **really** stuck.'
+    );
+  });
+
+  it('removes full-string emphasis wrappers', () => {
+    expect(cleanVisibleAIText('**I need room to be scared**')).toBe(
+      'I need room to be scared'
     );
   });
 });

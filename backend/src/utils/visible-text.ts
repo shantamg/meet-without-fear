@@ -23,9 +23,13 @@ export function cleanVisibleAIText(text: string): string {
       })
       .join('\n')
       .replace(/^---+\s*/, '')
-      .replace(/\*\*([^*\n][\s\S]*?[^*\n])\*\*/g, '$1')
-      .replace(/__([^_\n][\s\S]*?[^_\n])__/g, '$1')
       .trim();
+
+    const emphasisMatch = cleaned.match(/^\*\*([\s\S]*?)\*\*$/) ??
+      cleaned.match(/^__([\s\S]*?)__$/);
+    if (emphasisMatch) {
+      cleaned = emphasisMatch[1].trim();
+    }
 
     const quoteMatch = cleaned.match(/^["“”']([\s\S]*?)["“”']$/);
     if (quoteMatch) {

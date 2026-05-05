@@ -112,7 +112,7 @@ const PLANNER_LINE_PREFIXES = [
 
 export function scrubVisibleAIText(text: string): { text: string; scrubbed: boolean } {
   const before = text;
-  const cleaned = cleanVisibleAIText(text
+  const plannerScrubbed = text
     .split(/\r?\n/)
     .filter((line) => {
       const trimmed = line.trim().toLowerCase();
@@ -120,7 +120,8 @@ export function scrubVisibleAIText(text: string): { text: string; scrubbed: bool
     })
     .join('\n')
     .replace(/\bI should\b/gi, '')
-    .replace(/\bso both lists should be available\b/gi, ''));
+    .replace(/\bso both lists should be available\b/gi, '');
+  const cleaned = cleanVisibleAIText(plannerScrubbed);
 
   return { text: cleaned, scrubbed: cleaned !== before };
 }
