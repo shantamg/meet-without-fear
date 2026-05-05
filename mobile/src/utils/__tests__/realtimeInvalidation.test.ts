@@ -2,6 +2,7 @@ import { messageKeys, notificationKeys, sessionKeys, stageKeys } from '../../hoo
 import {
   getStage2RealtimeInvalidationQueryKeys,
   getStage3RealtimeInvalidationQueryKeys,
+  getStage4RealtimeInvalidationQueryKeys,
 } from '../realtimeInvalidation';
 
 describe('realtime invalidation key sets', () => {
@@ -24,6 +25,19 @@ describe('realtime invalidation key sets', () => {
     expect(getStage3RealtimeInvalidationQueryKeys(sessionId)).toEqual([
       stageKeys.needs(sessionId),
       stageKeys.needsComparison(sessionId),
+      stageKeys.progress(sessionId),
+      sessionKeys.state(sessionId),
+      messageKeys.infinite(sessionId),
+      stageKeys.pendingActions(sessionId),
+      notificationKeys.badgeCount(),
+    ]);
+  });
+
+  it('covers Stage 4 strategy, agreement, progress, session, and message caches', () => {
+    expect(getStage4RealtimeInvalidationQueryKeys(sessionId)).toEqual([
+      stageKeys.strategies(sessionId),
+      stageKeys.strategiesReveal(sessionId),
+      stageKeys.agreements(sessionId),
       stageKeys.progress(sessionId),
       sessionKeys.state(sessionId),
       messageKeys.infinite(sessionId),

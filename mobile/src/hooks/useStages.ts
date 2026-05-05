@@ -1765,7 +1765,11 @@ export function useSubmitRankings(
     UseMutationOptions<
       SubmitRankingResponse,
       ApiClientError,
-      { sessionId: string; rankedIds: string[] }
+      { sessionId: string; rankedIds: string[] },
+      {
+        previousStrategies: GetStrategiesResponse | undefined;
+        previousProgress: ProgressCacheWithGates | undefined;
+      }
     >,
     'mutationFn'
   >
@@ -1778,12 +1782,65 @@ export function useSubmitRankings(
         rankedIds,
       });
     },
-    onSuccess: (_, { sessionId }) => {
-      queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
-      queryClient.invalidateQueries({
-        queryKey: stageKeys.strategiesReveal(sessionId),
-      });
-      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+    onMutate: async ({ sessionId }) => {
+      await queryClient.cancelQueries({ queryKey: stageKeys.strategies(sessionId) });
+      await queryClient.cancelQueries({ queryKey: stageKeys.progress(sessionId) });
+
+      const previousStrategies = queryClient.getQueryData<GetStrategiesResponse>(
+        stageKeys.strategies(sessionId)
+      );
+      const previousProgress = queryClient.getQueryData<ProgressCacheWithGates>(
+        stageKeys.progress(sessionId)
+      );
+      const submittedAt = new Date().toISOString();
+
+      queryClient.setQueryData<GetStrategiesResponse>(
+        stageKeys.strategies(sessionId),
+        (old) => old
+          ? { ...old, phase: StrategyPhase.REVEALING }
+          : old
+      );
+      queryClient.setQueryData<ProgressCacheWithGates>(
+        stageKeys.progress(sessionId),
+        (old) => old
+          ? {
+              ...old,
+              myProgress: {
+                ...old.myProgress,
+                gatesSatisfied: {
+                  ...(old.myProgress.gatesSatisfied ?? {}),
+                  rankingSubmitted: true,
+                  rankingSubmittedAt: submittedAt,
+                },
+              },
+            }
+          : old
+      );
+
+      return { previousStrategies, previousProgress };
+    },
+    onSuccess: (data, { sessionId }) => {
+      const canReveal =
+        (data as SubmitRankingResponse & { canReveal?: boolean }).canReveal ??
+        (data as SubmitRankingResponse & { awaitingReveal?: boolean }).awaitingReveal ??
+        false;
+      queryClient.setQueryData<GetStrategiesResponse>(
+        stageKeys.strategies(sessionId),
+        (old) => old
+          ? { ...old, phase: canReveal ? StrategyPhase.REVEALING : old.phase }
+          : old
+      );
+      queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
+      queryClient.refetchQueries({ queryKey: stageKeys.strategiesReveal(sessionId) });
+      queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
+    },
+    onError: (_error, { sessionId }, context) => {
+      if (context?.previousStrategies) {
+        queryClient.setQueryData(stageKeys.strategies(sessionId), context.previousStrategies);
+      }
+      if (context?.previousProgress) {
+        queryClient.setQueryData(stageKeys.progress(sessionId), context.previousProgress);
+      }
     },
     ...options,
   });
@@ -1806,7 +1863,7 @@ export function useStrategiesReveal(
       return get<RevealOverlapResponse>(`/sessions/${sessionId}/strategies/overlap`);
     },
     enabled: !!sessionId,
-    staleTime: 30_000,
+    staleTime: 0,
     ...options,
   });
 }
@@ -1832,7 +1889,7 @@ export function useAgreements(
       return get<{ agreements: AgreementDTO[] }>(`/sessions/${sessionId}/agreements`);
     },
     enabled: !!sessionId,
-    staleTime: 30_000,
+    staleTime: 0,
     ...options,
   });
 }
@@ -1859,8 +1916,23 @@ export function useCreateAgreement(
         request
       );
     },
-    onSuccess: (_, { sessionId }) => {
-      queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData<{ agreements: AgreementDTO[] }>(
+        stageKeys.agreements(sessionId),
+        (old) => {
+          const existing = old?.agreements ?? [];
+          const withoutDuplicate = existing.filter((a) => a.id !== data.agreement.id);
+          return { agreements: [...withoutDuplicate, data.agreement] };
+        }
+      );
+      queryClient.setQueryData<GetStrategiesResponse>(
+        stageKeys.strategies(sessionId),
+        (old) => old
+          ? { ...old, phase: StrategyPhase.NEGOTIATING }
+          : old
+      );
+      queryClient.refetchQueries({ queryKey: stageKeys.agreements(sessionId) });
+      queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
     },
     ...options,
   });

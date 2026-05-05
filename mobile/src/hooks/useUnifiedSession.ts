@@ -719,7 +719,7 @@ export function useUnifiedSession(
       }
 
       // Overlap preview after ranking (hide after session is resolved)
-      if (strategyPhase === StrategyPhase.REVEALING && overlappingStrategies.length > 0 && session?.status !== SessionStatus.RESOLVED) {
+      if (strategyPhase === StrategyPhase.REVEALING && overlappingStrategies.length > 0 && agreements.length === 0 && session?.status !== SessionStatus.RESOLVED) {
         cards.push({
           id: 'overlap-preview',
           type: 'overlap-preview',

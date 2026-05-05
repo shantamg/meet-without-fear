@@ -166,9 +166,12 @@ export async function getStrategies(req: Request, res: Response): Promise<void> 
     const partnerGates = partnerProgress?.gatesSatisfied as Record<string, unknown> | null;
 
     const bothRanked = rankings.length >= 2;
+    const myRanked = rankings.some((r) => r.userId === user.id);
 
     let phase: StrategyPhase;
     if (bothRanked) {
+      phase = StrategyPhase.REVEALING;
+    } else if (myRanked) {
       phase = StrategyPhase.REVEALING;
     } else if (allReadyToRank) {
       phase = StrategyPhase.RANKING;
@@ -411,6 +414,11 @@ export async function submitRanking(req: Request, res: Response): Promise<void> 
     }
 
     successResponse(res, {
+      submitted: true,
+      submittedAt: new Date().toISOString(),
+      partnerSubmitted: partnerRanked,
+      awaitingReveal: canReveal,
+      // Legacy aliases kept for older clients.
       ranked: true,
       rankedAt: new Date().toISOString(),
       partnerRanked,
@@ -684,7 +692,12 @@ export async function createAgreement(req: Request, res: Response): Promise<void
           id: agreement.id,
           description: agreement.description,
           type: agreement.type,
+          duration: null,
+          measureOfSuccess: null,
           status: agreement.status,
+          agreedByMe: true,
+          agreedByPartner: false,
+          agreedAt: agreement.agreedAt?.toISOString() ?? null,
           followUpDate: agreement.followUpDate?.toISOString() ?? null,
         },
         awaitingPartnerConfirmation: true,
