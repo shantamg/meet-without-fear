@@ -250,16 +250,22 @@ function InviteeTopicIntroCard({
 
 function NeedsIdentifiedChatCard({
   needs,
-  confirmed,
+  status,
   onReview,
 }: {
   needs: Array<{ id: string; need: string; category: string }>;
-  confirmed: boolean;
+  status: 'ready' | 'confirmed' | 'shared';
   onReview: () => void;
 }) {
   const styles = useStyles();
   const visibleNeeds = needs.slice(0, 3);
   const extraCount = Math.max(0, needs.length - visibleNeeds.length);
+  const statusLabel = status === 'shared'
+    ? 'Shared'
+    : status === 'confirmed'
+      ? 'Confirmed'
+      : 'Ready to review';
+  const actionLabel = status === 'ready' ? 'Review and confirm' : 'Open review';
 
   return (
     <TouchableOpacity
@@ -270,9 +276,7 @@ function NeedsIdentifiedChatCard({
     >
       <View style={styles.needsSummaryHeader}>
         <Text style={styles.needsSummaryEyebrow}>WHAT MATTERS</Text>
-        <Text style={styles.needsSummaryStatus}>
-          {confirmed ? 'Confirmed' : 'Ready to review'}
-        </Text>
+        <Text style={styles.needsSummaryStatus}>{statusLabel}</Text>
       </View>
       <Text style={styles.needsSummaryTitle}>Your needs so far</Text>
       <View style={styles.needsSummaryList}>
@@ -286,9 +290,7 @@ function NeedsIdentifiedChatCard({
           <Text style={styles.needsSummaryMore}>+{extraCount} more</Text>
         ) : null}
       </View>
-      <Text style={styles.needsSummaryAction}>
-        {confirmed ? 'Open review' : 'Review and confirm'}
-      </Text>
+      <Text style={styles.needsSummaryAction}>{actionLabel}</Text>
     </TouchableOpacity>
   );
 }
@@ -467,6 +469,25 @@ export function UnifiedSessionScreen({
       queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
     }
   }, [queryClient, sessionId]);
+
+  useEffect(() => {
+    const latestMessage = messages[messages.length - 1];
+    if (
+      !latestMessage ||
+      latestMessage.role !== MessageRole.USER ||
+      isSending ||
+      session?.status === SessionStatus.RESOLVED
+    ) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+      queryClient.refetchQueries({ queryKey: messageKeys.list(sessionId) });
+    }, 2500);
+
+    return () => clearTimeout(timeout);
+  }, [messages, isSending, queryClient, sessionId, session?.status]);
 
   // User-level events (memory suggestions are now sent to specific user, not session)
   useUserSessionUpdates({
@@ -1745,7 +1766,7 @@ export function UnifiedSessionScreen({
         case 'overlap-preview':
           return (
             <View style={styles.inlineCard} key={card.id}>
-              <Text style={styles.cardTitle}>You Both Chose</Text>
+              <Text style={styles.cardTitle}>Possible Shared Step</Text>
               <Text style={styles.overlapDescription}>
                 {(card.props.topOverlap as { description: string })?.description}
               </Text>
@@ -1963,7 +1984,13 @@ export function UnifiedSessionScreen({
   const needsReviewCards = useMemo((): ChatCustomCardItem[] => {
     if (currentStage !== Stage.NEED_MAPPING) return [];
     if (!needsData?.synthesizedAt || !needs || needs.length === 0) return [];
-    if ((myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true) return [];
+    const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
+    let needsStatus: 'ready' | 'confirmed' | 'shared' = 'ready';
+    if (gates?.needsShared === true) {
+      needsStatus = 'shared';
+    } else if (allNeedsConfirmed) {
+      needsStatus = 'confirmed';
+    }
 
     return [{
       type: 'custom-card',
@@ -1977,7 +2004,7 @@ export function UnifiedSessionScreen({
             need: need.need,
             category: String(need.category),
           }))}
-          confirmed={allNeedsConfirmed}
+          status={needsStatus}
           onReview={() => {
             setNeedsDrawerMode('needs');
             setShowNeedsDrawer(true);
@@ -2610,7 +2637,7 @@ export function UnifiedSessionScreen({
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
           onBackPress={onNavigateBack}
-          stageName="Resolved"
+          stageName="Closed"
           testID="session-chat-header"
         />
         <SessionCompletionScreen

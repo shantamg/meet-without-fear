@@ -60,7 +60,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: true,
-    bannerText: (p) => `${p} is still reflecting.`,
+    bannerText: (p) => `${p} is still sharing their side.`,
   },
 
   // Stage 2: Waiting for partner to share their empathy perspective

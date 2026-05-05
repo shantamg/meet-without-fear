@@ -56,7 +56,7 @@ export function SessionCompletionScreen({
         <Text style={styles.icon}>🤝</Text>
         <Text style={styles.headline}>A Path Forward</Text>
         <Text style={styles.subheading}>
-          You and {partnerName} reached an agreement together
+          You and {partnerName} identified a limited next step. This does not have to mean everything is resolved.
         </Text>
       </View>
 
@@ -64,7 +64,7 @@ export function SessionCompletionScreen({
       {agreements.length > 0 && (
         <View style={styles.agreementsSection}>
           <Text style={styles.sectionTitle}>
-            {agreements.length === 1 ? 'Your Agreement' : 'Your Agreements'}
+            {agreements.length === 1 ? 'Your Next Step' : 'Your Next Steps'}
           </Text>
           {agreements.map((agreement) => (
             <AgreementSummaryCard

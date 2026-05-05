@@ -1,7 +1,7 @@
 /**
  * OverlapReveal Component Tests
  *
- * Tests for the overlap reveal component that shows shared priorities.
+ * Tests for the overlap reveal component that shows possible shared steps.
  */
 
 import React from 'react';
@@ -58,10 +58,10 @@ describe('OverlapReveal', () => {
       />
     );
 
-    expect(screen.getByText(/you both chose/i)).toBeTruthy();
+    expect(screen.getByText(/both marked worth discussing/i)).toBeTruthy();
   });
 
-  it('shows shared priorities header', () => {
+  it('shows possible shared steps header', () => {
     render(
       <OverlapReveal
         overlapping={overlappingStrategies}
@@ -70,7 +70,7 @@ describe('OverlapReveal', () => {
       />
     );
 
-    expect(screen.getByText(/shared priorities/i)).toBeTruthy();
+    expect(screen.getByText(/possible shared steps/i)).toBeTruthy();
   });
 
   it('renders overlapping strategies', () => {
@@ -99,7 +99,7 @@ describe('OverlapReveal', () => {
       />
     );
 
-    expect(screen.getByText(/only one of you chose/i)).toBeTruthy();
+    expect(screen.getByText(/different preferences/i)).toBeTruthy();
     expect(
       screen.getByText('Practice active listening exercises')
     ).toBeTruthy();
@@ -118,10 +118,10 @@ describe('OverlapReveal', () => {
     );
 
     expect(screen.getByText(/no direct overlap/i)).toBeTruthy();
-    expect(screen.getByText(/that is okay/i)).toBeTruthy();
+    expect(screen.getByText(/no shared next step/i)).toBeTruthy();
   });
 
-  it('shows positive messaging for common ground', () => {
+  it('frames overlap as worth discussing rather than an agreement', () => {
     render(
       <OverlapReveal
         overlapping={overlappingStrategies}
@@ -130,7 +130,7 @@ describe('OverlapReveal', () => {
       />
     );
 
-    expect(screen.getByText(/common ground found/i)).toBeTruthy();
+    expect(screen.getAllByText(/worth discussing/i).length).toBeGreaterThan(0);
   });
 
   it('does not show unique section when no unique choices', () => {
@@ -142,6 +142,6 @@ describe('OverlapReveal', () => {
       />
     );
 
-    expect(screen.queryByText(/only one of you chose/i)).toBeNull();
+    expect(screen.queryByText(/different preferences/i)).toBeNull();
   });
 });
