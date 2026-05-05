@@ -50,8 +50,13 @@ export interface ProposeStrategyRequest {
 }
 
 export interface ProposeStrategyResponse {
-  strategy: StrategyDTO;
-  totalStrategies: number;
+  strategy: {
+    id: string;
+    description: string;
+    duration: string | null;
+    measureOfSuccess: string | null;
+  };
+  createdAt: string;
 }
 
 // ============================================================================
