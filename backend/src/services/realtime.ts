@@ -38,6 +38,7 @@ export type SessionEvent = Extract<
   | 'partner.needs_shared'
   | 'partner.needs_validated'
   | 'session.needs_reveal_ready'
+  | 'session.strategies_updated'
   | 'partner.ranking_submitted'
   | 'partner.ready_to_rank'
   | 'partner.consent_granted'

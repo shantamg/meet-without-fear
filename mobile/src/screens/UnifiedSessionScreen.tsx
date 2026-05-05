@@ -371,6 +371,7 @@ export function UnifiedSessionScreen({
     commonGround,
     commonGroundData,
     commonGroundComplete,
+    strategyData,
     strategyPhase,
     strategies,
     revealData,
@@ -803,19 +804,41 @@ export function UnifiedSessionScreen({
       // Stage 4: Strategic Repair Events
       // -----------------------------------------------------------------------
 
+      if (eventName === 'session.strategies_updated') {
+        console.log('[UnifiedSessionScreen] Strategies updated');
+        queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
+      }
+
       if (eventName === 'partner.ranking_submitted') {
         // Partner submitted their strategy rankings
         console.log('[UnifiedSessionScreen] Partner submitted rankings');
-        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.strategiesReveal(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
+        queryClient.refetchQueries({ queryKey: stageKeys.strategiesReveal(sessionId) });
+        queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
-      if (eventName === 'partner.marked_ready') {
+      if (eventName === 'partner.ready_to_rank' || eventName === 'partner.marked_ready') {
         // Partner marked ready to rank
         console.log('[UnifiedSessionScreen] Partner marked ready to rank');
-        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.setQueryData(stageKeys.strategies(sessionId), (old: any) => old
+          ? { ...old, partnerReadyToRank: true }
+          : old
+        );
+        queryClient.setQueryData(stageKeys.progress(sessionId), (old: any) => {
+          if (!old?.partnerProgress) return old;
+          return {
+            ...old,
+            partnerProgress: {
+              ...old.partnerProgress,
+              gatesSatisfied: {
+                ...(old.partnerProgress.gatesSatisfied ?? {}),
+                readyToRank: true,
+              },
+            },
+          };
+        });
+        queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
+        queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
       }
 
       if (eventName === 'agreement.proposed') {
@@ -1235,6 +1258,12 @@ export function UnifiedSessionScreen({
     commonGroundAllConfirmedByBoth: commonGroundComplete,
     hasConfirmedCommonGroundLocal: completedActions.has('validated-needs'),
     strategyPhase,
+    strategyReadiness: {
+      myReadyToRank: strategyData?.myReadyToRank === true ||
+        (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.readyToRank === true,
+      partnerReadyToRank: strategyData?.partnerReadyToRank === true ||
+        ((partnerProgress as { gatesSatisfied?: Record<string, unknown> } | undefined)?.gatesSatisfied)?.readyToRank === true,
+    },
     overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
     agreements: agreements?.map(a => ({
       agreedByMe: a.agreedByMe,

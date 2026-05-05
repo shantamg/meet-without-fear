@@ -27,6 +27,7 @@ export type WaitingStatusState =
   | 'common-ground-pending' // Stage 3: Waiting for partner to confirm common ground
   | 'partner-validating-needs' // Stage 3: User validated revealed needs, waiting for partner
   | 'ranking-pending' // Stage 4: Waiting for partner to submit ranking
+  | 'strategy-readiness-pending' // Stage 4: User is ready to rank, waiting for partner readiness
   | 'partner-signed' // Partner has signed compact (transient)
   | 'partner-completed-witness' // Partner completed witness stage (transient)
   | 'partner-shared-empathy' // Partner shared their empathy attempt (transient)
@@ -96,6 +97,10 @@ export interface WaitingStatusInputs {
 
   // Stage 4: Strategy phase and overlap
   strategyPhase: StrategyPhase | string;
+  strategyReadiness?: {
+    myReadyToRank?: boolean;
+    partnerReadyToRank?: boolean;
+  };
   overlappingStrategies: {
     count: number;
   };
@@ -136,6 +141,7 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     needs,
     commonGround,
     strategyPhase,
+    strategyReadiness,
     overlappingStrategies,
   } = inputs;
 
@@ -285,6 +291,15 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
   }
 
   // --- Priority 6: Stage 4 (Strategies) ---
+
+  if (
+    myStage === Stage.STRATEGIC_REPAIR &&
+    strategyPhase === StrategyPhase.COLLECTING &&
+    strategyReadiness?.myReadyToRank &&
+    !strategyReadiness?.partnerReadyToRank
+  ) {
+    return 'strategy-readiness-pending';
+  }
 
   if (strategyPhase === StrategyPhase.REVEALING && overlappingStrategies.count === 0) {
     return 'ranking-pending';

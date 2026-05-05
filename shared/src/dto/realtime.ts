@@ -96,6 +96,7 @@ export type SessionEventType =
   | 'session.common_ground_ready' // Legacy alias for side-by-side needs reveal readiness
   | 'partner.common_ground_confirmed' // Legacy alias for needs validation
   // Stage 4: Strategic Repair events
+  | 'session.strategies_updated'
   | 'partner.ranking_submitted'
   | 'partner.ready_to_rank'
   | 'partner.consent_granted'

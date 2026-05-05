@@ -119,6 +119,10 @@ export interface UseChatUIStateProps {
 
   // Stage 4: Strategies
   strategyPhase: StrategyPhase | string;
+  strategyReadiness?: {
+    myReadyToRank?: boolean;
+    partnerReadyToRank?: boolean;
+  };
   overlappingStrategiesCount: number;
 
   // Stage 4: Agreements
@@ -214,6 +218,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     commonGroundAllConfirmedByBoth,
     hasConfirmedCommonGroundLocal,
     strategyPhase,
+    strategyReadiness,
     overlappingStrategiesCount,
     agreements,
   } = props;
@@ -249,6 +254,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
       allConfirmedByBoth: commonGroundAllConfirmedByBoth,
     },
     strategyPhase,
+    strategyReadiness,
     overlappingStrategies: { count: overlappingStrategiesCount },
     agreements,
 
@@ -314,6 +320,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     commonGroundAllConfirmedByBoth,
     hasConfirmedCommonGroundLocal,
     strategyPhase,
+    strategyReadiness,
     overlappingStrategiesCount,
     agreements,
     sessionStatus,

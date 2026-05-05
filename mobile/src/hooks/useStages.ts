@@ -67,6 +67,7 @@ import {
   SaveValidationFeedbackDraftResponse,
   RefineValidationFeedbackRequest,
   RefineValidationFeedbackResponse,
+  StrategyPhase,
 } from '@meet-without-fear/shared';
 
 // Import query keys from centralized file to avoid circular dependencies
@@ -1654,7 +1655,15 @@ export function useRequestStrategySuggestions(
  */
 export function useMarkReadyToRank(
   options?: Omit<
-    UseMutationOptions<MarkReadyResponse, ApiClientError, { sessionId: string }>,
+    UseMutationOptions<
+      MarkReadyResponse,
+      ApiClientError,
+      { sessionId: string },
+      {
+        previousStrategies: GetStrategiesResponse | undefined;
+        previousProgress: GetProgressResponse | undefined;
+      }
+    >,
     'mutationFn'
   >
 ) {
@@ -1664,9 +1673,79 @@ export function useMarkReadyToRank(
     mutationFn: async ({ sessionId }) => {
       return post<MarkReadyResponse>(`/sessions/${sessionId}/strategies/ready`);
     },
-    onSuccess: (_, { sessionId }) => {
-      queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
-      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+    onMutate: async ({ sessionId }) => {
+      await queryClient.cancelQueries({ queryKey: stageKeys.strategies(sessionId) });
+      await queryClient.cancelQueries({ queryKey: stageKeys.progress(sessionId) });
+
+      const previousStrategies = queryClient.getQueryData<GetStrategiesResponse>(
+        stageKeys.strategies(sessionId)
+      );
+      const previousProgress = queryClient.getQueryData<GetProgressResponse>(
+        stageKeys.progress(sessionId)
+      );
+      const readyAt = new Date().toISOString();
+
+      queryClient.setQueryData<GetStrategiesResponse>(
+        stageKeys.strategies(sessionId),
+        (old) => old
+          ? { ...old, myReadyToRank: true }
+          : old
+      );
+      queryClient.setQueryData<any>(
+        stageKeys.progress(sessionId),
+        (old: any) => old
+          ? {
+              ...old,
+              myProgress: {
+                ...old.myProgress,
+                gatesSatisfied: {
+                  ...((old.myProgress as { gatesSatisfied?: Record<string, unknown> }).gatesSatisfied ?? {}),
+                  readyToRank: true,
+                  readyAt,
+                },
+              },
+            }
+          : old
+      );
+
+      return { previousStrategies, previousProgress };
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData<GetStrategiesResponse>(
+        stageKeys.strategies(sessionId),
+        (old) => old
+          ? {
+              ...old,
+              myReadyToRank: true,
+              partnerReadyToRank: data.partnerReady,
+              phase: data.canStartRanking ? StrategyPhase.RANKING : old.phase,
+            }
+          : old
+      );
+      queryClient.setQueryData<any>(
+        stageKeys.progress(sessionId),
+        (old: any) => old
+          ? {
+              ...old,
+              myProgress: {
+                ...old.myProgress,
+                gatesSatisfied: {
+                  ...((old.myProgress as { gatesSatisfied?: Record<string, unknown> }).gatesSatisfied ?? {}),
+                  readyToRank: true,
+                  readyAt: data.readyAt ?? new Date().toISOString(),
+                },
+              },
+            }
+          : old
+      );
+    },
+    onError: (_error, { sessionId }, context) => {
+      if (context?.previousStrategies) {
+        queryClient.setQueryData(stageKeys.strategies(sessionId), context.previousStrategies);
+      }
+      if (context?.previousProgress) {
+        queryClient.setQueryData(stageKeys.progress(sessionId), context.previousProgress);
+      }
     },
     ...options,
   });

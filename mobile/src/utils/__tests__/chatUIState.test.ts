@@ -67,6 +67,22 @@ describe('Onboarding State (isInOnboardingUnsigned)', () => {
   });
 });
 
+describe('Stage 4 Strategy Readiness', () => {
+  it('hides input while the user is ready to rank and waiting for partner', () => {
+    const inputs = createInputs({
+      myStage: Stage.STRATEGIC_REPAIR,
+      myProgress: { stage: Stage.STRATEGIC_REPAIR },
+      strategyPhase: 'COLLECTING',
+      strategyReadiness: { myReadyToRank: true, partnerReadyToRank: false },
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.waitingStatus).toBe('strategy-readiness-pending');
+    expect(result.shouldHideInput).toBe(true);
+    expect(result.panels.showWaitingBanner).toBe(true);
+  });
+});
+
 // ============================================================================
 // Panel Priority Tests
 // ============================================================================

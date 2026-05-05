@@ -24,6 +24,7 @@ import {
   useConsentShareNeeds,
   useStrategies,
   useProposeStrategy,
+  useMarkReadyToRank,
   useSubmitRankings,
   useStrategiesReveal,
   useAgreements,
@@ -640,6 +641,55 @@ describe('useStages', () => {
     });
 
     describe('useSubmitRankings hook', () => {
+      it('optimistically marks current user ready to rank in cache', async () => {
+        mockPost.mockResolvedValueOnce({
+          ready: true,
+          readyAt: '2026-05-05T00:00:00.000Z',
+          partnerReady: false,
+          canStartRanking: false,
+        });
+
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        queryClient.setQueryData(stageKeys.strategies(sessionId), {
+          strategies: [],
+          phase: StrategyPhase.COLLECTING,
+          aiSuggestionsAvailable: false,
+          myReadyToRank: false,
+          partnerReadyToRank: false,
+        });
+        queryClient.setQueryData(stageKeys.progress(sessionId), {
+          sessionId,
+          myProgress: {
+            stage: Stage.STRATEGIC_REPAIR,
+            status: StageStatus.IN_PROGRESS,
+            startedAt: '2026-05-05T00:00:00.000Z',
+            completedAt: null,
+            gatesSatisfied: null,
+          },
+          partnerProgress: {
+            stage: Stage.STRATEGIC_REPAIR,
+            status: StageStatus.IN_PROGRESS,
+            gatesSatisfied: null,
+          },
+          canAdvance: false,
+        });
+        const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+          return React.createElement(QueryClientProvider, { client: queryClient }, children);
+        };
+
+        const { result } = renderHook(() => useMarkReadyToRank(), { wrapper });
+
+        await act(async () => {
+          await result.current.mutateAsync({ sessionId });
+        });
+
+        expect(mockPost).toHaveBeenCalledWith(`/sessions/${sessionId}/strategies/ready`);
+        expect(queryClient.getQueryData<any>(stageKeys.strategies(sessionId))?.myReadyToRank).toBe(true);
+        expect(
+          queryClient.getQueryData<any>(stageKeys.progress(sessionId))?.myProgress.gatesSatisfied.readyToRank
+        ).toBe(true);
+      });
+
       it('submits strategy rankings', async () => {
         mockPost.mockResolvedValueOnce({
           submitted: true,

@@ -118,6 +118,12 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   commonGroundAllConfirmedByMe: boolean;
   commonGroundAllConfirmedByBoth: boolean;
   hasConfirmedCommonGroundLocal: boolean;
+
+  // Stage 4: Strategy readiness
+  strategyReadiness?: {
+    myReadyToRank?: boolean;
+    partnerReadyToRank?: boolean;
+  };
 }
 
 /**
@@ -714,6 +720,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     needs: { allConfirmed: false },
     commonGround: { count: 0 },
     strategyPhase: 'COLLECTING',
+    strategyReadiness: undefined,
     overlappingStrategies: { count: 0 },
     agreements: undefined,
 
