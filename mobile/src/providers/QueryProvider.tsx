@@ -50,6 +50,15 @@ function trackNetworkError(error: unknown): void {
   }
 }
 
+function shouldRetryApiError(failureCount: number, error: unknown, maxRetries: number): boolean {
+  if (error instanceof ApiClientError) {
+    if (error.status === 401 || error.status === 403 || error.status === 404) {
+      return false;
+    }
+  }
+  return failureCount < maxRetries;
+}
+
 function createQueryClient(): QueryClient {
   return new QueryClient({
     queryCache: new QueryCache({
@@ -66,8 +75,9 @@ function createQueryClient(): QueryClient {
         // Cache data for 5 minutes
         gcTime: 5 * 60_000,
 
-        // Retry failed requests up to 3 times
-        retry: 3,
+        // Retry failed requests up to 3 times, but never on 401/403/404 —
+        // those are terminal client errors and retrying just floods Sentry.
+        retry: (failureCount, error) => shouldRetryApiError(failureCount, error, 3),
 
         // Exponential backoff for retries
         retryDelay: (attemptIndex) =>
@@ -86,8 +96,8 @@ function createQueryClient(): QueryClient {
         networkMode: 'offlineFirst',
       },
       mutations: {
-        // Retry failed mutations once
-        retry: 1,
+        // Retry failed mutations once, but never on terminal client errors.
+        retry: (failureCount, error) => shouldRetryApiError(failureCount, error, 1),
 
         // Network mode for mutations
         networkMode: 'offlineFirst',
