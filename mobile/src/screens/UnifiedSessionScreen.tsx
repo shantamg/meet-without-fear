@@ -378,7 +378,9 @@ export function UnifiedSessionScreen({
     overlappingStrategies,
     agreements,
     isGenerating,
+    isSavingEmpathyDraft,
     isSharingEmpathy,
+    isResubmittingEmpathy,
     isConfirmingNeeds,
 
     // Memory suggestion
@@ -2737,8 +2739,16 @@ export function UnifiedSessionScreen({
           // Cache-First: Ghost dots are derived from last message role in ChatInterface
           // isSending is still needed for brief moment during API call before optimistic message appears
           // isFetchingInitialMessage shows dots while fetching first AI message
-          // isConfirmingFeelHeard, isSharingEmpathy, and isConfirmingInvitation show dots during those API calls
-          isLoading={isFetchingInitialMessage || isConfirmingFeelHeard || isSharingEmpathy || isConfirmingInvitation}
+          // Button-only actions do not add a USER message, so pass their pending state
+          // explicitly to keep ghost dots visible until the AI follow-up is inserted.
+          isLoading={
+            isFetchingInitialMessage ||
+            isConfirmingFeelHeard ||
+            isSavingEmpathyDraft ||
+            isSharingEmpathy ||
+            isResubmittingEmpathy ||
+            isConfirmingInvitation
+          }
           // isInputDisabled prevents sending while API call is in progress
           isInputDisabled={isSending}
           showEmotionSlider={!isInOnboardingUnsigned}

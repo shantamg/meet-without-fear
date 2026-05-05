@@ -314,7 +314,7 @@ export function useUnifiedSession(
   const { mutate: signCompact, isPending: isSigningCompact } = useSignCompact();
   const { mutate: confirmInvitationMessage, isPending: isConfirmingInvitation } = useConfirmInvitationMessage();
   const { mutate: advanceStage } = useAdvanceStage();
-  const { mutate: saveDraft, mutateAsync: saveDraftAsync } = useSaveEmpathyDraft();
+  const { mutate: saveDraft, mutateAsync: saveDraftAsync, isPending: isSavingEmpathyDraft } = useSaveEmpathyDraft();
   const { mutate: consentToShare, isPending: isSharingEmpathy } = useConsentToShareEmpathy({
     onError: (error) => {
       console.error('[useConsentToShareEmpathy] Mutation error', error);
@@ -324,7 +324,7 @@ export function useUnifiedSession(
     },
   });
   const { mutate: validateEmpathy } = useValidateEmpathy();
-  const { mutate: resubmitEmpathy } = useResubmitEmpathy();
+  const { mutate: resubmitEmpathy, isPending: isResubmittingEmpathy } = useResubmitEmpathy();
   const { mutate: skipRefinement } = useSkipRefinement();
   const { mutate: confirmNeeds, isPending: isConfirmingNeeds } = useConfirmNeeds();
   const { mutate: consentShareNeeds } = useConsentShareNeeds();
@@ -1238,7 +1238,9 @@ export function useUnifiedSession(
     empathyStatusData,
     shareOfferData,
     isGenerating,
+    isSavingEmpathyDraft,
     isSharingEmpathy,
+    isResubmittingEmpathy,
     isProposing,
     isConfirmingNeeds,
 
