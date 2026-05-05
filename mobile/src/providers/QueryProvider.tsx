@@ -66,8 +66,16 @@ function createQueryClient(): QueryClient {
         // Cache data for 5 minutes
         gcTime: 5 * 60_000,
 
-        // Retry failed requests up to 3 times
-        retry: 3,
+        // Retry failed requests up to 3 times, but never on 401/403/404 —
+        // those are terminal client errors and retrying just floods Sentry.
+        retry: (failureCount, error) => {
+          if (error instanceof ApiClientError) {
+            if (error.status === 401 || error.status === 403 || error.status === 404) {
+              return false;
+            }
+          }
+          return failureCount < 3;
+        },
 
         // Exponential backoff for retries
         retryDelay: (attemptIndex) =>

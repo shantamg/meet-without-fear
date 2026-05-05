@@ -6,7 +6,7 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { UnauthorizedError, ForbiddenError } from './errors';
+import { UnauthorizedError, ForbiddenError, NotFoundError } from './errors';
 import { prisma } from '../lib/prisma';
 import { ApiResponse, ErrorCode } from '@meet-without-fear/shared';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
@@ -342,6 +342,16 @@ export async function requireSessionAccess(
     if (session) {
       next();
       return;
+    }
+
+    // Distinguish "session does not exist" from "exists but you can't access it".
+    // Without this, deleted/stale sessionIds polled by clients flood Sentry as 403s.
+    const exists = await prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { id: true },
+    });
+    if (!exists) {
+      throw new NotFoundError('Session not found');
     }
 
     // Fallback: allow access for invitees during the acceptance timing gap.

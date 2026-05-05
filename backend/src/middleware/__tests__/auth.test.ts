@@ -5,7 +5,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { requireAuth, optionalAuth, getUser } from '../auth';
+import { requireAuth, optionalAuth, getUser, requireSessionAccess } from '../auth';
+import { ForbiddenError, NotFoundError } from '../errors';
 import { prisma } from '../../lib/prisma';
 
 // Mock Prisma
@@ -456,6 +457,66 @@ describe('Auth Middleware', () => {
       expect(mockVerifyToken).not.toHaveBeenCalled();
       expect(next).toHaveBeenCalled();
       expect(req.user).toEqual(e2eUser);
+    });
+  });
+
+  describe('requireSessionAccess', () => {
+    const user = {
+      id: 'user-1',
+      clerkId: 'clerk-1',
+      email: 'a@b.com',
+      name: null,
+      firstName: null,
+      lastName: null,
+      pushToken: null,
+      biometricEnabled: false,
+      biometricEnrolledAt: null,
+      lastMoodIntensity: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('passes when user is a relationship member', async () => {
+      (prisma.session.findFirst as jest.Mock).mockResolvedValueOnce({ id: 'sess-1' });
+      const req = createMockRequest({ user, params: { id: 'sess-1' } });
+      const { res } = createMockResponse();
+      const next = jest.fn();
+      await requireSessionAccess(req as Request, res as Response, next);
+      expect(next).toHaveBeenCalledWith();
+    });
+
+    it('throws NotFoundError when session does not exist', async () => {
+      (prisma.session.findFirst as jest.Mock).mockResolvedValueOnce(null);
+      (prisma.session.findUnique as jest.Mock).mockResolvedValueOnce(null);
+      const req = createMockRequest({ user, params: { id: 'missing' } });
+      const { res } = createMockResponse();
+      const next = jest.fn();
+      await requireSessionAccess(req as Request, res as Response, next);
+      expect(next).toHaveBeenCalledWith(expect.any(NotFoundError));
+    });
+
+    it('throws ForbiddenError when session exists but user has no access', async () => {
+      (prisma.session.findFirst as jest.Mock)
+        .mockResolvedValueOnce(null) // membership check
+        .mockResolvedValueOnce(null); // invitation fallback
+      (prisma.session.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'sess-2' });
+      const req = createMockRequest({ user, params: { id: 'sess-2' } });
+      const { res } = createMockResponse();
+      const next = jest.fn();
+      await requireSessionAccess(req as Request, res as Response, next);
+      expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+    });
+
+    it('passes for invitee via invitation fallback', async () => {
+      (prisma.session.findFirst as jest.Mock)
+        .mockResolvedValueOnce(null) // membership
+        .mockResolvedValueOnce({ id: 'sess-3' }); // invitation
+      (prisma.session.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'sess-3' });
+      const req = createMockRequest({ user, params: { id: 'sess-3' } });
+      const { res } = createMockResponse();
+      const next = jest.fn();
+      await requireSessionAccess(req as Request, res as Response, next);
+      expect(next).toHaveBeenCalledWith();
     });
   });
 });

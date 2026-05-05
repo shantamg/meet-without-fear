@@ -237,17 +237,13 @@ export function useUnifiedSession(
   // Consolidated Session State (reduces initial requests from ~5 to 1)
   // Returns session, progress, messages, invitation, and compact in one request
   // -------------------------------------------------------------------------
-  const { data: stateData, isLoading: loadingState, error: stateError } = useSessionState(sessionId, {
-    retry: (failureCount, error) => {
-      // Don't retry 403s — user simply doesn't have access
-      if (error instanceof ApiClientError && error.status === 403) return false;
-      return failureCount < 3;
-    },
-  });
+  const { data: stateData, isLoading: loadingState, error: stateError } = useSessionState(sessionId);
 
-  // If the /state endpoint returns 403, the user has no access to this session.
-  // Disable all child queries to prevent hundreds of redundant 403s from polling.
-  const accessDenied = stateError instanceof ApiClientError && stateError.status === 403;
+  // If the /state endpoint returns 403 (no access) or 404 (session deleted/missing),
+  // disable all child queries to prevent hundreds of redundant errors from polling.
+  const accessDenied =
+    stateError instanceof ApiClientError &&
+    (stateError.status === 403 || stateError.status === 404);
 
   // Extract core data from consolidated state
   const sessionData = stateData ? { session: stateData.session } : undefined;
