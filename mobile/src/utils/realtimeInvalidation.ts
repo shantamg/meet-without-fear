@@ -24,3 +24,16 @@ export function getStage3RealtimeInvalidationQueryKeys(sessionId: string) {
     notificationKeys.badgeCount(),
   ];
 }
+
+export function getStage4RealtimeInvalidationQueryKeys(sessionId: string) {
+  return [
+    stageKeys.strategies(sessionId),
+    stageKeys.strategiesReveal(sessionId),
+    stageKeys.agreements(sessionId),
+    stageKeys.progress(sessionId),
+    sessionKeys.state(sessionId),
+    messageKeys.infinite(sessionId),
+    stageKeys.pendingActions(sessionId),
+    notificationKeys.badgeCount(),
+  ];
+}

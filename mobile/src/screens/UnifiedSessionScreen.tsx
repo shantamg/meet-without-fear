@@ -59,7 +59,7 @@ import { usePendingActions } from '../hooks/usePendingActions';
 import { useNeedsComparison } from '../hooks/useStages';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
-import { getStage2RealtimeInvalidationQueryKeys, getStage3RealtimeInvalidationQueryKeys } from '../utils/realtimeInvalidation';
+import { getStage2RealtimeInvalidationQueryKeys, getStage3RealtimeInvalidationQueryKeys, getStage4RealtimeInvalidationQueryKeys } from '../utils/realtimeInvalidation';
 import { useToast } from '../contexts/ToastContext';
 import { createStyles } from '../theme/styled';
 import { WaitingBanner } from '../components/WaitingBanner';
@@ -378,7 +378,9 @@ export function UnifiedSessionScreen({
     overlappingStrategies,
     agreements,
     isGenerating,
+    isSavingEmpathyDraft,
     isSharingEmpathy,
+    isResubmittingEmpathy,
     isConfirmingNeeds,
 
     // Memory suggestion
@@ -450,6 +452,17 @@ export function UnifiedSessionScreen({
     for (const queryKey of getStage3RealtimeInvalidationQueryKeys(sessionId)) {
       queryClient.invalidateQueries({ queryKey });
     }
+    if (options?.refetchMessages) {
+      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+    }
+  }, [queryClient, sessionId]);
+
+  const refreshStage4RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
+    for (const queryKey of getStage4RealtimeInvalidationQueryKeys(sessionId)) {
+      queryClient.invalidateQueries({ queryKey });
+    }
+    queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
+    queryClient.refetchQueries({ queryKey: stageKeys.agreements(sessionId) });
     if (options?.refetchMessages) {
       queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
     }
@@ -806,15 +819,13 @@ export function UnifiedSessionScreen({
 
       if (eventName === 'session.strategies_updated') {
         console.log('[UnifiedSessionScreen] Strategies updated');
-        queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
+        refreshStage4RealtimeState();
       }
 
       if (eventName === 'partner.ranking_submitted') {
         // Partner submitted their strategy rankings
         console.log('[UnifiedSessionScreen] Partner submitted rankings');
-        queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
-        queryClient.refetchQueries({ queryKey: stageKeys.strategiesReveal(sessionId) });
-        queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
+        refreshStage4RealtimeState();
       }
 
       if (eventName === 'partner.ready_to_rank' || eventName === 'partner.marked_ready') {
@@ -837,33 +848,25 @@ export function UnifiedSessionScreen({
             },
           };
         });
-        queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
-        queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
+        refreshStage4RealtimeState();
       }
 
       if (eventName === 'agreement.proposed') {
         // Partner proposed an agreement
         console.log('[UnifiedSessionScreen] Agreement proposed');
-        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        refreshStage4RealtimeState();
       }
 
       if (eventName === 'agreement.confirmed') {
         // Partner confirmed an agreement
         console.log('[UnifiedSessionScreen] Agreement confirmed');
-        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        refreshStage4RealtimeState();
       }
 
       if (eventName === 'session.resolved') {
         // Session has been resolved
         console.log('[UnifiedSessionScreen] Session resolved');
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
-        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
-        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
+        refreshStage4RealtimeState();
       }
     },
     // Fire-and-forget pattern: AI responses arrive via Ably
@@ -2627,6 +2630,70 @@ export function UnifiedSessionScreen({
   }
 
   // -------------------------------------------------------------------------
+  // Agreement Confirmation / Waiting - Full Screen Overlay
+  // -------------------------------------------------------------------------
+  if (currentStage === Stage.STRATEGIC_REPAIR && agreements.length > 0) {
+    const unconfirmedAgreement = agreements.find((a) => !a.agreedByMe);
+    const waitingForPartner = agreements.every((a) => a.agreedByMe) &&
+      agreements.some((a) => !a.agreedByPartner);
+
+    if (unconfirmedAgreement) {
+      return (
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+          <SessionChatHeader
+            partnerName={partnerName}
+            partnerOnline={partnerOnline}
+            connectionStatus={connectionStatus}
+            briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+            onBackPress={onNavigateBack}
+            stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
+            testID="session-chat-header"
+          />
+          <AgreementCard
+            agreement={{
+              experiment: unconfirmedAgreement.description,
+              duration: unconfirmedAgreement.duration || 'To be determined',
+              successMeasure: unconfirmedAgreement.measureOfSuccess || 'To be defined together',
+              checkInDate: unconfirmedAgreement.followUpDate || undefined,
+            }}
+            confirmedByMe={unconfirmedAgreement.agreedByMe}
+            confirmedByPartner={unconfirmedAgreement.agreedByPartner}
+            partnerName={partnerName}
+            onConfirm={() => {
+              handleConfirmAgreement(unconfirmedAgreement.id, (response: ConfirmAgreementResponse) => {
+                if (response.sessionCanResolve) {
+                  trackSessionResolved(sessionId, 'agreement');
+                  handleResolveSession(() => onStageComplete?.(Stage.STRATEGIC_REPAIR));
+                }
+              });
+            }}
+          />
+        </SafeAreaView>
+      );
+    }
+
+    if (waitingForPartner) {
+      return (
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+          <SessionChatHeader
+            partnerName={partnerName}
+            partnerOnline={partnerOnline}
+            connectionStatus={connectionStatus}
+            briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+            onBackPress={onNavigateBack}
+            stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
+            testID="session-chat-header"
+          />
+          <WaitingRoom
+            message={`You've proposed the agreement. Waiting for ${partnerName || 'your partner'} to confirm.`}
+            partnerName={partnerName || undefined}
+          />
+        </SafeAreaView>
+      );
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Strategy Ranking Phase - Full Screen Overlay
   // -------------------------------------------------------------------------
   if (currentStage === Stage.STRATEGIC_REPAIR && strategyPhase === StrategyPhase.RANKING) {
@@ -2657,6 +2724,10 @@ export function UnifiedSessionScreen({
   // Strategy Revealing Phase - Full Screen Overlay
   // -------------------------------------------------------------------------
   if (currentStage === Stage.STRATEGIC_REPAIR && strategyPhase === StrategyPhase.REVEALING) {
+    const waitingForRankingReveal = !revealData ||
+      (revealData as { waitingForPartner?: boolean; overlap?: unknown[] | null }).waitingForPartner === true ||
+      (revealData as { overlap?: unknown[] | null }).overlap === null;
+
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <SessionChatHeader
@@ -2668,7 +2739,7 @@ export function UnifiedSessionScreen({
           stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
           testID="session-chat-header"
         />
-        {!revealData ? (
+        {waitingForRankingReveal ? (
           <WaitingRoom
             message="Waiting for your partner to submit their ranking"
             partnerName={partnerName || undefined}
@@ -2737,8 +2808,16 @@ export function UnifiedSessionScreen({
           // Cache-First: Ghost dots are derived from last message role in ChatInterface
           // isSending is still needed for brief moment during API call before optimistic message appears
           // isFetchingInitialMessage shows dots while fetching first AI message
-          // isConfirmingFeelHeard, isSharingEmpathy, and isConfirmingInvitation show dots during those API calls
-          isLoading={isFetchingInitialMessage || isConfirmingFeelHeard || isSharingEmpathy || isConfirmingInvitation}
+          // Button-only actions do not add a USER message, so pass their pending state
+          // explicitly to keep ghost dots visible until the AI follow-up is inserted.
+          isLoading={
+            isFetchingInitialMessage ||
+            isConfirmingFeelHeard ||
+            isSavingEmpathyDraft ||
+            isSharingEmpathy ||
+            isResubmittingEmpathy ||
+            isConfirmingInvitation
+          }
           // isInputDisabled prevents sending while API call is in progress
           isInputDisabled={isSending}
           showEmotionSlider={!isInOnboardingUnsigned}
