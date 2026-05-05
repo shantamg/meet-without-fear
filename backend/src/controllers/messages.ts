@@ -2060,23 +2060,24 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
       );
 
       if (newStrategies.length > 0) {
-        if (supersededIds.length > 0) {
-          await prisma.strategyProposal.deleteMany({
-            where: { id: { in: supersededIds } },
+        await prisma.$transaction(async (tx) => {
+          if (supersededIds.length > 0) {
+            await tx.strategyProposal.deleteMany({
+              where: { id: { in: supersededIds } },
+            });
+          }
+          await tx.strategyProposal.createMany({
+            data: newStrategies.map((description) => ({
+              sessionId,
+              createdByUserId: user.id,
+              description,
+              needsAddressed: [],
+              source: 'AI_SUGGESTED' as const,
+            })),
           });
-        }
-        await prisma.strategyProposal.createMany({
-          data: newStrategies.map((description) => ({
-            sessionId,
-            createdByUserId: user.id,
-            description,
-            needsAddressed: [],
-            source: 'AI_SUGGESTED' as const,
-          })),
         });
         logger.info(`[sendMessageStream:${requestId}] Created ${newStrategies.length} strategy proposals for user ${user.id}`);
 
-        const { publishSessionEvent } = await import('../services/realtime');
         await publishSessionEvent(sessionId, 'session.strategies_updated', {
           stage: 4,
           updatedBy: user.id,

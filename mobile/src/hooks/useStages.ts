@@ -80,6 +80,12 @@ import {
 // Re-export for backwards compatibility
 export { stageKeys };
 
+type ProgressCacheWithGates = GetProgressResponse & {
+  myProgress: GetProgressResponse['myProgress'] & {
+    gatesSatisfied?: Record<string, unknown> | null;
+  };
+};
+
 // ============================================================================
 // Progress Hook
 // ============================================================================
@@ -1661,7 +1667,7 @@ export function useMarkReadyToRank(
       { sessionId: string },
       {
         previousStrategies: GetStrategiesResponse | undefined;
-        previousProgress: GetProgressResponse | undefined;
+        previousProgress: ProgressCacheWithGates | undefined;
       }
     >,
     'mutationFn'
@@ -1680,7 +1686,7 @@ export function useMarkReadyToRank(
       const previousStrategies = queryClient.getQueryData<GetStrategiesResponse>(
         stageKeys.strategies(sessionId)
       );
-      const previousProgress = queryClient.getQueryData<GetProgressResponse>(
+      const previousProgress = queryClient.getQueryData<ProgressCacheWithGates>(
         stageKeys.progress(sessionId)
       );
       const readyAt = new Date().toISOString();
@@ -1691,15 +1697,15 @@ export function useMarkReadyToRank(
           ? { ...old, myReadyToRank: true }
           : old
       );
-      queryClient.setQueryData<any>(
+      queryClient.setQueryData<ProgressCacheWithGates>(
         stageKeys.progress(sessionId),
-        (old: any) => old
+        (old) => old
           ? {
               ...old,
               myProgress: {
                 ...old.myProgress,
                 gatesSatisfied: {
-                  ...((old.myProgress as { gatesSatisfied?: Record<string, unknown> }).gatesSatisfied ?? {}),
+                  ...(old.myProgress.gatesSatisfied ?? {}),
                   readyToRank: true,
                   readyAt,
                 },
@@ -1722,15 +1728,15 @@ export function useMarkReadyToRank(
             }
           : old
       );
-      queryClient.setQueryData<any>(
+      queryClient.setQueryData<ProgressCacheWithGates>(
         stageKeys.progress(sessionId),
-        (old: any) => old
+        (old) => old
           ? {
               ...old,
               myProgress: {
                 ...old.myProgress,
                 gatesSatisfied: {
-                  ...((old.myProgress as { gatesSatisfied?: Record<string, unknown> }).gatesSatisfied ?? {}),
+                  ...(old.myProgress.gatesSatisfied ?? {}),
                   readyToRank: true,
                   readyAt: data.readyAt ?? new Date().toISOString(),
                 },
