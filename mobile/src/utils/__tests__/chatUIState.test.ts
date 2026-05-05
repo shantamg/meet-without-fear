@@ -288,16 +288,46 @@ describe('Input Hiding (shouldHideInput)', () => {
     expect(result.shouldHideInput).toBe(true);
   });
 
-  it('shows input when awaiting-context-share (user can still chat)', () => {
+  it('hides input when awaiting-context-share panel owns the next action', () => {
     const inputs = createInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       compactMySigned: true,
       myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
       shareOffer: { hasSuggestion: true },
+      hasShareSuggestion: true,
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.shouldHideInput).toBe(false);
+    expect(result.aboveInputPanel).toBe('share-suggestion');
+    expect(result.shouldHideInput).toBe(true);
+  });
+
+  it('hides input while the empathy review panel owns the next action', () => {
+    const inputs = createInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      compactMySigned: true,
+      myProgress: { stage: Stage.PERSPECTIVE_STRETCH },
+      hasEmpathyContent: true,
+      empathyAlreadyConsented: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.aboveInputPanel).toBe('empathy-statement');
+    expect(result.shouldHideInput).toBe(true);
+  });
+
+  it('hides input while the feel-heard panel owns the next action', () => {
+    const inputs = createInputs({
+      myStage: Stage.WITNESS,
+      compactMySigned: true,
+      myProgress: { stage: Stage.WITNESS },
+      showFeelHeardConfirmation: true,
+      feelHeardConfirmedAt: null,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.aboveInputPanel).toBe('feel-heard');
+    expect(result.shouldHideInput).toBe(true);
   });
 
   it('hides input while empathy review is running', () => {
@@ -382,6 +412,40 @@ describe('Input Hiding (shouldHideInput)', () => {
 
     const result = computeChatUIState(inputs);
     expect(result.waitingStatus).toBe('partner-validating-needs');
+    expect(result.shouldHideInput).toBe(true);
+  });
+
+  it('hides input while the needs reveal validation panel owns the next action', () => {
+    const inputs = createInputs({
+      myStage: Stage.NEED_MAPPING,
+      compactMySigned: true,
+      myProgress: { stage: Stage.NEED_MAPPING },
+      allNeedsConfirmed: true,
+      needsShared: true,
+      needsRevealReady: true,
+      needs: { allConfirmed: true, shared: true, revealReady: true },
+      needsRevealAvailable: true,
+      needsRevealValidationCount: 2,
+      needsRevealValidation: { count: 2, allConfirmedByMe: false, allConfirmedByBoth: false },
+      needsRevealValidatedByMe: false,
+      needsRevealValidatedByBoth: false,
+    });
+
+    const result = computeChatUIState(inputs);
+    expect(result.aboveInputPanel).toBe('needs-reveal-validation');
+    expect(result.shouldHideInput).toBe(true);
+  });
+
+  it('hides input while Stage 4 agreement review owns the next action', () => {
+    const inputs = createInputs({
+      myStage: Stage.STRATEGIC_REPAIR,
+      compactMySigned: true,
+      myProgress: { stage: Stage.STRATEGIC_REPAIR },
+      strategyPhase: 'NEGOTIATING',
+      agreements: [{ agreedByMe: false, agreedByPartner: true }],
+    });
+
+    const result = computeChatUIState(inputs);
     expect(result.shouldHideInput).toBe(true);
   });
 

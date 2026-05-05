@@ -59,7 +59,12 @@ import { usePendingActions } from '../hooks/usePendingActions';
 import { useNeedsComparison } from '../hooks/useStages';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
-import { getStage2RealtimeInvalidationQueryKeys, getStage3RealtimeInvalidationQueryKeys, getStage4RealtimeInvalidationQueryKeys } from '../utils/realtimeInvalidation';
+import {
+  getPersistedMessageRefreshQueryKeys,
+  getStage2RealtimeInvalidationQueryKeys,
+  getStage3RealtimeInvalidationQueryKeys,
+  getStage4RealtimeInvalidationQueryKeys,
+} from '../utils/realtimeInvalidation';
 import { useToast } from '../contexts/ToastContext';
 import { createStyles } from '../theme/styled';
 import { WaitingBanner } from '../components/WaitingBanner';
@@ -449,23 +454,29 @@ export function UnifiedSessionScreen({
   // AI message handler for fire-and-forget pattern
   const { addAIMessage, handleAIMessageError } = useAIMessageHandler();
 
+  const refetchPersistedMessages = useCallback(() => {
+    for (const queryKey of getPersistedMessageRefreshQueryKeys(sessionId)) {
+      queryClient.refetchQueries({ queryKey });
+    }
+  }, [queryClient, sessionId]);
+
   const refreshStage2RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
     for (const queryKey of getStage2RealtimeInvalidationQueryKeys(sessionId)) {
       queryClient.invalidateQueries({ queryKey });
     }
     if (options?.refetchMessages) {
-      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+      refetchPersistedMessages();
     }
-  }, [queryClient, sessionId]);
+  }, [queryClient, refetchPersistedMessages, sessionId]);
 
   const refreshStage3RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
     for (const queryKey of getStage3RealtimeInvalidationQueryKeys(sessionId)) {
       queryClient.invalidateQueries({ queryKey });
     }
     if (options?.refetchMessages) {
-      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+      refetchPersistedMessages();
     }
-  }, [queryClient, sessionId]);
+  }, [queryClient, refetchPersistedMessages, sessionId]);
 
   const refreshStage4RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
     for (const queryKey of getStage4RealtimeInvalidationQueryKeys(sessionId)) {
@@ -474,9 +485,9 @@ export function UnifiedSessionScreen({
     queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
     queryClient.refetchQueries({ queryKey: stageKeys.agreements(sessionId) });
     if (options?.refetchMessages) {
-      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+      refetchPersistedMessages();
     }
-  }, [queryClient, sessionId]);
+  }, [queryClient, refetchPersistedMessages, sessionId]);
 
   useEffect(() => {
     const latestMessage = messages[messages.length - 1];
@@ -812,34 +823,34 @@ export function UnifiedSessionScreen({
       if (eventName === 'session.needs_extracted') {
         // My own needs have been extracted by the backend
         console.log('[UnifiedSessionScreen] Needs extracted, refreshing cache');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       if (eventName === 'partner.needs_confirmed') {
         // Partner confirmed their identified needs
         console.log('[UnifiedSessionScreen] Partner confirmed needs');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       if (eventName === 'partner.needs_shared') {
         // Partner consented to share their needs
         console.log('[UnifiedSessionScreen] Partner shared needs');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       if (eventName === 'session.needs_reveal_ready' || eventName === 'session.needs_revealed') {
         console.log('[UnifiedSessionScreen] Needs reveal ready');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       if (eventName === 'session.common_ground_ready') {
         console.log('[UnifiedSessionScreen] Common ground ready');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       if (eventName === 'partner.needs_validated') {
         console.log('[UnifiedSessionScreen] Partner validated needs');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       // -----------------------------------------------------------------------
@@ -1150,7 +1161,9 @@ export function UnifiedSessionScreen({
         // React Query's focusManager also triggers stale refetches, but this
         // ensures immediate refresh even within the 30s staleTime window.
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-        queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
+        for (const queryKey of getPersistedMessageRefreshQueryKeys(sessionId)) {
+          queryClient.invalidateQueries({ queryKey });
+        }
       }
     });
     return () => subscription.remove();
@@ -2934,8 +2947,7 @@ export function UnifiedSessionScreen({
           ) : undefined}
           hideInput={
             // Use derived hideInput logic from useChatUIState
-            // Never hide when empathy review panel is showing (user still needs to interact)
-            !shouldShowEmpathyPanel && derivedShouldHideInput
+            derivedShouldHideInput
           }
           validationCards={validationCards}
           onValidateAccurate={handleValidationAccurate}
