@@ -140,6 +140,13 @@ describe('Messages API (Fire-and-Forget)', () => {
           scrubbed: false,
         });
       });
+
+      it('can preserve boundary whitespace for streamed chunks', () => {
+        expect(scrubVisibleAIText(' talk ', { preserveBoundaryWhitespace: true })).toEqual({
+          text: ' talk ',
+          scrubbed: false,
+        });
+      });
     });
 
     describe('isReadyForStage3RevealText', () => {

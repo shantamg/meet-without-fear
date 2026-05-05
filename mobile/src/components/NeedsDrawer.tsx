@@ -210,7 +210,6 @@ export function NeedsDrawer({
   // -------------------------------------------------------------------------
   const renderNeedsMode = () => (
     <>
-      <Text style={styles.sectionTitle}>Your Needs</Text>
       <Text style={styles.sectionSubtitle}>
         Review and confirm the needs you named in this conversation.
       </Text>
@@ -235,22 +234,12 @@ export function NeedsDrawer({
     return (
       <View style={[styles.fixedButtonArea, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
         <View style={styles.buttonRow}>
-          {onAdjustNeeds && (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => {
-                closeDrawer();
-                onAdjustNeeds();
-              }}
-              activeOpacity={0.7}
-              testID={`${testID}-adjust`}
-            >
-              <Text style={styles.secondaryButtonText}>Adjust these</Text>
-            </TouchableOpacity>
-          )}
           {onConfirmNeeds && (
             <TouchableOpacity
-              style={[styles.primaryButton, isConfirming && styles.primaryButtonDisabled]}
+              style={[
+                styles.primaryButton,
+                isConfirming && styles.primaryButtonDisabled,
+              ]}
               onPress={() => {
                 if (!isConfirming) onConfirmNeeds();
               }}
@@ -261,6 +250,19 @@ export function NeedsDrawer({
               <Text style={styles.primaryButtonText}>
                 {isConfirming ? confirmingNeedsLabel : confirmNeedsLabel}
               </Text>
+            </TouchableOpacity>
+          )}
+          {onAdjustNeeds && (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                closeDrawer();
+                onAdjustNeeds();
+              }}
+              activeOpacity={0.7}
+              testID={`${testID}-adjust`}
+            >
+              <Text style={styles.secondaryButtonText}>Chat to refine</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -303,7 +305,7 @@ export function NeedsDrawer({
   const renderRevealMode = () => (
     <>
       <Text style={styles.sectionSubtitle}>
-        Review both needs lists side by side. What do you notice?
+        Review both needs lists side by side, then validate whether they feel accurate.
       </Text>
       {renderSideBySideNeeds()}
     </>
@@ -324,8 +326,10 @@ export function NeedsDrawer({
               }}
               activeOpacity={0.7}
               testID={`${testID}-not-valid-yet`}
+              accessibilityRole="button"
+              accessibilityLabel="Needs not reviewed yet"
             >
-              <Text style={styles.secondaryButtonText}>Not valid yet</Text>
+              <Text style={styles.secondaryButtonText}>Not reviewed yet</Text>
             </TouchableOpacity>
           )}
           {onValidateNeeds && (
@@ -337,6 +341,8 @@ export function NeedsDrawer({
               }}
               activeOpacity={0.7}
               testID={`${testID}-validate-needs`}
+              accessibilityRole="button"
+              accessibilityLabel="Validate needs"
             >
               <Text style={styles.primaryButtonText}>Validate needs</Text>
             </TouchableOpacity>

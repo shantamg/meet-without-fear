@@ -53,8 +53,13 @@ export interface ProposeStrategyRequest {
 }
 
 export interface ProposeStrategyResponse {
-  strategy: StrategyDTO;
-  totalStrategies: number;
+  strategy: {
+    id: string;
+    description: string;
+    duration: string | null;
+    measureOfSuccess: string | null;
+  };
+  createdAt: string;
 }
 
 // ============================================================================
@@ -109,6 +114,7 @@ export type RevealOverlapResponse = {
 
 export interface AgreementDTO {
   id: string;
+  strategyId?: string | null;
   description: string;
   type?: AgreementType;
   duration: string | null;

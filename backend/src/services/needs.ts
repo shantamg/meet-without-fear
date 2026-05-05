@@ -84,7 +84,7 @@ export async function captureProposedNeedsForUser(
           vesselId: vessel.id,
           need: cleanVisibleAIText(item.description || item.need),
           category: item.category,
-          evidence: evidence.map(cleanVisibleAIText).filter(Boolean),
+          evidence: evidence.map((entry) => cleanVisibleAIText(entry)).filter(Boolean),
           aiConfidence: 0.85,
           confirmed: false,
         },

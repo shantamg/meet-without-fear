@@ -67,7 +67,7 @@ function parseNeedsBlock(rawNeeds: string | null): CapturedNeedInput[] {
       const evidence = Array.isArray(candidate.evidence)
         ? candidate.evidence
             .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-            .map(cleanVisibleAIText)
+            .map((entry) => cleanVisibleAIText(entry))
             .filter(Boolean)
         : [];
 
@@ -84,6 +84,46 @@ function parseNeedsBlock(rawNeeds: string | null): CapturedNeedInput[] {
     logger.warn('[micro-tag-parser] Failed to parse <needs> block', error);
     return [];
   }
+}
+
+function isFollowUpTimingOnlyStrategy(strategy: string): boolean {
+  const normalized = strategy.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalized) return true;
+
+  const mentionsFollowUpTiming =
+    /\bfollow[- ]?up\b/.test(normalized) ||
+    /\bcheck back\b/.test(normalized) ||
+    /\bcheck in on how (?:it|this|that) (?:went|goes)\b/.test(normalized) ||
+    /\bwhen should we check in\b/.test(normalized);
+  if (!mentionsFollowUpTiming) return false;
+
+  const hasExperimentAction = /\b(?:try|do|take|schedule|practice|write|use|pause|walk|talk|meet|plan|attend|share|listen|ask|choose|spend|set aside|commit)\b/.test(normalized);
+  return !hasExperimentAction;
+}
+
+function addProposedStrategy(proposedStrategies: string[], rawStrategy: string): void {
+  const strategy = cleanVisibleAIText(rawStrategy);
+  if (strategy.length > 0 && !isFollowUpTimingOnlyStrategy(strategy)) {
+    proposedStrategies.push(strategy);
+  }
+}
+
+function stripVisibleProposedStrategyLines(responseText: string): {
+  responseText: string;
+  visibleStrategies: string[];
+} {
+  const visibleStrategies: string[] = [];
+  const cleanedLines = responseText.split('\n').filter((line) => {
+    const match = line.match(/^\s*ProposedStrategy:\s*(.+?)\s*$/i);
+    if (!match) return true;
+    visibleStrategies.push(match[1]);
+    return false;
+  });
+
+  return {
+    responseText: cleanedLines.join('\n').trim(),
+    visibleStrategies,
+  };
 }
 
 /**
@@ -123,6 +163,9 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     });
   }
 
+  const strippedVisibleStrategies = stripVisibleProposedStrategyLines(responseText);
+  responseText = strippedVisibleStrategies.responseText;
+
   // 3. Extract flags from thinking string (no JSON needed!)
   const offerFeelHeardCheck = /FeelHeardCheck:\s*Y/i.test(thinking);
   const offerReadyToShare = /ReadyShare:\s*Y/i.test(thinking);
@@ -132,10 +175,10 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
   const strategyRegex = /ProposedStrategy:\s*(.+)/gi;
   let strategyMatch: RegExpExecArray | null;
   while ((strategyMatch = strategyRegex.exec(thinking)) !== null) {
-    const strategy = cleanVisibleAIText(strategyMatch[1]);
-    if (strategy.length > 0) {
-      proposedStrategies.push(strategy);
-    }
+    addProposedStrategy(proposedStrategies, strategyMatch[1]);
+  }
+  for (const visibleStrategy of strippedVisibleStrategies.visibleStrategies) {
+    addProposedStrategy(proposedStrategies, visibleStrategy);
   }
 
   const needRegex = /ProposedNeed:\s*([^|]+)\|([^|]+)\|(.+)/gi;

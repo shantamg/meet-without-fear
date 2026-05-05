@@ -45,7 +45,26 @@ describe('NeedsDrawer', () => {
     expect(screen.getByText('Darryl')).toBeTruthy();
     expect(screen.getByText('Being heard')).toBeTruthy();
     expect(screen.getByText('Room to choose')).toBeTruthy();
-    expect(screen.getByText('Review both needs lists side by side. What do you notice?')).toBeTruthy();
+    expect(screen.getByText('Review both needs lists side by side, then validate whether they feel accurate.')).toBeTruthy();
+  });
+
+  it('uses neutral copy and accessibility labels for reveal actions', () => {
+    render(
+      <NeedsDrawer
+        visible
+        onClose={jest.fn()}
+        mode="reveal"
+        needs={needs}
+        partnerNeeds={partnerNeeds}
+        onValidateNeeds={jest.fn()}
+        onNeedsNotValidYet={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Not reviewed yet')).toBeTruthy();
+    expect(screen.queryByText('Not valid yet')).toBeNull();
+    expect(screen.getByLabelText('Needs not reviewed yet')).toBeTruthy();
+    expect(screen.getByLabelText('Validate needs')).toBeTruthy();
   });
 
   it('validates the side-by-side needs reveal from reveal mode', () => {

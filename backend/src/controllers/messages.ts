@@ -110,7 +110,10 @@ const PLANNER_LINE_PREFIXES = [
   'i need to make sure both lists',
 ];
 
-export function scrubVisibleAIText(text: string): { text: string; scrubbed: boolean } {
+export function scrubVisibleAIText(
+  text: string,
+  options: { preserveBoundaryWhitespace?: boolean } = {}
+): { text: string; scrubbed: boolean } {
   const before = text;
   const plannerScrubbed = text
     .split(/\r?\n/)
@@ -121,7 +124,9 @@ export function scrubVisibleAIText(text: string): { text: string; scrubbed: bool
     .join('\n')
     .replace(/\bI should\b/gi, '')
     .replace(/\bso both lists should be available\b/gi, '');
-  const cleaned = cleanVisibleAIText(plannerScrubbed);
+  const cleaned = cleanVisibleAIText(plannerScrubbed, {
+    preserveBoundaryWhitespace: options.preserveBoundaryWhitespace,
+  });
 
   return { text: cleaned, scrubbed: cleaned !== before };
 }
@@ -543,7 +548,7 @@ export async function confirmFeelHeard(
         if (aiResponse) {
           // Parse the semantic tag response (micro-tag format)
           const parsed = parseMicroTagResponse(aiResponse);
-          transitionContent = parsed.response.trim() || `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
+          transitionContent = cleanVisibleAIText(parsed.response) || `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
         } else {
           transitionContent = `What you just did really mattered — sharing what's been weighing on you and staying with it until you felt heard takes real honesty.\n\n${STAGE2_ROADMAP_COPY}\n\nThis next part might feel a little unusual — I'm going to ask you to try to imagine what ${partnerName || 'your partner'} might be experiencing, even though you might still be upset with them. I know that's a strange ask. But there's a lot of research showing that when each person genuinely tries to see what the other is going through, it's one of the strongest things you can do to actually work things out. It's a guess, not a test — you don't have to get it right. ${mutualPhrase}\n\nSo — what do you think might be going on for ${partnerName || 'your partner'} in all of this?`;
         }
@@ -1598,7 +1603,7 @@ export async function sendMessageStream(req: Request, res: Response): Promise<vo
           cleanText = cleanText.trimStart();
         }
 
-        const scrubbed = scrubVisibleAIText(cleanText);
+        const scrubbed = scrubVisibleAIText(cleanText, { preserveBoundaryWhitespace: true });
         cleanText = scrubbed.text;
 
         if (cleanText.length > 0) {

@@ -127,6 +127,8 @@ interface ChatInterfaceProps {
   onHighEmotion?: (value: number) => void;
   compactEmotionSlider?: boolean;
   renderAboveInput?: () => React.ReactNode;
+  /** Render content below the input area (e.g., persistent review affordances) */
+  renderBelowInput?: () => React.ReactNode;
   /** Render content above the emotion slider / input area (e.g., inline cards) */
   renderBelowChat?: () => React.ReactNode;
   /** Render card-shaped content in the chronological chat stream */
@@ -208,6 +210,7 @@ export function ChatInterface({
   onHighEmotion,
   compactEmotionSlider = false,
   renderAboveInput,
+  renderBelowInput,
   renderBelowChat,
   customCards,
   renderMessageExtra,
@@ -842,6 +845,7 @@ export function ChatInterface({
             onVoicePress={onVoicePress}
           />
         )}
+        {renderBelowInput?.()}
       </View>
     </KeyboardAvoidingView>
   );

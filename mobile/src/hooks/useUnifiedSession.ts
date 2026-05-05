@@ -725,7 +725,12 @@ export function useUnifiedSession(
     // Stage 4: Strategic Repair cards
     if (currentStage === Stage.STRATEGIC_REPAIR) {
       // Strategy pool preview (hide after session is resolved)
-      if (strategyPhase === StrategyPhase.COLLECTING && !myReadyToRank && session?.status !== SessionStatus.RESOLVED) {
+      if (
+        strategyPhase === StrategyPhase.COLLECTING &&
+        strategies.length > 0 &&
+        !myReadyToRank &&
+        session?.status !== SessionStatus.RESOLVED
+      ) {
         cards.push({
           id: 'strategy-pool-preview',
           type: 'strategy-pool-preview',
