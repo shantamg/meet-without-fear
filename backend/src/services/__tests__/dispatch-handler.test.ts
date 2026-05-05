@@ -38,6 +38,14 @@ describe('dispatch-handler', () => {
       expect(result).toContain('Things to Remember');
     });
 
+    it('returns retry guidance for safety concern tags', async () => {
+      const result = await handleDispatch('SAFETY_CONCERN_MENTAL_HEALTH_CRISIS', mockContext);
+
+      expect(result).toContain("I'm sorry");
+      expect(result).toContain('safety-sensitive');
+      expect(result).toContain('try again');
+    });
+
     it('returns null for unknown dispatch tag (falls through to original AI response)', async () => {
       const result = await handleDispatch('UNKNOWN_TAG', mockContext);
 

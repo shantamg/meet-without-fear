@@ -1405,8 +1405,27 @@ export async function skipRefinement(
         willingToAccept,
       });
 
-      // Check for mutual completion
-      triggerStage3Transition(sessionId, user.id, partnerId).catch((e) => logger.error('[Stage2] Stage 3 transition failed:', e));
+      const partnerStage2Progress = await prisma.stageProgress.findUnique({
+        where: {
+          sessionId_userId_stage: {
+            sessionId,
+            userId: partnerId,
+            stage: 2,
+          },
+        },
+      });
+      const partnerGates = partnerStage2Progress?.gatesSatisfied as Record<string, unknown> | null | undefined;
+      const partnerCompletedEmpathy = partnerGates?.empathyValidated === true;
+
+      if (partnerCompletedEmpathy) {
+        triggerStage3Transition(sessionId, user.id, partnerId).catch((e) => logger.error('[Stage2] Stage 3 transition failed:', e));
+      } else {
+        logger.info('[skipRefinement] Waiting for partner Stage 2 empathy completion before Stage 3 transition', {
+          sessionId,
+          userId: user.id,
+          partnerId,
+        });
+      }
     }
 
     successResponse(res, { success: true });
