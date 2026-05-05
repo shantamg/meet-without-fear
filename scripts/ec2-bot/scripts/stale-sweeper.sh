@@ -8,7 +8,7 @@ source "$SCRIPT_DIR/lib/shared.sh"
 LOGFILE="$BOT_LOG_DIR/stale-sweeper.log"
 REPO="$GITHUB_REPO"
 SLACK_SCRIPT="$BOT_SCRIPTS_DIR/slack-post.sh"
-AGENTIC_DEVS="C0AM2J47R4L"
+AGENTIC_DEVS="${AGENTIC_DEVS_CHANNEL_ID:-C0ATAE7QP3P}"
 STALE_HOURS=24
 
 # Labels that exempt items from sweeping

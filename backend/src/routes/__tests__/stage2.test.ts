@@ -779,6 +779,9 @@ describe('Validation Feedback Routes', () => {
       (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
         gatesSatisfied: {},
       });
+      (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue({
+        gatesSatisfied: { empathyValidated: false },
+      });
       (prisma.empathyValidation.upsert as jest.Mock).mockResolvedValue({});
       (prisma.stageProgress.update as jest.Mock).mockResolvedValue({});
 
@@ -791,6 +794,41 @@ describe('Validation Feedback Routes', () => {
         })
       );
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    });
+
+    it('does not advance to Stage 3 until partner has completed Stage 2 empathy', async () => {
+      const req = mockRequest({
+        body: { willingToAccept: true },
+      });
+      const res = mockResponse();
+
+      (prisma.session.findUnique as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.empathyAttempt.findFirst as jest.Mock).mockResolvedValue({ id: 'attempt-1' });
+      (prisma.empathyValidation.upsert as jest.Mock).mockResolvedValue({});
+      (prisma.empathyAttempt.update as jest.Mock).mockResolvedValue({});
+      (prisma.stageProgress.update as jest.Mock).mockResolvedValue({});
+      (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue({
+        gatesSatisfied: { empathyValidated: false },
+      });
+
+      await skipRefinement(req, res);
+      await Promise.resolve();
+
+      expect(prisma.stageProgress.findUnique).toHaveBeenCalledWith({
+        where: {
+          sessionId_userId_stage: {
+            sessionId: 'session-123',
+            userId: 'partner-1',
+            stage: 2,
+          },
+        },
+      });
+      expect(prisma.user.findMany).not.toHaveBeenCalled();
+      expect(publishSessionEvent).not.toHaveBeenCalledWith(
+        'session-123',
+        'stage.progress',
+        expect.anything()
+      );
     });
 
     it('records refusal', async () => {
@@ -806,6 +844,9 @@ describe('Validation Feedback Routes', () => {
       (prisma.empathyAttempt.update as jest.Mock).mockResolvedValue({});
       (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
         gatesSatisfied: {},
+      });
+      (prisma.stageProgress.findUnique as jest.Mock).mockResolvedValue({
+        gatesSatisfied: { empathyValidated: false },
       });
       (prisma.empathyValidation.upsert as jest.Mock).mockResolvedValue({});
 

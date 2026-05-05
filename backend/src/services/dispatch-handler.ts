@@ -116,6 +116,13 @@ export async function handleDispatch(
 Is there something specific you'd like to note down?`;
 
     default:
+      if (/^SAFETY_CONCERN/i.test(dispatchTag)) {
+        logger.info(`[Dispatch Handler] Routing safety tag "${dispatchTag}" to retry guidance`);
+        return `I'm sorry, I had trouble responding to that safely. Something in the wording appears to touch on safety-sensitive harm, crisis, or risk, so I paused instead of guessing.
+
+Could you try again with a little more concrete context and less shorthand? For example, name what happened, who is currently safe or unsafe, and what kind of help you want from me right now.`;
+      }
+
       // Sharing/process-related tags the AI freelances (e.g. EXPLAIN_WHAT_WAS_SHARED,
       // SHOW_SHARING_HISTORY, CLARIFY_SHARE_HISTORY) — route to the process explainer
       // rather than falling through to an empty response (issue #312).
