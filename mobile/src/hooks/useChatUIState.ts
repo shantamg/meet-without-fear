@@ -122,6 +122,8 @@ export interface UseChatUIStateProps {
   strategyReadiness?: {
     myReadyToRank?: boolean;
     partnerReadyToRank?: boolean;
+    canMarkReadyToRank?: boolean;
+    canRank?: boolean;
   };
   overlappingStrategiesCount: number;
 

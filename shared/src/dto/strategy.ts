@@ -40,6 +40,9 @@ export interface GetStrategiesResponse {
   phase: StrategyPhase;
   myReadyToRank?: boolean;
   partnerReadyToRank?: boolean;
+  canMarkReadyToRank?: boolean;
+  canRank?: boolean;
+  rankableStrategyCount?: number;
 }
 
 export interface ProposeStrategyRequest {

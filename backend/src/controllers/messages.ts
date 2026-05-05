@@ -40,6 +40,7 @@ import { CONTEXT_WINDOW, trimConversationHistory } from '../utils/token-budget';
 import { estimateContextSizes, finalizeTurnMetrics, recordContextSizes } from '../services/llm-telemetry';
 import { captureProposedNeedsForUser } from '../services/needs';
 import { filterNewStrategiesAgainstExisting } from '../utils/strategy-dedupe';
+import { cleanVisibleAIText } from '../utils/visible-text';
 
 // ============================================================================
 // Helpers
@@ -111,7 +112,7 @@ const PLANNER_LINE_PREFIXES = [
 
 export function scrubVisibleAIText(text: string): { text: string; scrubbed: boolean } {
   const before = text;
-  const cleaned = text
+  const cleaned = cleanVisibleAIText(text
     .split(/\r?\n/)
     .filter((line) => {
       const trimmed = line.trim().toLowerCase();
@@ -119,7 +120,7 @@ export function scrubVisibleAIText(text: string): { text: string; scrubbed: bool
     })
     .join('\n')
     .replace(/\bI should\b/gi, '')
-    .replace(/\bso both lists should be available\b/gi, '');
+    .replace(/\bso both lists should be available\b/gi, ''));
 
   return { text: cleaned, scrubbed: cleaned !== before };
 }

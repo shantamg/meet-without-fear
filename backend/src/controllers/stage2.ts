@@ -43,6 +43,7 @@ import { publishSessionEvent } from '../services/realtime';
 import { updateContext } from '../lib/request-context';
 import { routeModel, scoreAmbiguity } from '../services/model-router';
 import { transition } from '../services/empathy-state-machine';
+import { cleanVisibleAIText } from '../utils/visible-text';
 
 // ============================================================================
 // Types
@@ -855,7 +856,7 @@ Respond in JSON format:
         try {
           const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
           transitionContent = typeof parsed.response === 'string'
-            ? parsed.response
+            ? cleanVisibleAIText(parsed.response)
             : bothShared
               ? `Thank you for sharing your attempt. Now you can read ${partnerName || 'your partner'}'s empathy statement and mark whether it feels accurate.`
               : `You've done something difficult — thank you for staying with it. You've completed your part for now. We'll notify you when ${partnerName || 'your partner'} has completed their side. Then you'll each see the other's attempt to understand.`;
@@ -1644,7 +1645,7 @@ Respond in JSON format:
         try {
           const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
           if (typeof parsed.response === 'string') {
-            content = parsed.response;
+            content = cleanVisibleAIText(parsed.response);
           }
         } catch (e) {
           logger.warn('Failed to parse transition AI response', e);
@@ -2122,7 +2123,7 @@ Respond in JSON format:
         try {
           const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
           transitionContent = typeof parsed.response === 'string'
-            ? parsed.response
+            ? cleanVisibleAIText(parsed.response)
             : `You're showing real understanding here. We'll send this through a separate privacy-protected review to check whether your updated perspective is ready to share.`;
         } catch {
           transitionContent = `You're showing real understanding here. We'll send this through a separate privacy-protected review to check whether your updated perspective is ready to share.`;

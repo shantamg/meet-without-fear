@@ -121,6 +121,8 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   strategyReadiness?: {
     myReadyToRank?: boolean;
     partnerReadyToRank?: boolean;
+    canMarkReadyToRank?: boolean;
+    canRank?: boolean;
   };
 }
 
