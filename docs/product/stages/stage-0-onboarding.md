@@ -77,10 +77,13 @@ flowchart TB
 
         subgraph Content[Main Content]
             Message[AI welcome message with typewriter effect]
+            TopicDraft[Neutral topic frame proposal]
         end
 
         subgraph Actions[Actions]
-            Ready[Ready / Let's go button]
+            ConfirmTopic[Confirm topic frame]
+            ShareInvite[Share invitation]
+            ConfirmInvite[Confirm invitation sent]
         end
     end
 ```
@@ -88,9 +91,10 @@ flowchart TB
 ## Success Criteria
 
 - Inviter has confirmed the AI-proposed topic frame (`topicFrameConfirmedAt` set on session)
-- Inviter has confirmed the invitation was sent (`Invitation.messageConfirmed = true`)
+- Invitation is ready to accept (`Invitation.messageConfirmed = true` and session status is `INVITED`)
+- Inviter has completed their Stage 0 gate by confirming the invitation/share step
 - Invitee has accepted the invitation
-- Both users have acknowledged the opening message in their respective Stage 0 chats
+- Both users have Stage 0 progress created/completed as appropriate before entering Stage 1
 
 ## Failure Paths
 
@@ -103,9 +107,9 @@ flowchart TB
 
 ## Data Captured
 
-- Acknowledgment timestamp for each user
 - Topic frame text and `topicFrameConfirmedAt` timestamp
 - `Invitation.messageConfirmed` flag and `messageConfirmedAt` timestamp
+- Stage 0 progress/gates for each participant
 - Any concerns raised (for improving onboarding)
 - Invitation/acceptance timing
 
@@ -118,7 +122,7 @@ flowchart TB
 
 ### Backend Implementation
 
-- [Stage 0 API](../backend/api/stage-0.md) - Onboarding acknowledgment endpoints
+- [Stage 0 API](../backend/api/stage-0.md) - Stage 0 gates and progress endpoints
 - [Stage 0 Prompt](../backend/prompts/stage-0-opening.md) - Opening message template
 - [Retrieval Contracts](../backend/state-machine/retrieval-contracts.md#stage-0-onboarding)
 

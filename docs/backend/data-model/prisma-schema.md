@@ -128,14 +128,14 @@ enum SessionStatus {
 
 ### Invitation
 
-Tracks the Stage 0 invitation flow — created when the initiating user confirms their message and sends an invite link to their partner.
+Tracks the Stage 0 invitation flow. The row is created with the session, then topic-frame confirmation makes the invitation acceptable and invitation confirmation records the inviter's share/continue action.
 
 ```prisma
 model Invitation {
   id                 String           @id @default(cuid())
-  session            Session          @relation(fields: [sessionId], references: [id])
+  session            Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId          String
-  invitedBy          User             @relation("InvitedBy", fields: [invitedById], references: [id])
+  invitedBy          User             @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
   invitedById        String
   name               String?          // Display name for the invited person
   messageConfirmed   Boolean          @default(false) // User confirmed the invitation message

@@ -111,7 +111,7 @@ curl -X POST /api/v1/sessions \
 
 ### Session lifecycle
 
-`CREATED → INVITED → ACTIVE → ARCHIVED | ABANDONED`. There are no pause/resume states. `CREATED` flips to `INVITED` when the inviter confirms the AI-proposed topic frame (`POST /sessions/:id/topic-frame/confirm`); `INVITED` flips to `ACTIVE` when the partner accepts.
+Primary path: `CREATED → INVITED → ACTIVE → RESOLVED | ARCHIVED | ABANDONED`. `CREATED` flips to `INVITED` when the inviter confirms the AI-proposed topic frame (`POST /sessions/:id/topic-frame/confirm`); `INVITED` flips to `ACTIVE` when the partner accepts. Active sessions can also temporarily enter `PAUSED` or `WAITING`.
 
 > **Background AI**: After the inviter confirms the invitation was sent (`POST /sessions/:id/invitation/confirm`), the HTTP response returns immediately and the backend fires an AI transition message generation + Ably session-event publish asynchronously (fire-and-forget).
 
@@ -185,6 +185,8 @@ The frontend doesn't reconstruct session state from `GET /sessions/:id` alone. U
 | `GET`  | `/api/v1/sessions/:id/state` | Consolidated session + stage + gate state |
 | `GET`  | `/api/v1/sessions/:id/timeline` | Ordered ChatItem timeline (messages + indicators) |
 | `GET`  | `/api/v1/sessions/:id/progress` | Per-user `StageProgress` + gate satisfaction |
+| `POST` | `/api/v1/sessions/:id/pause` | Pause an active session for a cooling period |
+| `POST` | `/api/v1/sessions/:id/resume` | Resume a paused session |
 | `POST` | `/api/v1/sessions/:id/stages/advance` | Advance the caller's stage when all gates for the current stage are satisfied |
 | `POST` | `/api/v1/sessions/:id/resolve` | Resolve session. Requires at least one `AGREED` agreement exists in the shared vessel; returns `VALIDATION_ERROR` otherwise |
 | `POST` | `/api/v1/sessions/:id/viewed` | Mark the session as viewed (clears unread flags) |
@@ -198,7 +200,7 @@ The frontend doesn't reconstruct session state from `GET /sessions/:id` alone. U
 
 ### Pause / Resume
 
-Not implemented. Sessions cannot be paused. For cooling-off, users can stop messaging — all state persists, and the session remains in `ACTIVE` until archived, abandoned, or resolved.
+Pause/resume is implemented for cooling-off. `POST /sessions/:id/pause` moves an active session to `PAUSED`; `POST /sessions/:id/resume` moves a paused session back to `ACTIVE`. The session data and stage progress persist across the pause.
 
 ---
 
