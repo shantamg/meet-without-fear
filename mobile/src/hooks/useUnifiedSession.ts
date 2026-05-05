@@ -575,6 +575,8 @@ export function useUnifiedSession(
   const myReadyToRank =
     strategyData?.myReadyToRank === true ||
     (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.readyToRank === true;
+  const canMarkReadyToRank = strategyData?.canMarkReadyToRank === true;
+  const canRankStrategies = strategyData?.canRank === true;
   const overlappingStrategies = useMemo(() => revealData?.overlap ?? [], [revealData?.overlap]);
   const agreements = useMemo(() => agreementsData?.agreements ?? [], [agreementsData?.agreements]);
 
@@ -734,6 +736,8 @@ export function useUnifiedSession(
           position: 'end',
           props: {
             strategyCount: strategies.length,
+            canMarkReadyToRank,
+            canRank: canRankStrategies,
             // Note: StrategyDTO doesn't expose source to keep strategies unlabeled
             userContributedCount: 0,
           },
@@ -792,6 +796,8 @@ export function useUnifiedSession(
     strategyPhase,
     strategies,
     myReadyToRank,
+    canMarkReadyToRank,
+    canRankStrategies,
     overlappingStrategies,
     agreements,
     partnerName,
@@ -1253,6 +1259,8 @@ export function useUnifiedSession(
     strategyData,
     strategyPhase,
     strategies,
+    canMarkReadyToRank,
+    canRankStrategies,
     revealData,
     overlappingStrategies,
     agreementsData,

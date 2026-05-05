@@ -59,7 +59,12 @@ import { usePendingActions } from '../hooks/usePendingActions';
 import { useNeedsComparison } from '../hooks/useStages';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
 import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
-import { getStage2RealtimeInvalidationQueryKeys, getStage3RealtimeInvalidationQueryKeys, getStage4RealtimeInvalidationQueryKeys } from '../utils/realtimeInvalidation';
+import {
+  getPersistedMessageRefreshQueryKeys,
+  getStage2RealtimeInvalidationQueryKeys,
+  getStage3RealtimeInvalidationQueryKeys,
+  getStage4RealtimeInvalidationQueryKeys,
+} from '../utils/realtimeInvalidation';
 import { useToast } from '../contexts/ToastContext';
 import { createStyles } from '../theme/styled';
 import { WaitingBanner } from '../components/WaitingBanner';
@@ -449,23 +454,29 @@ export function UnifiedSessionScreen({
   // AI message handler for fire-and-forget pattern
   const { addAIMessage, handleAIMessageError } = useAIMessageHandler();
 
+  const refetchPersistedMessages = useCallback(() => {
+    for (const queryKey of getPersistedMessageRefreshQueryKeys(sessionId)) {
+      queryClient.refetchQueries({ queryKey });
+    }
+  }, [queryClient, sessionId]);
+
   const refreshStage2RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
     for (const queryKey of getStage2RealtimeInvalidationQueryKeys(sessionId)) {
       queryClient.invalidateQueries({ queryKey });
     }
     if (options?.refetchMessages) {
-      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+      refetchPersistedMessages();
     }
-  }, [queryClient, sessionId]);
+  }, [queryClient, refetchPersistedMessages, sessionId]);
 
   const refreshStage3RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
     for (const queryKey of getStage3RealtimeInvalidationQueryKeys(sessionId)) {
       queryClient.invalidateQueries({ queryKey });
     }
     if (options?.refetchMessages) {
-      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+      refetchPersistedMessages();
     }
-  }, [queryClient, sessionId]);
+  }, [queryClient, refetchPersistedMessages, sessionId]);
 
   const refreshStage4RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
     for (const queryKey of getStage4RealtimeInvalidationQueryKeys(sessionId)) {
@@ -474,9 +485,9 @@ export function UnifiedSessionScreen({
     queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
     queryClient.refetchQueries({ queryKey: stageKeys.agreements(sessionId) });
     if (options?.refetchMessages) {
-      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+      refetchPersistedMessages();
     }
-  }, [queryClient, sessionId]);
+  }, [queryClient, refetchPersistedMessages, sessionId]);
 
   useEffect(() => {
     const latestMessage = messages[messages.length - 1];
@@ -812,34 +823,34 @@ export function UnifiedSessionScreen({
       if (eventName === 'session.needs_extracted') {
         // My own needs have been extracted by the backend
         console.log('[UnifiedSessionScreen] Needs extracted, refreshing cache');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       if (eventName === 'partner.needs_confirmed') {
         // Partner confirmed their identified needs
         console.log('[UnifiedSessionScreen] Partner confirmed needs');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       if (eventName === 'partner.needs_shared') {
         // Partner consented to share their needs
         console.log('[UnifiedSessionScreen] Partner shared needs');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       if (eventName === 'session.needs_reveal_ready' || eventName === 'session.needs_revealed') {
         console.log('[UnifiedSessionScreen] Needs reveal ready');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       if (eventName === 'session.common_ground_ready') {
         console.log('[UnifiedSessionScreen] Common ground ready');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       if (eventName === 'partner.needs_validated') {
         console.log('[UnifiedSessionScreen] Partner validated needs');
-        refreshStage3RealtimeState();
+        refreshStage3RealtimeState({ refetchMessages: true });
       }
 
       // -----------------------------------------------------------------------
@@ -1150,7 +1161,9 @@ export function UnifiedSessionScreen({
         // React Query's focusManager also triggers stale refetches, but this
         // ensures immediate refresh even within the 30s staleTime window.
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-        queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
+        for (const queryKey of getPersistedMessageRefreshQueryKeys(sessionId)) {
+          queryClient.invalidateQueries({ queryKey });
+        }
       }
     });
     return () => subscription.remove();
@@ -1295,6 +1308,8 @@ export function UnifiedSessionScreen({
         (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.readyToRank === true,
       partnerReadyToRank: strategyData?.partnerReadyToRank === true ||
         ((partnerProgress as { gatesSatisfied?: Record<string, unknown> } | undefined)?.gatesSatisfied)?.readyToRank === true,
+      canMarkReadyToRank: strategyData?.canMarkReadyToRank === true,
+      canRank: strategyData?.canRank === true,
     },
     overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
     agreements: agreements?.map(a => ({
@@ -1742,16 +1757,21 @@ export function UnifiedSessionScreen({
 
         case 'strategy-pool-preview': {
           const stratCount = card.props.strategyCount as number;
+          const canMarkReadyToRank = card.props.canMarkReadyToRank === true;
+          const canRank = card.props.canRank === true;
+          const showPoolActions = stratCount > 0 && canRank;
           return (
             <View style={styles.inlineCard} key={card.id}>
               <Text style={styles.cardTitle}>Ideas So Far</Text>
               <Text style={styles.cardSubtitle}>
                 {stratCount === 0
                   ? 'Strategies are being gathered from your conversation...'
-                  : `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} ready to review`}
+                  : canRank
+                    ? `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} ready to review`
+                    : `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} saved from your side`}
               </Text>
               <View style={styles.strategyPreviewButtons}>
-                {stratCount > 0 && (
+                {showPoolActions && (
                   <TouchableOpacity
                     style={styles.secondaryButton}
                     onPress={() => openOverlay('strategy-pool')}
@@ -1759,13 +1779,22 @@ export function UnifiedSessionScreen({
                     <Text style={styles.secondaryButtonText}>View All</Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  style={[styles.primaryButton, stratCount === 0 && { opacity: 0.5 }]}
-                  onPress={handleMarkReadyToRank}
-                  disabled={stratCount === 0}
-                >
-                  <Text style={styles.primaryButtonText}>Ready to Rank</Text>
-                </TouchableOpacity>
+                {canMarkReadyToRank && (
+                  <TouchableOpacity
+                    style={styles.primaryButton}
+                    onPress={handleMarkReadyToRank}
+                  >
+                    <Text style={styles.primaryButtonText}>Done Adding Ideas</Text>
+                  </TouchableOpacity>
+                )}
+                {showPoolActions && (
+                  <TouchableOpacity
+                    style={styles.primaryButton}
+                    onPress={() => openOverlay('strategy-ranking')}
+                  >
+                    <Text style={styles.primaryButtonText}>Ready to Rank</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           );
@@ -2108,6 +2137,7 @@ export function UnifiedSessionScreen({
         );
 
       case 'strategy-pool':
+        if (strategyData?.canRank !== true) return null;
         return (
           <View style={styles.overlayContainer}>
             <StrategyPool
@@ -2128,6 +2158,7 @@ export function UnifiedSessionScreen({
         );
 
       case 'strategy-ranking':
+        if (strategyData?.canRank !== true) return null;
         return (
           <View style={styles.overlayContainer}>
             <StrategyRanking
@@ -2731,7 +2762,11 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // Strategy Ranking Phase - Full Screen Overlay
   // -------------------------------------------------------------------------
-  if (currentStage === Stage.STRATEGIC_REPAIR && strategyPhase === StrategyPhase.RANKING) {
+  if (
+    currentStage === Stage.STRATEGIC_REPAIR &&
+    strategyPhase === StrategyPhase.RANKING &&
+    strategyData?.canRank === true
+  ) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <SessionChatHeader
@@ -2912,8 +2947,7 @@ export function UnifiedSessionScreen({
           ) : undefined}
           hideInput={
             // Use derived hideInput logic from useChatUIState
-            // Never hide when empathy review panel is showing (user still needs to interact)
-            !shouldShowEmpathyPanel && derivedShouldHideInput
+            derivedShouldHideInput
           }
           validationCards={validationCards}
           onValidateAccurate={handleValidationAccurate}

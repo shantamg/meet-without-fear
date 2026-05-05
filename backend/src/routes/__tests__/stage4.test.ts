@@ -27,6 +27,7 @@ import {
   getStrategies,
   proposeStrategy,
   submitRanking,
+  markReady,
   getOverlap,
   createAgreement,
   confirmAgreement,
@@ -117,7 +118,7 @@ describe('Stage 4 API', () => {
           needsAddressed: ['connection'],
           duration: '2 weeks',
           measureOfSuccess: 'Feel more connected',
-          // Note: createdByUserId is NOT returned due to Prisma select
+          createdByUserId: mockUser.id,
         },
         {
           id: mockStrategyIds[1],
@@ -125,7 +126,7 @@ describe('Stage 4 API', () => {
           needsAddressed: ['recognition'],
           duration: '1 week',
           measureOfSuccess: null,
-          // Note: createdByUserId is NOT returned due to Prisma select
+          createdByUserId: mockUser.id,
         },
       ]);
 
@@ -155,7 +156,7 @@ describe('Stage 4 API', () => {
         expect(strategy).not.toHaveProperty('createdByUserId');
       });
 
-      // Verify Prisma was called with select that excludes createdByUserId
+      // Verify Prisma can use createdByUserId for server-side visibility without exposing it
       expect(prisma.strategyProposal.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           select: expect.objectContaining({
@@ -164,12 +165,50 @@ describe('Stage 4 API', () => {
             needsAddressed: true,
             duration: true,
             measureOfSuccess: true,
+            createdByUserId: true,
           }),
         })
       );
-      // Verify createdByUserId is NOT in the select
-      const findManyCall = (prisma.strategyProposal.findMany as jest.Mock).mock.calls[0][0];
-      expect(findManyCall.select.createdByUserId).toBeUndefined();
+    });
+
+    it('does not return partner-only strategies while current user is still collecting', async () => {
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: mockUser.id, stage: 4, gatesSatisfied: null },
+        { userId: mockPartnerId, stage: 4, gatesSatisfied: { readyToRank: true } },
+      ]);
+      (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: mockStrategyIds[0],
+          description: 'Partner-only idea',
+          needsAddressed: [],
+          duration: null,
+          measureOfSuccess: null,
+          createdByUserId: mockPartnerId,
+        },
+      ]);
+      (prisma.strategyRanking.findMany as jest.Mock).mockResolvedValue([]);
+
+      await getStrategies(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            phase: 'COLLECTING',
+            strategies: [],
+            canMarkReadyToRank: false,
+            canRank: false,
+          }),
+        })
+      );
     });
 
     it('returns revealing phase for a user who already submitted ranking while partner has not', async () => {
@@ -397,6 +436,14 @@ describe('Stage 4 API', () => {
         status: 'IN_PROGRESS',
         gatesSatisfied: {},
       });
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: mockUser.id, stage: 4, gatesSatisfied: { readyToRank: true } },
+        { userId: mockPartnerId, stage: 4, gatesSatisfied: { readyToRank: true } },
+      ]);
+      (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue(
+        rankedIds.map((id) => ({ id }))
+      );
+      (prisma.strategyProposal.count as jest.Mock).mockResolvedValue(1);
       (prisma.strategyRanking.upsert as jest.Mock).mockResolvedValue({
         id: 'clranking0001',
         rankedIds,
@@ -445,6 +492,14 @@ describe('Stage 4 API', () => {
         status: 'IN_PROGRESS',
         gatesSatisfied: {},
       });
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: mockUser.id, stage: 4, gatesSatisfied: { readyToRank: true } },
+        { userId: mockPartnerId, stage: 4, gatesSatisfied: { readyToRank: true } },
+      ]);
+      (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue(
+        rankedIds.map((id) => ({ id }))
+      );
+      (prisma.strategyProposal.count as jest.Mock).mockResolvedValue(1);
       (prisma.strategyRanking.upsert as jest.Mock).mockResolvedValue({
         id: 'clranking0001',
         rankedIds,
@@ -491,6 +546,35 @@ describe('Stage 4 API', () => {
           error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
         })
       );
+    });
+  });
+
+  describe('POST /sessions/:id/strategies/ready (markReady)', () => {
+    it('rejects readiness when current user has not contributed strategies', async () => {
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findFirst as jest.Mock).mockResolvedValue({
+        stage: 4,
+        status: 'IN_PROGRESS',
+        gatesSatisfied: {},
+      });
+      (prisma.strategyProposal.count as jest.Mock).mockResolvedValue(0);
+
+      await markReady(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(400);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+        })
+      );
+      expect(prisma.stageProgress.update).not.toHaveBeenCalled();
     });
   });
 

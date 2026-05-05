@@ -100,6 +100,8 @@ export interface WaitingStatusInputs {
   strategyReadiness?: {
     myReadyToRank?: boolean;
     partnerReadyToRank?: boolean;
+    canMarkReadyToRank?: boolean;
+    canRank?: boolean;
   };
   overlappingStrategies: {
     count: number;

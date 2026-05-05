@@ -18,6 +18,7 @@ import {
   CapturedNeedInput,
 } from '@meet-without-fear/shared';
 import { messageKeys, sessionKeys, stageKeys, timelineKeys } from './queryKeys';
+import { getPersistedMessageRefreshQueryKeys } from '../utils/realtimeInvalidation';
 
 // ============================================================================
 // Types
@@ -155,6 +156,7 @@ export function useStreamingMessage(
   // Ref for 15-second fallback timer to handle stuck connections
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const FALLBACK_TIMEOUT = 15000; // 15 seconds
+  const reconciliationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * Add a message to the cache
@@ -369,8 +371,10 @@ export function useStreamingMessage(
 
   const invalidateAfterSuccessfulStream = useCallback(
     (sessionId: string, stage?: Stage) => {
+      queryClient.invalidateQueries({ queryKey: messageKeys.list(sessionId) });
       queryClient.invalidateQueries({ queryKey: messageKeys.infinite(sessionId) });
       queryClient.invalidateQueries({ queryKey: timelineKeys.infinite(sessionId) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       if (stage === Stage.PERSPECTIVE_STRETCH) {
         queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
       }
@@ -380,6 +384,28 @@ export function useStreamingMessage(
         queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
+    },
+    [queryClient]
+  );
+
+  const reconcilePersistedMessages = useCallback(
+    (sessionId: string) => {
+      if (reconciliationTimerRef.current) {
+        clearTimeout(reconciliationTimerRef.current);
+        reconciliationTimerRef.current = null;
+      }
+
+      for (const queryKey of getPersistedMessageRefreshQueryKeys(sessionId)) {
+        queryClient.invalidateQueries({ queryKey });
+        queryClient.refetchQueries({ queryKey });
+      }
+
+      reconciliationTimerRef.current = setTimeout(() => {
+        for (const queryKey of getPersistedMessageRefreshQueryKeys(sessionId)) {
+          queryClient.refetchQueries({ queryKey });
+        }
+        reconciliationTimerRef.current = null;
+      }, 1200);
     },
     [queryClient]
   );
@@ -745,6 +771,7 @@ export function useStreamingMessage(
               if (data.metadata) {
                 handleMetadata(sessionId, data.metadata);
               }
+              reconcilePersistedMessages(sessionId);
 
               // If text_complete wasn't received (fallback), handle completion here
               if (!textCompleteReceivedRef.current) {
@@ -789,6 +816,10 @@ export function useStreamingMessage(
             clearTimeout(fallbackTimerRef.current);
             fallbackTimerRef.current = null;
           }
+          if (reconciliationTimerRef.current) {
+            clearTimeout(reconciliationTimerRef.current);
+            reconciliationTimerRef.current = null;
+          }
 
           // Clear any pending throttled update
           if (pendingUpdateRef.current) {
@@ -812,6 +843,10 @@ export function useStreamingMessage(
         });
 
       } catch (error) {
+        if (reconciliationTimerRef.current) {
+          clearTimeout(reconciliationTimerRef.current);
+          reconciliationTimerRef.current = null;
+        }
         console.error('[useStreamingMessage] Error:', error);
         cleanupFailedStream(sessionId, currentStage);
         setErrorMessage((error as Error).message || 'Failed to send message');
@@ -819,7 +854,7 @@ export function useStreamingMessage(
         onError?.(error as Error);
       }
     },
-    [addMessageToCache, updateMessageInCache, cleanupFailedStream, handleMetadata, invalidateAfterSuccessfulStream, queryClient, onComplete, onError]
+    [addMessageToCache, updateMessageInCache, cleanupFailedStream, handleMetadata, invalidateAfterSuccessfulStream, reconcilePersistedMessages, queryClient, onComplete, onError]
   );
 
   /**
@@ -830,6 +865,10 @@ export function useStreamingMessage(
     if (fallbackTimerRef.current) {
       clearTimeout(fallbackTimerRef.current);
       fallbackTimerRef.current = null;
+    }
+    if (reconciliationTimerRef.current) {
+      clearTimeout(reconciliationTimerRef.current);
+      reconciliationTimerRef.current = null;
     }
 
     // Clear any pending throttled update

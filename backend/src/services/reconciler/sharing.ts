@@ -19,6 +19,7 @@ import {
 } from '../stage-prompts';
 import type { ContextBundle } from '../context-assembler';
 import { extractJsonFromResponse } from '../../utils/json-extractor';
+import { cleanVisibleAIText } from '../../utils/visible-text';
 import type {
   ReconcilerResult,
   ShareOfferMessage,
@@ -468,6 +469,8 @@ Respond in JSON:
     // Return null to signal failure - let caller handle the error state
     return null;
   }
+  response.suggestedContent = cleanVisibleAIText(response.suggestedContent);
+  response.reason = cleanVisibleAIText(response.reason);
   logger.info('Share suggestion generated', { preview: response.suggestedContent.substring(0, 50), reason: response.reason });
 
   // Use provided DB record or fall back to retry loop
@@ -773,6 +776,7 @@ export async function respondToShareSuggestion(
   } else {
     sharedContent = shareOffer.suggestedContent || '';
   }
+  sharedContent = cleanVisibleAIText(sharedContent);
 
   // Error if suggestedContent was somehow empty - this is a data integrity issue
   if (!sharedContent.trim()) {
@@ -1197,7 +1201,11 @@ Respond in JSON:
     return null;
   }
 
-  logger.debug('Generated feelings-focused suggestion', { preview: suggestionResult.suggestedContent.substring(0, 50) });
+  const offerMessage = cleanVisibleAIText(offerResult.message);
+  const suggestedContent = cleanVisibleAIText(suggestionResult.suggestedContent);
+  const suggestedReason = cleanVisibleAIText(suggestionResult.reason);
+
+  logger.debug('Generated feelings-focused suggestion', { preview: suggestedContent.substring(0, 50) });
 
   // Create or update share offer record with the crafted suggestion
   await prisma.reconcilerShareOffer.upsert({
@@ -1206,22 +1214,22 @@ Respond in JSON:
       resultId: result.id,
       userId: subjectId,
       status: 'OFFERED',
-      offerMessage: offerResult.message,
-      suggestedContent: suggestionResult.suggestedContent,
-      suggestedReason: suggestionResult.reason,
+      offerMessage,
+      suggestedContent,
+      suggestedReason,
     },
     update: {
       status: 'OFFERED',
-      offerMessage: offerResult.message,
-      suggestedContent: suggestionResult.suggestedContent,
-      suggestedReason: suggestionResult.reason,
+      offerMessage,
+      suggestedContent,
+      suggestedReason,
     },
   });
 
   return {
-    offerMessage: offerResult.message,
-    suggestedContent: suggestionResult.suggestedContent,
-    suggestedReason: suggestionResult.reason,
+    offerMessage,
+    suggestedContent,
+    suggestedReason,
     gapDescription: result.mostImportantGap || result.gapSummary,
   };
 }
