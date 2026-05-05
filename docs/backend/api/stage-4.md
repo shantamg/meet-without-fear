@@ -14,7 +14,8 @@ Stage 4 is **sequential** (unlike stages 1-3 which are parallel). Both users mus
 
 Key design:
 - Both users propose strategies independently
-- Strategies are presented as an **unlabeled pool**
+- During collection, each user only sees their own proposed strategies
+- The shared pool is presented as **unlabeled options** only after both users are ready and the current user has contributed at least one strategy
 - Users **privately rank** their preferences
 - Overlap is revealed together
 
@@ -28,11 +29,13 @@ Key design:
 
 ## Get Strategy Pool
 
-Get all proposed strategies (unlabeled).
+Get the strategies currently visible to the caller.
 
 ```
 GET /api/v1/sessions/:id/strategies
 ```
+
+During `COLLECTING`, the response only includes strategies created by the caller. Partner-origin strategies remain hidden so one side cannot be asked to rank a partner-only pool. After both users mark ready and the caller has contributed at least one strategy, the endpoint returns the full shared pool as unlabeled options.
 
 ### Response
 
@@ -43,6 +46,9 @@ interface GetStrategiesResponse {
   phase: StrategyPhase;
   myReadyToRank?: boolean;
   partnerReadyToRank?: boolean;
+  canMarkReadyToRank?: boolean;
+  canRank?: boolean;
+  rankableStrategyCount?: number;
 }
 
 interface StrategyDTO {
@@ -95,12 +101,15 @@ enum StrategyPhase {
     "aiSuggestionsAvailable": false,
     "phase": "COLLECTING",
     "myReadyToRank": false,
-    "partnerReadyToRank": false
+    "partnerReadyToRank": false,
+    "canMarkReadyToRank": true,
+    "canRank": false,
+    "rankableStrategyCount": 3
   }
 }
 ```
 
-**Privacy note**: Strategies are never attributed to their source. Both parties see the same unlabeled list.
+**Privacy note**: Strategies are never attributed to their source. During collection, partner-created strategies are not returned to the caller. Once ranking opens for the caller, both parties see the same unlabeled shared list.
 
 Validation: description required (1-800 chars), needsAddressed max 3 entries, duration/measureOfSuccess optional. Allow duplicates; UI may dedupe.
 
@@ -195,7 +204,7 @@ Validation: count 1-5; focusNeeds max 3 entries.
 
 ## Mark Ready to Rank
 
-Indicate readiness to move to ranking phase.
+Indicate that the caller is done adding ideas and ready to move toward ranking.
 
 ```
 POST /api/v1/sessions/:id/strategies/ready
@@ -206,10 +215,19 @@ POST /api/v1/sessions/:id/strategies/ready
 ```typescript
 interface MarkReadyResponse {
   ready: boolean;
+  readyAt?: string;
   partnerReady: boolean;
   canStartRanking: boolean;
 }
 ```
+
+### Preconditions
+
+- Session must be active.
+- Caller must be in Stage 4.
+- Caller must have contributed at least one `StrategyProposal` in this session.
+
+If the caller has no strategies, the endpoint returns `VALIDATION_ERROR` (400) and does not set `readyToRank`.
 
 ### Side Effects
 
@@ -253,7 +271,16 @@ interface SubmitRankingResponse {
 
 Rankings are **completely private** until both submit. Neither party can see the other's choices during ranking.
 
-Validation: IDs must exist in session, no duplicates, overwrite allowed (last write wins). Gate link: sets `rankingSubmitted` on the caller's `StageProgress.gatesSatisfied`.
+### Preconditions and Validation
+
+- Session must be active.
+- Caller must be in Stage 4.
+- Both users must have `readyToRank`.
+- Caller must have contributed at least one strategy.
+- `rankedIds` must be unique.
+- Every ranked ID must belong to the session's rankable strategy pool.
+
+Overwrite is allowed (last write wins). Gate link: sets `rankingSubmitted` on the caller's `StageProgress.gatesSatisfied`.
 
 ---
 
@@ -392,8 +419,8 @@ Stage 4 uses these caller-side gate markers on `StageProgress.gatesSatisfied`:
 
 | Gate | Requirement |
 |------|-------------|
-| `readyToRank` | Caller posted `/strategies/ready` |
-| `rankingSubmitted` | Caller posted `/strategies/rank` |
+| `readyToRank` | Caller posted `/strategies/ready` after contributing at least one strategy |
+| `rankingSubmitted` | Caller posted `/strategies/rank` after both users were ready and the caller had contributed at least one strategy |
 | `agreementCreated` | Required by the generic `/stages/advance` gate table, but Stage 4 normally resolves through agreement confirmation rather than manual advancement |
 
 `readyToRank` and `rankingSubmitted` are actively set by the Stage 4 controller. Agreement confirmation updates `Agreement` rows and may resolve the session directly; it does not currently set a StageProgress `agreementConfirmed` gate.
@@ -407,12 +434,15 @@ Session resolves when every `Agreement` row in the session is fully signed by bo
 ```mermaid
 flowchart TD
     Enter[Enter Stage 4] --> Collect[Both propose strategies]
-    Collect --> Pool[Strategies in unlabeled pool]
-    Pool --> MoreIdeas{Want more ideas?}
+    Collect --> LocalPool[Each user sees only their own ideas]
+    LocalPool --> MoreIdeas{Want more ideas?}
     MoreIdeas -->|Yes| AISuggest[AI generates suggestions]
-    AISuggest --> Pool
-    MoreIdeas -->|No| Ready[Both mark ready]
-    Ready --> Rank[Private ranking]
+    AISuggest --> LocalPool
+    MoreIdeas -->|No| Done[Each marks done adding ideas]
+    Done --> Ready{Both ready and each contributed?}
+    Ready -->|No| WaitReady[Wait for partner readiness or contribution]
+    Ready -->|Yes| SharedPool[Show full unlabeled shared pool]
+    SharedPool --> Rank[Private ranking]
     Rank --> BothRanked{Both ranked?}
     BothRanked -->|No| Wait[Wait for partner]
     BothRanked -->|Yes| Reveal[Reveal overlap]

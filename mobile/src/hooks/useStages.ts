@@ -1744,6 +1744,8 @@ export function useMarkReadyToRank(
               myReadyToRank: true,
               partnerReadyToRank: data.partnerReady,
               phase: data.canStartRanking ? StrategyPhase.RANKING : old.phase,
+              canMarkReadyToRank: false,
+              canRank: data.canStartRanking,
             }
           : old
       );
@@ -1763,6 +1765,9 @@ export function useMarkReadyToRank(
             }
           : old
       );
+      queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
     },
     onError: (_error, { sessionId }, context) => {
       if (context?.previousStrategies) {

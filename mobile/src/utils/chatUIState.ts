@@ -121,6 +121,8 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   strategyReadiness?: {
     myReadyToRank?: boolean;
     partnerReadyToRank?: boolean;
+    canMarkReadyToRank?: boolean;
+    canRank?: boolean;
   };
 }
 
@@ -572,6 +574,11 @@ function computeShouldHideInput(
   }
 
   if (
+    aboveInputPanel === 'topic-proposal' ||
+    aboveInputPanel === 'invitation' ||
+    aboveInputPanel === 'feel-heard' ||
+    aboveInputPanel === 'share-suggestion' ||
+    aboveInputPanel === 'empathy-statement' ||
     aboveInputPanel === 'needs-review' ||
     aboveInputPanel === 'needs-share' ||
     aboveInputPanel === 'needs-reveal-validation'
@@ -612,6 +619,14 @@ function computeShouldHideInput(
   if (currentStage === Stage.STRATEGIC_REPAIR &&
       inputs.strategyPhase &&
       inputs.strategyPhase !== 'COLLECTING') {
+    return true;
+  }
+
+  if (
+    currentStage === Stage.STRATEGIC_REPAIR &&
+    inputs.agreements &&
+    inputs.agreements.length > 0
+  ) {
     return true;
   }
 

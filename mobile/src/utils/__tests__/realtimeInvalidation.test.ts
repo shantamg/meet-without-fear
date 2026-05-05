@@ -1,5 +1,6 @@
-import { messageKeys, notificationKeys, sessionKeys, stageKeys } from '../../hooks/queryKeys';
+import { messageKeys, notificationKeys, sessionKeys, stageKeys, timelineKeys } from '../../hooks/queryKeys';
 import {
+  getPersistedMessageRefreshQueryKeys,
   getStage2RealtimeInvalidationQueryKeys,
   getStage3RealtimeInvalidationQueryKeys,
   getStage4RealtimeInvalidationQueryKeys,
@@ -8,14 +9,25 @@ import {
 describe('realtime invalidation key sets', () => {
   const sessionId = 'session-1';
 
+  it('covers all persisted message refresh caches used by the active session screen', () => {
+    expect(getPersistedMessageRefreshQueryKeys(sessionId)).toEqual([
+      messageKeys.infinite(sessionId),
+      messageKeys.list(sessionId),
+      timelineKeys.infinite(sessionId),
+      sessionKeys.state(sessionId),
+    ]);
+  });
+
   it('covers Stage 2 dependent state and message caches', () => {
     expect(getStage2RealtimeInvalidationQueryKeys(sessionId)).toEqual([
       stageKeys.empathyStatus(sessionId),
       stageKeys.partnerEmpathy(sessionId),
       stageKeys.empathyDraft(sessionId),
       stageKeys.progress(sessionId),
-      sessionKeys.state(sessionId),
       messageKeys.infinite(sessionId),
+      messageKeys.list(sessionId),
+      timelineKeys.infinite(sessionId),
+      sessionKeys.state(sessionId),
       stageKeys.pendingActions(sessionId),
       notificationKeys.badgeCount(),
     ]);
@@ -26,8 +38,10 @@ describe('realtime invalidation key sets', () => {
       stageKeys.needs(sessionId),
       stageKeys.needsComparison(sessionId),
       stageKeys.progress(sessionId),
-      sessionKeys.state(sessionId),
       messageKeys.infinite(sessionId),
+      messageKeys.list(sessionId),
+      timelineKeys.infinite(sessionId),
+      sessionKeys.state(sessionId),
       stageKeys.pendingActions(sessionId),
       notificationKeys.badgeCount(),
     ]);
@@ -39,8 +53,10 @@ describe('realtime invalidation key sets', () => {
       stageKeys.strategiesReveal(sessionId),
       stageKeys.agreements(sessionId),
       stageKeys.progress(sessionId),
-      sessionKeys.state(sessionId),
       messageKeys.infinite(sessionId),
+      messageKeys.list(sessionId),
+      timelineKeys.infinite(sessionId),
+      sessionKeys.state(sessionId),
       stageKeys.pendingActions(sessionId),
       notificationKeys.badgeCount(),
     ]);

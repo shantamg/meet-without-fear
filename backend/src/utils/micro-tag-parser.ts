@@ -12,6 +12,7 @@
 import { extractJsonFromResponse } from './json-extractor';
 import { logger } from '../lib/logger';
 import { NeedCategory, type CapturedNeedInput } from '@meet-without-fear/shared';
+import { cleanVisibleAIText } from './visible-text';
 
 export interface ParsedMicroTagResponse {
   /** The user-facing response text (all tags stripped) */
@@ -58,13 +59,16 @@ function parseNeedsBlock(rawNeeds: string | null): CapturedNeedInput[] {
     return items.flatMap((item): CapturedNeedInput[] => {
       if (!item || typeof item !== 'object') return [];
       const candidate = item as Record<string, unknown>;
-      const need = typeof candidate.need === 'string' ? candidate.need.trim() : '';
+      const need = typeof candidate.need === 'string' ? cleanVisibleAIText(candidate.need) : '';
       const description = typeof candidate.description === 'string'
-        ? candidate.description.trim()
+        ? cleanVisibleAIText(candidate.description)
         : need;
       const category = candidate.category;
       const evidence = Array.isArray(candidate.evidence)
-        ? candidate.evidence.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        ? candidate.evidence
+            .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+            .map(cleanVisibleAIText)
+            .filter(Boolean)
         : [];
 
       if (!need || !description || !isNeedCategory(category)) return [];
@@ -128,7 +132,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
   const strategyRegex = /ProposedStrategy:\s*(.+)/gi;
   let strategyMatch: RegExpExecArray | null;
   while ((strategyMatch = strategyRegex.exec(thinking)) !== null) {
-    const strategy = strategyMatch[1].trim();
+    const strategy = cleanVisibleAIText(strategyMatch[1]);
     if (strategy.length > 0) {
       proposedStrategies.push(strategy);
     }
@@ -137,9 +141,9 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
   const needRegex = /ProposedNeed:\s*([^|]+)\|([^|]+)\|(.+)/gi;
   let needMatch: RegExpExecArray | null;
   while ((needMatch = needRegex.exec(thinking)) !== null) {
-    const need = needMatch[1].trim();
+    const need = cleanVisibleAIText(needMatch[1]);
     const category = needMatch[2].trim();
-    const description = needMatch[3].trim();
+    const description = cleanVisibleAIText(needMatch[3]);
     if (need && isNeedCategory(category) && description) {
       proposedNeeds.push({ need, category, description, evidence: [] });
     }

@@ -77,6 +77,25 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
+type StrategyProposalForVisibility = {
+  id: string;
+  description: string;
+  needsAddressed: string[];
+  duration: string | null;
+  measureOfSuccess: string | null;
+  createdByUserId: string | null;
+};
+
+function toStrategyDTO(strategy: StrategyProposalForVisibility) {
+  return {
+    id: strategy.id,
+    description: strategy.description,
+    needsAddressed: strategy.needsAddressed,
+    duration: strategy.duration,
+    measureOfSuccess: strategy.measureOfSuccess,
+  };
+}
+
 // Create agreement request schema locally
 const createAgreementRequestSchema = z.object({
   strategyId: z.string().optional(),
@@ -132,7 +151,8 @@ export async function getStrategies(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Get strategies without exposing createdBy
+    // Get creator attribution for server-side visibility checks, but strip it
+    // before returning the anonymous pool to clients.
     const strategies = await prisma.strategyProposal.findMany({
       where: { sessionId },
       select: {
@@ -141,9 +161,9 @@ export async function getStrategies(req: Request, res: Response): Promise<void> 
         needsAddressed: true,
         duration: true,
         measureOfSuccess: true,
-        // Note: createdByUserId NOT selected - anonymous pool
+        createdByUserId: true,
       },
-    });
+    }) as StrategyProposalForVisibility[];
 
     // Compute actual phase from DB state
     const allProgress = await prisma.stageProgress.findMany({
@@ -167,20 +187,31 @@ export async function getStrategies(req: Request, res: Response): Promise<void> 
 
     const bothRanked = rankings.length >= 2;
     const myRanked = rankings.some((r) => r.userId === user.id);
+    const myProposalCount = strategies.filter((s) => s.createdByUserId === user.id).length;
+    const rankingOpenForUser = allReadyToRank && myProposalCount > 0;
 
     let phase: StrategyPhase;
     if (bothRanked) {
       phase = StrategyPhase.REVEALING;
     } else if (myRanked) {
       phase = StrategyPhase.REVEALING;
-    } else if (allReadyToRank) {
+    } else if (rankingOpenForUser) {
       phase = StrategyPhase.RANKING;
     } else {
       phase = StrategyPhase.COLLECTING;
     }
 
+    const fullPoolVisible = rankingOpenForUser || myRanked || bothRanked;
+    const visibleStrategies = fullPoolVisible
+      ? strategies
+      : strategies.filter((s) => s.createdByUserId === user.id);
+    const canRank = phase === StrategyPhase.RANKING && !myRanked && strategies.length > 0;
+    const canMarkReadyToRank = phase === StrategyPhase.COLLECTING &&
+      myGates?.readyToRank !== true &&
+      myProposalCount > 0;
+
     // Shuffle to avoid order bias
-    const shuffled = shuffleArray(strategies);
+    const shuffled = shuffleArray(visibleStrategies.map(toStrategyDTO));
 
     successResponse(res, {
       strategies: shuffled,
@@ -188,6 +219,9 @@ export async function getStrategies(req: Request, res: Response): Promise<void> 
       aiSuggestionsAvailable: false,
       myReadyToRank: myGates?.readyToRank === true,
       partnerReadyToRank: partnerGates?.readyToRank === true,
+      canMarkReadyToRank,
+      canRank,
+      rankableStrategyCount: fullPoolVisible ? strategies.length : visibleStrategies.length,
     });
   } catch (error) {
     logger.error('[getStrategies] Error:', error);
@@ -329,6 +363,10 @@ export async function submitRanking(req: Request, res: Response): Promise<void> 
     }
 
     const { rankedIds } = parseResult.data;
+    if (new Set(rankedIds).size !== rankedIds.length) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Ranked strategy IDs must be unique', 400);
+      return;
+    }
 
     // Check session exists and user has access
     const session = await prisma.session.findFirst({
@@ -372,6 +410,37 @@ export async function submitRanking(req: Request, res: Response): Promise<void> 
         `Cannot submit ranking: you are in stage ${currentStage}, but stage 4 is required`,
         400
       );
+      return;
+    }
+
+    const allProgress = await prisma.stageProgress.findMany({
+      where: { sessionId, stage: 4 },
+    });
+    const allReadyToRank = allProgress.length >= 2 &&
+      allProgress.every((p) => {
+        const gates = p.gatesSatisfied as Record<string, unknown> | null;
+        return gates?.readyToRank === true;
+      });
+    if (!allReadyToRank) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Strategies are not ready to rank yet', 400);
+      return;
+    }
+
+    const myProposalCount = await prisma.strategyProposal.count({
+      where: { sessionId, createdByUserId: user.id },
+    });
+    if (myProposalCount === 0) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Add at least one strategy before ranking', 400);
+      return;
+    }
+
+    const rankableStrategies = await prisma.strategyProposal.findMany({
+      where: { sessionId },
+      select: { id: true },
+    });
+    const rankableIds = new Set(rankableStrategies.map((strategy) => strategy.id));
+    if (rankedIds.some((id) => !rankableIds.has(id))) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Ranked strategy IDs must belong to this session', 400);
       return;
     }
 
@@ -1025,6 +1094,14 @@ export async function markReady(req: Request, res: Response): Promise<void> {
         `Cannot mark ready: you are in stage ${currentStage}, but stage 4 is required`,
         400
       );
+      return;
+    }
+
+    const myProposalCount = await prisma.strategyProposal.count({
+      where: { sessionId, createdByUserId: user.id },
+    });
+    if (myProposalCount === 0) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Add at least one strategy before marking ready to rank', 400);
       return;
     }
 
