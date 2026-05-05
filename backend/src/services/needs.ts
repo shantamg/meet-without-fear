@@ -10,6 +10,7 @@
 import { resetBedrockClient } from '../lib/bedrock';
 import { prisma } from '../lib/prisma';
 import { NeedCategory, type CapturedNeedInput } from '@meet-without-fear/shared';
+import { cleanVisibleAIText } from '../utils/visible-text';
 
 // ============================================================================
 // Types
@@ -81,9 +82,9 @@ export async function captureProposedNeedsForUser(
       await tx.identifiedNeed.create({
         data: {
           vesselId: vessel.id,
-          need: item.description || item.need,
+          need: cleanVisibleAIText(item.description || item.need),
           category: item.category,
-          evidence,
+          evidence: evidence.map(cleanVisibleAIText).filter(Boolean),
           aiConfidence: 0.85,
           confirmed: false,
         },

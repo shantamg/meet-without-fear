@@ -1295,6 +1295,8 @@ export function UnifiedSessionScreen({
         (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.readyToRank === true,
       partnerReadyToRank: strategyData?.partnerReadyToRank === true ||
         ((partnerProgress as { gatesSatisfied?: Record<string, unknown> } | undefined)?.gatesSatisfied)?.readyToRank === true,
+      canMarkReadyToRank: strategyData?.canMarkReadyToRank === true,
+      canRank: strategyData?.canRank === true,
     },
     overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
     agreements: agreements?.map(a => ({
@@ -1742,16 +1744,21 @@ export function UnifiedSessionScreen({
 
         case 'strategy-pool-preview': {
           const stratCount = card.props.strategyCount as number;
+          const canMarkReadyToRank = card.props.canMarkReadyToRank === true;
+          const canRank = card.props.canRank === true;
+          const showPoolActions = stratCount > 0 && canRank;
           return (
             <View style={styles.inlineCard} key={card.id}>
               <Text style={styles.cardTitle}>Ideas So Far</Text>
               <Text style={styles.cardSubtitle}>
                 {stratCount === 0
                   ? 'Strategies are being gathered from your conversation...'
-                  : `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} ready to review`}
+                  : canRank
+                    ? `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} ready to review`
+                    : `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} saved from your side`}
               </Text>
               <View style={styles.strategyPreviewButtons}>
-                {stratCount > 0 && (
+                {showPoolActions && (
                   <TouchableOpacity
                     style={styles.secondaryButton}
                     onPress={() => openOverlay('strategy-pool')}
@@ -1759,13 +1766,22 @@ export function UnifiedSessionScreen({
                     <Text style={styles.secondaryButtonText}>View All</Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  style={[styles.primaryButton, stratCount === 0 && { opacity: 0.5 }]}
-                  onPress={handleMarkReadyToRank}
-                  disabled={stratCount === 0}
-                >
-                  <Text style={styles.primaryButtonText}>Ready to Rank</Text>
-                </TouchableOpacity>
+                {canMarkReadyToRank && (
+                  <TouchableOpacity
+                    style={styles.primaryButton}
+                    onPress={handleMarkReadyToRank}
+                  >
+                    <Text style={styles.primaryButtonText}>Done Adding Ideas</Text>
+                  </TouchableOpacity>
+                )}
+                {showPoolActions && (
+                  <TouchableOpacity
+                    style={styles.primaryButton}
+                    onPress={() => openOverlay('strategy-ranking')}
+                  >
+                    <Text style={styles.primaryButtonText}>Ready to Rank</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           );
@@ -2108,6 +2124,7 @@ export function UnifiedSessionScreen({
         );
 
       case 'strategy-pool':
+        if (strategyData?.canRank !== true) return null;
         return (
           <View style={styles.overlayContainer}>
             <StrategyPool
@@ -2128,6 +2145,7 @@ export function UnifiedSessionScreen({
         );
 
       case 'strategy-ranking':
+        if (strategyData?.canRank !== true) return null;
         return (
           <View style={styles.overlayContainer}>
             <StrategyRanking
@@ -2731,7 +2749,11 @@ export function UnifiedSessionScreen({
   // -------------------------------------------------------------------------
   // Strategy Ranking Phase - Full Screen Overlay
   // -------------------------------------------------------------------------
-  if (currentStage === Stage.STRATEGIC_REPAIR && strategyPhase === StrategyPhase.RANKING) {
+  if (
+    currentStage === Stage.STRATEGIC_REPAIR &&
+    strategyPhase === StrategyPhase.RANKING &&
+    strategyData?.canRank === true
+  ) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <SessionChatHeader

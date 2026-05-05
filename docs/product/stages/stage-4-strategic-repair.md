@@ -18,7 +18,8 @@ Move from understanding to action by designing small, reversible experiments tha
 - Invite **both users** to propose their own strategies
 - Help refine proposals to be small, reversible, and time-bounded
 - Collect and combine suggestions from both parties
-- Present all strategies as **unlabeled options** (no attribution to source)
+- During collection, keep each person's proposed strategies visible only to that person
+- Present all strategies as **unlabeled options** only once both users are ready to rank and each has contributed
 - Allow users to select from the combined pool
 - Offer to generate additional AI suggestions if desired (product target; the current backend endpoint is still a placeholder)
 - Document agreed-upon micro-experiments
@@ -28,14 +29,16 @@ Move from understanding to action by designing small, reversible experiments tha
 Unlike traditional negotiation where one person proposes and the other reacts, Stage 4 invites **both parties to contribute strategies independently**. The AI then:
 
 1. Collects strategies from both users
-2. Presents them as a single unlabeled pool (no attribution to source)
-3. Asks: "Here is what we have come up with so far. Are you happy with these options, or would you like me to try and generate a few more to explore?"
-4. Each person **privately ranks their top choices**
-5. AI reveals where selections overlap
+2. Shows each user only their own ideas while collection is still in progress
+3. Lets each user mark "Done Adding Ideas" after they have contributed at least one strategy
+4. Presents the combined list as a single unlabeled pool once both users are ready
+5. Each person **privately ranks their top choices**
+6. AI reveals where selections overlap
 
 This approach:
 - Removes defensiveness that comes with accepting another's proposal
 - Creates joint ownership of solutions
+- Prevents one person from being asked to rank a partner-only set of ideas
 - Avoids win/lose dynamics
 - Encourages creativity when users can build on unlabeled ideas
 - Private ranking removes pressure of visible negotiation
@@ -51,16 +54,19 @@ flowchart TD
 
     InviteB[Invite User B strategy] --> RefineB[AI helps refine]
 
-    RefineA --> Collect[Collect all strategies]
+    RefineA --> Collect[Collect each user's strategies]
     RefineB --> Collect
 
-    Collect --> Present[Present unlabeled strategy pool]
-    Present --> Question[Happy with options or want more?]
+    Collect --> LocalReview[Show each user their own saved ideas]
+    LocalReview --> Question[Done adding ideas or want more?]
 
     Question -->|Want more| Generate[AI suggestions endpoint - placeholder today]
-    Generate --> Present
+    Generate --> LocalReview
 
-    Question -->|Happy| PrivateRank[Each privately ranks top choices]
+    Question -->|Done| Ready{Both ready and each contributed?}
+    Ready -->|No| WaitReady[Wait for partner readiness or contribution]
+    Ready -->|Yes| Present[Present combined unlabeled strategy pool]
+    Present --> PrivateRank[Each privately ranks top choices]
     PrivateRank --> WaitBoth[Wait for both to rank]
     WaitBoth --> Reveal[AI reveals overlap]
     Reveal --> Overlap{Any overlap?}
@@ -166,6 +172,10 @@ flowchart TB
     end
 ```
 
+### Collection View
+
+Before the shared pool opens, the user sees only ideas created from their side of the Stage 4 conversation. The primary action is **Done Adding Ideas**, not **Ready to Rank**. This marks the caller's readiness gate and waits for the partner if the combined pool is not ready yet.
+
 ### Private Ranking View
 
 ```mermaid
@@ -217,7 +227,8 @@ flowchart TB
 ```
 
 **Key visual elements:**
-- Strategy options are presented without labels indicating who suggested them
+- During collection, users see only their own saved ideas
+- Once ranking is available, strategy options are presented without labels indicating who suggested them
 - All buttons use soft, neutral colors (no "yours" vs "theirs" styling)
 - Ranking is private until both submit
 - Overlap is revealed together without implying agreement where none exists
