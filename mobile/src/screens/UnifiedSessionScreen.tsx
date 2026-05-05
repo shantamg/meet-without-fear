@@ -311,8 +311,6 @@ export function UnifiedSessionScreen({
   const queryClient = useQueryClient();
   const { showError } = useToast();
 
-  // Sharing status for header button
-  const sharingStatus = useSharingStatus(sessionId);
   // Server-side pending actions for badge count (replaces client-side computation)
   const pendingActionsQuery = usePendingActions(sessionId);
 
@@ -437,6 +435,16 @@ export function UnifiedSessionScreen({
     markSessionViewed,
 
   } = useUnifiedSession(sessionId);
+
+  // Sharing status for the header button. Keep these duplicate header queries
+  // behind the same stage/access gates as useUnifiedSession so the badge does
+  // not reintroduce the Stage 2 share-offer request storm this PR removes.
+  const sharingStatus = useSharingStatus(sessionId, {
+    enabled: !accessDenied && currentStage >= Stage.PERSPECTIVE_STRETCH,
+    enableEmpathyStatus: currentStage >= Stage.PERSPECTIVE_STRETCH,
+    enablePartnerEmpathy: currentStage >= Stage.PERSPECTIVE_STRETCH,
+    enableShareOffer: currentStage === Stage.PERSPECTIVE_STRETCH,
+  });
 
   // AI message handler for fire-and-forget pattern
   const { addAIMessage, handleAIMessageError } = useAIMessageHandler();
