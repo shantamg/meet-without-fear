@@ -759,6 +759,7 @@ export async function createAgreement(req: Request, res: Response): Promise<void
       {
         agreement: {
           id: agreement.id,
+          strategyId: agreement.proposalId,
           description: agreement.description,
           type: agreement.type,
           duration: null,
@@ -942,6 +943,7 @@ export async function confirmAgreement(req: Request, res: Response): Promise<voi
     successResponse(res, {
       agreement: {
         id: updatedAgreement.id,
+        strategyId: updatedAgreement.proposalId,
         description: updatedAgreement.description,
         type: updatedAgreement.type,
         duration: null, // Field not in Prisma model
@@ -1216,6 +1218,7 @@ export async function getAgreements(req: Request, res: Response): Promise<void> 
     successResponse(res, {
       agreements: agreements.map((a) => ({
         id: a.id,
+        strategyId: a.proposalId,
         description: a.description,
         type: a.type,
         duration: null, // Field removed from schema

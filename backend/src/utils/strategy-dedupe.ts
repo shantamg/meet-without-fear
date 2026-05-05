@@ -11,13 +11,17 @@ function normalizeStrategy(value: string): string[] {
     .filter((word) => word.length > 2);
 }
 
+function isMoreSpecificStrategy(existing: string, next: string): boolean {
+  return normalizeStrategy(next).length >= normalizeStrategy(existing).length;
+}
+
 export function isSupersededStrategy(existing: string, next: string): boolean {
   const existingWords = new Set(normalizeStrategy(existing));
   const nextWords = new Set(normalizeStrategy(next));
   if (existingWords.size === 0 || nextWords.size === 0) return false;
   const intersection = [...existingWords].filter((word) => nextWords.has(word)).length;
   const smallerSetSize = Math.min(existingWords.size, nextWords.size);
-  return intersection / smallerSetSize >= 0.65;
+  return intersection / smallerSetSize >= 0.65 && isMoreSpecificStrategy(existing, next);
 }
 
 export function filterNewStrategiesAgainstExisting(

@@ -109,6 +109,7 @@ export type RevealOverlapResponse = {
 
 export interface AgreementDTO {
   id: string;
+  strategyId?: string | null;
   description: string;
   type?: AgreementType;
   duration: string | null;

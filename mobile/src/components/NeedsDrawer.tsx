@@ -326,8 +326,10 @@ export function NeedsDrawer({
               }}
               activeOpacity={0.7}
               testID={`${testID}-not-valid-yet`}
+              accessibilityRole="button"
+              accessibilityLabel="Needs not reviewed yet"
             >
-              <Text style={styles.secondaryButtonText}>Not valid yet</Text>
+              <Text style={styles.secondaryButtonText}>Not reviewed yet</Text>
             </TouchableOpacity>
           )}
           {onValidateNeeds && (
@@ -339,6 +341,8 @@ export function NeedsDrawer({
               }}
               activeOpacity={0.7}
               testID={`${testID}-validate-needs`}
+              accessibilityRole="button"
+              accessibilityLabel="Validate needs"
             >
               <Text style={styles.primaryButtonText}>Validate needs</Text>
             </TouchableOpacity>

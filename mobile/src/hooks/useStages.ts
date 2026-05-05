@@ -1940,13 +1940,17 @@ export function useCreateAgreement(
         request
       );
     },
-    onSuccess: (data, { sessionId }) => {
+    onSuccess: (data, { sessionId, strategyId }) => {
       queryClient.setQueryData<{ agreements: AgreementDTO[] }>(
         stageKeys.agreements(sessionId),
         (old) => {
           const existing = old?.agreements ?? [];
-          const withoutDuplicate = existing.filter((a) => a.id !== data.agreement.id);
-          return { agreements: [...withoutDuplicate, data.agreement] };
+          const agreement = {
+            ...data.agreement,
+            strategyId: data.agreement.strategyId ?? strategyId ?? null,
+          };
+          const withoutDuplicate = existing.filter((a) => a.id !== agreement.id);
+          return { agreements: [...withoutDuplicate, agreement] };
         }
       );
       queryClient.setQueryData<GetStrategiesResponse>(
@@ -1956,7 +1960,10 @@ export function useCreateAgreement(
           : old
       );
       queryClient.refetchQueries({ queryKey: stageKeys.agreements(sessionId) });
+      queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
+      queryClient.refetchQueries({ queryKey: stageKeys.strategiesReveal(sessionId) });
       queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
+      queryClient.refetchQueries({ queryKey: sessionKeys.state(sessionId) });
     },
     ...options,
   });

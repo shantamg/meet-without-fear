@@ -244,6 +244,37 @@ Visible response.`;
       expect(result.offerReadyToShare).toBe(false);
     });
 
+    it('strips visible ProposedStrategy lines while preserving extracted strategies', () => {
+      const raw = `<thinking>Mode:STRATEGIC_REPAIR | StrategyProposed:Y</thinking>
+ProposedStrategy: Ceramics class on Tuesday evenings for eight weeks
+ProposedStrategy: Sunday morning walk, 45 minutes, once a week for four weeks
+That's solid. Which one feels easiest to start with?`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe("That's solid. Which one feels easiest to start with?");
+      expect(result.response).not.toContain('ProposedStrategy:');
+      expect(result.proposedStrategies).toEqual([
+        'Ceramics class on Tuesday evenings for eight weeks',
+        'Sunday morning walk, 45 minutes, once a week for four weeks',
+      ]);
+    });
+
+    it('does not treat follow-up timing as a rankable strategy', () => {
+      const raw = `<thinking>
+StrategyProposed:Y
+ProposedStrategy: Ceramics class on Tuesday evenings for eight weeks
+ProposedStrategy: Follow-up check-in after eight weeks
+</thinking>
+That gives you a concrete experiment and a time to revisit it.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.proposedStrategies).toEqual([
+        'Ceramics class on Tuesday evenings for eight weeks',
+      ]);
+    });
+
     it('defaults flags to false when not present', () => {
       const raw = `<thinking>Just some analysis</thinking>Response`;
       const result = parseMicroTagResponse(raw);

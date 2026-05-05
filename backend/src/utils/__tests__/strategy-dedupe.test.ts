@@ -41,4 +41,13 @@ describe('strategy dedupe', () => {
     expect(result.supersededIds).toEqual([]);
     expect(result.newStrategies).toEqual([]);
   });
+
+  it('does not let a broader later draft replace a more specific existing strategy', () => {
+    expect(
+      isSupersededStrategy(
+        'Sunday morning walk, 45 minutes, once a week for four weeks, no relationship agenda',
+        'Sunday morning walk once a week'
+      )
+    ).toBe(false);
+  });
 });

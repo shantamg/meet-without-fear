@@ -649,6 +649,7 @@ export function StrategicRepairScreen() {
           uniqueToMe={[]}
           uniqueToPartner={[]}
           onCreateAgreement={handleCreateAgreementFromOverlap}
+          existingAgreementStrategyIds={agreements.map((a) => a.strategyId).filter((id): id is string => typeof id === 'string')}
         />
       </SafeAreaView>
     );
