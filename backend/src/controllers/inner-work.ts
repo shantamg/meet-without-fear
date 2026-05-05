@@ -374,7 +374,6 @@ export const createInnerWorkSession = asyncHandler(
       const retrievedContext = await retrieveContext({
         userId: user.id,
         currentMessage: initialMessage,
-        currentSessionId: session.id,
         turnId,
         includeInnerThoughts: true,
         excludeInnerThoughtsSessionId: session.id,
