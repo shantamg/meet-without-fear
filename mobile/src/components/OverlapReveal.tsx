@@ -30,6 +30,8 @@ interface OverlapRevealProps {
   onCreateAgreement?: (strategy: { id: string; description: string }) => void;
   /** Whether to disable the next-step button (max agreements reached) */
   disableCreate?: boolean;
+  /** Strategy ids that already have a proposed or confirmed next step */
+  existingAgreementStrategyIds?: string[];
 }
 
 // ============================================================================
@@ -51,9 +53,11 @@ export function OverlapReveal({
   uniqueToPartner,
   onCreateAgreement,
   disableCreate,
+  existingAgreementStrategyIds = [],
 }: OverlapRevealProps) {
   const hasOverlap = overlapping.length > 0;
   const hasUnique = uniqueToMe.length > 0 || uniqueToPartner.length > 0;
+  const existingAgreementStrategyIdSet = new Set(existingAgreementStrategyIds);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -65,29 +69,37 @@ export function OverlapReveal({
       {hasOverlap && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Both Marked Worth Discussing</Text>
-          {overlapping.map((strategy) => (
-            <View key={strategy.id}>
-              <StrategyCard strategy={strategy} isOverlap />
-              {onCreateAgreement && (
-                <>
-                  <TouchableOpacity
-                    style={[styles.createAgreementButton, disableCreate && styles.createAgreementButtonDisabled]}
-                    onPress={() => !disableCreate && onCreateAgreement({ id: strategy.id, description: strategy.description })}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Use as next step: ${strategy.description}`}
-                    accessibilityState={{ disabled: disableCreate }}
-                    testID="create-agreement-button"
-                    disabled={disableCreate}
-                  >
-                    <Text style={[styles.createAgreementText, disableCreate && styles.createAgreementTextDisabled]}>Use as Next Step</Text>
-                  </TouchableOpacity>
-                  {disableCreate && (
-                    <Text style={styles.maxAgreementsText}>You can choose up to 2 next steps per session.</Text>
-                  )}
-                </>
-              )}
-            </View>
-          ))}
+          {overlapping.map((strategy) => {
+            const hasExistingAgreement = existingAgreementStrategyIdSet.has(strategy.id);
+            const createDisabled = disableCreate || hasExistingAgreement;
+
+            return (
+              <View key={strategy.id}>
+                <StrategyCard strategy={strategy} isOverlap />
+                {onCreateAgreement && !hasExistingAgreement && (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.createAgreementButton, createDisabled && styles.createAgreementButtonDisabled]}
+                      onPress={() => !createDisabled && onCreateAgreement({ id: strategy.id, description: strategy.description })}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Use as next step: ${strategy.description}`}
+                      accessibilityState={{ disabled: createDisabled }}
+                      testID="create-agreement-button"
+                      disabled={createDisabled}
+                    >
+                      <Text style={[styles.createAgreementText, createDisabled && styles.createAgreementTextDisabled]}>Use as Next Step</Text>
+                    </TouchableOpacity>
+                    {disableCreate && (
+                      <Text style={styles.maxAgreementsText}>You can choose up to 2 next steps per session.</Text>
+                    )}
+                  </>
+                )}
+                {hasExistingAgreement && (
+                  <Text style={styles.existingAgreementText}>Next step already proposed.</Text>
+                )}
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -168,6 +180,13 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   maxAgreementsText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 12,
+    marginTop: -4,
+  },
+  existingAgreementText: {
     fontSize: 13,
     color: colors.textSecondary,
     textAlign: 'center',

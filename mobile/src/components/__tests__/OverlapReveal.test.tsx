@@ -144,4 +144,19 @@ describe('OverlapReveal', () => {
 
     expect(screen.queryByText(/different preferences/i)).toBeNull();
   });
+
+  it('hides the create next-step button for strategies that already have agreements', () => {
+    render(
+      <OverlapReveal
+        overlapping={[overlappingStrategies[0]]}
+        uniqueToMe={[]}
+        uniqueToPartner={[]}
+        onCreateAgreement={jest.fn()}
+        existingAgreementStrategyIds={['strategy-1']}
+      />
+    );
+
+    expect(screen.queryByTestId('create-agreement-button')).toBeNull();
+    expect(screen.getByText('Next step already proposed.')).toBeTruthy();
+  });
 });

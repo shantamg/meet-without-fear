@@ -2210,6 +2210,7 @@ export function UnifiedSessionScreen({
               uniqueToPartner={[]}
               onCreateAgreement={handleCreateAgreementFromOverlap}
               disableCreate={agreements.length >= MAX_AGREEMENTS}
+              existingAgreementStrategyIds={agreements.map((a) => a.strategyId).filter((id): id is string => typeof id === 'string')}
             />
             <TouchableOpacity style={styles.closeOverlay} onPress={closeOverlay}>
               <Text style={styles.closeOverlayText}>Continue</Text>
@@ -2830,6 +2831,7 @@ export function UnifiedSessionScreen({
             uniqueToMe={[]}
             uniqueToPartner={[]}
             onCreateAgreement={handleCreateAgreementFromOverlap}
+            existingAgreementStrategyIds={agreements.map((a) => a.strategyId).filter((id): id is string => typeof id === 'string')}
           />
         ) : (
           <WaitingRoom
