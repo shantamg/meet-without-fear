@@ -130,13 +130,14 @@ User-driven self-reflection on what truly matters; AI facilitates needs clarity,
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET`  | `/sessions/:id/needs` | Get synthesized needs |
+| `GET`  | `/sessions/:id/needs` | Get stored captured needs; does not trigger extraction |
+| `POST` | `/sessions/:id/needs/capture` | Persist AI-suggested needs for user review |
 | `POST` | `/sessions/:id/needs` | Add a custom need |
 | `POST` | `/sessions/:id/needs/confirm` | Confirm/adjust needs |
 | `POST` | `/sessions/:id/needs/consent` | Consent to share needs |
-| `GET`  | `/sessions/:id/needs/comparison` | Compare confirmed needs across partners |
-| `GET`  | `/sessions/:id/common-ground` | Get common ground |
-| `POST` | `/sessions/:id/common-ground/confirm` | Confirm common ground |
+| `GET`  | `/sessions/:id/needs/comparison` | Reveal confirmed needs side by side |
+| `GET`  | `/sessions/:id/needs/reveal` | Alias for the side-by-side needs reveal |
+| `POST` | `/sessions/:id/needs/validate` | Validate the side-by-side needs reveal |
 
 ### [Stage 4: Strategic Repair](./stage-4.md)
 Collaborative strategy and agreement.

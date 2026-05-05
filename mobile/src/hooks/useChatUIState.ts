@@ -110,12 +110,12 @@ export interface UseChatUIStateProps {
   needsShared: boolean;
   needsRevealReady: boolean;
   hasConfirmedNeedsLocal: boolean;
-  commonGroundCount: number;
-  commonGroundAvailable: boolean;
-  commonGroundNoOverlap: boolean;
-  commonGroundAllConfirmedByMe: boolean;
-  commonGroundAllConfirmedByBoth: boolean;
-  hasConfirmedCommonGroundLocal: boolean;
+  needsRevealValidationCount: number;
+  needsRevealAvailable: boolean;
+  needsRevealNoOverlap: boolean;
+  needsRevealValidatedByMe: boolean;
+  needsRevealValidatedByBoth: boolean;
+  hasValidatedNeedsRevealLocal: boolean;
 
   // Stage 4: Strategies
   strategyPhase: StrategyPhase | string;
@@ -211,12 +211,12 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     needsShared,
     needsRevealReady,
     hasConfirmedNeedsLocal,
-    commonGroundCount,
-    commonGroundAvailable,
-    commonGroundNoOverlap,
-    commonGroundAllConfirmedByMe,
-    commonGroundAllConfirmedByBoth,
-    hasConfirmedCommonGroundLocal,
+    needsRevealValidationCount,
+    needsRevealAvailable,
+    needsRevealNoOverlap,
+    needsRevealValidatedByMe,
+    needsRevealValidatedByBoth,
+    hasValidatedNeedsRevealLocal,
     strategyPhase,
     strategyReadiness,
     overlappingStrategiesCount,
@@ -248,10 +248,10 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
       hasSuggestion: shareOfferData.hasSuggestion,
     } : undefined,
     needs: { allConfirmed: allNeedsConfirmed, shared: needsShared, revealReady: needsRevealReady },
-    commonGround: {
-      count: commonGroundCount,
-      allConfirmedByMe: commonGroundAllConfirmedByMe,
-      allConfirmedByBoth: commonGroundAllConfirmedByBoth,
+    needsRevealValidation: {
+      count: needsRevealValidationCount,
+      allConfirmedByMe: needsRevealValidatedByMe,
+      allConfirmedByBoth: needsRevealValidatedByBoth,
     },
     strategyPhase,
     strategyReadiness,
@@ -295,11 +295,11 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     hasConfirmedNeedsLocal,
 
     // Stage 3: Common Ground
-    commonGroundAvailable,
-    commonGroundNoOverlap,
-    commonGroundAllConfirmedByMe,
-    commonGroundAllConfirmedByBoth,
-    hasConfirmedCommonGroundLocal,
+    needsRevealAvailable,
+    needsRevealNoOverlap,
+    needsRevealValidatedByMe,
+    needsRevealValidatedByBoth,
+    hasValidatedNeedsRevealLocal,
   }), [
     myProgress?.stage,
     partnerProgress?.stage,
@@ -313,12 +313,12 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     needsShared,
     needsRevealReady,
     hasConfirmedNeedsLocal,
-    commonGroundCount,
-    commonGroundAvailable,
-    commonGroundNoOverlap,
-    commonGroundAllConfirmedByMe,
-    commonGroundAllConfirmedByBoth,
-    hasConfirmedCommonGroundLocal,
+    needsRevealValidationCount,
+    needsRevealAvailable,
+    needsRevealNoOverlap,
+    needsRevealValidatedByMe,
+    needsRevealValidatedByBoth,
+    hasValidatedNeedsRevealLocal,
     strategyPhase,
     strategyReadiness,
     overlappingStrategiesCount,

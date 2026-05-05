@@ -208,15 +208,15 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     bannerText: (p) => `${p} is deciding what they are ready to share.`,
   },
 
-  // Stage 3: Waiting for partner to confirm common ground
-  'common-ground-pending': {
+  // Stage 3: Waiting for partner to validate the needs reveal
+  'needs-validation-pending': {
     showBanner: true,
     hideInput: true,
     showInnerThoughts: false,
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: false,
-    bannerText: (p) => `${p} is reviewing common ground.`,
+    bannerText: (p) => `${p} is validating the needs reveal.`,
   },
 
   // Stage 3: User validated the side-by-side needs reveal; partner still needs to validate.

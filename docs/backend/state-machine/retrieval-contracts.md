@@ -55,7 +55,6 @@ type RetrievalQuery =
 
   // Shared Vessel queries (Stage 2+)
   | { type: 'consented_content'; vessel: 'shared'; source: 'structured'; consentActive: true }
-  | { type: 'common_ground'; vessel: 'shared'; source: 'structured' }
   | { type: 'agreement'; vessel: 'shared'; source: 'structured' }
   | { type: 'micro_experiment'; vessel: 'shared'; source: 'structured' }
 
@@ -148,8 +147,8 @@ All prompts receive pre-assembled, stage-scoped bundles. Every field must be tag
 | Stage 0 | `session_metadata`, `relationship_metadata`, `session_outcomes` (structured, no vectors) |
 | Stage 1 | `messages` (current session, user-only), `emotional_readings` (user-only), `prior_themes` (optional: user-only, same relationship, ≤3 bullets, summarizer = deterministic), `conversation_context` (recent turn buffer, user-only) |
 | Stage 2 | Stage 1 bundle **plus** `shared_partner_content[]` (each item: type TRANSFORMED_NEED or CONSENTED_STATEMENT, content, consentActive true, transformed true, sourceUserId - no raw partner venting), `empathy_draft` (user-authored), `phase` |
-| Stage 3 | Confirmed `user_needs[]`, `synthesized_needs[]` (derived only from user content; marked `model_generated: true`), `clarification_needed[]`, optional `partner_needs[]` (from shared vessel, consentActive true), `common_ground[]` (derived) |
-| Stage 4 | `common_ground[]`, `strategies[]` (unattributed pool), `user_rankings` (private until both submit), `partner_rankings` (unlock after both submit), `agreements[]`, `micro_experiments[]` (structured only), `global_suggestions[]` (vector-derived, must be labeled `source: global_library`) |
+| Stage 3 | `conversation_context` (recent user-only turn buffer), confirmed `user_needs[]`, optional `partner_needs[]` only after both users have consented to reveal, `needs_reveal` metadata, `needs_validation_status` |
+| Stage 4 | `confirmed_needs[]` (both users, from Stage 3 reveal/validation), `strategies[]` (unattributed pool), `user_rankings` (private until both submit), `partner_rankings` (unlock after both submit), `agreements[]`, `micro_experiments[]` (structured only), `global_suggestions[]` (vector-derived, must be labeled `source: global_library`) |
 | Emotional Support (any stage) | `intensity`, `trend`, `recent_message` (user-only). **No recall contexts injected** when `MemoryIntent=avoid_recall`. |
 
 **Assembler Rules**
@@ -160,11 +159,9 @@ All prompts receive pre-assembled, stage-scoped bundles. Every field must be tag
 
 ### Shared Vessel Consent Semantics
 
-**Invariant**: All objects stored in Shared Vessel are either:
-- **(a) Directly consented** (`ConsentedContent`) - requires `consentActive: true` check at query time
-- **(b) Derived from consented inputs** (`Agreement`, `CommonGround`) - safe to retrieve without additional consent checks because they are only created after consent gates are satisfied
+**Invariant**: Partner-authored content stored in Shared Vessel is directly consented (`ConsentedContent`) and requires `consentActive: true` at query time. Derived shared objects such as `Agreement` records may be retrieved only after their own gate conditions are satisfied.
 
-This explains why `agreement` and `common_ground` queries don't have `consentActive` fields - they are inherently safe by construction.
+Stage 3 does not create or retrieve AI-authored overlap analysis. The reveal surface is assembled from each user's confirmed needs after both users consent.
 
 ---
 
@@ -300,7 +297,7 @@ function validateStage2Retrieval(
     if (query.type === 'consented_content') {
       return 'consentActive' in query && query.consentActive === true;
     }
-    // common_ground, agreement are derived from consented inputs - safe
+    // Agreements are derived from consented inputs and only retrieved after their gates.
     return true;
   }
 
@@ -333,23 +330,27 @@ WHERE cc."sharedVesselId" = $sharedVesselId
 
 ## Stage 3: What Matters
 
-**Purpose**: Identify universal needs and find common ground. See [Stage 3 Documentation](../../stages/stage-3-what-matters.md).
+**Purpose**: Help each user identify, confirm, consent to reveal, and validate what matters. See [Stage 3 Documentation](../../stages/stage-3-what-matters.md).
 
 ### Retrieval Contract
 
 | Category | Access |
 |----------|--------|
 | **ALLOWED** | Current user's identified needs |
-| **ALLOWED** | Shared Vessel content (consented needs) |
-| **ALLOWED** | Common ground candidates |
+| **ALLOWED** | Current user's recent Stage 3 conversation context |
+| **ALLOWED** | Partner's confirmed needs only after both users have consented to reveal |
+| **ALLOWED** | Needs reveal and validation status |
 | **FORBIDDEN** | Partner's raw events |
 | **FORBIDDEN** | Non-consented partner needs |
-| **REQUIRES** | Needs must be confirmed by user |
+| **FORBIDDEN** | AI-authored overlap, compatibility, or shared-ground analysis |
+| **FORBIDDEN** | Pre-extracted needs presented as the user's needs |
+| **REQUIRES** | Needs must be articulated and confirmed by the owning user |
+| **REQUIRES** | Partner needs require both users' reveal consent |
 | **VECTOR SCOPE** | Needs only (not events) |
 
 ### Rationale
 
-Stage 3 works with abstracted needs, not raw events. This protects privacy while enabling common ground discovery.
+Stage 3 works with user-confirmed needs, not raw events and not model-prepared needs lists. This protects privacy while keeping the reveal user-driven: users notice what they notice after seeing the two confirmed lists side by side.
 
 ```typescript
 // Stage 3 retrieval validation
@@ -362,9 +363,8 @@ function validateStage3Retrieval(
     return 'userId' in query && query.userId === currentUserId;
   }
 
-  // Shared Vessel queries: common_ground and consented_content allowed
+  // Shared Vessel queries: consented need-shaped content allowed after reveal consent
   if ('vessel' in query && query.vessel === 'shared') {
-    if (query.type === 'common_ground') return true;  // Derived from consented inputs
     if (query.type === 'consented_content') {
       return 'consentActive' in query && query.consentActive === true;
     }
@@ -388,7 +388,7 @@ function validateStage3Retrieval(
 | Category | Access |
 |----------|--------|
 | **ALLOWED** | All Shared Vessel content |
-| **ALLOWED** | Confirmed common ground |
+| **ALLOWED** | Confirmed needs carried forward from Stage 3 |
 | **ALLOWED** | Past agreements (this relationship) |
 | **ALLOWED** | Past micro-experiments and outcomes |
 | **ALLOWED** | Global Micro-Experiments Library (anonymized suggestions) |
@@ -419,8 +419,8 @@ function validateStage4Retrieval(
 ): boolean {
   // Shared Vessel structured queries
   if ('vessel' in query && query.vessel === 'shared') {
-    // Agreements, common ground, consented content
-    if (query.type === 'agreement' || query.type === 'common_ground') {
+    // Agreements and consented content
+    if (query.type === 'agreement') {
       return true;
     }
     if (query.type === 'consented_content') {

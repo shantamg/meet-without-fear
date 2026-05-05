@@ -26,7 +26,7 @@ function createDefaultInputs(overrides: Partial<WaitingStatusInputs> = {}): Wait
     hasPartnerEmpathy: false,
     shareOffer: undefined,
     needs: { allConfirmed: false },
-    commonGround: { count: 0 },
+    needsRevealValidation: { count: 0 },
     strategyPhase: StrategyPhase.COLLECTING,
     overlappingStrategies: { count: 0 },
     ...overrides,
@@ -272,7 +272,7 @@ describe('Priority 5: Stage 3 (Needs)', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.NEED_MAPPING,
       needs: { allConfirmed: true, shared: true, revealReady: false },
-      commonGround: { count: 0 },
+      needsRevealValidation: { count: 0 },
     });
 
     expect(computeWaitingStatus(inputs)).toBe('needs-waiting-for-partner');
@@ -282,17 +282,17 @@ describe('Priority 5: Stage 3 (Needs)', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       needs: { allConfirmed: true },
-      commonGround: { count: 0 },
+      needsRevealValidation: { count: 0 },
     });
 
     expect(computeWaitingStatus(inputs)).toBeNull();
   });
 
-  it('returns null when needs confirmed and common ground exists', () => {
+  it('returns null when needs confirmed and needs validation exists', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.NEED_MAPPING,
       needs: { allConfirmed: true },
-      commonGround: { count: 2 },
+      needsRevealValidation: { count: 2 },
     });
 
     expect(computeWaitingStatus(inputs)).toBeNull();
@@ -302,7 +302,7 @@ describe('Priority 5: Stage 3 (Needs)', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.NEED_MAPPING,
       needs: { allConfirmed: true },
-      commonGround: { count: 2 },
+      needsRevealValidation: { count: 2 },
       previousStatus: 'needs-pending',
     });
 
@@ -313,7 +313,7 @@ describe('Priority 5: Stage 3 (Needs)', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.NEED_MAPPING,
       needs: { allConfirmed: true, shared: true, revealReady: true },
-      commonGround: {
+      needsRevealValidation: {
         count: 0,
         allConfirmedByMe: true,
         allConfirmedByBoth: false,

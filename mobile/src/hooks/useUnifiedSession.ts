@@ -97,7 +97,7 @@ export interface InlineChatCard {
   dismissible?: boolean;
 }
 
-type LegacyCommonGroundItem = {
+type LegacyNeedsRevealItem = {
   id: string;
   need: string;
   category: string;
@@ -285,7 +285,7 @@ export function useUnifiedSession(
   // Stage 3: Needs - always fetch to avoid waterfall
   const { data: needsData } = useNeeds(sessionId, disableChildQueries);
 
-  // Derive needs state for gating common ground query
+  // Derive needs state for gating the side-by-side reveal query.
   const needsForGating = needsData?.needs ?? [];
   const allNeedsConfirmedForGating = needsForGating.length > 0 && needsForGating.every((n) => n.confirmed);
   const myNeedsSharedForGating =
@@ -538,14 +538,14 @@ export function useUnifiedSession(
   // Needs confirmation state
   const needs = useMemo(() => needsData?.needs ?? [], [needsData?.needs]);
   const allNeedsConfirmed = needs.length > 0 && needs.every((n) => n.confirmed);
-  const commonGround = useMemo<LegacyCommonGroundItem[]>(() => [], []);
+  const needsRevealValidationItems = useMemo<LegacyNeedsRevealItem[]>(() => [], []);
   const needsRevealReady =
     (needsComparisonData?.myNeeds?.length ?? 0) > 0 &&
     (needsComparisonData?.partnerNeeds?.length ?? 0) > 0;
-  const commonGroundData = needsRevealReady
-    ? { commonGround: [], analysisComplete: true, bothConfirmed: false, noOverlap: false }
+  const needsRevealValidationData = needsRevealReady
+    ? { needsRevealValidationItems: [], analysisComplete: true, bothConfirmed: false, noOverlap: false }
     : undefined;
-  const commonGroundComplete = false;
+  const needsRevealValidatedByBoth = false;
 
   // Strategy phase
   const strategyPhase = strategyData?.phase ?? StrategyPhase.COLLECTING;
@@ -698,9 +698,9 @@ export function useUnifiedSession(
     }
 
     // Stage 3: Need Mapping cards
-    // Note: needs-summary and common-ground-preview inline cards removed.
+    // Note: needs-summary and needs-reveal-preview inline cards removed.
     // These are now shown in the NeedsDrawer bottom sheet, opened via
-    // the above-input buttons (needs-review, common-ground-confirm).
+    // the above-input buttons (needs-review, needs-reveal-validate).
 
     // Stage 4: Strategic Repair cards
     if (currentStage === Stage.STRATEGIC_REPAIR) {
@@ -765,8 +765,8 @@ export function useUnifiedSession(
     partnerEmpathyData,
     needs,
     allNeedsConfirmed,
-    commonGround,
-    commonGroundComplete,
+    needsRevealValidationItems,
+    needsRevealValidatedByBoth,
     strategyPhase,
     strategies,
     myReadyToRank,
@@ -1050,7 +1050,7 @@ export function useUnifiedSession(
     [sessionId, needs, consentShareNeeds]
   );
 
-  const handleConfirmCommonGround = useCallback(
+  const handleValidateNeedsReveal = useCallback(
     (onSuccess?: () => void) => {
       if (!sessionId) return;
 
@@ -1224,9 +1224,9 @@ export function useUnifiedSession(
     needsData,
     needs,
     allNeedsConfirmed,
-    commonGroundData,
-    commonGround,
-    commonGroundComplete,
+    needsRevealValidationData,
+    needsRevealValidationItems,
+    needsRevealValidatedByBoth,
     needsComparisonData,
     strategyData,
     strategyPhase,
@@ -1266,7 +1266,7 @@ export function useUnifiedSession(
     handleSkipRefinement,
     handleConfirmAllNeeds,
     handleConsentToShareNeeds,
-    handleConfirmCommonGround,
+    handleValidateNeedsReveal,
     handleNeedsNotValidYet,
     handleAddStrategy,
     handleRequestMoreStrategies,

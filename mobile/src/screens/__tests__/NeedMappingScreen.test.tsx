@@ -9,7 +9,7 @@
  */
 
 import React from 'react';
-import { screen } from '@testing-library/react-native';
+import { fireEvent, screen } from '@testing-library/react-native';
 import { render } from '../../utils/test-utils';
 import { Stage, StageStatus, NeedCategory, MessageRole } from '@meet-without-fear/shared';
 
@@ -110,6 +110,10 @@ const mockMessages = [
 
 // Type definitions for mock data
 type NeedsType = typeof mockNeedsUnconfirmed;
+type NeedsComparisonType = {
+  myNeeds: { id: string; need: string; category: NeedCategory; confirmed: boolean }[];
+  partnerNeeds: { id: string; need: string; category: NeedCategory; confirmed: boolean }[];
+};
 
 // Mock hooks - these will be overridden per test
 let mockNeedsData: { needs: NeedsType; synthesizedAt: string; isDirty: boolean } = {
@@ -117,14 +121,18 @@ let mockNeedsData: { needs: NeedsType; synthesizedAt: string; isDirty: boolean }
   synthesizedAt: '',
   isDirty: false,
 };
+let mockNeedsComparisonData: NeedsComparisonType | undefined;
 let mockMessagesData = { messages: mockMessages };
 let mockProgressData: {
-  myProgress: { stage: Stage; status: StageStatus };
-  partnerProgress: { stage: Stage; status: StageStatus };
+  myProgress: { stage: Stage; status: StageStatus; gatesSatisfied?: Record<string, unknown> };
+  partnerProgress: { stage: Stage; status: StageStatus; gatesSatisfied?: Record<string, unknown> };
 } = {
   myProgress: { stage: Stage.NEED_MAPPING, status: StageStatus.IN_PROGRESS },
   partnerProgress: { stage: Stage.NEED_MAPPING, status: StageStatus.IN_PROGRESS },
 };
+const mockCaptureNeedsMutate = jest.fn();
+const mockConfirmNeedsMutate = jest.fn();
+const mockConsentShareNeedsMutate = jest.fn();
 
 jest.mock('../../hooks/useSessions', () => ({
   useSession: () => ({
@@ -162,8 +170,16 @@ jest.mock('../../hooks/useStages', () => ({
     isLoading: false,
     refetch: jest.fn(),
   }),
+  useNeedsComparison: () => ({
+    data: mockNeedsComparisonData,
+    isLoading: false,
+  }),
+  useCaptureNeeds: () => ({
+    mutate: mockCaptureNeedsMutate,
+    isPending: false,
+  }),
   useConfirmNeeds: () => ({
-    mutate: jest.fn(),
+    mutate: mockConfirmNeedsMutate,
     isPending: false,
   }),
   useAddNeed: () => ({
@@ -171,7 +187,7 @@ jest.mock('../../hooks/useStages', () => ({
     isPending: false,
   }),
   useConsentShareNeeds: () => ({
-    mutate: jest.fn(),
+    mutate: mockConsentShareNeedsMutate,
     isPending: false,
   }),
 }));
@@ -181,6 +197,7 @@ describe('NeedMappingScreen', () => {
     jest.clearAllMocks();
     // Reset to defaults - exploration phase (no needs yet)
     mockNeedsData = { needs: [], synthesizedAt: '', isDirty: false };
+    mockNeedsComparisonData = undefined;
     mockMessagesData = { messages: mockMessages };
     mockProgressData = {
       myProgress: { stage: Stage.NEED_MAPPING, status: StageStatus.IN_PROGRESS },
@@ -221,7 +238,7 @@ describe('NeedMappingScreen', () => {
 
     it('shows identified needs section', () => {
       render(<NeedMappingScreen />);
-      expect(screen.getByText('Your Identified Needs')).toBeTruthy();
+      expect(screen.getByText('Your Needs')).toBeTruthy();
     });
 
     it('displays all identified needs', () => {
@@ -245,6 +262,88 @@ describe('NeedMappingScreen', () => {
       render(<NeedMappingScreen />);
       const confirmButton = screen.getByText(/confirm/i);
       expect(confirmButton).toBeTruthy();
+    });
+
+    it('captures displayed needs before confirming and consenting', () => {
+      mockCaptureNeedsMutate.mockImplementation((_variables, options) => {
+        options?.onSuccess?.({
+          needs: mockNeedsUnconfirmed.map((need) => ({ ...need, confirmed: false })),
+          capturedAt: new Date().toISOString(),
+        });
+      });
+      mockConfirmNeedsMutate.mockImplementation((_variables, options) => {
+        options?.onSuccess?.();
+      });
+
+      render(<NeedMappingScreen />);
+      fireEvent.press(screen.getByTestId('confirm-needs-button'));
+
+      expect(mockCaptureNeedsMutate).toHaveBeenCalledWith(
+        {
+          sessionId: 'test-session-123',
+          needs: [
+            {
+              need: 'Security',
+              category: NeedCategory.SAFETY,
+              description: 'A need to feel safe and stable in the relationship',
+              evidence: ['I felt unsafe when...'],
+            },
+            {
+              need: 'Connection',
+              category: NeedCategory.CONNECTION,
+              description: 'A need to feel close and emotionally connected',
+              evidence: ['I miss feeling close...'],
+            },
+          ],
+        },
+        expect.any(Object)
+      );
+      expect(mockConfirmNeedsMutate).toHaveBeenCalledWith(
+        { sessionId: 'test-session-123', needIds: ['need-1', 'need-2'] },
+        expect.any(Object)
+      );
+      expect(mockConsentShareNeedsMutate).toHaveBeenCalledWith({
+        sessionId: 'test-session-123',
+        needIds: ['need-1', 'need-2'],
+      });
+    });
+  });
+
+  describe('Reveal Phase (both partners consented)', () => {
+    beforeEach(() => {
+      mockNeedsData = {
+        needs: mockNeedsUnconfirmed.map((need) => ({ ...need, confirmed: true })),
+        synthesizedAt: new Date().toISOString(),
+        isDirty: false,
+      };
+      mockProgressData = {
+        myProgress: {
+          stage: Stage.NEED_MAPPING,
+          status: StageStatus.IN_PROGRESS,
+          gatesSatisfied: { needsShared: true },
+        },
+        partnerProgress: { stage: Stage.NEED_MAPPING, status: StageStatus.IN_PROGRESS },
+      };
+      mockNeedsComparisonData = {
+        myNeeds: [
+          { id: 'need-1', need: 'Security', category: NeedCategory.SAFETY, confirmed: true },
+        ],
+        partnerNeeds: [
+          { id: 'partner-need-1', need: 'Autonomy', category: NeedCategory.AUTONOMY, confirmed: true },
+        ],
+      };
+    });
+
+    it('renders side-by-side reveal cards and the noticing prompt', () => {
+      render(<NeedMappingScreen />);
+
+      expect(screen.getByTestId('need-mapping-reveal')).toBeTruthy();
+      expect(screen.getByTestId('needs-side-by-side')).toBeTruthy();
+      expect(screen.getByText('What do you notice?')).toBeTruthy();
+      expect(screen.getByText('Your needs')).toBeTruthy();
+      expect(screen.getByText('Partner needs')).toBeTruthy();
+      expect(screen.getByText('Security')).toBeTruthy();
+      expect(screen.getByText('Autonomy')).toBeTruthy();
     });
   });
 

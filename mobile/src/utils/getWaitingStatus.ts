@@ -24,7 +24,7 @@ export type WaitingStatusState =
   | 'partner-validating-empathy' // Stage 2: User validated partner empathy, waiting for partner to validate theirs
   | 'needs-pending' // Stage 3: Waiting for partner to confirm needs
   | 'needs-waiting-for-partner' // Stage 3: User shared needs, waiting for partner to share
-  | 'common-ground-pending' // Stage 3: Waiting for partner to confirm common ground
+  | 'needs-validation-pending' // Stage 3: Waiting for partner to confirm needs validation
   | 'partner-validating-needs' // Stage 3: User validated revealed needs, waiting for partner
   | 'ranking-pending' // Stage 4: Waiting for partner to submit ranking
   | 'strategy-readiness-pending' // Stage 4: User is ready to rank, waiting for partner readiness
@@ -88,8 +88,8 @@ export interface WaitingStatusInputs {
     revealReady?: boolean;
   };
 
-  // Stage 3: Common ground discovery
-  commonGround: {
+  // Stage 3: Needs reveal validation
+  needsRevealValidation: {
     count: number;
     allConfirmedByMe?: boolean;
     allConfirmedByBoth?: boolean;
@@ -139,7 +139,7 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     hasPartnerEmpathy,
     shareOffer,
     needs,
-    commonGround,
+    needsRevealValidation,
     strategyPhase,
     strategyReadiness,
     overlappingStrategies,
@@ -252,7 +252,7 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     needs.allConfirmed &&
     !needs.shared &&
     !needs.revealReady &&
-    commonGround.count === 0
+    needsRevealValidation.count === 0
   ) {
     return 'needs-pending';
   }
@@ -262,30 +262,28 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     myStage === Stage.NEED_MAPPING &&
     needs.shared &&
     !needs.revealReady &&
-    commonGround.count === 0
+    needsRevealValidation.count === 0
   ) {
     return 'needs-waiting-for-partner';
   }
 
-  // Transition: Partner confirmed needs and common ground discovered
-  if (commonGround.count > 0 && previousStatus === 'needs-pending') {
+  // Transition: Partner confirmed needs and the reveal is ready.
+  if (needsRevealValidation.count > 0 && previousStatus === 'needs-pending') {
     return 'partner-confirmed-needs';
   }
 
-  // Common ground confirmed by me, waiting for partner
-  if (myStage === Stage.NEED_MAPPING && commonGround.count > 0 && commonGround.allConfirmedByMe && !commonGround.allConfirmedByBoth) {
-    return 'common-ground-pending';
+  // Reveal validation completed by me, waiting for partner.
+  if (myStage === Stage.NEED_MAPPING && needsRevealValidation.count > 0 && needsRevealValidation.allConfirmedByMe && !needsRevealValidation.allConfirmedByBoth) {
+    return 'needs-validation-pending';
   }
 
-  // Needs reveal validated by me, waiting for partner. This covers the current
-  // side-by-side needs reveal, including the no-overlap path where there are
-  // revealed needs but no generated CommonGround rows.
+  // Needs reveal validated by me, waiting for partner.
   if (
     myStage === Stage.NEED_MAPPING &&
     needs.shared &&
     needs.revealReady &&
-    commonGround.allConfirmedByMe &&
-    !commonGround.allConfirmedByBoth
+    needsRevealValidation.allConfirmedByMe &&
+    !needsRevealValidation.allConfirmedByBoth
   ) {
     return 'partner-validating-needs';
   }

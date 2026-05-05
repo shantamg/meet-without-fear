@@ -19,6 +19,7 @@ import {
   useValidateEmpathy,
   useSkipRefinement,
   useNeeds,
+  useCaptureNeeds,
   useConfirmNeeds,
   useAddNeed,
   useConsentShareNeeds,
@@ -490,6 +491,54 @@ describe('useStages', () => {
       });
     });
 
+    describe('useCaptureNeeds hook', () => {
+      it('captures needs through the Stage 3 capture endpoint', async () => {
+        mockPost.mockResolvedValueOnce({
+          needs: [
+            {
+              id: 'need-1',
+              need: 'Respect',
+              category: NeedCategory.RECOGNITION,
+              description: 'Feeling valued and recognized',
+              evidence: ['Quote 1'],
+              confirmed: false,
+              aiConfidence: 0.85,
+            },
+          ],
+          capturedAt: '2024-01-01T00:00:00.000Z',
+        });
+
+        const { result } = renderHook(() => useCaptureNeeds(), {
+          wrapper: createWrapper(),
+        });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            needs: [
+              {
+                need: 'Respect',
+                category: NeedCategory.RECOGNITION,
+                description: 'Feeling valued and recognized',
+                evidence: ['Quote 1'],
+              },
+            ],
+          });
+        });
+
+        expect(mockPost).toHaveBeenCalledWith(`/sessions/${sessionId}/needs/capture`, {
+          needs: [
+            {
+              need: 'Respect',
+              category: NeedCategory.RECOGNITION,
+              description: 'Feeling valued and recognized',
+              evidence: ['Quote 1'],
+            },
+          ],
+        });
+      });
+    });
+
     describe('useConfirmNeeds hook', () => {
       it('confirms identified needs', async () => {
         mockPost.mockResolvedValueOnce({
@@ -553,7 +602,7 @@ describe('useStages', () => {
     });
 
     describe('useConsentShareNeeds hook', () => {
-      it('consents to share needs for common ground', async () => {
+      it('consents to reveal confirmed needs to the partner', async () => {
         mockPost.mockResolvedValueOnce({
           consent: true,
           sharedNeedIds: ['need-1', 'need-2'],

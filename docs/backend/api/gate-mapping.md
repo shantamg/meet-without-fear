@@ -31,8 +31,8 @@ Canonical mapping from gate keys to the endpoints/payloads that set them. Used b
 | Gate | Endpoint | Payload trigger |
 |------|----------|-----------------|
 | `needsConfirmed` | `POST /sessions/:id/needs/confirm` | Caller confirms needs |
-| `partnerNeedsConfirmed` | Derived | Partner confirms needs |
-| `commonGroundConfirmed` | `POST /sessions/:id/common-ground/confirm` | Both confirm common ground |
+| `needsShared` | `POST /sessions/:id/needs/consent` | Caller consents to share confirmed needs |
+| `needsValidated` | `POST /sessions/:id/needs/validate` | Caller validates the side-by-side needs reveal |
 
 ## Stage 4
 | Gate | Endpoint | Payload trigger |

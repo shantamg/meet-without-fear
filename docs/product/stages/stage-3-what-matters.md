@@ -21,7 +21,7 @@ Help each user articulate what truly matters to them in their own words — what
 1. **User-driven**: The user discovers what matters; the AI guides but doesn't synthesize for them
 2. **Self-referential needs**: Valid needs don't depend on a specific person acting a specific way
 3. **Suggestion, not correction**: AI offers needs language as a possibility, not a reframe
-4. **No premature overlap analysis**: The AI does NOT identify common ground — that seeing belongs to the users
+4. **No premature overlap analysis**: The AI does not identify, label, or score overlap; noticing belongs to the users
 
 ## Flow
 
@@ -37,7 +37,7 @@ flowchart TD
 
     Deepen --> Suggest[AI suggests needs language]
     Suggest --> Check{Does that land?}
-    Check -->|Yes| Confirm[Need confirmed]
+    Check -->|Yes| Confirm[User confirms needs list]
     Check -->|Not quite| Refine[Refine together]
     Refine --> Suggest
 
@@ -45,14 +45,17 @@ flowchart TD
     More -->|Yes| Explore
     More -->|No| Summary[Needs summary ready]
 
-    Summary --> Consent[User consents to share]
+    Summary --> Consent[User consents to share confirmed needs]
     Consent --> Wait{Partner ready?}
     Wait -->|Not yet| Waiting[Waiting for partner]
-    Wait -->|Yes| NeedsShare[The Needs Share]
+    Wait -->|Yes| NeedsShare[Mutual needs reveal]
 
     NeedsShare --> SideBySide[Both needs shown side by side]
     SideBySide --> Notice[AI asks: What do you notice?]
-    Notice --> Stage4[Advance to Stage 4]
+    Notice --> Process[Emotional processing]
+    Process --> Validate{Do both lists feel valid enough?}
+    Validate -->|Needs repair| Explore
+    Validate -->|Both validate| Stage4[Advance to Stage 4]
 ```
 
 ## Opening
@@ -86,19 +89,21 @@ Example exchange:
 - User: "I guess I just want to feel like we're a team."
 - AI: "Partnership. Like you need to feel like you're in this together. Does that land?"
 
-## The Needs Share
+## Mutual Needs Reveal
 
 After both users complete their needs exploration:
 
-1. **Hold**: Both needs summaries are held until both users finish Stage 3
+1. **Hold**: Both confirmed needs lists are held until both users finish Stage 3
 2. **Consent**: Each user consents to share (same pattern as Stage 2 empathy consent)
 3. **Reveal**: Both needs shown side by side
 4. **Minimal framing**: AI says something brief, then asks: **"What do you notice?"**
-5. **No interpretation**: AI does NOT frame needs as compatible, overlapping, or complementary -- that seeing belongs to the users
+5. **Emotional processing**: AI helps users name what it is like to see both lists without interpreting the relationship for them
+6. **Validity gate**: Each user validates whether both revealed lists feel accurate enough to carry into Stage 4
+7. **No interpretation**: AI does not frame needs as compatible, overlapping, complementary, or shared -- that seeing belongs to the users
 
 ## Success Criteria
 
-Each user has articulated what matters to them in needs language that doesn't depend on the other person acting a specific way. Both users have seen each other's needs side by side.
+Each user has articulated what matters to them in needs language that doesn't depend on the other person acting a specific way. Both users have confirmed their own needs, consented to share them, seen the side-by-side reveal, processed what they notice, and validated that the revealed needs are accurate enough to carry into Stage 4.
 
 ## Failure Paths
 
@@ -112,8 +117,10 @@ Each user has articulated what matters to them in needs language that doesn't de
 ## Data Captured
 
 - Identified needs for each user (user-driven, AI-suggested)
+- Confirmation records for each user's needs list
 - Consent records for needs sharing
-- Needs Share reveal timestamp
+- Mutual needs reveal timestamp
+- Needs validation records for the Stage 3 gate
 
 ---
 
