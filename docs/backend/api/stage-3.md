@@ -3,7 +3,7 @@ title: "Stage 3 API: What Matters"
 sidebar_position: 10
 description: Endpoints for identifying needs, confirming them, and validating revealed needs with a partner.
 slug: /backend/api/stage-3
-updated: "2026-05-03"
+updated: "2026-05-05"
 ---
 # Stage 3 API: What Matters
 
@@ -21,9 +21,9 @@ Key concepts:
 
 ---
 
-## Get Captured Needs
+## Get Stored Captured Needs
 
-Get the current user's captured needs.
+Get the current user's stored captured needs. This is a read-only endpoint; it never starts automatic extraction or background synthesis.
 
 ```
 GET /api/v1/sessions/:id/needs
@@ -34,7 +34,7 @@ GET /api/v1/sessions/:id/needs
 ```typescript
 interface GetNeedsResponse {
   needs: IdentifiedNeedDTO[];
-  extracting: boolean;         // Always false — extraction is not triggered on-demand
+  extracting: boolean;          // Deprecated compatibility field; always false
   synthesizedAt: string | null; // null when no needs exist
   isDirty: boolean;
 }
@@ -99,7 +99,7 @@ enum NeedCategory {
 
 ### Behavior
 
-`GET /needs` is a direct read — it returns the stored `IdentifiedNeed` rows for the caller without triggering AI extraction. Needs are created only through explicit capture or user add/edit actions after Stage 3 conversation. `extracting` is always `false`; `synthesizedAt` is `null` when no needs exist.
+`GET /needs` is a direct read — it returns the stored `IdentifiedNeed` rows for the caller without triggering AI extraction. Needs are created only through explicit capture or user add/edit actions after Stage 3 conversation. `extracting` is retained only as a deprecated compatibility field and is always `false`; `synthesizedAt` is `null` when no needs exist.
 
 Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response includes both `need` and `description` fields carrying the same string (`description` is a compatibility alias).
 
@@ -107,7 +107,7 @@ Validation: each need has evidence 1-5 items; `aiConfidence` 0-1. The response i
 
 ## Capture Needs from AI Summary
 
-Bulk-create needs from an AI-generated summary card. This is the primary way needs are created in Stage 3 — the AI surfaces a summary card mid-conversation, and the client calls this endpoint to persist the proposed needs for user review.
+Bulk-create needs from an AI-suggested summary card. This is the primary way needs are created in Stage 3 — the AI facilitates needs clarity during conversation, then the client calls this endpoint to persist the proposed needs for user review.
 
 ```
 POST /api/v1/sessions/:id/needs/capture
@@ -138,6 +138,28 @@ interface CaptureNeedsResponse {
 ```
 
 Validation: `needs` array required and non-empty; each item must have `need`, `description`, and a valid `category`. Captured needs are created with `confirmed: false` (user must confirm via `POST /needs/confirm` before consenting to share).
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "needs": [
+      {
+        "id": "need_003",
+        "need": "To feel heard",
+        "category": "CONNECTION",
+        "description": "I want my concern to be understood before we solve it.",
+        "evidence": ["I keep repeating myself because I do not think it landed."],
+        "confirmed": false,
+        "aiConfidence": 0.82
+      }
+    ],
+    "capturedAt": "2026-05-05T18:00:00Z"
+  }
+}
+```
 
 ---
 
@@ -283,7 +305,7 @@ POST /api/v1/sessions/:id/needs/validate
 
 ```typescript
 interface ValidateNeedsRequest {
-  validated: boolean;  // Defaults to true if omitted
+  validated?: boolean;  // Defaults to true if omitted
 }
 ```
 
@@ -300,12 +322,28 @@ interface ValidateNeedsResponse {
 
 ### Side Effects
 
+Calling this endpoint with `validated !== false` sets the caller's `needsValidated` gate.
+
 When both partners validate (`canAdvance === true`):
 1. Both partners' Stage-3 status transitions to `COMPLETED`
 2. Both partners' Stage-4 progress records are created (`IN_PROGRESS`)
 3. A transition message is published to both users
 
 Pre-conditions: both partners must have consented to share needs (`needsShared` gate) before calling this endpoint. The `hasPartnerSharedNeeds` check is enforced server-side.
+
+### Example Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "validated": true,
+    "validatedAt": "2026-05-05T18:05:00Z",
+    "partnerValidated": false,
+    "canAdvance": false
+  }
+}
+```
 
 ---
 

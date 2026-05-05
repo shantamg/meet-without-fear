@@ -32,6 +32,8 @@ import {
   ValidateEmpathyRequest,
   ValidateEmpathyResponse,
   GetNeedsResponse,
+  CaptureNeedsRequest,
+  CaptureNeedsResponse,
   ConfirmNeedsRequest,
   NeedAdjustment,
   ConfirmNeedsResponse,
@@ -1385,11 +1387,7 @@ export function useRefineValidationFeedback(
 // ============================================================================
 
 /**
- * Get AI-identified needs for the current user.
- *
- * Automatically polls every 3 seconds when the backend returns
- * `extracting: true`, indicating AI extraction is in progress.
- * Polling stops once needs are available or extraction completes.
+ * Get captured needs for the current user.
  */
 export function useNeeds(
   sessionId: string | undefined,
@@ -1403,15 +1401,36 @@ export function useNeeds(
     },
     enabled: !!sessionId,
     staleTime: 0, // Always treat as stale so Ably event invalidation triggers fresh fetch
-    // Poll every 3s only while extraction is actively in progress.
-    // The backend returns extracting: true while AI is analyzing needs.
-    // Do NOT poll when needs are simply empty (normal state for stages before Need Mapping).
-    refetchInterval: (query) => {
-      const data = query.state.data as (GetNeedsResponse & { extracting?: boolean }) | undefined;
-      if (data?.extracting) {
-        return 3_000; // Poll every 3 seconds while extracting
-      }
-      return false; // Stop polling otherwise
+    ...options,
+  });
+}
+
+/**
+ * Capture the user's final needs list from the Stage 3 conversation.
+ */
+export function useCaptureNeeds(
+  options?: Omit<
+    UseMutationOptions<
+      CaptureNeedsResponse,
+      ApiClientError,
+      { sessionId: string } & CaptureNeedsRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, needs }) => {
+      return post<CaptureNeedsResponse>(`/sessions/${sessionId}/needs/capture`, {
+        needs,
+      });
+    },
+    onSuccess: (_, { sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.needsComparison(sessionId) });
+      queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
     },
     ...options,
   });
@@ -1480,7 +1499,7 @@ export function useAddNeed(
 }
 
 /**
- * Consent to share needs for common ground discovery.
+ * Consent to reveal confirmed needs to the partner.
  */
 export function useConsentShareNeeds(
   options?: Omit<

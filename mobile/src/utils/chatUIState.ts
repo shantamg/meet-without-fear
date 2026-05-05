@@ -110,14 +110,12 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   needsRevealReady: boolean; // Both users have shared and comparison can be shown
   hasConfirmedNeedsLocal: boolean; // Local latch to prevent panel flash after confirming
 
-  // Stage 3: Needs reveal validation. These field names are kept as
-  // compatibility shims for existing call sites; values come from the
-  // side-by-side needs reveal, not AI-authored common-ground analysis.
-  commonGroundAvailable: boolean;
-  commonGroundNoOverlap: boolean;
-  commonGroundAllConfirmedByMe: boolean;
-  commonGroundAllConfirmedByBoth: boolean;
-  hasConfirmedCommonGroundLocal: boolean;
+  // Stage 3: Needs reveal validation.
+  needsRevealAvailable: boolean;
+  needsRevealNoOverlap: boolean;
+  needsRevealValidatedByMe: boolean;
+  needsRevealValidatedByBoth: boolean;
+  hasValidatedNeedsRevealLocal: boolean;
 
   // Stage 4: Strategy readiness
   strategyReadiness?: {
@@ -156,7 +154,7 @@ export interface ChatUIState {
     showShareSuggestionPanel: boolean;
     showNeedsReviewPanel: boolean;
     showNeedsSharePanel: boolean;
-    showCommonGroundPanel: boolean;
+    showNeedsRevealValidationPanel: boolean;
     showWaitingBanner: boolean;
     showCompactAgreementBar: boolean;
   };
@@ -407,12 +405,12 @@ function computeShowNeedsSharePanel(inputs: ChatUIStateInputs): boolean {
 function computeShowNeedsRevealValidationPanel(inputs: ChatUIStateInputs): boolean {
   const {
     myStage,
-    commonGroundAvailable,
+    needsRevealAvailable,
     needsRevealReady,
-    commonGroundNoOverlap,
-    commonGroundAllConfirmedByMe,
-    commonGroundAllConfirmedByBoth,
-    hasConfirmedCommonGroundLocal,
+    needsRevealNoOverlap,
+    needsRevealValidatedByMe,
+    needsRevealValidatedByBoth,
+    hasValidatedNeedsRevealLocal,
     sessionStatus,
   } = inputs;
 
@@ -426,12 +424,12 @@ function computeShowNeedsRevealValidationPanel(inputs: ChatUIStateInputs): boole
   }
 
   // Local latch: Once user confirms, hide panel immediately
-  if (hasConfirmedCommonGroundLocal) {
+  if (hasValidatedNeedsRevealLocal) {
     return false;
   }
 
   // Already confirmed by both or by me - no need to show
-  if (commonGroundAllConfirmedByBoth || commonGroundAllConfirmedByMe) {
+  if (needsRevealValidatedByBoth || needsRevealValidatedByMe) {
     return false;
   }
 
@@ -440,12 +438,12 @@ function computeShowNeedsRevealValidationPanel(inputs: ChatUIStateInputs): boole
   }
 
   // Legacy no-overlap state is treated as validation-ready for compatibility.
-  if (commonGroundNoOverlap) {
+  if (needsRevealNoOverlap) {
     return true;
   }
 
   // Must have both revealed needs lists available
-  return commonGroundAvailable;
+  return needsRevealAvailable;
 }
 
 /**
@@ -509,7 +507,7 @@ function computeAboveInputPanel(
   }
 
   // Priority 8: Needs reveal validation panel (Stage 3)
-  if (panels.showCommonGroundPanel) {
+  if (panels.showNeedsRevealValidationPanel) {
     return 'needs-reveal-validation';
   }
 
@@ -604,7 +602,7 @@ function computeShouldHideInput(
     currentStage === Stage.NEED_MAPPING &&
     inputs.needsShared &&
     !inputs.needsRevealReady &&
-    !inputs.commonGroundAvailable
+    !inputs.needsRevealAvailable
   ) {
     return true;
   }
@@ -655,7 +653,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const showShareSuggestionPanel = computeShowShareSuggestionPanel(inputs);
   const showNeedsReviewPanel = computeShowNeedsReviewPanel(inputs);
   const showNeedsSharePanel = computeShowNeedsSharePanel(inputs);
-  const showCommonGroundPanel = computeShowNeedsRevealValidationPanel(inputs);
+  const showNeedsRevealValidationPanel = computeShowNeedsRevealValidationPanel(inputs);
   const showWaitingBanner = computeShouldShowWaitingBanner(waitingStatus);
   const showCompactAgreementBar = isInOnboardingUnsigned;
 
@@ -668,7 +666,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
     showShareSuggestionPanel,
     showNeedsReviewPanel,
     showNeedsSharePanel,
-    showCommonGroundPanel,
+    showNeedsRevealValidationPanel,
     showWaitingBanner,
     showCompactAgreementBar,
   };
@@ -718,7 +716,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     hasPartnerEmpathy: false,
     shareOffer: undefined,
     needs: { allConfirmed: false },
-    commonGround: { count: 0 },
+    needsRevealValidation: { count: 0 },
     strategyPhase: 'COLLECTING',
     strategyReadiness: undefined,
     overlappingStrategies: { count: 0 },
@@ -761,10 +759,10 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     hasConfirmedNeedsLocal: false,
 
     // Stage 3: Needs reveal validation
-    commonGroundAvailable: false,
-    commonGroundNoOverlap: false,
-    commonGroundAllConfirmedByMe: false,
-    commonGroundAllConfirmedByBoth: false,
-    hasConfirmedCommonGroundLocal: false,
+    needsRevealAvailable: false,
+    needsRevealNoOverlap: false,
+    needsRevealValidatedByMe: false,
+    needsRevealValidatedByBoth: false,
+    hasValidatedNeedsRevealLocal: false,
   };
 }

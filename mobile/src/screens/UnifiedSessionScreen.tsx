@@ -368,9 +368,9 @@ export function UnifiedSessionScreen({
     needs,
     needsData,
     allNeedsConfirmed,
-    commonGround,
-    commonGroundData,
-    commonGroundComplete,
+    needsRevealValidationItems,
+    needsRevealValidationData,
+    needsRevealValidatedByBoth,
     strategyData,
     strategyPhase,
     strategies,
@@ -412,7 +412,7 @@ export function UnifiedSessionScreen({
     handleValidatePartnerEmpathy,
     handleConfirmAllNeeds,
     handleConsentToShareNeeds,
-    handleConfirmCommonGround,
+    handleValidateNeedsReveal,
     handleNeedsNotValidYet,
     handleRequestMoreStrategies,
     handleMarkReadyToRank,
@@ -827,7 +827,7 @@ export function UnifiedSessionScreen({
         refreshStage3RealtimeState();
       }
 
-      if (eventName === 'session.needs_reveal_ready') {
+      if (eventName === 'session.needs_reveal_ready' || eventName === 'session.needs_revealed') {
         console.log('[UnifiedSessionScreen] Needs reveal ready');
         refreshStage3RealtimeState();
       }
@@ -837,7 +837,7 @@ export function UnifiedSessionScreen({
         refreshStage3RealtimeState();
       }
 
-      if (eventName === 'partner.common_ground_confirmed' || eventName === 'partner.needs_validated') {
+      if (eventName === 'partner.needs_validated') {
         console.log('[UnifiedSessionScreen] Partner validated needs');
         refreshStage3RealtimeState();
       }
@@ -1227,7 +1227,7 @@ export function UnifiedSessionScreen({
       showShareSuggestionPanel: shouldShowShareSuggestion,
       showNeedsReviewPanel: shouldShowNeedsReview,
       showNeedsSharePanel: shouldShowNeedsShare,
-      showCommonGroundPanel: shouldShowCommonGround,
+      showNeedsRevealValidationPanel: shouldShowNeedsRevealValidation,
     },
   } = useChatUIState({
     partnerName: partnerName || 'Partner',
@@ -1283,12 +1283,12 @@ export function UnifiedSessionScreen({
     needsShared: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true,
     needsRevealReady: (needsComparisonData?.myNeeds?.length ?? 0) > 0 && (needsComparisonData?.partnerNeeds?.length ?? 0) > 0,
     hasConfirmedNeedsLocal: completedActions.has('confirmed-needs'),
-    commonGroundCount: commonGround?.length ?? 0,
-    commonGroundAvailable: (needsComparisonData?.myNeeds?.length ?? 0) > 0 && (needsComparisonData?.partnerNeeds?.length ?? 0) > 0,
-    commonGroundNoOverlap: false,
-    commonGroundAllConfirmedByMe: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsValidated === true,
-    commonGroundAllConfirmedByBoth: commonGroundComplete,
-    hasConfirmedCommonGroundLocal: completedActions.has('validated-needs'),
+    needsRevealValidationCount: needsRevealValidationItems?.length ?? 0,
+    needsRevealAvailable: (needsComparisonData?.myNeeds?.length ?? 0) > 0 && (needsComparisonData?.partnerNeeds?.length ?? 0) > 0,
+    needsRevealNoOverlap: false,
+    needsRevealValidatedByMe: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsValidated === true,
+    needsRevealValidatedByBoth: needsRevealValidatedByBoth,
+    hasValidatedNeedsRevealLocal: completedActions.has('validated-needs'),
     strategyPhase,
     strategyReadiness: {
       myReadyToRank: strategyData?.myReadyToRank === true ||
@@ -1400,8 +1400,8 @@ export function UnifiedSessionScreen({
   const readyToShowEmpathy = shouldShowEmpathyPanel;
   const readyToShowFeelHeard = shouldShowFeelHeard;
   const readyToShowShareSuggestion = shouldShowShareSuggestion;
-  const readyToShowNeedsReview = shouldShowNeedsReview || shouldShowNeedsShare || shouldShowCommonGround;
-  const readyToShowCommonGround = shouldShowCommonGround;
+  const readyToShowNeedsReview = shouldShowNeedsReview || shouldShowNeedsShare || shouldShowNeedsRevealValidation;
+  const readyToShowNeedsRevealValidation = shouldShowNeedsRevealValidation;
   const readyToShowWaitingBanner = shouldShowWaitingBanner;
 
   useEffect(() => {
@@ -1736,7 +1736,7 @@ export function UnifiedSessionScreen({
         // Note: empathy-draft-preview case removed - users access empathy statement via the overlay drawer
         // Note: accuracy-feedback case removed - now handled by inline validation card
 
-        // Note: needs-summary and common-ground-preview cases removed.
+        // Note: needs-summary and needs-reveal-preview cases removed.
         // These are now shown in the NeedsDrawer bottom sheet, opened via
         // the above-input buttons (needs-review, needs-reveal-validation).
 
@@ -2508,7 +2508,7 @@ export function UnifiedSessionScreen({
                 style={styles.needsReviewButton}
                 onPress={() => {
                   setShowActivityMenu(false);
-                  setNeedsDrawerMode('comparison');
+                  setNeedsDrawerMode('reveal');
                   setShowNeedsDrawer(true);
                 }}
                 activeOpacity={0.7}
@@ -2568,7 +2568,7 @@ export function UnifiedSessionScreen({
     handleConfirmTopicFrame,
     isConfirmingTopicFrame,
     handleConfirmAllNeeds,
-    handleConfirmCommonGround,
+    handleValidateNeedsReveal,
     handleNeedsNotValidYet,
     markCompleted,
     onStageComplete,
@@ -3107,7 +3107,7 @@ export function UnifiedSessionScreen({
         />
       )}
 
-      {/* Needs Drawer - bottom sheet for Stage 3 needs/comparison */}
+      {/* Needs Drawer - bottom sheet for Stage 3 needs/reveal */}
       <NeedsDrawer
         visible={showNeedsDrawer}
         onClose={() => setShowNeedsDrawer(false)}
@@ -3144,7 +3144,7 @@ export function UnifiedSessionScreen({
         }))}
         onValidateNeeds={() => {
           markCompleted('validated-needs');
-          handleConfirmCommonGround(() => onStageComplete?.(Stage.NEED_MAPPING));
+          handleValidateNeedsReveal(() => onStageComplete?.(Stage.NEED_MAPPING));
         }}
         onNeedsNotValidYet={() => {
           handleNeedsNotValidYet(() => {
@@ -3731,14 +3731,14 @@ const useStyles = () =>
     },
 
     // Needs Validation Panel (Stage 3)
-    commonGroundContainer: {
+    needsRevealContainer: {
       paddingHorizontal: t.spacing.lg,
       paddingVertical: t.spacing.md,
       backgroundColor: t.colors.bgSecondary,
       borderTopWidth: 1,
       borderTopColor: t.colors.border,
     },
-    commonGroundButton: {
+    needsRevealButton: {
       paddingVertical: t.spacing.sm,
       paddingHorizontal: t.spacing.md,
       backgroundColor: t.colors.bgPrimary,
@@ -3746,7 +3746,7 @@ const useStyles = () =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    commonGroundButtonText: {
+    needsRevealButtonText: {
       fontSize: t.typography.fontSize.md,
       fontWeight: '500',
       color: t.colors.brandBlue,

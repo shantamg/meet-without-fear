@@ -333,8 +333,8 @@ describe('Input Hiding (shouldHideInput)', () => {
       myProgress: { stage: Stage.NEED_MAPPING },
       allNeedsConfirmed: true,
       needs: { allConfirmed: true },
-      commonGroundCount: 0,
-      commonGround: { count: 0 },
+      needsRevealValidationCount: 0,
+      needsRevealValidation: { count: 0 },
     });
 
     const result = computeChatUIState(inputs);
@@ -349,14 +349,14 @@ describe('Input Hiding (shouldHideInput)', () => {
       myProgress: { stage: Stage.NEED_MAPPING },
       allNeedsConfirmed: true,
       needs: { allConfirmed: true },
-      commonGroundCount: 2,
-      commonGround: { count: 2, allConfirmedByMe: true, allConfirmedByBoth: false },
-      commonGroundAllConfirmedByMe: true,
-      commonGroundAllConfirmedByBoth: false,
+      needsRevealValidationCount: 2,
+      needsRevealValidation: { count: 2, allConfirmedByMe: true, allConfirmedByBoth: false },
+      needsRevealValidatedByMe: true,
+      needsRevealValidatedByBoth: false,
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.waitingStatus).toBe('common-ground-pending');
+    expect(result.waitingStatus).toBe('needs-validation-pending');
     expect(result.shouldHideInput).toBe(true);
   });
 
@@ -369,15 +369,15 @@ describe('Input Hiding (shouldHideInput)', () => {
       needsShared: true,
       needsRevealReady: true,
       needs: { allConfirmed: true, shared: true, revealReady: true },
-      commonGroundAvailable: true,
-      commonGroundCount: 0,
-      commonGround: {
+      needsRevealAvailable: true,
+      needsRevealValidationCount: 0,
+      needsRevealValidation: {
         count: 0,
         allConfirmedByMe: true,
         allConfirmedByBoth: false,
       },
-      commonGroundAllConfirmedByMe: true,
-      commonGroundAllConfirmedByBoth: false,
+      needsRevealValidatedByMe: true,
+      needsRevealValidatedByBoth: false,
     });
 
     const result = computeChatUIState(inputs);
@@ -791,14 +791,14 @@ describe('Needs Reveal Validation Panel Visibility', () => {
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
       myProgress: { stage: Stage.NEED_MAPPING },
-      commonGroundAvailable: true,
-      commonGroundAllConfirmedByMe: false,
-      commonGroundAllConfirmedByBoth: false,
-      hasConfirmedCommonGroundLocal: false,
+      needsRevealAvailable: true,
+      needsRevealValidatedByMe: false,
+      needsRevealValidatedByBoth: false,
+      hasValidatedNeedsRevealLocal: false,
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showCommonGroundPanel).toBe(true);
+    expect(result.panels.showNeedsRevealValidationPanel).toBe(true);
     expect(result.aboveInputPanel).toBe('needs-reveal-validation');
   });
 
@@ -807,14 +807,14 @@ describe('Needs Reveal Validation Panel Visibility', () => {
       myStage: Stage.STRATEGIC_REPAIR,
       compactMySigned: true,
       myProgress: { stage: Stage.STRATEGIC_REPAIR },
-      commonGroundAvailable: true,
-      commonGroundAllConfirmedByMe: false,
-      commonGroundAllConfirmedByBoth: false,
-      hasConfirmedCommonGroundLocal: false,
+      needsRevealAvailable: true,
+      needsRevealValidatedByMe: false,
+      needsRevealValidatedByBoth: false,
+      hasValidatedNeedsRevealLocal: false,
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showCommonGroundPanel).toBe(false);
+    expect(result.panels.showNeedsRevealValidationPanel).toBe(false);
   });
 
   it('does not show when already confirmed by me', () => {
@@ -822,14 +822,14 @@ describe('Needs Reveal Validation Panel Visibility', () => {
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
       myProgress: { stage: Stage.NEED_MAPPING },
-      commonGroundAvailable: true,
-      commonGroundAllConfirmedByMe: true,
-      commonGroundAllConfirmedByBoth: false,
-      hasConfirmedCommonGroundLocal: false,
+      needsRevealAvailable: true,
+      needsRevealValidatedByMe: true,
+      needsRevealValidatedByBoth: false,
+      hasValidatedNeedsRevealLocal: false,
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showCommonGroundPanel).toBe(false);
+    expect(result.panels.showNeedsRevealValidationPanel).toBe(false);
   });
 
   it('does not show when already confirmed by both', () => {
@@ -837,14 +837,14 @@ describe('Needs Reveal Validation Panel Visibility', () => {
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
       myProgress: { stage: Stage.NEED_MAPPING },
-      commonGroundAvailable: true,
-      commonGroundAllConfirmedByMe: false,
-      commonGroundAllConfirmedByBoth: true,
-      hasConfirmedCommonGroundLocal: false,
+      needsRevealAvailable: true,
+      needsRevealValidatedByMe: false,
+      needsRevealValidatedByBoth: true,
+      hasValidatedNeedsRevealLocal: false,
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showCommonGroundPanel).toBe(false);
+    expect(result.panels.showNeedsRevealValidationPanel).toBe(false);
   });
 
   it('does not show when local latch is set (prevents flash)', () => {
@@ -852,14 +852,14 @@ describe('Needs Reveal Validation Panel Visibility', () => {
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
       myProgress: { stage: Stage.NEED_MAPPING },
-      commonGroundAvailable: true,
-      commonGroundAllConfirmedByMe: false,
-      commonGroundAllConfirmedByBoth: false,
-      hasConfirmedCommonGroundLocal: true,
+      needsRevealAvailable: true,
+      needsRevealValidatedByMe: false,
+      needsRevealValidatedByBoth: false,
+      hasValidatedNeedsRevealLocal: true,
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showCommonGroundPanel).toBe(false);
+    expect(result.panels.showNeedsRevealValidationPanel).toBe(false);
   });
 
   it('does not show when the needs reveal is unavailable', () => {
@@ -867,14 +867,14 @@ describe('Needs Reveal Validation Panel Visibility', () => {
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
       myProgress: { stage: Stage.NEED_MAPPING },
-      commonGroundAvailable: false,
-      commonGroundAllConfirmedByMe: false,
-      commonGroundAllConfirmedByBoth: false,
-      hasConfirmedCommonGroundLocal: false,
+      needsRevealAvailable: false,
+      needsRevealValidatedByMe: false,
+      needsRevealValidatedByBoth: false,
+      hasValidatedNeedsRevealLocal: false,
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showCommonGroundPanel).toBe(false);
+    expect(result.panels.showNeedsRevealValidationPanel).toBe(false);
   });
 
   it('shows for the legacy noOverlap compatibility state', () => {
@@ -882,15 +882,15 @@ describe('Needs Reveal Validation Panel Visibility', () => {
       myStage: Stage.NEED_MAPPING,
       compactMySigned: true,
       myProgress: { stage: Stage.NEED_MAPPING },
-      commonGroundAvailable: false,
-      commonGroundNoOverlap: true,
-      commonGroundAllConfirmedByMe: false,
-      commonGroundAllConfirmedByBoth: false,
-      hasConfirmedCommonGroundLocal: false,
+      needsRevealAvailable: false,
+      needsRevealNoOverlap: true,
+      needsRevealValidatedByMe: false,
+      needsRevealValidatedByBoth: false,
+      hasValidatedNeedsRevealLocal: false,
     });
 
     const result = computeChatUIState(inputs);
-    expect(result.panels.showCommonGroundPanel).toBe(true);
+    expect(result.panels.showNeedsRevealValidationPanel).toBe(true);
     expect(result.aboveInputPanel).toBe('needs-reveal-validation');
   });
 
@@ -903,10 +903,10 @@ describe('Needs Reveal Validation Panel Visibility', () => {
       allNeedsConfirmed: false,
       needsShared: false,
       hasConfirmedNeedsLocal: false,
-      commonGroundAvailable: true,
-      commonGroundAllConfirmedByMe: false,
-      commonGroundAllConfirmedByBoth: false,
-      hasConfirmedCommonGroundLocal: false,
+      needsRevealAvailable: true,
+      needsRevealValidatedByMe: false,
+      needsRevealValidatedByBoth: false,
+      hasValidatedNeedsRevealLocal: false,
     });
 
     const result = computeChatUIState(inputs);

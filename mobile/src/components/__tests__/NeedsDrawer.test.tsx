@@ -23,17 +23,17 @@ describe('NeedsDrawer', () => {
       />
     );
 
-    expect(screen.getByText('Your Needs')).toBeTruthy();
+    expect(screen.getByTestId('needs-drawer-header').props.children).toBe('Your Needs');
     expect(screen.getByText('Being heard')).toBeTruthy();
     expect(screen.getByText('Reliability')).toBeTruthy();
   });
 
-  it('renders comparison mode with both partners needs side by side', () => {
+  it('renders reveal mode with both partners needs side by side', () => {
     render(
       <NeedsDrawer
         visible
         onClose={jest.fn()}
-        mode="comparison"
+        mode="reveal"
         needs={needs}
         partnerNeeds={partnerNeeds}
         partnerName="Darryl"
@@ -48,7 +48,7 @@ describe('NeedsDrawer', () => {
     expect(screen.getByText('Review both needs lists side by side. What do you notice?')).toBeTruthy();
   });
 
-  it('validates the side-by-side needs reveal from comparison mode', () => {
+  it('validates the side-by-side needs reveal from reveal mode', () => {
     const onValidateNeeds = jest.fn();
     const onNeedsNotValidYet = jest.fn();
 
@@ -56,7 +56,7 @@ describe('NeedsDrawer', () => {
       <NeedsDrawer
         visible
         onClose={jest.fn()}
-        mode="comparison"
+        mode="reveal"
         needs={needs}
         partnerNeeds={partnerNeeds}
         onValidateNeeds={onValidateNeeds}

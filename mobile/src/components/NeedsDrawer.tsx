@@ -4,7 +4,7 @@
  * Bottom-sheet drawer for Stage 3 Need Mapping. Two modes:
  *
  * - `needs`: Review own needs with adjust/confirm actions
- * - `comparison`: Side-by-side view of both users' needs
+ * - `reveal`: Side-by-side view of both users' needs
  */
 
 import React, { useRef, useCallback, useEffect, useState } from 'react';
@@ -28,7 +28,7 @@ import { NeedCard } from './NeedCard';
 // Types
 // ============================================================================
 
-export type NeedsDrawerMode = 'needs' | 'comparison';
+export type NeedsDrawerMode = 'needs' | 'reveal';
 
 interface NeedItem {
   id: string;
@@ -48,7 +48,7 @@ export interface NeedsDrawerProps {
   confirmNeedsLabel?: string;
   confirmingNeedsLabel?: string;
   isConfirming?: boolean;
-  // Comparison mode
+  // Reveal mode
   partnerNeeds?: NeedItem[];
   partnerName?: string;
   onValidateNeeds?: () => void;
@@ -210,9 +210,9 @@ export function NeedsDrawer({
   // -------------------------------------------------------------------------
   const renderNeedsMode = () => (
     <>
-      <Text style={styles.sectionTitle}>Your Identified Needs</Text>
+      <Text style={styles.sectionTitle}>Your Needs</Text>
       <Text style={styles.sectionSubtitle}>
-        Review and confirm the needs identified from your conversation.
+        Review and confirm the needs you named in this conversation.
       </Text>
 
       {needs.map((need) => (
@@ -224,7 +224,7 @@ export function NeedsDrawer({
       ))}
 
       {needs.length === 0 && (
-        <Text style={styles.emptyText}>No needs identified yet.</Text>
+        <Text style={styles.emptyText}>No needs captured yet.</Text>
       )}
     </>
   );
@@ -270,13 +270,13 @@ export function NeedsDrawer({
 
   const renderSideBySideNeeds = () => {
     return (
-      <View style={styles.comparisonContainer} testID={`${testID}-side-by-side`}>
-        <View style={styles.comparisonColumn}>
+      <View style={styles.revealContainer} testID={`${testID}-side-by-side`}>
+        <View style={styles.revealColumn}>
           <Text style={styles.columnHeader}>You</Text>
           {needs.map((need) => (
-            <View key={need.id} style={styles.comparisonCard}>
-              <Text style={styles.comparisonCategory}>{need.category}</Text>
-              <Text style={styles.comparisonNeed}>{need.need}</Text>
+            <View key={need.id} style={styles.revealCard}>
+              <Text style={styles.revealCategory}>{need.category}</Text>
+              <Text style={styles.revealNeed}>{need.need}</Text>
             </View>
           ))}
           {needs.length === 0 && (
@@ -284,12 +284,12 @@ export function NeedsDrawer({
           )}
         </View>
 
-        <View style={styles.comparisonColumn}>
+        <View style={styles.revealColumn}>
           <Text style={styles.columnHeader}>{partnerName}</Text>
           {partnerNeeds.map((need) => (
-            <View key={need.id} style={[styles.comparisonCard, styles.partnerComparisonCard]}>
-              <Text style={styles.comparisonCategory}>{need.category}</Text>
-              <Text style={styles.comparisonNeed}>{need.need}</Text>
+            <View key={need.id} style={[styles.revealCard, styles.partnerRevealCard]}>
+              <Text style={styles.revealCategory}>{need.category}</Text>
+              <Text style={styles.revealNeed}>{need.need}</Text>
             </View>
           ))}
           {partnerNeeds.length === 0 && (
@@ -300,7 +300,7 @@ export function NeedsDrawer({
     );
   };
 
-  const renderComparisonMode = () => (
+  const renderRevealMode = () => (
     <>
       <Text style={styles.sectionSubtitle}>
         Review both needs lists side by side. What do you notice?
@@ -309,7 +309,7 @@ export function NeedsDrawer({
     </>
   );
 
-  const renderComparisonButtons = () => {
+  const renderRevealButtons = () => {
     const hasButtons = onValidateNeeds || onNeedsNotValidYet;
     if (!hasButtons) return null;
     return (
@@ -407,12 +407,12 @@ export function NeedsDrawer({
             showsVerticalScrollIndicator
           >
             {mode === 'needs' && renderNeedsMode()}
-            {mode === 'comparison' && renderComparisonMode()}
+            {mode === 'reveal' && renderRevealMode()}
           </ScrollView>
 
           {/* Fixed footer buttons */}
           {mode === 'needs' && renderNeedsButtons()}
-          {mode === 'comparison' && renderComparisonButtons()}
+          {mode === 'reveal' && renderRevealButtons()}
         </View>
       </Animated.View>
     </View>
@@ -537,13 +537,13 @@ const styles = StyleSheet.create({
     flex: undefined,
   },
 
-  // Comparison view
-  comparisonContainer: {
+  // Reveal view
+  revealContainer: {
     flexDirection: 'row',
     gap: 8,
     marginHorizontal: 12,
   },
-  comparisonColumn: {
+  revealColumn: {
     flex: 1,
   },
   columnHeader: {
@@ -555,7 +555,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 4,
   },
-  comparisonCard: {
+  revealCard: {
     backgroundColor: 'rgba(147, 197, 253, 0.15)',
     borderRadius: 10,
     borderWidth: 1,
@@ -564,17 +564,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     position: 'relative',
   },
-  partnerComparisonCard: {
+  partnerRevealCard: {
     backgroundColor: 'rgba(251, 191, 36, 0.12)',
     borderColor: 'rgba(251, 191, 36, 0.3)',
   },
-  comparisonCategory: {
+  revealCategory: {
     fontSize: 11,
     fontWeight: '600',
     color: colors.textSecondary,
     marginBottom: 2,
   },
-  comparisonNeed: {
+  revealNeed: {
     fontSize: 13,
     color: colors.textPrimary,
     lineHeight: 18,
