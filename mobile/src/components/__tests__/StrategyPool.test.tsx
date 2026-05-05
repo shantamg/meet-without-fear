@@ -1,7 +1,7 @@
 /**
  * StrategyPool Component Tests
  *
- * Tests for the strategy pool component that displays unlabeled strategies.
+ * Tests for the strategy pool component that displays strategies without author labels.
  */
 
 import React from 'react';
@@ -49,7 +49,7 @@ describe('StrategyPool', () => {
     jest.clearAllMocks();
   });
 
-  it('shows strategy pool without attribution', () => {
+  it('shows strategy pool without author attribution', () => {
     render(<StrategyPool {...defaultProps} />);
 
     // Verify strategies shown without "You suggested" or "Partner suggested"
@@ -71,11 +71,11 @@ describe('StrategyPool', () => {
     ).toBeTruthy();
   });
 
-  it('displays header text explaining unlabeled strategies', () => {
+  it('displays header text explaining role-specific clarity', () => {
     render(<StrategyPool {...defaultProps} />);
 
     expect(
-      screen.getByText(/strategies are shown without attribution/i)
+      screen.getByText(/some may name roles/i)
     ).toBeTruthy();
   });
 

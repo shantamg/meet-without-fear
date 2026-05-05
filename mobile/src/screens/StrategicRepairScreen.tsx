@@ -3,7 +3,7 @@
  *
  * Stage 4 - Strategic Repair
  * Implements the strategy pool, ranking, overlap reveal, and agreement flow.
- * Strategies are shown without attribution to focus on the ideas themselves.
+ * Strategies are shown without author labels to focus on the ideas themselves.
  */
 
 import { useState } from 'react';
@@ -692,7 +692,7 @@ export function StrategicRepairScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <WaitingRoom
-          message="Creating your agreement based on shared priorities..."
+          message="Preparing the next-step review..."
           partnerName={session?.partner?.nickname ?? session?.partner?.name ?? undefined}
         />
       </SafeAreaView>
