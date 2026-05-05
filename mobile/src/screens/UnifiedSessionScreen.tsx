@@ -257,10 +257,12 @@ function NeedsIdentifiedChatCard({
   needs,
   status,
   onReview,
+  compact = false,
 }: {
   needs: Array<{ id: string; need: string; category: string }>;
   status: 'ready' | 'confirmed' | 'shared';
   onReview: () => void;
+  compact?: boolean;
 }) {
   const styles = useStyles();
   const visibleNeeds = needs.slice(0, 3);
@@ -270,32 +272,51 @@ function NeedsIdentifiedChatCard({
     : status === 'confirmed'
       ? 'Confirmed'
       : 'Ready to review';
-  const actionLabel = status === 'ready' ? 'Review and confirm' : 'Open review';
+  const actionLabel = compact ? 'Review' : status === 'ready' ? 'Review and confirm' : 'Open review';
+  const countLabel = `${needs.length} ${needs.length === 1 ? 'need' : 'needs'} captured`;
 
   return (
     <TouchableOpacity
-      style={styles.needsSummaryCard}
+      style={[styles.needsSummaryCard, compact && styles.needsSummaryCardCompact]}
       onPress={onReview}
       activeOpacity={0.8}
       testID="needs-identified-chat-card"
     >
-      <View style={styles.needsSummaryHeader}>
-        <Text style={styles.needsSummaryEyebrow}>WHAT MATTERS</Text>
-        <Text style={styles.needsSummaryStatus}>{statusLabel}</Text>
-      </View>
-      <Text style={styles.needsSummaryTitle}>Your needs so far</Text>
-      <View style={styles.needsSummaryList}>
-        {visibleNeeds.map((need) => (
-          <View key={need.id} style={styles.needsSummaryRow}>
-            <Text style={styles.needsSummaryCategory}>{need.category}</Text>
-            <Text style={styles.needsSummaryText}>{need.need}</Text>
-          </View>
-        ))}
-        {extraCount > 0 ? (
-          <Text style={styles.needsSummaryMore}>+{extraCount} more</Text>
+      {!compact ? (
+        <View style={styles.needsSummaryHeader}>
+          <Text style={styles.needsSummaryEyebrow}>WHAT MATTERS</Text>
+          <Text style={styles.needsSummaryStatus}>{statusLabel}</Text>
+        </View>
+      ) : null}
+      <View style={compact ? styles.needsSummaryCompactBody : undefined}>
+        <View style={compact ? styles.needsSummaryCompactText : undefined}>
+          <Text style={compact ? styles.needsSummaryCompactTitle : styles.needsSummaryTitle}>
+            {compact ? 'What Matters' : 'Your needs so far'}
+          </Text>
+          {compact ? (
+            <Text style={styles.needsSummaryCount}>{countLabel}</Text>
+          ) : null}
+        </View>
+        {compact ? (
+          <Text style={styles.needsSummaryActionCompact}>{actionLabel}</Text>
         ) : null}
       </View>
-      <Text style={styles.needsSummaryAction}>{actionLabel}</Text>
+      {!compact ? (
+        <>
+          <View style={styles.needsSummaryList}>
+            {visibleNeeds.map((need) => (
+              <View key={need.id} style={styles.needsSummaryRow}>
+                <Text style={styles.needsSummaryCategory}>{need.category}</Text>
+                <Text style={styles.needsSummaryText}>{need.need}</Text>
+              </View>
+            ))}
+            {extraCount > 0 ? (
+              <Text style={styles.needsSummaryMore}>+{extraCount} more</Text>
+            ) : null}
+          </View>
+          <Text style={styles.needsSummaryAction}>{actionLabel}</Text>
+        </>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -1757,6 +1778,8 @@ export function UnifiedSessionScreen({
 
         case 'strategy-pool-preview': {
           const stratCount = card.props.strategyCount as number;
+          if (stratCount === 0) return null;
+
           const canMarkReadyToRank = card.props.canMarkReadyToRank === true;
           const canRank = card.props.canRank === true;
           const showPoolActions = stratCount > 0 && canRank;
@@ -1764,9 +1787,7 @@ export function UnifiedSessionScreen({
             <View style={styles.inlineCard} key={card.id}>
               <Text style={styles.cardTitle}>Ideas So Far</Text>
               <Text style={styles.cardSubtitle}>
-                {stratCount === 0
-                  ? 'Strategies are being gathered from your conversation...'
-                  : canRank
+                {canRank
                     ? `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} ready to review`
                     : `${stratCount} ${stratCount === 1 ? 'strategy' : 'strategies'} saved from your side`}
               </Text>
@@ -2021,6 +2042,7 @@ export function UnifiedSessionScreen({
   const needsReviewCards = useMemo((): ChatCustomCardItem[] => {
     if (currentStage !== Stage.NEED_MAPPING) return [];
     if (!needsData?.synthesizedAt || !needs || needs.length === 0) return [];
+    if (aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share') return [];
     const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
     let needsStatus: 'ready' | 'confirmed' | 'shared' = 'ready';
     if (gates?.needsShared === true) {
@@ -2049,7 +2071,7 @@ export function UnifiedSessionScreen({
         />
       ),
     }];
-  }, [currentStage, needsData?.synthesizedAt, needs, myProgress?.gatesSatisfied, allNeedsConfirmed]);
+  }, [currentStage, needsData?.synthesizedAt, needs, myProgress?.gatesSatisfied, allNeedsConfirmed, aboveInputPanel]);
 
   const chatCustomCards = useMemo(
     () => [...inviteeOpeningCards, ...needsReviewCards],
@@ -2440,80 +2462,10 @@ export function UnifiedSessionScreen({
         return undefined;
 
       case 'needs-review':
-        return (
-          <Animated.View
-            style={{
-              opacity: needsReviewAnim,
-              maxHeight: needsReviewAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 100],
-              }),
-              transform: [{
-                translateY: needsReviewAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0],
-                }),
-              }],
-              overflow: 'hidden',
-            }}
-            pointerEvents="auto"
-          >
-            <View style={styles.needsReviewContainer}>
-              <TouchableOpacity
-                style={styles.needsReviewButton}
-                onPress={() => {
-                  setShowActivityMenu(false);
-                  setNeedsDrawerMode('needs');
-                  setShowNeedsDrawer(true);
-                }}
-                activeOpacity={0.7}
-                testID="needs-review-button"
-              >
-                <Text style={styles.needsReviewButtonText}>
-                  Review and confirm your needs
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        );
+        return undefined;
 
       case 'needs-share':
-        return (
-          <Animated.View
-            style={{
-              opacity: needsReviewAnim,
-              maxHeight: needsReviewAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 100],
-              }),
-              transform: [{
-                translateY: needsReviewAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0],
-                }),
-              }],
-              overflow: 'hidden',
-            }}
-            pointerEvents="auto"
-          >
-            <View style={styles.needsReviewContainer}>
-              <TouchableOpacity
-                style={styles.needsReviewButton}
-                onPress={() => {
-                  setShowActivityMenu(false);
-                  setNeedsDrawerMode('needs');
-                  setShowNeedsDrawer(true);
-                }}
-                activeOpacity={0.7}
-                testID="needs-share-button"
-              >
-                <Text style={styles.needsReviewButtonText}>
-                  Share my needs
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        );
+        return undefined;
 
       case 'needs-reveal-validation':
         return (
@@ -2605,6 +2557,60 @@ export function UnifiedSessionScreen({
     onStageComplete,
     openOverlay,
   ]);
+
+  const renderBelowInput = useCallback((): React.ReactNode | undefined => {
+    if (aboveInputPanel !== 'needs-review' && aboveInputPanel !== 'needs-share') {
+      return undefined;
+    }
+    if (!needs || needs.length === 0) {
+      return undefined;
+    }
+
+    const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
+    let needsStatus: 'ready' | 'confirmed' | 'shared' = 'ready';
+    if (gates?.needsShared === true) {
+      needsStatus = 'shared';
+    } else if (allNeedsConfirmed) {
+      needsStatus = 'confirmed';
+    }
+
+    return (
+      <Animated.View
+        style={{
+          opacity: needsReviewAnim,
+          maxHeight: needsReviewAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, 420],
+          }),
+          transform: [{
+            translateY: needsReviewAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [20, 0],
+            }),
+          }],
+          overflow: 'hidden',
+        }}
+        pointerEvents="auto"
+      >
+        <View style={styles.needsReviewBelowInputContainer}>
+          <NeedsIdentifiedChatCard
+            needs={needs.map((need) => ({
+              id: need.id,
+              need: need.need,
+              category: String(need.category),
+            }))}
+            status={needsStatus}
+            compact
+            onReview={() => {
+              setShowActivityMenu(false);
+              setNeedsDrawerMode('needs');
+              setShowNeedsDrawer(true);
+            }}
+          />
+        </View>
+      </Animated.View>
+    );
+  }, [aboveInputPanel, needsReviewAnim, styles, needs, myProgress?.gatesSatisfied, allNeedsConfirmed]);
 
   // -------------------------------------------------------------------------
   // Loading State
@@ -2930,6 +2936,11 @@ export function UnifiedSessionScreen({
               : undefined
           }
           renderAboveInput={aboveInputPanel ? renderAboveInput : undefined}
+          renderBelowInput={
+            aboveInputPanel === 'needs-review' || aboveInputPanel === 'needs-share'
+              ? renderBelowInput
+              : undefined
+          }
           renderBelowChat={(inlineCards.length > 0 || memorySuggestion) ? () => (
             <>
               {inlineCards.map((card) => renderInlineCard(card))}
@@ -3153,7 +3164,7 @@ export function UnifiedSessionScreen({
           confirmed: n.confirmed,
         }))}
         onAdjustNeeds={() => {
-          sendMessage('I would like to adjust my identified needs');
+          setShowNeedsDrawer(false);
         }}
         onConfirmNeeds={() => {
           if (allNeedsConfirmed) {
@@ -3750,6 +3761,14 @@ const useStyles = () =>
       borderTopWidth: 1,
       borderTopColor: t.colors.border,
     },
+    needsReviewBelowInputContainer: {
+      paddingHorizontal: t.spacing.lg,
+      paddingTop: t.spacing.sm,
+      paddingBottom: t.spacing.md,
+      backgroundColor: t.colors.bgSecondary,
+      borderTopWidth: 1,
+      borderTopColor: t.colors.border,
+    },
     needsReviewButton: {
       paddingVertical: t.spacing.sm,
       paddingHorizontal: t.spacing.md,
@@ -3808,6 +3827,12 @@ const useStyles = () =>
       borderWidth: 1,
       borderColor: t.colors.border,
     },
+    needsSummaryCardCompact: {
+      marginHorizontal: 0,
+      marginVertical: 0,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+    },
     needsSummaryHeader: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -3830,6 +3855,27 @@ const useStyles = () =>
       fontWeight: '700',
       color: t.colors.textPrimary,
       marginBottom: 12,
+    },
+    needsSummaryCompactBody: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    needsSummaryCompactText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    needsSummaryCompactTitle: {
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: '700',
+      color: t.colors.textPrimary,
+    },
+    needsSummaryCount: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: t.colors.textSecondary,
     },
     needsSummaryList: {
       gap: 8,
@@ -3862,6 +3908,18 @@ const useStyles = () =>
       fontSize: 14,
       fontWeight: '700',
       color: t.colors.brandBlue,
+    },
+    needsSummaryActionCompact: {
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: t.colors.bgPrimary,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      fontSize: 14,
+      fontWeight: '700',
+      color: t.colors.brandBlue,
+      overflow: 'hidden',
     },
     shareActions: {
       flexDirection: 'row',

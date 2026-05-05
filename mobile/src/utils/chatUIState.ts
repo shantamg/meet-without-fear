@@ -579,8 +579,6 @@ function computeShouldHideInput(
     aboveInputPanel === 'feel-heard' ||
     aboveInputPanel === 'share-suggestion' ||
     aboveInputPanel === 'empathy-statement' ||
-    aboveInputPanel === 'needs-review' ||
-    aboveInputPanel === 'needs-share' ||
     aboveInputPanel === 'needs-reveal-validation'
   ) {
     return true;
