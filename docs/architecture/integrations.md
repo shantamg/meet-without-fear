@@ -3,7 +3,7 @@ title: External Integrations
 sidebar_position: 6
 description: "Analysis Date: 2026-03-11"
 created: 2026-03-11
-updated: 2026-05-01
+updated: 2026-05-05
 status: living
 ---
 # External Integrations
@@ -90,8 +90,9 @@ status: living
   - SDK: `mixpanel-react-native` (mobile/native), `mixpanel-browser` (mobile/Expo web build)
   - Auth: `EXPO_PUBLIC_MIXPANEL_TOKEN` (environment variable, public token)
   - Tracking: Session events, user actions, completion milestones
+  - PII posture: Users are identified only by pseudonymous Clerk user ID. `setUserProperties` sends only `last_login_at`; real name and email are never sent to Mixpanel.
   - Files:
-    - Mobile (native): `mobile/src/services/mixpanel.ts`, `mobile/src/services/analytics.ts`
+    - Mobile (native): `mobile/src/services/mixpanel.ts`, `mobile/src/services/analytics.ts`, `mobile/src/components/MixpanelInitializer.tsx`
     - Mobile (Expo web build): `mobile/src/services/mixpanel.web.ts` (platform override using `mixpanel-browser`)
     - Website: Google Analytics via Next.js
 
@@ -152,6 +153,11 @@ status: living
 - Winston structured logger (`backend/src/lib/logger.ts`) with JSON output in production, pretty-print in development
 - Automatic request context injection: turnId, sessionId, userId, requestId
 - Sentry transport: error-level logs forwarded to Sentry via custom SentryTransport
+- Mobile Sentry: initialized in `mobile/app/_layout.tsx`
+  - `sendDefaultPii: false` — prevents automatic PII capture
+  - `beforeSend` hook: strips PII keys from event extras and breadcrumbs before transmission
+  - `beforeBreadcrumb` hook: filters PII from breadcrumbs in real-time
+  - `tracesSampleRate: 0.2` (20% performance trace sampling)
 - LLM telemetry: `llm-telemetry.ts` tracks token usage, cost, duration per turn
 - Brain Activity: Stored in `BrainActivity` table for audit and cost analysis (brain service)
 - TurnTrace: Request-scoped logging via AsyncLocalStorage captures `turnId` for correlating logs
