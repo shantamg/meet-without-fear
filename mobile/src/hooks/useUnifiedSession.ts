@@ -300,10 +300,12 @@ export function useUnifiedSession(
   // Derive needs state for gating common ground query
   const needsForGating = needsData?.needs ?? [];
   const allNeedsConfirmedForGating = needsForGating.length > 0 && needsForGating.every((n) => n.confirmed);
+  const myNeedsSharedForGating =
+    (progressData?.myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true;
 
   const { data: needsComparisonData } = useNeedsComparison(
     sessionId,
-    allNeedsConfirmedForGating && !accessDenied
+    !accessDenied && (allNeedsConfirmedForGating || myNeedsSharedForGating)
   );
 
   // Stage 4: Strategies
@@ -334,7 +336,7 @@ export function useUnifiedSession(
   const { mutate: signCompact, isPending: isSigningCompact } = useSignCompact();
   const { mutate: confirmInvitationMessage, isPending: isConfirmingInvitation } = useConfirmInvitationMessage();
   const { mutate: advanceStage } = useAdvanceStage();
-  const { mutate: saveDraft, mutateAsync: saveDraftAsync } = useSaveEmpathyDraft();
+  const { mutate: saveDraft, mutateAsync: saveDraftAsync, isPending: isSavingEmpathyDraft } = useSaveEmpathyDraft();
   const { mutate: consentToShare, isPending: isSharingEmpathy } = useConsentToShareEmpathy({
     onError: (error) => {
       console.error('[useConsentToShareEmpathy] Mutation error', error);
@@ -344,7 +346,7 @@ export function useUnifiedSession(
     },
   });
   const { mutate: validateEmpathy } = useValidateEmpathy();
-  const { mutate: resubmitEmpathy } = useResubmitEmpathy();
+  const { mutate: resubmitEmpathy, isPending: isResubmittingEmpathy } = useResubmitEmpathy();
   const { mutate: skipRefinement } = useSkipRefinement();
   const { mutate: confirmNeeds, isPending: isConfirmingNeeds } = useConfirmNeeds();
   const { mutate: consentShareNeeds } = useConsentShareNeeds();
@@ -378,13 +380,24 @@ export function useUnifiedSession(
       }
       // Invalidate strategies cache when AI extracts new strategies (Stage 4)
       if (sessionId && metadata.proposedStrategies && metadata.proposedStrategies.length > 0) {
-        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
+        queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
+      }
+      // Invalidate needs cache when AI captures reviewable needs (Stage 3)
+      if (sessionId && metadata.proposedNeeds && metadata.proposedNeeds.length > 0) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
       // Stage 0: AI emitted a <draft> topic — backend persisted Session.topicFrame.
       // Refresh session state so the topic-proposal panel picks it up.
       if (sessionId && metadata.topicFrame) {
         queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
         queryClient.invalidateQueries({ queryKey: sessionKeys.sessionInvitation(sessionId) });
+      }
+      if (sessionId && metadata.needsCaptured) {
+        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
       }
     },
     [sessionId, saveDraft, setStreamTriggeredFeelHeard, setAiRecommendsReadyToShare,
@@ -559,6 +572,9 @@ export function useUnifiedSession(
   // Strategy phase
   const strategyPhase = strategyData?.phase ?? StrategyPhase.COLLECTING;
   const strategies = useMemo(() => strategyData?.strategies ?? [], [strategyData?.strategies]);
+  const myReadyToRank =
+    strategyData?.myReadyToRank === true ||
+    (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.readyToRank === true;
   const overlappingStrategies = useMemo(() => revealData?.overlap ?? [], [revealData?.overlap]);
   const agreements = useMemo(() => agreementsData?.agreements ?? [], [agreementsData?.agreements]);
 
@@ -711,7 +727,7 @@ export function useUnifiedSession(
     // Stage 4: Strategic Repair cards
     if (currentStage === Stage.STRATEGIC_REPAIR) {
       // Strategy pool preview (hide after session is resolved)
-      if (strategyPhase === StrategyPhase.COLLECTING && session?.status !== SessionStatus.RESOLVED) {
+      if (strategyPhase === StrategyPhase.COLLECTING && !myReadyToRank && session?.status !== SessionStatus.RESOLVED) {
         cards.push({
           id: 'strategy-pool-preview',
           type: 'strategy-pool-preview',
@@ -725,7 +741,7 @@ export function useUnifiedSession(
       }
 
       // Overlap preview after ranking (hide after session is resolved)
-      if (strategyPhase === StrategyPhase.REVEALING && overlappingStrategies.length > 0 && session?.status !== SessionStatus.RESOLVED) {
+      if (strategyPhase === StrategyPhase.REVEALING && overlappingStrategies.length > 0 && agreements.length === 0 && session?.status !== SessionStatus.RESOLVED) {
         cards.push({
           id: 'overlap-preview',
           type: 'overlap-preview',
@@ -775,6 +791,7 @@ export function useUnifiedSession(
     commonGroundComplete,
     strategyPhase,
     strategies,
+    myReadyToRank,
     overlappingStrategies,
     agreements,
     partnerName,
@@ -1243,7 +1260,9 @@ export function useUnifiedSession(
     empathyStatusData,
     shareOfferData,
     isGenerating,
+    isSavingEmpathyDraft,
     isSharingEmpathy,
+    isResubmittingEmpathy,
     isProposing,
     isConfirmingNeeds,
 

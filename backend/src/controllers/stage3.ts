@@ -19,6 +19,7 @@ import { confirmNeedsRequestSchema, ConsentContentType, NeedCategory } from '@me
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
 import { getPartnerUserId } from '../utils/session';
+import { captureProposedNeedsForUser } from '../services/needs';
 
 // ============================================================================
 // Helpers
@@ -269,27 +270,18 @@ export async function captureNeeds(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const userVessel = await getOrCreateUserVessel(sessionId, user.id);
-    const now = new Date();
-
-    const capturedNeeds = [];
-    for (const item of needs) {
-      const evidence = Array.isArray(item.evidence)
-        ? item.evidence.filter((entry): entry is string => typeof entry === 'string')
-        : [];
-
-      const created = await prisma.identifiedNeed.create({
-        data: {
-          vesselId: userVessel.id,
-          need: item.description || item.need!,
-          category: item.category as NeedCategory,
-          evidence,
-          aiConfidence: 0.85,
-          confirmed: false,
-        },
-      });
-      capturedNeeds.push(created);
-    }
+    const { needs: capturedNeeds, capturedAt } = await captureProposedNeedsForUser(
+      sessionId,
+      user.id,
+      needs.map((item) => ({
+        need: item.need!,
+        category: item.category as NeedCategory,
+        description: item.description!,
+        evidence: Array.isArray(item.evidence)
+          ? item.evidence.filter((entry): entry is string => typeof entry === 'string')
+          : [],
+      }))
+    );
 
     successResponse(
       res,
@@ -303,7 +295,7 @@ export async function captureNeeds(req: Request, res: Response): Promise<void> {
           confirmed: n.confirmed,
           aiConfidence: n.aiConfidence,
         })),
-        capturedAt: now.toISOString(),
+        capturedAt: capturedAt.toISOString(),
       },
       201
     );
@@ -625,7 +617,7 @@ export async function consentToShareNeeds(
 
     // If both have shared, notify clients that the side-by-side reveal is ready.
     if (partnerShared && partnerId) {
-      await publishSessionEvent(sessionId, 'session.needs_reveal_ready' as any, {
+      await publishSessionEvent(sessionId, 'session.needs_reveal_ready', {
         stage: 3,
         needsRevealReady: true,
       });
@@ -745,7 +737,7 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
     const partnerValidated = await hasPartnerValidatedNeeds(sessionId, user.id);
     const partnerId = await getPartnerUserId(sessionId, user.id);
     if (partnerId) {
-      await notifyPartner(sessionId, partnerId, 'partner.needs_validated' as any, {
+      await notifyPartner(sessionId, partnerId, 'partner.needs_validated', {
         stage: 3,
         validatedBy: user.id,
         validated,
@@ -790,7 +782,7 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
       const transitionContent =
         'You have both checked the needs lists and marked them valid. Now move to strategies that can honor what each of you needs.';
 
-      const transitionMessages: Array<{ id: string; content: string; timestamp: Date }> = [];
+      const transitionMessages: Array<{ id: string; content: string; timestamp: Date; forUserId: string }> = [];
       for (const uid of [user.id, partnerId]) {
         const message = await prisma.message.create({
           data: {
@@ -802,23 +794,24 @@ export async function validateNeeds(req: Request, res: Response): Promise<void> 
             stage: 4,
           },
         });
-        transitionMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp });
+        transitionMessages.push({ id: message.id, content: message.content, timestamp: message.timestamp, forUserId: uid });
       }
 
-      const firstMessage = transitionMessages[0];
-      await publishSessionEvent(sessionId, 'partner.stage_completed', {
-        previousStage: 3,
-        currentStage: 4,
-        userId: user.id,
-        triggeredByUserId: user.id,
-        message: firstMessage
-          ? {
-              id: firstMessage.id,
-              content: firstMessage.content,
-              timestamp: firstMessage.timestamp,
-            }
-          : undefined,
-      });
+      for (const transitionMessage of transitionMessages) {
+        await publishSessionEvent(sessionId, 'partner.stage_completed', {
+          forUserId: transitionMessage.forUserId,
+          previousStage: 3,
+          currentStage: 4,
+          userId: user.id,
+          triggeredByUserId: user.id,
+          message: {
+            id: transitionMessage.id,
+            content: transitionMessage.content,
+            timestamp: transitionMessage.timestamp,
+            forUserId: transitionMessage.forUserId,
+          },
+        });
+      }
     }
 
     successResponse(res, {
@@ -1036,14 +1029,25 @@ export async function getNeedsComparison(
 
     const [myNeeds, partnerNeeds] = await Promise.all([
       prisma.identifiedNeed.findMany({
-        where: { vesselId: myVessel.id },
+        where: { vesselId: myVessel.id, confirmed: true },
         orderBy: { createdAt: 'asc' },
       }),
       prisma.identifiedNeed.findMany({
-        where: { vesselId: partnerVessel.id },
+        where: { vesselId: partnerVessel.id, confirmed: true },
         orderBy: { createdAt: 'asc' },
       }),
     ]);
+
+    if (myNeeds.length === 0 || partnerNeeds.length === 0) {
+      successResponse(res, {
+        myNeeds: [],
+        partnerNeeds: [],
+        commonGround: [],
+        analysisComplete: false,
+        noOverlap: false,
+      });
+      return;
+    }
 
     const partnerProgress = await prisma.stageProgress.findUnique({
       where: {

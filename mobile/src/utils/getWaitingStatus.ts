@@ -21,9 +21,13 @@ export type WaitingStatusState =
   | 'witness-pending' // Stage 1: Waiting for partner to complete witness
   | 'empathy-pending' // Stage 2: Waiting for partner to share empathy
   | 'partner-considering-perspective' // Stage 2: Partner felt heard, now building empathy for you (good alignment)
+  | 'partner-validating-empathy' // Stage 2: User validated partner empathy, waiting for partner to validate theirs
   | 'needs-pending' // Stage 3: Waiting for partner to confirm needs
+  | 'needs-waiting-for-partner' // Stage 3: User shared needs, waiting for partner to share
   | 'common-ground-pending' // Stage 3: Waiting for partner to confirm common ground
+  | 'partner-validating-needs' // Stage 3: User validated revealed needs, waiting for partner
   | 'ranking-pending' // Stage 4: Waiting for partner to submit ranking
+  | 'strategy-readiness-pending' // Stage 4: User is ready to rank, waiting for partner readiness
   | 'partner-signed' // Partner has signed compact (transient)
   | 'partner-completed-witness' // Partner completed witness stage (transient)
   | 'partner-shared-empathy' // Partner shared their empathy attempt (transient)
@@ -59,6 +63,10 @@ export interface WaitingStatusInputs {
     myAttemptStatus?: string; // 'REVEALED', 'NEEDS_WORK', etc.
     myAttemptRevisionCount?: number; // Number of times empathy was revised
   } | undefined;
+  myValidation?: {
+    validated?: boolean;
+  } | undefined;
+  partnerValidated?: boolean;
 
   // Stage 2: Empathy draft state
   empathyDraft: {
@@ -76,6 +84,8 @@ export interface WaitingStatusInputs {
   // Stage 3: Needs confirmation state
   needs: {
     allConfirmed: boolean;
+    shared?: boolean;
+    revealReady?: boolean;
   };
 
   // Stage 3: Common ground discovery
@@ -87,6 +97,10 @@ export interface WaitingStatusInputs {
 
   // Stage 4: Strategy phase and overlap
   strategyPhase: StrategyPhase | string;
+  strategyReadiness?: {
+    myReadyToRank?: boolean;
+    partnerReadyToRank?: boolean;
+  };
   overlappingStrategies: {
     count: number;
   };
@@ -127,6 +141,7 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     needs,
     commonGround,
     strategyPhase,
+    strategyReadiness,
     overlappingStrategies,
   } = inputs;
 
@@ -217,10 +232,39 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     return 'partner-shared-empathy';
   }
 
+  // User has validated the partner's empathy attempt, but the partner has not
+  // validated the user's revealed attempt yet. There is no useful freeform
+  // user action here; the next gate belongs to the partner.
+  if (
+    myStage === Stage.PERSPECTIVE_STRETCH &&
+    empathyStatus?.myAttemptStatus === 'REVEALED' &&
+    inputs.myValidation?.validated &&
+    inputs.partnerValidated === false
+  ) {
+    return 'partner-validating-empathy';
+  }
+
   // --- Priority 5: Stage 3 (Needs) ---
-  // Only show needs-pending when in Stage 3, needs confirmed, and no common ground yet
-  if (myStage === Stage.NEED_MAPPING && needs.allConfirmed && commonGround.count === 0) {
+  // User has confirmed their needs locally but has not shared them yet. Hide
+  // freeform input while the review/share controls own the next step.
+  if (
+    myStage === Stage.NEED_MAPPING &&
+    needs.allConfirmed &&
+    !needs.shared &&
+    !needs.revealReady &&
+    commonGround.count === 0
+  ) {
     return 'needs-pending';
+  }
+
+  // User shared needs; wait for partner before showing the side-by-side reveal.
+  if (
+    myStage === Stage.NEED_MAPPING &&
+    needs.shared &&
+    !needs.revealReady &&
+    commonGround.count === 0
+  ) {
+    return 'needs-waiting-for-partner';
   }
 
   // Transition: Partner confirmed needs and common ground discovered
@@ -233,7 +277,29 @@ export function computeWaitingStatus(inputs: WaitingStatusInputs): WaitingStatus
     return 'common-ground-pending';
   }
 
+  // Needs reveal validated by me, waiting for partner. This covers the current
+  // side-by-side needs reveal, including the no-overlap path where there are
+  // revealed needs but no generated CommonGround rows.
+  if (
+    myStage === Stage.NEED_MAPPING &&
+    needs.shared &&
+    needs.revealReady &&
+    commonGround.allConfirmedByMe &&
+    !commonGround.allConfirmedByBoth
+  ) {
+    return 'partner-validating-needs';
+  }
+
   // --- Priority 6: Stage 4 (Strategies) ---
+
+  if (
+    myStage === Stage.STRATEGIC_REPAIR &&
+    strategyPhase === StrategyPhase.COLLECTING &&
+    strategyReadiness?.myReadyToRank &&
+    !strategyReadiness?.partnerReadyToRank
+  ) {
+    return 'strategy-readiness-pending';
+  }
 
   if (strategyPhase === StrategyPhase.REVEALING && overlappingStrategies.count === 0) {
     return 'ranking-pending';

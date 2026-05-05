@@ -86,6 +86,8 @@ export interface UseChatUIStateProps {
     hasNewSharedContext?: boolean;
     hasUnviewedSharedContext?: boolean;
     myAttempt?: { status?: string; content?: string };
+    myValidation?: { validated?: boolean };
+    partnerValidated?: boolean;
     messageCountSinceSharedContext?: number;
   } | undefined;
   empathyDraftData: {
@@ -106,6 +108,7 @@ export interface UseChatUIStateProps {
   allNeedsConfirmed: boolean;
   needsAvailable: boolean;
   needsShared: boolean;
+  needsRevealReady: boolean;
   hasConfirmedNeedsLocal: boolean;
   commonGroundCount: number;
   commonGroundAvailable: boolean;
@@ -116,6 +119,10 @@ export interface UseChatUIStateProps {
 
   // Stage 4: Strategies
   strategyPhase: StrategyPhase | string;
+  strategyReadiness?: {
+    myReadyToRank?: boolean;
+    partnerReadyToRank?: boolean;
+  };
   overlappingStrategiesCount: number;
 
   // Stage 4: Agreements
@@ -202,6 +209,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     allNeedsConfirmed,
     needsAvailable,
     needsShared,
+    needsRevealReady,
     hasConfirmedNeedsLocal,
     commonGroundCount,
     commonGroundAvailable,
@@ -210,6 +218,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     commonGroundAllConfirmedByBoth,
     hasConfirmedCommonGroundLocal,
     strategyPhase,
+    strategyReadiness,
     overlappingStrategiesCount,
     agreements,
   } = props;
@@ -229,6 +238,8 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
       hasNewSharedContext: empathyStatusData.hasNewSharedContext,
       myAttemptStatus: empathyStatusData.myAttempt?.status,
     } : undefined,
+    myValidation: empathyStatusData?.myValidation,
+    partnerValidated: empathyStatusData?.partnerValidated,
     empathyDraft: empathyDraftData ? {
       alreadyConsented: empathyDraftData.alreadyConsented,
     } : undefined,
@@ -236,13 +247,14 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     shareOffer: shareOfferData ? {
       hasSuggestion: shareOfferData.hasSuggestion,
     } : undefined,
-    needs: { allConfirmed: allNeedsConfirmed },
+    needs: { allConfirmed: allNeedsConfirmed, shared: needsShared, revealReady: needsRevealReady },
     commonGround: {
       count: commonGroundCount,
       allConfirmedByMe: commonGroundAllConfirmedByMe,
       allConfirmedByBoth: commonGroundAllConfirmedByBoth,
     },
     strategyPhase,
+    strategyReadiness,
     overlappingStrategies: { count: overlappingStrategiesCount },
     agreements,
 
@@ -279,6 +291,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     needsAvailable,
     allNeedsConfirmed,
     needsShared,
+    needsRevealReady,
     hasConfirmedNeedsLocal,
 
     // Stage 3: Common Ground
@@ -298,6 +311,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     allNeedsConfirmed,
     needsAvailable,
     needsShared,
+    needsRevealReady,
     hasConfirmedNeedsLocal,
     commonGroundCount,
     commonGroundAvailable,
@@ -306,6 +320,7 @@ export function useChatUIState(props: UseChatUIStateProps): UseChatUIStateResult
     commonGroundAllConfirmedByBoth,
     hasConfirmedCommonGroundLocal,
     strategyPhase,
+    strategyReadiness,
     overlappingStrategiesCount,
     agreements,
     sessionStatus,

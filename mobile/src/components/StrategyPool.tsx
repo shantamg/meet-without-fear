@@ -1,7 +1,7 @@
 /**
  * StrategyPool Component
  *
- * Displays the pool of strategies without attribution.
+ * Displays the pool of strategies without author labels.
  * Users can request more AI-generated ideas or proceed to ranking.
  */
 
@@ -37,7 +37,7 @@ interface StrategyPoolProps {
 // ============================================================================
 
 /**
- * StrategyPool displays all available strategies without attribution.
+ * StrategyPool displays all available strategies without author labels.
  *
  * Key features:
  * - Shows strategies unlabeled (no source indication)
@@ -58,7 +58,7 @@ export function StrategyPool({
           <View style={styles.headerText}>
             <Text style={styles.title}>Here is what we have come up with</Text>
             <Text style={styles.subtitle}>
-              Strategies are shown without attribution - focus on the ideas
+              Strategies are grouped by idea. Some may name roles when safety or accountability needs that clarity.
             </Text>
           </View>
           {onClose && (

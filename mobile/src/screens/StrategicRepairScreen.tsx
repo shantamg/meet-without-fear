@@ -3,7 +3,7 @@
  *
  * Stage 4 - Strategic Repair
  * Implements the strategy pool, ranking, overlap reveal, and agreement flow.
- * Strategies are shown without attribution to focus on the ideas themselves.
+ * Strategies are shown without author labels to focus on the ideas themselves.
  */
 
 import { useState } from 'react';
@@ -512,6 +512,53 @@ export function StrategicRepairScreen() {
     }
   };
 
+  const agreements = agreementsData?.agreements || [];
+  const unconfirmedAgreement = agreements.find((a) => !a.agreedByMe);
+  const waitingForPartnerAgreement =
+    agreements.length > 0 &&
+    agreements.every((a) => a.agreedByMe) &&
+    agreements.some((a) => !a.agreedByPartner);
+
+  if (unconfirmedAgreement) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <ScrollView style={styles.scrollContainer}>
+          <AgreementCard
+            agreement={{
+              experiment: unconfirmedAgreement.description,
+              duration: unconfirmedAgreement.duration || 'To be determined',
+              successMeasure:
+                unconfirmedAgreement.measureOfSuccess || 'To be defined together',
+              checkInDate: unconfirmedAgreement.followUpDate || followUpDate?.toISOString() || undefined,
+            }}
+            confirmedByMe={unconfirmedAgreement.agreedByMe}
+            confirmedByPartner={unconfirmedAgreement.agreedByPartner}
+            partnerName={session?.partner?.nickname ?? session?.partner?.name ?? undefined}
+            onConfirm={handleConfirmAgreement}
+          />
+
+          {!unconfirmedAgreement.followUpDate && (
+            <FollowUpScheduler
+              onSchedule={setFollowUpDate}
+              initialDate={followUpDate || undefined}
+            />
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (waitingForPartnerAgreement) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <WaitingRoom
+          message="You've proposed the agreement. Waiting for your partner to confirm."
+          partnerName={session?.partner?.nickname ?? session?.partner?.name ?? undefined}
+        />
+      </SafeAreaView>
+    );
+  }
+
   // Phase: Collecting strategies
   if (phase === StrategyPhase.COLLECTING) {
     return (
@@ -548,10 +595,14 @@ export function StrategicRepairScreen() {
     );
   }
 
+  const waitingForRankingReveal = !revealData ||
+    (revealData as { waitingForPartner?: boolean; overlap?: unknown[] | null }).waitingForPartner === true ||
+    (revealData as { overlap?: unknown[] | null }).overlap === null;
+
   // Phase: Waiting for partner to rank
   // Note: This is typically handled by polling the phase, but we can show
   // a waiting state if we detect the user has submitted but phase hasn't changed
-  if (phase === StrategyPhase.REVEALING && !revealData) {
+  if (phase === StrategyPhase.REVEALING && waitingForRankingReveal) {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <WaitingRoom
@@ -608,7 +659,7 @@ export function StrategicRepairScreen() {
     phase === StrategyPhase.NEGOTIATING ||
     phase === StrategyPhase.AGREED
   ) {
-    const agreement = agreementsData?.agreements?.[0];
+    const agreement = agreements[0];
 
     if (agreement) {
       return (
@@ -641,7 +692,7 @@ export function StrategicRepairScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <WaitingRoom
-          message="Creating your agreement based on shared priorities..."
+          message="Preparing the next-step review..."
           partnerName={session?.partner?.nickname ?? session?.partner?.name ?? undefined}
         />
       </SafeAreaView>

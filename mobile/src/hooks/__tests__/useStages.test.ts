@@ -24,6 +24,7 @@ import {
   useConsentShareNeeds,
   useStrategies,
   useProposeStrategy,
+  useMarkReadyToRank,
   useSubmitRankings,
   useStrategiesReveal,
   useAgreements,
@@ -640,6 +641,55 @@ describe('useStages', () => {
     });
 
     describe('useSubmitRankings hook', () => {
+      it('optimistically marks current user ready to rank in cache', async () => {
+        mockPost.mockResolvedValueOnce({
+          ready: true,
+          readyAt: '2026-05-05T00:00:00.000Z',
+          partnerReady: false,
+          canStartRanking: false,
+        });
+
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        queryClient.setQueryData(stageKeys.strategies(sessionId), {
+          strategies: [],
+          phase: StrategyPhase.COLLECTING,
+          aiSuggestionsAvailable: false,
+          myReadyToRank: false,
+          partnerReadyToRank: false,
+        });
+        queryClient.setQueryData(stageKeys.progress(sessionId), {
+          sessionId,
+          myProgress: {
+            stage: Stage.STRATEGIC_REPAIR,
+            status: StageStatus.IN_PROGRESS,
+            startedAt: '2026-05-05T00:00:00.000Z',
+            completedAt: null,
+            gatesSatisfied: null,
+          },
+          partnerProgress: {
+            stage: Stage.STRATEGIC_REPAIR,
+            status: StageStatus.IN_PROGRESS,
+            gatesSatisfied: null,
+          },
+          canAdvance: false,
+        });
+        const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+          return React.createElement(QueryClientProvider, { client: queryClient }, children);
+        };
+
+        const { result } = renderHook(() => useMarkReadyToRank(), { wrapper });
+
+        await act(async () => {
+          await result.current.mutateAsync({ sessionId });
+        });
+
+        expect(mockPost).toHaveBeenCalledWith(`/sessions/${sessionId}/strategies/ready`);
+        expect(queryClient.getQueryData<any>(stageKeys.strategies(sessionId))?.myReadyToRank).toBe(true);
+        expect(
+          queryClient.getQueryData<any>(stageKeys.progress(sessionId))?.myProgress.gatesSatisfied.readyToRank
+        ).toBe(true);
+      });
+
       it('submits strategy rankings', async () => {
         mockPost.mockResolvedValueOnce({
           submitted: true,
@@ -660,6 +710,57 @@ describe('useStages', () => {
         expect(mockPost).toHaveBeenCalledWith(`/sessions/${sessionId}/strategies/rank`, {
           rankedIds: ['strategy-1', 'strategy-2', 'strategy-3'],
         });
+      });
+
+      it('moves the local strategy cache out of active ranking immediately', async () => {
+        mockPost.mockResolvedValueOnce({
+          ranked: true,
+          rankedAt: '2026-05-05T00:00:00.000Z',
+          partnerRanked: false,
+          canReveal: false,
+        });
+
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        queryClient.setQueryData(stageKeys.strategies(sessionId), {
+          strategies: [],
+          phase: StrategyPhase.RANKING,
+          aiSuggestionsAvailable: false,
+          myReadyToRank: true,
+          partnerReadyToRank: true,
+        });
+        queryClient.setQueryData(stageKeys.progress(sessionId), {
+          sessionId,
+          myProgress: {
+            stage: Stage.STRATEGIC_REPAIR,
+            status: StageStatus.IN_PROGRESS,
+            startedAt: '2026-05-05T00:00:00.000Z',
+            completedAt: null,
+            gatesSatisfied: { readyToRank: true },
+          },
+          partnerProgress: {
+            stage: Stage.STRATEGIC_REPAIR,
+            status: StageStatus.IN_PROGRESS,
+            gatesSatisfied: { readyToRank: true },
+          },
+          canAdvance: false,
+        });
+        const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
+          React.createElement(QueryClientProvider, { client: queryClient }, children);
+
+        const { result } = renderHook(() => useSubmitRankings(), { wrapper });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            rankedIds: ['strategy-1', 'strategy-2'],
+          });
+        });
+
+        expect(queryClient.getQueryData<any>(stageKeys.strategies(sessionId))?.phase)
+          .toBe(StrategyPhase.REVEALING);
+        expect(
+          queryClient.getQueryData<any>(stageKeys.progress(sessionId))?.myProgress.gatesSatisfied.rankingSubmitted
+        ).toBe(true);
       });
     });
 
@@ -734,7 +835,7 @@ describe('useStages', () => {
             status: 'PROPOSED',
             duration: null,
             measureOfSuccess: null,
-            agreedByMe: false,
+            agreedByMe: true,
             agreedByPartner: false,
             agreedAt: null,
             followUpDate: null,
@@ -760,6 +861,49 @@ describe('useStages', () => {
           description: 'We agree to weekly check-ins on Sundays',
           type: AgreementType.COMMITMENT,
         });
+      });
+
+      it('adds the created agreement to cache and leaves reveal state', async () => {
+        mockPost.mockResolvedValueOnce({
+          agreement: {
+            id: 'agreement-1',
+            description: 'We agree to weekly check-ins on Sundays',
+            type: AgreementType.COMMITMENT,
+            status: 'PROPOSED',
+            duration: null,
+            measureOfSuccess: null,
+            agreedByMe: true,
+            agreedByPartner: false,
+            agreedAt: null,
+            followUpDate: null,
+          },
+          awaitingPartnerConfirmation: true,
+        });
+
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        queryClient.setQueryData(stageKeys.strategies(sessionId), {
+          strategies: [],
+          phase: StrategyPhase.REVEALING,
+          aiSuggestionsAvailable: false,
+        });
+        const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
+          React.createElement(QueryClientProvider, { client: queryClient }, children);
+
+        const { result } = renderHook(() => useCreateAgreement(), { wrapper });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            strategyId: 'strategy-1',
+            description: 'We agree to weekly check-ins on Sundays',
+            type: AgreementType.COMMITMENT,
+          });
+        });
+
+        expect(queryClient.getQueryData<any>(stageKeys.agreements(sessionId))?.agreements)
+          .toHaveLength(1);
+        expect(queryClient.getQueryData<any>(stageKeys.strategies(sessionId))?.phase)
+          .toBe(StrategyPhase.NEGOTIATING);
       });
     });
 

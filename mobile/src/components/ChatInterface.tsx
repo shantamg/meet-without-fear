@@ -174,6 +174,23 @@ const DEFAULT_EMPTY_TITLE = 'Start the Conversation';
 const DEFAULT_EMPTY_MESSAGE =
   "Share what's on your mind. I'm here to listen and help you work through it.";
 
+const seenAnimatedItemIdsByScope = new Map<string, Set<string>>();
+let localAnimationScopeCounter = 0;
+
+function createLocalAnimationScope(): string {
+  localAnimationScopeCounter += 1;
+  return `__local_chat_animation_scope_${localAnimationScopeCounter}`;
+}
+
+function getSeenAnimatedItemIds(scope: string): Set<string> {
+  let ids = seenAnimatedItemIdsByScope.get(scope);
+  if (!ids) {
+    ids = new Set<string>();
+    seenAnimatedItemIdsByScope.set(scope, ids);
+  }
+  return ids;
+}
+
 export function ChatInterface({
   sessionId,
   messages,
@@ -213,6 +230,18 @@ export function ChatInterface({
 }: ChatInterfaceProps) {
   const styles = useStyles();
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
+  const localAnimationScopeRef = useRef<string | null>(null);
+  if (localAnimationScopeRef.current === null) {
+    localAnimationScopeRef.current = createLocalAnimationScope();
+  }
+  const animationScope = sessionId || localAnimationScopeRef.current;
+  const animationScopeRef = useRef(animationScope);
+  const seenAnimatedItemIdsRef = useRef(getSeenAnimatedItemIds(animationScope));
+
+  if (animationScopeRef.current !== animationScope) {
+    animationScopeRef.current = animationScope;
+    seenAnimatedItemIdsRef.current = getSeenAnimatedItemIds(animationScope);
+  }
 
   // ---------------------------------------------------------------------------
   // Cache-First Architecture: Derive "waiting for AI" from last message role
@@ -245,6 +274,11 @@ export function ChatInterface({
 
   // Track items that have completed animation during this mount.
   const animatedItemIdsRef = useRef<Set<string>>(new Set());
+
+  const markItemAnimationSeen = useCallback((itemId: string) => {
+    animatedItemIdsRef.current.add(itemId);
+    seenAnimatedItemIdsRef.current.add(itemId);
+  }, []);
 
   // STABLE SORT: Ensure order never flip-flops if timestamps are identical
   const listItems = useMemo((): ChatListItem[] => {
@@ -369,14 +403,20 @@ export function ChatInterface({
   if (isInitialLoadRef.current && messages.length > 0) {
     const shouldSkip = skipInitialHistory && messages.length === 1;
     if (!shouldSkip) {
-      messages.forEach(m => mountSnapshotIdsRef.current.add(m.id));
+      messages.forEach((m) => {
+        mountSnapshotIdsRef.current.add(m.id);
+        seenAnimatedItemIdsRef.current.add(m.id);
+      });
     }
     isInitialLoadRef.current = false;
   }
 
   // Add pagination messages to snapshot (they're history, not new)
   if (isLoadingHistoryRef.current && messages.length > 0) {
-    messages.forEach(m => mountSnapshotIdsRef.current.add(m.id));
+    messages.forEach((m) => {
+      mountSnapshotIdsRef.current.add(m.id);
+      seenAnimatedItemIdsRef.current.add(m.id);
+    });
   }
 
   // Detect when custom empty state is removed (e.g., compact was signed)
@@ -416,6 +456,7 @@ export function ChatInterface({
   const shouldAnimateItem = useCallback((item: ChatListItem, index: number) => {
     if (isIndicator(item) || isValidationCard(item) || isCustomEmptyState(item)) return false;
     if (animatedItemIdsRef.current.has(item.id)) return false;
+    if (seenAnimatedItemIdsRef.current.has(item.id)) return false;
     if (isAtOrBeforeSeenBoundary(item, index)) return false;
 
     if (isCustomCard(item)) {
@@ -497,6 +538,30 @@ export function ChatInterface({
     return null;
   }, [listItems, animatingItemId, shouldAnimateItem]);
 
+  // Once a non-user chat item renders in full, it should never be eligible for
+  // a later typewriter pass. This prevents refetches/status changes after
+  // button-only actions from replaying older visible messages one by one.
+  useEffect(() => {
+    listItems.forEach((item, index) => {
+      if (isIndicator(item) || isValidationCard(item) || isCustomEmptyState(item)) return;
+      if (item.id === nextAnimatableMessageId || item.id === animatingItemId) return;
+
+      if (isCustomCard(item)) {
+        if (item.animate === true && !shouldAnimateItem(item, index)) {
+          markItemAnimationSeen(item.id);
+        }
+        return;
+      }
+
+      const message = item as ChatMessage;
+      if (message.role === MessageRole.USER) return;
+      if (message.id.startsWith('optimistic-')) return;
+      if (!shouldAnimateItem(message, index)) {
+        markItemAnimationSeen(message.id);
+      }
+    });
+  }, [listItems, nextAnimatableMessageId, animatingItemId, shouldAnimateItem, markItemAnimationSeen]);
+
   // Notify parent when typewriter state changes
   useEffect(() => {
     const isAnimating = animatingItemId !== null;
@@ -557,7 +622,7 @@ export function ChatInterface({
           {item.render({
             skipAnimation: !shouldAnimate || !isNextAnimatable,
             onAnimationComplete: shouldAnimate && isNextAnimatable ? () => {
-              animatedItemIdsRef.current.add(item.id);
+              markItemAnimationSeen(item.id);
               setAnimatingItemId(null);
               onTypewriterComplete?.();
             } : undefined,
@@ -595,7 +660,7 @@ export function ChatInterface({
           message={bubbleMessage}
           onAnimationStart={isNextAnimatable ? () => setAnimatingItemId(message.id) : undefined}
           onAnimationComplete={(isNextAnimatable || isCurrentlyAnimating) ? () => {
-            animatedItemIdsRef.current.add(message.id);
+            markItemAnimationSeen(message.id);
             setAnimatingItemId(null);
             onTypewriterComplete?.();
           } : undefined}
@@ -606,7 +671,7 @@ export function ChatInterface({
         {renderMessageExtra?.(message)}
       </>
     );
-  }, [listItems, shouldAnimateItem, nextAnimatableMessageId, animatingItemId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra, onValidateAccurate, onValidateNotQuite]);
+  }, [listItems, shouldAnimateItem, nextAnimatableMessageId, animatingItemId, onTypewriterComplete, isSpeaking, currentId, handleSpeakerPress, customEmptyState, styles, partnerName, renderMessageExtra, onValidateAccurate, onValidateNotQuite, markItemAnimationSeen]);
 
   const keyExtractor = useCallback((item: ChatListItem) => item.id, []);
 

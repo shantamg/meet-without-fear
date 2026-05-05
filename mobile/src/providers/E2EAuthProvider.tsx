@@ -40,7 +40,6 @@ let cachedE2EUserInfo: { id: string; email: string } | null = null;
  * Caches the result so client-side navigation doesn't lose the params.
  */
 function getE2EUserFromURL(): { id: string; email: string } | null {
-  if (cachedE2EUserInfo) return cachedE2EUserInfo;
   if (Platform.OS !== 'web') return null;
 
   try {
@@ -57,7 +56,7 @@ function getE2EUserFromURL(): { id: string; email: string } | null {
     // Ignore - not in web environment
   }
 
-  return null;
+  return cachedE2EUserInfo;
 }
 
 interface E2EAuthProviderProps {

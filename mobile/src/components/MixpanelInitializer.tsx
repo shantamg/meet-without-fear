@@ -130,8 +130,6 @@ export function MixpanelInitializer() {
         });
 
         setUserProperties({
-          name: user.fullName || user.firstName || 'User',
-          email: user.emailAddresses?.[0]?.emailAddress,
           last_login_at: new Date().toISOString(),
         });
       }

@@ -4,12 +4,14 @@
  * Parses the semantic tag format used by the AI response:
  * - <thinking>...</thinking> - Hidden analysis with flags
  * - <draft>...</draft> - Optional draft content (invitation/empathy)
+ * - <needs>...</needs> - Optional structured Stage 3 needs JSON
  * - <dispatch>...</dispatch> - Optional off-ramp signal
  * - Everything else is the user-facing response
  */
 
 import { extractJsonFromResponse } from './json-extractor';
 import { logger } from '../lib/logger';
+import { NeedCategory, type CapturedNeedInput } from '@meet-without-fear/shared';
 
 export interface ParsedMicroTagResponse {
   /** The user-facing response text (all tags stripped) */
@@ -29,6 +31,55 @@ export interface ParsedMicroTagResponse {
   offerReadyToShare: boolean;
   /** Extracted from thinking: ProposedStrategy lines (Stage 4) */
   proposedStrategies: string[];
+  /** Structured needs proposed by Stage 3 in a hidden <needs> JSON block */
+  proposedNeeds: CapturedNeedInput[];
+}
+
+function isNeedCategory(value: unknown): value is NeedCategory {
+  return typeof value === 'string' && Object.values(NeedCategory).includes(value as NeedCategory);
+}
+
+function parseNeedsBlock(rawNeeds: string | null): CapturedNeedInput[] {
+  if (!rawNeeds) return [];
+
+  try {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawNeeds);
+    } catch {
+      parsed = extractJsonFromResponse(rawNeeds) as unknown;
+    }
+    const items = Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === 'object' && Array.isArray((parsed as { needs?: unknown }).needs)
+        ? (parsed as { needs: unknown[] }).needs
+        : [];
+
+    return items.flatMap((item): CapturedNeedInput[] => {
+      if (!item || typeof item !== 'object') return [];
+      const candidate = item as Record<string, unknown>;
+      const need = typeof candidate.need === 'string' ? candidate.need.trim() : '';
+      const description = typeof candidate.description === 'string'
+        ? candidate.description.trim()
+        : need;
+      const category = candidate.category;
+      const evidence = Array.isArray(candidate.evidence)
+        ? candidate.evidence.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        : [];
+
+      if (!need || !description || !isNeedCategory(category)) return [];
+
+      return [{
+        need,
+        category,
+        description,
+        evidence,
+      }];
+    });
+  } catch (error) {
+    logger.warn('[micro-tag-parser] Failed to parse <needs> block', error);
+    return [];
+  }
 }
 
 /**
@@ -39,16 +90,20 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
   // 1. Extract blocks using regex
   const thinkingMatch = rawResponse.match(/<thinking>([\s\S]*?)<\/thinking>/i);
   const draftMatch = rawResponse.match(/<draft>([\s\S]*?)<\/draft>/i);
+  const needsMatch = rawResponse.match(/<needs>([\s\S]*?)<\/needs>/i);
   const dispatchMatch = rawResponse.match(/<dispatch>([\s\S]*?)<\/dispatch>/i);
 
   const thinking = thinkingMatch?.[1]?.trim() ?? '';
   const draft = draftMatch?.[1]?.trim() ?? null;
+  const needsRaw = needsMatch?.[1]?.trim() ?? null;
   const dispatchTag = dispatchMatch?.[1]?.trim() ?? null;
+  const proposedNeeds = parseNeedsBlock(needsRaw);
 
   // 2. Clean response text - remove all tags
   let responseText = rawResponse
     .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
     .replace(/<draft>[\s\S]*?<\/draft>/gi, '')
+    .replace(/<needs>[\s\S]*?<\/needs>/gi, '')
     .replace(/<dispatch>[\s\S]*?<\/dispatch>/gi, '')
     .trim();
 
@@ -79,6 +134,17 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     }
   }
 
+  const needRegex = /ProposedNeed:\s*([^|]+)\|([^|]+)\|(.+)/gi;
+  let needMatch: RegExpExecArray | null;
+  while ((needMatch = needRegex.exec(thinking)) !== null) {
+    const need = needMatch[1].trim();
+    const category = needMatch[2].trim();
+    const description = needMatch[3].trim();
+    if (need && isNeedCategory(category) && description) {
+      proposedNeeds.push({ need, category, description, evidence: [] });
+    }
+  }
+
   // 4. Compatibility fallback: JSON output (legacy stages may emit empathy as JSON)
   if (!thinking && !draft && responseText.startsWith('{')) {
     try {
@@ -95,6 +161,7 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
         offerFeelHeardCheck,
         offerReadyToShare,
         proposedStrategies,
+        proposedNeeds,
       };
     } catch {
       // Fall through to raw responseText
@@ -110,5 +177,6 @@ export function parseMicroTagResponse(rawResponse: string): ParsedMicroTagRespon
     offerFeelHeardCheck,
     offerReadyToShare,
     proposedStrategies,
+    proposedNeeds,
   };
 }

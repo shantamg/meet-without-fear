@@ -113,14 +113,14 @@ export function ChatIndicator({ type, timestamp, testID, onPress, metadata }: Ch
       case 'needs-identified':
         return 'Needs identified';
       case 'common-ground-found':
-        return 'Common ground found';
+        return 'Needs overlap ready to review';
       // Stage 4: Strategic Repair
       case 'strategies-ready':
         return 'Strategies ready';
       case 'overlap-revealed':
         return 'Overlap revealed';
       case 'agreement-reached':
-        return 'Agreement reached ✓';
+        return 'Next step confirmed ✓';
       // Semantic indicator types
       case 'empathy-validated':
         const validatorName = metadata?.partnerName || 'Partner';

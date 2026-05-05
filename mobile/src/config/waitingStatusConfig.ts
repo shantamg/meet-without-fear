@@ -60,7 +60,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: true,
-    bannerText: (p) => `${p} is still reflecting.`,
+    bannerText: (p) => `${p} is still sharing their side.`,
   },
 
   // Stage 2: Waiting for partner to share their empathy perspective
@@ -86,26 +86,37 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     bannerSubtext: "Once they share, you'll both be able to reflect on what each other shared.",
   },
 
-  // Stage 2: Reconciler is analyzing empathy match (brief transient state)
-  // Uses "Keep Chatting" style - no spinner, input enabled
-  'reconciler-analyzing': {
+  // Stage 2: User has validated partner's empathy; partner still needs to validate user's empathy.
+  'partner-validating-empathy': {
     showBanner: true,
-    hideInput: false,
-    showInnerThoughts: false,
+    hideInput: true,
+    showInnerThoughts: true,
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: true,
+    bannerText: (p) => `${p} is reviewing what you shared.`,
+    bannerSubtext: "Once they respond, you'll both be ready for the next step.",
+  },
+
+  // Stage 2: System review is running; block input until the next action is known.
+  'reconciler-analyzing': {
+    showBanner: true,
+    hideInput: true,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
     bannerText: () => `Checking how well you captured their perspective...`,
   },
 
-  // Stage 2: Reconciler is re-analyzing revised empathy (same style as first time)
+  // Stage 2: System review is re-checking revised empathy.
   'revision-analyzing': {
     showBanner: true,
-    hideInput: false,
+    hideInput: true,
     showInnerThoughts: false,
     isActionRequired: false,
     showSpinner: false,
-    showKeepChattingAction: true,
+    showKeepChattingAction: false,
     bannerText: () => `Checking your updated understanding...`,
   },
 
@@ -179,7 +190,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
   // Stage 3: Waiting for partner to confirm their needs
   'needs-pending': {
     showBanner: true,
-    hideInput: false,  // Users can chat while waiting for partner
+    hideInput: true,
     showInnerThoughts: false,
     isActionRequired: false,
     showSpinner: false,
@@ -187,15 +198,36 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     bannerText: (p) => `${p} is exploring what matters to them.`,
   },
 
+  'needs-waiting-for-partner': {
+    showBanner: true,
+    hideInput: true,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
+    bannerText: (p) => `${p} is deciding what they are ready to share.`,
+  },
+
   // Stage 3: Waiting for partner to confirm common ground
   'common-ground-pending': {
     showBanner: true,
-    hideInput: false,
+    hideInput: true,
     showInnerThoughts: false,
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: false,
     bannerText: (p) => `${p} is reviewing common ground.`,
+  },
+
+  // Stage 3: User validated the side-by-side needs reveal; partner still needs to validate.
+  'partner-validating-needs': {
+    showBanner: true,
+    hideInput: true,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
+    bannerText: (p) => `${p} is reviewing the needs you both shared.`,
   },
 
   // Stage 4: Waiting for partner to submit strategy rankings
@@ -247,6 +279,17 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
     isActionRequired: false,
     showSpinner: false,
     showKeepChattingAction: false,
+  },
+
+  // Stage 4: User is ready to rank, waiting for partner readiness
+  'strategy-readiness-pending': {
+    showBanner: true,
+    hideInput: true,
+    showInnerThoughts: false,
+    isActionRequired: false,
+    showSpinner: false,
+    showKeepChattingAction: false,
+    bannerText: (p) => `${p} is getting ready to rank the ideas.`,
   },
 
   // Stage 4: All agreements confirmed by me, waiting for partner

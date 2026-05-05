@@ -98,6 +98,59 @@ Let me explain how this works.`;
       expect(result.dispatchTag).toBe('EXPLAIN_PROCESS');
     });
 
+    it('extracts proposed needs from a hidden needs JSON block', () => {
+      const raw = `<thinking>NeedsReady:Y</thinking>
+
+<needs>
+[
+  {
+    "need": "safety",
+    "category": "SAFETY",
+    "description": "I need steadiness before deciding what comes next.",
+    "evidence": ["I feel scared when things escalate"]
+  },
+  {
+    "need": "recognition",
+    "category": "RECOGNITION",
+    "description": "I need my effort to be seen.",
+    "evidence": []
+  }
+]
+</needs>
+
+I captured a draft of what matters to you for review.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe('I captured a draft of what matters to you for review.');
+      expect(result.response).not.toContain('<needs>');
+      expect(result.proposedNeeds).toEqual([
+        {
+          need: 'safety',
+          category: 'SAFETY',
+          description: 'I need steadiness before deciding what comes next.',
+          evidence: ['I feel scared when things escalate'],
+        },
+        {
+          need: 'recognition',
+          category: 'RECOGNITION',
+          description: 'I need my effort to be seen.',
+          evidence: [],
+        },
+      ]);
+    });
+
+    it('ignores malformed needs JSON and still strips the hidden block', () => {
+      const raw = `<thinking>NeedsReady:Y</thinking>
+<needs>{not valid json</needs>
+Let's keep exploring what matters most.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.response).toBe("Let's keep exploring what matters most.");
+      expect(result.proposedNeeds).toEqual([]);
+    });
+
     it('handles response with no tags gracefully', () => {
       const raw = 'Just a plain response with no tags.';
       const result = parseMicroTagResponse(raw);
@@ -123,6 +176,8 @@ Response without closing tag.`;
 
 <draft>Draft content</draft>
 
+<needs>[{"need":"Safety","category":"SAFETY","description":"To feel safe enough to speak","evidence":["I shut down"]}]</needs>
+
 <dispatch>SOME_TAG</dispatch>
 
 The actual response.`;
@@ -130,6 +185,45 @@ The actual response.`;
       const result = parseMicroTagResponse(raw);
 
       expect(result.response).toBe('The actual response.');
+    });
+
+    it('extracts structured Stage 3 needs from hidden needs tag', () => {
+      const raw = `<thinking>Mode: NEEDS</thinking>
+<needs>
+[
+  {
+    "need": "Safety",
+    "category": "SAFETY",
+    "description": "To feel safe enough to say what is true",
+    "evidence": ["I shut down when it gets loud"]
+  }
+]
+</needs>
+Here is what I am hearing matters most.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.proposedNeeds).toEqual([
+        {
+          need: 'Safety',
+          category: 'SAFETY',
+          description: 'To feel safe enough to say what is true',
+          evidence: ['I shut down when it gets loud'],
+        },
+      ]);
+      expect(result.response).toBe('Here is what I am hearing matters most.');
+    });
+
+    it('drops malformed needs instead of exposing hidden needs JSON', () => {
+      const raw = `<thinking>Mode: NEEDS</thinking>
+<needs>[{"need":"Fix them","category":"NOT_A_CATEGORY","description":"Make them stop","evidence":[]}]</needs>
+Visible response.`;
+
+      const result = parseMicroTagResponse(raw);
+
+      expect(result.proposedNeeds).toEqual([]);
+      expect(result.response).toBe('Visible response.');
+      expect(result.response).not.toContain('<needs>');
     });
 
     it('handles whitespace variations in flag extraction', () => {

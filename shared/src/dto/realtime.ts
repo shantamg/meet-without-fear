@@ -88,9 +88,15 @@ export type SessionEventType =
   | 'empathy.context_shared' // Subject shared context with guesser
   | 'empathy.status_updated' // Reconciler completed, empathy statuses changed
   // Stage 3: Need Mapping events
+  | 'session.needs_extracted' // Current user's structured needs were captured
   | 'partner.needs_confirmed' // Partner confirmed their identified needs
   | 'partner.needs_shared' // Partner consented to share needs
+  | 'partner.needs_validated' // Partner validated or rejected side-by-side needs
+  | 'session.needs_reveal_ready' // Both users consented; side-by-side needs reveal is ready
+  | 'session.common_ground_ready' // Legacy alias for side-by-side needs reveal readiness
+  | 'partner.common_ground_confirmed' // Legacy alias for needs validation
   // Stage 4: Strategic Repair events
+  | 'session.strategies_updated'
   | 'partner.ranking_submitted'
   | 'partner.ready_to_rank'
   | 'partner.consent_granted'
