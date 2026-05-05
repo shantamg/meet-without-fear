@@ -268,6 +268,16 @@ describe('Priority 4: Stage 2 (Empathy)', () => {
 // ============================================================================
 
 describe('Priority 5: Stage 3 (Needs)', () => {
+  it('returns needs-pending when my needs are confirmed but not shared', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.NEED_MAPPING,
+      needs: { allConfirmed: true, shared: false, revealReady: false },
+      needsRevealValidation: { count: 0 },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBe('needs-pending');
+  });
+
   it('returns needs-waiting-for-partner when needs are shared but reveal is not ready yet', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.NEED_MAPPING,
@@ -282,6 +292,16 @@ describe('Priority 5: Stage 3 (Needs)', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.PERSPECTIVE_STRETCH,
       needs: { allConfirmed: true },
+      needsRevealValidation: { count: 0 },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBeNull();
+  });
+
+  it('does not enter a Stage 3 wait state before needs are confirmed or shared', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.NEED_MAPPING,
+      needs: { allConfirmed: false, shared: false, revealReady: false },
       needsRevealValidation: { count: 0 },
     });
 

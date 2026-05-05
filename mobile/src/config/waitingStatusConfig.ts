@@ -295,7 +295,7 @@ export const WAITING_STATUS_CONFIG: Record<NonNullable<WaitingStatusState>, Wait
   // Stage 4: All agreements confirmed by me, waiting for partner
   'agreement-pending': {
     showBanner: true,
-    hideInput: false,
+    hideInput: true,
     showInnerThoughts: false,
     isActionRequired: false,
     showSpinner: false,

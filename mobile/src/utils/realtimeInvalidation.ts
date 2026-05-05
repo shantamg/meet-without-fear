@@ -1,4 +1,13 @@
-import { messageKeys, notificationKeys, sessionKeys, stageKeys } from '../hooks/queryKeys';
+import { messageKeys, notificationKeys, sessionKeys, stageKeys, timelineKeys } from '../hooks/queryKeys';
+
+export function getPersistedMessageRefreshQueryKeys(sessionId: string) {
+  return [
+    messageKeys.infinite(sessionId),
+    messageKeys.list(sessionId),
+    timelineKeys.infinite(sessionId),
+    sessionKeys.state(sessionId),
+  ];
+}
 
 export function getStage2RealtimeInvalidationQueryKeys(sessionId: string) {
   return [
@@ -6,8 +15,7 @@ export function getStage2RealtimeInvalidationQueryKeys(sessionId: string) {
     stageKeys.partnerEmpathy(sessionId),
     stageKeys.empathyDraft(sessionId),
     stageKeys.progress(sessionId),
-    sessionKeys.state(sessionId),
-    messageKeys.infinite(sessionId),
+    ...getPersistedMessageRefreshQueryKeys(sessionId),
     stageKeys.pendingActions(sessionId),
     notificationKeys.badgeCount(),
   ];
@@ -18,8 +26,7 @@ export function getStage3RealtimeInvalidationQueryKeys(sessionId: string) {
     stageKeys.needs(sessionId),
     stageKeys.needsComparison(sessionId),
     stageKeys.progress(sessionId),
-    sessionKeys.state(sessionId),
-    messageKeys.infinite(sessionId),
+    ...getPersistedMessageRefreshQueryKeys(sessionId),
     stageKeys.pendingActions(sessionId),
     notificationKeys.badgeCount(),
   ];
@@ -31,8 +38,7 @@ export function getStage4RealtimeInvalidationQueryKeys(sessionId: string) {
     stageKeys.strategiesReveal(sessionId),
     stageKeys.agreements(sessionId),
     stageKeys.progress(sessionId),
-    sessionKeys.state(sessionId),
-    messageKeys.infinite(sessionId),
+    ...getPersistedMessageRefreshQueryKeys(sessionId),
     stageKeys.pendingActions(sessionId),
     notificationKeys.badgeCount(),
   ];
