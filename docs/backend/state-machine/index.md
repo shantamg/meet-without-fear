@@ -73,11 +73,11 @@ stateDiagram-v2
 
 | Stage | Gate Keys | Satisfied When |
 |-------|-----------|----------------|
-| 0 (Onboarding) | `compactSigned`, `partnerCompactSigned` | User signed, partner signed |
+| 0 (Onboarding) | `compactSigned` | User signs the compact. Partner signing is reported in compact status, but the generic advancement gate checks the caller's own key. |
 | 1 (Witness) | `feelHeardConfirmed` | User posts feel-heard true |
-| 2 (Perspective) | `empathyDraftReady`, `empathyConsented`, `partnerConsented`, `partnerValidated` | Draft marked ready, user consents to share, partner consents, partner validates (or user accepts feedback path) |
+| 2 (Perspective) | `empathyValidated` | Caller validates the partner's empathy attempt, or explicitly accepts the remaining differences via the skip-refinement path |
 | 3 (What Matters) | `needsConfirmed`, `needsShared`, `needsValidated` | User confirms needs, consents to share them, and validates the mutual needs reveal |
-| 4 (Strategic Repair) | `strategiesSubmitted`, `rankingsSubmitted`, `overlapIdentified`, `agreementCreated` | Both submitted strategies (or declared none), both rankings in, overlap revealed, Agreement saved |
+| 4 (Strategic Repair) | `rankingSubmitted`, `agreementCreated` | Generic advancement checks for a submitted ranking and agreement-created marker. The Stage 4 controller also sets `readyToRank`; agreement confirmation can resolve the session directly. |
 
 Advancement rule: a user can advance when all gate keys for their current stage are true AND any stage-level preconditions (e.g., Stage 4 only after both Stage 3 complete). WAITING state is derived when one user satisfies gates and the other has not.
 

@@ -137,9 +137,8 @@ To advance from Stage 0 to Stage 1:
 | Gate | Requirement |
 |------|-------------|
 | `compactSigned` | User has signed the compact |
-| `partnerCompactSigned` | Partner has signed the compact |
 
-**Both** users must sign before **either** can advance.
+The generic stage-advance gate checks the caller's own `compactSigned` key. The compact status response still reports whether the partner has signed so the UI can show the right waiting state. The session creator can advance from Stage 0 to Stage 1 while the session is still `INVITED`; when both parties sign and the session is still `CREATED` / `INVITED`, signing self-heals the session to `ACTIVE`.
 
 ---
 

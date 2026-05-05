@@ -41,12 +41,14 @@ interface GetStrategiesResponse {
   strategies: StrategyDTO[];
   aiSuggestionsAvailable: boolean;
   phase: StrategyPhase;
+  myReadyToRank?: boolean;
+  partnerReadyToRank?: boolean;
 }
 
 interface StrategyDTO {
   id: string;
   description: string;
-  needsAddressed: string[];      // Which common ground needs
+  needsAddressed: string[];      // Which confirmed Stage 3 needs
   duration: string | null;       // e.g., "1 week"
   measureOfSuccess: string | null;
   // Note: NO source attribution
@@ -90,8 +92,10 @@ enum StrategyPhase {
         "measureOfSuccess": "Did we use it? Did it help?"
       }
     ],
-    "aiSuggestionsAvailable": true,
-    "phase": "COLLECTING"
+    "aiSuggestionsAvailable": false,
+    "phase": "COLLECTING",
+    "myReadyToRank": false,
+    "partnerReadyToRank": false
   }
 }
 ```
@@ -125,8 +129,13 @@ interface ProposeStrategyRequest {
 
 ```typescript
 interface ProposeStrategyResponse {
-  strategy: StrategyDTO;
-  totalStrategies: number;
+  strategy: {
+    id: string;
+    description: string;
+    duration: string | null;
+    measureOfSuccess: string | null;
+  };
+  createdAt: string;
 }
 ```
 
@@ -173,7 +182,7 @@ interface RequestSuggestionsResponse {
 ### Source Constraints
 
 AI suggestions are designed to be generated from:
-- Common ground needs (Shared Vessel)
+- Confirmed Stage 3 needs (Shared Vessel)
 - Global Micro-Experiments Library (anonymized)
 
 **Never** from user memory (Retrieval Contract enforced).
@@ -260,15 +269,18 @@ GET /api/v1/sessions/:id/strategies/overlap
 
 ```typescript
 interface RevealOverlapResponse {
-  overlap: StrategyDTO[];
-  phase: StrategyPhase; // Should be REVEALING or later
+  overlap: Array<Pick<StrategyDTO, 'id' | 'description' | 'needsAddressed' | 'duration'>> | null;
+  waitingForPartner: boolean;
+  agreementCandidates: Array<Pick<StrategyDTO, 'id' | 'description' | 'duration'>> | null;
 }
 ```
 
 ### Behavior
 
-- Phase is computed from the `(callerReady, partnerReady, callerRanked, partnerRanked)` combination: `COLLECTING` → `RANKING` → `REVEALING`.
-- If no overlap exists once both sides have ranked, the response is `{ overlap: [], phase: 'REVEALING' }`; there is no separate `NEGOTIATING` phase.
+- Until both users have ranked, the response is `{ overlap: null, waitingForPartner: true, agreementCandidates: null }`.
+- Once both users have ranked, `overlap` contains strategies that appear in both users' top three.
+- If no top-three overlap exists, `overlap` is `[]` and `agreementCandidates` falls back to each user's top-ranked strategy so the UI can keep the conversation moving.
+- Non-active sessions return empty data with `waitingForPartner: false`.
 
 ---
 
@@ -376,15 +388,17 @@ Each session is capped at **two `Agreement` rows**. `createAgreement` returns `V
 
 ## Stage 4 Gate Requirements
 
-Advancement to `RESOLVED` uses these caller-side gates (set on `StageProgress.gatesSatisfied`):
+Stage 4 uses these caller-side gate markers on `StageProgress.gatesSatisfied`:
 
 | Gate | Requirement |
 |------|-------------|
 | `readyToRank` | Caller posted `/strategies/ready` |
 | `rankingSubmitted` | Caller posted `/strategies/rank` |
-| `agreementConfirmed` | Caller confirmed at least one agreement (partner too, for session to resolve) |
+| `agreementCreated` | Required by the generic `/stages/advance` gate table, but Stage 4 normally resolves through agreement confirmation rather than manual advancement |
 
-Session resolves once both partners have at least one `AGREED` agreement (see Resolve Session side effect above).
+`readyToRank` and `rankingSubmitted` are actively set by the Stage 4 controller. Agreement confirmation updates `Agreement` rows and may resolve the session directly; it does not currently set a StageProgress `agreementConfirmed` gate.
+
+Session resolves when every `Agreement` row in the session is fully signed by both partners. If two agreements exist and only one is agreed, the session remains active until the other is also agreed.
 
 ---
 
@@ -402,10 +416,10 @@ flowchart TD
     Rank --> BothRanked{Both ranked?}
     BothRanked -->|No| Wait[Wait for partner]
     BothRanked -->|Yes| Reveal[Reveal overlap]
-    Reveal --> HasOverlap{Overlap exists?}
+    Reveal --> HasOverlap{Top-three overlap exists?}
     HasOverlap -->|Yes| Discuss[Discuss overlapping options]
-    HasOverlap -->|No| Negotiate[Explore differences]
-    Negotiate --> MoreIdeas
+    HasOverlap -->|No| Candidates[Show each user's top choice as agreement candidates]
+    Candidates --> MoreIdeas
     Discuss --> Agree[Create agreement]
     Agree --> PartnerConfirm{Partner confirms?}
     PartnerConfirm -->|No| Modify[Modify and re-propose]
@@ -422,7 +436,7 @@ In Stage 4, the API enforces these retrieval rules:
 | Allowed | Forbidden |
 |---------|-----------|
 | All Shared Vessel content | User Vessel raw content |
-| Confirmed common ground | Vector search on user memory |
+| Confirmed Stage 3 needs | Vector search on user memory |
 | Past agreements | Any retrieval for decision-making |
 | Global Library (vector) | - |
 
