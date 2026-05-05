@@ -442,6 +442,8 @@ Generate a brief, specific suggestion for what ${subject.name} could share to he
 IMPORTANT GUIDELINES for the suggestion:
 - Never start with confrontational phrases like "Look," or "Listen,"
 - Focus on sharing ${subject.name}'s experience, not making claims about ${guesser.name}'s behavior
+- Do not say or imply what ${guesser.name} thinks, believes, or has already understood
+- Do not escalate ambiguity into permanent rupture, departure, rejection, or leaving unless ${subject.name} explicitly said that
 - Use "I" statements, never "you" accusations
 - Keep the tone warm and vulnerable, not defensive or aggressive
 
@@ -1164,6 +1166,12 @@ Your job is to CRAFT a feelings-focused message that ${userName} would say direc
 5. IS BRIEF AND FOCUSED
    - 1-3 sentences maximum
    - Address the most important gap in understanding
+
+6. PRESERVES ACCOUNTABILITY AND SAFETY
+   - If anger, temper, volatility, escalation, or loss of control is part of the conflict, never imply ${userName} cannot control themselves
+   - Do not ask ${partnerName} to accept unsafe behavior or minimize harm
+   - It is okay to name defensiveness or anger, but pair it with ownership (for example: "my anger is still mine to handle")
+   - Recognition needs must never override ${partnerName}'s need for safety or boundaries
 
 IMPORTANT GUIDELINES:
 - Never start with confrontational phrases like "Look," or "Listen,"

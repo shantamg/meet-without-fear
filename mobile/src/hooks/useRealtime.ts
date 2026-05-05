@@ -34,6 +34,7 @@ import {
   getAblyConnectionState,
   refreshAblyToken,
 } from '../lib/ably';
+import { isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
 
 // ============================================================================
 // Types
@@ -228,6 +229,13 @@ export function useRealtime(config: RealtimeConfig): RealtimeState & RealtimeAct
 
       // Skip events from ourselves
       if (eventData.excludeUserId === currentUserId) {
+        return;
+      }
+
+      // Session channels are broadcast. Drop private payloads for other users
+      // before they reach screen-level handlers.
+      if (!isRealtimePayloadAddressedToCurrentUser(eventData, currentUserId)) {
+        console.log('[Realtime] Dropping event addressed to a different user:', eventName);
         return;
       }
 

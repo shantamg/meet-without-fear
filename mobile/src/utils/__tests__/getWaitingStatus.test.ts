@@ -246,6 +246,21 @@ describe('Priority 4: Stage 2 (Empathy)', () => {
 
     expect(computeWaitingStatus(inputs)).toBe('partner-shared-empathy');
   });
+
+  it('returns partner-validating-empathy after I validate partner and wait for partner to validate me', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.PERSPECTIVE_STRETCH,
+      partnerStage: Stage.PERSPECTIVE_STRETCH,
+      hasPartnerEmpathy: true,
+      empathyStatus: {
+        myAttemptStatus: 'REVEALED',
+      },
+      myValidation: { validated: true },
+      partnerValidated: false,
+    });
+
+    expect(computeWaitingStatus(inputs)).toBe('partner-validating-empathy');
+  });
 });
 
 // ============================================================================
@@ -253,14 +268,14 @@ describe('Priority 4: Stage 2 (Empathy)', () => {
 // ============================================================================
 
 describe('Priority 5: Stage 3 (Needs)', () => {
-  it('returns needs-pending when all needs confirmed but no common ground yet', () => {
+  it('returns needs-waiting-for-partner when needs are shared but reveal is not ready yet', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.NEED_MAPPING,
-      needs: { allConfirmed: true },
+      needs: { allConfirmed: true, shared: true, revealReady: false },
       commonGround: { count: 0 },
     });
 
-    expect(computeWaitingStatus(inputs)).toBe('needs-pending');
+    expect(computeWaitingStatus(inputs)).toBe('needs-waiting-for-partner');
   });
 
   it('does not return needs-pending when in Stage 2 (stage gate)', () => {
@@ -293,6 +308,20 @@ describe('Priority 5: Stage 3 (Needs)', () => {
 
     expect(computeWaitingStatus(inputs)).toBe('partner-confirmed-needs');
   });
+
+  it('returns partner-validating-needs after I validate revealed needs and wait for partner', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.NEED_MAPPING,
+      needs: { allConfirmed: true, shared: true, revealReady: true },
+      commonGround: {
+        count: 0,
+        allConfirmedByMe: true,
+        allConfirmedByBoth: false,
+      },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBe('partner-validating-needs');
+  });
 });
 
 // ============================================================================
@@ -300,6 +329,17 @@ describe('Priority 5: Stage 3 (Needs)', () => {
 // ============================================================================
 
 describe('Priority 6: Stage 4 (Strategies)', () => {
+  it('returns strategy-readiness-pending when user is ready and partner is not', () => {
+    const inputs = createDefaultInputs({
+      myStage: Stage.STRATEGIC_REPAIR,
+      strategyPhase: StrategyPhase.COLLECTING,
+      strategyReadiness: { myReadyToRank: true, partnerReadyToRank: false },
+      overlappingStrategies: { count: 0 },
+    });
+
+    expect(computeWaitingStatus(inputs)).toBe('strategy-readiness-pending');
+  });
+
   it('returns ranking-pending when in REVEALING phase with no overlap', () => {
     const inputs = createDefaultInputs({
       myStage: Stage.STRATEGIC_REPAIR,

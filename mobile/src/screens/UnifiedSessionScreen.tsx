@@ -58,6 +58,8 @@ import { useSharingStatus } from '../hooks/useSharingStatus';
 import { usePendingActions } from '../hooks/usePendingActions';
 import { useNeedsComparison } from '../hooks/useStages';
 import { deriveIndicators, SessionIndicatorData } from '../utils/chatListSelector';
+import { canInsertRealtimeMessageForCurrentUser, isRealtimePayloadAddressedToCurrentUser } from '../utils/realtimePrivacy';
+import { getStage2RealtimeInvalidationQueryKeys, getStage3RealtimeInvalidationQueryKeys, getStage4RealtimeInvalidationQueryKeys } from '../utils/realtimeInvalidation';
 import { useToast } from '../contexts/ToastContext';
 import { createStyles } from '../theme/styled';
 import { WaitingBanner } from '../components/WaitingBanner';
@@ -114,7 +116,7 @@ const STAGE_FRIENDLY_NAMES: Record<number, string> = {
   [Stage.WITNESS]: 'Your Story',
   [Stage.PERSPECTIVE_STRETCH]: 'Walking in Their Shoes',
   [Stage.NEED_MAPPING]: 'What Matters Most',
-  [Stage.STRATEGIC_REPAIR]: 'Moving Forward Together',
+  [Stage.STRATEGIC_REPAIR]: 'What Comes Next',
   [Stage.INFORMED_EMPATHY]: 'Deeper Understanding',
 };
 
@@ -246,6 +248,53 @@ function InviteeTopicIntroCard({
   );
 }
 
+function NeedsIdentifiedChatCard({
+  needs,
+  status,
+  onReview,
+}: {
+  needs: Array<{ id: string; need: string; category: string }>;
+  status: 'ready' | 'confirmed' | 'shared';
+  onReview: () => void;
+}) {
+  const styles = useStyles();
+  const visibleNeeds = needs.slice(0, 3);
+  const extraCount = Math.max(0, needs.length - visibleNeeds.length);
+  const statusLabel = status === 'shared'
+    ? 'Shared'
+    : status === 'confirmed'
+      ? 'Confirmed'
+      : 'Ready to review';
+  const actionLabel = status === 'ready' ? 'Review and confirm' : 'Open review';
+
+  return (
+    <TouchableOpacity
+      style={styles.needsSummaryCard}
+      onPress={onReview}
+      activeOpacity={0.8}
+      testID="needs-identified-chat-card"
+    >
+      <View style={styles.needsSummaryHeader}>
+        <Text style={styles.needsSummaryEyebrow}>WHAT MATTERS</Text>
+        <Text style={styles.needsSummaryStatus}>{statusLabel}</Text>
+      </View>
+      <Text style={styles.needsSummaryTitle}>Your needs so far</Text>
+      <View style={styles.needsSummaryList}>
+        {visibleNeeds.map((need) => (
+          <View key={need.id} style={styles.needsSummaryRow}>
+            <Text style={styles.needsSummaryCategory}>{need.category}</Text>
+            <Text style={styles.needsSummaryText}>{need.need}</Text>
+          </View>
+        ))}
+        {extraCount > 0 ? (
+          <Text style={styles.needsSummaryMore}>+{extraCount} more</Text>
+        ) : null}
+      </View>
+      <Text style={styles.needsSummaryAction}>{actionLabel}</Text>
+    </TouchableOpacity>
+  );
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -324,13 +373,16 @@ export function UnifiedSessionScreen({
     commonGround,
     commonGroundData,
     commonGroundComplete,
+    strategyData,
     strategyPhase,
     strategies,
     revealData,
     overlappingStrategies,
     agreements,
     isGenerating,
+    isSavingEmpathyDraft,
     isSharingEmpathy,
+    isResubmittingEmpathy,
     isConfirmingNeeds,
 
     // Memory suggestion
@@ -389,6 +441,54 @@ export function UnifiedSessionScreen({
   // AI message handler for fire-and-forget pattern
   const { addAIMessage, handleAIMessageError } = useAIMessageHandler();
 
+  const refreshStage2RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
+    for (const queryKey of getStage2RealtimeInvalidationQueryKeys(sessionId)) {
+      queryClient.invalidateQueries({ queryKey });
+    }
+    if (options?.refetchMessages) {
+      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+    }
+  }, [queryClient, sessionId]);
+
+  const refreshStage3RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
+    for (const queryKey of getStage3RealtimeInvalidationQueryKeys(sessionId)) {
+      queryClient.invalidateQueries({ queryKey });
+    }
+    if (options?.refetchMessages) {
+      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+    }
+  }, [queryClient, sessionId]);
+
+  const refreshStage4RealtimeState = useCallback((options?: { refetchMessages?: boolean }) => {
+    for (const queryKey of getStage4RealtimeInvalidationQueryKeys(sessionId)) {
+      queryClient.invalidateQueries({ queryKey });
+    }
+    queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
+    queryClient.refetchQueries({ queryKey: stageKeys.agreements(sessionId) });
+    if (options?.refetchMessages) {
+      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+    }
+  }, [queryClient, sessionId]);
+
+  useEffect(() => {
+    const latestMessage = messages[messages.length - 1];
+    if (
+      !latestMessage ||
+      latestMessage.role !== MessageRole.USER ||
+      isSending ||
+      session?.status === SessionStatus.RESOLVED
+    ) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+      queryClient.refetchQueries({ queryKey: messageKeys.list(sessionId) });
+    }, 2500);
+
+    return () => clearTimeout(timeout);
+  }, [messages, isSending, queryClient, sessionId, session?.status]);
+
   // User-level events (memory suggestions are now sent to specific user, not session)
   useUserSessionUpdates({
     disableRefetch: true,
@@ -408,6 +508,11 @@ export function UnifiedSessionScreen({
     onSessionEvent: (event, data) => {
       console.log('[UnifiedSessionScreen] Received realtime event:', event);
 
+      if (!isRealtimePayloadAddressedToCurrentUser(data, user?.id)) {
+        console.log('[UnifiedSessionScreen] Dropping event addressed to another user:', event);
+        return;
+      }
+
       // Skip events triggered by self to prevent race conditions with optimistic updates.
       // Exception: events explicitly addressed TO us (forUserId === user.id) are always
       // processed, since system-generated events like reconciler results may be triggered
@@ -424,8 +529,7 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Share suggestion received, updating cache');
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
-        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
+        refreshStage2RealtimeState();
       }
 
       if (event === 'empathy.context_shared' && data.forUserId === user?.id) {
@@ -433,12 +537,29 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Context shared, updating cache');
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         queryClient.refetchQueries({ queryKey: stageKeys.shareOffer(sessionId) });
-        // Refetch messages so new SHARED_CONTEXT message appears
-        queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
-        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
+        refreshStage2RealtimeState({ refetchMessages: true });
         // Mark session as viewed so partner sees "seen" status
         markSessionViewed({});
+      }
+
+      if (event === 'empathy.status_updated' && data.forUserId === user?.id) {
+        console.log('[UnifiedSessionScreen] Empathy status updated, syncing cache');
+        const incomingVersion = data.statusVersion as number | undefined;
+        const cached = queryClient.getQueryData<any>(stageKeys.empathyStatus(sessionId));
+        const cachedVersion = cached?.statusVersion as number | undefined;
+        const shouldUpdate = incomingVersion === undefined ||
+          cachedVersion === undefined ||
+          incomingVersion > cachedVersion;
+        if (shouldUpdate) {
+          if (data.empathyStatus) {
+            queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
+          } else {
+            queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
+          }
+        } else {
+          console.log('[UnifiedSessionScreen] Rejecting stale addressed empathy.status_updated event (version:', data.statusVersion, ')');
+        }
+        refreshStage2RealtimeState();
       }
 
       if (event === 'partner.session_viewed' && data.empathyStatuses && user?.id) {
@@ -462,6 +583,9 @@ export function UnifiedSessionScreen({
       // Notification events - invalidate pending actions for activity menu badges
       if (event === 'notification.pending_action' && data.forUserId === user?.id) {
         console.log('[UnifiedSessionScreen] Pending action notification, refreshing badges');
+        if (data.actionType === 'context_received') {
+          refreshStage2RealtimeState({ refetchMessages: true });
+        }
         queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
         queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
       }
@@ -469,9 +593,7 @@ export function UnifiedSessionScreen({
       // Empathy resubmitted - partner refined their understanding
       if (event === 'empathy.resubmitted' && data.forUserId === user?.id) {
         console.log('[UnifiedSessionScreen] Partner resubmitted empathy');
-        queryClient.invalidateQueries({ queryKey: stageKeys.empathyStatus(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
+        refreshStage2RealtimeState({ refetchMessages: true });
       }
 
       if (event === 'partner.stage_completed') {
@@ -496,9 +618,17 @@ export function UnifiedSessionScreen({
             };
           });
         }
-        // Also add transition message to cache if included in event
-        if (data.message) {
-          const message = data.message as { id: string; content: string; timestamp: string };
+        // Transition messages are private per user. Only insert if explicitly
+        // addressed to us; otherwise refetch the filtered message list.
+        const messagesByUserId = data.messagesByUserId as Record<string, { id: string; content: string; timestamp: string; forUserId?: string }> | undefined;
+        const addressedMessage = user?.id && messagesByUserId ? messagesByUserId[user.id] : undefined;
+        const legacyMessage = data.message as { id: string; content: string; timestamp: string; forUserId?: string } | undefined;
+        const message = canInsertRealtimeMessageForCurrentUser(addressedMessage as any, user?.id)
+          ? addressedMessage
+          : canInsertRealtimeMessageForCurrentUser(legacyMessage as any, user?.id)
+            ? legacyMessage
+            : undefined;
+        if (message) {
           const newMessage = {
             id: message.id,
             content: message.content,
@@ -507,6 +637,7 @@ export function UnifiedSessionScreen({
             role: 'AI' as const,
             sessionId,
             senderId: null,
+            forUserId: message.forUserId ?? user?.id,
           };
           queryClient.setQueryData(messageKeys.infinite(sessionId), (old: any) => {
             if (!old || old.pages.length === 0) {
@@ -520,7 +651,14 @@ export function UnifiedSessionScreen({
             return { ...old, pages: updatedPages };
           });
         }
-        queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
+        if (data.currentStage === 3 || data.previousStage === 2) {
+          refreshStage2RealtimeState({ refetchMessages: true });
+          refreshStage3RealtimeState({ refetchMessages: true });
+        } else if (data.currentStage === 4 || data.previousStage === 3) {
+          refreshStage3RealtimeState({ refetchMessages: true });
+        } else {
+          queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
+        }
       }
 
       if (event === 'partner.advanced') {
@@ -596,7 +734,7 @@ export function UnifiedSessionScreen({
         if (data.empathyStatus) {
           queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         }
-        queryClient.refetchQueries({ queryKey: messageKeys.infinite(sessionId) });
+        refreshStage2RealtimeState({ refetchMessages: true });
       }
 
       if (event === 'empathy.revealed' && data.forUserId === user?.id) {
@@ -604,8 +742,7 @@ export function UnifiedSessionScreen({
         console.log('[UnifiedSessionScreen] Empathy revealed, updating cache');
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
         queryClient.refetchQueries({ queryKey: stageKeys.partnerEmpathy(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
-        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
+        refreshStage2RealtimeState();
         // Optimistic cache write for partner empathy so validation card appears immediately
         if (data.empathyContent && data.attemptId) {
           queryClient.setQueryData(stageKeys.partnerEmpathy(sessionId), (old: any) => ({
@@ -654,6 +791,7 @@ export function UnifiedSessionScreen({
         // Guesser received notification that subject shared context - update cache directly
         console.log('[UnifiedSessionScreen] Empathy refining, updating cache');
         queryClient.setQueryData(stageKeys.empathyStatus(sessionId), data.empathyStatus);
+        refreshStage2RealtimeState();
       }
 
       // -----------------------------------------------------------------------
@@ -666,76 +804,90 @@ export function UnifiedSessionScreen({
       if (eventName === 'session.needs_extracted') {
         // My own needs have been extracted by the backend
         console.log('[UnifiedSessionScreen] Needs extracted, refreshing cache');
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
+        refreshStage3RealtimeState();
       }
 
       if (eventName === 'partner.needs_confirmed') {
         // Partner confirmed their identified needs
         console.log('[UnifiedSessionScreen] Partner confirmed needs');
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        refreshStage3RealtimeState();
       }
 
       if (eventName === 'partner.needs_shared') {
         // Partner consented to share their needs
         console.log('[UnifiedSessionScreen] Partner shared needs');
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        refreshStage3RealtimeState();
+      }
+
+      if (eventName === 'session.needs_reveal_ready') {
+        console.log('[UnifiedSessionScreen] Needs reveal ready');
+        refreshStage3RealtimeState();
       }
 
       if (eventName === 'session.common_ground_ready') {
         console.log('[UnifiedSessionScreen] Common ground ready');
-        queryClient.invalidateQueries({ queryKey: stageKeys.needs(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        refreshStage3RealtimeState();
       }
 
-      if (eventName === 'partner.common_ground_confirmed') {
-        console.log('[UnifiedSessionScreen] Partner confirmed common ground');
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+      if (eventName === 'partner.common_ground_confirmed' || eventName === 'partner.needs_validated') {
+        console.log('[UnifiedSessionScreen] Partner validated needs');
+        refreshStage3RealtimeState();
       }
 
       // -----------------------------------------------------------------------
       // Stage 4: Strategic Repair Events
       // -----------------------------------------------------------------------
 
+      if (eventName === 'session.strategies_updated') {
+        console.log('[UnifiedSessionScreen] Strategies updated');
+        refreshStage4RealtimeState();
+      }
+
       if (eventName === 'partner.ranking_submitted') {
         // Partner submitted their strategy rankings
         console.log('[UnifiedSessionScreen] Partner submitted rankings');
-        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.strategiesReveal(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        refreshStage4RealtimeState();
       }
 
-      if (eventName === 'partner.marked_ready') {
+      if (eventName === 'partner.ready_to_rank' || eventName === 'partner.marked_ready') {
         // Partner marked ready to rank
         console.log('[UnifiedSessionScreen] Partner marked ready to rank');
-        queryClient.invalidateQueries({ queryKey: stageKeys.strategies(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        queryClient.setQueryData(stageKeys.strategies(sessionId), (old: any) => old
+          ? { ...old, partnerReadyToRank: true }
+          : old
+        );
+        queryClient.setQueryData(stageKeys.progress(sessionId), (old: any) => {
+          if (!old?.partnerProgress) return old;
+          return {
+            ...old,
+            partnerProgress: {
+              ...old.partnerProgress,
+              gatesSatisfied: {
+                ...(old.partnerProgress.gatesSatisfied ?? {}),
+                readyToRank: true,
+              },
+            },
+          };
+        });
+        refreshStage4RealtimeState();
       }
 
       if (eventName === 'agreement.proposed') {
         // Partner proposed an agreement
         console.log('[UnifiedSessionScreen] Agreement proposed');
-        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
+        refreshStage4RealtimeState();
       }
 
       if (eventName === 'agreement.confirmed') {
         // Partner confirmed an agreement
         console.log('[UnifiedSessionScreen] Agreement confirmed');
-        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
+        refreshStage4RealtimeState();
       }
 
       if (eventName === 'session.resolved') {
         // Session has been resolved
         console.log('[UnifiedSessionScreen] Session resolved');
-        queryClient.invalidateQueries({ queryKey: sessionKeys.state(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.progress(sessionId) });
-        queryClient.invalidateQueries({ queryKey: stageKeys.pendingActions(sessionId) });
-        queryClient.invalidateQueries({ queryKey: notificationKeys.badgeCount() });
-        queryClient.invalidateQueries({ queryKey: stageKeys.agreements(sessionId) });
+        refreshStage4RealtimeState();
       }
     },
     // Fire-and-forget pattern: AI responses arrive via Ably
@@ -743,6 +895,10 @@ export function UnifiedSessionScreen({
     // When AI message is added to cache, last message becomes AI → dots disappear automatically
     onAIResponse: (payload) => {
       console.log('[UnifiedSessionScreen] AI response received via Ably:', payload.message?.id);
+      if (!isRealtimePayloadAddressedToCurrentUser(payload, user?.id)) {
+        console.log('[UnifiedSessionScreen] Dropping AI response addressed to another user:', payload.message?.id);
+        return;
+      }
       // Add AI message to the cache - this automatically hides ghost dots
       // because ChatInterface derives showTypingIndicator from last message role
       addAIMessage(sessionId, payload.message);
@@ -1062,6 +1218,7 @@ export function UnifiedSessionScreen({
       showFeelHeardPanel: shouldShowFeelHeard,
       showShareSuggestionPanel: shouldShowShareSuggestion,
       showNeedsReviewPanel: shouldShowNeedsReview,
+      showNeedsSharePanel: shouldShowNeedsShare,
       showCommonGroundPanel: shouldShowCommonGround,
     },
   } = useChatUIState({
@@ -1097,6 +1254,8 @@ export function UnifiedSessionScreen({
         status: empathyStatusData.myAttempt.status,
         content: empathyStatusData.myAttempt.content,
       } : undefined,
+      myValidation: sharingStatus.myValidation,
+      partnerValidated: sharingStatus.partnerValidated,
       messageCountSinceSharedContext: empathyStatusData.messageCountSinceSharedContext,
     } : undefined,
     empathyDraftData: empathyDraftData ? {
@@ -1114,6 +1273,7 @@ export function UnifiedSessionScreen({
     allNeedsConfirmed,
     needsAvailable: (needs?.length ?? 0) > 0,
     needsShared: (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.needsShared === true,
+    needsRevealReady: (needsComparisonData?.myNeeds?.length ?? 0) > 0 && (needsComparisonData?.partnerNeeds?.length ?? 0) > 0,
     hasConfirmedNeedsLocal: completedActions.has('confirmed-needs'),
     commonGroundCount: commonGround?.length ?? 0,
     commonGroundAvailable: (needsComparisonData?.myNeeds?.length ?? 0) > 0 && (needsComparisonData?.partnerNeeds?.length ?? 0) > 0,
@@ -1122,6 +1282,12 @@ export function UnifiedSessionScreen({
     commonGroundAllConfirmedByBoth: commonGroundComplete,
     hasConfirmedCommonGroundLocal: completedActions.has('validated-needs'),
     strategyPhase,
+    strategyReadiness: {
+      myReadyToRank: strategyData?.myReadyToRank === true ||
+        (myProgress?.gatesSatisfied as Record<string, unknown> | undefined)?.readyToRank === true,
+      partnerReadyToRank: strategyData?.partnerReadyToRank === true ||
+        ((partnerProgress as { gatesSatisfied?: Record<string, unknown> } | undefined)?.gatesSatisfied)?.readyToRank === true,
+    },
     overlappingStrategiesCount: overlappingStrategies?.length ?? 0,
     agreements: agreements?.map(a => ({
       agreedByMe: a.agreedByMe,
@@ -1226,7 +1392,7 @@ export function UnifiedSessionScreen({
   const readyToShowEmpathy = shouldShowEmpathyPanel;
   const readyToShowFeelHeard = shouldShowFeelHeard;
   const readyToShowShareSuggestion = shouldShowShareSuggestion;
-  const readyToShowNeedsReview = shouldShowNeedsReview;
+  const readyToShowNeedsReview = shouldShowNeedsReview || shouldShowNeedsShare || shouldShowCommonGround;
   const readyToShowCommonGround = shouldShowCommonGround;
   const readyToShowWaitingBanner = shouldShowWaitingBanner;
 
@@ -1600,7 +1766,7 @@ export function UnifiedSessionScreen({
         case 'overlap-preview':
           return (
             <View style={styles.inlineCard} key={card.id}>
-              <Text style={styles.cardTitle}>You Both Chose</Text>
+              <Text style={styles.cardTitle}>Possible Shared Step</Text>
               <Text style={styles.overlapDescription}>
                 {(card.props.topOverlap as { description: string })?.description}
               </Text>
@@ -1712,6 +1878,14 @@ export function UnifiedSessionScreen({
   const handleShareInvitation = useCallback(async (): Promise<boolean> => {
     if (!invitationUrl) return false;
     try {
+      if (process.env.EXPO_PUBLIC_E2E_MODE === 'true') {
+        console.log('[UnifiedSessionScreen] E2E mode: treating invitation as shared', {
+          sessionId,
+          invitationUrl,
+        });
+        return true;
+      }
+
       const shareMessage = buildInvitationShareText(invitationUrl);
       const result = await Share.share(
         Platform.OS === 'web'
@@ -1806,6 +1980,44 @@ export function UnifiedSessionScreen({
     invitation?.acceptedAt,
     session?.createdAt,
   ]);
+
+  const needsReviewCards = useMemo((): ChatCustomCardItem[] => {
+    if (currentStage !== Stage.NEED_MAPPING) return [];
+    if (!needsData?.synthesizedAt || !needs || needs.length === 0) return [];
+    const gates = myProgress?.gatesSatisfied as Record<string, unknown> | undefined;
+    let needsStatus: 'ready' | 'confirmed' | 'shared' = 'ready';
+    if (gates?.needsShared === true) {
+      needsStatus = 'shared';
+    } else if (allNeedsConfirmed) {
+      needsStatus = 'confirmed';
+    }
+
+    return [{
+      type: 'custom-card',
+      id: `needs-identified-${needsData.synthesizedAt}`,
+      animate: true,
+      timestamp: needsData.synthesizedAt,
+      render: () => (
+        <NeedsIdentifiedChatCard
+          needs={needs.map((need) => ({
+            id: need.id,
+            need: need.need,
+            category: String(need.category),
+          }))}
+          status={needsStatus}
+          onReview={() => {
+            setNeedsDrawerMode('needs');
+            setShowNeedsDrawer(true);
+          }}
+        />
+      ),
+    }];
+  }, [currentStage, needsData?.synthesizedAt, needs, myProgress?.gatesSatisfied, allNeedsConfirmed]);
+
+  const chatCustomCards = useMemo(
+    () => [...inviteeOpeningCards, ...needsReviewCards],
+    [inviteeOpeningCards, needsReviewCards]
+  );
 
   // -------------------------------------------------------------------------
   // Render Overlays
@@ -2211,6 +2423,7 @@ export function UnifiedSessionScreen({
               <TouchableOpacity
                 style={styles.needsReviewButton}
                 onPress={() => {
+                  setShowActivityMenu(false);
                   setNeedsDrawerMode('needs');
                   setShowNeedsDrawer(true);
                 }}
@@ -2219,6 +2432,44 @@ export function UnifiedSessionScreen({
               >
                 <Text style={styles.needsReviewButtonText}>
                   Review and confirm your needs
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        );
+
+      case 'needs-share':
+        return (
+          <Animated.View
+            style={{
+              opacity: needsReviewAnim,
+              maxHeight: needsReviewAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 100],
+              }),
+              transform: [{
+                translateY: needsReviewAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              }],
+              overflow: 'hidden',
+            }}
+            pointerEvents="auto"
+          >
+            <View style={styles.needsReviewContainer}>
+              <TouchableOpacity
+                style={styles.needsReviewButton}
+                onPress={() => {
+                  setShowActivityMenu(false);
+                  setNeedsDrawerMode('needs');
+                  setShowNeedsDrawer(true);
+                }}
+                activeOpacity={0.7}
+                testID="needs-share-button"
+              >
+                <Text style={styles.needsReviewButtonText}>
+                  Share my needs
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2248,6 +2499,7 @@ export function UnifiedSessionScreen({
               <TouchableOpacity
                 style={styles.needsReviewButton}
                 onPress={() => {
+                  setShowActivityMenu(false);
                   setNeedsDrawerMode('comparison');
                   setShowNeedsDrawer(true);
                 }}
@@ -2385,7 +2637,7 @@ export function UnifiedSessionScreen({
           connectionStatus={connectionStatus}
           briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
           onBackPress={onNavigateBack}
-          stageName="Resolved"
+          stageName="Closed"
           testID="session-chat-header"
         />
         <SessionCompletionScreen
@@ -2402,6 +2654,70 @@ export function UnifiedSessionScreen({
         />
       </SafeAreaView>
     );
+  }
+
+  // -------------------------------------------------------------------------
+  // Agreement Confirmation / Waiting - Full Screen Overlay
+  // -------------------------------------------------------------------------
+  if (currentStage === Stage.STRATEGIC_REPAIR && agreements.length > 0) {
+    const unconfirmedAgreement = agreements.find((a) => !a.agreedByMe);
+    const waitingForPartner = agreements.every((a) => a.agreedByMe) &&
+      agreements.some((a) => !a.agreedByPartner);
+
+    if (unconfirmedAgreement) {
+      return (
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+          <SessionChatHeader
+            partnerName={partnerName}
+            partnerOnline={partnerOnline}
+            connectionStatus={connectionStatus}
+            briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+            onBackPress={onNavigateBack}
+            stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
+            testID="session-chat-header"
+          />
+          <AgreementCard
+            agreement={{
+              experiment: unconfirmedAgreement.description,
+              duration: unconfirmedAgreement.duration || 'To be determined',
+              successMeasure: unconfirmedAgreement.measureOfSuccess || 'To be defined together',
+              checkInDate: unconfirmedAgreement.followUpDate || undefined,
+            }}
+            confirmedByMe={unconfirmedAgreement.agreedByMe}
+            confirmedByPartner={unconfirmedAgreement.agreedByPartner}
+            partnerName={partnerName}
+            onConfirm={() => {
+              handleConfirmAgreement(unconfirmedAgreement.id, (response: ConfirmAgreementResponse) => {
+                if (response.sessionCanResolve) {
+                  trackSessionResolved(sessionId, 'agreement');
+                  handleResolveSession(() => onStageComplete?.(Stage.STRATEGIC_REPAIR));
+                }
+              });
+            }}
+          />
+        </SafeAreaView>
+      );
+    }
+
+    if (waitingForPartner) {
+      return (
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+          <SessionChatHeader
+            partnerName={partnerName}
+            partnerOnline={partnerOnline}
+            connectionStatus={connectionStatus}
+            briefStatus={getBriefStatus(session?.status, invitation?.isInviter)}
+            onBackPress={onNavigateBack}
+            stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
+            testID="session-chat-header"
+          />
+          <WaitingRoom
+            message={`You've proposed the agreement. Waiting for ${partnerName || 'your partner'} to confirm.`}
+            partnerName={partnerName || undefined}
+          />
+        </SafeAreaView>
+      );
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -2435,6 +2751,10 @@ export function UnifiedSessionScreen({
   // Strategy Revealing Phase - Full Screen Overlay
   // -------------------------------------------------------------------------
   if (currentStage === Stage.STRATEGIC_REPAIR && strategyPhase === StrategyPhase.REVEALING) {
+    const waitingForRankingReveal = !revealData ||
+      (revealData as { waitingForPartner?: boolean; overlap?: unknown[] | null }).waitingForPartner === true ||
+      (revealData as { overlap?: unknown[] | null }).overlap === null;
+
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <SessionChatHeader
@@ -2446,7 +2766,7 @@ export function UnifiedSessionScreen({
           stageName={myProgress?.stage !== undefined ? STAGE_FRIENDLY_NAMES[myProgress.stage] : undefined}
           testID="session-chat-header"
         />
-        {!revealData ? (
+        {waitingForRankingReveal ? (
           <WaitingRoom
             message="Waiting for your partner to submit their ranking"
             partnerName={partnerName || undefined}
@@ -2515,8 +2835,16 @@ export function UnifiedSessionScreen({
           // Cache-First: Ghost dots are derived from last message role in ChatInterface
           // isSending is still needed for brief moment during API call before optimistic message appears
           // isFetchingInitialMessage shows dots while fetching first AI message
-          // isConfirmingFeelHeard, isSharingEmpathy, and isConfirmingInvitation show dots during those API calls
-          isLoading={isFetchingInitialMessage || isConfirmingFeelHeard || isSharingEmpathy || isConfirmingInvitation}
+          // Button-only actions do not add a USER message, so pass their pending state
+          // explicitly to keep ghost dots visible until the AI follow-up is inserted.
+          isLoading={
+            isFetchingInitialMessage ||
+            isConfirmingFeelHeard ||
+            isSavingEmpathyDraft ||
+            isSharingEmpathy ||
+            isResubmittingEmpathy ||
+            isConfirmingInvitation
+          }
           // isInputDisabled prevents sending while API call is in progress
           isInputDisabled={isSending}
           showEmotionSlider={!isInOnboardingUnsigned}
@@ -2551,7 +2879,7 @@ export function UnifiedSessionScreen({
           onContextSharedPress={() => {
             setShowActivityMenu(true);
           }}
-          customCards={inviteeOpeningCards}
+          customCards={chatCustomCards}
           // Show compact as custom empty state during onboarding when not signed.
           customEmptyState={
             isInOnboardingUnsigned
@@ -2577,8 +2905,7 @@ export function UnifiedSessionScreen({
           hideInput={
             // Use derived hideInput logic from useChatUIState
             // Never hide when empathy review panel is showing (user still needs to interact)
-            // Never hide when needs/common ground panels are showing (Stage 3 interaction)
-            !shouldShowEmpathyPanel && !shouldShowNeedsReview && !shouldShowCommonGround && derivedShouldHideInput
+            !shouldShowEmpathyPanel && derivedShouldHideInput
           }
           validationCards={validationCards}
           onValidateAccurate={handleValidationAccurate}
@@ -2683,15 +3010,6 @@ export function UnifiedSessionScreen({
               // 3. When API responds, replace optimistic with real message + AI response
               handleShareEmpathy(statementToShare);
             }
-          }}
-          onSendRefinement={(message) => {
-            const refined =
-              message.trim().toLowerCase().startsWith('refine empathy draft')
-                ? message
-                : `Refine empathy draft: ${message}`;
-            // Prefix to make intent clear to the AI/prompt that this is a draft update
-            sendMessage(refined);
-            setShowEmpathyDrawer(false);
           }}
           onClose={() => setShowEmpathyDrawer(false)}
         />
@@ -2882,8 +3200,12 @@ export function UnifiedSessionScreen({
                   styles.invitationModalButton,
                   styles.invitationModalButtonPrimary,
                 ]}
-                onPress={() => {
-                  void handleShareInvitation();
+                onPress={async () => {
+                  const didShare = await handleShareInvitation();
+                  if (didShare) {
+                    setInvitationPanelDismissed(true);
+                    handleConfirmInvitationMessage();
+                  }
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Share invitation"
@@ -3434,6 +3756,70 @@ const useStyles = () =>
       padding: 16,
       backgroundColor: t.colors.bgSecondary,
       borderRadius: 12,
+    },
+    needsSummaryCard: {
+      marginHorizontal: 16,
+      marginVertical: 8,
+      padding: 16,
+      backgroundColor: t.colors.bgSecondary,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+    },
+    needsSummaryHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+    needsSummaryEyebrow: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: t.colors.textSecondary,
+      letterSpacing: 0,
+    },
+    needsSummaryStatus: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: t.colors.brandBlue,
+    },
+    needsSummaryTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: t.colors.textPrimary,
+      marginBottom: 12,
+    },
+    needsSummaryList: {
+      gap: 8,
+    },
+    needsSummaryRow: {
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+      backgroundColor: t.colors.bgPrimary,
+    },
+    needsSummaryCategory: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: t.colors.textSecondary,
+      marginBottom: 3,
+      letterSpacing: 0,
+    },
+    needsSummaryText: {
+      fontSize: 14,
+      lineHeight: 19,
+      color: t.colors.textPrimary,
+    },
+    needsSummaryMore: {
+      fontSize: 13,
+      color: t.colors.textSecondary,
+      marginTop: 2,
+    },
+    needsSummaryAction: {
+      marginTop: 14,
+      fontSize: 14,
+      fontWeight: '700',
+      color: t.colors.brandBlue,
     },
     shareActions: {
       flexDirection: 'row',

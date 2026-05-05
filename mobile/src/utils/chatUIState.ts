@@ -35,6 +35,7 @@ export type AboveInputPanel =
   | 'feel-heard' // Feel heard confirmation panel
   | 'share-suggestion' // Share suggestion from reconciler (Subject side)
   | 'needs-review' // Needs review panel (Stage 3: confirm identified needs)
+  | 'needs-share' // Needs share panel (Stage 3: consent to reveal own confirmed needs)
   | 'needs-reveal-validation' // Needs reveal validation panel (Stage 3)
   | 'waiting-banner' // General waiting banner
   | 'compact-agreement-bar' // Compact agreement bar during onboarding
@@ -106,6 +107,7 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   needsAvailable: boolean; // Needs have been extracted and are available for review
   allNeedsConfirmed: boolean; // All identified needs confirmed by user
   needsShared: boolean; // User has consented to share needs
+  needsRevealReady: boolean; // Both users have shared and comparison can be shown
   hasConfirmedNeedsLocal: boolean; // Local latch to prevent panel flash after confirming
 
   // Stage 3: Needs reveal validation. These field names are kept as
@@ -116,6 +118,12 @@ export interface ChatUIStateInputs extends WaitingStatusInputs {
   commonGroundAllConfirmedByMe: boolean;
   commonGroundAllConfirmedByBoth: boolean;
   hasConfirmedCommonGroundLocal: boolean;
+
+  // Stage 4: Strategy readiness
+  strategyReadiness?: {
+    myReadyToRank?: boolean;
+    partnerReadyToRank?: boolean;
+  };
 }
 
 /**
@@ -147,6 +155,7 @@ export interface ChatUIState {
     showFeelHeardPanel: boolean;
     showShareSuggestionPanel: boolean;
     showNeedsReviewPanel: boolean;
+    showNeedsSharePanel: boolean;
     showCommonGroundPanel: boolean;
     showWaitingBanner: boolean;
     showCompactAgreementBar: boolean;
@@ -349,7 +358,6 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
     needsAvailable,
     allNeedsConfirmed,
     needsShared,
-    hasConfirmedNeedsLocal,
     sessionStatus,
   } = inputs;
 
@@ -362,18 +370,33 @@ function computeShowNeedsReviewPanel(inputs: ChatUIStateInputs): boolean {
     return false;
   }
 
-  // Local latch: once the user shares, hide panel immediately.
-  if (hasConfirmedNeedsLocal && needsShared) {
-    return false;
-  }
-
   // Already shared - reveal/waiting state owns the next step.
-  if (needsShared) {
+  if (needsShared || allNeedsConfirmed) {
     return false;
   }
 
   // Must have needs to show
   return needsAvailable;
+}
+
+function computeShowNeedsSharePanel(inputs: ChatUIStateInputs): boolean {
+  const {
+    myStage,
+    needsAvailable,
+    allNeedsConfirmed,
+    needsShared,
+    needsRevealReady,
+    hasConfirmedNeedsLocal,
+    sessionStatus,
+  } = inputs;
+
+  if (sessionStatus === SessionStatus.RESOLVED) return false;
+
+  const currentStage = myStage ?? Stage.ONBOARDING;
+  if (currentStage !== Stage.NEED_MAPPING) return false;
+  if (!needsAvailable || !allNeedsConfirmed) return false;
+  if (needsShared || needsRevealReady || hasConfirmedNeedsLocal) return false;
+  return true;
 }
 
 /**
@@ -385,6 +408,7 @@ function computeShowNeedsRevealValidationPanel(inputs: ChatUIStateInputs): boole
   const {
     myStage,
     commonGroundAvailable,
+    needsRevealReady,
     commonGroundNoOverlap,
     commonGroundAllConfirmedByMe,
     commonGroundAllConfirmedByBoth,
@@ -409,6 +433,10 @@ function computeShowNeedsRevealValidationPanel(inputs: ChatUIStateInputs): boole
   // Already confirmed by both or by me - no need to show
   if (commonGroundAllConfirmedByBoth || commonGroundAllConfirmedByMe) {
     return false;
+  }
+
+  if (needsRevealReady) {
+    return true;
   }
 
   // Legacy no-overlap state is treated as validation-ready for compatibility.
@@ -475,12 +503,17 @@ function computeAboveInputPanel(
     return 'needs-review';
   }
 
-  // Priority 7: Needs reveal validation panel (Stage 3)
+  // Priority 7: Needs share panel (Stage 3)
+  if (panels.showNeedsSharePanel) {
+    return 'needs-share';
+  }
+
+  // Priority 8: Needs reveal validation panel (Stage 3)
   if (panels.showCommonGroundPanel) {
     return 'needs-reveal-validation';
   }
 
-  // Priority 8: Waiting banner
+  // Priority 9: Waiting banner
   if (panels.showWaitingBanner) {
     return 'waiting-banner';
   }
@@ -540,6 +573,14 @@ function computeShouldHideInput(
     return true;
   }
 
+  if (
+    aboveInputPanel === 'needs-review' ||
+    aboveInputPanel === 'needs-share' ||
+    aboveInputPanel === 'needs-reveal-validation'
+  ) {
+    return true;
+  }
+
   // Note: hasUnviewedSharedContext no longer hides input.
   // The notification popup already surfaces the shared context to the user,
   // so requiring them to also open the Activity menu is unnecessary friction.
@@ -555,6 +596,15 @@ function computeShouldHideInput(
     inputs.empathyDraft === undefined &&
     inputs.empathyStatus === undefined &&
     !hasShareSuggestion
+  ) {
+    return true;
+  }
+
+  if (
+    currentStage === Stage.NEED_MAPPING &&
+    inputs.needsShared &&
+    !inputs.needsRevealReady &&
+    !inputs.commonGroundAvailable
   ) {
     return true;
   }
@@ -604,6 +654,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
   const showFeelHeardPanel = computeShowFeelHeardPanel(inputs);
   const showShareSuggestionPanel = computeShowShareSuggestionPanel(inputs);
   const showNeedsReviewPanel = computeShowNeedsReviewPanel(inputs);
+  const showNeedsSharePanel = computeShowNeedsSharePanel(inputs);
   const showCommonGroundPanel = computeShowNeedsRevealValidationPanel(inputs);
   const showWaitingBanner = computeShouldShowWaitingBanner(waitingStatus);
   const showCompactAgreementBar = isInOnboardingUnsigned;
@@ -616,6 +667,7 @@ export function computeChatUIState(inputs: ChatUIStateInputs): ChatUIState {
     showFeelHeardPanel,
     showShareSuggestionPanel,
     showNeedsReviewPanel,
+    showNeedsSharePanel,
     showCommonGroundPanel,
     showWaitingBanner,
     showCompactAgreementBar,
@@ -668,6 +720,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     needs: { allConfirmed: false },
     commonGround: { count: 0 },
     strategyPhase: 'COLLECTING',
+    strategyReadiness: undefined,
     overlappingStrategies: { count: 0 },
     agreements: undefined,
 
@@ -704,6 +757,7 @@ export function createDefaultChatUIStateInputs(): ChatUIStateInputs {
     needsAvailable: false,
     allNeedsConfirmed: false,
     needsShared: false,
+    needsRevealReady: false,
     hasConfirmedNeedsLocal: false,
 
     // Stage 3: Needs reveal validation

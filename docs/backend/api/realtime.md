@@ -59,6 +59,8 @@ Published by backend to session channel:
 | `partner.advanced` | `{ toStage }` | Partner advanced to new stage |
 | `partner.empathy_shared` | `{ }` | Partner consented to share empathy |
 | `partner.needs_shared` | `{ }` | Partner shared their needs |
+| `partner.needs_validated` | `{ stage: 3, validatedBy: string, validated: boolean }` | Partner validated the revealed needs lists |
+| `session.needs_reveal_ready` | `{ stage: 3, needsRevealReady: true }` | Both partners consented — side-by-side reveal is ready |
 | `partner.ranking_submitted` | `{ }` | Partner submitted strategy ranking |
 | `agreement.proposed` | `{ agreementId }` | New agreement proposed |
 | `agreement.confirmed` | `{ agreementId }` | Agreement confirmed by both |

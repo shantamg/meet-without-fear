@@ -301,7 +301,7 @@ describe('StrategicRepairScreen', () => {
     it('reveals overlap after both rank', () => {
       render(<StrategicRepairScreen />);
 
-      expect(screen.getByText(/you both chose/i)).toBeTruthy();
+      expect(screen.getByText(/both marked worth discussing/i)).toBeTruthy();
     });
 
     it('shows shared strategies', () => {
@@ -315,7 +315,7 @@ describe('StrategicRepairScreen', () => {
     it('shows positive messaging for common ground', () => {
       render(<StrategicRepairScreen />);
 
-      expect(screen.getByText(/shared priorities/i)).toBeTruthy();
+      expect(screen.getByText(/possible shared steps/i)).toBeTruthy();
     });
   });
 

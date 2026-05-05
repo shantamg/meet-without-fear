@@ -105,6 +105,10 @@ describe('Stage 4 API', () => {
         status: 'IN_PROGRESS',
         gatesSatisfied: {},
       });
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: mockUser.id, stage: 4, gatesSatisfied: { readyToRank: true } },
+        { userId: mockPartnerId, stage: 4, gatesSatisfied: null },
+      ]);
       // Mock returns only the selected fields (as Prisma would with select clause)
       (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
         {
@@ -132,6 +136,8 @@ describe('Stage 4 API', () => {
         expect.objectContaining({
           success: true,
           data: expect.objectContaining({
+            myReadyToRank: true,
+            partnerReadyToRank: false,
             strategies: expect.arrayContaining([
               expect.objectContaining({
                 id: expect.any(String),
@@ -164,6 +170,46 @@ describe('Stage 4 API', () => {
       // Verify createdByUserId is NOT in the select
       const findManyCall = (prisma.strategyProposal.findMany as jest.Mock).mock.calls[0][0];
       expect(findManyCall.select.createdByUserId).toBeUndefined();
+    });
+
+    it('returns revealing phase for a user who already submitted ranking while partner has not', async () => {
+      const req = createMockRequest({
+        user: mockUser,
+        params: { id: mockSessionId },
+      });
+      const { res, statusMock, jsonMock } = createMockResponse();
+
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession());
+      (prisma.stageProgress.findMany as jest.Mock).mockResolvedValue([
+        { userId: mockUser.id, stage: 4, gatesSatisfied: { readyToRank: true, rankingSubmitted: true } },
+        { userId: mockPartnerId, stage: 4, gatesSatisfied: { readyToRank: true } },
+      ]);
+      (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: mockStrategyIds[0],
+          description: 'Weekly check-in',
+          needsAddressed: ['connection'],
+          duration: '2 weeks',
+          measureOfSuccess: 'Feel more connected',
+        },
+      ]);
+      (prisma.strategyRanking.findMany as jest.Mock).mockResolvedValue([
+        { sessionId: mockSessionId, userId: mockUser.id, rankedIds: [mockStrategyIds[0]] },
+      ]);
+
+      await getStrategies(req as Request, res as Response);
+
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            phase: 'REVEALING',
+            myReadyToRank: true,
+            partnerReadyToRank: true,
+          }),
+        })
+      );
     });
 
     it('requires authentication', async () => {

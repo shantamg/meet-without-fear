@@ -1,7 +1,7 @@
 /**
  * ShareTopicDrawer Component
  *
- * A full-screen drawer that displays the reconciler's topic suggestion
+ * A full-screen drawer that displays a privacy-protected review suggestion
  * for the subject to share additional context with their partner.
  *
  * This is Phase 1 of the two-phase share flow:
@@ -29,11 +29,11 @@ import { colors } from '@/theme';
 export interface ShareTopicDrawerProps {
   /** Whether the drawer is visible */
   visible: boolean;
-  /** Reconciler action type - affects language and styling */
+  /** Review action type - affects language and styling */
   action: 'OFFER_SHARING' | 'OFFER_OPTIONAL';
   /** Partner's name */
   partnerName: string;
-  /** The reconciler's suggested focus topic */
+  /** The suggested focus topic from the separate review */
   suggestedShareFocus: string;
   /** Callback when "Yes, help me share" is tapped */
   onAccept: () => void;
@@ -62,8 +62,8 @@ export function ShareTopicDrawer({
 
   // Action-specific suffix text
   const actionSuffix = action === 'OFFER_SHARING'
-    ? 'you share more about:'
-    : 'you might consider sharing about:';
+    ? 'sharing more about this:'
+    : 'sharing a little more about this:';
 
   const handleDecline = () => {
     // Show confirmation dialog before declining
@@ -123,8 +123,9 @@ export function ShareTopicDrawer({
 
             {/* Intro text */}
             <Text style={styles.intro}>
-              Our internal reconciler has reviewed what {partnerName} is imagining you are feeling,
-              noted some of the things you have talked about, and has suggested that{' '}
+              A separate privacy-protected review suggested there may be
+              something important {partnerName} still needs understood. You
+              can choose whether you want help{' '}
               <Text style={[styles.actionText, { color: actionTextColor }]}>
                 {actionSuffix}
               </Text>

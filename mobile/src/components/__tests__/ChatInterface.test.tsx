@@ -23,6 +23,30 @@ jest.mock('../SpeakerButton', () => {
   };
 });
 
+jest.mock('../../hooks/useSpeech', () => ({
+  useSpeech: () => ({
+    isSpeaking: false,
+    currentId: null,
+    toggle: jest.fn(),
+  }),
+  useAutoSpeech: () => ({
+    isAutoSpeechEnabled: false,
+  }),
+}));
+
+jest.mock('../TypewriterText', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return {
+    TypewriterText: ({ text, onComplete }: { text: string; onComplete?: () => void }) => {
+      React.useEffect(() => {
+        onComplete?.();
+      }, [onComplete]);
+      return <Text testID="typewriter-text">{text}</Text>;
+    },
+  };
+});
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -177,6 +201,72 @@ describe('ChatInterface', () => {
       render(<ChatInterface messages={[]} onSendMessage={mockOnSendMessage} isLoading={false} />);
 
       expect(screen.queryByTestId('typing-indicator')).toBeNull();
+    });
+  });
+
+  describe('Typewriter Animation', () => {
+    it('does not replay already rendered AI messages after message updates', async () => {
+      const baseTime = new Date('2026-05-05T03:00:00.000Z').getTime();
+      const userMessage = createMockMessage({
+        id: 'user-1',
+        role: MessageRole.USER,
+        content: 'I replied',
+        timestamp: new Date(baseTime).toISOString(),
+      });
+      const firstAIMessage = createMockMessage({
+        id: 'ai-1',
+        role: MessageRole.AI,
+        content: 'First AI response',
+        timestamp: new Date(baseTime + 1000).toISOString(),
+      });
+      const secondAIMessage = createMockMessage({
+        id: 'ai-2',
+        role: MessageRole.AI,
+        content: 'Second AI response',
+        timestamp: new Date(baseTime + 2000).toISOString(),
+      });
+      const thirdAIMessage = createMockMessage({
+        id: 'ai-3',
+        role: MessageRole.AI,
+        content: 'Third AI response',
+        timestamp: new Date(baseTime + 3000).toISOString(),
+      });
+
+      const { rerender } = render(
+        <ChatInterface
+          sessionId="animation-regression-session"
+          messages={[userMessage]}
+          onSendMessage={mockOnSendMessage}
+          skipInitialHistory
+        />
+      );
+
+      rerender(
+        <ChatInterface
+          sessionId="animation-regression-session"
+          messages={[userMessage, firstAIMessage, secondAIMessage]}
+          onSendMessage={mockOnSendMessage}
+          skipInitialHistory
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryAllByTestId('typewriter-text').length).toBeLessThanOrEqual(1);
+      });
+
+      rerender(
+        <ChatInterface
+          sessionId="animation-regression-session"
+          messages={[userMessage, firstAIMessage, secondAIMessage, thirdAIMessage]}
+          onSendMessage={mockOnSendMessage}
+          skipInitialHistory
+        />
+      );
+
+      await waitFor(() => {
+        const animatedTexts = screen.queryAllByTestId('typewriter-text').map((node) => node.props.children);
+        expect(animatedTexts).not.toContain('Second AI response');
+      });
     });
   });
 

@@ -26,9 +26,9 @@ interface OverlapRevealProps {
   uniqueToMe: Strategy[];
   /** Strategies only the partner selected */
   uniqueToPartner: Strategy[];
-  /** Callback when user wants to create an agreement from a matched strategy */
+  /** Callback when user wants to use a matched strategy as a next step */
   onCreateAgreement?: (strategy: { id: string; description: string }) => void;
-  /** Whether to disable the Create Agreement button (max agreements reached) */
+  /** Whether to disable the next-step button (max agreements reached) */
   disableCreate?: boolean;
 }
 
@@ -42,7 +42,7 @@ interface OverlapRevealProps {
  * Key features:
  * - Highlights shared choices (overlap)
  * - Shows unique selections without judgment
- * - Provides positive messaging for common ground
+ * - Frames overlap as a possible protocol, not a settled agreement
  * - Handles no-overlap case gracefully
  */
 export function OverlapReveal({
@@ -58,13 +58,13 @@ export function OverlapReveal({
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.title}>Your Shared Priorities</Text>
-        <Text style={styles.subtitle}>Common ground found!</Text>
+        <Text style={styles.title}>Possible Shared Steps</Text>
+        <Text style={styles.subtitle}>Both of you marked these as worth discussing.</Text>
       </View>
 
       {hasOverlap && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>You Both Chose</Text>
+          <Text style={styles.sectionTitle}>Both Marked Worth Discussing</Text>
           {overlapping.map((strategy) => (
             <View key={strategy.id}>
               <StrategyCard strategy={strategy} isOverlap />
@@ -74,15 +74,15 @@ export function OverlapReveal({
                     style={[styles.createAgreementButton, disableCreate && styles.createAgreementButtonDisabled]}
                     onPress={() => !disableCreate && onCreateAgreement({ id: strategy.id, description: strategy.description })}
                     accessibilityRole="button"
-                    accessibilityLabel={`Create agreement from strategy: ${strategy.description}`}
+                    accessibilityLabel={`Use as next step: ${strategy.description}`}
                     accessibilityState={{ disabled: disableCreate }}
                     testID="create-agreement-button"
                     disabled={disableCreate}
                   >
-                    <Text style={[styles.createAgreementText, disableCreate && styles.createAgreementTextDisabled]}>Create Agreement</Text>
+                    <Text style={[styles.createAgreementText, disableCreate && styles.createAgreementTextDisabled]}>Use as Next Step</Text>
                   </TouchableOpacity>
                   {disableCreate && (
-                    <Text style={styles.maxAgreementsText}>You can create up to 2 agreements per session.</Text>
+                    <Text style={styles.maxAgreementsText}>You can choose up to 2 next steps per session.</Text>
                   )}
                 </>
               )}
@@ -93,7 +93,7 @@ export function OverlapReveal({
 
       {hasUnique && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Only One of You Chose</Text>
+          <Text style={styles.sectionTitle}>Different Preferences</Text>
           {[...uniqueToMe, ...uniqueToPartner].map((strategy) => (
             <StrategyCard key={strategy.id} strategy={strategy} />
           ))}
@@ -103,8 +103,8 @@ export function OverlapReveal({
       {!hasOverlap && (
         <View style={styles.noOverlap}>
           <Text style={styles.noOverlapText}>
-            No direct overlap yet - but that is okay! Let us explore your
-            different preferences.
+            No direct overlap yet. Return to chat to decide whether there is a smaller step,
+            an individual commitment, or no shared next step for now.
           </Text>
         </View>
       )}
