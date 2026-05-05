@@ -20,7 +20,7 @@ Move from understanding to action by designing small, reversible experiments tha
 - Collect and combine suggestions from both parties
 - Present all strategies as **unlabeled options** (no attribution to source)
 - Allow users to select from the combined pool
-- Offer to generate additional AI suggestions if desired
+- Offer to generate additional AI suggestions if desired (product target; the current backend endpoint is still a placeholder)
 - Document agreed-upon micro-experiments
 
 ## Key Design: Collaborative Strategy Generation
@@ -57,7 +57,7 @@ flowchart TD
     Collect --> Present[Present unlabeled strategy pool]
     Present --> Question[Happy with options or want more?]
 
-    Question -->|Want more| Generate[AI generates additional ideas]
+    Question -->|Want more| Generate[AI suggestions endpoint - placeholder today]
     Generate --> Present
 
     Question -->|Happy| PrivateRank[Each privately ranks top choices]
@@ -69,7 +69,7 @@ flowchart TD
     Overlap -->|No| Explore[Explore differences]
     Explore --> MoreOptions{Want more options?}
     MoreOptions -->|Yes| Generate
-    MoreOptions -->|No| Negotiate[Work toward common ground]
+    MoreOptions -->|No| Negotiate[Explore differences honestly]
     Negotiate --> Discuss
 
     Discuss --> Document[Document micro-experiment]
@@ -114,7 +114,7 @@ flowchart TB
 
 ## When No Overlap Exists
 
-If private rankings reveal no overlap, the AI facilitates finding common ground:
+If private rankings reveal no overlap, the backend returns each user's top-ranked strategy as agreement candidates so the UI can keep the conversation moving:
 
 ```mermaid
 flowchart TD
@@ -145,7 +145,7 @@ flowchart TB
             Status[Building your path forward]
         end
 
-        subgraph Foundation[Common Ground Foundation]
+        subgraph Foundation[Needs Foundation]
             Title1[Building on shared needs]
             SharedNeed[You both need: Recognition]
         end
@@ -201,7 +201,7 @@ flowchart TB
         subgraph Header[Header]
             Logo[Meet Without Fear]
             Stage[Stage 4: Strategic Repair]
-            Status[Common ground found]
+            Status[Shared priorities found]
         end
 
         subgraph Overlap[You Both Chose]
@@ -220,7 +220,7 @@ flowchart TB
 - Strategy options are presented without labels indicating who suggested them
 - All buttons use soft, neutral colors (no "yours" vs "theirs" styling)
 - Ranking is private until both submit
-- Overlap is revealed together, celebrating common ground
+- Overlap is revealed together without implying agreement where none exists
 
 ## Success Criteria
 
