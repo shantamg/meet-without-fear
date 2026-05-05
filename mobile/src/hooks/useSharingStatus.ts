@@ -79,15 +79,37 @@ export interface SharingStatusData {
   isError: boolean;
 }
 
+export interface UseSharingStatusOptions {
+  /** Master switch for all sharing-status queries. */
+  enabled?: boolean;
+  /** Whether to fetch empathy status data. */
+  enableEmpathyStatus?: boolean;
+  /** Whether to fetch pending share-offer data. */
+  enableShareOffer?: boolean;
+  /** Whether to fetch partner empathy data. */
+  enablePartnerEmpathy?: boolean;
+}
+
 // ============================================================================
 // Hook
 // ============================================================================
 
-export function useSharingStatus(sessionId: string | undefined): SharingStatusData {
+export function useSharingStatus(
+  sessionId: string | undefined,
+  options: UseSharingStatusOptions = {}
+): SharingStatusData {
+  const baseEnabled = !!sessionId && (options.enabled ?? true);
+
   // Compose existing hooks
-  const empathyStatusQuery = useEmpathyStatus(sessionId);
-  const shareOfferQuery = useShareOffer(sessionId);
-  const partnerEmpathyQuery = usePartnerEmpathy(sessionId);
+  const empathyStatusQuery = useEmpathyStatus(sessionId, {
+    enabled: baseEnabled && (options.enableEmpathyStatus ?? true),
+  });
+  const shareOfferQuery = useShareOffer(sessionId, {
+    enabled: baseEnabled && (options.enableShareOffer ?? true),
+  });
+  const partnerEmpathyQuery = usePartnerEmpathy(sessionId, {
+    enabled: baseEnabled && (options.enablePartnerEmpathy ?? true),
+  });
 
   const empathyStatus = empathyStatusQuery.data;
   const shareOfferData = shareOfferQuery.data;
