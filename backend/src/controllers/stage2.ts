@@ -2093,7 +2093,7 @@ export async function resubmitEmpathy(
 
 Generate a brief, warm acknowledgment message (2-3 sentences) for ${userName} that:
 1. Acknowledges the effort to refine their understanding
-2. Notes that we will check whether their updated statement is ready to share
+2. Notes that a separate privacy-protected review will check whether their updated statement is ready to share
 3. Encourages them that this iterative process helps build deeper understanding
 
 Use human process language. Do not mention internal systems or implementation details.
@@ -2123,12 +2123,12 @@ Respond in JSON format:
           const parsed = extractJsonFromResponse(aiResponse) as Record<string, unknown>;
           transitionContent = typeof parsed.response === 'string'
             ? parsed.response
-            : `You're showing real understanding here. We'll check whether your updated perspective is ready to share.`;
+            : `You're showing real understanding here. We'll send this through a separate privacy-protected review to check whether your updated perspective is ready to share.`;
         } catch {
-          transitionContent = `You're showing real understanding here. We'll check whether your updated perspective is ready to share.`;
+          transitionContent = `You're showing real understanding here. We'll send this through a separate privacy-protected review to check whether your updated perspective is ready to share.`;
         }
       } else {
-        transitionContent = `You're showing real understanding here. We'll check whether your updated perspective is ready to share.`;
+        transitionContent = `You're showing real understanding here. We'll send this through a separate privacy-protected review to check whether your updated perspective is ready to share.`;
       }
 
       // Save the transition message to the database
@@ -2178,7 +2178,7 @@ Respond in JSON format:
 
     successResponse(res, {
       status: 'ANALYZING',
-      message: 'We are checking whether your updated understanding is ready to share...',
+      message: 'We are sending this through a separate privacy-protected review to check whether your updated understanding is ready to share...',
       empathyMessage: {
         id: newMessage.id,
         content: newMessage.content,
