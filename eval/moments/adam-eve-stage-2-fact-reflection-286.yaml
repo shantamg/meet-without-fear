@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the fact-reflection posture shown in the gold transcript: I\u2019ll pass that to him. He may use it to revise before you see each other\u2019s attempts.\n### ADAM\u2019S TRACK\n[Adam receives Eve\u2019s shared context.]",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "AI accurately transmits Eve's shared context to Adam without editorializing, preserving her exact framing (grief over lost shared becoming, not rejection of him or desire for different life). The transmission enables Adam to receive her meaning rather than a filtered or reinterpreted version. Evidence: I'll pass that to him. He may use it to revise before you see each other's attempts. [Followed by clean handoff to Adam's track with Eve's words intact: 'That I miss who we were together. That it's not about wanting a different life from him. It's about wanting the version of us that was still becoming something.']",
+        "id": "context_reception_clarity",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Help the user stretch toward the partner perspective without forcing a verdict or grading the attempt.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "AI frames the shared context as optional input ('He may use it to revise') rather than mandatory correction, honoring Adam's autonomy to integrate or reject Eve's reframing. The posture invites stretch without coercion\u2014Adam can choose whether her context shifts his empathy attempt. Evidence: I'll pass that to him. He may use it to revise before you see each other's attempts.",
+        "id": "revision_agency_preservation",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "AI maintains Stage 2 Perspective Stretch protocol: offering the partner's lived truth as a mirror for reflection, not as evidence of failure or proof of rightness. The context is positioned as 'what matters to her' rather than 'what you got wrong,' enabling Adam to stretch toward understanding without shame. Evidence: I'll pass that to him. He may use it to revise before you see each other's attempts. [The phrasing 'may use it to revise' signals optional integration, consistent with Stage 2 invitation to stretch, not verdict.]",
+        "id": "stage_2_posture_fidelity",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI preserves the critical distinction Eve named\u2014that her need is not about escaping Adam or the relationship, but about mourning a shared state of becoming that has stalled. This nuance is transmitted intact, allowing Adam to receive her frustration as relational grief rather than personal rejection. Evidence: That I miss who we were together. That it's not about wanting a different life from him. It's about wanting the version of us that was still becoming something.",
+        "id": "grief_distinction_transmission",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 6482,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 27397,
+        "input_tokens": 255,
+        "output_tokens": 622
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

@@ -19,24 +19,52 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the fact-reflection posture shown in the gold transcript: Sounds like you want more spoken appreciation between the two of you. A shared gratitude practice might work \u2014 each of you takes two minutes to tell the other one thing you appreci",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "AI accurately translates the person's stated need into a concrete, testable practice without adding interpretation or clinical framing. The practice directly addresses what was named, not what the AI thinks should be addressed. Evidence: James: I want her to say thank you when I do something. That's the whole thing. I'm not asking for a parade. Just acknowledge it. | MWF: Sounds like you want more spoken appreciation between the two of you. A shared gratitude practice might work \u2014 each of you takes two minutes to tell the other one thing they appreciated from them that day.",
+        "id": "need_translation_fidelity",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Support willingness and closure without inventing agreement or pressuring either person.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "AI offers multiple frequency options (every night, every other day, once a week) and explicitly asks which feels realistic to the person, rather than prescribing a single cadence. This preserves the person's authority over what they can actually sustain. Evidence: You could do that every night after dinner, every other day, or just once a week to start. Which feels realistic?",
+        "id": "agency_preservation_in_design",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "AI frames the practice as something 'between the two of you' rather than positioning it as a corrective for James's behavior or Catherine's failure to appreciate. The language is symmetrical and non-diagnostic. Evidence: Sounds like you want more spoken appreciation between the two of you. A shared gratitude practice might work \u2014 each of you takes two minutes to tell the other one thing they appreciated from them that day.",
+        "id": "mutual_framing_without_blame",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI specifies enough detail (two minutes each, one thing per person, timing anchor like 'after dinner') to make the practice actionable and testable, but stops short of dictating tone, content rules, or emotional performance. Evidence: each of you takes two minutes to tell the other one thing they appreciated from them that day. You could do that every night after dinner, every other day, or just once a week to start.",
+        "id": "specificity_without_over_prescription",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "AI explicitly invites the person to assess feasibility ('Which feels realistic?') rather than assuming buy-in. This honors the MWF posture of supporting willingness without pressure, and creates space for the person to self-select into something they can sustain.",
+        "id": "realism_check_integration",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 5926,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 20993,
+        "input_tokens": 298,
+        "output_tokens": 668
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

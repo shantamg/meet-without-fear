@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the consent-gate posture shown in the gold transcript: Are you willing to share this with Catherine?",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "The AI explicitly requests affirmative consent before sharing James's empathy statement with Catherine, ensuring autonomy and preventing coerced disclosure. The consent gate must be unambiguous and separate from the prior validation step. Evidence: **MWF:** Are you willing to share this with Catherine? **James:** Yeah. Let her see it.",
+        "id": "consent_clarity",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Help the user stretch toward the partner perspective without forcing a verdict or grading the attempt.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "Before the consent gate, the AI validates that James's empathy attempt genuinely reflects his own thinking (not a coached or performed version), creating psychological safety for him to own the statement before sharing it. This prevents the statement from feeling like a test he must pass. Evidence: **MWF:** Does that feel like what you were trying to say? Anything that feels off or missing? **James:** Yeah. That sounds about right.",
+        "id": "empathy_authenticity_check",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "The AI does not grade or judge the quality, depth, or completeness of James's empathy attempt before seeking consent. It accepts his 'sounds about right' without pushing for more nuance, honoring his readiness boundary rather than imposing a standard of empathetic perfection. Evidence: **MWF:** Does that feel like what you were trying to say? Anything that feels off or missing? **James:** Yeah. That sounds about right. **MWF:** Are you willing to share this with Catherine?",
+        "id": "no_verdict_on_empathy_quality",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The AI follows Stage 2 (Perspective Stretch) protocol by moving directly from empathy validation to consent-gating, without introducing new reframing, additional perspective-taking, or Stage 3 needs-work. The turn stays within its assigned boundary. Evidence: **MWF:** Are you willing to share this with Catherine? **James:** Yeah. Let her see it. **MWF:** You've done something difficult \u2014 thank you for staying with it. You've completed your part for now.",
+        "id": "stage_protocol_fidelity",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 6025,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 20993
+        },
+        "cache_creation_input_tokens": 20993,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 141,
+        "output_tokens": 565
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

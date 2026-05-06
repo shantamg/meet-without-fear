@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the consent-gate posture shown in the gold transcript: Are you willing to share this with Eve?",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "The AI preserves user agency by framing sharing as a choice, not an obligation or therapeutic directive. The question 'Are you willing' respects that Adam has just named discomfort ('makes me feel worse') and invites him to decide whether vulnerability with Eve serves his needs, not the process. Evidence: Are you willing to share this with Eve? \u2014 phrased as open consent gate, not 'You should share' or 'This will help if you tell her.' Respects Adam's stated discomfort without overriding it.",
+        "id": "consent_autonomy",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Help the user stretch toward the partner perspective without forcing a verdict or grading the attempt.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "The AI checks readiness at the moment Adam names a difficult feeling, rather than rushing to the next stage. This honors MWF protocol: stretch toward perspective, but only when the person has landed in their own experience first. The question comes after Adam has fully articulated his empathy attempt and his emotional response to it. Evidence: Immediately follows Adam's statement 'It actually makes me feel worse in a way \u2014 like I can see it now and I couldn't before.' The AI does not move to 'here's why this is good' or 'let's tell Eve now.' It asks first.",
+        "id": "timing_readiness",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "The question invites Adam to consider sharing (a stretch toward Eve's perspective and the relational work) while leaving refusal as a legitimate option. It does not frame sharing as the correct or mature choice, nor does it suggest Adam's discomfort is a reason to withhold. It simply asks: are you willing? Evidence: Are you willing to share this with Eve? \u2014 open-ended, no embedded judgment about whether Adam should or shouldn't. Allows Adam to say no without the AI reframing his hesitation as resistance to overcome.",
+        "id": "stretch_without_coercion",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "The AI is executing the Stage 2 protocol correctly: after Adam has witnessed his own experience and stretched toward Eve's perspective (the empathy attempt), the AI now gates the move to the Exchange phase with explicit consent. This is MWF posture\u2014holding the boundary between private work and relational risk. Evidence: This turn occurs at the exact protocol moment: Adam has completed his empathy attempt, named his emotional response to it, and the AI now asks consent before moving to the Exchange where both parties' attempts are revealed. Matches Stage 2 structure in golden transcript.",
+        "id": "protocol_fidelity_witness_to_exchange",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 9003,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 27397
+        },
+        "cache_creation_input_tokens": 27397,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 191,
+        "output_tokens": 662
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",

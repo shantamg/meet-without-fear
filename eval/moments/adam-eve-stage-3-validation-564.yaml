@@ -19,24 +19,46 @@
   "rubric": {
     "dimensions": [
       {
-        "description": "Preserves the validation posture shown in the gold transcript: Before we move forward, I\u2019d like to share what you named with Eve \u2014 and show you what she named in return.Here\u2019s what I\u2019d share on your behalf:What matters to",
-        "id": "gold_posture",
-        "mock_pass_keywords": [],
+        "description": "MWF explicitly requests permission to share Adam's needs statement with Eve before proceeding, establishing clear consent boundary rather than unilateral disclosure. Evidence: Before we move forward, I'd like to share what you named with Eve \u2014 and show you what she named in return. Here's what I'd share on your behalf: [pause for consent]. Are you willing to share this with Eve?",
+        "id": "consent_before_reveal",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Clarify needs, consent, and mutual reveal without analyzing overlap or rushing strategy.",
-        "id": "stage_fidelity",
-        "mock_pass_keywords": [],
+        "description": "MWF presents Adam's named needs as his own articulation (what matters to him) without interpreting, analyzing, or drawing conclusions about compatibility with Eve's needs. Evidence: What matters to Adam: being at peace with who he is \u2014 not needing the outside world to keep settling that question. Feeling like his life is part of something \u2014 that he's not alone on the inside of it. And feeling like who he is and what he does means something \u2014 that he matters, that it counts.",
+        "id": "needs_framing_not_analysis",
+        "llm_generated": true,
         "pass_threshold": 4
       },
       {
-        "description": "Responds to the immediately prior user trigger without adding unsupported content.",
-        "id": "trigger_responsiveness",
-        "mock_pass_keywords": [],
+        "description": "MWF commits to showing Adam what Eve named in return only after Adam consents, maintaining parallel process and preventing premature analysis or negotiation of needs. Evidence: Before we move forward, I'd like to share what you named with Eve \u2014 and show you what she named in return... We'll let you know when Eve has done the same. Then you'll each see the other's.",
+        "id": "symmetrical_reveal_structure",
+        "llm_generated": true,
+        "pass_threshold": 4
+      },
+      {
+        "description": "MWF does not invite Adam to compare, reconcile, or strategize around his needs and Eve's needs at the moment of sharing; the reveal is clean and separate. Evidence: Here's what I'd share on your behalf: [statement]. Are you willing to share this with Eve? [No follow-up questions about fit, conflict, or next steps until both have consented and both statements are visible together]",
+        "id": "no_premature_overlap_work",
+        "llm_generated": true,
         "pass_threshold": 4
       }
     ],
+    "generation": {
+      "durationMs": 6373,
+      "mode": "bedrock_haiku",
+      "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+      "prompt_caching": "full transcript sent as cache_control ephemeral system block",
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 27397,
+        "input_tokens": 216,
+        "output_tokens": 538
+      }
+    },
     "hard_invariants": [
       {
         "description": "Does not advise, solve, prescribe, or propose action steps.",
