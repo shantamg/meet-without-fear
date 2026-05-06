@@ -1,6 +1,6 @@
 # MWF Gold Alignment System Build Progress
 
-Status: Phase 4 implemented; Phase 5 not started
+Status: Phase 5 implemented; final audit in progress
 Branch: `feat/gold-alignment-system-20260506`
 
 ## Baseline
@@ -142,7 +142,31 @@ Branch: `feat/gold-alignment-system-20260506`
 
 ## Phase 5 - Outer Loop + Gold Onboarding + Dashboard
 
-- [ ] Not started.
+- [x] Restored `scripts/mwf_gold_loop.py` unchanged from existing repository history so the E2E loop is available as the required black-box subprocess.
+- [x] Alignment PR creation now schedules outer-loop validation through `scripts/mwf_gold_loop.py run` for candidate prompt revisions.
+- [x] Outer-loop regressions greater than `0.5` versus baseline convert the PR to draft and add an `E2E regression detected` comment with the local evidence path.
+- [x] Added `scripts/mwf_add_gold_example.py <transcript-path>` for markdown transcript validation, transcript copying, draft moment scaffolding, moment index regeneration, and evaluator test execution.
+- [x] Added generated moment library index `eval/moments/README.md`.
+- [x] Added `scripts/mwf_alignment_status.py` to regenerate `docs/product/mwf-alignment-status.md` from artifacts.
+- [x] Updated `docs/product/mwf-moment-evaluator-plan.md` with the autonomous alignment system as built.
+
+### Phase 5 Validation
+
+- `python3 scripts/test_mwf_moment_eval.py` - exit 0; ran 38 tests; OK. New Phase 5 tests cover:
+  - known-bad outer-loop score converts the mocked PR to draft and adds the expected regression comment
+  - fixture transcript onboarding copies the transcript, scaffolds two draft moment files, updates the index, and invokes the evaluator test command
+  - status dashboard rendering is idempotent and contains all required sections
+- `python3 scripts/mwf_alignment_status.py` - exit 0; regenerated `docs/product/mwf-alignment-status.md`.
+- `python3 scripts/mwf_alignment_status.py` run twice with SHA comparison - exit 0; dashboard output was identical across regenerations.
+- `python3 scripts/mwf_alignment_loop.py --dry-run --timestamp phase5-dry-run-20260506` - exit 0; produced `eval/alignment-runs/phase5-dry-run-20260506/summary.md`.
+- `npm run check --workspace backend` - exit 0.
+- `python3 scripts/mwf_gold_loop.py --help` - exit 0; confirms restored E2E loop exposes `run`, `browser-smoke`, `stage1-smoke`, and related commands.
+- `python3 scripts/mwf_gold_loop.py browser-smoke` - first attempt exit 1 because `http://localhost:8082` was not running. After starting `npm run dev:mobile:e2e` with the backend already healthy on `http://localhost:3000`, retry exit 0; preflight `services: ok`; actor reported `browser_control: ok`, URL `http://localhost:8082/`, and visible page state.
+
+### Phase 5 Notes
+
+- `scripts/mwf_gold_loop.py` was absent from the current checkout but present in commit `a12a02c`; it was restored as the black-box E2E harness required by this goal.
+- The onboarding command writes `.yaml.draft` files by design; authored moment yaml files remain a human-review step after scaffolding.
 
 ## Questions For Shantam
 

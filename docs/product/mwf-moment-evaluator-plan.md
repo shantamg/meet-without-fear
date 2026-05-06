@@ -367,6 +367,24 @@ Known limitations carrying into moment-library expansion:
 - The same prompt diff, picked up by the E2E loop on its next run, does not regress the global E2E score.
 - Coverage reaches at least 10 distinct moments across Stages 0-4 and Tending.
 
+## Autonomous Gold-Alignment System Status
+
+Date: 2026-05-06
+Goal spec: `docs/product/mwf-gold-alignment-system-goal.md`
+Build progress: `docs/product/mwf-gold-alignment-system-build-progress.md`
+Dashboard: `docs/product/mwf-alignment-status.md`
+
+The Moment Evaluator now has an autonomous alignment layer on top of the single-moment runner:
+
+- Moment library: 14 configured moments cover Stages 1-4, one Stage 2 to Stage 3 transition, the original Stage 1/Stage 4 baseline moments, and one multi-turn trajectory per stage.
+- Cross-moment regularization: prompt proposals are rejected if they regress any same-stage moment below threshold or fail same-stage hard invariants; the gate can run through the real judge path.
+- Autonomous loop: `scripts/mwf_alignment_loop.py` reads `eval/alignment-loop-config.yaml`, enforces per-run/per-day cost caps, records `eval/alignment-runs/<timestamp>/summary.md`, and opens `loop:auto-improvement` PRs from `loop/alignment-<moment-id>-<timestamp>` branches.
+- Outer loop: when the alignment loop opens a candidate PR, it schedules `scripts/mwf_gold_loop.py run` as the slow E2E validation. Regressions greater than 0.5 versus baseline convert the PR back to draft and add an E2E regression comment.
+- Gold onboarding: `scripts/mwf_add_gold_example.py <transcript.md>` validates markdown stage markers, copies the transcript into the golden transcript library, scaffolds `eval/moments/*.yaml.draft`, regenerates the moment index, and runs the evaluator tests.
+- Status dashboard: `scripts/mwf_alignment_status.py` regenerates `docs/product/mwf-alignment-status.md` from prompt versions, score artifacts, alignment summaries, loop PRs, costs, E2E results, and transcript inventory.
+
+The E2E loop remains a separate black-box harness. The alignment loop does not patch production prompt source directly; it writes versioned proposals and relies on PR review/merge for production changes.
+
 ## Out of scope, restated
 
 - Replacing the existing E2E loop. The two are complementary.

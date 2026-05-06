@@ -17,6 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import mwf_moment_eval as mme  # noqa: E402
 import mwf_alignment_loop as loop  # noqa: E402
+import mwf_add_gold_example as add_gold  # noqa: E402
+import mwf_alignment_status as status  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOMENT_ID = "stage-4-no-shared-agreement-closure"
@@ -519,6 +521,143 @@ class TestAlignmentLoop(unittest.TestCase):
         self.assertIn(request.title, pr_create)
         self.assertIn("--draft", pr_create)
         self.assertIn(["gh", "pr", "edit", result["url"], "--add-label", "loop:auto-improvement"], commands)
+
+    def test_outer_loop_regression_converts_pr_to_draft_and_comments(self) -> None:
+        def completed(cmd: list[str], stdout: str = "") -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+
+        commands: list[list[str]] = []
+
+        def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            commands.append(cmd)
+            return completed(cmd)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            prompt_version = tmp_path / "v01.md"
+            prompt_version.write_text("bad revision", encoding="utf-8")
+            args = loop.build_parser().parse_args(
+                [
+                    "--mock-outer-loop-score",
+                    "3.0",
+                    "--outer-loop-baseline-score",
+                    "4.0",
+                    "--timestamp",
+                    "phase5-outer-loop-test",
+                ]
+            )
+            with mock.patch.object(loop, "ALIGNMENT_RUNS_ROOT", tmp_path / "alignment-runs"), \
+                 mock.patch.object(loop, "run_command", side_effect=fake_run):
+                result = loop.run_outer_loop_validation(
+                    pr={"url": "https://github.com/example/repo/pull/123"},
+                    moment_id="stage-2-empathy-validation",
+                    prompt_version=prompt_version,
+                    timestamp="phase5-outer-loop-test",
+                    args=args,
+                )
+
+        self.assertEqual(result["status"], "regressed")
+        self.assertTrue(result["regressed"])
+        self.assertIn(["gh", "pr", "ready", "--undo", "https://github.com/example/repo/pull/123"], commands)
+        comment = [cmd for cmd in commands if cmd[:3] == ["gh", "pr", "comment"]][0]
+        self.assertIn("E2E regression detected", comment[-1])
+        self.assertIn("outer-loop/stage-2-empathy-validation", comment[-1])
+
+
+class TestGoldExampleOnboarding(unittest.TestCase):
+    def test_gold_example_onboarding_copies_scaffolds_indexes_and_runs_tests(self) -> None:
+        def completed(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(cmd, 0, stdout="OK\n", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fixture = tmp_path / "New Couple.md"
+            fixture.write_text(
+                "\n".join(
+                    [
+                        "# New Couple",
+                        "",
+                        "## Stage 1",
+                        "",
+                        "**Alex:** I keep going quiet.",
+                        "",
+                        "**MWF:** Something in you goes quiet before it gets a chance to be heard.",
+                        "",
+                        "## Stage 2",
+                        "",
+                        "**Blair:** That is close, but it misses the fear.",
+                        "",
+                        "**MWF:** Keep the part that landed and bring the fear into the next version.",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(add_gold, "TRANSCRIPTS_ROOT", tmp_path / "golden-transcripts"), \
+                 mock.patch.object(add_gold, "MOMENTS_ROOT", tmp_path / "moments"), \
+                 mock.patch.object(add_gold, "INDEX_PATH", tmp_path / "moments/README.md"), \
+                 mock.patch.object(add_gold, "run_command", side_effect=completed) as run_tests:
+                result = add_gold.onboard(fixture)
+
+            self.assertEqual(result["tests"], 0)
+            self.assertTrue((tmp_path / "golden-transcripts/new-couple.md").exists())
+            self.assertEqual(len(result["drafts"]), 2)
+            self.assertTrue((tmp_path / "moments/new-couple-stage-1-moment-01.yaml.draft").exists())
+            self.assertIn("new-couple-stage-2-moment-01.yaml.draft", (tmp_path / "moments/README.md").read_text(encoding="utf-8"))
+            run_tests.assert_called_once()
+
+
+class TestAlignmentStatus(unittest.TestCase):
+    def test_alignment_status_generation_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            prompts = tmp_path / "stage-prompts.ts"
+            prompts.write_text("export const prompt = 'stable';\n", encoding="utf-8")
+            versions = tmp_path / "prompt-versions"
+            (versions / "mwf/stage-1").mkdir(parents=True)
+            (versions / "mwf/stage-1/v01.md").write_text("candidate\n", encoding="utf-8")
+            runs = tmp_path / "runs/moment-stage-1-fact-reflection-20260506-000000-iter-01"
+            runs.mkdir(parents=True)
+            (runs / "run.json").write_text(json.dumps({"moment": "stage-1-fact-reflection"}), encoding="utf-8")
+            (runs / "score.json").write_text(json.dumps({"overall_score": 4.2, "verdict": "eval_pass"}), encoding="utf-8")
+            align = tmp_path / "alignment-runs/phase5"
+            align.mkdir(parents=True)
+            (align / "summary.json").write_text(
+                json.dumps(
+                    {
+                        "started_at": "2026-05-06T00:00:00Z",
+                        "cost_spent_cents": 2,
+                        "moments": [
+                            {
+                                "id": "stage-1-fact-reflection",
+                                "outer_loop": {"status": "passed", "run_dir": "outer-loop/run"},
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            transcripts = tmp_path / "golden-transcripts"
+            transcripts.mkdir()
+            (transcripts / "fixture.md").write_text("# Fixture\n", encoding="utf-8")
+            with mock.patch.object(status, "STAGE_PROMPTS", prompts), \
+                 mock.patch.object(status, "PROMPT_VERSIONS_ROOT", versions), \
+                 mock.patch.object(status, "MOMENT_RUNS_ROOT", tmp_path / "runs"), \
+                 mock.patch.object(status, "ALIGNMENT_RUNS_ROOT", tmp_path / "alignment-runs"), \
+                 mock.patch.object(status, "TRANSCRIPTS_ROOT", transcripts), \
+                 mock.patch.object(status, "git_head", return_value="abc123"), \
+                 mock.patch.object(status, "open_loop_prs", return_value=[]):
+                first = status.render(limit=5)
+                second = status.render(limit=5)
+
+        self.assertEqual(first, second)
+        self.assertIn("## Production Prompt", first)
+        self.assertIn("## Latest Candidate Revisions", first)
+        self.assertIn("## Open Loop PRs", first)
+        self.assertIn("## Score Trends", first)
+        self.assertIn("## Cost", first)
+        self.assertIn("## Last E2E Outer Loop", first)
+        self.assertIn("## Gold Examples", first)
 
 
 class TestCli(unittest.TestCase):

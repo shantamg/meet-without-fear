@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -60,16 +61,24 @@ def load_config(path: Path) -> dict[str, Any]:
         raise AlignmentLoopError(f"Config must be JSON-compatible YAML: {path}: {exc}") from exc
 
 
-def run_command(cmd: list[str], *, cwd: Path = REPO_ROOT, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+def run_command(
+    cmd: list[str],
+    *,
+    cwd: Path = REPO_ROOT,
+    input_text: str | None = None,
+    timeout: int = 120,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         cmd,
         cwd=cwd,
+        env=env,
         input=input_text,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
-        timeout=120,
+        timeout=timeout,
     )
 
 
@@ -223,6 +232,110 @@ def build_pr_body(moment_id: str, run_dir: Path, score: dict[str, Any], improvem
     )
 
 
+def pr_ref(pr: dict[str, Any]) -> str:
+    return str(pr.get("url") or pr.get("branch") or pr.get("title") or "")
+
+
+def run_outer_loop_validation(
+    *,
+    pr: dict[str, Any],
+    moment_id: str,
+    prompt_version: Path,
+    timestamp: str,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    run_dir = ALIGNMENT_RUNS_ROOT / timestamp / "outer-loop" / moment_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    result: dict[str, Any] = {
+        "status": "skipped" if args.skip_outer_loop else "running",
+        "run_dir": display_path(run_dir),
+        "baseline_score": args.outer_loop_baseline_score,
+        "regression_threshold": 0.5,
+        "prompt_version": display_path(prompt_version),
+    }
+    (run_dir / "outer-loop.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if args.skip_outer_loop:
+        return result
+
+    if args.mock_outer_loop_score is not None:
+        score = {
+            "overall_score": float(args.mock_outer_loop_score),
+            "verdict": "mock_regression" if args.outer_loop_baseline_score - float(args.mock_outer_loop_score) > 0.5 else "mock_pass",
+        }
+        (run_dir / "score.json").write_text(json.dumps(score, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        command: list[str] = []
+        returncode = 0
+        stderr = ""
+    else:
+        command = [
+            sys.executable,
+            str(REPO_ROOT / "scripts/mwf_gold_loop.py"),
+            "run",
+            "--scenario",
+            args.outer_loop_scenario,
+            "--max-iterations",
+            "1",
+            "--target-score",
+            str(args.outer_loop_target_score),
+            "--improvement-mode",
+            "proposal",
+            "--no-improve-on-final-fail",
+        ]
+        if args.outer_loop_skip_service_preflight:
+            command.append("--skip-service-preflight")
+        env = os.environ.copy()
+        env["MWF_ALIGNMENT_PROMPT_VERSION"] = str(prompt_version)
+        completed = run_command(command, timeout=args.outer_loop_timeout, env=env)
+        (run_dir / "stdout.log").write_text(completed.stdout, encoding="utf-8")
+        (run_dir / "stderr.log").write_text(completed.stderr, encoding="utf-8")
+        command = completed.args if isinstance(completed.args, list) else command
+        returncode = completed.returncode
+        stderr = completed.stderr
+        score = latest_outer_loop_score()
+        if score is None:
+            score = {"overall_score": 0.0, "verdict": "missing_score"}
+
+    overall = float(score.get("overall_score", 0.0))
+    regressed = args.outer_loop_baseline_score - overall > 0.5
+    result.update(
+        {
+            "status": "regressed" if regressed else "passed",
+            "command": command,
+            "returncode": returncode,
+            "stderr": stderr,
+            "score": score,
+            "regressed": regressed,
+        }
+    )
+
+    ref = pr_ref(pr)
+    if regressed:
+        draft = run_command(["gh", "pr", "ready", "--undo", ref])
+        comment_text = f"E2E regression detected — see {display_path(run_dir)}."
+        comment = run_command(["gh", "pr", "comment", ref, "--body", comment_text])
+        result["pr_action"] = {
+            "converted_to_draft": draft.returncode == 0,
+            "commented": comment.returncode == 0,
+            "comment": comment_text,
+        }
+    else:
+        ready = run_command(["gh", "pr", "ready", ref])
+        result["pr_action"] = {"marked_ready": ready.returncode == 0}
+
+    (run_dir / "outer-loop.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return result
+
+
+def latest_outer_loop_score() -> dict[str, Any] | None:
+    candidates = sorted(ALIGNMENT_RUNS_ROOT.glob("**/score.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in candidates:
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
 def run_alignment_loop(args: argparse.Namespace) -> dict[str, Any]:
     config = load_config(args.config)
     timestamp = args.timestamp or datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -316,6 +429,13 @@ def run_alignment_loop(args: argparse.Namespace) -> dict[str, Any]:
                             borderline=threshold - float(score.get("overall_score", 0)) <= 0.5,
                         )
                         row["pr"] = create_alignment_pr(pr_request, dry_run=False)
+                        row["outer_loop"] = run_outer_loop_validation(
+                            pr=row["pr"],
+                            moment_id=moment_id,
+                            prompt_version=version,
+                            timestamp=timestamp,
+                            args=args,
+                        )
                         row["status"] = "pr_opened"
                     except Exception as exc:  # keep loop transparent instead of swallowing gate failures
                         row["status"] = "improver_rejected"
@@ -349,6 +469,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--per-day-cap-cents", type=float)
     parser.add_argument("--mock-response")
     parser.add_argument("--timestamp", help="Stable timestamp for tests")
+    parser.add_argument("--skip-outer-loop", action="store_true", help="Open PRs without running the slow E2E outer loop")
+    parser.add_argument("--mock-outer-loop-score", type=float, help="Use a deterministic outer-loop score instead of invoking mwf_gold_loop.py")
+    parser.add_argument("--outer-loop-baseline-score", type=float, default=4.0)
+    parser.add_argument("--outer-loop-target-score", type=float, default=4.0)
+    parser.add_argument("--outer-loop-scenario", default="adam-eve")
+    parser.add_argument("--outer-loop-timeout", type=int, default=3600)
+    parser.add_argument("--outer-loop-skip-service-preflight", action="store_true")
     return parser
 
 
