@@ -371,9 +371,17 @@ Build first against real data contracts, then inspect screenshots and golden-ses
 
 ## Questions For Shantam
 
-- For v1, should individual commitments be privately owned but visible as outcome summaries, or fully visible to both partners during Stage 4?
-- Should passive Tending re-entry notify the partner only after the user chooses a partner-involving path, as currently specified?
-- Should old `/strategies` ranking endpoints remain indefinitely for compatibility, or be explicitly legacy/deprecated after mobile moves to `/stage4`?
+Reference: `docs/product/stage-4-gold-question-analysis.md` (gold-transcript analysis dated 2026-05-05) is the source of truth for the resolved items below. The cross-cutting posture from that analysis: **MWF is private-by-default but binding-on-cross.** Trust the consent gates the gold flow already builds in; do not add belt-and-suspenders confirmations after a crossing has occurred.
+
+### Resolved
+
+- **[RESOLVED] Individual commitment visibility during Stage 4.** Individual commitments are **fully visible to both partners inside the combined Stage 4 inventory** (labeled, e.g. "INDIVIDUAL COMMITMENTS (Catherine)"). The closing per-track summary remains per-user, but the live inventory is shared. Confidence: high. Evidence: James/Catherine inventory at lines 1141–1142, Adam/Eve combined inventory at lines 782/798, core protocol lines 192–198. Failure mode of the opposite: hiding individual commitments would reduce the inventory to only shared candidates and break the "first-class outcome, not a consolation prize" framing.
+- **[RESOLVED] Passive Tending re-entry partner notification.** Notify the partner **only after the user chooses a partner-involving path.** Re-entry itself is private; MWF holds choices and only crosses tracks when there is coordinated, consented content to deliver. Confidence: high. Evidence: core-protocol-update.md lines 248/289/295, adam-eve.md line 1039 ("We'll hold your choices until [partner]'s check-in is complete").
+- **[RESOLVED] Mutual `WILLING` selections on shared proposals are an agreement.** Closure should treat mutual-WILLING items as already-AGREED — no separate post-overlap confirm step. Codex's V1 closure decision (#367) is correct. Confidence: high. Evidence: adam-eve.md lines 788/810/814/838 — flow goes "willing → overlap → agreement document" with no intermediate "do you both confirm?" beat. Core protocol lines 215–217: "If overlap exists → that becomes the starting agreement." Failure mode of the opposite: a redundant confirm step would dilute the weight of the willingness moment and re-introduce the asymmetric "I said yes only because they said yes first" dynamic the parallel-private structure prevents.
+
+### Open (engineering decision, not transcript-answerable)
+
+- **`/strategies` ranking endpoints — keep indefinitely or deprecate after mobile cutover?** Engineering call. Gold transcripts give no direct signal (selection is willingness, not ordinal ranking — mild indirect support for retirement after `/stage4` is stable on mobile, but not required). Default plan: keep alive through mobile cutover, then deprecate with a notice window. Decide based on maintenance burden vs. external client impact.
 
 ## Continuation Prompt
 
