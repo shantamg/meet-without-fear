@@ -166,6 +166,7 @@ function buildProposalCard(
   userId: string,
   partnerUserId: string | null,
   selections: Stage4SelectionRow[],
+  coverageRows: Stage4NeedCoverageRow[],
   revealPartnerSelections: boolean
 ): ProposalCardDTO {
   const mySelection = selections.find(
@@ -177,6 +178,18 @@ function buildProposalCard(
       )
     : undefined;
 
+  const linkedCoverage = coverageRows
+    .filter(
+      (row) =>
+        row.coveringProposalIds.includes(proposal.id) &&
+        (row.coverageStatus === 'COVERED' || row.coverageStatus === 'PARTIAL')
+    )
+    .map((row) => ({
+      id: row.needId ?? row.id,
+      label: row.needLabel,
+      coverage: row.coverageStatus as 'COVERED' | 'PARTIAL',
+    }));
+
   return {
     id: proposal.id,
     kind: proposal.kind,
@@ -187,10 +200,12 @@ function buildProposalCard(
           ? 'You'
           : 'Partner'
         : undefined,
-    needsAddressed: proposal.needsAddressed.map((label) => ({
-      label,
-      coverage: 'COVERED',
-    })),
+    needsAddressed: linkedCoverage.length > 0
+      ? linkedCoverage
+      : proposal.needsAddressed.map((label) => ({
+          label,
+          coverage: 'COVERED',
+        })),
     duration: proposal.duration,
     measureOfSuccess: proposal.measureOfSuccess,
     status: proposal.status,
@@ -345,7 +360,7 @@ export async function getStage4State(
   const revealPartnerSelections = mySelections.length > 0 && partnerSelections.length > 0;
   const activeProposals = proposals.filter((proposal) => proposal.status !== Stage4ProposalStatus.REMOVED);
   const proposalCards = activeProposals.map((proposal) =>
-    buildProposalCard(proposal, userId, partnerUserId, selections, revealPartnerSelections)
+    buildProposalCard(proposal, userId, partnerUserId, selections, coverageRows, revealPartnerSelections)
   );
   const unaddressedNeeds = buildUnaddressedNeeds(coverageRows, userId, partnerUserId);
   const agreementsDTO = agreements.map((agreement) => buildAgreementDTO(agreement, userIsA));

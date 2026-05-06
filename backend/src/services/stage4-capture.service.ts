@@ -10,6 +10,7 @@ import {
 } from '@meet-without-fear/shared';
 import { prisma } from '../lib/prisma';
 import { logger } from '../lib/logger';
+import { refreshStage4NeedCoverage } from './stage4-coverage.service';
 
 export type Stage4CaptureInput = {
   sessionId: string;
@@ -547,6 +548,10 @@ export async function captureStage4Turn(input: Stage4CaptureInput): Promise<Stag
     const applied = await applyOperation(operation, input, proposals);
     if (applied) appliedOperationCount += 1;
     else skippedOperationCount += 1;
+  }
+
+  if (appliedOperationCount > 0) {
+    await refreshStage4NeedCoverage(input.sessionId);
   }
 
   if (selection) {

@@ -115,9 +115,26 @@ Build in this order unless there is a concrete reason to change sequencing.
     - `npm run check --workspace backend`
   - Result: targeted Stage 4 capture tests passed with 5 passed; backend typecheck passed.
 
-- [ ] [#366 - Stage 4 redesign: needs coverage audit](https://github.com/shantamg/meet-without-fear/issues/366)
+- [x] [#366 - Stage 4 redesign: needs coverage audit](https://github.com/shantamg/meet-without-fear/issues/366)
   - Depends on: #363, #364.
   - Generate covered, partly covered, and still-open needs from Stage 3 needs plus active proposals.
+  - Status: draft PR opened.
+  - PR: [#373 - Stage 4/Tending data model and state API](https://github.com/shantamg/meet-without-fear/pull/373)
+  - Local files touched:
+    - `backend/src/services/stage4-coverage.service.ts`
+    - `backend/src/services/__tests__/stage4-coverage.service.test.ts`
+    - `backend/src/services/stage4-capture.service.ts`
+    - `backend/src/services/stage4-state.ts`
+  - Implemented:
+    - Added a deterministic coverage refresh service that reads confirmed Stage 3 needs from session user vessels and compares them against non-removed Stage 4 proposals.
+    - Persists `Stage4NeedCoverage` rows for covered, partial, and open needs with source user id, linked proposal ids, and no-failure audit notes.
+    - Refreshes coverage after captured add, revise, remove, and restore inventory operations.
+    - Uses persisted coverage rows to populate proposal-card `needsAddressed`, including partial coverage, while retaining legacy proposal `needsAddressed` fallback.
+    - Keeps all-needs-open coverage valid so later no-shared-agreement closure can persist open need ids without treating the session as failed.
+  - Validation run:
+    - `npm test --workspace backend -- --runTestsByPath src/services/__tests__/stage4-coverage.service.test.ts src/services/__tests__/stage4-capture.service.test.ts src/routes/__tests__/stage4.test.ts --runInBand`
+    - `npm run check --workspace backend`
+  - Result: targeted Stage 4 coverage/capture/state route tests passed with 34 passed; backend typecheck passed.
 
 - [ ] [#367 - Stage 4 redesign: selection, outcome, and no-shared-agreement closure](https://github.com/shantamg/meet-without-fear/issues/367)
   - Depends on: #363, #364, #366.
@@ -146,12 +163,13 @@ Build in this order unless there is a concrete reason to change sequencing.
 
 ## Current Local State
 
-The branch currently contains implementation patches for #363, #364, and #365:
+The branch currently contains implementation patches for #363, #364, #365, and #366:
 
 - Added Stage 4/Tending data model changes and migration SQL under `backend/prisma/migrations/20260506000000_add_stage4_tending_models/`.
 - Added shared redesigned Stage 4/Tending DTOs and enums.
 - Added `GET /sessions/:id/stage4` with backend state derivation for inventory, coverage, selections, outcome, and Tending preview.
 - Added structured Stage 4 capture service and wired streaming Stage 4 turns through it.
+- Added persisted Stage 4 needs coverage refresh from confirmed Stage 3 needs and active proposal inventory.
 - Kept legacy `/strategies` and `/agreements` compatibility endpoints alive.
 - Kept `ProposedStrategy:` micro-tag compatibility as a fallback into structured capture.
 
@@ -159,13 +177,13 @@ Before continuing implementation, inspect `git diff` carefully. Do not overwrite
 
 ## Recommended Next Step
 
-Move to #366:
+Move to #367:
 
-1. Inspect Stage 3 confirmed/shared need persistence and the `GET /sessions/:id/stage4` coverage DTO.
-2. Implement a needs coverage audit service that compares Stage 3 needs against active Stage 4 proposals.
-3. Persist covered, partial, and open rows in `Stage4NeedCoverage`.
-4. Add route/service tests covering covered, partial, and open needs plus proposal removal/revision effects.
-5. Keep coverage semantics conservative and update the question list if the exact partial/covered threshold needs product judgment.
+1. Inspect current `Stage4ProposalSelection`, `Agreement`, and `Stage4Closure` flows.
+2. Add selection endpoints for single-proposal and batch willingness submission against the redesigned `/stage4` API.
+3. Implement shared-agreement and no-shared-agreement closure creation using mutual selections, individual commitments, and persisted open needs.
+4. Preserve compatibility with existing agreement confirmation endpoints until mobile moves fully to `/stage4`.
+5. Add tests for mutual willingness, no-overlap closure, open-needs closure payloads, and privacy of partner decisions before both submit.
 
 ## Parallelization Guidance
 
