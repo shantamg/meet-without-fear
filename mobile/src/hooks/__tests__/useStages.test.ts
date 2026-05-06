@@ -28,13 +28,30 @@ import {
   useMarkReadyToRank,
   useSubmitRankings,
   useStrategiesReveal,
+  useStage4State,
+  useSubmitStage4ProposalSelection,
+  useSubmitStage4Selections,
+  useCloseStage4,
   useAgreements,
   useCreateAgreement,
   useConfirmAgreement,
   useResolveSession,
   stageKeys,
 } from '../useStages';
-import { Stage, StageStatus, NeedCategory, AgreementType, AgreementStatus, StrategyPhase } from '@meet-without-fear/shared';
+import {
+  Stage,
+  StageStatus,
+  NeedCategory,
+  AgreementType,
+  AgreementStatus,
+  StrategyPhase,
+  Stage4ClosureKind,
+  Stage4ClosureReason,
+  Stage4Phase,
+  Stage4ProposalKind,
+  Stage4ProposalStatus,
+  Stage4SelectionDecision,
+} from '@meet-without-fear/shared';
 
 // Import mocked functions
 import * as api from '../../lib/api';
@@ -79,6 +96,46 @@ function createWrapper(): React.FC<{ children: React.ReactNode }> {
 }
 
 const sessionId = 'session-123';
+
+const redesignedStage4State = {
+  phase: Stage4Phase.SELECTION,
+  inventory: {
+    sharedProposals: [
+      {
+        id: 'proposal-1',
+        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+        description: 'Try a Sunday check-in',
+        needsAddressed: [],
+        duration: null,
+        measureOfSuccess: null,
+        status: Stage4ProposalStatus.ACTIVE,
+        myDecision: Stage4SelectionDecision.WILLING,
+      },
+    ],
+    individualCommitments: [],
+    unaddressedNeeds: [],
+    removedProposalCount: 0,
+    updatedAt: '2026-05-06T00:00:00.000Z',
+  },
+  coverageAudit: {
+    covered: [],
+    partial: [],
+    open: [],
+    updatedAt: null,
+  },
+  mySelections: [
+    {
+      proposalId: 'proposal-1',
+      decision: Stage4SelectionDecision.WILLING,
+      note: null,
+      selectedAt: '2026-05-06T00:00:00.000Z',
+      updatedAt: '2026-05-06T00:00:00.000Z',
+    },
+  ],
+  partnerSelectionStatus: 'NOT_STARTED' as const,
+  outcome: null,
+  tendingPreview: null,
+};
 
 describe('useStages', () => {
   beforeEach(() => {
@@ -840,6 +897,130 @@ describe('useStages', () => {
         expect(result.current.data?.overlap[0].id).toBe('strategy-1');
       });
     });
+
+    describe('redesigned Stage 4 hooks', () => {
+      it('fetches redesigned Stage 4 state', async () => {
+        mockGet.mockResolvedValueOnce(redesignedStage4State);
+
+        const { result } = renderHook(() => useStage4State(sessionId), {
+          wrapper: createWrapper(),
+        });
+
+        await waitFor(() => {
+          expect(result.current.isSuccess).toBe(true);
+        });
+
+        expect(mockGet).toHaveBeenCalledWith(`/sessions/${sessionId}/stage4`);
+        expect(result.current.data?.phase).toBe(Stage4Phase.SELECTION);
+      });
+
+      it('submits one proposal selection and caches refreshed Stage 4 state', async () => {
+        mockPost.mockResolvedValueOnce({
+          submitted: true,
+          submittedAt: '2026-05-06T00:00:00.000Z',
+          partnerSubmitted: false,
+          state: redesignedStage4State,
+        });
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
+          React.createElement(QueryClientProvider, { client: queryClient }, children);
+
+        const { result } = renderHook(() => useSubmitStage4ProposalSelection(), { wrapper });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            proposalId: 'proposal-1',
+            decision: Stage4SelectionDecision.WILLING,
+            note: 'Worth trying',
+          });
+        });
+
+        expect(mockPost).toHaveBeenCalledWith(
+          `/sessions/${sessionId}/stage4/proposals/proposal-1/selection`,
+          { decision: Stage4SelectionDecision.WILLING, note: 'Worth trying' }
+        );
+        expect(queryClient.getQueryData(stageKeys.stage4(sessionId))).toEqual(redesignedStage4State);
+      });
+
+      it('submits bulk proposal selections', async () => {
+        mockPost.mockResolvedValueOnce({
+          submitted: true,
+          submittedAt: '2026-05-06T00:00:00.000Z',
+          partnerSubmitted: true,
+          state: redesignedStage4State,
+        });
+
+        const { result } = renderHook(() => useSubmitStage4Selections(), {
+          wrapper: createWrapper(),
+        });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            selections: [
+              {
+                proposalId: 'proposal-1',
+                decision: Stage4SelectionDecision.NEEDS_DISCUSSION,
+              },
+            ],
+          });
+        });
+
+        expect(mockPost).toHaveBeenCalledWith(`/sessions/${sessionId}/stage4/selections`, {
+          selections: [
+            {
+              proposalId: 'proposal-1',
+              decision: Stage4SelectionDecision.NEEDS_DISCUSSION,
+            },
+          ],
+        });
+      });
+
+      it('closes redesigned Stage 4 through the new closure endpoint', async () => {
+        const closedState = {
+          ...redesignedStage4State,
+          phase: Stage4Phase.CLOSED_NO_SHARED_AGREEMENT,
+          outcome: {
+            kind: Stage4ClosureKind.NO_SHARED_AGREEMENT,
+            reason: Stage4ClosureReason.NO_OVERLAP,
+            summary: 'No shared agreement for now.',
+            agreements: [],
+            individualCommitments: [],
+            openNeeds: [],
+            closedAt: '2026-05-06T00:00:00.000Z',
+          },
+        };
+        mockPost.mockResolvedValueOnce({
+          closed: true,
+          closedAt: '2026-05-06T00:00:00.000Z',
+          outcome: closedState.outcome,
+          state: closedState,
+        });
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =>
+          React.createElement(QueryClientProvider, { client: queryClient }, children);
+
+        const { result } = renderHook(() => useCloseStage4(), { wrapper });
+
+        await act(async () => {
+          await result.current.mutateAsync({
+            sessionId,
+            kind: Stage4ClosureKind.NO_SHARED_AGREEMENT,
+            reason: Stage4ClosureReason.NO_OVERLAP,
+            summary: 'No shared agreement for now.',
+          });
+        });
+
+        expect(mockPost).toHaveBeenCalledWith(`/sessions/${sessionId}/stage4/close`, {
+          kind: Stage4ClosureKind.NO_SHARED_AGREEMENT,
+          reason: Stage4ClosureReason.NO_OVERLAP,
+          summary: 'No shared agreement for now.',
+        });
+        expect(queryClient.getQueryData(stageKeys.stage4(sessionId))).toEqual(closedState);
+        expect(queryClient.getQueryData(stageKeys.agreements(sessionId))).toEqual({ agreements: [] });
+      });
+    });
   });
 
   describe('Agreements', () => {
@@ -1052,6 +1233,7 @@ describe('useStages', () => {
         sessionId,
       ]);
       expect(stageKeys.needs(sessionId)).toEqual(['stages', 'needs', sessionId]);
+      expect(stageKeys.stage4(sessionId)).toEqual(['stages', 'stage4', sessionId]);
       expect(stageKeys.strategies(sessionId)).toEqual(['stages', 'strategies', sessionId]);
       expect(stageKeys.strategiesReveal(sessionId)).toEqual([
         'stages',

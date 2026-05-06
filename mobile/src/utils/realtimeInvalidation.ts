@@ -34,6 +34,7 @@ export function getStage3RealtimeInvalidationQueryKeys(sessionId: string) {
 
 export function getStage4RealtimeInvalidationQueryKeys(sessionId: string) {
   return [
+    stageKeys.stage4(sessionId),
     stageKeys.strategies(sessionId),
     stageKeys.strategiesReveal(sessionId),
     stageKeys.agreements(sessionId),

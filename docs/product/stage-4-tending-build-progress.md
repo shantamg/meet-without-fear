@@ -136,16 +136,22 @@ Build in this order unless there is a concrete reason to change sequencing.
     - `npm run check --workspace backend`
   - Result: targeted Stage 4 coverage/capture/state route tests passed with 34 passed; backend typecheck passed.
 
-- [ ] [#367 - Stage 4 redesign: selection, outcome, and no-shared-agreement closure](https://github.com/shantamg/meet-without-fear/issues/367)
+- [x] [#367 - Stage 4 redesign: selection, outcome, and no-shared-agreement closure](https://github.com/shantamg/meet-without-fear/issues/367)
   - Depends on: #363, #364, #366.
   - Replace ranking overlap with per-proposal willingness.
   - Allow both `SHARED_AGREEMENT` and `NO_SHARED_AGREEMENT` closure kinds.
-  - Status: in progress; backend mutation surface implemented locally, PR not yet updated/opened for this issue.
+  - Status: draft PR updated.
+  - PR: [#373 - Stage 4/Tending data model and state API](https://github.com/shantamg/meet-without-fear/pull/373)
   - Local files touched:
     - `shared/src/dto/strategy.ts`
     - `backend/src/controllers/stage4.ts`
     - `backend/src/routes/stage4.ts`
     - `backend/src/routes/__tests__/stage4.test.ts`
+    - `mobile/src/hooks/queryKeys.ts`
+    - `mobile/src/hooks/useStages.ts`
+    - `mobile/src/hooks/__tests__/useStages.test.ts`
+    - `mobile/src/utils/realtimeInvalidation.ts`
+    - `mobile/src/utils/__tests__/realtimeInvalidation.test.ts`
   - Implemented so far:
     - Added shared request/response DTOs for single selection, bulk selections, and Stage 4 closure.
     - Added `POST /sessions/:id/stage4/proposals/:proposalId/selection`.
@@ -155,15 +161,16 @@ Build in this order unless there is a concrete reason to change sequencing.
     - Shared-agreement closure requires both partners to have submitted selections and at least one active shared proposal with mutual `WILLING`; it creates `AGREED` Agreement rows, marks converted proposals, records conversion revisions, creates `Stage4Closure(kind = SHARED_AGREEMENT)`, resolves the session, and completes open stage progress.
     - No-shared-agreement closure resolves without agreements, persists `Stage4Closure(kind = NO_SHARED_AGREEMENT)`, carries forward willing individual commitments, and stores open/partial coverage ids.
     - Partner inactivity cannot create a shared obligation: requested shared-agreement closure is rejected unless both partners submitted selections.
+    - Added mobile query/mutation hooks for `GET /stage4`, single selection, bulk selections, and close; these cache refreshed redesigned state and keep legacy Stage 4 caches invalidated during the transition.
+    - Added redesigned Stage 4 state to mobile realtime invalidation keys.
+    - V1 closure decision: mutual `WILLING` selections on shared proposals are treated as agreement consent for closure, so closure creates already-`AGREED` agreements. Existing legacy agreement confirmation endpoints remain available for compatibility-created agreements.
   - Validation run:
     - `npm test --workspace backend -- --runTestsByPath src/routes/__tests__/stage4.test.ts --runInBand`
     - `npm run check --workspace backend`
     - `npm run check --workspace shared`
-  - Result: targeted Stage 4 route tests passed with 31 passed; backend and shared typechecks passed.
-  - Remaining #367 work:
-    - Inspect route integration against mobile expectations before marking complete.
-    - Decide whether shared-agreement closure should create already-`AGREED` agreements or proposed agreements requiring an additional confirmation step; current implementation treats mutual `WILLING` selections as agreement consent for v1 closure.
-    - Push/update PR once the issue contract is settled.
+    - `npm test --workspace mobile -- --runTestsByPath src/hooks/__tests__/useStages.test.ts src/utils/__tests__/realtimeInvalidation.test.ts --runInBand --forceExit`
+    - `npm run check --workspace mobile`
+  - Result: targeted Stage 4 route tests passed with 31 passed; backend, shared, and mobile typechecks passed; targeted mobile hook/realtime tests passed with 40 passed. The same mobile Jest suite also passed without `--forceExit` but stayed open on an existing async handle after reporting success, so the recorded clean-exit command used `--forceExit`.
 
 - [ ] [#368 - The Tending: backend scheduling, responses, and passive re-entry](https://github.com/shantamg/meet-without-fear/issues/368)
   - Depends on: #363, #367.
@@ -187,13 +194,15 @@ Build in this order unless there is a concrete reason to change sequencing.
 
 ## Current Local State
 
-The branch currently contains implementation patches for #363, #364, #365, and #366:
+The branch currently contains implementation patches for #363, #364, #365, #366, and #367:
 
 - Added Stage 4/Tending data model changes and migration SQL under `backend/prisma/migrations/20260506000000_add_stage4_tending_models/`.
 - Added shared redesigned Stage 4/Tending DTOs and enums.
 - Added `GET /sessions/:id/stage4` with backend state derivation for inventory, coverage, selections, outcome, and Tending preview.
 - Added structured Stage 4 capture service and wired streaming Stage 4 turns through it.
 - Added persisted Stage 4 needs coverage refresh from confirmed Stage 3 needs and active proposal inventory.
+- Added redesigned Stage 4 selection and closure mutation endpoints, including shared-agreement and no-shared-agreement closure.
+- Added mobile hooks/query keys for the redesigned `/stage4` state and mutations so #369 can build cards against typed contracts.
 - Kept legacy `/strategies` and `/agreements` compatibility endpoints alive.
 - Kept `ProposedStrategy:` micro-tag compatibility as a fallback into structured capture.
 
@@ -201,13 +210,13 @@ Before continuing implementation, inspect `git diff` carefully. Do not overwrite
 
 ## Recommended Next Step
 
-Move to #367:
+Move to #368:
 
-1. Inspect current `Stage4ProposalSelection`, `Agreement`, and `Stage4Closure` flows.
-2. Add selection endpoints for single-proposal and batch willingness submission against the redesigned `/stage4` API.
-3. Implement shared-agreement and no-shared-agreement closure creation using mutual selections, individual commitments, and persisted open needs.
-4. Preserve compatibility with existing agreement confirmation endpoints until mobile moves fully to `/stage4`.
-5. Add tests for mutual willingness, no-overlap closure, open-needs closure payloads, and privacy of partner decisions before both submit.
+1. Inspect the new `TendingEntry`/`TendingResponse` models and current agreement follow-up handling.
+2. Add backend scheduling for shared-agreement check-ins created during Stage 4 shared closure.
+3. Add response endpoints for scheduled Tending entries and user-initiated passive re-entry.
+4. Keep no-shared-agreement closure free of scheduled shared check-ins while preserving passive re-entry.
+5. Add tests for scheduled shared check-ins, response aggregation, passive re-entry creation, and no-shared-agreement no-schedule behavior.
 
 ## Parallelization Guidance
 

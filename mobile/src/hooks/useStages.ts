@@ -49,6 +49,12 @@ import {
   SubmitRankingResponse,
   RevealOverlapResponse,
   MarkReadyResponse,
+  GetStage4StateResponse,
+  SubmitStage4SelectionRequest,
+  SubmitStage4SelectionsRequest,
+  SubmitStage4SelectionsResponse,
+  CloseStage4Request,
+  CloseStage4Response,
   AgreementDTO,
   CreateAgreementRequest,
   CreateAgreementResponse,
@@ -1888,6 +1894,134 @@ export function useStrategiesReveal(
     },
     enabled: !!sessionId,
     staleTime: 0,
+    ...options,
+  });
+}
+
+// ============================================================================
+// Redesigned Stage 4
+// ============================================================================
+
+/**
+ * Get redesigned Stage 4 state: inventory, coverage, selections, outcome, and Tending preview.
+ */
+export function useStage4State(
+  sessionId: string | undefined,
+  options?: Omit<
+    UseQueryOptions<GetStage4StateResponse, ApiClientError>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: stageKeys.stage4(sessionId || ''),
+    queryFn: async () => {
+      if (!sessionId) throw new Error('Session ID is required');
+      return get<GetStage4StateResponse>(`/sessions/${sessionId}/stage4`);
+    },
+    enabled: !!sessionId,
+    staleTime: 0,
+    ...options,
+  });
+}
+
+function refreshStage4Caches(queryClient: ReturnType<typeof useQueryClient>, sessionId: string) {
+  queryClient.refetchQueries({ queryKey: stageKeys.stage4(sessionId) });
+  queryClient.refetchQueries({ queryKey: stageKeys.strategies(sessionId) });
+  queryClient.refetchQueries({ queryKey: stageKeys.strategiesReveal(sessionId) });
+  queryClient.refetchQueries({ queryKey: stageKeys.agreements(sessionId) });
+  queryClient.refetchQueries({ queryKey: stageKeys.progress(sessionId) });
+  queryClient.refetchQueries({ queryKey: sessionKeys.state(sessionId) });
+}
+
+/**
+ * Submit willingness for a single redesigned Stage 4 proposal.
+ */
+export function useSubmitStage4ProposalSelection(
+  options?: Omit<
+    UseMutationOptions<
+      SubmitStage4SelectionsResponse,
+      ApiClientError,
+      { sessionId: string; proposalId: string } & SubmitStage4SelectionRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, proposalId, ...request }) => {
+      return post<SubmitStage4SelectionsResponse, SubmitStage4SelectionRequest>(
+        `/sessions/${sessionId}/stage4/proposals/${proposalId}/selection`,
+        request
+      );
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
+    ...options,
+  });
+}
+
+/**
+ * Submit willingness for multiple redesigned Stage 4 proposals.
+ */
+export function useSubmitStage4Selections(
+  options?: Omit<
+    UseMutationOptions<
+      SubmitStage4SelectionsResponse,
+      ApiClientError,
+      { sessionId: string } & SubmitStage4SelectionsRequest
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, selections }) => {
+      return post<SubmitStage4SelectionsResponse, SubmitStage4SelectionsRequest>(
+        `/sessions/${sessionId}/stage4/selections`,
+        { selections }
+      );
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      refreshStage4Caches(queryClient, sessionId);
+    },
+    ...options,
+  });
+}
+
+/**
+ * Close redesigned Stage 4 with either shared agreements or no shared agreement.
+ */
+export function useCloseStage4(
+  options?: Omit<
+    UseMutationOptions<
+      CloseStage4Response,
+      ApiClientError,
+      { sessionId: string } & CloseStage4Request
+    >,
+    'mutationFn'
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, ...request }) => {
+      return post<CloseStage4Response, CloseStage4Request>(
+        `/sessions/${sessionId}/stage4/close`,
+        request
+      );
+    },
+    onSuccess: (data, { sessionId }) => {
+      queryClient.setQueryData(stageKeys.stage4(sessionId), data.state);
+      queryClient.setQueryData(stageKeys.agreements(sessionId), {
+        agreements: data.outcome.agreements,
+      });
+      refreshStage4Caches(queryClient, sessionId);
+    },
     ...options,
   });
 }

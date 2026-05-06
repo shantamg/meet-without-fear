@@ -63,6 +63,8 @@ export const stageKeys = {
     [...stageKeys.all, 'needs', 'comparison', sessionId] as const,
 
   // Stage 4: Strategies
+  stage4: (sessionId: string) =>
+    [...stageKeys.all, 'stage4', sessionId] as const,
   strategies: (sessionId: string) =>
     [...stageKeys.all, 'strategies', sessionId] as const,
   strategiesReveal: (sessionId: string) =>
@@ -134,4 +136,3 @@ export const knowledgeBaseKeys = {
   personDetail: (id: string) => [...knowledgeBaseKeys.all, 'person', id] as const,
   themeDetail: (id: string) => [...knowledgeBaseKeys.all, 'theme', id] as const,
 };
-

@@ -47,8 +47,9 @@ describe('realtime invalidation key sets', () => {
     ]);
   });
 
-  it('covers Stage 4 strategy, agreement, progress, session, and message caches', () => {
+  it('covers redesigned Stage 4, legacy strategy, agreement, progress, session, and message caches', () => {
     expect(getStage4RealtimeInvalidationQueryKeys(sessionId)).toEqual([
+      stageKeys.stage4(sessionId),
       stageKeys.strategies(sessionId),
       stageKeys.strategiesReveal(sessionId),
       stageKeys.agreements(sessionId),
