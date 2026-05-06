@@ -23,6 +23,7 @@ import mwf_add_gold_example as add_gold  # noqa: E402
 import mwf_alignment_status as status  # noqa: E402
 import mwf_extract_moments as extract  # noqa: E402
 import mwf_gold_loop as gold_loop  # noqa: E402
+import mwf_gold_profile as gold_profile  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOMENT_ID = "stage-4-no-shared-agreement-closure"
@@ -93,6 +94,10 @@ class TestYamlParsing(unittest.TestCase):
         self.assertEqual(gold_loop.SCENARIOS["adam-eve"], ("Adam", "Eve"))
         self.assertEqual(gold_loop.SCENARIOS["james-catherine"], ("James", "Catherine"))
         self.assertEqual(gold_loop.scenario_sides("james-catherine"), ["james", "catherine"])
+        self.assertEqual(
+            gold_loop.scenario_gold_profile_path("james-catherine"),
+            REPO_ROOT / "eval/gold-profiles/james-catherine.json",
+        )
 
     def test_trajectory_moment_schema_validation(self) -> None:
         for moment_id in TRAJECTORY_MOMENT_IDS:
@@ -762,6 +767,17 @@ class TestAlignmentLoop(unittest.TestCase):
 
 
 class TestGoldExampleOnboarding(unittest.TestCase):
+    def test_gold_profile_extracts_process_shape_from_transcript_evidence(self) -> None:
+        profile = gold_profile.build_profile(
+            REPO_ROOT / "docs/product/source-material/golden-transcripts/james-catherine.md",
+            "james-catherine",
+        )
+
+        self.assertEqual(profile["scenario_shape"]["primary"], "no_shared_agreement_or_unresolved_closure")
+        self.assertEqual(profile["participant_profiles"]["james"]["resistance_level"]["level"], "high")
+        self.assertIn("Catherine", profile["participants"])
+        self.assertTrue(profile["scenario_shape"]["evidence"])
+
     def test_gold_example_onboarding_copies_scaffolds_indexes_and_runs_tests(self) -> None:
         def completed(cmd: list[str]) -> subprocess.CompletedProcess[str]:
             return subprocess.CompletedProcess(cmd, 0, stdout="OK\n", stderr="")
@@ -794,6 +810,7 @@ class TestGoldExampleOnboarding(unittest.TestCase):
                  mock.patch.object(add_gold, "MOMENTS_ROOT", tmp_path / "moments"), \
                  mock.patch.object(add_gold, "INDEX_PATH", tmp_path / "moments/README.md"), \
                  mock.patch.object(add_gold, "SCENARIOS_PATH", tmp_path / "gold-scenarios.json"), \
+                 mock.patch.object(gold_profile, "PROFILES_ROOT", tmp_path / "gold-profiles"), \
                  mock.patch.object(add_gold, "run_command", side_effect=completed) as run_tests:
                 result = add_gold.onboard(fixture)
 
@@ -802,6 +819,7 @@ class TestGoldExampleOnboarding(unittest.TestCase):
             self.assertEqual(len(result["drafts"]), 2)
             self.assertEqual(result["scenario"]["participants"], ["Alex", "Blair"])
             self.assertTrue(result["scenario"]["live_enabled"])
+            self.assertTrue((tmp_path / "gold-profiles/new-couple.json").exists())
             self.assertTrue((tmp_path / "moments/new-couple-stage-1-moment-01.yaml.draft").exists())
             scenarios = json.loads((tmp_path / "gold-scenarios.json").read_text(encoding="utf-8"))
             self.assertEqual(scenarios["scenarios"][0]["id"], "new-couple")
@@ -841,6 +859,7 @@ class TestGoldExampleOnboarding(unittest.TestCase):
                  mock.patch.object(add_gold, "INDEX_PATH", tmp_path / "moments/README.md"), \
                  mock.patch.object(add_gold, "ALIGNMENT_CONFIG", tmp_path / "alignment-loop-config.yaml"), \
                  mock.patch.object(add_gold, "SCENARIOS_PATH", tmp_path / "gold-scenarios.json"), \
+                 mock.patch.object(gold_profile, "PROFILES_ROOT", tmp_path / "gold-profiles"), \
                  mock.patch.object(extract, "MOMENTS_ROOT", tmp_path / "moments"), \
                  mock.patch.object(extract, "JUDGE_PROMPTS_ROOT", tmp_path / "judge-prompts"), \
                  mock.patch.object(add_gold, "run_command", side_effect=completed):
