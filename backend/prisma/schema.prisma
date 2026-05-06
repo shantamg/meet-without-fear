@@ -48,7 +48,10 @@ model User {
   empathyAttempts          EmpathyAttempt[]
   empathyValidations       EmpathyValidation[]
   strategyProposals        StrategyProposal[]
+  removedStage4Proposals   StrategyProposal[]            @relation("Stage4ProposalRemovedBy")
   strategyRankings         StrategyRanking[]
+  stage4ProposalSelections Stage4ProposalSelection[]
+  tendingResponses         TendingResponse[]
   exerciseCompletions      EmotionalExerciseCompletion[]
   invitationsSent          Invitation[]                  @relation("InvitedBy")
   innerWorkSessions        InnerWorkSession[]
@@ -133,6 +136,10 @@ model Session {
   empathyValidations        EmpathyValidation[]
   strategyProposals         StrategyProposal[]
   strategyRankings          StrategyRanking[]
+  stage4ProposalSelections  Stage4ProposalSelection[]
+  stage4NeedCoverages       Stage4NeedCoverage[]
+  stage4Closure             Stage4Closure?
+  tendingEntries            TendingEntry[]
   consentRecords            ConsentRecord[]
   exerciseCompletions       EmotionalExerciseCompletion[]
   invitations               Invitation[]
@@ -511,19 +518,22 @@ model CommonGround {
 }
 
 model Agreement {
-  id             String            @id @default(cuid())
-  sharedVessel   SharedVessel      @relation(fields: [sharedVesselId], references: [id], onDelete: Cascade)
-  sharedVesselId String
-  description    String            @db.Text
-  type           AgreementType
-  status         AgreementStatus   @default(PROPOSED)
-  agreedByA      Boolean           @default(false)
-  agreedByB      Boolean           @default(false)
-  agreedAt       DateTime?
-  followUpDate   DateTime?
-  completedAt    DateTime?
-  proposal       StrategyProposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
-  proposalId     String?
+  id               String            @id @default(cuid())
+  sharedVessel     SharedVessel      @relation(fields: [sharedVesselId], references: [id], onDelete: Cascade)
+  sharedVesselId   String
+  description      String            @db.Text
+  type             AgreementType
+  status           AgreementStatus   @default(PROPOSED)
+  agreedByA        Boolean           @default(false)
+  agreedByB        Boolean           @default(false)
+  agreedAt         DateTime?
+  followUpDate     DateTime?
+  duration         String?
+  measureOfSuccess String?
+  completedAt      DateTime?
+  proposal         StrategyProposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  proposalId       String?
+  tendingEntries   TendingEntry[]
 
   @@index([sharedVesselId])
 }
@@ -899,31 +909,189 @@ model RefinementAttemptCounter {
 // ============================================================================
 
 model StrategyProposal {
-  id               String         @id @default(cuid())
-  session          Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sessionId        String
-  createdBy        User?          @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
-  createdByUserId  String?
-  description      String         @db.Text
-  needsAddressed   String[]
-  duration         String?
-  measureOfSuccess String?
-  source           StrategySource @default(USER_SUBMITTED)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  consentRecord    ConsentRecord? @relation(fields: [consentRecordId], references: [id], onDelete: SetNull)
-  consentRecordId  String?
+  id                    String               @id @default(cuid())
+  session               Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId             String
+  createdBy             User?                @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByUserId       String?
+  description           String               @db.Text
+  needsAddressed        String[]
+  duration              String?
+  measureOfSuccess      String?
+  source                StrategySource       @default(USER_SUBMITTED)
+  kind                  Stage4ProposalKind   @default(SHARED_PROPOSAL)
+  status                Stage4ProposalStatus @default(ACTIVE)
+  removedAt             DateTime?
+  removedBy             User?                @relation("Stage4ProposalRemovedBy", fields: [removedByUserId], references: [id], onDelete: SetNull)
+  removedByUserId       String?
+  removalReason         String?              @db.Text
+  parentProposalId      String?
+  coverageSummary       Json?
+  capturedFromMessageId String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  consentRecord         ConsentRecord?       @relation(fields: [consentRecordId], references: [id], onDelete: SetNull)
+  consentRecordId       String?
 
   // Note: Rankings reference proposals via rankedIds (String[]), not a direct relation
   agreements Agreement[]
+  selections Stage4ProposalSelection[]
+  revisions  Stage4ProposalRevision[]
 
   @@index([sessionId])
+  @@index([sessionId, status])
+  @@index([parentProposalId])
 }
 
 enum StrategySource {
   USER_SUBMITTED
   AI_SUGGESTED
   CURATED
+}
+
+enum Stage4ProposalKind {
+  SHARED_PROPOSAL
+  INDIVIDUAL_COMMITMENT
+}
+
+enum Stage4ProposalStatus {
+  ACTIVE
+  REVISED
+  REMOVED
+  CONVERTED_TO_AGREEMENT
+}
+
+enum Stage4SelectionDecision {
+  WILLING
+  NOT_WILLING
+  NEEDS_DISCUSSION
+}
+
+enum Stage4ClosureKind {
+  SHARED_AGREEMENT
+  NO_SHARED_AGREEMENT
+}
+
+enum Stage4ClosureReason {
+  MUTUAL_SELECTION
+  NO_OVERLAP
+  BOUNDARY_HONORED
+  USER_STOPPED
+}
+
+enum TendingEntryType {
+  SCHEDULED_SHARED_AGREEMENT_CHECKIN
+  USER_INITIATED_REENTRY
+}
+
+enum TendingEntryStatus {
+  SCHEDULED
+  OPEN
+  PARTIAL
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+model Stage4ProposalSelection {
+  id         String                  @id @default(cuid())
+  proposal   StrategyProposal        @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  proposalId String
+  session    Session                 @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  user       User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  decision   Stage4SelectionDecision
+  note       String?                 @db.Text
+  selectedAt DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+
+  @@unique([proposalId, userId])
+  @@index([sessionId, userId])
+}
+
+model Stage4ProposalRevision {
+  id          String           @id @default(cuid())
+  proposal    StrategyProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  proposalId  String
+  sessionId   String
+  actorUserId String?
+  action      String
+  before      Json?
+  after       Json?
+  reason      String?          @db.Text
+  messageId   String?
+  createdAt   DateTime         @default(now())
+
+  @@index([proposalId, createdAt])
+  @@index([sessionId, createdAt])
+}
+
+model Stage4NeedCoverage {
+  id                  String   @id @default(cuid())
+  session             Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId           String
+  needId              String?
+  needLabel           String
+  sourceUserId        String?
+  coverageStatus      String
+  coveringProposalIds String[]
+  note                String?  @db.Text
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+
+  @@index([sessionId])
+}
+
+model Stage4Closure {
+  id                    String              @id @default(cuid())
+  session               Session             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId             String              @unique
+  kind                  Stage4ClosureKind
+  reason                Stage4ClosureReason
+  summary               String              @db.Text
+  sharedAgreementIds    String[]
+  individualProposalIds String[]
+  openNeedIds           String[]
+  closedByUserId        String?
+  closedAt              DateTime            @default(now())
+  createdAt             DateTime            @default(now())
+}
+
+model TendingEntry {
+  id           String             @id @default(cuid())
+  session      Session            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId    String
+  agreement    Agreement?         @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  agreementId  String?
+  type         TendingEntryType
+  status       TendingEntryStatus @default(SCHEDULED)
+  scheduledFor DateTime?
+  openedAt     DateTime?
+  completedAt  DateTime?
+  summary      String?            @db.Text
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  responses TendingResponse[]
+
+  @@index([sessionId, status])
+  @@index([agreementId])
+  @@index([scheduledFor])
+}
+
+model TendingResponse {
+  id             String       @id @default(cuid())
+  tendingEntry   TendingEntry @relation(fields: [tendingEntryId], references: [id], onDelete: Cascade)
+  tendingEntryId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  status         String
+  reflection     String?      @db.Text
+  continueChoice String?
+  submittedAt    DateTime     @default(now())
+
+  @@unique([tendingEntryId, userId])
 }
 
 model StrategyRanking {

@@ -178,6 +178,11 @@ export async function publishSessionEvent(
   data: Record<string, unknown>,
   excludeUserId?: string
 ): Promise<void> {
+  if (process.env.E2E_AUTH_BYPASS === 'true' && !process.env.ABLY_API_KEY) {
+    logger.info(`[Realtime] E2E mode without ABLY_API_KEY - skipping ${event} publish for session ${sessionId}`);
+    return;
+  }
+
   // Circuit breaker fast-fail: skip publish if Ably is in OPEN state
   const cbStats = ablyCircuitBreaker.getStats();
   if (cbStats.state === 'OPEN') {
@@ -598,6 +603,11 @@ export async function notifyPartner(
   data: Record<string, unknown>,
   options?: { excludeUserId?: string }
 ): Promise<void> {
+  if (process.env.E2E_AUTH_BYPASS === 'true' && !process.env.ABLY_API_KEY) {
+    logger.info(`[Realtime] E2E mode without ABLY_API_KEY - skipping partner ${event} notification for session ${sessionId}`);
+    return;
+  }
+
   // Always publish to session channel (for clients viewing the session)
   // This also calls notifySessionMembers which updates session.updatedAt
   // and publishes to all members' user channels

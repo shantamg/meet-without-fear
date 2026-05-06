@@ -19,7 +19,11 @@ export type TargetStage =
   | 'CONTEXT_SHARED_B'
   | 'EMPATHY_REVEALED'
   | 'NEED_MAPPING_COMPLETE'
-  | 'STRATEGIC_REPAIR_COMPLETE';
+  | 'STRATEGIC_REPAIR_COMPLETE'
+  | 'STAGE4_REDESIGN_INVENTORY'
+  | 'STAGE4_REDESIGN_SHARED_SELECTIONS'
+  | 'STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS'
+  | 'STAGE4_REDESIGN_PARTNER_INACTIVE';
 
 export interface UserConfig {
   email: string;
@@ -130,6 +134,10 @@ export class SessionBuilder {
    * - EMPATHY_REVEALED: Both users have shared and validated empathy (Stage 2 complete)
    * - NEED_MAPPING_COMPLETE: Stage 3 complete, needs identified and common ground confirmed
    * - STRATEGIC_REPAIR_COMPLETE: Stage 4 complete, strategies ranked and agreement created
+   * - STAGE4_REDESIGN_INVENTORY: Stage 4 redesigned inventory with active, individual, and removed proposals
+   * - STAGE4_REDESIGN_SHARED_SELECTIONS: Stage 4 redesigned selections with mutual willingness
+   * - STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS: Stage 4 redesigned selections without mutual willingness
+   * - STAGE4_REDESIGN_PARTNER_INACTIVE: Stage 4 redesigned one-sided selection state
    */
   startingAt(stage: TargetStage): this {
     this._targetStage = stage;

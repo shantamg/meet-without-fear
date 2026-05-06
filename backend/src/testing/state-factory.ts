@@ -7,6 +7,11 @@
  */
 
 import { prisma } from '../lib/prisma';
+import {
+  Stage4ProposalKind,
+  Stage4ProposalStatus,
+  Stage4SelectionDecision,
+} from '@meet-without-fear/shared';
 
 // ============================================================================
 // Types
@@ -40,7 +45,32 @@ export enum TargetStage {
 
   /** Stage 4: Strategies collected, ranked, and agreement created */
   STRATEGIC_REPAIR_COMPLETE = 'STRATEGIC_REPAIR_COMPLETE',
+
+  /** Redesigned Stage 4: Active proposal inventory with one removed proposal */
+  STAGE4_REDESIGN_INVENTORY = 'STAGE4_REDESIGN_INVENTORY',
+
+  /** Redesigned Stage 4: Both partners selected one shared proposal as willing */
+  STAGE4_REDESIGN_SHARED_SELECTIONS = 'STAGE4_REDESIGN_SHARED_SELECTIONS',
+
+  /** Redesigned Stage 4: Both partners selected, but no shared proposal overlaps */
+  STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS = 'STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS',
+
+  /** Redesigned Stage 4: One partner selected while the other is inactive */
+  STAGE4_REDESIGN_PARTNER_INACTIVE = 'STAGE4_REDESIGN_PARTNER_INACTIVE',
 }
+
+const TWO_USER_ACTIVE_TARGETS = new Set<TargetStage>([
+  TargetStage.FEEL_HEARD_B,
+  TargetStage.RECONCILER_SHOWN_B,
+  TargetStage.CONTEXT_SHARED_B,
+  TargetStage.EMPATHY_REVEALED,
+  TargetStage.NEED_MAPPING_COMPLETE,
+  TargetStage.STRATEGIC_REPAIR_COMPLETE,
+  TargetStage.STAGE4_REDESIGN_INVENTORY,
+  TargetStage.STAGE4_REDESIGN_SHARED_SELECTIONS,
+  TargetStage.STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS,
+  TargetStage.STAGE4_REDESIGN_PARTNER_INACTIVE,
+]);
 
 export interface UserConfig {
   email: string;
@@ -143,7 +173,7 @@ export class StateFactory {
       ];
 
       // Add User B as member for stages where both users are active
-      if ((targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B || targetStage === TargetStage.EMPATHY_REVEALED || targetStage === TargetStage.NEED_MAPPING_COMPLETE || targetStage === TargetStage.STRATEGIC_REPAIR_COMPLETE) && userBRecord) {
+      if (TWO_USER_ACTIVE_TARGETS.has(targetStage) && userBRecord) {
         memberData.push({
           userId: userBRecord.id,
           nickname: userA.name, // What B calls A
@@ -166,14 +196,7 @@ export class StateFactory {
         // Session is INVITED - waiting for User B to accept
         // Will become ACTIVE when User B accepts the invitation
         sessionStatus = 'INVITED';
-      } else if (
-        targetStage === TargetStage.FEEL_HEARD_B ||
-        targetStage === TargetStage.RECONCILER_SHOWN_B ||
-        targetStage === TargetStage.CONTEXT_SHARED_B ||
-        targetStage === TargetStage.EMPATHY_REVEALED ||
-        targetStage === TargetStage.NEED_MAPPING_COMPLETE ||
-        targetStage === TargetStage.STRATEGIC_REPAIR_COMPLETE
-      ) {
+      } else if (TWO_USER_ACTIVE_TARGETS.has(targetStage)) {
         // Both users have joined and are active
         sessionStatus = 'ACTIVE';
       }
@@ -188,13 +211,7 @@ export class StateFactory {
 
       // 6. Create invitation
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      const invitationAccepted =
-        targetStage === TargetStage.FEEL_HEARD_B ||
-        targetStage === TargetStage.RECONCILER_SHOWN_B ||
-        targetStage === TargetStage.CONTEXT_SHARED_B ||
-        targetStage === TargetStage.EMPATHY_REVEALED ||
-        targetStage === TargetStage.NEED_MAPPING_COMPLETE ||
-        targetStage === TargetStage.STRATEGIC_REPAIR_COMPLETE;
+      const invitationAccepted = TWO_USER_ACTIVE_TARGETS.has(targetStage);
       const invitationStatus = invitationAccepted ? 'ACCEPTED' : 'PENDING';
       const invitation = await tx.invitation.create({
         data: {
@@ -223,7 +240,7 @@ export class StateFactory {
       });
 
       // 8b. Create UserVessel for User B (if both users are active)
-      if ((targetStage === TargetStage.FEEL_HEARD_B || targetStage === TargetStage.RECONCILER_SHOWN_B || targetStage === TargetStage.CONTEXT_SHARED_B || targetStage === TargetStage.EMPATHY_REVEALED || targetStage === TargetStage.NEED_MAPPING_COMPLETE || targetStage === TargetStage.STRATEGIC_REPAIR_COMPLETE) && userBRecord) {
+      if (TWO_USER_ACTIVE_TARGETS.has(targetStage) && userBRecord) {
         await tx.userVessel.create({
           data: {
             sessionId: session.id,
@@ -266,6 +283,24 @@ export class StateFactory {
       } else if (targetStage === TargetStage.STRATEGIC_REPAIR_COMPLETE && userBRecord) {
         // Stage 4 complete - strategies ranked and agreement created
         await this.createStrategicRepairCompleteState(tx, session.id, userARecord.id, userBRecord.id, userA.name, userB!.name);
+      } else if (
+        (
+          targetStage === TargetStage.STAGE4_REDESIGN_INVENTORY ||
+          targetStage === TargetStage.STAGE4_REDESIGN_SHARED_SELECTIONS ||
+          targetStage === TargetStage.STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS ||
+          targetStage === TargetStage.STAGE4_REDESIGN_PARTNER_INACTIVE
+        ) &&
+        userBRecord
+      ) {
+        await this.createStage4RedesignFixtureState(
+          tx,
+          session.id,
+          userARecord.id,
+          userBRecord.id,
+          userA.name,
+          userB!.name,
+          targetStage
+        );
       }
 
       // Build result
@@ -1922,6 +1957,195 @@ export class StateFactory {
       ],
     });
 
+  }
+
+  /**
+   * Create deterministic redesigned Stage 4 fixtures on top of completed Stage 3.
+   *
+   * These states avoid LLM nondeterminism while covering the proposal inventory,
+   * removed proposal, selection privacy, closure, and Tending paths.
+   */
+  private async createStage4RedesignFixtureState(
+    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+    sessionId: string,
+    userAId: string,
+    userBId: string,
+    userAName: string,
+    userBName: string,
+    targetStage: TargetStage
+  ): Promise<void> {
+    await this.createNeedMappingCompleteState(tx, sessionId, userAId, userBId, userAName, userBName);
+
+    const now = new Date();
+    const sharedCheckin = await tx.strategyProposal.create({
+      data: {
+        sessionId,
+        createdByUserId: userAId,
+        description: 'Try a Sunday evening planning check-in for the next two weeks',
+        needsAddressed: ['Partnership', 'Support'],
+        duration: 'Two weeks',
+        measureOfSuccess: 'Both people know the week plan before Monday',
+        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+        status: Stage4ProposalStatus.ACTIVE,
+        coverageSummary: { fixture: 'shared-agreement-with-tending' },
+      },
+    });
+    const sharedPause = await tx.strategyProposal.create({
+      data: {
+        sessionId,
+        createdByUserId: userBId,
+        description: 'Use a pause phrase when either person starts to shut down',
+        needsAddressed: ['Understanding'],
+        duration: 'One month',
+        measureOfSuccess: 'Hard conversations can pause without either person feeling abandoned',
+        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+        status: Stage4ProposalStatus.ACTIVE,
+        coverageSummary: { fixture: 'alternate-shared-proposal' },
+      },
+    });
+    const individualCommitment = await tx.strategyProposal.create({
+      data: {
+        sessionId,
+        createdByUserId: userAId,
+        description: 'I will name when I am overloaded before I disappear',
+        needsAddressed: ['Appreciation'],
+        duration: 'This week',
+        measureOfSuccess: 'Stress is named before withdrawal',
+        kind: Stage4ProposalKind.INDIVIDUAL_COMMITMENT,
+        status: Stage4ProposalStatus.ACTIVE,
+        coverageSummary: { fixture: 'individual-only-commitment' },
+      },
+    });
+    const removedProposal = await tx.strategyProposal.create({
+      data: {
+        sessionId,
+        createdByUserId: userBId,
+        description: 'Track every chore in a shared spreadsheet every night',
+        needsAddressed: ['Partnership'],
+        duration: 'One week',
+        measureOfSuccess: 'Every chore is logged',
+        kind: Stage4ProposalKind.SHARED_PROPOSAL,
+        status: Stage4ProposalStatus.REMOVED,
+        removedAt: now,
+        removedByUserId: userBId,
+        removalReason: 'Partner said this felt too controlling',
+        coverageSummary: { fixture: 'removed-proposal' },
+      },
+    });
+
+    await tx.stage4ProposalRevision.createMany({
+      data: [
+        {
+          proposalId: sharedCheckin.id,
+          sessionId,
+          actorUserId: userAId,
+          action: 'CREATED',
+          after: { description: sharedCheckin.description },
+          reason: 'E2E redesigned Stage 4 fixture',
+        },
+        {
+          proposalId: sharedPause.id,
+          sessionId,
+          actorUserId: userBId,
+          action: 'CREATED',
+          after: { description: sharedPause.description },
+          reason: 'E2E redesigned Stage 4 fixture',
+        },
+        {
+          proposalId: individualCommitment.id,
+          sessionId,
+          actorUserId: userAId,
+          action: 'CREATED',
+          after: { description: individualCommitment.description },
+          reason: 'E2E redesigned Stage 4 fixture',
+        },
+        {
+          proposalId: removedProposal.id,
+          sessionId,
+          actorUserId: userBId,
+          action: 'REMOVED',
+          before: { status: Stage4ProposalStatus.ACTIVE },
+          after: { status: Stage4ProposalStatus.REMOVED },
+          reason: 'E2E redesigned Stage 4 fixture',
+        },
+      ],
+    });
+
+    await tx.stage4NeedCoverage.createMany({
+      data: [
+        {
+          sessionId,
+          needLabel: 'Partnership',
+          sourceUserId: userAId,
+          coverageStatus: 'COVERED',
+          coveringProposalIds: [sharedCheckin.id],
+          note: 'Sunday planning check-in directly covers partnership.',
+        },
+        {
+          sessionId,
+          needLabel: 'Support',
+          sourceUserId: userBId,
+          coverageStatus: 'PARTIAL',
+          coveringProposalIds: [sharedCheckin.id, sharedPause.id],
+          note: 'Support is partly covered but may need more specificity.',
+        },
+        {
+          sessionId,
+          needLabel: 'Appreciation',
+          sourceUserId: userAId,
+          coverageStatus: 'OPEN',
+          coveringProposalIds: [],
+          note: 'No active shared proposal directly covers appreciation yet.',
+        },
+      ],
+    });
+
+    if (targetStage === TargetStage.STAGE4_REDESIGN_INVENTORY) {
+      return;
+    }
+
+    const selections =
+      targetStage === TargetStage.STAGE4_REDESIGN_SHARED_SELECTIONS
+        ? [
+            { proposalId: sharedCheckin.id, userId: userAId, decision: Stage4SelectionDecision.WILLING },
+            { proposalId: sharedCheckin.id, userId: userBId, decision: Stage4SelectionDecision.WILLING },
+            { proposalId: sharedPause.id, userId: userAId, decision: Stage4SelectionDecision.NEEDS_DISCUSSION },
+            { proposalId: sharedPause.id, userId: userBId, decision: Stage4SelectionDecision.NEEDS_DISCUSSION },
+            { proposalId: individualCommitment.id, userId: userAId, decision: Stage4SelectionDecision.WILLING },
+          ]
+        : targetStage === TargetStage.STAGE4_REDESIGN_NO_OVERLAP_SELECTIONS
+          ? [
+              { proposalId: sharedCheckin.id, userId: userAId, decision: Stage4SelectionDecision.WILLING },
+              { proposalId: sharedCheckin.id, userId: userBId, decision: Stage4SelectionDecision.NOT_WILLING },
+              { proposalId: sharedPause.id, userId: userAId, decision: Stage4SelectionDecision.NOT_WILLING },
+              { proposalId: sharedPause.id, userId: userBId, decision: Stage4SelectionDecision.WILLING },
+              { proposalId: individualCommitment.id, userId: userAId, decision: Stage4SelectionDecision.WILLING },
+            ]
+          : [
+              { proposalId: sharedCheckin.id, userId: userAId, decision: Stage4SelectionDecision.WILLING },
+            ];
+
+    await tx.stage4ProposalSelection.createMany({
+      data: selections.map((selection) => ({
+        ...selection,
+        sessionId,
+        selectedAt: now,
+      })),
+    });
+
+    await tx.stageProgress.updateMany({
+      where: {
+        sessionId,
+        userId: { in: [...new Set(selections.map((selection) => selection.userId))] },
+        stage: 4,
+      },
+      data: {
+        gatesSatisfied: {
+          selectionSubmitted: true,
+          selectionSubmittedAt: now.toISOString(),
+        },
+      },
+    });
   }
 
   /**
