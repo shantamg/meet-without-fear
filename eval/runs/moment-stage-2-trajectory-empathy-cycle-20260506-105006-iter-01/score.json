@@ -1,0 +1,66 @@
+{
+  "dimensions": {
+    "feedback_integrated": {
+      "pass_threshold": 4,
+      "rationale": "Flat judge result normalized.",
+      "score": 0.88
+    },
+    "review_invited": {
+      "pass_threshold": 4,
+      "rationale": "Flat judge result normalized.",
+      "score": 0.92
+    },
+    "validation_honored": {
+      "pass_threshold": 4,
+      "rationale": "Flat judge result normalized.",
+      "score": 0.85
+    }
+  },
+  "hard_invariants": [
+    {
+      "description": "No forced verdict.",
+      "id": "no_forced_verdict",
+      "pass": true
+    },
+    {
+      "description": "No needs or strategies.",
+      "id": "no_later_stage_language",
+      "pass": true
+    }
+  ],
+  "improvement_targets": [
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "review_invited",
+      "owner": "mwf_prompts"
+    },
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "feedback_integrated",
+      "owner": "mwf_prompts"
+    },
+    {
+      "action": "Make the Stage 4 closure explicitly say there is no overlap and no shared agreement.",
+      "dimension": "validation_honored",
+      "owner": "mwf_prompts"
+    }
+  ],
+  "judge": {
+    "durationMs": 1319,
+    "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "prompt_caching": "system and judge template sent as cache_control ephemeral blocks where supported by Bedrock",
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 191,
+      "output_tokens": 46
+    }
+  },
+  "mock_judge": false,
+  "overall_score": 0.88,
+  "verdict": "eval_fail"
+}
