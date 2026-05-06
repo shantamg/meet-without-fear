@@ -699,6 +699,7 @@ describe('Stage Prompts Service', () => {
       // The flag instruction is in format "FeelHeardCheck: [Y if ready..., N otherwise]"
       expect(prompt).toContain('FeelHeardCheck:');
       expect(prompt).toMatch(/FeelHeardCheck.*Y.*N/s);
+      expect(prompt).toContain('Do NOT invite more freeform chat unless the input remains visible');
     });
 
     it('Stage 2 protocol includes ReadyShare flag instruction', () => {
@@ -709,6 +710,7 @@ describe('Stage Prompts Service', () => {
       // The flag instruction is in format "ReadyShare: [Y if ready..., N otherwise]"
       expect(prompt).toContain('ReadyShare:');
       expect(prompt).toMatch(/ReadyShare.*Y.*N/s);
+      expect(prompt).toContain('Do NOT invite more freeform chat unless the input remains visible');
     });
 
     it('Stage 0 protocol instructs the AI to emit a topic via <draft> tags', () => {
@@ -718,6 +720,7 @@ describe('Stage Prompts Service', () => {
 
       // Stage 0 now emits the proposed TOPIC inline as <draft> (not an invitation message).
       expect(prompt).toContain('<draft>');
+      expect(prompt).toContain('without inviting freeform chat unless the input remains visible');
     });
 
     it('protocol includes dispatch tag instruction', () => {
