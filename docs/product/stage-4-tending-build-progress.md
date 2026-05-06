@@ -140,6 +140,30 @@ Build in this order unless there is a concrete reason to change sequencing.
   - Depends on: #363, #364, #366.
   - Replace ranking overlap with per-proposal willingness.
   - Allow both `SHARED_AGREEMENT` and `NO_SHARED_AGREEMENT` closure kinds.
+  - Status: in progress; backend mutation surface implemented locally, PR not yet updated/opened for this issue.
+  - Local files touched:
+    - `shared/src/dto/strategy.ts`
+    - `backend/src/controllers/stage4.ts`
+    - `backend/src/routes/stage4.ts`
+    - `backend/src/routes/__tests__/stage4.test.ts`
+  - Implemented so far:
+    - Added shared request/response DTOs for single selection, bulk selections, and Stage 4 closure.
+    - Added `POST /sessions/:id/stage4/proposals/:proposalId/selection`.
+    - Added `POST /sessions/:id/stage4/selections`.
+    - Added `POST /sessions/:id/stage4/close`.
+    - Selection writes `Stage4ProposalSelection`, marks the user's Stage 4 `selectionSubmitted` gate, returns refreshed redesigned Stage 4 state, and preserves partner decision privacy through the existing state service.
+    - Shared-agreement closure requires both partners to have submitted selections and at least one active shared proposal with mutual `WILLING`; it creates `AGREED` Agreement rows, marks converted proposals, records conversion revisions, creates `Stage4Closure(kind = SHARED_AGREEMENT)`, resolves the session, and completes open stage progress.
+    - No-shared-agreement closure resolves without agreements, persists `Stage4Closure(kind = NO_SHARED_AGREEMENT)`, carries forward willing individual commitments, and stores open/partial coverage ids.
+    - Partner inactivity cannot create a shared obligation: requested shared-agreement closure is rejected unless both partners submitted selections.
+  - Validation run:
+    - `npm test --workspace backend -- --runTestsByPath src/routes/__tests__/stage4.test.ts --runInBand`
+    - `npm run check --workspace backend`
+    - `npm run check --workspace shared`
+  - Result: targeted Stage 4 route tests passed with 31 passed; backend and shared typechecks passed.
+  - Remaining #367 work:
+    - Inspect route integration against mobile expectations before marking complete.
+    - Decide whether shared-agreement closure should create already-`AGREED` agreements or proposed agreements requiring an additional confirmation step; current implementation treats mutual `WILLING` selections as agreement consent for v1 closure.
+    - Push/update PR once the issue contract is settled.
 
 - [ ] [#368 - The Tending: backend scheduling, responses, and passive re-entry](https://github.com/shantamg/meet-without-fear/issues/368)
   - Depends on: #363, #367.

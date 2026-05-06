@@ -23,6 +23,11 @@ import {
   ErrorCode,
   StrategyPhase,
   MAX_AGREEMENTS,
+  Stage4ClosureKind,
+  Stage4ClosureReason,
+  Stage4ProposalKind,
+  Stage4ProposalStatus,
+  Stage4SelectionDecision,
 } from '@meet-without-fear/shared';
 import { notifyPartner, publishSessionEvent } from '../services/realtime';
 import { successResponse, errorResponse } from '../utils/response';
@@ -107,6 +112,183 @@ const createAgreementRequestSchema = z.object({
   followUpDate: z.string().optional(),
 });
 
+const stage4SelectionDecisionSchema = z.nativeEnum(Stage4SelectionDecision);
+
+const submitStage4SelectionRequestSchema = z.object({
+  decision: stage4SelectionDecisionSchema,
+  note: z.string().max(1000).optional(),
+});
+
+const submitStage4SelectionsRequestSchema = z.object({
+  selections: z
+    .array(
+      z.object({
+        proposalId: z.string().min(1, 'Proposal ID is required'),
+        decision: stage4SelectionDecisionSchema,
+        note: z.string().max(1000).optional(),
+      })
+    )
+    .min(1, 'At least one selection is required'),
+});
+
+const closeStage4RequestSchema = z.object({
+  kind: z.nativeEnum(Stage4ClosureKind).optional(),
+  reason: z.nativeEnum(Stage4ClosureReason).optional(),
+  summary: z.string().max(2000).optional(),
+  followUpDatesByProposalId: z.record(z.string()).optional(),
+});
+
+type Stage4MutableSession = {
+  id: string;
+  status: string;
+  relationship: {
+    members: Array<{ userId: string; joinedAt: Date }>;
+  };
+};
+
+type Stage4ProposalForClosure = {
+  id: string;
+  sessionId: string;
+  description: string;
+  duration: string | null;
+  measureOfSuccess: string | null;
+  kind: Stage4ProposalKind;
+  status: Stage4ProposalStatus;
+  createdByUserId: string | null;
+};
+
+type Stage4SelectionForClosure = {
+  proposalId: string;
+  userId: string;
+  decision: Stage4SelectionDecision;
+};
+
+type Stage4CoverageForClosure = {
+  id: string;
+  needId: string | null;
+  coverageStatus: string;
+};
+
+async function getMutableStage4Session(
+  sessionId: string,
+  userId: string
+): Promise<{ session: Stage4MutableSession; progress: { gatesSatisfied: Prisma.JsonValue | null } | null } | null> {
+  const session = (await prisma.session.findFirst({
+    where: {
+      id: sessionId,
+      relationship: {
+        members: {
+          some: { userId },
+        },
+      },
+    },
+    include: {
+      relationship: {
+        include: {
+          members: {
+            orderBy: { joinedAt: 'asc' },
+          },
+        },
+      },
+    },
+  })) as Stage4MutableSession | null;
+
+  if (!session) return null;
+
+  const progress = await prisma.stageProgress.findFirst({
+    where: {
+      sessionId,
+      userId,
+      status: 'IN_PROGRESS',
+    },
+    orderBy: { stage: 'desc' },
+    select: { gatesSatisfied: true },
+  });
+
+  return { session, progress };
+}
+
+async function markStage4SelectionSubmitted(
+  sessionId: string,
+  userId: string,
+  existingGates: Prisma.JsonValue | null | undefined
+): Promise<void> {
+  const gatesSatisfied = {
+    ...((existingGates as Record<string, unknown> | null) || {}),
+    selectionSubmitted: true,
+    selectionSubmittedAt: new Date().toISOString(),
+  } satisfies Prisma.InputJsonValue;
+
+  await prisma.stageProgress.update({
+    where: {
+      sessionId_userId_stage: { sessionId, userId, stage: 4 },
+    },
+    data: { gatesSatisfied },
+  });
+}
+
+function userIsSessionMember(session: Stage4MutableSession, userId: string): boolean {
+  return session.relationship.members.some((member) => member.userId === userId);
+}
+
+function selectionsByProposalAndUser(
+  selections: Stage4SelectionForClosure[]
+): Map<string, Map<string, Stage4SelectionForClosure>> {
+  const byProposal = new Map<string, Map<string, Stage4SelectionForClosure>>();
+  for (const selection of selections) {
+    const byUser = byProposal.get(selection.proposalId) ?? new Map<string, Stage4SelectionForClosure>();
+    byUser.set(selection.userId, selection);
+    byProposal.set(selection.proposalId, byUser);
+  }
+  return byProposal;
+}
+
+function bothPartnersWilling(
+  proposalId: string,
+  session: Stage4MutableSession,
+  selectionsByProposal: Map<string, Map<string, Stage4SelectionForClosure>>
+): boolean {
+  const proposalSelections = selectionsByProposal.get(proposalId);
+  if (!proposalSelections) return false;
+
+  return session.relationship.members.every(
+    (member) => proposalSelections.get(member.userId)?.decision === Stage4SelectionDecision.WILLING
+  );
+}
+
+function getWillingIndividualCommitmentIds(
+  proposals: Stage4ProposalForClosure[],
+  selections: Stage4SelectionForClosure[]
+): string[] {
+  return proposals
+    .filter((proposal) => proposal.kind === Stage4ProposalKind.INDIVIDUAL_COMMITMENT)
+    .filter((proposal) =>
+      selections.some(
+        (selection) =>
+          selection.proposalId === proposal.id &&
+          selection.decision === Stage4SelectionDecision.WILLING &&
+          (!proposal.createdByUserId || proposal.createdByUserId === selection.userId)
+      )
+    )
+    .map((proposal) => proposal.id);
+}
+
+function buildClosureSummary(
+  kind: Stage4ClosureKind,
+  mutualProposalCount: number,
+  individualCommitmentCount: number,
+  openNeedCount: number,
+  requestedSummary?: string
+): string {
+  if (requestedSummary) return requestedSummary;
+
+  if (kind === Stage4ClosureKind.SHARED_AGREEMENT) {
+    return `Closed with ${mutualProposalCount} shared agreement${mutualProposalCount === 1 ? '' : 's'} and ${individualCommitmentCount} individual commitment${individualCommitmentCount === 1 ? '' : 's'}.`;
+  }
+
+  return `Closed without a shared agreement, preserving ${individualCommitmentCount} individual commitment${individualCommitmentCount === 1 ? '' : 's'} and ${openNeedCount} still-open need${openNeedCount === 1 ? '' : 's'}.`;
+}
+
 // ============================================================================
 // Controllers
 // ============================================================================
@@ -136,6 +318,411 @@ export async function getStage4State(req: Request, res: Response): Promise<void>
 
     logger.error('[getStage4State] Error:', error);
     errorResponse(res, 'INTERNAL_ERROR', 'Failed to get Stage 4 state', 500);
+  }
+}
+
+/**
+ * Submit one redesigned Stage 4 per-proposal willingness decision.
+ * POST /sessions/:id/stage4/proposals/:proposalId/selection
+ */
+export async function submitStage4ProposalSelection(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId, proposalId } = req.params;
+    const parseResult = submitStage4SelectionRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.issues);
+      return;
+    }
+
+    await submitStage4SelectionsInternal(
+      req,
+      res,
+      sessionId,
+      user.id,
+      [{ proposalId, ...parseResult.data }]
+    );
+  } catch (error) {
+    logger.error('[submitStage4ProposalSelection] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to submit Stage 4 selection', 500);
+  }
+}
+
+/**
+ * Submit redesigned Stage 4 per-proposal willingness decisions.
+ * POST /sessions/:id/stage4/selections
+ */
+export async function submitStage4Selections(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const parseResult = submitStage4SelectionsRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.issues);
+      return;
+    }
+
+    await submitStage4SelectionsInternal(req, res, sessionId, user.id, parseResult.data.selections);
+  } catch (error) {
+    logger.error('[submitStage4Selections] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to submit Stage 4 selections', 500);
+  }
+}
+
+async function submitStage4SelectionsInternal(
+  req: Request,
+  res: Response,
+  sessionId: string,
+  userId: string,
+  selections: Array<{ proposalId: string; decision: Stage4SelectionDecision; note?: string }>
+): Promise<void> {
+  const mutable = await getMutableStage4Session(sessionId, userId);
+  if (!mutable) {
+    errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+    return;
+  }
+
+  if (mutable.session.status !== 'ACTIVE') {
+    errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+    return;
+  }
+
+  const currentStage = await prisma.stageProgress.findFirst({
+    where: { sessionId, userId, status: 'IN_PROGRESS' },
+    orderBy: { stage: 'desc' },
+  });
+  if ((currentStage?.stage ?? 0) !== 4) {
+    errorResponse(
+      res,
+      'VALIDATION_ERROR',
+      `Cannot submit Stage 4 selections: you are in stage ${currentStage?.stage ?? 0}, but stage 4 is required`,
+      400
+    );
+    return;
+  }
+
+  const existingClosure = await prisma.stage4Closure.findUnique({ where: { sessionId } });
+  if (existingClosure) {
+    errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+    return;
+  }
+
+  const uniqueProposalIds = [...new Set(selections.map((selection) => selection.proposalId))];
+  if (uniqueProposalIds.length !== selections.length) {
+    errorResponse(res, 'VALIDATION_ERROR', 'Proposal selections must be unique per request', 400);
+    return;
+  }
+
+  const proposals = await prisma.strategyProposal.findMany({
+    where: {
+      sessionId,
+      id: { in: uniqueProposalIds },
+      status: { not: Stage4ProposalStatus.REMOVED },
+    },
+    select: { id: true },
+  });
+  const validProposalIds = new Set(proposals.map((proposal) => proposal.id));
+  if (uniqueProposalIds.some((proposalId) => !validProposalIds.has(proposalId))) {
+    errorResponse(res, 'VALIDATION_ERROR', 'Selections must reference active proposals in this session', 400);
+    return;
+  }
+
+  const submittedAt = new Date();
+  await prisma.$transaction(
+    selections.map((selection) =>
+      prisma.stage4ProposalSelection.upsert({
+        where: {
+          proposalId_userId: {
+            proposalId: selection.proposalId,
+            userId,
+          },
+        },
+        create: {
+          proposalId: selection.proposalId,
+          sessionId,
+          userId,
+          decision: selection.decision,
+          note: selection.note,
+          selectedAt: submittedAt,
+        },
+        update: {
+          decision: selection.decision,
+          note: selection.note,
+          selectedAt: submittedAt,
+        },
+      })
+    )
+  );
+
+  await markStage4SelectionSubmitted(sessionId, userId, mutable.progress?.gatesSatisfied);
+
+  const partnerId = await getPartnerUserId(sessionId, userId);
+  const partnerSubmitted = partnerId
+    ? (await prisma.stage4ProposalSelection.count({ where: { sessionId, userId: partnerId } })) > 0
+    : false;
+
+  if (partnerId) {
+    await notifyPartner(sessionId, partnerId, 'session.strategies_updated', {
+      stage: 4,
+      submittedBy: userId,
+      change: 'stage4_selection_submitted',
+    });
+  }
+
+  const state = await buildStage4State(sessionId, userId);
+  successResponse(res, {
+    submitted: true,
+    submittedAt: submittedAt.toISOString(),
+    partnerSubmitted,
+    state,
+  });
+}
+
+/**
+ * Close redesigned Stage 4 from willingness selections.
+ * POST /sessions/:id/stage4/close
+ */
+export async function closeStage4(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      errorResponse(res, 'UNAUTHORIZED', 'Authentication required', 401);
+      return;
+    }
+
+    const { id: sessionId } = req.params;
+    const parseResult = closeStage4RequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Invalid request body', 400, parseResult.error.issues);
+      return;
+    }
+
+    const mutable = await getMutableStage4Session(sessionId, user.id);
+    if (!mutable) {
+      errorResponse(res, 'NOT_FOUND', 'Session not found', 404);
+      return;
+    }
+
+    if (mutable.session.status !== 'ACTIVE') {
+      errorResponse(res, 'SESSION_NOT_ACTIVE', 'Session is not active', 400);
+      return;
+    }
+
+    const currentStage = await prisma.stageProgress.findFirst({
+      where: { sessionId, userId: user.id, status: 'IN_PROGRESS' },
+      orderBy: { stage: 'desc' },
+    });
+    if ((currentStage?.stage ?? 0) !== 4) {
+      errorResponse(
+        res,
+        'VALIDATION_ERROR',
+        `Cannot close Stage 4: you are in stage ${currentStage?.stage ?? 0}, but stage 4 is required`,
+        400
+      );
+      return;
+    }
+
+    if (await prisma.stage4Closure.findUnique({ where: { sessionId } })) {
+      errorResponse(res, 'CONFLICT', 'Stage 4 is already closed', 409);
+      return;
+    }
+
+    const [proposals, selections, coverageRows, sharedVessel] = await Promise.all([
+      prisma.strategyProposal.findMany({
+        where: { sessionId, status: { not: Stage4ProposalStatus.REMOVED } },
+        select: {
+          id: true,
+          sessionId: true,
+          description: true,
+          duration: true,
+          measureOfSuccess: true,
+          kind: true,
+          status: true,
+          createdByUserId: true,
+        },
+      }) as Promise<Stage4ProposalForClosure[]>,
+      prisma.stage4ProposalSelection.findMany({
+        where: { sessionId },
+        select: { proposalId: true, userId: true, decision: true },
+      }) as Promise<Stage4SelectionForClosure[]>,
+      prisma.stage4NeedCoverage.findMany({
+        where: { sessionId },
+        select: { id: true, needId: true, coverageStatus: true },
+      }) as Promise<Stage4CoverageForClosure[]>,
+      prisma.sharedVessel.findUnique({ where: { sessionId } }),
+    ]);
+
+    if (!sharedVessel) {
+      errorResponse(res, 'NOT_FOUND', 'Shared vessel not found', 404);
+      return;
+    }
+
+    const selectionUserIds = new Set(selections.map((selection) => selection.userId));
+    const bothPartnersSubmitted = mutable.session.relationship.members.every((member) =>
+      selectionUserIds.has(member.userId)
+    );
+    const selectionsByProposal = selectionsByProposalAndUser(selections);
+    const mutuallyWillingSharedProposals = proposals
+      .filter((proposal) => proposal.kind === Stage4ProposalKind.SHARED_PROPOSAL)
+      .filter((proposal) => bothPartnersWilling(proposal.id, mutable.session, selectionsByProposal))
+      .slice(0, MAX_AGREEMENTS);
+    const individualProposalIds = getWillingIndividualCommitmentIds(proposals, selections);
+    const openNeedIds = coverageRows
+      .filter((row) => row.coverageStatus === 'OPEN' || row.coverageStatus === 'PARTIAL')
+      .map((row) => row.needId ?? row.id);
+
+    const requestedKind = parseResult.data.kind;
+    const closureKind =
+      requestedKind ??
+      (mutuallyWillingSharedProposals.length > 0 && bothPartnersSubmitted
+        ? Stage4ClosureKind.SHARED_AGREEMENT
+        : Stage4ClosureKind.NO_SHARED_AGREEMENT);
+
+    if (closureKind === Stage4ClosureKind.SHARED_AGREEMENT) {
+      if (!bothPartnersSubmitted) {
+        errorResponse(res, 'VALIDATION_ERROR', 'Both partners must submit selections before shared agreement closure', 400);
+        return;
+      }
+      if (mutuallyWillingSharedProposals.length === 0) {
+        errorResponse(res, 'VALIDATION_ERROR', 'No mutually willing shared proposals are available to close', 400);
+        return;
+      }
+    }
+
+    if (
+      closureKind === Stage4ClosureKind.NO_SHARED_AGREEMENT &&
+      mutuallyWillingSharedProposals.length > 0 &&
+      parseResult.data.reason !== Stage4ClosureReason.BOUNDARY_HONORED &&
+      parseResult.data.reason !== Stage4ClosureReason.USER_STOPPED
+    ) {
+      errorResponse(res, 'VALIDATION_ERROR', 'Mutual willingness exists; no-shared-agreement closure requires an explicit boundary or stop reason', 400);
+      return;
+    }
+
+    const now = new Date();
+    const closureReason =
+      parseResult.data.reason ??
+      (closureKind === Stage4ClosureKind.SHARED_AGREEMENT
+        ? Stage4ClosureReason.MUTUAL_SELECTION
+        : bothPartnersSubmitted
+          ? Stage4ClosureReason.NO_OVERLAP
+          : Stage4ClosureReason.USER_STOPPED);
+    const summary = buildClosureSummary(
+      closureKind,
+      mutuallyWillingSharedProposals.length,
+      individualProposalIds.length,
+      openNeedIds.length,
+      parseResult.data.summary
+    );
+
+    const agreementIds = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const createdAgreementIds: string[] = [];
+
+      if (closureKind === Stage4ClosureKind.SHARED_AGREEMENT) {
+        for (const proposal of mutuallyWillingSharedProposals) {
+          const followUpDate = parseResult.data.followUpDatesByProposalId?.[proposal.id];
+          const agreement = await tx.agreement.create({
+            data: {
+              sharedVesselId: sharedVessel.id,
+              proposalId: proposal.id,
+              description: proposal.description,
+              type: AgreementType.MICRO_EXPERIMENT,
+              duration: proposal.duration,
+              measureOfSuccess: proposal.measureOfSuccess,
+              followUpDate: followUpDate ? new Date(followUpDate) : null,
+              status: 'AGREED',
+              agreedByA: true,
+              agreedByB: true,
+              agreedAt: now,
+            },
+          });
+          createdAgreementIds.push(agreement.id);
+
+          await tx.strategyProposal.update({
+            where: { id: proposal.id },
+            data: { status: Stage4ProposalStatus.CONVERTED_TO_AGREEMENT },
+          });
+
+          await tx.stage4ProposalRevision.create({
+            data: {
+              proposalId: proposal.id,
+              sessionId,
+              actorUserId: user.id,
+              action: 'CONVERTED',
+              before: { status: proposal.status },
+              after: { agreementId: agreement.id, status: Stage4ProposalStatus.CONVERTED_TO_AGREEMENT },
+              reason: 'Mutual Stage 4 willingness closure',
+            },
+          });
+        }
+      }
+
+      await tx.stage4Closure.create({
+        data: {
+          sessionId,
+          kind: closureKind,
+          reason: closureReason,
+          summary,
+          sharedAgreementIds: createdAgreementIds,
+          individualProposalIds,
+          openNeedIds,
+          closedByUserId: user.id,
+          closedAt: now,
+        },
+      });
+
+      await tx.session.update({
+        where: { id: sessionId },
+        data: { status: 'RESOLVED', resolvedAt: now },
+      });
+
+      await tx.stageProgress.updateMany({
+        where: { sessionId, completedAt: null },
+        data: { status: 'COMPLETED', completedAt: now },
+      });
+
+      return createdAgreementIds;
+    });
+
+    const partnerId = await getPartnerUserId(sessionId, user.id);
+    if (partnerId && userIsSessionMember(mutable.session, partnerId)) {
+      await notifyPartner(sessionId, partnerId, 'session.resolved', {
+        closedBy: user.id,
+        kind: closureKind,
+        agreementIds,
+      });
+    }
+
+    await publishSessionEvent(sessionId, 'session.resolved', {
+      closureKind,
+      agreementIds,
+    });
+
+    const state = await buildStage4State(sessionId, user.id);
+    if (!state.outcome) {
+      errorResponse(res, 'INTERNAL_ERROR', 'Stage 4 closed but outcome was not available', 500);
+      return;
+    }
+
+    successResponse(res, {
+      closed: true,
+      closedAt: now.toISOString(),
+      outcome: state.outcome,
+      state,
+    });
+  } catch (error) {
+    logger.error('[closeStage4] Error:', error);
+    errorResponse(res, 'INTERNAL_ERROR', 'Failed to close Stage 4', 500);
   }
 }
 

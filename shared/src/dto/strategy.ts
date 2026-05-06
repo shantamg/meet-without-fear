@@ -279,3 +279,37 @@ export interface GetStage4StateResponse {
   outcome: Stage4OutcomeDTO | null;
   tendingPreview: TendingPreviewDTO | null;
 }
+
+export interface SubmitStage4SelectionRequest {
+  decision: Stage4SelectionDecision;
+  note?: string;
+}
+
+export interface SubmitStage4SelectionsRequest {
+  selections: Array<{
+    proposalId: string;
+    decision: Stage4SelectionDecision;
+    note?: string;
+  }>;
+}
+
+export interface SubmitStage4SelectionsResponse {
+  submitted: boolean;
+  submittedAt: string;
+  partnerSubmitted: boolean;
+  state: GetStage4StateResponse;
+}
+
+export interface CloseStage4Request {
+  kind?: Stage4ClosureKind;
+  reason?: Stage4ClosureReason;
+  summary?: string;
+  followUpDatesByProposalId?: Record<string, string>;
+}
+
+export interface CloseStage4Response {
+  closed: boolean;
+  closedAt: string;
+  outcome: Stage4OutcomeDTO;
+  state: GetStage4StateResponse;
+}

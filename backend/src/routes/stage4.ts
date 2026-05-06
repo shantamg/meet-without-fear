@@ -17,6 +17,9 @@ import { asyncHandler } from '../middleware/errors';
 import {
   getStrategies,
   getStage4State,
+  submitStage4ProposalSelection,
+  submitStage4Selections,
+  closeStage4,
   proposeStrategy,
   submitRanking,
   getOverlap,
@@ -35,6 +38,30 @@ router.get(
   requireAuth,
   requireSessionAccess,
   asyncHandler(getStage4State)
+);
+
+// Submit one redesigned Stage 4 per-proposal willingness decision
+router.post(
+  '/sessions/:id/stage4/proposals/:proposalId/selection',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(submitStage4ProposalSelection)
+);
+
+// Submit redesigned Stage 4 per-proposal willingness decisions
+router.post(
+  '/sessions/:id/stage4/selections',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(submitStage4Selections)
+);
+
+// Close redesigned Stage 4 from willingness selections
+router.post(
+  '/sessions/:id/stage4/close',
+  requireAuth,
+  requireSessionAccess,
+  asyncHandler(closeStage4)
 );
 
 // Get anonymous strategy pool
