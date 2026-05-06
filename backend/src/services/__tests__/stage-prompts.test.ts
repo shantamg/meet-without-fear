@@ -191,7 +191,7 @@ describe('Stage Prompts Service', () => {
       const prompt = fullPrompt(buildStagePrompt(4, context));
 
       expect(prompt).toContain('Strategic Repair');
-      expect(prompt).toContain('experiment');
+      expect(prompt).toContain('proposal inventory');
     });
 
     it('Stage 4 prompt supports collaborative proposal inventory without ranking pressure', () => {
@@ -225,6 +225,62 @@ describe('Stage Prompts Service', () => {
       expect(prompt).toContain('Do not describe no-overlap or no-shared-agreement as failure');
       expect(prompt).toContain('individual commitments can still be carried forward');
       expect(prompt).toContain('Do not ask for scheduled shared check-in timing for individual-only commitments');
+    });
+
+    it('Stage 4 no-shared-agreement prompt avoids failure-language tokens', () => {
+      const context = createContext({
+        turnCount: 3,
+        contextBundle: {
+          ...mockContextBundle,
+          stageContext: {
+            stage: 4,
+            gatesSatisfied: {
+              selectionSubmitted: true,
+              partnerSelectionSubmitted: true,
+              noSharedAgreement: true,
+            },
+          },
+        },
+      });
+      const prompt = fullPrompt(buildStagePrompt(4, context)).toLowerCase();
+
+      expect(prompt).not.toContain('failed');
+      expect(prompt).not.toContain('unsuccessful');
+      expect(prompt).not.toContain('incomplete');
+      expect(prompt).not.toContain("didn't reach");
+      expect(prompt).not.toContain("couldn't");
+    });
+
+    it('Stage 4 individual-only commitments do not trigger follow-up mandate language', () => {
+      const context = createContext({
+        contextBundle: {
+          ...mockContextBundle,
+          stageContext: {
+            stage: 4,
+            gatesSatisfied: {
+              individualCommitmentOnly: true,
+            },
+          },
+        },
+      });
+      const prompt = fullPrompt(buildStagePrompt(4, context));
+
+      expect(prompt).not.toMatch(/follow-up check-in\s*\(required\)/i);
+      expect(prompt).not.toMatch(/every (experiment|proposal|strategy) must include/i);
+      expect(prompt).not.toMatch(/not optional/i);
+      expect(prompt).not.toMatch(/without a follow-up is incomplete/i);
+      expect(prompt).toContain('Do not ask for scheduled shared check-in timing for individual-only commitments');
+    });
+
+    it('Stage 4 prompt avoids grading praise tokens', () => {
+      const context = createContext();
+      const prompt = fullPrompt(buildStagePrompt(4, context)).toLowerCase();
+
+      expect(prompt).not.toContain('solid experiment');
+      expect(prompt).not.toContain('good idea');
+      expect(prompt).not.toContain("that's a great");
+      expect(prompt).not.toContain('great idea');
+      expect(prompt).not.toContain('good vs bad');
     });
 
     it('Stage 4 response protocol keeps ProposedStrategy as compatibility fallback only', () => {
