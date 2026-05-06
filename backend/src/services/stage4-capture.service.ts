@@ -179,6 +179,16 @@ function inferProposalKind(text: string): Stage4ProposalKind {
   return Stage4ProposalKind.SHARED_PROPOSAL;
 }
 
+function hasRemoveIntent(text: string): boolean {
+  return [
+    /\b(?:remove|delete)\b.*\b(?:proposal|idea|strategy|that|this|it|one)\b/i,
+    /\b(?:drop|scratch)\s+(?:that|this|it|one|that one|this one)\b/i,
+    /\b(?:take|taking)\s+(?:that|this|it|one|that one|this one|proposal|idea|strategy|that proposal|this proposal|that idea|this idea)\s+(?:off|back)\b/i,
+    /\b(?:that|this|it|one|that one|this one)\s+comes\s+off(?:\s+the\s+list)?\b/i,
+    /\bi'?m\s+taking\s+(?:that|this|it|one|that one|this one)\s+back\b/i,
+  ].some((pattern) => pattern.test(text));
+}
+
 function extractAddOperations(input: Stage4CaptureInput): Stage4InventoryOperation[] {
   const operations: Stage4InventoryOperation[] = [];
   const compatibility = input.compatibilityProposedStrategies ?? [];
@@ -231,7 +241,7 @@ function extractDestructiveOrRevisionOperation(
   text: string,
   proposals: ProposalRow[]
 ): { operation: Stage4InventoryOperation | null; confidence: number; lowConfidenceAction?: string } {
-  if (/\b(?:remove|delete|drop|take)\b.*\b(?:proposal|idea|strategy|that|it|off|out)\b/i.test(text)) {
+  if (hasRemoveIntent(text)) {
     const match = findReferencedProposal(text, proposals, [Stage4ProposalStatus.ACTIVE, Stage4ProposalStatus.REVISED]);
     if (match.proposal) {
       return {

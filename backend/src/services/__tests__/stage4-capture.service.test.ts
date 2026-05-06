@@ -118,6 +118,43 @@ describe('stage4-capture.service', () => {
     expect(result.appliedOperationCount).toBe(1);
   });
 
+  it.each([
+    'That comes off the list',
+    'Take that off',
+    'Remove that one',
+    "I'm taking it back",
+    "Let's drop that",
+  ])('removes a semantically referenced proposal for phrasing: %s', async (userMessage) => {
+    (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
+      proposal({
+        description: 'kids conversation negotiation after dinner for one week',
+      }),
+    ]);
+
+    const result = await captureStage4Turn(
+      captureInput({
+        userMessage: `${userMessage}. I mean the kids conversation negotiation.`,
+      })
+    );
+
+    expect(prisma.strategyProposal.update).toHaveBeenCalledWith({
+      where: { id: 'proposal-1' },
+      data: expect.objectContaining({
+        status: Stage4ProposalStatus.REMOVED,
+        removedByUserId: userId,
+        removalReason: `${userMessage}. I mean the kids conversation negotiation.`,
+      }),
+    });
+    expect(prisma.stage4ProposalRevision.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        proposalId: 'proposal-1',
+        action: 'REMOVED',
+        messageId,
+      }),
+    });
+    expect(result.appliedOperationCount).toBe(1);
+  });
+
   it('does not apply low-confidence destructive captures', async () => {
     (prisma.strategyProposal.findMany as jest.Mock).mockResolvedValue([
       proposal({ id: 'proposal-1', description: '10-minute check-in after dinner for one week' }),
